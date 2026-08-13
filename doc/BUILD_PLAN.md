@@ -46,7 +46,11 @@ at the root and is gitignored along with .env.
 
 - src/: config, ettime, criteria, eodhd, store, universe, discover,
   collect_premarket, baseline, scan, analyst, render_report, deliver,
-  backfill_premarket, fill_outcomes, verify_morning, build_archive
+  backfill_premarket, fill_outcomes, verify_morning, build_archive,
+  market_today (the trading day guard every weekday job runs first: exit 3
+  on weekends and official holidays from the cached EODHD exchange-details
+  calendar, the .bat logs one line and stops; calendar unreachable with no
+  cache assumes open on purpose)
 - doc/: this file, CRITERIA.md, REPORT_TEMPLATE.md, prompt_analyst.md
 - tasks/: five job .bat files, register_tasks.ps1, README.md
 - data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,
@@ -104,7 +108,10 @@ at the root and is gitignored along with .env.
   with ex=US (bulk live, ~18.3k rows), eod-bulk-last-day/US, eod/{symbol},
   intraday/{symbol} interval=1m (04:00 to 19:59 ET coverage, UTC epoch
   seconds, published a few hours behind live), exchange-symbol-list (keep
-  only Type == "Common Stock"), news (s= symbol tag filter, no publisher
+  only Type == "Common Stock"), exchange-details/US (official holidays, early
+  close days, trading hours, verified live on this plan, cached to
+  data/exchange-details.json for the trading day guard), news (s= symbol tag
+  filter, no publisher
   field, derived from url host), economic-events (no importance field, the
   CRITERIA.md high importance list owns that call), calendar/earnings, user,
   search.

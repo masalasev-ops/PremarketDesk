@@ -27,6 +27,11 @@ were registered, the tree does not refresh itself.
 
 ## Things worth knowing
 
+- Every weekday job first runs `src\market_today.py`, the trading day guard.
+  On a weekend or an official market holiday (from the cached EODHD exchange
+  calendar) the job writes one line to its log and exits 0 without doing
+  anything. So the tasks stay registered plain Mon to Fri and holidays take
+  care of themselves.
 - The machine must be awake at trigger time. Task Scheduler does not wake a
   sleeping laptop by default; enable "wake the computer to run this task" in
   the task's properties, or keep the machine plugged in and awake weekday

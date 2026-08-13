@@ -10,6 +10,12 @@ if "%TODAY%"=="" set TODAY=undated
 if not exist logs mkdir logs
 set LOG=logs\nightly-%TODAY%.log
 
+%PY% src\market_today.py >> "%LOG%" 2>&1
+if %ERRORLEVEL% equ 3 (
+    echo ===== market closed today, nightly skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
+
 echo ===== backfill started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\backfill_premarket.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%

@@ -275,6 +275,21 @@ recorded in analyst_usage.json and must be 1. The report is produced either
 way: on any analyst failure, timeout included, analyst.py renders the plain
 table fallback straight from packet.json and the chain carries on to email.
 
+## Calendar
+
+The is it a trading day guard. Every weekday job runs market_today.py first
+and exits cleanly when the market is closed, because a full pipeline run on
+Thanksgiving would build a watchlist from stale quotes, collect zero trades,
+and email a report about a session that does not exist. The holiday list is
+the EODHD exchange-details endpoint, cached to data/exchange-details.json and
+refreshed when the cache is older than refresh_after_days. On any fetch error
+with no usable cache the guard assumes the market is OPEN: a false closed
+silently loses a real morning, a false open produces one honestly thin
+report.
+
+exchange                      = US
+refresh_after_days            = 7
+
 ## Archive
 
 The single file report archive at site/PremarketDesk.html, rebuilt from

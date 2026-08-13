@@ -11,6 +11,12 @@ if "%TODAY%"=="" set TODAY=undated
 if not exist logs mkdir logs
 set LOG=logs\morning-chain-%TODAY%.log
 
+%PY% src\market_today.py >> "%LOG%" 2>&1
+if %ERRORLEVEL% equ 3 (
+    echo ===== market closed today, morning chain skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
+
 echo ===== scan started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\scan.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%

@@ -10,6 +10,12 @@ if "%TODAY%"=="" set TODAY=undated
 if not exist logs mkdir logs
 set LOG=logs\collector-%TODAY%.log
 
+%PY% src\market_today.py >> "%LOG%" 2>&1
+if %ERRORLEVEL% equ 3 (
+    echo ===== market closed today, collector skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
+
 echo ===== collector started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\collect_premarket.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%

@@ -248,7 +248,10 @@
     the amber night job returns after the data vendor has published the full
     day, records what the morning could not see, and rebuilds the single file
     report archive at site/PremarketDesk.html, which the morning chain also
-    rebuilds as its own last step.</figcaption>
+    rebuilds as its own last step. Before any of this, every weekday job asks
+    market_today.py whether the market trades today: on a weekend or an
+    official holiday, from the cached EODHD exchange calendar, the job logs
+    one line and stops.</figcaption>
   </figure>
 </section>
 
@@ -506,6 +509,16 @@
   <div class="table-wrap">
   <table class="files">
     <tr>
+      <td>a market holiday arrives</td>
+      <td>Every weekday job runs market_today.py first. On a weekend or an
+      official exchange holiday (cached from EODHD exchange-details,
+      refreshed weekly) the job logs one line and exits cleanly: no
+      watchlist from stale quotes, no empty collection, no report about a
+      session that does not exist. If the calendar is unreachable and no
+      cache exists, the guard assumes the market is open, because a false
+      closed silently loses a real morning.</td>
+    </tr>
+    <tr>
       <td>universe.py fails Sunday</td>
       <td>The week runs on the last good universe.json until it turns ten days
       old, then discover and scan refuse to run, printing the age and the
@@ -595,10 +608,10 @@
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>all code: config, ettime (the one ET clock), criteria, eodhd, store, universe, discover, collect_premarket, baseline, scan, analyst, render_report, deliver, backfill_premarket, fill_outcomes, verify_morning, build_archive</td></tr>
+    <tr><td>src\</td><td>all code: config, ettime (the one ET clock), criteria, eodhd, store, universe, discover, collect_premarket, baseline, scan, analyst, render_report, deliver, backfill_premarket, fill_outcomes, verify_morning, build_archive, market_today (the trading day guard)</td></tr>
     <tr><td>doc\</td><td>CRITERIA.md (every threshold), REPORT_TEMPLATE.md, prompt_analyst.md, BUILD_PLAN.md, this page</td></tr>
     <tr><td>tasks\</td><td>five job .bat files, register_tasks.ps1, README with scheduling notes</td></tr>
-    <tr><td>data\</td><td>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl minute bars, premarketdesk.db, UNVERIFIED gate marker</td></tr>
+    <tr><td>data\</td><td>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl minute bars, premarketdesk.db, exchange-details.json holiday cache, UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, verify_intraday.json</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>
     <tr><td>logs\</td><td>one dated log per job per day</td></tr>

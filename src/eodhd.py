@@ -423,6 +423,18 @@ class EodhdClient:
             return ApiResult(None, f"eod {symbol} failed: payload was not a list")
         return ApiResult(rows, None)
 
+    def exchange_details(self, exchange: str) -> ApiResult:
+        """Exchange metadata: official holidays, early closes, trading hours."""
+        result = self._request(
+            f"exchange-details/{exchange}",
+            endpoint="exchange-details",
+        )
+        if not result.ok:
+            return result
+        if not isinstance(result.data, dict):
+            return ApiResult(None, f"exchange-details {exchange}: payload was not an object")
+        return result
+
     def exchange_symbol_list(self, exchange: str) -> ApiResult:
         """Every listed symbol on an exchange, with its security Type."""
         result = self._request(
