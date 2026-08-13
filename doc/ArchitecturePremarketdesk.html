@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PremarketDesk architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ground:#F6F7F9;
+  --panel:#FFFFFF;
+  --ink:#15181E;
+  --ink-2:#3C444F;
+  --ink-3:#6B7581;
+  --rule:#DCE0E6;
+  --rule-2:#EDEFF3;
+
+  --sched:#5B6B7A;
+  --found:#1F6E6A;
+  --morn:#2C5FA8;
+  --night:#A87308;
+  --conf:#75409B;
+  --store:#33763A;
+  --ext:#A3364F;
+
+  --sched-bg:#EEF1F4;
+  --found-bg:#E7F2F1;
+  --morn-bg:#E9F0FA;
+  --night-bg:#FAF2DF;
+  --conf-bg:#F2EBF8;
+  --store-bg:#EAF3EA;
+  --ext-bg:#FAEBEF;
+
+  --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+  --sans:'IBM Plex Sans',-apple-system,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--sans);font-size:15.5px;line-height:1.62;
+  font-feature-settings:"tnum" 1;
+}
+.wrap{max-width:1120px;margin:0 auto;padding:0 28px 120px}
+
+/* masthead */
+.mast{padding:64px 0 34px;border-bottom:2px solid var(--ink)}
+.mast .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3)}
+.mast h1{font-size:44px;line-height:1.06;margin:14px 0 0;letter-spacing:-.022em;font-weight:600}
+.mast .sub{margin:14px 0 0;max-width:64ch;color:var(--ink-2);font-size:16px}
+.mast .meta{margin-top:22px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);display:flex;flex-wrap:wrap;gap:22px}
+
+/* contents */
+.toc{margin:30px 0 0;padding:22px 24px;background:var(--panel);border:1px solid var(--rule)}
+.toc ol{margin:0;padding:0;list-style:none;columns:2;column-gap:38px}
+.toc li{margin:0 0 7px;font-size:14px;break-inside:avoid}
+.toc a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--rule)}
+.toc a:hover{color:var(--ink);border-color:var(--ink)}
+.toc .n{font-family:var(--mono);color:var(--ink-3);margin-right:10px;font-size:12.5px}
+
+/* sections */
+section{padding-top:58px}
+h2{font-size:12px;font-family:var(--mono);letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px;font-weight:500}
+h2 .n{color:var(--ink);font-weight:600}
+h3{font-size:27px;line-height:1.2;margin:0 0 16px;letter-spacing:-.016em;font-weight:600;max-width:32ch}
+h4{font-size:15px;margin:32px 0 10px;font-weight:600;letter-spacing:-.005em}
+p{margin:0 0 15px;max-width:74ch;color:var(--ink-2)}
+p strong{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:.885em;background:var(--rule-2);padding:1px 5px;border-radius:2px;color:var(--ink)}
+.lede{font-size:17px;color:var(--ink);max-width:70ch}
+
+/* layer chips */
+.cid{font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.02em}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 8px}
+.lg{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:5px 10px;border-left:3px solid}
+.lg.sched{border-color:var(--sched);background:var(--sched-bg);color:var(--sched)}
+.lg.found{border-color:var(--found);background:var(--found-bg);color:var(--found)}
+.lg.morn{border-color:var(--morn);background:var(--morn-bg);color:var(--morn)}
+.lg.night{border-color:var(--night);background:var(--night-bg);color:var(--night)}
+.lg.conf{border-color:var(--conf);background:var(--conf-bg);color:var(--conf)}
+.lg.store{border-color:var(--store);background:var(--store-bg);color:var(--store)}
+.lg.ext{border-color:var(--ext);background:var(--ext-bg);color:var(--ext)}
+
+/* figures */
+figure{margin:26px 0 8px;background:var(--panel);border:1px solid var(--rule);padding:26px 24px 20px}
+figcaption{margin-top:20px;padding-top:14px;border-top:1px solid var(--rule-2);font-size:13px;color:var(--ink-3);max-width:80ch}
+figcaption b{color:var(--ink-2);font-weight:600}
+
+/* box primitive */
+.box{background:var(--panel);border:1px solid var(--rule);border-top:3px solid var(--ink-3);padding:11px 13px;min-width:0}
+.box .cid{display:block;margin-bottom:3px;opacity:.85}
+.box .nm{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--ink);word-break:break-word}
+.box .dt{font-size:12px;color:var(--ink-3);margin-top:4px;line-height:1.45}
+.box.sched{border-top-color:var(--sched)} .box.sched .cid{color:var(--sched)}
+.box.found{border-top-color:var(--found)} .box.found .cid{color:var(--found)}
+.box.morn{border-top-color:var(--morn)}  .box.morn .cid{color:var(--morn)}
+.box.night{border-top-color:var(--night)} .box.night .cid{color:var(--night)}
+.box.conf{border-top-color:var(--conf)}  .box.conf .cid{color:var(--conf)}
+.box.store{border-top-color:var(--store)} .box.store .cid{color:var(--store)}
+.box.ext{border-top-color:var(--ext)}   .box.ext .cid{color:var(--ext)}
+.box.store{background:var(--store-bg)}
+.box.ext{background:var(--ext-bg)}
+
+/* arrows */
+.ar{font-family:var(--mono);color:var(--ink-3);font-size:19px;text-align:center;align-self:center;padding:0 2px;user-select:none}
+.ar.night{color:var(--night)}
+.ar small{display:block;font-size:10px;letter-spacing:.05em;color:var(--ink-3);margin-top:-2px}
+
+/* clock rail */
+.rail{display:grid;grid-template-columns:78px 1fr;gap:0}
+.rail .t{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);padding:14px 14px 14px 0;text-align:right;border-right:2px solid var(--rule);white-space:nowrap}
+.rail .t b{color:var(--ink);font-weight:600;display:block;font-size:14px}
+.rail .c{padding:14px 0 14px 20px;position:relative;border-right:0}
+.rail .c::before{content:"";position:absolute;left:-6px;top:22px;width:10px;height:10px;background:var(--panel);border:2px solid var(--sched);border-radius:50%}
+.rail .c.morn::before{border-color:var(--morn)}
+.rail .c.night::before{border-color:var(--night)}
+.rail .c.conf::before{border-color:var(--conf)}
+.rail .c.open::before{border-color:var(--ink);background:var(--ink)}
+.rail .c h5{margin:0 0 4px;font-size:14.5px;font-weight:600;letter-spacing:-.005em}
+.rail .c p{margin:0;font-size:13.5px;max-width:70ch}
+.rail .c .ids{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:5px}
+.rail .band{grid-column:2;margin:0 0 0 20px;padding:9px 12px;background:var(--morn-bg);border-left:3px solid var(--morn);font-size:12.5px;font-family:var(--mono);color:var(--morn)}
+
+/* relay */
+.relay{display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr 26px 1fr;gap:10px 0;align-items:stretch}
+.relay .box{grid-column:span 1}
+.stack{display:grid;gap:8px}
+
+/* generic flow row */
+.flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+.flow .box{flex:1 1 168px}
+
+/* steps */
+.steps{counter-reset:s;margin:20px 0 0;padding:0;list-style:none}
+.steps li{counter-increment:s;position:relative;padding:0 0 16px 46px;margin:0}
+.steps li::before{content:counter(s,decimal-leading-zero);position:absolute;left:0;top:1px;font-family:var(--mono);font-size:12px;color:var(--morn);font-weight:600;background:var(--morn-bg);padding:2px 7px}
+.steps li b{display:block;font-size:14.5px;color:var(--ink);margin-bottom:2px}
+.steps li span{font-size:13.5px;color:var(--ink-2)}
+
+/* tables */
+.tw{overflow-x:auto;margin:24px 0 8px;border:1px solid var(--rule);background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule-2);vertical-align:top}
+th{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);font-weight:500;background:var(--ground);border-bottom:1px solid var(--rule);position:sticky;top:0}
+td.id{font-family:var(--mono);font-weight:600;white-space:nowrap;width:52px}
+td.nm{font-family:var(--mono);font-size:12.5px;white-space:nowrap;color:var(--ink)}
+tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--ground)}
+.lay{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;white-space:nowrap}
+.lay.sched{background:var(--sched-bg);color:var(--sched)}
+.lay.found{background:var(--found-bg);color:var(--found)}
+.lay.morn{background:var(--morn-bg);color:var(--morn)}
+.lay.night{background:var(--night-bg);color:var(--night)}
+.lay.conf{background:var(--conf-bg);color:var(--conf)}
+.lay.store{background:var(--store-bg);color:var(--store)}
+.lay.ext{background:var(--ext-bg);color:var(--ext)}
+.mx td{text-align:center;font-family:var(--mono);font-size:12px;font-weight:600}
+.mx td:first-child,.mx td:nth-child(2){text-align:left}
+.mx th:not(:first-child):not(:nth-child(2)){text-align:center;font-size:9.5px;letter-spacing:.04em}
+.r{color:var(--morn)} .w{color:var(--store)} .rw{color:var(--conf)} .dash{color:var(--rule)}
+
+/* rules */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:24px}
+.rule-c{background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--ink);padding:16px 18px}
+.rule-c h5{margin:0 0 7px;font-size:14.5px;font-weight:600;letter-spacing:-.005em}
+.rule-c p{margin:0;font-size:13.5px}
+.rule-c .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:6px}
+
+/* coverage bar */
+.cov{margin:22px 0 0}
+.cov .scale{display:flex;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);justify-content:space-between;margin-bottom:5px}
+.cov .bar{display:flex;height:38px;border:1px solid var(--rule)}
+.cov .seg{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-align:center;padding:0 6px}
+.cov .blind{flex:0 0 60.6%;background:repeating-linear-gradient(135deg,var(--ground),var(--ground) 6px,#E4E7EC 6px,#E4E7EC 12px);color:var(--ink-3)}
+.cov .live{flex:1;background:var(--morn-bg);color:var(--morn);border-left:1px solid var(--rule)}
+.cov .truth{margin-top:8px;height:26px;background:var(--night-bg);border:1px solid var(--night);color:var(--night);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;letter-spacing:.04em}
+
+/* row lifecycle */
+.life{display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr;align-items:start}
+.life .col{background:var(--panel);border:1px solid var(--rule);border-top:3px solid var(--morn);padding:14px 15px}
+.life .col.n2{border-top-color:var(--night)}
+.life .col.n3{border-top-color:var(--night)}
+.life .col h5{margin:0 0 2px;font-size:14px;font-weight:600}
+.life .col .when{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:10px;display:block}
+.life .col ul{margin:0;padding:0;list-style:none;font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--ink-2)}
+
+/* filemap */
+.fm{display:grid;grid-template-columns:132px 1fr;gap:0;border:1px solid var(--rule);background:var(--panel)}
+.fm dt{font-family:var(--mono);font-size:12.5px;font-weight:600;padding:11px 14px;border-bottom:1px solid var(--rule-2);color:var(--ink)}
+.fm dd{margin:0;padding:11px 14px;border-bottom:1px solid var(--rule-2);border-left:1px solid var(--rule-2);font-size:13px;color:var(--ink-2)}
+.fm dt:last-of-type,.fm dd:last-of-type{border-bottom:0}
+
+.note{background:var(--panel);border:1px solid var(--rule);border-left:3px solid var(--night);padding:15px 18px;margin:22px 0 0}
+.note p{margin:0;font-size:13.5px}
+.note b{color:var(--ink)}
+
+@media (max-width:860px){
+  .wrap{padding:0 18px 80px}
+  .mast h1{font-size:32px}
+  .toc ol{columns:1}
+  .relay,.life{grid-template-columns:1fr}
+  .relay .ar,.life .ar{transform:rotate(90deg);padding:6px 0}
+  h3{font-size:22px}
+}
+@media print{body{background:#fff}.toc{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">doc / architecture</div>
+  <h1>PremarketDesk</h1>
+  <p class="sub">There is no server, no queue, and no service. PremarketDesk is six Windows Task Scheduler
+  jobs on one machine, each waking at its own time, reading files the earlier jobs left behind, and
+  leaving files for the next. The schedule is the architecture.</p>
+  <div class="meta">
+    <span>37 components</span><span>6 scheduled jobs</span><span>1 data vendor</span><span>1 model call per day</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <ol>
+    <li><span class="n">01</span><a href="#s1">What this is for</a></li>
+    <li><span class="n">02</span><a href="#s2">The weekday, end to end</a></li>
+    <li><span class="n">03</span><a href="#s3">Layers and component catalogue</a></li>
+    <li><span class="n">04</span><a href="#s4">The morning relay</a></li>
+    <li><span class="n">05</span><a href="#s5">Inside the scan</a></li>
+    <li><span class="n">06</span><a href="#s6">Inside the analyst pass</a></li>
+    <li><span class="n">07</span><a href="#s7">The blind window and the night</a></li>
+    <li><span class="n">08</span><a href="#s8">One picks row, three passes</a></li>
+    <li><span class="n">09</span><a href="#s9">Data store read and write matrix</a></li>
+    <li><span class="n">10</span><a href="#s10">Failure behaviour</a></li>
+    <li><span class="n">11</span><a href="#s11">Load-bearing rules</a></li>
+    <li><span class="n">12</span><a href="#s12">File map</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section id="s1">
+  <h2><span class="n">01</span> &nbsp;Purpose</h2>
+  <h3>What this is for</h3>
+  <p class="lede">PremarketDesk has two goals that live on different timescales, and most of the
+  confusion about it comes from reading one and expecting the other.</p>
+  <p><strong>The daily goal is orientation before the bell.</strong> At 08:53 an email arrives naming
+  the stocks that gapped overnight, the headline behind each one, whether the premarket volume behind
+  the move is unusual for that ticker or ordinary, and where price sits against the prior high, the
+  premarket high, and the 200-day average. It replaces the hour most people spend scanning between
+  07:00 and 09:30. It is not a signal and cannot be one, because gap setups resolve in the first
+  fifteen minutes and the report is read at 09:00.</p>
+  <p><strong>The long goal is finding out whether the screen is worth anything.</strong> Every morning
+  the system writes down what it claimed and where the levels were. Every night it writes down what
+  actually happened. After enough sessions that record answers questions that cannot be answered
+  today: whether gap plus catalyst plus premarket relative volume has an edge on this data rather
+  than on the data of whoever published the thresholds, whether a high confluence score outperforms a
+  low one, and which component of the score is carrying the result. Until then the thresholds in
+  <code>CRITERIA.md</code> are seed values copied from a third party and the report is a well-formatted
+  list of names that met a stranger's rules.</p>
+  <p>The briefing exists to keep the system in daily use long enough for the record to become worth
+  reading. That is the whole design in one sentence.</p>
+  <div class="note"><p><b>Sample unit is the session, not the row.</b> Twelve candidates from one
+  morning share a market, a macro print, and often a sector move, so they are not twelve independent
+  observations. Any analysis of the record aggregates to one figure per session before comparing
+  conviction buckets.</p></div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2><span class="n">02</span> &nbsp;Timeline</h2>
+  <h3>The weekday, end to end</h3>
+  <p>Each job wakes on its clock time, does one thing, and exits. No job calls another. What passes
+  between them is files on disk, which is why a dead job shows up downstream as a missing file with a
+  stated reason rather than as a crash.</p>
+
+  <figure>
+    <div class="rail">
+      <div class="t"><b>SUN 20:00</b>weekly</div>
+      <div class="c conf">
+        <h5>Rebuild the discovery population</h5>
+        <p>Pulls the NYSE and NASDAQ symbol lists, keeps common stock only, and admits roughly 2,700
+        names on price, dollar volume, market cap, and history. The whole week screens against this file.</p>
+        <div class="ids">C02 fires C12 &rarr; writes C26</div>
+      </div>
+
+      <div class="t"><b>07:15</b>ET</div>
+      <div class="c morn">
+        <h5>Find the morning's gappers, warm the baselines</h5>
+        <p>One bulk quote call across the population, gap computed against prior close, top 30 by
+        absolute gap written to the watchlist. In the same pass it refreshes any stale premarket
+        volume medians, which keeps that fetch off the 08:45 critical path.</p>
+        <div class="ids">C03 fires C13 and C14 &rarr; writes C27, C30</div>
+      </div>
+
+      <div class="t"><b>07:20</b>to 09:25</div>
+      <div class="c morn">
+        <h5>Listen to live trades</h5>
+        <p>Opens the trades websocket, subscribes to the 30 watchlist names plus eight fixed context
+        tickers, and aggregates incoming prints into one-minute bars on disk. This is the only source
+        of today's premarket price path.</p>
+        <div class="ids">C04 fires C15 &rarr; writes C28</div>
+      </div>
+
+      <div class="t"><b>08:45</b>ET</div>
+      <div class="c morn">
+        <h5>Gather the evidence and decide</h5>
+        <p>Fresh gap pass, top 12 candidates, per-candidate enrichment, premarket relative volume
+        against the cached median, catalyst headlines by symbol tag, economic events, earnings. Then
+        the eligibility booleans and the confluence score, both computed in Python. Every decision in
+        the system is made here.</p>
+        <div class="ids">C05 fires C16 &rarr; writes C29, C31</div>
+      </div>
+
+      <div class="t"><b>08:46</b>ET</div>
+      <div class="c morn">
+        <h5>Write the narrative</h5>
+        <p>Pipes the prompt, the template, and the packet to the Claude CLI under the existing
+        subscription. The model writes prose around numbers that are already fixed. A containment
+        check fails the run if the report names a ticker the packet does not carry.</p>
+        <div class="ids">C05 fires C17 &rarr; reads C24, C25, C29</div>
+      </div>
+
+      <div class="t"><b>08:53</b>ET</div>
+      <div class="c morn">
+        <h5>Render and send</h5>
+        <p>Markdown to a single HTML file, then out by email. While the unverified marker file exists,
+        sending is refused no matter what keys are configured.</p>
+        <div class="ids">C05 fires C18 and C19 &rarr; gated by C33</div>
+      </div>
+
+      <div class="t"><b>09:30</b>ET</div>
+      <div class="c open">
+        <h5>Market opens</h5>
+        <p>The system has already finished. Nothing it does after this point affects today's report.</p>
+        <div class="ids">&mdash;</div>
+      </div>
+
+      <div class="t"><b>22:15</b>ET</div>
+      <div class="c night">
+        <h5>Write down what was really true</h5>
+        <p>The vendor has now published the full 04:00 to 09:30 intraday bars. The backfill widens
+        this morning's rows with the true premarket levels, beside the live values and never over
+        them. The outcomes pass returns to older rows once one and five sessions have elapsed.</p>
+        <div class="ids">C06 fires C20 and C21 &rarr; writes C31</div>
+      </div>
+    </div>
+    <figcaption><b>One weekday.</b> The morning jobs gather live evidence while it exists. The night
+    job returns hours after the report has already gone out, once the vendor has published data that
+    did not exist at 08:45. Times are Eastern throughout, resolved by a single clock module rather
+    than by the machine's local time.</figcaption>
+  </figure>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2><span class="n">03</span> &nbsp;Catalogue</h2>
+  <h3>Layers and component catalogue</h3>
+  <p>Every component carries an identifier used consistently in every figure and table on this page.
+  Seven layers, colour-coded by the left or top accent wherever a component appears.</p>
+
+  <div class="legend">
+    <span class="lg sched">Scheduler</span>
+    <span class="lg found">Foundation</span>
+    <span class="lg morn">Morning pipeline</span>
+    <span class="lg night">Night pipeline</span>
+    <span class="lg conf">Authored input</span>
+    <span class="lg store">Data store</span>
+    <span class="lg ext">External</span>
+  </div>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>ID</th><th>Component</th><th>Layer</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06</td></tr>
+      <tr><td class="id">C02</td><td class="nm">job_universe.bat</td><td><span class="lay sched">Scheduler</span></td><td>Sun 20:00</td><td>&mdash;</td><td>C12, C34</td></tr>
+      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:15</td><td>&mdash;</td><td>C13, C14, C34</td></tr>
+      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:20</td><td>&mdash;</td><td>C15, C34</td></tr>
+      <tr><td class="id">C05</td><td class="nm">job_morning.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>&mdash;</td><td>C16-C19, C34</td></tr>
+      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15</td><td>&mdash;</td><td>C20, C21, C34</td></tr>
+
+      <tr><td class="id">C07</td><td class="nm">config.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>.env, paths</td><td>&mdash;</td></tr>
+      <tr><td class="id">C08</td><td class="nm">ettime.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>System clock</td><td>&mdash;</td></tr>
+      <tr><td class="id">C09</td><td class="nm">criteria.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C23</td><td>&mdash;</td></tr>
+      <tr><td class="id">C10</td><td class="nm">eodhd.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C35, C36</td><td>Call counter</td></tr>
+      <tr><td class="id">C11</td><td class="nm">store.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C30, C31</td><td>C30, C31</td></tr>
+
+      <tr><td class="id">C12</td><td class="nm">universe.py</td><td><span class="lay morn">Morning</span></td><td>Weekly</td><td>C35</td><td>C26</td></tr>
+      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C26, C35</td><td>C27</td></tr>
+      <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C27, C30, C35</td><td>C30</td></tr>
+      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>07:20-09:25</td><td>C27, C36</td><td>C28</td></tr>
+      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C28, C30, C35</td><td>C29, C31, C32</td></tr>
+      <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
+      <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:53</td><td>C32</td><td>C32</td></tr>
+      <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:53</td><td>C32, C33, C38</td><td>C34</td></tr>
+
+      <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
+      <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
+      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay night">Night</span></td><td>By hand</td><td>C29, C31, C32</td><td>Console</td></tr>
+
+      <tr><td class="id">C23</td><td class="nm">CRITERIA.md</td><td><span class="lay conf">Authored</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C24</td><td class="nm">prompt_analyst.md</td><td><span class="lay conf">Authored</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C25</td><td class="nm">REPORT_TEMPLATE.md</td><td><span class="lay conf">Authored</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+
+      <tr><td class="id">C26</td><td class="nm">universe.json</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C27</td><td class="nm">watchlist.json</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C28</td><td class="nm">premarket/&lt;date&gt;.jsonl</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C29</td><td class="nm">packet.json</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C30</td><td class="nm">db: baseline table</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C31</td><td class="nm">db: picks table</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>Deleted by hand</td></tr>
+      <tr><td class="id">C34</td><td class="nm">logs/</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+
+      <tr><td class="id">C35</td><td class="nm">EODHD REST</td><td><span class="lay ext">External</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C36</td><td class="nm">EODHD trades socket</td><td><span class="lay ext">External</span></td><td>04:00-20:00</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C37</td><td class="nm">claude CLI</td><td><span class="lay ext">External</span></td><td>On call</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C38</td><td class="nm">Resend</td><td><span class="lay ext">External</span></td><td>On call</td><td>&mdash;</td><td>&mdash;</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:14px;font-size:13px;color:var(--ink-3)">The foundation layer is imported by
+  everything and scheduled by nothing. One clock module means one answer to what time it is, which
+  matters on a machine outside the exchange's timezone crossing two daylight saving boundaries a year.</p>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <h2><span class="n">04</span> &nbsp;Morning flow</h2>
+  <h3>The morning relay</h3>
+  <p>Each stage writes one artifact and the next stage reads it. Nothing talks to anything else at
+  runtime. If a stage dies, its file is simply absent and the next stage records the absence in the
+  packet's <code>gaps_to_fill</code> list rather than raising.</p>
+
+  <figure>
+    <div class="relay">
+      <div class="box conf"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 20:00. Common stock only, ~2,700 names.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">07:15. One bulk call, gap vs prior close, top 30.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">07:20-09:25. Websocket trades to 1m bars.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box morn"><span class="cid">C16</span><span class="nm">scan.py</span><span class="dt">08:45. All decisions made here.</span></div>
+
+      <div class="box store"><span class="cid">C26</span><span class="nm">universe.json</span></div>
+      <div class="ar"></div>
+      <div class="box store"><span class="cid">C27</span><span class="nm">watchlist.json</span></div>
+      <div class="ar"></div>
+      <div class="box store"><span class="cid">C28</span><span class="nm">premarket/&lt;date&gt;.jsonl</span></div>
+      <div class="ar"></div>
+      <div class="box store"><span class="cid">C29</span><span class="nm">packet.json</span></div>
+    </div>
+
+    <div class="relay" style="margin-top:18px">
+      <div class="box morn"><span class="cid">C17</span><span class="nm">analyst.py</span><span class="dt">08:46. Claude CLI writes the prose only.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box morn"><span class="cid">C18</span><span class="nm">render_report.py</span><span class="dt">08:53. Markdown to one HTML file.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box morn"><span class="cid">C19</span><span class="nm">deliver.py</span><span class="dt">08:53. Blocked while C33 exists.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box ext"><span class="cid">C38</span><span class="nm">Resend</span><span class="dt">Inbox, 08:53.</span></div>
+
+      <div class="box store"><span class="cid">C32</span><span class="nm">report.md</span></div>
+      <div class="ar"></div>
+      <div class="box store"><span class="cid">C32</span><span class="nm">report.html</span></div>
+      <div class="ar"></div>
+      <div class="box store"><span class="cid">C33</span><span class="nm">UNVERIFIED gate</span></div>
+      <div class="ar"></div>
+      <div class="box night"><span class="cid">C20</span><span class="nm">night returns here</span><span class="dt">22:15, to the rows C16 created.</span></div>
+    </div>
+
+    <figcaption><b>The relay.</b> Solid arrows are same-morning handoffs. The single scheduled
+    dependency that spans days is the one at the far right: the night pipeline returns to the database
+    rows the 08:45 scan created, hours after the report has already been sent and read.</figcaption>
+  </figure>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <h2><span class="n">05</span> &nbsp;Opened up</h2>
+  <h3>Inside the scan</h3>
+  <p>The scan does more work than anything else in the system and it is the only place where a
+  decision is made. Eight ordered steps, no model involved in any of them.</p>
+
+  <figure>
+    <ol class="steps">
+      <li><b>Market snapshot</b><span>The index, volatility, rates, oil, and dollar tickers, last price and change against prior close. Context for the narrative, never an input to eligibility.</span></li>
+      <li><b>Final candidates</b><span>A fresh bulk quote call rather than trusting the 07:15 watchlist, gap recomputed, top 12 by absolute gap. The universe size that produced them is recorded.</span></li>
+      <li><b>Per-candidate enrichment</b><span>Extended-hours volume and last price, market cap, float, average volume, 200-day average, previous close. Prior-day high and 20-day average volume from the end-of-day feed.</span></li>
+      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else. A candidate that first gapped after 07:20 was never subscribed, so its levels are null with <code>collector_covered</code> false rather than filled from a snapshot.</span></li>
+      <li><b>Premarket relative volume</b><span>Extended-hours volume as of the run divided by the cached median for the same clock cutoff. Fewer than ten baseline sessions, or a missing collector file, produces null plus a written reason. Full-day relative volume is never substituted.</span></li>
+      <li><b>Catalyst</b><span>Vendor news filtered by symbol tag over 24 hours, top three with headline, publisher, link, time, and sentiment. No keyword matching and no company-name regex, because the feed is already tagged. No tagged story means <code>catalyst_found</code> false.</span></li>
+      <li><b>Calendar</b><span>High-importance US economic events for today and tomorrow, and earnings for the candidates plus notable names reporting tomorrow.</span></li>
+      <li><b>Flags and score</b><span>Eligibility booleans read straight from the criteria file with the names of any failed conditions recorded. Then a confluence score from 0 to 10 built from catalyst class, relative volume band, gap band, position against prior high and premarket average, and market cap, bucketed green, yellow, or red. The per-component breakdown is stored, not just the total, so the score can be argued with later.</span></li>
+    </ol>
+    <figcaption><b>Why the order matters.</b> Provenance is established before relative volume is
+    computed, and relative volume before the score, so a null can never silently become a zero
+    contribution that looks like a measured one. Two runs against the same inputs produce byte-identical
+    scores.</figcaption>
+  </figure>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <h2><span class="n">06</span> &nbsp;Opened up</h2>
+  <h3>Inside the analyst pass</h3>
+  <p>This is the boundary the whole design is built around. Everything to the left of it is
+  deterministic and reproducible. Everything to the right is prose. The model never chooses a name,
+  never sets a number, and never changes a conviction.</p>
+
+  <figure>
+    <div class="flow">
+      <div class="box conf"><span class="cid">C24</span><span class="nm">prompt_analyst.md</span><span class="dt">The contract: what may not be invented.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box conf"><span class="cid">C25</span><span class="nm">REPORT_TEMPLATE.md</span><span class="dt">Eleven fixed sections, in order.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box store"><span class="cid">C29</span><span class="nm">packet.json</span><span class="dt">Every number, already decided.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box ext"><span class="cid">C37</span><span class="nm">claude -p --model sonnet</span><span class="dt">Subscription auth. No API key exists in this project.</span></div>
+      <div class="ar">&rarr;</div>
+      <div class="box store"><span class="cid">C32</span><span class="nm">report.md</span><span class="dt">Prose only.</span></div>
+    </div>
+
+    <h4>What is fixed before the model sees anything</h4>
+    <p style="font-size:13.5px">Which tickers appear. Which watchlist each one belongs to. The
+    conviction colour. Every price, level, ratio, and percentage. The section order. The list of
+    candidates whose data is incomplete.</p>
+
+    <h4>What the model is asked to do</h4>
+    <p style="font-size:13.5px">Explain why each name is moving using the supplied headline, say what
+    would invalidate the setup, connect the macro calendar to the day's tone, and name the traps.
+    Nothing in that list changes a number.</p>
+
+    <h4>What stops it going wrong</h4>
+    <p style="font-size:13.5px">A containment check compares every ticker in the report against the
+    packet and fails the run on any name that is not there. The prompt requires the disclaimer line to
+    name any candidate with a null relative volume or a partial premarket window. A run that exceeds
+    240 seconds, exits non-zero, or is refused for any reason falls back to rendering the packet as
+    plain tables stamped with the reason, so a report always goes out.</p>
+
+    <figcaption><b>One model call per weekday.</b> Roughly 12,000 input tokens and 2,000 output,
+    against the existing Claude subscription rather than a metered API key. Token counts are written to
+    <code>runs/&lt;date&gt;/analyst_usage.json</code> so the real cost is measured rather than assumed.</figcaption>
+  </figure>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+  <h2><span class="n">07</span> &nbsp;Coverage</h2>
+  <h3>The blind window and the night</h3>
+  <p>Two facts force the night pipeline to exist. The premarket session opens at 04:00 but the
+  collector only starts listening at 07:20, so the morning's premarket high honestly describes a
+  partial window. And the vendor publishes its one-minute intraday bars several hours behind live, so
+  the full truth does not exist anywhere until the evening.</p>
+
+  <figure>
+    <div class="cov">
+      <div class="scale"><span>04:00</span><span>07:20</span><span>09:30 open</span></div>
+      <div class="bar">
+        <div class="seg blind">NO LISTENER &mdash; by design</div>
+        <div class="seg live">C15 COLLECTOR, LIVE &rarr; C28</div>
+      </div>
+      <div class="truth">C35 INTRADAY 1m &mdash; the whole session, published hours later &rarr; C20 at 22:15</div>
+    </div>
+    <figcaption><b>Coverage of the 04:00 to 09:30 premarket session.</b> The morning writes what the
+    collector actually heard, labelled partial where it was partial. The night writes
+    <code>pm_high_true</code>, <code>pm_low_true</code>, and <code>pm_vwap_true</code> beside those
+    values and never over them. The distance between the two column families is not noise to be
+    cleaned up, it is the measured cost of starting at 07:20 instead of 04:00, and after a month it
+    tells you whether that trade was worth making.</figcaption>
+  </figure>
+
+  <div class="note"><p><b>A true high below the live high is suspicious, not impossible.</b> The
+  trades socket and the published bars can differ on odd lots, condition codes, and late corrections,
+  so a legitimate feed difference will trip this. The backfill records the size of the discrepancy as
+  a percentage rather than a boolean, so small feed noise stays visibly distinct from a real fault,
+  and a human decides. Nothing is silently corrected.</p></div>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+  <h2><span class="n">08</span> &nbsp;Record</h2>
+  <h3>One picks row, three passes</h3>
+  <p>The clearest way to see the system is to follow a single database row. The scan creates it in the
+  morning, the backfill widens it the same night, and the outcomes pass returns one and five sessions
+  later to record what the market actually did.</p>
+
+  <figure>
+    <div class="life">
+      <div class="col">
+        <h5>Scan creates it</h5>
+        <span class="when">C16 &mdash; 08:45, same morning</span>
+        <ul>
+          <li>date, ticker</li>
+          <li>day_eligible, swing_eligible</li>
+          <li>score, conviction</li>
+          <li>gap_pct, pm_rvol</li>
+          <li>pm_high, pm_low, pm_vwap</li>
+          <li>collector_covered</li>
+          <li>pm_window_start</li>
+          <li>prior_high, catalyst_class</li>
+          <li>entry_ref, stop_ref</li>
+        </ul>
+      </div>
+      <div class="ar night">&rarr;<small>same night</small></div>
+      <div class="col n2">
+        <h5>Backfill widens it</h5>
+        <span class="when">C20 &mdash; 22:15, same night</span>
+        <ul>
+          <li>pm_high_true</li>
+          <li>pm_low_true</li>
+          <li>pm_vwap_true</li>
+          <li>pm_true_bars</li>
+          <li>pm_source_disagreement</li>
+          <li>backfilled_at</li>
+        </ul>
+      </div>
+      <div class="ar night">&rarr;<small>+1, +5</small></div>
+      <div class="col n3">
+        <h5>Outcomes finish it</h5>
+        <span class="when">C21 &mdash; once 1 and 5 sessions have passed</span>
+        <ul>
+          <li>next_day_open, high</li>
+          <li>next_day_low, close</li>
+          <li>day5_close</li>
+          <li>pm_high_broke_next_day</li>
+          <li>mfe_pct, mae_pct</li>
+          <li>outcomes_filled_at</li>
+        </ul>
+      </div>
+    </div>
+    <figcaption><b>The third column is the point of the project.</b> The first column is what the
+    system claimed. The third is what happened. Until a few dozen sessions of the third column exist,
+    the thresholds driving the first are unvalidated seed values, and the report should be read as a
+    formatted list rather than as a judgement.</figcaption>
+  </figure>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+  <h2><span class="n">09</span> &nbsp;Stores</h2>
+  <h3>Data store read and write matrix</h3>
+  <p>Every store has exactly one writer in the morning path, which is what makes a missing file
+  unambiguous. The picks table is the single exception and is written by three components at three
+  different times, always to different columns of the same row.</p>
+
+  <div class="tw">
+  <table class="mx">
+    <thead><tr>
+      <th>ID</th><th>Component</th>
+      <th>C26<br>universe</th><th>C27<br>watchlist</th><th>C28<br>pm bars</th><th>C29<br>packet</th>
+      <th>C30<br>baseline</th><th>C31<br>picks</th><th>C32<br>runs/</th><th>C33<br>gate</th><th>C34<br>logs</th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="id">C12</td><td class="nm">universe.py</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C13</td><td class="nm">discover.py</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C14</td><td class="nm">baseline.py</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td class="dash">&middot;</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C16</td><td class="nm">scan.py</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="w">W</td><td class="r">R</td><td class="w">W</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C17</td><td class="nm">analyst.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C18</td><td class="nm">render_report.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C19</td><td class="nm">deliver.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="w">W</td></tr>
+      <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:14px;font-size:13px;color:var(--ink-3)">
+  <span class="r" style="font-family:var(--mono);font-weight:600">R</span> reads &nbsp;
+  <span class="w" style="font-family:var(--mono);font-weight:600">W</span> writes &nbsp;
+  <span class="rw" style="font-family:var(--mono);font-weight:600">RW</span> reads then writes the same store.
+  The scan reads the collector's file while the collector is still appending to it, so it copies to a
+  snapshot first, parses only complete lines, and discards any trailing partial line.</p>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <h2><span class="n">10</span> &nbsp;Failure</h2>
+  <h3>Failure behaviour</h3>
+  <p>No job retries another job and no job waits on one. The design question for each failure is only
+  what is missing downstream, what the next stage does about it, and whether the email still goes.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>What fails</th><th>Missing downstream</th><th>What the next stage does</th><th>Email?</th></tr></thead>
+    <tbody>
+      <tr><td class="nm">C12 universe.py<br><span style="font-family:var(--sans);color:var(--ink-3)">Sunday rebuild</span></td><td>Nothing immediately. Last week's C26 is still on disk.</td><td>C13 and C16 run against the stale file until it passes ten days old, then refuse and name the age.</td><td>Yes, until day 10</td></tr>
+      <tr><td class="nm">C13 discover.py<br><span style="font-family:var(--sans);color:var(--ink-3)">07:15</span></td><td>C27 absent or stale, baselines not warmed.</td><td>C15 has nothing to subscribe to and exits with a logged reason. C16 still runs its own gap pass, so candidates are found, but every premarket level is null and baselines are fetched inline.</td><td>Yes, degraded</td></tr>
+      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">07:20 to 09:25</span></td><td>C28 absent or short.</td><td>C16 sets premarket high, low, average, and relative volume to null with <code>collector_covered</code> false and a written reason. The disclaimer line names every affected candidate.</td><td>Yes, degraded</td></tr>
+      <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
+      <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
+      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 240 seconds, non-zero exit, or a refused request, C18 renders C29 directly as plain tables stamped "narrative unavailable" with the reason. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
+      <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:53</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
+      <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
+      <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C21 fill_outcomes<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Outcome columns.</td><td>Same. It scans for unfilled rows past the one and five session marks, so it catches up on its own.</td><td>Already sent</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note"><p><b>Only one failure is unrecoverable.</b> A scan that dies at 08:45 loses that
+  session permanently, because premarket state is live and cannot be fetched again afterwards. Every
+  other failure either degrades the report or self-heals on the next run. That asymmetry is why the
+  scan catches everything and raises nothing.</p></div>
+</section>
+
+<!-- 11 -->
+<section id="s11">
+  <h2><span class="n">11</span> &nbsp;Rules</h2>
+  <h3>Load-bearing rules</h3>
+  <p>Six decisions that shape everything above. Changing any of them changes the architecture rather
+  than the configuration.</p>
+
+  <div class="rules">
+    <div class="rule-c" style="border-left-color:var(--ext)">
+      <span class="tag">One vendor</span>
+      <h5>EODHD is the only market data source</h5>
+      <p>REST for quotes, history, news, and calendars. The trades websocket for live premarket. No
+      second vendor, so there is never a question of which feed a number came from.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--conf)">
+      <span class="tag">One place</span>
+      <h5>Every threshold lives in CRITERIA.md</h5>
+      <p>No Python file contains a screening number. The reader raises on anything missing, so a
+      threshold cannot quietly exist in two places and drift.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--morn)">
+      <span class="tag">The boundary</span>
+      <h5>Python decides, the model narrates</h5>
+      <p>Membership, eligibility, scores, and conviction are all computed before the packet is piped
+      to the CLI. A containment check fails the run if the report names a ticker the packet does not
+      carry.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--night)">
+      <span class="tag">No guessing</span>
+      <h5>Missing evidence is null with a reason</h5>
+      <p>A relative volume that cannot be computed honestly is null plus a reason string, never a
+      substituted proxy. The disclaimer line names every such candidate by ticker.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--store)">
+      <span class="tag">No overwriting</span>
+      <h5>Corrections sit beside the original</h5>
+      <p>The night writes true premarket columns next to the morning's live values and never over
+      them. The distance between them is a measurement the project needs, not an error to clean up.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--sched)">
+      <span class="tag">Human gate</span>
+      <h5>No email until a real morning is verified</h5>
+      <p>While <code>data/UNVERIFIED</code> exists, sending is refused regardless of configuration.
+      Only a person who has checked a live morning's numbers against a reference deletes it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 12 -->
+<section id="s12">
+  <h2><span class="n">12</span> &nbsp;Reference</h2>
+  <h3>File map</h3>
+
+  <dl class="fm">
+    <dt>src\</dt>
+    <dd>config, ettime, criteria, eodhd, store, universe, discover, baseline, collect_premarket,
+    scan, analyst, render_report, deliver, backfill_premarket, fill_outcomes, verify_morning
+    <span style="color:var(--ink-3)">(C07-C22)</span></dd>
+
+    <dt>doc\</dt>
+    <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md, BUILD_PLAN.md, and this page
+    <span style="color:var(--ink-3)">(C23-C25)</span></dd>
+
+    <dt>tasks\</dt>
+    <dd>the job batch files, register_tasks.ps1, and scheduling notes
+    <span style="color:var(--ink-3)">(C02-C06)</span></dd>
+
+    <dt>data\</dt>
+    <dd>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl, premarketdesk.db, UNVERIFIED
+    <span style="color:var(--ink-3)">(C26-C28, C30, C31, C33)</span></dd>
+
+    <dt>runs\&lt;date&gt;\</dt>
+    <dd>packet.json, report.md, report.html, analyst_usage.json, verify_intraday.json,
+    premarket_snapshot.jsonl <span style="color:var(--ink-3)">(C29, C32)</span></dd>
+
+    <dt>logs\</dt>
+    <dd>one dated log per job per day <span style="color:var(--ink-3)">(C34)</span></dd>
+  </dl>
+</section>
+
+</div>
+</body>
+</html>
