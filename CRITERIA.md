@@ -138,6 +138,56 @@ bar_seconds                   = 60
 reconnect_backoff_start_s     = 1
 reconnect_backoff_max_s       = 60
 poll_interval_s               = 60         # only used by the --poll fallback
+auth_wait_s                   = 10         # see the handshake note below
+late_trade_grace_s            = 45         # see the late trade note below
+verify_warmup_minutes         = 25         # see the verification note below
+verify_window_minutes         = 15
+
+### The handshake note
+
+The trades socket sends {"status_code":200,"message":"Authorized"} a moment
+after it opens. A subscribe frame sent before that arrives is answered with
+{"status":500,"message":"Server error"} and the connection is dropped. The
+first build of the collector did exactly that and ran a clean looking fifteen
+minutes on thirty eight liquid symbols, including SPY at midday, and folded
+zero trades. So the collector now waits for the authorization frame, and fails
+loudly if it never comes, rather than sitting on a socket that will never
+deliver anything.
+
+### The late trade note
+
+Trades do not arrive in timestamp order. A trade stamped 12:10:59 can land at
+12:11:07. The first build closed a minute the instant the clock passed it, so
+every late print was thrown away: a fifteen minute run folded 88,632 trades and
+discarded 11,144 of them, which is twelve percent of the volume, silently.
+
+So a minute is not written until late_trade_grace_s has passed since it ended.
+Anything that still arrives after its minute is on disk cannot be merged in,
+because rows are append only and are never revised, which is what makes a
+restart safe. Those stragglers are counted and reported as late_trades and
+late_volume instead. Watch those numbers. If late_volume is a material share of
+the total, raise the grace period.
+
+### The verification note
+
+Two references were tried and one of them is unsound.
+
+Live v1 polling was measured twice against the websocket, with per symbol
+windows taken from the feed's own timestamps and a warmup covering its fifteen
+to sixteen minute delay. It disagreed with the trade stream by orders of
+magnitude in both directions on the most liquid ETFs in the market: IWM +804
+percent, DIA +1113 percent, small caps -50 to -90 percent. Whatever Live v1's
+cumulative volume field measures over a short window, it is not the
+consolidated tape that the websocket delivers, so a within one percent test
+against it is a test against a broken ruler. The --verify mode still prints
+this comparison, labelled as directional only.
+
+The sound reference is EODHD's own one minute intraday bars, which cover
+04:00 to 20:00 ET and match the collector minute for minute. They are
+published with a lag of a few hours, so the definitive check runs in the
+evening: --verify-intraday compares every collected minute against the
+intraday bar for that exact minute, and the nightly backfill runs the same
+comparison for the record. Same window, same units, per minute.
 
 ## Baseline
 
@@ -155,13 +205,74 @@ The 08:45 gathering pass that writes packet.json.
 candidate_count               = 12         # top N by absolute gap, recomputed on a fresh bulk call
 news_lookback_hours           = 24
 news_keep                     = 3
-index_symbols                 = SPY, QQQ, IWM, DIA
-macro_symbols                 = VIX, 10Y, 3M, WTI, DXY
 economic_country              = US
 economic_importance           = high
 economic_days_ahead           = 1          # today plus this many days
 earnings_days_ahead           = 1
 run_time                      = 08:45
+
+## Scan snapshot
+
+The market snapshot line, as report label to EODHD symbol. Order is preserved.
+
+Resolution is tried live first, then end of day. Indices, government bonds and
+the dollar index return NA on the live endpoint but are current in the end of
+day feed, so both paths are needed and the packet records which one answered.
+
+snapshot = SPY : SPY.US
+snapshot = QQQ : QQQ.US
+snapshot = IWM : IWM.US
+snapshot = DIA : DIA.US
+snapshot = VIX : VIX.INDX
+snapshot = 10Y : US10Y.GBOND
+snapshot = 3M : US3M.GBOND
+snapshot = WTI : USO.US
+snapshot = DXY : DXY.INDX
+
+EODHD commodity symbols are not on this plan. CL.COMM, WTI.COMM, CL1.COMM,
+BRENT.COMM and OIL.COMM all return 404 on both the live and the end of day
+endpoints. USO is an oil ETF standing in for WTI and it is labelled as a proxy
+everywhere it appears, including in the report.
+
+proxy = WTI : USO is an oil ETF standing in for WTI, EODHD commodities are not on this plan
+
+## Economic importance
+
+EODHD economic events carry no importance field. The response has type,
+country, date, actual, estimate, previous and change, and nothing else. So high
+importance is a list you own, matched case insensitively against the event
+type. Anything not matched is dropped from the report rather than shown at an
+importance we invented for it.
+
+This is substring matching, and it is the only option here because there is no
+structured field. It is not the same thing as the ban on keyword matching for
+news catalysts, which exists because news carries a proper symbol tag that
+should be used instead.
+
+high = Fed Interest Rate Decision
+high = FOMC
+high = Fed Press Conference
+high = Fed Chair
+high = Inflation Rate
+high = Core Inflation Rate
+high = CPI
+high = PPI
+high = Producer Prices
+high = Non Farm Payrolls
+high = Unemployment Rate
+high = Average Hourly Earnings
+high = GDP Growth Rate
+high = Retail Sales
+high = ISM Manufacturing PMI
+high = ISM Services PMI
+high = Initial Jobless Claims
+high = PCE Price Index
+high = Core PCE Price Index
+high = Consumer Confidence
+high = Michigan Consumer Sentiment
+high = Durable Goods Orders
+high = Building Permits
+high = Existing Home Sales
 
 ## Score catalyst class
 

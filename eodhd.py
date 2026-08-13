@@ -345,6 +345,43 @@ class EodhdClient:
             )
         return ApiResult(merged, None)
 
+    def live_quotes(self, symbols: Iterable[str]) -> ApiResult:
+        """Live v1 for a handful of named symbols, keyed by symbol.
+
+        Only the collector's --poll fallback and its verification mode use
+        this. The normal websocket path spends no REST calls at all.
+        """
+        wanted = [s.strip().upper() for s in symbols if s and s.strip()]
+        if not wanted:
+            return ApiResult({}, None)
+
+        merged: dict[str, Any] = {}
+        errors: list[str] = []
+        for start in range(0, len(wanted), QUOTE_BATCH_SIZE):
+            chunk = wanted[start:start + QUOTE_BATCH_SIZE]
+            params: dict[str, Any] = {}
+            if len(chunk) > 1:
+                params["s"] = ",".join(chunk[1:])
+            result = self._request(
+                f"real-time/{chunk[0]}", params=params, endpoint="real-time-live"
+            )
+            if not result.ok:
+                errors.append(result.error or "unknown error")
+                continue
+            rows = result.data
+            if isinstance(rows, dict):
+                rows = [rows]
+            for row in rows or []:
+                code = str(row.get("code") or "").strip().upper()
+                if code:
+                    merged[code] = row
+
+        if not merged and errors:
+            return ApiResult(None, "; ".join(errors))
+        if errors:
+            return ApiResult(merged, f"real-time-live partially failed: {errors[0]}")
+        return ApiResult(merged, None)
+
     def intraday(
         self,
         symbol: str,
