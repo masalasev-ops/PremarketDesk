@@ -1,0 +1,108 @@
+"""The first morning verification gate.
+
+Until a human has watched one real morning's numbers and agreed they are sane,
+the system must not email anyone. The gate has two parts. This script prints
+the evidence table for the first few candidates of today's packet: raw
+ethVolume, the cached baseline median, the RVOL those two produce, the
+collector's premarket high, and how many bars stand behind it. And a marker
+file, data/UNVERIFIED, which deliver.py refuses to send past while it exists.
+
+When the table looks sane on a live morning, the human deletes the marker and
+the next morning goes out. Nothing in the code ever deletes it, and nothing
+recreates it on its own either: the marker is created exactly once at install
+time and by the explicit --arm flag, because a marker that quietly respawned
+after the human removed it would overrule a decision that belongs to them.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import config
+import ettime
+
+UNVERIFIED_MARKER = config.DATA_DIR / "UNVERIFIED"
+
+_MARKER_TEXT = (
+    "PremarketDesk verification gate.\n"
+    "While this file exists deliver.py sends no email.\n"
+    "Watch one real morning's gate table (verify_morning.py), and when the\n"
+    "numbers are sane delete this file to go live. Nothing deletes it for you.\n"
+)
+
+
+def ensure_marker() -> None:
+    if not UNVERIFIED_MARKER.exists():
+        config.ensure_dirs()
+        UNVERIFIED_MARKER.write_text(_MARKER_TEXT, encoding="utf-8")
+        print(f"gate: created {UNVERIFIED_MARKER}")
+
+
+def print_table(packet_path: Path, count: int = 3) -> int:
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    candidates = packet.get("candidates", [])[:count]
+    if not candidates:
+        print("gate: the packet has no candidates to verify")
+        return 1
+
+    print(f"gate: verification table for {packet.get('session_date')}, "
+          f"packet generated {packet.get('generated_at')}")
+    header = (
+        f"  {'ticker':<10} {'ethVolume':>13} {'baseline med':>13} {'pm_rvol':>9} "
+        f"{'pm_high':>10} {'bars':>6}"
+    )
+    print(header)
+    for candidate in candidates:
+        quote = candidate.get("quote") or {}
+        baseline_row = candidate.get("baseline") or {}
+        eth = quote.get("ethVolume")
+        median = baseline_row.get("median_volume")
+        print(
+            f"  {candidate.get('symbol', ''):<10} "
+            f"{eth if eth is not None else 'null':>13} "
+            f"{median if median is not None else 'null':>13} "
+            f"{candidate.get('pm_rvol') if candidate.get('pm_rvol') is not None else 'null':>9} "
+            f"{candidate.get('pm_high') if candidate.get('pm_high') is not None else 'null':>10} "
+            f"{candidate.get('bars_collected', 0):>6}"
+        )
+        reason = candidate.get("pm_rvol_reason")
+        if reason:
+            print(f"             rvol null because: {reason}")
+
+    print()
+    if UNVERIFIED_MARKER.exists():
+        print(f"gate: {UNVERIFIED_MARKER} exists, deliver.py will refuse to email.")
+        print("gate: when this table looks sane on a real morning, delete that file to go live.")
+    else:
+        print("gate: no UNVERIFIED marker, delivery is armed.")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Print the first morning verification table.")
+    parser.add_argument("--packet", metavar="PATH",
+                        help="Packet to verify. Defaults to runs/<today>/packet.json.")
+    parser.add_argument("--arm", action="store_true",
+                        help="Recreate the UNVERIFIED marker to disarm delivery again.")
+    args = parser.parse_args(argv)
+
+    if args.arm:
+        UNVERIFIED_MARKER.unlink(missing_ok=True)
+        ensure_marker()
+        return 0
+
+    packet_path = (
+        Path(args.packet) if args.packet
+        else config.run_dir(ettime.today_et().isoformat()) / "packet.json"
+    )
+    if not packet_path.is_file():
+        print(f"gate: no packet at {packet_path}, run scan.py first")
+        return 1
+    return print_table(packet_path)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
