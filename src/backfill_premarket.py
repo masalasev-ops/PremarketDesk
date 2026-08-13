@@ -43,9 +43,11 @@ _TRUE_COLUMNS = (
     ("pm_low_true", "REAL"),
     ("pm_vwap_true", "REAL"),
     ("pm_true_bars", "INTEGER"),
-    # The percentage by which the true high undercuts the live high, 0.0 when
-    # it does not. A magnitude, not a boolean: feed noise and bad bars both
-    # trip a boolean, and then nobody can tell them apart in the table.
+    # The percentage by which the true high undercuts the live high. NULL
+    # means the backfill has not checked this row (or could not, both highs
+    # are needed); 0.0 means checked and clean. A magnitude, not a boolean:
+    # feed noise and bad bars both trip a boolean, and then nobody can tell
+    # them apart. Queries counting clean rows must test = 0.0, never IS NULL.
     ("pm_source_disagreement", "REAL"),
     ("backfilled_at", "TEXT"),
 )

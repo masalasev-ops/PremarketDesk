@@ -1,4 +1,4 @@
-"""The narrative pass. Turns packet.json into report.md through the claude CLI.
+﻿"""The narrative pass. Turns packet.json into report.md through the claude CLI.
 
 The division of labor is absolute. Python computed membership, eligibility,
 scores and conviction before this module runs, and the packet records the
@@ -33,23 +33,8 @@ import ettime
 
 _CRIT = criteria.load()
 
-# Uppercase tokens in the report that are ordinary finance or English usage,
-# not tickers, and so are exempt from the containment check. Anything else
-# uppercase must appear somewhere in the packet.
-_NOT_TICKERS = frozenset({
-    "AI", "AM", "PM", "ET", "EST", "EDT", "UTC",
-    "EPS", "CEO", "CFO", "COO", "CTO", "PR", "IPO", "SEC", "FDA", "FED",
-    "FOMC", "CPI", "PPI", "PCE", "GDP", "ISM", "PMI", "NFP",
-    "VWAP", "RVOL", "SMA", "EMA", "ATR", "RSI", "MACD",
-    "ETF", "ETFS", "ETN", "REIT", "ADR",
-    "NYSE", "NASDAQ", "OTC", "US", "USA", "USD", "EU", "UK",
-    "WTI", "DXY", "OPEC", "EIA", "DOE",
-    "YOY", "QOQ", "MOM", "FY", "NA", "OK", "VS", "TBD", "CLI", "JSON",
-    "AND", "THE", "NOT", "FOR", "ALL", "NO", "YES", "TOP", "NEW", "PT",
-    "MA", "LLC", "INC", "CORP", "PLC",
-})
-
 _TOKEN_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,5}\b")
+_DOLLAR_RE = re.compile(r"\$([A-Z][A-Z0-9]{0,5})\b")
 
 
 # ------------------------------------------------------------ CLI plumbing
@@ -57,14 +42,18 @@ _TOKEN_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,5}\b")
 def resolve_cli() -> str:
     """Find the claude CLI in a form Windows CreateProcess can run.
 
-    On this machine the npm shim exists as claude.ps1, claude.cmd and a bare
-    claude. subprocess can run the .cmd directly, which was verified by probe,
-    so that form is preferred and the bare name is the fallback.
+    The npm claude.cmd shim just forwards to a native claude.exe next to it,
+    and cmd.exe mangles empty string arguments on the way through, which
+    silently breaks --tools "". So the real executable is preferred, found
+    relative to the shim, and the shim itself is only a last resort.
     """
-    for name in ("claude.cmd", "claude"):
-        found = shutil.which(name)
-        if found:
-            return found
+    shim = shutil.which("claude.cmd") or shutil.which("claude")
+    if shim:
+        exe = (Path(shim).parent / "node_modules" / "@anthropic-ai"
+               / "claude-code" / "bin" / "claude.exe")
+        if exe.is_file():
+            return str(exe)
+        return shim
     raise FileNotFoundError(
         "The claude CLI is not on PATH. The narrative pass cannot run without it."
     )
@@ -120,7 +109,19 @@ def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | N
     timeout_s = _CRIT.integer("analyst", "timeout_s")
     attempts = _CRIT.integer("analyst", "max_attempts")
     try:
-        command = [resolve_cli(), "-p", "--model", model, "--output-format", "json"]
+        # One text generation, not an agent loop. --tools "" removes every
+        # tool, so there is nothing to take a second turn on (verified: this
+        # CLI version has no turn cap flag, and none is needed without
+        # tools). The one line system prompt replaces the CLI's large agent
+        # system prompt; the piped document is the entire instruction. The
+        # recorded num_turns must come back 1.
+        command = [
+            resolve_cli(), "-p", "--model", model, "--output-format", "json",
+            "--tools", "", "--effort", _CRIT.text("analyst", "effort"),
+            "--system-prompt",
+            "You are the narrative pass of PremarketDesk. Follow the piped "
+            "instructions exactly and output only the finished report markdown.",
+        ]
     except FileNotFoundError as exc:
         return None, {}, str(exc), "failed"
     stdin_doc = _compose_stdin(packet_text)
@@ -281,7 +282,7 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("## Day watchlist")
     add("")
     if day:
-        add("| Ticker | Gap % | Price | PM RVOL | PM high | PM VWAP | Score | Conviction |")
+        add("| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |")
         add("|---|---|---|---|---|---|---|---|")
         for c in day:
             add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
@@ -315,7 +316,7 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("")
     add("## Technical signals")
     add("")
-    add("| Ticker | PM high | PM low | PM VWAP | Prior high | 200d avg | Score | Conviction |")
+    add("| Ticker | Premarket high | Premarket low | Premarket VWAP | Prior high | 200d avg | Score | Conviction |")
     add("|---|---|---|---|---|---|---|---|")
     for c in candidates:
         quote = c.get("quote") or {}
@@ -368,7 +369,7 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
 def _packet_uppercase_tokens(packet_text: str) -> set[str]:
     """Every uppercase token the packet itself carries, symbols included.
 
-    The containment rule is literal: a ticker the report mentions must appear
+    The containment rule is literal: a ticker the report claims must appear
     in packet.json. Building the allowed set from the packet's own text means
     quoted headlines that name other tickers stay legal, because those names
     are in the packet too.
@@ -396,20 +397,74 @@ def _packet_uppercase_tokens(packet_text: str) -> set[str]:
     return allowed
 
 
+def _universe_bare_symbols() -> set[str] | None:
+    """Bare tickers of every universe member, or None when the file is absent."""
+    try:
+        universe = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return {
+        str(row.get("symbol", "")).split(".")[0].upper()
+        for row in universe.get("symbols", [])
+        if row.get("symbol")
+    }
+
+
+def _ticker_claims(report_text: str) -> set[str]:
+    """The tokens the report presents AS tickers.
+
+    Prose is not scanned: an acronym like CEO or FOMC in a sentence is not a
+    ticker claim and must never trip containment. A claim is an uppercase
+    token inside a markdown table cell, where the template puts tickers, or a
+    token anywhere carrying a $ prefix, which is unambiguous.
+    """
+    claims: set[str] = set(_DOLLAR_RE.findall(report_text))
+    separator = re.compile(r"[|\s:\-]+")
+    lines = report_text.splitlines()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        if separator.fullmatch(stripped):
+            continue  # the |---|---| separator row
+        # A row immediately above the separator is the header row: column
+        # labels, not tickers. "PM high" must not read as Philip Morris.
+        if index + 1 < len(lines):
+            following = lines[index + 1].strip()
+            if following.startswith("|") and separator.fullmatch(following):
+                continue
+        for cell in stripped.strip("|").split("|"):
+            claims.update(_TOKEN_RE.findall(cell))
+    return claims
+
+
 def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[str]]:
-    """Returns (invented_tickers, candidates_missing_from_report)."""
-    allowed = _packet_uppercase_tokens(packet_text)
-    report_tokens = set(_TOKEN_RE.findall(report_text))
-    invented = sorted(
-        token for token in report_tokens
-        if token not in allowed and token not in _NOT_TICKERS
-    )
+    """Returns (invented_tickers, candidates_missing_from_report).
+
+    A token is an invented ticker only when all three hold: the report
+    presents it as a ticker (table cell or $ prefix), it names a real symbol
+    in the universe file, and the packet does not carry it. The universe test
+    is what keeps ordinary uppercase words out: CEO in a table cell is not a
+    universe member, so it is not a claim about a tradeable name.
+    """
+    universe_symbols = _universe_bare_symbols()
+    if universe_symbols is None:
+        print("analyst: containment note: universe.json is unavailable, so ticker "
+              "claims cannot be validated this run")
+        invented: list[str] = []
+    else:
+        allowed = _packet_uppercase_tokens(packet_text)
+        invented = sorted(
+            token for token in _ticker_claims(report_text)
+            if token in universe_symbols and token not in allowed
+        )
 
     missing: list[str] = []
     try:
         packet = json.loads(packet_text)
     except json.JSONDecodeError:
         return invented, missing
+    report_tokens = set(_TOKEN_RE.findall(report_text))
     for candidate in packet.get("candidates", []):
         bare = str(candidate.get("symbol", "")).split(".")[0]
         if bare and bare not in report_tokens:
@@ -461,23 +516,14 @@ def write_report(packet_path: Path) -> int:
             + ", ".join(missing)
         )
     if invented:
-        if usage.get("fallback"):
-            # The fallback is assembled from the packet by code, so it cannot
-            # invent a ticker. Anything flagged here is an uppercase token from
-            # the quoted failure reason, worth a note but never a stop.
-            print(
-                "analyst: containment note on the fallback report, tokens from the "
-                "failure text: " + ", ".join(invented)
-            )
-        else:
-            print(
-                "analyst: FAILED the containment check. These tickers appear in the "
-                "report but nowhere in the packet: " + ", ".join(invented)
-            )
-            print("analyst: the report was written for inspection but must not be delivered.")
-            return 2
-    else:
-        print("analyst: containment check passed, every report ticker exists in the packet")
+        print(
+            "analyst: FAILED the containment check. These tickers are presented "
+            "as tickers, exist in the universe, and are nowhere in the packet: "
+            + ", ".join(invented)
+        )
+        print("analyst: the report was written for inspection but must not be delivered.")
+        return 2
+    print("analyst: containment check passed, every ticker claim exists in the packet")
     return 0
 
 

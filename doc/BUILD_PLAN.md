@@ -81,11 +81,17 @@ at the root and is gitignored along with .env.
 - Backslash paths inside Python docstrings: `data\UNVERIFIED` in a docstring
   is a unicode escape error at import time. Use forward slashes in prose.
 - PowerShell 5.1: no `&&`, use `if ($?) { }` or separate statements.
-- The claude CLI lives at C:\Users\udaya\AppData\Roaming\npm\ as claude.ps1,
-  claude.cmd and a bare claude. Python subprocess runs the .cmd directly,
-  probed and confirmed. Its JSON output carries result, usage, is_error,
-  subtype, total_cost_usd. An opus morning run costs roughly 1.2 to 1.6
-  dollars of subscription usage and takes 6 to 9 minutes.
+- The claude CLI lives at C:\Users\udaya\AppData\Roaming\npm\. The .cmd shim
+  MANGLES empty string arguments (it forwards through cmd.exe), which
+  silently breaks --tools "". analyst.resolve_cli therefore invokes the real
+  binary directly: node_modules\@anthropic-ai\claude-code\bin\claude.exe
+  next to the shim. JSON output carries result, usage, num_turns, is_error,
+  subtype, total_cost_usd. The narrative run is one completion: --tools ""
+  (nothing to loop on; this CLI version has no turn cap flag and needs
+  none), --effort low (default effort spent ~35k thinking tokens and 340s;
+  low measured 64 to 73s), a one line --system-prompt, everything piped on
+  stdin. Measured five runs on 2026-08-13: 69.2, 65.4, 67.8, 64.3, 72.5
+  seconds, num_turns 1 every time, ~33k tokens, about 14 cents equivalent.
 - .env holds the real EODHD token (100k daily request limit). RESEND_API_KEY
   and EMAIL_TO are empty, so delivery skips even without the gate.
 - `.claude/settings.local.json` grants broad tool permissions.
@@ -153,17 +159,20 @@ report.md and analyst_usage.json, logs tokens and cost, then runs the
 containment checker: every uppercase token in the report must exist in the
 packet text (finance acronym stoplist excepted), exit 2 on violation.
 Verified with sonnet and again with opus after the owner switched the knob.
-Hardened same day: the report survives the analyst failing. On timeout or any
-CLI failure (two attempts, timeout_s per attempt from CRITERIA, owner set
-240), analyst.py renders a deterministic plain table fallback report straight
-from packet.json, puts the reason in the disclaimer line, records
-status ok|timeout|failed in analyst_usage.json, and exits 0 so render and
-deliver carry on. Proven by forcing a fake claude.cmd to exit 1: the fallback
-carried all twelve candidates and their levels and the chain reached deliver.
-Know this: both models measured slower than 240s on 2026-08-13 (opus 393 to
-453s, sonnet 517s), so at the current knob the fallback is the EXPECTED
-morning report and the narrative is a bonus. Raise timeout_s to 600 or more
-if the narrative should usually win.
+Hardened same day, twice. First, the report survives the analyst failing: on
+timeout or any CLI failure (two attempts, timeout_s per attempt), analyst.py
+renders a deterministic plain table fallback straight from packet.json, puts
+the reason in the disclaimer line, records status ok|timeout|failed in
+analyst_usage.json, and exits 0 so render and deliver carry on. Proven with
+a forced CLI failure and again live when the shim mangling caused real
+timeouts. Second, the invocation became one completion instead of an agent
+loop (see the CLI facts above): model back to sonnet per the owner,
+timeout_s = 218, three times the slowest of the five measured runs named in
+CRITERIA.md. The containment checker was also rebuilt: a claim is an
+uppercase token in a table cell or with a $ prefix that names a real
+universe member; prose acronyms (CEO, FOMC, CPI...) can no longer trip it,
+src/test_containment.py proves both directions, and a containment failure is
+fatal again on every path including the fallback.
 
 CP11 render and deliver: report.html via the markdown library (tables,
 fenced_code, sane_lists). deliver.py posts to Resend through the Norton

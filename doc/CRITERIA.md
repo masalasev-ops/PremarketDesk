@@ -262,17 +262,18 @@ authenticates through the logged in subscription, never an API key. The model
 narrates numbers already decided in Python, so these are operational knobs
 like the Api section above, not screen criteria.
 
-model                         = opus       # owner's call on 2026-08-13, was sonnet in the original brief
-timeout_s                     = 240        # per attempt, owner's guard set 2026-08-13
+model                         = sonnet     # owner's call: back to sonnet with the one completion invocation
+effort                        = low        # measured: default effort spent ~35k thinking tokens and 340s on a job with no decisions to make
+timeout_s                     = 218        # 3x the slowest of five measured runs on 2026-08-13: 69.2, 65.4, 67.8, 64.3, 72.5 seconds
 max_attempts                  = 2          # total tries, including the first
 
-Note on timeout_s: every successful narrative run measured on 2026-08-13
-exceeded 240 seconds (opus 393 to 453, sonnet 517), so at this setting the
-plain table fallback report is the expected morning outcome and the narrative
-is a bonus when the model is fast. Raise this to 600 or more if the narrative
-should usually win. The report is produced either way: on any analyst
-failure, timeout included, analyst.py renders the fallback straight from
-packet.json and the chain carries on to email.
+Note on the invocation: the narrative pass is one text generation, not an
+agent loop. The CLI runs with --tools "" so there is nothing to loop on, a
+one line --system-prompt so the piped document is the entire instruction,
+and everything (prompt, template, packet) piped on stdin. num_turns is
+recorded in analyst_usage.json and must be 1. The report is produced either
+way: on any analyst failure, timeout included, analyst.py renders the plain
+table fallback straight from packet.json and the chain carries on to email.
 
 ## Archive
 
