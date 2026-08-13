@@ -198,6 +198,19 @@ session_start                 = 04:00      # premarket volume accumulates from h
 refresh_after_days            = 7
 min_sessions_for_rvol         = 10         # below this pm_rvol is null with a recorded reason
 
+## Backfill
+
+The nightly job that writes the true premarket window into picks, from EODHD
+one minute intraday bars, which are published a few hours behind live. The
+premarket window opens at the baseline session start and closes at market
+open. The gap report compares the morning's live collector high against the
+true high over recent sessions, which is the standing measurement of how much
+premarket the 07:20 collector start actually misses.
+
+market_open                   = 09:30
+run_after                     = 22:00      # ET, the day's intraday is complete by then
+gap_report_sessions           = 20
+
 ## Scan
 
 The 08:45 gathering pass that writes packet.json.
