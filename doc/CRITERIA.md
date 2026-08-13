@@ -262,6 +262,19 @@ everywhere it appears, including in the report.
 
 proxy = WTI : USO is an oil ETF standing in for WTI, EODHD commodities are not on this plan
 
+## Picks
+
+The picks table row written for every candidate after each scan. entry_ref
+and stop_ref are references for outcome measurement in later nightly jobs,
+never advice. The entry reference is the premarket high, the natural breakout
+trigger level for a gap candidate. The stop reference is the premarket low
+rather than the VWAP: the low is a level that actually traded, an extreme of
+the observed premarket path, where a VWAP is an average that one large print
+can drag. Excursion math against a traded extreme stays interpretable.
+
+entry_ref_field               = pm_high
+stop_ref_field                = pm_low
+
 ## Economic importance
 
 EODHD economic events carry no importance field. The response has type,

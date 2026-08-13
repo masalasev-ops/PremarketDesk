@@ -823,6 +823,57 @@ def write_packet(payload: dict[str, Any]) -> Any:
     return path
 
 
+def write_picks(payload: dict[str, Any]) -> int:
+    """One picks row per candidate, upserted on (date, ticker).
+
+    The natural key is what makes a re-run of the same day an update rather
+    than a second copy. entry_ref and stop_ref follow the field choices
+    documented in CRITERIA.md, and a null level stays null: a reference that
+    was never observed is not a reference.
+    """
+    reference_fields = {"pm_high", "pm_low", "pm_vwap"}
+    entry_field = _CRIT.text("picks", "entry_ref_field")
+    stop_field = _CRIT.text("picks", "stop_ref_field")
+    for field in (entry_field, stop_field):
+        if field not in reference_fields:
+            raise criteria.CriteriaError(
+                f"picks reference field {field!r} is not one of {sorted(reference_fields)}"
+            )
+
+    written = 0
+    with store.connect() as connection:
+        store.init(connection)
+        for candidate in payload.get("candidates", []):
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": payload["session_date"],
+                "ticker": candidate["symbol"],
+                "day_eligible": int(bool(candidate.get("day_eligible"))),
+                "swing_eligible": int(bool(candidate.get("swing_eligible"))),
+                "score": candidate.get("score"),
+                "conviction": candidate.get("conviction"),
+                "gap_pct": candidate.get("gap_pct"),
+                "pm_rvol": candidate.get("pm_rvol"),
+                "pm_high": candidate.get("pm_high"),
+                "pm_low": candidate.get("pm_low"),
+                "pm_vwap": candidate.get("pm_vwap"),
+                "collector_covered": int(bool(candidate.get("collector_covered"))),
+                "pm_window_start": candidate.get("pm_window_start"),
+                "prior_high": candidate.get("prior_high"),
+                "catalyst_class": candidate.get("catalyst_class"),
+                "entry_ref": candidate.get(entry_field),
+                "stop_ref": candidate.get(stop_field),
+            })
+            written += 1
+        connection.commit()
+        total, distinct = connection.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT ticker) FROM picks WHERE date=?",
+            (payload["session_date"],),
+        ).fetchone()
+    print(f"scan: picks upserted {written} rows for {payload['session_date']}, "
+          f"table now holds {total} rows ({distinct} distinct tickers) for the day")
+    return written
+
+
 def rescore(path) -> dict[str, Any]:
     """Recompute flags and scores from an existing packet, changing nothing else.
 
@@ -869,6 +920,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     path = write_packet(payload)
+    write_picks(payload)
     print("")
     print(f"scan: wrote {path}")
     print(f"scan: {len(payload['candidates'])} candidates, "

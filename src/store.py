@@ -25,6 +25,27 @@ CREATE TABLE IF NOT EXISTS baseline (
     computed_at   TEXT NOT NULL,
     PRIMARY KEY (ticker, cutoff_hhmm)
 );
+
+CREATE TABLE IF NOT EXISTS picks (
+    date              TEXT NOT NULL,
+    ticker            TEXT NOT NULL,
+    day_eligible      INTEGER,
+    swing_eligible    INTEGER,
+    score             REAL,
+    conviction        TEXT,
+    gap_pct           REAL,
+    pm_rvol           REAL,
+    pm_high           REAL,
+    pm_low            REAL,
+    pm_vwap           REAL,
+    collector_covered INTEGER,
+    pm_window_start   TEXT,
+    prior_high        REAL,
+    catalyst_class    TEXT,
+    entry_ref         REAL,
+    stop_ref          REAL,
+    PRIMARY KEY (date, ticker)
+);
 """
 
 
