@@ -21,11 +21,14 @@ from pathlib import Path
 # The one environment variable this project refuses to touch.
 FORBIDDEN_KEYS = frozenset({"ANTHROPIC_API_KEY"})
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+# Code lives in src/, documents in doc/, so the project root is one level up.
+SRC_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SRC_DIR.parent
+DOC_DIR = PROJECT_ROOT / "doc"
 
 ENV_PATH = PROJECT_ROOT / ".env"
 ENV_EXAMPLE_PATH = PROJECT_ROOT / ".env.example"
-CRITERIA_PATH = PROJECT_ROOT / "CRITERIA.md"
+CRITERIA_PATH = DOC_DIR / "CRITERIA.md"
 
 DATA_DIR = PROJECT_ROOT / "data"
 PREMARKET_DIR = DATA_DIR / "premarket"
@@ -36,8 +39,8 @@ DB_PATH = DATA_DIR / "premarketdesk.db"
 UNIVERSE_PATH = DATA_DIR / "universe.json"
 WATCHLIST_PATH = DATA_DIR / "watchlist.json"
 
-REPORT_TEMPLATE_PATH = PROJECT_ROOT / "REPORT_TEMPLATE.md"
-ANALYST_PROMPT_PATH = PROJECT_ROOT / "prompt_analyst.md"
+REPORT_TEMPLATE_PATH = DOC_DIR / "REPORT_TEMPLATE.md"
+ANALYST_PROMPT_PATH = DOC_DIR / "prompt_analyst.md"
 
 _ALL_DIRS = (DATA_DIR, PREMARKET_DIR, RUNS_DIR, LOGS_DIR)
 
