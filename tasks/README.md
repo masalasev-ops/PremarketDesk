@@ -21,6 +21,10 @@ Remove all five again with `-Unregister`. The times come from the clocks in
 `doc\CRITERIA.md`. If a clock there changes, change the register script to
 match and re-register.
 
+In the Task Scheduler GUI the jobs live in their own folder: Task Scheduler
+Library > PremarketDesk. Press F5 if the console was already open when they
+were registered, the tree does not refresh itself.
+
 ## Things worth knowing
 
 - The machine must be awake at trigger time. Task Scheduler does not wake a
