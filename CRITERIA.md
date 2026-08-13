@@ -108,6 +108,22 @@ price                         = > 3        # matches the day setup price floor
 gap_pct                       = > 3        # matches the day setup gap floor
 watchlist_size                = 30         # top N by absolute gap
 run_time                      = 07:15
+max_quote_age_hours           = 96         # see the ghost row note below
+
+### The ghost row note
+
+The bulk live feed returns some tickers twice. One row is current, the other is
+a frozen snapshot from an old session that never aged out. On 2026-08-13 it
+carried AZN twice: the live row was 157.90 against a 158.50 prior close, a
+quiet -0.4 percent, and the ghost row was 188.41 against a 92.77 prior close, a
+fabricated +103 percent that sorted straight to the top of the watchlist. The
+ADT ghost was timestamped February 2023.
+
+So the feed is deduplicated by taking the newest timestamp per ticker, and any
+row older than max_quote_age_hours is dropped outright. A long weekend with a
+holiday Monday is about 87 hours from Friday's close to Tuesday's premarket,
+which is what 96 leaves room for. Every run reports how many rows it dropped.
+Watch that number. If it moves a lot, the feed changed.
 
 ## Collector
 
