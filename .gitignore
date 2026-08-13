@@ -6,6 +6,7 @@ __pycache__/
 data/
 runs/
 logs/
+site/
 premarketdesk.db
 universe.json
 watchlist.json

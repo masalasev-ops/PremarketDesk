@@ -9,8 +9,8 @@ project's own ET clock so a locale change cannot mangle the file name.
 | --- | --- | --- | --- |
 | job_discover.bat | 07:15 | Mon to Fri | discover.py, then baseline.py to warm the RVOL cache for the new watchlist |
 | job_collector.bat | 07:20 | Mon to Fri | collect_premarket.py, runs to the 09:25 stop time |
-| job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, deliver.py, stopping on the first failure |
-| job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, then fill_outcomes.py |
+| job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, deliver.py, build_archive.py, stopping on the first failure |
+| job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, fill_outcomes.py, then build_archive.py so a broken morning still gets archived that evening |
 | job_universe.bat | 20:00 | Sunday | universe.py weekly rebuild |
 
 ## Registering

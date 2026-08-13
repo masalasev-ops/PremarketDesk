@@ -20,4 +20,12 @@ echo ===== outcomes started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\fill_outcomes.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== outcomes finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
+if %RC% neq 0 exit /b %RC%
+
+rem The archive also rebuilds here so a morning that failed after the scan
+rem still gets archived the same evening.
+echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
+%PY% src\build_archive.py >> "%LOG%" 2>&1
+set RC=%ERRORLEVEL%
+echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

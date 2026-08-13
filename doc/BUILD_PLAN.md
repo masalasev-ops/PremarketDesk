@@ -46,13 +46,21 @@ at the root and is gitignored along with .env.
 
 - src/: config, ettime, criteria, eodhd, store, universe, discover,
   collect_premarket, baseline, scan, analyst, render_report, deliver,
-  backfill_premarket, fill_outcomes, verify_morning
+  backfill_premarket, fill_outcomes, verify_morning, build_archive
 - doc/: this file, CRITERIA.md, REPORT_TEMPLATE.md, prompt_analyst.md
 - tasks/: five job .bat files, register_tasks.ps1, README.md
 - data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,
   premarketdesk.db, ca-bundle.pem, UNVERIFIED (the delivery gate marker)
-- runs/YYYY-MM-DD/: packet.json, report.md, report.html, analyst_usage.json,
-  verify_intraday.json once the nightly job has run
+- runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
+  report.html, analyst_usage.json, verify_intraday.json once the nightly job
+  has run
+- site/PremarketDesk.html: the single file report archive, rebuilt from
+  runs/ at the end of every morning chain and every nightly run
+  (build_archive.py, embed_sessions knob in CRITERIA [archive]). Opens by
+  double clicking, no server, no network; the newest sessions are inlined,
+  older ones link out to their runs/<date>/report.html; the URL hash picks a
+  day, j and k or the arrows step between days. Full rebuild every time,
+  idempotent by construction; gitignored like the other generated output
 
 ## Environment facts a new session must know
 

@@ -274,6 +274,17 @@ should usually win. The report is produced either way: on any analyst
 failure, timeout included, analyst.py renders the fallback straight from
 packet.json and the chain carries on to email.
 
+## Archive
+
+The single file report archive at site/PremarketDesk.html, rebuilt from
+runs/ at the end of every morning chain and every nightly run. Always a full
+rebuild, never an append, so it is idempotent by construction. The newest
+sessions are inlined in full; older ones stay in the rail but link out to
+their own runs/<date>/report.html so the file stays small and nothing is
+ever dropped.
+
+embed_sessions                = 120
+
 ## Scan snapshot
 
 The market snapshot line, as report label to EODHD symbol. Order is preserved.

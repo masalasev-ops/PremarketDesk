@@ -1,0 +1,318 @@
+"""Rebuild the single file report archive from runs/.
+
+One self contained HTML file at site/PremarketDesk.html that opens by double
+clicking, no web server, no network requests of any kind. Chrome blocks fetch
+on file://, so every byte the page needs is inlined at build time: the CSS,
+every embedded day's report HTML, and the tiny script that switches days.
+
+The build is a full rebuild from what is on disk, never an append, so running
+it twice is the same as running it once, and deleting site/ entirely costs
+nothing but the next run.
+
+Each run directory contributes its report.md, rendered here with the same
+markdown extensions render_report.py uses, so an archived day and a freshly
+rendered day look identical. The newest embed_sessions days (CRITERIA.md
+[archive]) are inlined in full; older days stay in the rail but link out to
+their own runs/<date>/report.html, which is rendered on the spot if the
+morning that wrote report.md never got to the render step.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+from typing import Any
+
+import markdown
+
+import config
+import criteria
+import ettime
+import render_report
+
+_CRIT = criteria.load()
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+_PAGE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PremarketDesk Archive</title>
+<style>
+  :root {
+    --bg: #F3F4F6; --surface: #FFFFFF; --ink: #1B222C; --muted: #58636F;
+    --line: #D8DDE3; --accent: #B45E14;
+    --good: #2E7D32; --warn: #B98900; --bad: #C62828;
+    --active: rgba(180, 94, 20, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12161C; --surface: #1A2028; --ink: #E7EAEE; --muted: #97A1AC;
+      --line: #303845; --accent: #E8A254;
+      --good: #6FBF73; --warn: #E0B341; --bad: #E57373;
+      --active: rgba(232, 162, 84, 0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+  }
+  .shell { display: flex; height: 100vh; }
+  .rail {
+    width: 250px; flex: none; overflow-y: auto;
+    background: var(--surface); border-right: 1px solid var(--line);
+    padding: 14px 0 24px;
+  }
+  .rail-head {
+    padding: 4px 16px 12px; border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .rail-head strong { font-size: 1.02rem; letter-spacing: -0.01em; }
+  .rail-head span { display: block; font-size: 0.75rem; color: var(--muted); }
+  .rail-day {
+    display: flex; justify-content: space-between; align-items: baseline;
+    width: 100%; padding: 7px 16px; border: 0; background: none;
+    color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+    text-decoration: none; gap: 8px;
+  }
+  .rail-day:hover { background: var(--active); }
+  .rail-day:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .rail-day.active { background: var(--active); box-shadow: inset 3px 0 0 var(--accent); }
+  .rail-day .d {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 0.82rem;
+  }
+  .rail-day .counts {
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 0.74rem;
+    color: var(--muted); white-space: nowrap;
+  }
+  .counts em { font-style: normal; }
+  .counts .g { color: var(--good); }
+  .counts .y { color: var(--warn); }
+  .counts .r { color: var(--bad); }
+  .rail-note {
+    padding: 10px 16px 4px; font-size: 0.7rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted);
+    border-top: 1px solid var(--line); margin-top: 8px;
+  }
+  .rail-day.out .d::after { content: " \\2197"; color: var(--muted); }
+  .pane { flex: 1; overflow-y: auto; padding: 28px 36px 80px; }
+  .day { max-width: 760px; margin: 0 auto; }
+  .day[hidden] { display: none; }
+  .hint {
+    max-width: 760px; margin: 0 auto 18px; font-size: 0.75rem;
+    color: var(--muted); font-family: "Cascadia Code", Consolas, monospace;
+  }
+  .day h1 { font-size: 1.55rem; letter-spacing: -0.012em;
+    border-bottom: 2px solid var(--ink); padding-bottom: 6px; }
+  .day h2 { font-size: 1.15rem; margin-top: 1.5em;
+    border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  .day table { border-collapse: collapse; width: 100%; font-size: 0.88em;
+    display: block; overflow-x: auto; }
+  .day th, .day td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
+  .day th { background: var(--active); }
+  .day code { font-family: Consolas, monospace; background: var(--active); padding: 1px 4px; }
+  .day blockquote { border-left: 3px solid var(--line); margin-left: 0;
+    padding-left: 12px; color: var(--muted); }
+  .day a { color: var(--accent); }
+  .empty { max-width: 760px; margin: 40px auto; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" aria-label="Sessions">
+    <div class="rail-head">
+      <strong>PremarketDesk</strong>
+      <span>__SUBTITLE__</span>
+    </div>
+__RAIL__
+  </nav>
+  <main class="pane">
+    <p class="hint">j / k or the arrow keys step between days; the address hash picks a day directly.</p>
+__DAYS__
+  </main>
+</div>
+<script>
+(function () {
+  "use strict";
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(".rail-day[data-date]"));
+  var dates = buttons.map(function (b) { return b.getAttribute("data-date"); });
+  if (dates.length === 0) { return; }
+  var pane = document.querySelector(".pane");
+  var current = -1;
+  function select(index) {
+    if (index < 0 || index >= dates.length) { index = 0; }
+    current = index;
+    for (var i = 0; i < dates.length; i += 1) {
+      var section = document.getElementById("day-" + dates[i]);
+      if (section) { section.hidden = i !== index; }
+      if (i === index) { buttons[i].classList.add("active"); }
+      else { buttons[i].classList.remove("active"); }
+    }
+    pane.scrollTop = 0;
+    if (buttons[index].scrollIntoView) {
+      buttons[index].scrollIntoView({ block: "nearest" });
+    }
+  }
+  function fromHash() {
+    var raw = window.location.hash.replace(/^#/, "");
+    var idx = dates.indexOf(raw);
+    select(idx === -1 ? 0 : idx);
+  }
+  window.addEventListener("hashchange", fromHash);
+  buttons.forEach(function (button, index) {
+    button.addEventListener("click", function () {
+      if (window.location.hash === "#" + dates[index]) { select(index); }
+      else { window.location.hash = dates[index]; }
+    });
+  });
+  document.addEventListener("keydown", function (event) {
+    var step = 0;
+    if (event.key === "j" || event.key === "ArrowDown") { step = 1; }
+    else if (event.key === "k" || event.key === "ArrowUp") { step = -1; }
+    else { return; }
+    event.preventDefault();
+    var next = current + step;
+    if (next < 0) { next = 0; }
+    if (next > dates.length - 1) { next = dates.length - 1; }
+    if (next !== current) { window.location.hash = dates[next]; }
+  });
+  fromHash();
+})();
+</script>
+</body>
+</html>
+"""
+
+
+def _counts_from_packet(run_dir: Path) -> dict[str, Any] | None:
+    packet_path = run_dir / "packet.json"
+    if not packet_path.is_file():
+        return None
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        print(f"archive: {run_dir.name} packet.json unreadable ({exc}), counts omitted")
+        return None
+    candidates = packet.get("candidates", [])
+    tally = {"green": 0, "yellow": 0, "red": 0}
+    for candidate in candidates:
+        conviction = str(candidate.get("conviction") or "")
+        if conviction in tally:
+            tally[conviction] += 1
+    return {"candidates": len(candidates), **tally}
+
+
+def _counts_html(counts: dict[str, Any] | None) -> str:
+    if counts is None:
+        return '<span class="counts">no packet</span>'
+    return (
+        f'<span class="counts">{counts["candidates"]} &#183; '
+        f'<em class="g">{counts["green"]}</em> '
+        f'<em class="y">{counts["yellow"]}</em> '
+        f'<em class="r">{counts["red"]}</em></span>'
+    )
+
+
+def collect_runs() -> list[dict[str, Any]]:
+    """Every run directory holding a report.md, newest first. Skips are logged."""
+    entries: list[dict[str, Any]] = []
+    if not config.RUNS_DIR.is_dir():
+        return entries
+    for run_dir in sorted(config.RUNS_DIR.iterdir(), key=lambda p: p.name, reverse=True):
+        if not run_dir.is_dir() or not _DATE_RE.match(run_dir.name):
+            continue
+        report = run_dir / "report.md"
+        if not report.is_file():
+            print(f"archive: skipped {run_dir.name}, no report.md")
+            continue
+        try:
+            text = report.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"archive: skipped {run_dir.name}, report.md unreadable: {exc}")
+            continue
+        entries.append({
+            "date": run_dir.name,
+            "dir": run_dir,
+            "markdown": text,
+            "counts": _counts_from_packet(run_dir),
+        })
+    return entries
+
+
+def build(embed_sessions: int) -> Path:
+    entries = collect_runs()
+    embedded = entries[:embed_sessions]
+    linked = entries[embed_sessions:]
+
+    rail_parts: list[str] = []
+    day_parts: list[str] = []
+
+    for entry in embedded:
+        date = entry["date"]
+        rail_parts.append(
+            f'    <button class="rail-day" data-date="{date}">'
+            f'<span class="d">{date}</span>{_counts_html(entry["counts"])}</button>'
+        )
+        body = markdown.markdown(entry["markdown"], extensions=render_report._EXTENSIONS)
+        day_parts.append(f'<section class="day" id="day-{date}" hidden>\n{body}\n</section>')
+
+    if linked:
+        rail_parts.append('    <div class="rail-note">Older, opens its own page</div>')
+    for entry in linked:
+        date = entry["date"]
+        # The link target must exist even for a morning that died before the
+        # render step, so render it now from the report.md we just read.
+        target = entry["dir"] / "report.html"
+        if not target.is_file():
+            render_report.render(entry["dir"] / "report.md")
+            print(f"archive: rendered missing {target}")
+        rail_parts.append(
+            f'    <a class="rail-day out" href="../runs/{date}/report.html">'
+            f'<span class="d">{date}</span>{_counts_html(entry["counts"])}</a>'
+        )
+
+    if not entries:
+        day_parts.append('<p class="empty">No runs with a report.md were found. '
+                         'The archive fills in as mornings run.</p>')
+
+    subtitle = (
+        f"{len(entries)} session{'s' if len(entries) != 1 else ''}, "
+        f"{len(embedded)} embedded, rebuilt {ettime.stamp(ettime.now_et())}"
+    )
+    page = (
+        _PAGE
+        .replace("__SUBTITLE__", subtitle)
+        .replace("__RAIL__", "\n".join(rail_parts))
+        .replace("__DAYS__", "\n".join(day_parts))
+    )
+
+    site_dir = config.PROJECT_ROOT / "site"
+    site_dir.mkdir(parents=True, exist_ok=True)
+    out_path = site_dir / "PremarketDesk.html"
+    out_path.write_text(page, encoding="utf-8")
+    print(f"archive: wrote {out_path} ({out_path.stat().st_size:,} bytes, "
+          f"{len(embedded)} embedded, {len(linked)} linked out)")
+    return out_path
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Rebuild the single file report archive.")
+    parser.add_argument("--embed", type=int, default=None, metavar="N",
+                        help="Override the CRITERIA.md embed_sessions knob, for testing.")
+    args = parser.parse_args(argv)
+    embed_sessions = args.embed if args.embed is not None else _CRIT.integer(
+        "archive", "embed_sessions")
+    build(embed_sessions)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

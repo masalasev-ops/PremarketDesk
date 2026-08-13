@@ -38,4 +38,10 @@ echo ===== deliver started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\deliver.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== deliver finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
+if %RC% neq 0 exit /b %RC%
+
+echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
+%PY% src\build_archive.py >> "%LOG%" 2>&1
+set RC=%ERRORLEVEL%
+echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%
