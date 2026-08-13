@@ -23,6 +23,20 @@ import ettime
 
 
 def deliver(html_path: Path) -> int:
+    # The first morning verification gate. verify_morning.py owns the marker;
+    # a human deletes it after watching one real morning's numbers, and until
+    # then no email leaves this machine no matter what keys are configured.
+    import verify_morning
+
+    if verify_morning.UNVERIFIED_MARKER.exists():
+        print(
+            f"deliver: refusing to email, the verification gate {verify_morning.UNVERIFIED_MARKER} "
+            "exists. Review the gate table from verify_morning.py on a real morning "
+            "and delete that file to go live. The report is on disk at "
+            f"{html_path}."
+        )
+        return 0
+
     api_key = config.resend_api_key()
     recipients = config.email_to()
 

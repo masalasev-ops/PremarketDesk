@@ -29,6 +29,11 @@ set RC=%ERRORLEVEL%
 echo ===== render finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 if %RC% neq 0 exit /b %RC%
 
+rem The gate table is printed into the log every morning for the human to
+rem review. It does not stop the chain: deliver.py itself enforces the gate.
+echo ===== gate table %DATE% %TIME% ===== >> "%LOG%"
+%PY% src\verify_morning.py >> "%LOG%" 2>&1
+
 echo ===== deliver started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\deliver.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
