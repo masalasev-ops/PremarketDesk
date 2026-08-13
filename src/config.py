@@ -158,6 +158,11 @@ def email_to() -> list[str]:
     return [part.strip() for part in raw.split(",") if part.strip()]
 
 
+def email_from() -> str:
+    """Sender address. The resend.dev default needs no verified domain."""
+    return get("EMAIL_FROM") or "PremarketDesk <onboarding@resend.dev>"
+
+
 CA_BUNDLE_PATH = DATA_DIR / "ca-bundle.pem"
 
 # Windows security suites terminate TLS and re-sign it with their own root,
