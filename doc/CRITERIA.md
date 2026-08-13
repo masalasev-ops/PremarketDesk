@@ -226,6 +226,17 @@ carries both run_time_et and rvol_cutoff_hhmm, and they differ when snapped.
 Outside the snap window nothing is snapped, which is why an off hours test run
 honestly reports no cached baseline.
 
+## Analyst
+
+The narrative pass. The claude CLI is invoked as a subprocess and
+authenticates through the logged in subscription, never an API key. The model
+narrates numbers already decided in Python, so these are operational knobs
+like the Api section above, not screen criteria.
+
+model                         = opus       # owner's call on 2026-08-13, was sonnet in the original brief
+timeout_s                     = 1200       # the sonnet run took 8.6 minutes, opus gets more headroom
+max_attempts                  = 2          # total tries, including the first
+
 ## Scan snapshot
 
 The market snapshot line, as report label to EODHD symbol. Order is preserved.
