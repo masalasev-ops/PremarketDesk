@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+runs/
+logs/
+premarketdesk.db
+universe.json
+watchlist.json

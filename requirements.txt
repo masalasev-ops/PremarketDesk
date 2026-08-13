@@ -1,0 +1,7 @@
+# PremarketDesk runtime dependencies.
+# Deliberately small. Everything else is standard library.
+# There is no Anthropic SDK here. The narrative pass shells out to the
+# claude CLI and authenticates through the logged in subscription.
+requests
+websocket-client
+markdown
