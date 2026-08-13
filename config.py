@@ -41,6 +41,12 @@ ANALYST_PROMPT_PATH = PROJECT_ROOT / "prompt_analyst.md"
 
 _ALL_DIRS = (DATA_DIR, PREMARKET_DIR, RUNS_DIR, LOGS_DIR)
 
+# EODHD addresses. These are locations, not criteria, so they live here rather
+# than in CRITERIA.md. Every number that shapes a decision lives in that file.
+EODHD_BASE_URL = "https://eodhd.com/api"
+EODHD_WS_TRADES_URL = "wss://ws.eodhistoricaldata.com/ws/us"
+RESEND_SEND_URL = "https://api.resend.com/emails"
+
 # Parsed .env contents, filled lazily by load_env().
 _env_file_cache: dict[str, str] | None = None
 
@@ -147,6 +153,115 @@ def email_to() -> list[str]:
     """Recipient list, empty when delivery should be skipped."""
     raw = get("EMAIL_TO") or ""
     return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+CA_BUNDLE_PATH = DATA_DIR / "ca-bundle.pem"
+
+# Windows security suites terminate TLS and re-sign it with their own root,
+# which certifi has never heard of. Norton drops its root here and points
+# NODE_EXTRA_CA_CERTS at it. Verification stays on. We widen the trust store
+# instead of turning the check off, because verify=False in a data pipeline is
+# how you end up trusting whatever answers on port 443.
+_EXTRA_CA_ENV_VARS = ("EODHD_CA_BUNDLE", "REQUESTS_CA_BUNDLE", "NODE_EXTRA_CA_CERTS")
+_EXTRA_CA_KNOWN_PATHS = (
+    Path(r"C:\ProgramData\Norton\Antivirus\wscert.pem"),
+)
+
+
+def _extra_ca_files() -> list[Path]:
+    found: list[Path] = []
+    for name in _EXTRA_CA_ENV_VARS:
+        raw = os.environ.get(name) or load_env().get(name)
+        if raw:
+            candidate = Path(raw.strip().strip('"'))
+            if candidate.is_file():
+                found.append(candidate)
+    for candidate in _EXTRA_CA_KNOWN_PATHS:
+        if candidate.is_file():
+            found.append(candidate)
+    unique: list[Path] = []
+    for path in found:
+        resolved = path.resolve()
+        if resolved not in [p.resolve() for p in unique]:
+            unique.append(path)
+    return unique
+
+
+def ca_bundle() -> str | bool:
+    """What to hand requests as verify=.
+
+    Returns True when certifi alone is enough, otherwise the path to a merged
+    bundle of certifi plus any locally installed inspection roots. The merged
+    file is rebuilt whenever one of its sources is newer than it.
+    """
+    explicit = get("EODHD_CA_BUNDLE")
+    if explicit and Path(explicit).is_file():
+        return explicit
+
+    extras = _extra_ca_files()
+    if not extras:
+        return True
+
+    try:
+        import certifi
+    except ImportError:
+        return True
+
+    sources = [Path(certifi.where())] + extras
+    newest = max(p.stat().st_mtime for p in sources)
+    if CA_BUNDLE_PATH.is_file() and CA_BUNDLE_PATH.stat().st_mtime >= newest:
+        return str(CA_BUNDLE_PATH)
+
+    CA_BUNDLE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    merged = []
+    for source in sources:
+        merged.append(f"# from {source}\n")
+        merged.append(source.read_text(encoding="utf-8", errors="replace").strip())
+        merged.append("\n")
+    CA_BUNDLE_PATH.write_text("\n".join(merged), encoding="utf-8")
+    return str(CA_BUNDLE_PATH)
+
+
+def tls_context():
+    """An SSLContext that trusts the local TLS inspection root, if there is one.
+
+    Norton Web/Mail Shield re-signs every HTTPS connection with a self signed
+    root whose basicConstraints extension is not marked critical. Python 3.13
+    onwards turns on VERIFY_X509_STRICT in create_default_context, and strict
+    mode rejects exactly that. So when, and only when, such a root is actually
+    installed, this clears that one flag.
+
+    What stays switched on: chain building, signature checking, expiry checking
+    and hostname matching. What is given up: one encoding pedantry about an
+    extension marked critical or not. That is a very long way from verify=False.
+    """
+    import ssl
+
+    try:
+        import certifi
+
+        context = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        context = ssl.create_default_context()
+
+    extras = _extra_ca_files()
+    for extra in extras:
+        try:
+            context.load_verify_locations(cafile=str(extra))
+        except (OSError, ssl.SSLError) as exc:
+            print(f"config: could not load extra CA {extra}: {exc}", file=sys.stderr)
+    if extras:
+        context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context
+
+
+def tls_note() -> str:
+    """One line describing the trust decision, for logs and the verification gate."""
+    extras = _extra_ca_files()
+    if not extras:
+        return "TLS: certifi defaults, strict verification"
+    names = ", ".join(p.name for p in extras)
+    return f"TLS: certifi plus local inspection root ({names}), X509_STRICT relaxed"
 
 
 def ensure_dirs() -> None:

@@ -1,0 +1,509 @@
+"""EODHD All-In-One client.
+
+The only market data provider in this project. There is no second source, no
+yfinance, no fallback vendor. If a number is not in here it does not exist.
+
+Two rules shape the whole module.
+
+One, every single HTTP call goes through _request. That is where the retry on
+429 lives, that is where the per run counter is incremented, and that is where
+failures are turned into a returned value instead of an exception. Nothing in
+this file calls requests directly anywhere else.
+
+Two, no endpoint method ever raises at the caller. Each returns an ApiResult,
+which is a (data, error) pair. On success error is None. On failure data is
+None and error carries a human readable note that is good enough to paste into
+the gaps_to_fill list of a packet. A morning run that loses one endpoint must
+still produce a report saying which endpoint it lost.
+
+The call counter prints at the end of every run whether or not the script
+remembers to ask for it.
+
+Endpoints wrapped, and only these:
+    bulk live OHLCV for US exchanges   /real-time/{any}.US?ex=US
+    delayed US quotes                  /us-quote-delayed?s=...
+    intraday 1 minute bars             /intraday/{symbol}?interval=1m
+    end of day historical              /eod/{symbol}
+    exchange symbol list               /exchange-symbol-list/{exchange}
+    financial news                     /news?s=...
+    economic events                    /economic-events
+    earnings calendar                  /calendar/earnings
+"""
+
+from __future__ import annotations
+
+import atexit
+import datetime as dt
+import json
+import time
+from collections import Counter
+from typing import Any, Iterable, NamedTuple
+
+import requests
+
+import config
+import criteria
+import ettime
+
+_CRIT = criteria.load()
+
+MAX_ATTEMPTS = _CRIT.integer("api", "max_attempts")
+BACKOFF_START_S = _CRIT.number("api", "retry_backoff_start_s")
+BACKOFF_MAX_S = _CRIT.number("api", "retry_backoff_max_s")
+TIMEOUT_S = _CRIT.number("api", "timeout_s")
+BULK_TIMEOUT_S = _CRIT.number("api", "bulk_timeout_s")
+QUOTE_BATCH_SIZE = _CRIT.integer("api", "quote_batch_size")
+NEWS_LIMIT = _CRIT.integer("api", "news_limit")
+
+# Status codes worth another try. 429 is the one the brief names, the 5xx
+# family is added because a gateway blip should not cost us the morning.
+_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+class _TlsAdapter(requests.adapters.HTTPAdapter):
+    """Carries our SSLContext into urllib3 so the trust decision actually applies."""
+
+    def __init__(self, context, **kwargs) -> None:
+        self._context = context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs["ssl_context"] = self._context
+        return super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, *args, **kwargs):
+        kwargs["ssl_context"] = self._context
+        return super().proxy_manager_for(*args, **kwargs)
+
+
+def build_session() -> requests.Session:
+    """A verifying session that also works behind a local TLS inspector."""
+    session = requests.Session()
+    session.headers.update({"User-Agent": "PremarketDesk/1.0"})
+    session.verify = config.ca_bundle()
+    session.mount("https://", _TlsAdapter(config.tls_context()))
+    return session
+
+
+class ApiResult(NamedTuple):
+    """(data, error). Exactly one of the two is set."""
+
+    data: Any | None
+    error: str | None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None
+
+    def or_empty(self, fallback: Any) -> Any:
+        return self.data if self.ok and self.data is not None else fallback
+
+
+class CallLedger:
+    """Per run accounting for every HTTP call the process makes."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.failures = 0
+        self.retries = 0
+        self.by_endpoint: Counter[str] = Counter()
+        self.errors: list[str] = []
+        self.started = ettime.now_et()
+        self._reported = False
+
+    def record(self, endpoint: str, attempts: int, error: str | None) -> None:
+        self.calls += attempts
+        self.retries += attempts - 1
+        self.by_endpoint[endpoint] += attempts
+        if error:
+            self.failures += 1
+            self.errors.append(f"{endpoint}: {error}")
+
+    def summary(self) -> str:
+        elapsed = (ettime.now_et() - self.started).total_seconds()
+        lines = [
+            "",
+            "EODHD call report",
+            f"  total http calls   {self.calls}",
+            f"  of which retries   {self.retries}",
+            f"  failed endpoints   {self.failures}",
+            f"  wall clock         {elapsed:.1f}s",
+        ]
+        for endpoint, count in self.by_endpoint.most_common():
+            lines.append(f"    {count:>5}  {endpoint}")
+        for note in self.errors:
+            lines.append(f"    error  {note}")
+        return "\n".join(lines)
+
+    def report(self) -> None:
+        if self._reported:
+            return
+        self._reported = True
+        print(self.summary())
+
+
+LEDGER = CallLedger()
+atexit.register(LEDGER.report)
+
+
+def print_call_report() -> None:
+    """Print the call count. Safe to call more than once, prints only once."""
+    LEDGER.report()
+
+
+def call_count() -> int:
+    return LEDGER.calls
+
+
+def _sleep_for(attempt: int, retry_after: str | None) -> float:
+    """Exponential backoff, but honour a Retry-After header when the server sends one."""
+    if retry_after:
+        try:
+            return min(float(retry_after), BACKOFF_MAX_S)
+        except ValueError:
+            pass
+    return min(BACKOFF_START_S * (2 ** (attempt - 1)), BACKOFF_MAX_S)
+
+
+class EodhdClient:
+    """Thin wrapper. One session, one chokepoint, one counter."""
+
+    def __init__(self, token: str | None = None, ledger: CallLedger | None = None) -> None:
+        self._token = token or config.eodhd_token()
+        # Certificate verification stays on. build_session widens the trust
+        # store when a local security suite is re-signing TLS.
+        self._session = build_session()
+        self.ledger = ledger or LEDGER
+
+    # ---- the one and only chokepoint --------------------------------------
+
+    def _request(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        endpoint: str | None = None,
+        timeout: float | None = None,
+    ) -> ApiResult:
+        """Every HTTP call in this project goes through here. It never raises."""
+        label = endpoint or path
+        query: dict[str, Any] = {"api_token": self._token, "fmt": "json"}
+        query.update(params or {})
+        url = f"{config.EODHD_BASE_URL}/{path.lstrip('/')}"
+        attempts = 0
+        last_error = "no attempt was made"
+
+        while attempts < MAX_ATTEMPTS:
+            attempts += 1
+            try:
+                response = self._session.get(
+                    url, params=query, timeout=timeout or TIMEOUT_S
+                )
+            except requests.RequestException as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                if attempts < MAX_ATTEMPTS:
+                    time.sleep(_sleep_for(attempts, None))
+                    continue
+                break
+
+            if response.status_code in _RETRY_STATUSES:
+                last_error = f"HTTP {response.status_code} after {attempts} attempts"
+                if attempts < MAX_ATTEMPTS:
+                    wait = _sleep_for(attempts, response.headers.get("Retry-After"))
+                    print(
+                        f"eodhd: {label} returned {response.status_code}, "
+                        f"retrying in {wait:.0f}s (attempt {attempts} of {MAX_ATTEMPTS})"
+                    )
+                    time.sleep(wait)
+                    continue
+                break
+
+            if response.status_code != 200:
+                body = (response.text or "")[:200].replace("\n", " ")
+                last_error = f"HTTP {response.status_code}: {body}"
+                break
+
+            try:
+                payload = response.json()
+            except (ValueError, json.JSONDecodeError) as exc:
+                body = (response.text or "")[:200].replace("\n", " ")
+                last_error = f"response was not JSON ({exc}): {body}"
+                break
+
+            self.ledger.record(label, attempts, None)
+            return ApiResult(payload, None)
+
+        self.ledger.record(label, attempts, last_error)
+        print(f"eodhd: {label} failed, {last_error}")
+        return ApiResult(None, f"{label} failed: {last_error}")
+
+    # ---- endpoints --------------------------------------------------------
+
+    def bulk_live_us(self) -> ApiResult:
+        """Latest live OHLCV for every US listed ticker, in one call.
+
+        The ticker in the path is a placeholder. ex=US is what makes it bulk.
+        Returns a list of dicts carrying code, timestamp, open, high, low,
+        close, volume, previousClose, change and change_p.
+        """
+        result = self._request(
+            "real-time/AAPL.US",
+            params={"ex": "US"},
+            endpoint="bulk-live-us",
+            timeout=BULK_TIMEOUT_S,
+        )
+        if not result.ok:
+            return result
+        rows = result.data
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list):
+            return ApiResult(None, "bulk-live-us failed: payload was not a list")
+        return ApiResult(rows, None)
+
+    def quote_delayed(self, symbols: Iterable[str]) -> ApiResult:
+        """Delayed US quotes keyed by symbol.
+
+        This is where ethVolume, ethTime, marketCap, sharesFloat,
+        averageVolume, twoHundredDayAveragePrice and previousClosePrice come
+        from. Requests are chunked, and a chunk that fails leaves its symbols
+        out of the result rather than losing the whole batch.
+        """
+        wanted = [s.strip().upper() for s in symbols if s and s.strip()]
+        if not wanted:
+            return ApiResult({}, None)
+
+        merged: dict[str, Any] = {}
+        failed_chunks: list[str] = []
+        for start in range(0, len(wanted), QUOTE_BATCH_SIZE):
+            chunk = wanted[start:start + QUOTE_BATCH_SIZE]
+            result = self._request(
+                "us-quote-delayed",
+                params={"s": ",".join(chunk)},
+                endpoint="us-quote-delayed",
+            )
+            if not result.ok:
+                failed_chunks.append(result.error or "unknown error")
+                continue
+            payload = result.data
+            data = payload.get("data") if isinstance(payload, dict) else None
+            if isinstance(data, dict):
+                merged.update(data)
+            elif isinstance(payload, dict) and "symbol" in payload:
+                merged[str(payload["symbol"]).upper()] = payload
+            elif isinstance(payload, list):
+                for row in payload:
+                    if isinstance(row, dict) and row.get("symbol"):
+                        merged[str(row["symbol"]).upper()] = row
+
+        if not merged and failed_chunks:
+            return ApiResult(None, "; ".join(failed_chunks))
+        if failed_chunks:
+            missing = sorted(set(wanted) - set(merged))
+            return ApiResult(
+                merged,
+                f"us-quote-delayed partially failed, missing {len(missing)} symbols "
+                f"({', '.join(missing[:10])}): {failed_chunks[0]}",
+            )
+        return ApiResult(merged, None)
+
+    def intraday(
+        self,
+        symbol: str,
+        start: dt.datetime,
+        end: dt.datetime,
+        interval: str = "1m",
+    ) -> ApiResult:
+        """One minute bars. Timestamps come back as UTC unix seconds."""
+        return self._request(
+            f"intraday/{symbol}",
+            params={
+                "interval": interval,
+                "from": ettime.epoch_s(start),
+                "to": ettime.epoch_s(end),
+            },
+            endpoint=f"intraday-{interval}",
+        )
+
+    def eod(
+        self,
+        symbol: str,
+        start: dt.date | None = None,
+        end: dt.date | None = None,
+        period: str = "d",
+    ) -> ApiResult:
+        """Daily bars: date, open, high, low, close, adjusted_close, volume."""
+        params: dict[str, Any] = {"period": period, "order": "a"}
+        if start:
+            params["from"] = start.isoformat()
+        if end:
+            params["to"] = end.isoformat()
+        result = self._request(f"eod/{symbol}", params=params, endpoint="eod")
+        if not result.ok:
+            return result
+        rows = result.data
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list):
+            return ApiResult(None, f"eod {symbol} failed: payload was not a list")
+        return ApiResult(rows, None)
+
+    def exchange_symbol_list(self, exchange: str) -> ApiResult:
+        """Every listed symbol on an exchange, with its security Type."""
+        result = self._request(
+            f"exchange-symbol-list/{exchange}",
+            endpoint="exchange-symbol-list",
+            timeout=BULK_TIMEOUT_S,
+        )
+        if not result.ok:
+            return result
+        if not isinstance(result.data, list):
+            return ApiResult(None, f"exchange-symbol-list {exchange}: payload was not a list")
+        return result
+
+    def news(
+        self,
+        symbol: str,
+        start: dt.date | None = None,
+        end: dt.date | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ApiResult:
+        """News carrying the EODHD symbol tag.
+
+        The symbol tag is the whole filter. There is no keyword matching, no
+        company name regex and no stopword list anywhere in this project.
+        """
+        params: dict[str, Any] = {"s": symbol, "limit": limit or NEWS_LIMIT, "offset": offset}
+        if start:
+            params["from"] = start.isoformat()
+        if end:
+            params["to"] = end.isoformat()
+        result = self._request("news", params=params, endpoint="news")
+        if not result.ok:
+            return result
+        if not isinstance(result.data, list):
+            return ApiResult(None, f"news {symbol}: payload was not a list")
+        return result
+
+    def economic_events(
+        self,
+        country: str,
+        start: dt.date,
+        end: dt.date,
+        limit: int = 1000,
+    ) -> ApiResult:
+        result = self._request(
+            "economic-events",
+            params={
+                "country": country,
+                "from": start.isoformat(),
+                "to": end.isoformat(),
+                "limit": limit,
+            },
+            endpoint="economic-events",
+        )
+        if not result.ok:
+            return result
+        if not isinstance(result.data, list):
+            return ApiResult(None, "economic-events: payload was not a list")
+        return result
+
+    def earnings_calendar(
+        self,
+        start: dt.date,
+        end: dt.date,
+        symbols: Iterable[str] | None = None,
+    ) -> ApiResult:
+        """Returns the earnings array, already unwrapped from its envelope."""
+        params: dict[str, Any] = {"from": start.isoformat(), "to": end.isoformat()}
+        symbol_list = [s for s in (symbols or []) if s]
+        if symbol_list:
+            params["symbols"] = ",".join(symbol_list)
+        result = self._request(
+            "calendar/earnings", params=params, endpoint="calendar-earnings"
+        )
+        if not result.ok:
+            return result
+        payload = result.data
+        if isinstance(payload, dict):
+            rows = payload.get("earnings")
+            if isinstance(rows, list):
+                return ApiResult(rows, None)
+            return ApiResult(None, "calendar/earnings: no earnings array in the payload")
+        if isinstance(payload, list):
+            return ApiResult(payload, None)
+        return ApiResult(None, "calendar/earnings: unexpected payload shape")
+
+
+_default_client: EodhdClient | None = None
+
+
+def client() -> EodhdClient:
+    """Process wide client so the counter counts the whole run."""
+    global _default_client
+    if _default_client is None:
+        _default_client = EodhdClient()
+    return _default_client
+
+
+def _smoke() -> int:
+    """Checkpoint 3 done condition.
+
+    Hit us-quote-delayed for AAPL.US, print ethVolume and ethTime, and report
+    the call count.
+    """
+    api = client()
+    symbol = "AAPL.US"
+    print(f"smoke test: us-quote-delayed for {symbol}")
+
+    data, error = api.quote_delayed([symbol])
+    if error:
+        print(f"FAIL  {error}")
+        print_call_report()
+        return 1
+
+    quote = data.get(symbol) or data.get(symbol.upper())
+    if not quote:
+        print(f"FAIL  no row for {symbol} in {sorted(data)}")
+        print_call_report()
+        return 1
+
+    eth_volume = quote.get("ethVolume")
+    eth_time_ms = quote.get("ethTime")
+    eth_time_et = ettime.from_epoch_ms(eth_time_ms)
+
+    print(f"  symbol                     {quote.get('symbol', symbol)}")
+    print(f"  ethVolume                  {eth_volume}")
+    print(f"  ethTime                    {eth_time_ms}")
+    print(f"  ethTime as ET              {ettime.stamp(eth_time_et) if eth_time_et else 'null'}")
+    print(f"  lastTradePrice             {quote.get('lastTradePrice')}")
+    print(f"  previousClosePrice         {quote.get('previousClosePrice')}")
+    print(f"  marketCap                  {quote.get('marketCap')}")
+    print(f"  sharesFloat                {quote.get('sharesFloat')}")
+    print(f"  averageVolume              {quote.get('averageVolume')}")
+    print(f"  twoHundredDayAveragePrice  {quote.get('twoHundredDayAveragePrice')}")
+    print(f"  fields returned            {len(quote)}")
+
+    missing = [
+        field
+        for field in (
+            "ethVolume",
+            "ethTime",
+            "marketCap",
+            "sharesFloat",
+            "averageVolume",
+            "twoHundredDayAveragePrice",
+            "previousClosePrice",
+        )
+        if field not in quote
+    ]
+    if missing:
+        print(f"  WARNING fields absent from the payload: {', '.join(missing)}")
+
+    print("OK")
+    print_call_report()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_smoke())

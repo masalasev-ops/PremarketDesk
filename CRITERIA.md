@@ -40,6 +40,20 @@ Value shapes:
 Repeated keys inside one section keep their order, which is what makes the
 banded scoring blocks readable. First matching band wins.
 
+## Api
+
+Operational knobs for the EODHD client. Endpoint addresses live in config.py
+because a URL is not a criterion. Everything here is a number you may want to
+turn on a bad network day.
+
+max_attempts                  = 4          # total tries per call, including the first
+retry_backoff_start_s         = 2
+retry_backoff_max_s           = 30
+timeout_s                     = 30         # per request, normal endpoints
+bulk_timeout_s                = 180        # the bulk feed returns every US ticker
+quote_batch_size              = 20         # symbols per us-quote-delayed call
+news_limit                    = 50
+
 ## Day setup
 
 Applies to the intraday gap and go screen. A candidate is day_eligible only
