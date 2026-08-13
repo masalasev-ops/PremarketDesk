@@ -211,6 +211,22 @@ market_open                   = 09:30
 run_after                     = 22:00      # ET, the day's intraday is complete by then
 gap_report_sessions           = 20
 
+## Outcomes
+
+The nightly outcome fill for picks old enough to have them. Horizons are
+trading sessions counted on the session calendar symbol's end of day history,
+never weekday arithmetic, because holidays are not sessions.
+
+The excursion definitions, for the record: favourable excursion is how far
+the next session's high ran past entry_ref, as a percent of entry_ref.
+Adverse excursion is how far the next session's low undercut stop_ref, as a
+percent of stop_ref, so a negative adverse excursion means the stop reference
+was breached by that much. Both are measurements of what happened near the
+reference levels, not a simulation of any trade.
+
+horizon_sessions_short        = 1
+horizon_sessions_long         = 5
+
 ## Scan
 
 The 08:45 gathering pass that writes packet.json.
