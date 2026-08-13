@@ -263,8 +263,16 @@ narrates numbers already decided in Python, so these are operational knobs
 like the Api section above, not screen criteria.
 
 model                         = opus       # owner's call on 2026-08-13, was sonnet in the original brief
-timeout_s                     = 1200       # the sonnet run took 8.6 minutes, opus gets more headroom
+timeout_s                     = 240        # per attempt, owner's guard set 2026-08-13
 max_attempts                  = 2          # total tries, including the first
+
+Note on timeout_s: every successful narrative run measured on 2026-08-13
+exceeded 240 seconds (opus 393 to 453, sonnet 517), so at this setting the
+plain table fallback report is the expected morning outcome and the narrative
+is a bonus when the model is fast. Raise this to 600 or more if the narrative
+should usually win. The report is produced either way: on any analyst
+failure, timeout included, analyst.py renders the fallback straight from
+packet.json and the chain carries on to email.
 
 ## Scan snapshot
 

@@ -202,37 +202,102 @@ class BarBuilder:
 
         if lines:
             self.path.parent.mkdir(parents=True, exist_ok=True)
+            # One write and one flush per bar, so the file never holds a
+            # buffered partial line while scan.py reads it at 08:45. The
+            # handle is opened per settle batch and closed again, which also
+            # flushes through to the OS on every batch.
             with self.path.open("a", encoding="utf-8") as handle:
-                handle.write("\n".join(lines) + "\n")
+                for line in lines:
+                    handle.write(line + "\n")
+                    handle.flush()
             self.rows_written += len(lines)
         return len(lines)
 
 
 # --------------------------------------------------------------- reading back
 
-def read_bars(day: str | None = None) -> dict[str, list[dict[str, Any]]]:
-    """Today's collected minutes, per symbol, oldest first.
+def read_bars_file(path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    """Parse a bar file, tolerating a writer mid-append.
 
-    This is what scan.py reads. It never falls back to anything else.
+    Only lines terminated by a newline are trusted. A trailing partial line
+    means the collector was flushed mid-write at the moment of the read, so
+    that fragment is counted and discarded rather than parsed or raised on.
+    Returns (bars_by_symbol, stats).
     """
-    path = bar_path(day)
     out: dict[str, list[dict[str, Any]]] = {}
+    stats: dict[str, Any] = {
+        "bars_total": 0,
+        "last_bar_epoch": None,
+        "last_bar_et": None,
+        "partial_line_discarded": False,
+        "bad_lines_skipped": 0,
+    }
     if not path.exists():
-        return out
-    for line in path.read_text(encoding="utf-8").splitlines():
+        return out, stats
+
+    text = path.read_bytes().decode("utf-8", errors="replace")
+    lines = text.split("\n")
+    if lines and lines[-1] != "":
+        # No trailing newline: the final line is incomplete. Drop it.
+        stats["partial_line_discarded"] = True
+        lines = lines[:-1]
+
+    for line in lines:
         line = line.strip()
         if not line:
             continue
         try:
             row = json.loads(line)
         except ValueError:
+            stats["bad_lines_skipped"] += 1
             continue
         symbol = str(row.get("symbol") or "")
         if symbol:
             out.setdefault(symbol, []).append(row)
     for rows in out.values():
         rows.sort(key=lambda r: r.get("minute_epoch", 0))
-    return out
+        stats["bars_total"] += len(rows)
+        last = rows[-1].get("minute_epoch")
+        if last is not None and (stats["last_bar_epoch"] is None or last > stats["last_bar_epoch"]):
+            stats["last_bar_epoch"] = last
+    if stats["last_bar_epoch"] is not None:
+        stats["last_bar_et"] = ettime.stamp(ettime.from_epoch_s(stats["last_bar_epoch"]))
+    return out, stats
+
+
+def read_bars(day: str | None = None) -> dict[str, list[dict[str, Any]]]:
+    """Today's collected minutes, per symbol, oldest first.
+
+    This is what everything except scan.py reads. Scan takes a snapshot copy
+    first, because at 08:45 the collector is still appending to this file;
+    see snapshot_bars.
+    """
+    bars, _ = read_bars_file(bar_path(day))
+    return bars
+
+
+def snapshot_bars(day: str, destination) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+    """Copy the live bar file aside, then parse the copy.
+
+    The collector appends until 09:25 and scan reads at 08:45, so the read
+    overlaps the write. Copying first means the parse works on bytes that
+    stopped moving, and the copy in runs/<date>/ records exactly what the
+    packet saw.
+    """
+    import shutil
+
+    source = bar_path(day)
+    stats: dict[str, Any]
+    if not source.exists():
+        return {}, {
+            "bars_total": 0, "last_bar_epoch": None, "last_bar_et": None,
+            "partial_line_discarded": False, "bad_lines_skipped": 0,
+            "source_missing": True,
+        }
+    shutil.copyfile(source, destination)
+    bars, stats = read_bars_file(destination)
+    stats["source_missing"] = False
+    return bars, stats
 
 
 # ------------------------------------------------------------------ websocket

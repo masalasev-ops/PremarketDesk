@@ -8,10 +8,13 @@ into the day's picks, next to the morning values, never over them.
 
 The two sets of columns are the point. Their difference is the standing
 measurement of what a 07:20 collector start misses, reported here as a median
-and worst case over recent sessions. A true high LOWER than the live high is
-geometrically impossible, the true window contains the collector window, so
-any such row is flagged as a source disagreement and left for a human, the
-morning value never silently corrected.
+and worst case over recent sessions. A true high LOWER than the live high
+should not happen if both sources saw the same tape, since the true window
+contains the collector window, but the trades websocket and the published
+bars can legitimately differ on odd lots, condition codes, and late
+corrections. So the shortfall is recorded as a magnitude, a percentage in
+pm_source_disagreement, small values reading as feed noise and large ones as
+a bad bar worth chasing, and the morning value is never silently corrected.
 
 While it is here with the intraday feed open, this job also runs the
 definitive collector volume check, verify_against_intraday, and writes the
@@ -40,7 +43,10 @@ _TRUE_COLUMNS = (
     ("pm_low_true", "REAL"),
     ("pm_vwap_true", "REAL"),
     ("pm_true_bars", "INTEGER"),
-    ("pm_source_disagreement", "INTEGER"),
+    # The percentage by which the true high undercuts the live high, 0.0 when
+    # it does not. A magnitude, not a boolean: feed noise and bad bars both
+    # trip a boolean, and then nobody can tell them apart in the table.
+    ("pm_source_disagreement", "REAL"),
     ("backfilled_at", "TEXT"),
 )
 
@@ -154,15 +160,18 @@ def backfill(day: str) -> int:
 
             live_high = pick["pm_high"]
             true_high = true_row["pm_high_true"]
-            disagree = 0
-            if live_high is not None and true_high is not None and true_high + 1e-6 < live_high:
-                disagree = 1
-                disagreements += 1
-                print(
-                    f"backfill: SOURCE DISAGREEMENT {ticker}: true high {true_high} is "
-                    f"below the live collector high {live_high}. The true window is a "
-                    "superset, so one of the sources is wrong. Flagged, nothing overwritten."
-                )
+            disagree = None
+            if live_high is not None and true_high is not None and live_high > 0:
+                shortfall = (live_high - true_high) / live_high * 100.0
+                disagree = round(shortfall, 4) if shortfall > 0 else 0.0
+                if disagree > 0:
+                    disagreements += 1
+                    print(
+                        f"backfill: SOURCE DISAGREEMENT {ticker}: true high {true_high} is "
+                        f"{disagree:.4f} percent below the live collector high {live_high}. "
+                        "The true window contains the collector window, so this is a feed "
+                        "difference or a bad bar. Recorded, nothing overwritten."
+                    )
 
             connection.execute(
                 """

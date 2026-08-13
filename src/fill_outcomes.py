@@ -152,8 +152,19 @@ def fill(day_limit: str | None = None) -> int:
             filled += 1
 
         connection.commit()
+
+        # Rows are not observations. Candidates from one morning share the
+        # same tape, so the sample unit for any threshold analysis is the
+        # session, and both counts are reported so nobody mistakes twelve
+        # correlated rows for twelve data points.
+        total_rows, total_sessions = connection.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT date) FROM picks "
+            "WHERE next_day_close IS NOT NULL"
+        ).fetchone()
         print(f"outcomes: {filled} picks filled, {skipped} not yet due, "
               f"{unavailable} had no data")
+        print(f"outcomes: the table now holds {total_rows} outcome rows across "
+              f"{total_sessions} sessions; the sample unit is the session")
     return 0
 
 

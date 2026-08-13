@@ -399,8 +399,11 @@
       <text x="70" y="237" font-size="10.5" class="svg-mono svg-accent-text">intraday bar &#8594; pm_high_true, pm_low_true, pm_vwap_true, written by backfill at 22:15, beside the morning values, never over them</text>
     </svg>
     <figcaption>Coverage of the 04:00 to 09:30 premarket session. A true high
-    below the live high is geometrically impossible, so any such row gets a
-    source disagreement flag and a human decides; nothing is silently corrected.</figcaption>
+    below the live high indicates a feed difference or a bad bar, the trades
+    websocket and the published bars can legitimately differ on odd lots,
+    condition codes, and late corrections, so the shortfall is recorded as a
+    percentage in pm_source_disagreement, small values reading as feed noise
+    and large ones as an error worth chasing; nothing is silently corrected.</figcaption>
   </figure>
 
   <div class="callout">
@@ -424,8 +427,13 @@
     scan creates it in the morning, the backfill widens it the same night, and
     the outcomes pass returns one and five trading sessions later to record what
     the market actually did next. Those outcome rows are the project's long
-    game: the CRITERIA.md thresholds are unvalidated seed values until a few
-    hundred of these rows say otherwise.</p>
+    game: the CRITERIA.md thresholds are unvalidated seed values until enough
+    filled rows say otherwise. And the sample unit for that judgment is the
+    session, not the row: twelve candidates from one morning share the same
+    market, the same macro print, and often the same sector move, so they are
+    one observation, not twelve. Any later analysis aggregates to one figure
+    per session before comparing conviction buckets, and fill_outcomes.py
+    reports both counts to keep that distinction visible.</p>
   </div>
 
   <div class="cards">
@@ -466,6 +474,67 @@
         <li>outcomes_filled_at</li>
       </ul>
     </div>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">Degradation, job by job</p>
+  <h2>When something fails</h2>
+  <div class="prose">
+    <p>The chain stops at the first failure, evidence gaps degrade to nulls
+    with written reasons, and staleness is refused loudly: any job reading
+    universe.json exits and names the file's age once it passes ten days.
+    While the <code>data/UNVERIFIED</code> gate marker exists, no email goes
+    out in any of these rows regardless of what else succeeded.</p>
+  </div>
+  <div class="table-wrap">
+  <table class="files">
+    <tr>
+      <td>universe.py fails Sunday</td>
+      <td>The week runs on the last good universe.json until it turns ten days
+      old, then discover and scan refuse to run, printing the age and the
+      limit. No packet, no report, no email past that point.</td>
+    </tr>
+    <tr>
+      <td>discover.py fails at 07:15</td>
+      <td>No fresh watchlist and no warmed baselines. The collector exits
+      naming the missing file (or runs on yesterday's list if one is on
+      disk). Scan still builds candidates from its own fresh bulk call, marks
+      them collector uncovered with RVOL null and reasons. The report goes
+      out with the holes named in the disclaimer.</td>
+    </tr>
+    <tr>
+      <td>collector never connects</td>
+      <td>No minute bars. Every premarket high, low, VWAP, and RVOL is null
+      with a reason, gaps_to_fill names every candidate. The report goes out,
+      thin and saying so.</td>
+    </tr>
+    <tr>
+      <td>scan.py fails at 08:45</td>
+      <td>No packet, so the chain stops before the model. No report, no
+      email; the morning log ends at the scan step's exit code.</td>
+    </tr>
+    <tr>
+      <td>analyst.py fails or times out</td>
+      <td>Two attempts at 240 seconds each, then the deterministic fallback:
+      report.md is rebuilt as plain tables straight from packet.json, the
+      disclaimer carries the failure reason, analyst_usage.json records
+      status timeout or failed. Render and deliver carry on, the email still
+      goes.</td>
+    </tr>
+    <tr>
+      <td>deliver.py fails</td>
+      <td>The report is on disk in runs/&lt;date&gt;/ and the log holds
+      Resend's answer. No email that morning; nothing retries until the next
+      scheduled morning.</td>
+    </tr>
+    <tr>
+      <td>nightly jobs fail</td>
+      <td>The true premarket columns and outcomes stay null. Both jobs are
+      idempotent and fill only what is missing, so the next night's run picks
+      up the backlog on its own. The morning report is unaffected.</td>
+    </tr>
+  </table>
   </div>
 </section>
 

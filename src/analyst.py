@@ -44,7 +44,7 @@ _NOT_TICKERS = frozenset({
     "ETF", "ETFS", "ETN", "REIT", "ADR",
     "NYSE", "NASDAQ", "OTC", "US", "USA", "USD", "EU", "UK",
     "WTI", "DXY", "OPEC", "EIA", "DOE",
-    "YOY", "QOQ", "MOM", "FY", "NA", "OK", "VS", "TBD",
+    "YOY", "QOQ", "MOM", "FY", "NA", "OK", "VS", "TBD", "CLI", "JSON",
     "AND", "THE", "NOT", "FOR", "ALL", "NO", "YES", "TOP", "NEW", "PT",
     "MA", "LLC", "INC", "CORP", "PLC",
 })
@@ -110,15 +110,23 @@ def _trim_to_report(text: str) -> str:
     return text + "\n"
 
 
-def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | None]:
-    """Run the CLI. Returns (report_text, usage_record, error)."""
+def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | None, str]:
+    """Run the CLI. Returns (report_text, usage_record, error, failure_kind).
+
+    failure_kind is "ok" on success, "timeout" when the last attempt ran out
+    of clock, "failed" for every other way the CLI can disappoint.
+    """
     model = _CRIT.text("analyst", "model")
     timeout_s = _CRIT.integer("analyst", "timeout_s")
     attempts = _CRIT.integer("analyst", "max_attempts")
-    command = [resolve_cli(), "-p", "--model", model, "--output-format", "json"]
+    try:
+        command = [resolve_cli(), "-p", "--model", model, "--output-format", "json"]
+    except FileNotFoundError as exc:
+        return None, {}, str(exc), "failed"
     stdin_doc = _compose_stdin(packet_text)
 
     last_error = None
+    last_kind = "failed"
     for attempt in range(1, attempts + 1):
         print(f"analyst: attempt {attempt} of {attempts}, model {model}")
         try:
@@ -135,15 +143,17 @@ def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | N
             )
         except subprocess.TimeoutExpired:
             last_error = f"claude CLI timed out after {timeout_s}s"
+            last_kind = "timeout"
             print(f"analyst: {last_error}")
             continue
         except OSError as exc:
-            return None, {}, f"claude CLI could not be started: {exc}"
+            return None, {}, f"claude CLI could not be started: {exc}", "failed"
 
         if proc.returncode != 0:
             last_error = (
                 f"claude CLI exited {proc.returncode}: {proc.stderr.strip()[:400]}"
             )
+            last_kind = "failed"
             print(f"analyst: {last_error}")
             continue
 
@@ -151,6 +161,7 @@ def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | N
             payload = json.loads(proc.stdout)
         except json.JSONDecodeError as exc:
             last_error = f"claude CLI output was not JSON: {exc}"
+            last_kind = "failed"
             print(f"analyst: {last_error}")
             continue
 
@@ -159,6 +170,7 @@ def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | N
                 f"claude CLI reported an error result: subtype "
                 f"{payload.get('subtype')!r}, result {str(payload.get('result'))[:300]!r}"
             )
+            last_kind = "failed"
             print(f"analyst: {last_error}")
             continue
 
@@ -177,9 +189,178 @@ def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | N
             "session_id": payload.get("session_id"),
             "attempt": attempt,
         }
-        return _trim_to_report(str(payload.get("result") or "")), record, None
+        return _trim_to_report(str(payload.get("result") or "")), record, None, "ok"
 
-    return None, {}, last_error or "claude CLI failed for an unrecorded reason"
+    return None, {}, last_error or "claude CLI failed for an unrecorded reason", last_kind
+
+
+# ------------------------------------------------- the fallback report
+
+def _f(value: Any, digits: int = 2) -> str:
+    if value is None:
+        return "null"
+    try:
+        return f"{float(value):,.{digits}f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _cap(value: Any) -> str:
+    if value is None:
+        return "null"
+    number = float(value)
+    if number >= 1e9:
+        return f"{number / 1e9:.2f}B"
+    return f"{number / 1e6:.0f}M"
+
+
+def _bare(symbol: str) -> str:
+    return str(symbol).split(".")[0]
+
+
+def fallback_report(packet: dict[str, Any], reason: str) -> str:
+    """The report the morning gets when the model cannot be reached.
+
+    Every number straight from the packet, no narrative, the same section
+    skeleton as the template so downstream rendering and reading habits hold.
+    The disclaimer line carries the failure reason, because a report that
+    silently degraded would be a report that lied about its own provenance.
+    """
+    candidates = packet.get("candidates", [])
+    no_rvol = [_bare(c["symbol"]) for c in candidates if c.get("pm_rvol") is None]
+    partial = [
+        _bare(c["symbol"]) for c in candidates
+        if c.get("pm_window_starts_late") or not c.get("collector_covered")
+    ]
+    day = [c for c in candidates if c.get("day_eligible")]
+    swing = [c for c in candidates if c.get("swing_eligible")]
+    no_catalyst = [_bare(c["symbol"]) for c in candidates if c.get("catalyst_found") is False]
+
+    lines: list[str] = []
+    add = lines.append
+    add("# PremarketDesk: numbers only, narrative unavailable")
+    add("")
+    add(f"{packet.get('session_date')}, packet generated {packet.get('generated_at')}, "
+        "generated by PremarketDesk.")
+    add("")
+    disclaimer = (
+        "Nothing here is advice, the screen thresholds are unvalidated seed values, "
+        f"the narrative pass was unavailable ({reason}), so this is the deterministic "
+        "fallback built straight from packet.json"
+    )
+    if no_rvol:
+        disclaimer += f"; premarket RVOL is null for {', '.join(no_rvol)}"
+    if partial:
+        disclaimer += (
+            f"; premarket path evidence is partial or missing for {', '.join(partial)}"
+        )
+    add(disclaimer + ".")
+    add("")
+    add("## Summary")
+    add("")
+    add(f"{len(candidates)} candidates. Day eligible: "
+        f"{', '.join(_bare(c['symbol']) for c in day) or 'none'}. Swing eligible: "
+        f"{', '.join(_bare(c['symbol']) for c in swing) or 'none'}. "
+        f"{len(packet.get('gaps_to_fill', []))} gaps recorded in the packet.")
+    add("")
+    add("## Premarket gappers")
+    add("")
+    add("| Ticker | Name | Gap % | Price | Prior close | Mkt cap | Catalyst | Top headline |")
+    add("|---|---|---|---|---|---|---|---|")
+    for c in candidates:
+        quote = c.get("quote") or {}
+        heads = c.get("headlines") or []
+        title = (heads[0].get("title") or "")[:80] if heads else ""
+        found = c.get("catalyst_found")
+        catalyst = c.get("catalyst_class") if found else (
+            "none found" if found is False else "unknown")
+        add(f"| {_bare(c['symbol'])} | {quote.get('name') or ''} | {_f(c.get('gap_pct'))} "
+            f"| {_f(c.get('price'))} | {_f(c.get('prior_close'))} | {_cap(quote.get('marketCap'))} "
+            f"| {catalyst} | {title} |")
+    add("")
+    add("## Day watchlist")
+    add("")
+    if day:
+        add("| Ticker | Gap % | Price | PM RVOL | PM high | PM VWAP | Score | Conviction |")
+        add("|---|---|---|---|---|---|---|---|")
+        for c in day:
+            add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
+                f"| {_f(c.get('pm_rvol'))} | {_f(c.get('pm_high'), 4)} | {_f(c.get('pm_vwap'), 4)} "
+                f"| {_f(c.get('score'), 1)} | {c.get('conviction')} |")
+    else:
+        add("No candidate is day eligible this morning.")
+    add("")
+    add("## Swing watchlist")
+    add("")
+    if swing:
+        add("| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | Score | Conviction |")
+        add("|---|---|---|---|---|---|---|---|")
+        for c in swing:
+            quote = c.get("quote") or {}
+            add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
+                f"| {_f(c.get('prior_high'))} | {_f(quote.get('twoHundredDayAveragePrice'))} "
+                f"| {c.get('catalyst_class')} | {_f(c.get('score'), 1)} | {c.get('conviction')} |")
+    else:
+        add("No candidate is swing eligible this morning.")
+    add("")
+    add("## Market trends")
+    add("")
+    add("| Label | Last | Change % | Source |")
+    add("|---|---|---|---|")
+    for row in packet.get("market_snapshot", []):
+        label = row.get("label", "")
+        note = " (proxy)" if row.get("proxy_note") else ""
+        add(f"| {str(label).upper()}{note} | {_f(row.get('last'))} "
+            f"| {_f(row.get('change_pct'))} | {row.get('source') or 'unavailable'} |")
+    add("")
+    add("## Technical signals")
+    add("")
+    add("| Ticker | PM high | PM low | PM VWAP | Prior high | 200d avg | Score | Conviction |")
+    add("|---|---|---|---|---|---|---|---|")
+    for c in candidates:
+        quote = c.get("quote") or {}
+        mark = " (partial)" if (c.get("pm_window_starts_late") or not c.get("collector_covered")) else ""
+        pm_high = _f(c.get("pm_high"), 4)
+        add(f"| {_bare(c['symbol'])} | {pm_high}{mark if c.get('pm_high') is not None else ''} "
+            f"| {_f(c.get('pm_low'), 4)} | {_f(c.get('pm_vwap'), 4)} | {_f(c.get('prior_high'))} "
+            f"| {_f(quote.get('twoHundredDayAveragePrice'))} | {_f(c.get('score'), 1)} "
+            f"| {c.get('conviction')} |")
+    add("")
+    add("## Economic data and rates")
+    add("")
+    events = (packet.get("economic") or {}).get("events", [])
+    if events:
+        for event in events:
+            add(f"- {event.get('time_et')}: {event.get('title')} "
+                f"(forecast {event.get('forecast')}, previous {event.get('previous')}, "
+                f"actual {event.get('actual')})")
+    else:
+        add("No high importance events in the packet window.")
+    add("")
+    add("## Coming up")
+    add("")
+    tomorrow = (packet.get("earnings") or {}).get("notable_tomorrow", [])
+    if tomorrow:
+        add("| Ticker | Mkt cap | Report date | Session |")
+        add("|---|---|---|---|")
+        for row in tomorrow:
+            add(f"| {_bare(row.get('symbol', ''))} | {_cap(row.get('market_cap'))} "
+                f"| {row.get('report_date')} | {row.get('before_after_market') or ''} |")
+    else:
+        add("No notable earnings in the packet window.")
+    add("")
+    add("## Skips and traps")
+    add("")
+    if no_catalyst:
+        add(f"Moving on no found catalyst, a skip: {', '.join(no_catalyst)}.")
+    if partial:
+        add(f"Premarket path partial or absent, treat any level as partial: {', '.join(partial)}.")
+    if not no_catalyst and not partial:
+        add("Every candidate carries a found catalyst and full evidence.")
+    add("")
+    add("Trap judgment (a gap up on bad news) needs the narrative pass and is "
+        "not attempted here.")
+    return "\n".join(lines) + "\n"
 
 
 # ------------------------------------------------- the containment checker
@@ -244,25 +425,34 @@ def write_report(packet_path: Path) -> int:
     session_date = packet.get("session_date") or ettime.today_et().isoformat()
     run_directory = config.run_dir(session_date)
 
-    report_text, usage, error = invoke_claude(packet_text)
+    report_text, usage, error, kind = invoke_claude(packet_text)
     if error or report_text is None or not report_text.strip():
-        print(f"analyst: FAILED: {error or 'the model returned an empty report'}")
-        return 1
+        reason = error or "the model returned an empty report"
+        if not error:
+            kind = "failed"
+        print(f"analyst: narrative unavailable ({kind}): {reason}")
+        print("analyst: falling back to the deterministic numbers only report")
+        report_text = fallback_report(packet, reason)
+        usage = {"status": kind, "error_message": reason, "fallback": True}
+    else:
+        usage["status"] = "ok"
+        usage["fallback"] = False
 
     report_path = run_directory / "report.md"
     report_path.write_text(report_text, encoding="utf-8")
-    print(f"analyst: wrote {report_path} ({len(report_text)} chars)")
+    print(f"analyst: wrote {report_path} ({len(report_text)} chars, status {usage['status']})")
 
     usage["generated_at"] = ettime.stamp(ettime.now_et())
     usage["packet"] = str(packet_path)
     usage_path = run_directory / "analyst_usage.json"
     usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True), encoding="utf-8")
-    print(
-        "analyst: tokens in "
-        f"{usage.get('input_tokens')} (cache write {usage.get('cache_creation_input_tokens')}, "
-        f"cache read {usage.get('cache_read_input_tokens')}), out {usage.get('output_tokens')}, "
-        f"cost ${usage.get('total_cost_usd')}, {usage.get('duration_ms')} ms"
-    )
+    if usage["status"] == "ok":
+        print(
+            "analyst: tokens in "
+            f"{usage.get('input_tokens')} (cache write {usage.get('cache_creation_input_tokens')}, "
+            f"cache read {usage.get('cache_read_input_tokens')}), out {usage.get('output_tokens')}, "
+            f"cost ${usage.get('total_cost_usd')}, {usage.get('duration_ms')} ms"
+        )
 
     invented, missing = check_report(report_text, packet_text)
     if missing:
@@ -271,14 +461,23 @@ def write_report(packet_path: Path) -> int:
             + ", ".join(missing)
         )
     if invented:
-        print(
-            "analyst: FAILED the containment check. These tickers appear in the "
-            "report but nowhere in the packet: " + ", ".join(invented)
-        )
-        print("analyst: the report was written for inspection but must not be delivered.")
-        return 2
-
-    print("analyst: containment check passed, every report ticker exists in the packet")
+        if usage.get("fallback"):
+            # The fallback is assembled from the packet by code, so it cannot
+            # invent a ticker. Anything flagged here is an uppercase token from
+            # the quoted failure reason, worth a note but never a stop.
+            print(
+                "analyst: containment note on the fallback report, tokens from the "
+                "failure text: " + ", ".join(invented)
+            )
+        else:
+            print(
+                "analyst: FAILED the containment check. These tickers appear in the "
+                "report but nowhere in the packet: " + ", ".join(invented)
+            )
+            print("analyst: the report was written for inspection but must not be delivered.")
+            return 2
+    else:
+        print("analyst: containment check passed, every report ticker exists in the packet")
     return 0
 
 

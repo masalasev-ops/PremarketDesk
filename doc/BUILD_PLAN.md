@@ -122,6 +122,13 @@ the sections above.
 CP8 scan gathers: verified 2026-08-13. `python src\scan.py` writes
 runs/YYYY-MM-DD/packet.json, every failure lands in gaps_to_fill with a
 reason, no network error crashes the run. 33 API calls, ~8s.
+Hardened same day: scan no longer reads the live collector file, which the
+collector is still appending to at 08:45. It copies it to
+runs/<date>/premarket_snapshot.jsonl, parses only newline terminated lines,
+discards and counts a trailing partial line, and records bars_total plus the
+last complete bar time in the packet under collector_snapshot. The collector
+writes and flushes line by line. Proven with a writer holding the file open
+around a truncated line.
 Added during verification: the RVOL cutoff snap. The baseline lookup is an
 exact minute match, so sixty seconds of scheduler jitter would have nulled
 every RVOL. When the wall clock is within rvol_cutoff_snap_minutes (10) of
@@ -138,6 +145,17 @@ report.md and analyst_usage.json, logs tokens and cost, then runs the
 containment checker: every uppercase token in the report must exist in the
 packet text (finance acronym stoplist excepted), exit 2 on violation.
 Verified with sonnet and again with opus after the owner switched the knob.
+Hardened same day: the report survives the analyst failing. On timeout or any
+CLI failure (two attempts, timeout_s per attempt from CRITERIA, owner set
+240), analyst.py renders a deterministic plain table fallback report straight
+from packet.json, puts the reason in the disclaimer line, records
+status ok|timeout|failed in analyst_usage.json, and exits 0 so render and
+deliver carry on. Proven by forcing a fake claude.cmd to exit 1: the fallback
+carried all twelve candidates and their levels and the chain reached deliver.
+Know this: both models measured slower than 240s on 2026-08-13 (opus 393 to
+453s, sonnet 517s), so at the current knob the fallback is the EXPECTED
+morning report and the narrative is a bonus. Raise timeout_s to 600 or more
+if the narrative should usually win.
 
 CP11 render and deliver: report.html via the markdown library (tables,
 fenced_code, sane_lists). deliver.py posts to Resend through the Norton
@@ -151,7 +169,10 @@ stop_ref is pm_low, the reasoning is documented in CRITERIA.md [picks].
 CP13 backfill: src/backfill_premarket.py widens picks with pm_high_true,
 pm_low_true, pm_vwap_true, pm_true_bars, pm_source_disagreement, and writes
 the true 04:00 to 09:30 window from intraday 1m bars next to the morning
-values, never over them. A true high below the live high is flagged, not
+values, never over them. A true high below the live high is a feed
+difference or a bad bar (odd lots, condition codes, late corrections), and
+pm_source_disagreement records the shortfall as a percentage magnitude, not
+a boolean, so noise and real errors read differently. Nothing is silently
 corrected. Prints the median and worst case live versus true high gap over
 recent sessions, and writes verify_intraday.json for the record. The fill
 math was proven against 2026-08-12 (AAPL 330 of 330 premarket minutes);

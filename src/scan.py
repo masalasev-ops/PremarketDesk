@@ -252,16 +252,21 @@ def attach_daily_history(
 
 
 def attach_premarket_path(
-    candidates: list[dict[str, Any]], watchlist: dict[str, Any], packet: Packet
+    candidates: list[dict[str, Any]],
+    watchlist: dict[str, Any],
+    packet: Packet,
+    bars_by_symbol: dict[str, list[dict[str, Any]]],
 ) -> None:
-    """Premarket high, low and VWAP, from the collector file and nowhere else.
+    """Premarket high, low and VWAP, from the collector snapshot and nowhere else.
+
+    The bars come from a snapshot copy taken by build_packet, never from the
+    live file, because the collector is still appending to it at 08:45.
 
     A candidate that was not on the watchlist was never subscribed, so the
     collector has nothing for it. That is recorded as collector_covered false
     with nulls, not filled in from a quote, because it started gapping after
     the collector had already chosen what to listen to.
     """
-    bars_by_symbol = collect_premarket.read_bars()
     watchlist_symbols = {
         str(r.get("symbol", "")).upper() for r in watchlist.get("symbols", [])
     }
@@ -762,10 +767,21 @@ def build_packet() -> dict[str, Any]:
     snapshot = market_snapshot(api, packet)
     candidates, provenance = final_candidates(api, packet, universe_payload)
 
+    # Snapshot the collector file before parsing it. The collector appends
+    # until 09:25, so at 08:45 this read overlaps the write; the copy freezes
+    # the bytes and a trailing partial line is discarded, not raised on.
+    session_date = now.date().isoformat()
+    snapshot_path = config.run_dir(session_date) / "premarket_snapshot.jsonl"
+    bars_by_symbol, collector_stats = collect_premarket.snapshot_bars(
+        session_date, snapshot_path
+    )
+    if collector_stats.get("partial_line_discarded"):
+        print("scan: the collector was mid write, one partial trailing line discarded")
+
     if candidates:
         attach_quotes(api, candidates, packet)
         attach_daily_history(api, candidates, packet)
-        attach_premarket_path(candidates, watchlist, packet)
+        attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
         attach_premarket_rvol(candidates, packet, cutoff)
         attach_catalysts(api, candidates, packet)
 
@@ -791,6 +807,13 @@ def build_packet() -> dict[str, Any]:
         "run_time_et": ettime.hhmm(now),
         "rvol_cutoff_hhmm": cutoff,
         "collector_file": collect_premarket.bar_path().name,
+        "collector_snapshot": {
+            "file": snapshot_path.name,
+            "bars_total": collector_stats.get("bars_total"),
+            "last_complete_bar_et": collector_stats.get("last_bar_et"),
+            "partial_line_discarded": collector_stats.get("partial_line_discarded"),
+            "bad_lines_skipped": collector_stats.get("bad_lines_skipped"),
+        },
         "collector_window_configured": [
             _CRIT.clock_text("collector", "start_time"),
             _CRIT.clock_text("collector", "stop_time"),
