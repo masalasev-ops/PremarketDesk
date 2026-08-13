@@ -260,6 +260,45 @@ class EodhdClient:
             return ApiResult(None, "bulk-live-us failed: payload was not a list")
         return ApiResult(rows, None)
 
+    def eod_bulk_last_day(
+        self,
+        exchange: str = "US",
+        day: dt.date | None = None,
+        symbols: Iterable[str] | None = None,
+        extended: bool = False,
+    ) -> ApiResult:
+        """One session of end of day bars for a whole exchange, in one call.
+
+        This is how the weekly universe build gets twenty sessions of history
+        for every US listing in twenty calls rather than five thousand. Note
+        that the extended filter adds company name, EMA 50, EMA 200 and average
+        volumes, but not market capitalisation. Market cap comes from
+        us-quote-delayed so that the universe and the morning scan are reading
+        the same field.
+        """
+        params: dict[str, Any] = {}
+        if day:
+            params["date"] = day.isoformat()
+        if extended:
+            params["filter"] = "extended"
+        symbol_list = [s for s in (symbols or []) if s]
+        if symbol_list:
+            params["symbols"] = ",".join(symbol_list)
+        result = self._request(
+            f"eod-bulk-last-day/{exchange}",
+            params=params,
+            endpoint="eod-bulk-last-day",
+            timeout=BULK_TIMEOUT_S,
+        )
+        if not result.ok:
+            return result
+        rows = result.data
+        if isinstance(rows, dict):
+            rows = [rows]
+        if not isinstance(rows, list):
+            return ApiResult(None, "eod-bulk-last-day: payload was not a list")
+        return ApiResult(rows, None)
+
     def quote_delayed(self, symbols: Iterable[str]) -> ApiResult:
         """Delayed US quotes keyed by symbol.
 

@@ -95,6 +95,7 @@ min_sessions                  = 20         # sessions of history required to adm
 lookback_sessions             = 20         # sessions pulled to compute the averages
 allowed_security_type         = Common Stock
 exchanges                     = NYSE, NASDAQ
+session_calendar_symbol       = SPY.US   # its EOD history supplies the real session dates
 expected_count_min            = 1000       # a smaller result means the build went wrong
 expected_count_max            = 3000       # a larger result means the type filter went wrong
 max_age_days                  = 10         # every later script refuses to run past this
