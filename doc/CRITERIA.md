@@ -262,9 +262,9 @@ authenticates through the logged in subscription, never an API key. The model
 narrates numbers already decided in Python, so these are operational knobs
 like the Api section above, not screen criteria.
 
-model                         = sonnet     # owner's call: back to sonnet with the one completion invocation
+model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
 effort                        = low        # measured: default effort spent ~35k thinking tokens and 340s on a job with no decisions to make
-timeout_s                     = 218        # 3x the slowest of five measured runs on 2026-08-13: 69.2, 65.4, 67.8, 64.3, 72.5 seconds
+timeout_s                     = 233        # 3x the slowest of five measured opus runs on 2026-08-13: 65.3, 70.1, 67.0, 77.6, 65.8 seconds
 max_attempts                  = 2          # total tries, including the first
 
 Note on the invocation: the narrative pass is one text generation, not an

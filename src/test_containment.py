@@ -49,18 +49,21 @@ def main() -> int:
     absent = pick_absent_universe_symbol(packet_text)
     failures: list[str] = []
 
-    # Claim 1: acronyms in prose pass.
+    # Claim 1: acronyms in prose pass, and so do prose-in-a-grid cells like
+    # headline times ("2:48 PM ET" must not read as Philip Morris) and column
+    # headers ("PM high" likewise). Only ticker columns and $ prefixes claim.
     prose_report = (
         "# PremarketDesk test\n\n"
         "The CEO spoke before the FOMC while the SEC reviewed an IPO. GDP and "
         "CPI both printed, EPS beat, the FDA approved, and an ETF rebalanced.\n\n"
         "## Day watchlist\n\n"
-        "| Ticker | Gap % |\n|---|---|\n| ARX | 43.02 |\n\n"
+        "| Ticker | Gap % | PM high | Top headline |\n|---|---|---|---|\n"
+        "| ARX | 43.02 | 19.51 | Workday jumps on report, 2:48 PM ET |\n\n"
         "Prose mention of $ARX is also fine.\n"
     )
     invented, _ = analyst.check_report(prose_report, packet_text)
     if invented:
-        failures.append(f"acronym prose tripped containment: {invented}")
+        failures.append(f"acronym prose or grid prose tripped containment: {invented}")
 
     # Claim 2a: a universe ticker absent from the packet fails via a table cell.
     table_report = prose_report + (

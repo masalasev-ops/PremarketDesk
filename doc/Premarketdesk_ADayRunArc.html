@@ -351,12 +351,12 @@
       <path d="M632 252 q-14 -4 -14 -18" fill="none" stroke="none"/>
     </svg>
     <figcaption>The morning relay, stage times as measured on 2026-08-13: the
-    scan takes about 10 seconds, the analyst 64 to 73 seconds over five
-    measured runs, and render, deliver, and the archive rebuild under two
-    seconds together, so the chain completes by about 08:46:30 with roughly
-    43 minutes of slack before the 09:30 open. A morning that rides both
-    analyst timeouts into the fallback report still finishes by about 08:53,
-    leaving 37. The dashed amber arrow is the night returning to the same
+    scan takes about 10 seconds, the analyst (opus, one completion, low
+    effort) 65 to 78 seconds over five measured runs, and render, deliver,
+    and the archive rebuild under two seconds together, so the chain
+    completes by about 08:46:30 with roughly 43 minutes of slack before the
+    09:30 open. A morning that rides both analyst timeouts into the fallback
+    report still finishes by about 08:53, leaving 37. The dashed amber arrow is the night returning to the same
     database rows the 08:45 scan created, hours after the report already
     went out.</figcaption>
   </figure>
@@ -545,7 +545,7 @@
     </tr>
     <tr>
       <td>analyst.py fails or times out</td>
-      <td>Two attempts at 218 seconds each, three times the slowest of five
+      <td>Two attempts at 233 seconds each, three times the slowest of five
       measured runs, then the deterministic fallback:
       report.md is rebuilt as plain tables straight from packet.json, the
       disclaimer carries the failure reason, analyst_usage.json records

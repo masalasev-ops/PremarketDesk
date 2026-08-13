@@ -414,27 +414,40 @@ def _ticker_claims(report_text: str) -> set[str]:
     """The tokens the report presents AS tickers.
 
     Prose is not scanned: an acronym like CEO or FOMC in a sentence is not a
-    ticker claim and must never trip containment. A claim is an uppercase
-    token inside a markdown table cell, where the template puts tickers, or a
-    token anywhere carrying a $ prefix, which is unambiguous.
+    ticker claim and must never trip containment. A claim is a token in a
+    table column whose header names it a ticker column, or a token anywhere
+    carrying a $ prefix, which is unambiguous. Other table cells are prose in
+    a grid ("2:48 PM ET" in a headline cell must not read as Philip Morris),
+    so they are not scanned either.
     """
     claims: set[str] = set(_DOLLAR_RE.findall(report_text))
     separator = re.compile(r"[|\s:\-]+")
     lines = report_text.splitlines()
+    ticker_columns: list[int] | None = None
     for index, line in enumerate(lines):
         stripped = line.strip()
         if not stripped.startswith("|"):
+            ticker_columns = None
             continue
         if separator.fullmatch(stripped):
             continue  # the |---|---| separator row
-        # A row immediately above the separator is the header row: column
-        # labels, not tickers. "PM high" must not read as Philip Morris.
-        if index + 1 < len(lines):
-            following = lines[index + 1].strip()
-            if following.startswith("|") and separator.fullmatch(following):
-                continue
-        for cell in stripped.strip("|").split("|"):
-            claims.update(_TOKEN_RE.findall(cell))
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        is_header = (
+            index + 1 < len(lines)
+            and lines[index + 1].strip().startswith("|")
+            and separator.fullmatch(lines[index + 1].strip()) is not None
+        )
+        if is_header:
+            ticker_columns = [
+                position for position, cell in enumerate(cells)
+                if "ticker" in cell.lower() or "symbol" in cell.lower()
+            ]
+            continue
+        if not ticker_columns:
+            continue
+        for position in ticker_columns:
+            if position < len(cells):
+                claims.update(_TOKEN_RE.findall(cells[position]))
     return claims
 
 

@@ -92,10 +92,13 @@ at the root and is gitignored along with .env.
   next to the shim. JSON output carries result, usage, num_turns, is_error,
   subtype, total_cost_usd. The narrative run is one completion: --tools ""
   (nothing to loop on; this CLI version has no turn cap flag and needs
-  none), --effort low (default effort spent ~35k thinking tokens and 340s;
-  low measured 64 to 73s), a one line --system-prompt, everything piped on
-  stdin. Measured five runs on 2026-08-13: 69.2, 65.4, 67.8, 64.3, 72.5
-  seconds, num_turns 1 every time, ~33k tokens, about 14 cents equivalent.
+  none), --effort low (default effort spent ~35k thinking tokens and 340s on
+  a job with no decisions to make), a one line --system-prompt, everything
+  piped on stdin. The model is opus, the owner's standing choice, re-asserted
+  after a review batch had said sonnet. Five measured opus runs on
+  2026-08-13: 65.3, 70.1, 67.0, 77.6, 65.8 seconds, num_turns 1 every time,
+  ~31k tokens, about 17 cents equivalent; timeout_s is 233, three times the
+  slowest.
 - .env holds the real EODHD token (100k daily request limit). RESEND_API_KEY
   and EMAIL_TO are empty, so delivery skips even without the gate.
 - `.claude/settings.local.json` grants broad tool permissions.
