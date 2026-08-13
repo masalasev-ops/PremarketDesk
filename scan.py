@@ -286,8 +286,10 @@ def attach_premarket_path(
             candidate["pm_high"] = None
             candidate["pm_low"] = None
             candidate["pm_vwap"] = None
+            candidate["pm_volume_collected"] = None
             candidate["pm_window_start"] = None
             candidate["pm_window_end"] = None
+            candidate["pm_window_starts_late"] = None
             if not on_watchlist:
                 candidate["pm_reason"] = (
                     "not on watchlist.json, so the collector never subscribed to it. "
@@ -739,6 +741,14 @@ def build_packet() -> dict[str, Any]:
     api = eodhd.client()
     now = ettime.now_et()
     cutoff = baseline.normalize_cutoff((now.hour, now.minute))
+    # The baseline cache is warmed for the configured run time. Sixty seconds
+    # of scheduler jitter must not miss it on an exact minute match, so a wall
+    # clock within the snap window uses the run time cutoff instead. See the
+    # cutoff snap note in CRITERIA.md.
+    run_hour, run_minute = _CRIT.clock("scan", "run_time")
+    snap_minutes = _CRIT.integer("scan", "rvol_cutoff_snap_minutes")
+    if abs((now.hour * 60 + now.minute) - (run_hour * 60 + run_minute)) <= snap_minutes:
+        cutoff = _CRIT.clock_text("scan", "run_time")
 
     try:
         universe_payload = universe.require_fresh_universe()

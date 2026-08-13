@@ -210,6 +210,21 @@ economic_importance           = high
 economic_days_ahead           = 1          # today plus this many days
 earnings_days_ahead           = 1
 run_time                      = 08:45
+rvol_cutoff_snap_minutes      = 10         # see the cutoff snap note below
+
+### The cutoff snap note
+
+The RVOL denominator is the cached baseline median for a clock cutoff, and the
+cache is warmed for run_time. The scan stamps its cutoff from the wall clock,
+so a scheduler that fires at 08:46 instead of 08:45 would miss the cache on an
+exact match and null out every RVOL over sixty seconds of jitter. So when the
+wall clock is within rvol_cutoff_snap_minutes of run_time, the scan uses the
+run_time cutoff. The numerator, ethVolume, is still read at the actual scan
+moment, so a snapped run compares up to that many extra minutes of volume
+against the run_time baseline. That skew is bounded and recorded: the packet
+carries both run_time_et and rvol_cutoff_hhmm, and they differ when snapped.
+Outside the snap window nothing is snapped, which is why an off hours test run
+honestly reports no cached baseline.
 
 ## Scan snapshot
 
