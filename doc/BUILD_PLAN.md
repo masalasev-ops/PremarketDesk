@@ -97,11 +97,14 @@ at the root and is gitignored along with .env.
   nightly on 2026-08-13, failed). register_tasks.ps1 therefore uses the
   ScheduledTasks PowerShell module, which stores the action structurally.
   If a task ever shows Last Result -2147024894, suspect quoting again.
-- EODHD sometimes publishes the day's intraday later than the 22:15
-  nightly. The backfill sweeps up to catchup_days prior sessions whose true
-  premarket columns are still null, so a late vendor never leaves a day
-  permanently unfilled; the 2026-08-13 verification lands whenever the
-  vendor publishes, via that sweep.
+- EODHD publishes the day's intraday later than the 22:15 nightly, probably
+  as a next day batch: at 22:40 on 2026-08-13 the whole day was still empty
+  (regular session included) while 2026-08-12 was complete. The backfill
+  sweeps up to catchup_days prior sessions whose true premarket columns are
+  still null, and the same job_nightly.bat is also scheduled at 07:00 as
+  nightly-catchup, so yesterday's fill and volume verification complete
+  before the new morning's collection is trusted. Never fill a day with
+  another day's bars; unfilled stays null with the sweep retrying.
 - The claude CLI lives at C:\Users\udaya\AppData\Roaming\npm\. The .cmd shim
   MANGLES empty string arguments (it forwards through cmd.exe), which
   silently breaks --tools "". analyst.resolve_cli therefore invokes the real

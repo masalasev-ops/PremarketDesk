@@ -11,6 +11,7 @@ project's own ET clock so a locale change cannot mangle the file name.
 | job_collector.bat | 07:20 | Mon to Fri | collect_premarket.py, runs to the 09:25 stop time |
 | job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, deliver.py, build_archive.py, stopping on the first failure |
 | job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, fill_outcomes.py, then build_archive.py so a broken morning still gets archived that evening |
+| job_nightly.bat (again, as nightly-catchup) | 07:00 | Mon to Fri | the same idempotent run before the market day: the vendor usually publishes intraday overnight, so this fills yesterday via the catch-up sweep and finishes the volume verification before the new morning's collection is trusted |
 | job_universe.bat | 20:00 | Sunday | universe.py weekly rebuild |
 | job_monitor.bat | 07:25, repeating every 30 min until 09:25, and once at 22:45 | Mon to Fri | monitor_jobs.py, the watchdog: checks that each job fired and finished, reruns what is safe |
 

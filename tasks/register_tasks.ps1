@@ -20,6 +20,11 @@ $jobs = @(
     @{ Name = "collector";     Bat = "job_collector.bat";     Days = $weekdays;    Start = "07:20" },
     @{ Name = "morning-chain"; Bat = "job_morning_chain.bat"; Days = $weekdays;    Start = "08:45" },
     @{ Name = "nightly";       Bat = "job_nightly.bat";       Days = $weekdays;    Start = "22:15" },
+    # The vendor publishes intraday overnight more often than by 22:15, so the
+    # same idempotent nightly runs again before the market day: it fills
+    # yesterday via the catch-up sweep and completes the volume verification
+    # before the new morning's collection is trusted.
+    @{ Name = "nightly-catchup"; Bat = "job_nightly.bat";      Days = $weekdays;    Start = "07:00" },
     @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "20:00" },
     # The watchdog: repeats through the morning window, once after the nightly.
     @{ Name = "monitor";       Bat = "job_monitor.bat";       Days = $weekdays;    Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
