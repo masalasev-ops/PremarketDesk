@@ -31,6 +31,7 @@ import markdown
 import config
 import criteria
 import ettime
+import job_status
 import render_report
 
 _CRIT = criteria.load()
@@ -294,7 +295,7 @@ def build(embed_sessions: int) -> Path:
         .replace("__DAYS__", "\n".join(day_parts))
     )
 
-    site_dir = config.PROJECT_ROOT / "site"
+    site_dir = config.SITE_DIR
     site_dir.mkdir(parents=True, exist_ok=True)
     out_path = site_dir / "PremarketDesk.html"
     out_path.write_text(page, encoding="utf-8")
@@ -310,9 +311,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     embed_sessions = args.embed if args.embed is not None else _CRIT.integer(
         "archive", "embed_sessions")
-    build(embed_sessions)
+    out_path = build(embed_sessions)
+    job_status.produced("archive bytes", out_path.stat().st_size)
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("archive", main))

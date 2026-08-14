@@ -16,6 +16,7 @@ import markdown
 
 import config
 import ettime
+import job_status
 
 _EXTENSIONS = ["tables", "fenced_code", "sane_lists"]
 
@@ -84,9 +85,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     html_path = render(report_path)
+    job_status.produced("html bytes", html_path.stat().st_size)
     print(f"render: wrote {html_path} ({html_path.stat().st_size} bytes)")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("render", main))

@@ -5,8 +5,191 @@ what changed and why it had to; the reasoning behind a choice that could have
 gone another way belongs in DECISIONS.md, and every threshold belongs in
 CRITERIA.md.
 
+Errors of fact are corrected in place and carry a `[corrected YYYY-MM-DD: was
+X]` marker; superseded decisions keep their original text and are answered by
+a later entry. A number that was wrong when it was written is not history, it
+is a mistake, and leaving it standing means the next reader measures against
+it. A number that was right when it was written and has since been overtaken
+is history, and rewriting it destroys the reasoning.
+
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
+
+## 2026-08-14, last: silent failure is made impossible, and two numbers close
+
+pool_recall failed on every nightly run for a week and left nothing anybody
+would see. The fix for that one step landed with the documentation
+reconciliation below. This entry is about the question that mattered more:
+how many other steps could do the same, answered by inventory rather than by
+guessing, because guessing which ones were exposed is what produced the bug.
+
+### What every scheduled step did when it failed, before this entry
+
+Six .bat files, twenty one step invocations, sixteen distinct modules. The
+"trace" column asks whether a failure would reach a human, not whether it
+appeared anywhere: every step writes its exit into a dated log, and the whole
+point of the pool_recall week is that a traceback in `logs/nightly-*.log` is
+not a trace if nobody reads that file.
+
+| Job (trigger) | Step | Exit code | main catches | Read downstream | Entrypoint test |
+|---|---|---|---|---|---|
+| universe (Sun 20:00) | universe | checked, stops job | RuntimeError | universe.json, by everything | none |
+| universe | gap_stats | checked, ends job | none, propagates | gap_stats table, by discover | none |
+| discover (07:15) | calendar | exit 3 only | Exception, returns 0 | the .bat's skip branch | none |
+| discover | discover | checked, stops job | StaleUniverse, QuotaRefusal, RuntimeError | watchlist.json, by collector, baseline, scan | none |
+| discover | baseline | checked, ends job | none, propagates | baseline table, by scan | none |
+| collector (07:20) | calendar | exit 3 only | Exception, returns 0 | the .bat's skip branch | none |
+| collector | collector | checked, ends job | KeyboardInterrupt | the bar file, by scan, backfill | none |
+| morning-chain (08:45) | calendar | exit 3 only | Exception, returns 0 | the .bat's skip branch | none |
+| morning-chain | scan | checked, stops chain | StaleUniverse, QuotaRefusal, StaleDataError | packet.json, by analyst, verify | none |
+| morning-chain | analyst | checked, stops chain | none, propagates | report.md, by render | none |
+| morning-chain | render | checked, stops chain | none, propagates | report.html, by deliver, archive | none |
+| morning-chain | verify | IGNORED, by design | none, propagates | nothing, it prints a table | none |
+| morning-chain | deliver | checked, stops chain | none, propagates | nothing | none |
+| morning-chain | archive | checked, ends job | none, propagates | nothing | none |
+| nightly (22:15, 07:00) | calendar | exit 3 only | Exception, returns 0 | the .bat's skip branch | none |
+| nightly | backfill | checked, stops job | none, propagates | picks columns, by outcomes | none |
+| nightly | outcomes | checked, stops job | none, propagates | picks columns | none |
+| nightly | pool_recall | IGNORED, by design | Exception, returns 0 | NOTHING | none |
+| nightly | archive | checked, ends job | none, propagates | nothing | none |
+| monitor (07:25 x5, 22:45) | calendar | exit 3 only | Exception, returns 0 | the .bat's skip branch | none |
+| monitor | monitor | checked, ends job | none, propagates | its own rerun state | none |
+
+**Twelve of the twenty one could fail without leaving a trace**, across eight
+modules. The calendar guard is five of the twelve on its own: it catches every
+exception and returns 0 so a guard fault cannot kill a real morning, which is
+right, and it then proceeds on an assumption nobody is told about. The rest are
+pool_recall, verify, gap_stats, the collector, backfill, outcomes and the
+watchdog. Two patterns produce all of them: a main that returns 0 on a path
+that did no work, and an output nothing downstream reads.
+
+**The last column is the finding.** Not one scheduled entrypoint had a test.
+Every suite tested a function underneath one. That is not an accident of this
+codebase; a pure function is easy to test, so it gets tested, and the wiring
+where a rename can strand a name does not.
+
+**And there was a fourth concealing layer, not three.** The watchdog checks
+each job's final step marker, and the nightly's is the archive, which runs
+after pool_recall and really did finish. So the nightly reported OK every
+night while the step inside it wrote nothing. That layer is correct and stays:
+a watchdog that failed the nightly because a diagnostic died would be worse.
+
+### Every job now records whether it succeeded
+
+`src/job_status.py`. Every scheduled step appends one line to
+`data/job-status.jsonl` as it exits: job name, start and end in ET, status,
+exception type, and one count of what it produced. Written in a `finally`
+block, catching BaseException, so a collector killed with Ctrl-C and a nightly
+killed by a reboot both record dying. The `.bat` files set `PMD_JOB` so a
+record says which job the step ran under, and a hand run records `manual`.
+
+The exit code is unchanged everywhere. `job_status.failed(reason)` is how a
+step keeps its zero and corrects its record: pool_recall calls it in the
+handler that swallows its exception, so the chain still cannot break on a
+diagnostic and the failure still reaches the morning. The calendar guard calls
+it when it assumes the market is open after an error, and the analyst calls it
+when the narrative falls back to the numbers only report.
+
+Staleness is counted in trading sessions, not hours, so a weekend cannot raise
+a false alarm and a Tuesday holiday cannot hide a real one. Windows are in
+CRITERIA.md [job status steps], one per step, 1 for a weekday job and 5 for
+the two that ride the Sunday schedule. A step with no success at all is
+reported only once the record file itself is older than that step's window,
+because nothing can be overdue before there was anywhere to record it, and a
+line naming every step on the day this landed would have taught the reader to
+skip it.
+
+The morning report gains one line naming any overdue step, and nothing at all
+when every step is current. It is written by `analyst.annotate_job_health` in
+Python, appended to the disclaimer line the template guarantees, rather than
+asked of the model in the prompt: the one morning a model forgets a prompt
+rule is the morning it mattered. Past four overdue steps the line stops
+listing them and says the machine or the schedule has stopped, naming the
+worst few, because sixteen named steps is one problem rather than sixteen.
+
+### Tests cover entrypoints now, not only the functions beneath them
+
+`src/test_entrypoints.py` drives all sixteen scheduled entrypoints through
+their own `main`, with the arguments the `.bat` passes, against the sandbox
+roots. The HTTP client is stubbed with a scripted session that records every
+path, so each step asserts the endpoints it actually asked for. Two steps
+reach the outside world through something other than the HTTP client and are
+stubbed at the equivalent layer, both marked in the file: the collector's
+socket, replayed through `_connect` with one deliberately silent symbol, and
+the analyst's claude CLI, stubbed at `invoke_claude`.
+
+Every entrypoint is also asserted through its status record, which is what
+catches the pool_recall shape specifically. Its exit code is zero whether or
+not `build()` worked, by design, so a test asserting the exit code would have
+passed all week. The record is what tells the two apart.
+
+The suite also checks the CRITERIA.md step list against the list of steps it
+drives, in both directions. A step the scheduler runs that is missing from
+that list would never be reported overdue, which is the one way the whole
+mechanism can fail silently.
+
+**It found a sandbox hole on its first run.** `build_archive` built its output
+path as `config.PROJECT_ROOT / "site"` rather than reading it from config, so
+the sandbox could not redirect it and the suite rewrote the real published
+`site/PremarketDesk.html`. The mtime check did not catch it because it watched
+`runs/` and `data/`, where the previous three escapes happened. `config.SITE_DIR`
+now exists, conftest redirects it, and run_tests photographs it too.
+
+### The collector reports its own coverage
+
+Monday is the first morning at fifty subscriptions and the socket has only
+ever been load tested at thirty eight, which was the old thirty plus eight
+configuration. The collector now writes
+`data/premarket/<date>-subscriptions.json` at subscribe time, before the first
+trade, listing what it asked the socket for. It has to be written then: the
+run stats sidecar is appended when the collector stops at 09:25, forty minutes
+after the packet is built.
+
+The packet gains `collector_coverage`: the count requested, the count that
+produced at least one bar, and the names of any that produced none. A symbol
+that was subscribed and stayed silent is a different failure from one that was
+never subscribed, and both now appear, the second as
+`unsubscribed_with_bars`. With no subscription list the block says so rather
+than reporting every absent symbol as never subscribed.
+
+`peak_trades_per_minute` comes off the bars, which already carry a trade count
+per minute, so nothing was added to the receive loop. On the 2026-08-14
+snapshot at thirty eight symbols that peak was 5,697 trades in a minute. The
+late trade count is not there: it lives in the running builder and is only
+written when the collector stops, so it stays null with that reason recorded
+rather than being filled from a previous run.
+
+### The two gapper counts reconcile, and neither was wrong
+
+The blindspot stage implied 173.7 gappers a session while the backtest and the
+live pool_recall both gave 99 for 2026-08-13. There is no definitional
+difference: both stages read the same `outcome["gappers"]` object out of the
+same cache file, built once by the fetch stage with the same `> 3` rule on the
+absolute gap, so both directions count, measured as the session open against
+the prior session close, over the same 2,745 name universe in every session.
+
+The distribution explains it. Over the sixty cached sessions the count runs
+42, p25 91, median 142, mean 173.7, p75 236, max 518. It is strongly right
+skewed, so the mean sits well above the typical session, and 99 is rank 40 of
+60, in the lightest third.
+
+What made 2026-08-13 look like it should be heavy was its earnings calendar:
+37 names before the open against a median of 6.5, the 9th heaviest of the
+sixty. On the other two sources it is light, rank 48 of 60 on overnight news
+and 53 of 60 on prior session movers. Earnings weight and gapper count
+correlate at 0.465, so a heavy calendar does not imply many gappers, and
+"heaviest calendar day" and "heaviest day" are not the same claim. No figure
+needed correcting. `blindspot` now reports the distribution rather than the
+mean alone, because a mean is a poor summary of a 42 to 518 spread.
+
+### Corrections are marked
+
+The four numbers corrected in place on 2026-08-14 now carry
+`[corrected 2026-08-14: was X]` markers naming what they said before, and both
+records state the rule at the top: errors of fact are corrected in place with
+a marker, superseded decisions keep their original text. The DECISIONS item
+citing pool_recall as accumulating evidence nightly is corrected to say the
+evidence began accumulating on the date the fix landed.
 
 ## 2026-08-14, later: the documentation was reconciled and it found a bug
 
@@ -235,6 +418,7 @@ and writes runs/<date>/pool_recall.json: how many gapped, how many the pool
 held, the recall fraction, and the names it missed. Two bulk end of day
 calls, today's and the prior session's, because the gap is measured open
 against prior close and one call carries only one of them.
+[corrected 2026-08-14: was "one bulk call"]
 
 Backtested against 2026-08-13, whose real gappers are known:
 
@@ -279,6 +463,9 @@ comparison has to come from the same bytes. Bulk end of day is cached per day
 rather than per session because consecutive sessions share it, so sixty
 sessions cost sixty two bulk days rather than a hundred and eighty, a session
 needing its own day, its prior and the one before that.
+[corrected 2026-08-14: was "sixty one bulk days rather than a hundred and
+twenty"; sixty two is what the fetch actually spent, and three days per session
+over sixty sessions is a hundred and eighty, not a hundred and twenty]
 
 From cache alone the harness reproduces the published 2026-08-13 figures
 exactly: 99 gapped, pool held 72 at 0.7273, subscribed held 28 at 0.2828.
@@ -419,6 +606,9 @@ sessions, on the earlier window: 169 had under 10, 34 had 10 to 24, 43 had 25
 to 49, and 109 had 50 to 99. Those 109 are 31 percent of the 355, and they are
 the ones within a couple of months of crossing the 100 session line on their
 own; the 169 with under 10 sessions are a year away from it.
+[corrected 2026-08-14: was "so half of them are within a fortnight or two";
+109 of 355 is 31 percent, and at 50 to 99 sessions of history they are months
+short of the line rather than a fortnight]
 
 The fraction is small, so the question is closed on the first of the two
 conclusions: the fallback stays as inert insurance, and no reserved allocation
@@ -428,6 +618,9 @@ Set against the same sixty sessions, the shipped configuration reaches 0.1164
 of the gappers, so 88 points are missed in total: about 50 of them because the
 pool held the name and the cap cut it, and about 38 because the pool never held
 it at all.
+[corrected 2026-08-14: was "a cap that currently misses 88 percent of gappers
+for want of slots"; 88 points is the whole miss, and only about 50 of it is the
+cap. Attributing all 88 to slots overstates what buying capacity would buy]
 The binding constraint is the cap, which is already the open item.
 
 ### The lock rule is enforced rather than audited

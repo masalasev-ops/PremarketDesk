@@ -26,6 +26,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 
 _CRIT = criteria.load()
 
@@ -129,11 +130,18 @@ def main(argv: list[str] | None = None) -> int:
     try:
         trades, reason = is_trading_day(date)
     except Exception as exc:  # the guard must never kill a real morning
+        # Exit zero so the day proceeds, but say so in the record. A guard
+        # that has been erroring for a fortnight is running every job on the
+        # assumption that the market is open, which is the right assumption
+        # and still something the reader should know is being assumed.
         print(f"calendar: guard errored ({exc}), assuming the market is open")
+        job_status.failed(f"{type(exc).__name__}: {exc}, assumed open")
         return 0
     print(f"calendar: {reason}")
+    job_status.produced("trading day", 1 if trades else 0)
     return 0 if trades else EXIT_CLOSED
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # A closed market is this guard working, not this guard failing.
+    sys.exit(job_status.run("calendar", main, ok_codes=(0, EXIT_CLOSED)))

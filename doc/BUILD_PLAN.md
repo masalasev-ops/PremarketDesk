@@ -56,7 +56,9 @@ at the root and is gitignored along with .env.
   scoring), pool_recall (the nightly measurement of what the candidate pool
   missed), gap_stats (per name gap propensity, weekly, on the universe
   schedule), backtest_pool (the fetch and evaluate harness that decides the
-  pool ordering), conftest and run_tests (the test sandbox and the mtime
+  pool ordering), job_status (the append only record of what every scheduled
+  step did, and the overdue line the morning report carries),
+  conftest and run_tests (the test sandbox and the mtime
   check that proves the suite wrote nothing under runs/ or data/),
   market_today (the trading day guard every weekday job runs first: exit 3
   on weekends and official holidays from the cached EODHD exchange-details
@@ -76,7 +78,10 @@ at the root and is gitignored along with .env.
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
   repeating weekday trigger and once more at 22:45
 - data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,
-  premarketdesk.db, ca-bundle.pem, UNVERIFIED (the delivery gate marker)
+  premarket/YYYY-MM-DD-subscriptions.json (what the collector asked the socket
+  for, written at subscribe time), premarketdesk.db, ca-bundle.pem,
+  job-status.jsonl (one line per scheduled step per run),
+  UNVERIFIED (the delivery gate marker)
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
   report.html, analyst_usage.json, and once the nightly job has run,
   verify_intraday.json and pool_recall.json

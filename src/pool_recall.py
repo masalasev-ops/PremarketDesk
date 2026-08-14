@@ -32,6 +32,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 import universe
 
 _CRIT = criteria.load()
@@ -209,16 +210,23 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        build(session_date=args.date, write=not args.dry_run)
+        payload = build(session_date=args.date, write=not args.dry_run)
+        job_status.produced("gappers measured", payload.get("gapped"))
     except Exception as exc:
         # A recall measurement that cannot be made is not a reason to fail the
         # nightly pass: nothing downstream depends on it. Broad on purpose,
         # and it prints the type: this used to catch RuntimeError only, so a
         # NameError in build() escaped into a non zero exit that the nightly
         # batch file ignores, and the step wrote nothing for a week without
-        # anyone noticing. A diagnostic that fails silently is worse than no
-        # diagnostic, so the reason is always printed.
+        # anyone noticing.
+        #
+        # The exit code stays zero, because the chain must not break on a
+        # diagnostic. The status record does not, because that is the half
+        # that was missing: a week of NameError looked exactly like a week of
+        # success from every angle a human could see. Tomorrow morning's
+        # report will name this step.
         print(f"pool_recall: skipped, {type(exc).__name__}: {exc}")
+        job_status.failed(f"{type(exc).__name__}: {exc}")
         eodhd.print_call_report()
         return 0
 
@@ -227,4 +235,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("pool_recall", main))

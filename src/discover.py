@@ -44,6 +44,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 import store
 import universe
 import vintage
@@ -688,7 +689,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        build(write=not args.dry_run)
+        payload = build(write=not args.dry_run)
+        job_status.produced("names subscribed", payload.get("subscribed_count"))
     except (universe.StaleUniverseError, eodhd.QuotaRefusal) as exc:
         print(f"REFUSING TO RUN: {exc}")
         eodhd.print_call_report()
@@ -703,4 +705,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(job_status.run("discover", main))

@@ -34,6 +34,7 @@ import criteria
 import discover
 import eodhd
 import ettime
+import job_status
 import store
 import universe
 import vintage
@@ -78,6 +79,91 @@ def _collector_last(bars: list[dict[str, Any]]) -> tuple[float | None, str | Non
         _as_float(last.get("c")),
         ettime.stamp(ettime.from_epoch_s(last["minute_epoch"])),
     )
+
+
+def collector_coverage(
+    bars_by_symbol: dict[str, list[dict[str, Any]]], session_date: str
+) -> dict[str, Any]:
+    """Which subscribed symbols the socket actually served, and which stayed silent.
+
+    Silence and absence are different failures and the packet has to tell them
+    apart. A symbol that was never subscribed produced nothing because nobody
+    asked; a symbol that was subscribed and produced nothing means the socket
+    accepted the subscription and delivered no trade for it, which at fifty
+    names on a socket load tested at thirty eight is the thing worth watching.
+    Neither is inferable from the bar file alone, which is why the collector
+    writes its subscription list at subscribe time.
+
+    The peak trade rate comes out of the bars themselves, which carry a trade
+    count per minute, so no counter had to be added to the hot path. The late
+    trade count does not: it lives in the running builder and is only written
+    to the stats sidecar when the collector stops at 09:25, which is after
+    this packet is built. It stays null with that reason recorded rather than
+    being filled with a number from a previous day's run.
+    """
+    subscriptions = collect_premarket.read_subscriptions(session_date)
+    with_bars = {symbol for symbol, bars in bars_by_symbol.items() if bars}
+
+    if not subscriptions:
+        return {
+            "requested": None,
+            "produced_bars": len(with_bars),
+            "silent": None,
+            "silent_symbols": [],
+            "unsubscribed_with_bars": [],
+            "reason": (f"the collector wrote no subscription list for {session_date}, "
+                       "so a silent symbol cannot be told from one that was never "
+                       "subscribed"),
+            "peak_trades_per_minute": _peak_trades_per_minute(bars_by_symbol),
+            "late_trades": None,
+            "late_trades_reason": (
+                "the late trade count is held by the running collector and written "
+                "when it stops at the CRITERIA.md [collector] stop_time, which is "
+                "after this packet is built"
+            ),
+        }
+
+    requested = [str(s) for s in subscriptions.get("symbols") or []]
+    silent = sorted(set(requested) - with_bars)
+    return {
+        "subscribed_at": subscriptions.get("subscribed_at"),
+        "requested": len(requested),
+        "socket_cap": subscriptions.get("socket_cap"),
+        "produced_bars": len(with_bars & set(requested)),
+        "silent": len(silent),
+        # Named, not counted. A count says the socket is lossy; the names say
+        # which report rows are missing their evidence because of it.
+        "silent_symbols": silent,
+        "dropped_to_fit_cap": subscriptions.get("dropped_to_fit_cap") or [],
+        "unsubscribed_with_bars": sorted(with_bars - set(requested)),
+        "peak_trades_per_minute": _peak_trades_per_minute(bars_by_symbol),
+        "late_trades": None,
+        "late_trades_reason": (
+            "the late trade count is held by the running collector and written "
+            "when it stops at the CRITERIA.md [collector] stop_time, which is "
+            "after this packet is built"
+        ),
+    }
+
+
+def _peak_trades_per_minute(
+    bars_by_symbol: dict[str, list[dict[str, Any]]]
+) -> int | None:
+    """The busiest minute of the morning, summed across every symbol.
+
+    Read off the bars, which already carry a trade count per minute, so this
+    is a measurement of what the socket delivered rather than a new counter in
+    the collector's receive loop.
+    """
+    per_minute: dict[int, int] = {}
+    for bars in bars_by_symbol.values():
+        for bar in bars:
+            try:
+                minute = int(bar["minute_epoch"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            per_minute[minute] = per_minute.get(minute, 0) + int(bar.get("trades") or 0)
+    return max(per_minute.values()) if per_minute else None
 
 
 def market_snapshot(
@@ -1188,6 +1274,14 @@ def build_packet() -> dict[str, Any]:
             "note": "every check in vintage.py passed, or this packet would not exist",
         },
         "quota_preflight": quota,
+        # Which scheduled steps have not succeeded inside their window. Empty
+        # on a healthy machine, and analyst.py puts the line in front of the
+        # reader when it is not, because a job that fails where nobody looks
+        # is a job that has stopped running.
+        "job_health": {
+            "overdue": job_status.overdue(now.date()),
+            "line": job_status.report_line(now.date()),
+        },
         "run_time_et": ettime.hhmm(now),
         "rvol_cutoff_hhmm": cutoff,
         "collector_file": collect_premarket.bar_path().name,
@@ -1206,6 +1300,11 @@ def build_packet() -> dict[str, Any]:
             "resubscriptions": (run_stats or {}).get("resubscriptions"),
             "messages": (run_stats or {}).get("messages"),
         },
+        # Did every name the socket was asked for actually produce anything.
+        # Separate from collector_snapshot above, which describes the file;
+        # this describes the subscription, and the two answer different
+        # questions when a symbol is missing from the file.
+        "collector_coverage": collector_coverage(bars_by_symbol, session_date),
         "collector_window_configured": [
             _CRIT.clock_text("collector", "start_time"),
             _CRIT.clock_text("collector", "stop_time"),
@@ -1406,6 +1505,7 @@ def main(argv: list[str] | None = None) -> int:
 
     path = write_packet(payload)
     write_picks(payload, force_test=args.test)
+    job_status.produced("candidates", len(payload["candidates"]))
     print("")
     print(f"scan: wrote {path}")
     dropped = payload.get("dropped_no_coverage") or []
@@ -1437,4 +1537,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(job_status.run("scan", main))

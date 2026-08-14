@@ -39,6 +39,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 import store
 import universe
 
@@ -244,10 +245,11 @@ def main(argv: list[str] | None = None) -> int:
     if quota["refused"]:
         print(f"gap_stats: refusing, {eodhd.describe_preflight(quota)}")
         return 1
-    build(dates)
+    result = build(dates)
+    job_status.produced("symbols measured", result["written"])
     eodhd.print_call_report()
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("gap_stats", main))

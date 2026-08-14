@@ -29,6 +29,7 @@ from pathlib import Path
 
 import config
 import ettime
+import job_status
 
 UNVERIFIED_MARKER = config.DATA_DIR / "UNVERIFIED"
 
@@ -64,6 +65,7 @@ def print_table(packet_path: Path, count: int = 3) -> int:
         f"{'baseline med':>13} {'pm_rvol':>10} {'bars':>5}"
     )
     print(header)
+    job_status.produced("rows tabled", len(candidates))
     for candidate in candidates:
         baseline_row = candidate.get("baseline") or {}
         median = baseline_row.get("median_volume")
@@ -81,6 +83,22 @@ def print_table(packet_path: Path, count: int = 3) -> int:
         reason = candidate.get("pm_rvol_reason")
         if reason:
             print(f"             rvol null because: {reason}")
+
+    coverage = packet.get("collector_coverage") or {}
+    if coverage.get("requested") is not None:
+        print(f"gate: collector subscribed {coverage['requested']} symbols "
+              f"(cap {coverage.get('socket_cap')}), {coverage.get('produced_bars')} "
+              f"produced bars, peak {coverage.get('peak_trades_per_minute')} "
+              "trades per minute")
+        if coverage.get("silent_symbols"):
+            print(f"gate: {coverage['silent']} subscribed symbol(s) produced NOTHING: "
+                  + ", ".join(coverage["silent_symbols"]))
+    elif coverage.get("reason"):
+        print(f"gate: collector coverage unknown, {coverage['reason']}")
+
+    health = (packet.get("job_health") or {}).get("line")
+    if health:
+        print(f"gate: {health}")
 
     dropped = packet.get("dropped_no_coverage") or []
     if dropped:
@@ -120,4 +138,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("verify", main))

@@ -749,6 +749,28 @@ def blindspot(as_of: str | None = None) -> dict[str, Any]:
         "total_null": total_null,
         "overall_fraction": round(total_null / total_gapped, 4) if total_gapped else None,
         "history_buckets": buckets,
+        # The count per session, not just its mean. The distribution is
+        # strongly right skewed (42 to 518 over the sixty cached sessions),
+        # so the mean sits well above the typical session and reading it as
+        # "a normal morning" makes any single session look anomalous when it
+        # is not. Reported as a distribution for that reason.
+        "gappers_per_session": _distribution([row["gapped"] for row in rows]),
+    }
+
+
+def _distribution(values: list[int]) -> dict[str, Any]:
+    """Mean, median and the tails. A mean alone hides a skew this wide."""
+    if not values:
+        return {}
+    ordered = sorted(values)
+    return {
+        "sessions": len(ordered),
+        "mean": round(statistics.mean(ordered), 1),
+        "median": round(statistics.median(ordered), 1),
+        "min": ordered[0],
+        "p25": ordered[len(ordered) // 4],
+        "p75": ordered[3 * len(ordered) // 4],
+        "max": ordered[-1],
     }
 
 
@@ -792,6 +814,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.sessions and len(report["sessions"]) > args.sessions:
             print(f"... {len(report['sessions']) - args.sessions} more sessions")
         print()
+        dist = report["gappers_per_session"]
+        print(f"gappers per session: mean {dist['mean']}, median {dist['median']}, "
+              f"min {dist['min']}, p25 {dist['p25']}, p75 {dist['p75']}, "
+              f"max {dist['max']}")
+        print("  the mean sits well above the median because the distribution is "
+              "right skewed; a session near the median is a normal session, not "
+              "a light one")
         print(f"total gapped {report['total_gapped']}, of which "
               f"{report['total_null']} carried a null propensity, "
               f"fraction {report['overall_fraction']}")

@@ -30,6 +30,7 @@ from typing import Any
 import config
 import criteria
 import ettime
+import job_status
 
 _CRIT = criteria.load()
 
@@ -658,6 +659,11 @@ def annotate_unvalidated(report_text: str, coverage: dict[str, Any]) -> str:
     """
     note = (f"ticker claims in this report were NOT validated: "
             f"{_why_unvalidated(coverage)}")
+    return _append_to_disclaimer(report_text, note)
+
+
+def _append_to_disclaimer(report_text: str, note: str) -> str:
+    """Put a sentence where the reader is already told to look."""
     lines = report_text.splitlines()
     for index, line in enumerate(lines):
         if "Nothing here is advice" in line:
@@ -667,6 +673,22 @@ def annotate_unvalidated(report_text: str, coverage: dict[str, Any]) -> str:
             lines[index] = f"{trimmed}; {note}."
             return "\n".join(lines) + "\n"
     return report_text.rstrip("\n") + f"\n\n{note[0].upper() + note[1:]}.\n"
+
+
+def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
+    """Name any scheduled step that has not succeeded inside its window.
+
+    Written here in Python rather than asked of the model, for the same reason
+    every other number in this file is: the model narrates, it does not decide.
+    A prompt rule can be forgotten by a model having an off morning, and the
+    one morning it is forgotten is the morning it mattered. Silence is the
+    normal case, so a healthy machine gets no line at all.
+    """
+    health = packet.get("job_health") or {}
+    line = health.get("line")
+    if not line:
+        return report_text
+    return _append_to_disclaimer(report_text, line.rstrip("."))
 
 
 # ------------------------------------------------------------------- runner
@@ -690,8 +712,19 @@ def write_report(packet_path: Path) -> int:
         usage["status"] = "ok"
         usage["fallback"] = False
 
+    # Overdue scheduled steps, named before the report is written rather than
+    # after, so the deterministic fallback report carries the line too.
+    report_text = annotate_job_health(report_text, packet)
+
     report_path = run_directory / "report.md"
     report_path.write_text(report_text, encoding="utf-8")
+    job_status.produced("report characters", len(report_text))
+    if usage.get("fallback"):
+        # The deterministic fallback is a real report and a real zero exit, and
+        # the morning still gets numbers. It is not the model narrating, and a
+        # run of fallback mornings is a thing to notice rather than discover.
+        job_status.failed(f"narrative unavailable, fell back to numbers only: "
+                          f"{usage.get('error_message')}")
     print(f"analyst: wrote {report_path} ({len(report_text)} chars, status {usage['status']})")
 
     invented, missing, coverage = check_report(report_text, packet_text)
@@ -789,4 +822,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(job_status.run("analyst", main))

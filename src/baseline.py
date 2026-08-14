@@ -28,6 +28,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 import store
 
 _CRIT = criteria.load()
@@ -347,15 +348,20 @@ def main(argv: list[str] | None = None) -> int:
               "skippable spend and the reading above says the shared key cannot "
               "afford it; the scan will record null RVOL with this reason for "
               "any name whose cache is stale.")
+        # A stand down is a completed job, not a failed one, so the status
+        # stays ok. Zero warmed is what makes it visible: a week of stand
+        # downs reads as a week of zeroes in the status table.
+        job_status.produced("tickers warmed", 0)
         eodhd.print_call_report()
         return 0
 
     print(f"baseline: cutoff {cutoff} ET, {len(tickers)} tickers, "
           f"{LOOKBACK_SESSIONS} session lookback, refresh after {REFRESH_AFTER_DAYS} days")
     warm(tickers, cutoff, force=args.force)
+    job_status.produced("tickers warmed", len(tickers))
     eodhd.print_call_report()
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(job_status.run("baseline", main))

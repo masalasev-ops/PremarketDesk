@@ -63,7 +63,19 @@ flowchart LR
     S -. picks .-> B[(SQLite)]
     N[backfill_premarket.py<br>+ fill_outcomes.py<br>nightly truth] --> B
     P[pool_recall.py<br>what the pool missed] -. reads .-> B
+    J[(job-status.jsonl)]
+    S -. records .-> J
+    C -. records .-> J
+    P -. records .-> J
+    J -. overdue steps .-> A
 ```
+
+Every step in that diagram, and every other step a `.bat` runs, appends its
+outcome to `data/job-status.jsonl` as it exits. The analyst reads it back and
+names anything overdue in the morning report, which is the one channel a human
+reads every day. It exists because `pool_recall.py` raised NameError on every
+nightly run for a week: its exit code is ignored by design so a diagnostic
+cannot break the chain, and nothing recorded that it had failed.
 
 Every weekday job first runs `src/market_today.py`, a trading day guard built
 on the cached EODHD exchange calendar. It exits 3 on a weekend or an official
@@ -168,7 +180,8 @@ Everything generated at runtime is git ignored and created on demand:
 | Path | What |
 | --- | --- |
 | `data/premarketdesk.db` | SQLite (WAL): the picks table, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; the premarket volume baseline; and gap_stats, one row per (ticker, as_of) |
-| `data/premarket/` | The collector's one minute bar files and per run stats |
+| `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
+| `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line |

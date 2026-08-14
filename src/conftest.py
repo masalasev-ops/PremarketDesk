@@ -40,7 +40,7 @@ import config
 # copied one at import time. A new module holding a path constant has to be
 # added here; the mtime check below is what catches it if nobody remembers.
 _CONFIG_PATHS = (
-    "DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR",
+    "DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR", "SITE_DIR",
     "DB_PATH", "UNIVERSE_PATH", "WATCHLIST_PATH", "CA_BUNDLE_PATH",
 )
 
@@ -48,14 +48,19 @@ _DERIVED = (
     ("backtest_pool", "CACHE_DIR", lambda c: c.DATA_DIR / "backtest"),
     ("backtest_pool", "EOD_DIR", lambda c: c.DATA_DIR / "backtest" / "eod"),
     ("backtest_pool", "SESSION_DIR", lambda c: c.DATA_DIR / "backtest" / "sessions"),
+    ("job_status", "RECORD_PATH", lambda c: c.DATA_DIR / "job-status.jsonl"),
     ("market_today", "CACHE_PATH", lambda c: c.DATA_DIR / "exchange-details.json"),
     ("monitor_jobs", "STATE_PATH", lambda c: c.DATA_DIR / "monitor-reruns.json"),
     ("verify_morning", "UNVERIFIED_MARKER", lambda c: c.DATA_DIR / "UNVERIFIED"),
 )
 
-# Real roots, captured before anything is redirected.
+# Real roots, captured before anything is redirected. site/ joined this list
+# after the entrypoint tests caught build_archive rewriting the published
+# archive from inside the sandbox: the redirect stops it, and the check is
+# what proves the redirect held.
 REAL_RUNS = config.RUNS_DIR
 REAL_DATA = config.DATA_DIR
+REAL_SITE = config.SITE_DIR
 
 
 def snapshot(*roots: Path) -> dict[str, tuple[float, int]]:
@@ -116,6 +121,7 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
         config.PREMARKET_DIR = data_copy / "premarket"
         config.RUNS_DIR = runs_copy
         config.LOGS_DIR = sandbox / "logs"
+        config.SITE_DIR = sandbox / "site"
         config.DB_PATH = data_copy / "premarketdesk.db"
         config.UNIVERSE_PATH = data_copy / "universe.json"
         config.WATCHLIST_PATH = data_copy / "watchlist.json"

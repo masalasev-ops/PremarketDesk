@@ -5,6 +5,12 @@ the project root, runs its scripts with the project venv, and appends stdout
 and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped by the
 project's own ET clock so a locale change cannot mangle the file name.
 
+Each .bat also sets `PMD_JOB` to its own name. Every step it runs appends one
+line to `data\job-status.jsonl` as it exits, and that name is what says which
+job the step ran under. Running a script by hand records `manual` instead,
+which is worth being able to tell apart: an ad hoc rerun that succeeded is
+still a success, but it is not evidence that the schedule fired.
+
 | Job | Time (ET, machine local) | Days | What it runs |
 | --- | --- | --- | --- |
 | job_discover.bat | 07:15 | Mon to Fri | discover.py builds and ranks the candidate pool, then baseline.py warms the RVOL cache for the subscribed names only, not the whole pool |
@@ -29,6 +35,15 @@ were registered, the tree does not refresh itself.
 
 ## Things worth knowing
 
+- Two steps have their exit code ignored on purpose, and both still record
+  their outcome. `verify_morning.py` prints the gate table for a human and
+  must not stop the chain, because the gate is enforced by `deliver.py`.
+  `pool_recall.py` is a diagnostic and nothing downstream reads it. An ignored
+  exit code is a decision about control flow and never a decision about
+  visibility: pool_recall raised NameError on every nightly run for a week and
+  nothing said so, which is why `data\job-status.jsonl` exists and why the
+  next morning's report names any step overdue against its window in
+  `doc\CRITERIA.md [job status steps]`.
 - Every weekday job first runs `src\market_today.py`, the trading day guard.
   On a weekend or an official market holiday (from the cached EODHD exchange
   calendar) the job writes one line to its log and exits 0 without doing

@@ -30,6 +30,7 @@ from typing import Any
 import config
 import criteria
 import ettime
+import job_status
 
 _CRIT = criteria.load()
 
@@ -298,6 +299,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                         + "; fully idempotent")
 
     print(f"monitor: {problems} problem(s), {actions} action(s) taken")
+    job_status.produced("jobs checked", len(JOBS))
     return 0 if problems == 0 else 1
 
 
@@ -320,4 +322,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("monitor", main))

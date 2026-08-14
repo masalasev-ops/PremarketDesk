@@ -27,7 +27,16 @@ and unknown is not zero. If the packet's quota_preflight block has
 degraded true, the line must also state the reading in plain words: the
 shared API key had {remaining} of {daily_limit} daily calls remaining at
 preflight, so the skippable evidence in this report is thin for quota
-reasons, not because of a vendor outage. One line, no exceptions.}
+reasons, not because of a vendor outage. If collector_coverage names any
+silent_symbols, say that those names were subscribed and the socket delivered
+no trade for them, which is different from their not having been watched.
+One line, no exceptions.}
+
+{Do not write anything about overdue scheduled jobs. If any step of the
+schedule is overdue, Python appends that sentence to the disclaimer line
+after you have finished, from the packet's job_health block. Writing it
+yourself would duplicate it, and writing it when job_health is empty would
+invent it.}
 
 ## Summary
 

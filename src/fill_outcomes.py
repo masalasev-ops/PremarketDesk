@@ -26,6 +26,7 @@ from typing import Any
 import criteria
 import eodhd
 import ettime
+import job_status
 import store
 
 _CRIT = criteria.load()
@@ -91,6 +92,7 @@ def fill(day_limit: str | None = None) -> int:
     if not candidates:
         print("outcomes: every live pick already has its outcomes "
               "(test rows are never filled), nothing to do")
+        job_status.produced("picks filled", 0)
         return 0
 
     calendar = _session_calendar(api, back_days=40)
@@ -174,6 +176,7 @@ def fill(day_limit: str | None = None) -> int:
             "SELECT COUNT(*), COUNT(DISTINCT date) FROM picks "
             "WHERE next_day_close IS NOT NULL AND source='live'"
         ).fetchone()
+        job_status.produced("picks filled", filled)
         print(f"outcomes: {filled} picks filled, {skipped} not yet due, "
               f"{unavailable} had no data")
         print(f"outcomes: the table now holds {total_rows} live outcome rows across "
@@ -190,4 +193,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("outcomes", main))

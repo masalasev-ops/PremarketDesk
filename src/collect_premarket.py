@@ -42,6 +42,7 @@ import config
 import criteria
 import discover
 import ettime
+import job_status
 
 _CRIT = criteria.load()
 
@@ -62,6 +63,47 @@ def bar_path(day: str | None = None) -> Path:
 
 def stats_path(day: str | None = None) -> Path:
     return config.PREMARKET_DIR / f"{day or ettime.today_str()}-stats.jsonl"
+
+
+def subscriptions_path(day: str | None = None) -> Path:
+    return config.PREMARKET_DIR / f"{day or ettime.today_str()}-subscriptions.json"
+
+
+def write_subscriptions(symbols: list[str], dropped: list[dict[str, Any]]) -> Path:
+    """What the collector asked the socket for, written before any trade arrives.
+
+    This exists so the 08:45 scan can tell a subscribed symbol that produced
+    nothing from a symbol that was never subscribed at all. The run stats
+    sidecar cannot answer that: it is appended when the collector stops at
+    09:25, which is forty minutes after the packet is built.
+
+    Rewritten by each run of the day rather than appended, because the current
+    subscription list is the answer, not the history of them. A restart that
+    subscribes to a different set replaces this, and the count of runs is in
+    the stats sidecar for anyone who needs the history.
+    """
+    path = subscriptions_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "subscribed_at": ettime.stamp(ettime.now_et()),
+        "requested_count": len(symbols),
+        "socket_cap": MAX_SUBSCRIPTIONS,
+        "symbols": sorted(symbols),
+        "dropped_to_fit_cap": [row.get("symbol") for row in dropped],
+    }, indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
+
+def read_subscriptions(day: str | None = None) -> dict[str, Any] | None:
+    """The collector's subscription list for a day, or None if it never wrote one."""
+    path = subscriptions_path(day)
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
@@ -702,6 +744,14 @@ def main(argv: list[str] | None = None) -> int:
 
     builder = BarBuilder(bar_path(), source="poll" if args.poll else "ws")
 
+    # Written before the socket opens, so the 08:45 packet can name a symbol
+    # that was subscribed and stayed silent. Monday is the first morning at
+    # fifty subscriptions and the throughput has only ever been measured at
+    # thirty eight, so this is the run that has to be able to say which names
+    # the socket actually served.
+    written_to = write_subscriptions(symbols, dropped)
+    print(f"collector: subscription list written to {written_to.name}")
+
     calls_before = eodhd.call_count()
     try:
         if args.verify:
@@ -718,6 +768,7 @@ def main(argv: list[str] | None = None) -> int:
         builder.flush(time.time(), force=True)
 
     calls_during = eodhd.call_count() - calls_before
+    job_status.produced("minutes written", builder.rows_written)
 
     late_share = (builder.late_volume / builder.total_volume * 100.0) if builder.total_volume else 0.0
     print("")
@@ -884,4 +935,4 @@ def _report_verification(
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(job_status.run("collector", main))

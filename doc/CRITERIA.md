@@ -499,6 +499,62 @@ report.
 exchange                      = US
 refresh_after_days            = 7
 
+## Job status
+
+Every scheduled step appends one line to data/job-status.jsonl as it exits,
+written in a finally block so a step that dies still records dying. This
+exists because pool_recall raised NameError on every nightly run for a week
+and nothing said so: its exit code is ignored by design, its main caught the
+wrong exception type, and the watchdog only reads each job's final step
+marker, which pool_recall does not write. An ignored exit code stays ignored
+and the chain still does not break on a diagnostic. What changed is that the
+failure now appears in the next morning's report.
+
+Staleness is counted in trading sessions rather than hours, so a long weekend
+or a holiday cannot raise a false alarm and cannot hide a real one either.
+The value is the largest number of sessions that may pass between successes:
+a weekday job is 1, and the Sunday jobs are 5 because a Sunday build is five
+sessions old by the following Friday. A step with no success record at all is
+reported only once the recorder itself has existed longer than that window,
+since nothing can be overdue before there was anywhere to record it.
+
+Past max_steps_named_in_report overdue steps the report stops listing them
+and says the machine or the schedule has stopped instead, naming only the
+worst few. Sixteen named steps is not a list of problems, it is one problem,
+and a line that long is a line nobody finishes reading.
+
+max_steps_named_in_report      = 4
+
+## Job status steps
+
+Every key in this section is a scheduled step, and its value is the largest
+number of trading sessions that may pass between successes. Nothing else
+belongs here: job_status.py treats the whole section as the list of steps, so
+a knob parked here would become a phantom step that has never succeeded. That
+is why the one knob above lives in its own section.
+
+A step is added here when the scheduler starts invoking it, and removed when
+it stops. A step the scheduler runs that is missing from this list is never
+reported as overdue, which is the one failure this list can have, so
+test_entrypoints.py checks the two lists against each other.
+
+universe                      = 5          # Sunday 20:00, five sessions old by Friday
+gap_stats                     = 5          # rides the universe schedule
+discover                      = 1
+baseline                      = 1
+collector                     = 1
+scan                          = 1
+analyst                       = 1
+render                        = 1
+verify                        = 1
+deliver                       = 1
+archive                       = 1
+backfill                      = 1
+outcomes                      = 1
+pool_recall                   = 1
+monitor                       = 1
+calendar                      = 1
+
 ## Monitor
 
 The watchdog. It runs a few times each weekday, asks Task Scheduler whether

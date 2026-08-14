@@ -33,6 +33,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 
 _CRIT = criteria.load()
 
@@ -369,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
         eodhd.print_call_report()
         return 1
 
+    job_status.produced("universe names", payload["count"])
     for note in payload["notes"]:
         print(f"universe note: {note}")
     eodhd.print_call_report()
@@ -377,4 +379,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(job_status.run("universe", main))

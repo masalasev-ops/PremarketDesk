@@ -34,6 +34,7 @@ import config
 import criteria
 import eodhd
 import ettime
+import job_status
 import store
 
 _CRIT = criteria.load()
@@ -136,6 +137,14 @@ def _gap_report(connection, sessions: int) -> None:
     )
 
 
+# Picks filled across the primary day and every catch-up day of one run. The
+# status record wants the whole invocation's count, and backfill() is called
+# once per day it fills, so the running total lives out here rather than in a
+# return value: backfill()'s return value is main's exit code, and an exit
+# code that counted rows would report three filled picks as failure three.
+_FILLED = [0]
+
+
 def backfill(day: str) -> int:
     api = eodhd.client()
     with store.session() as connection:
@@ -198,6 +207,8 @@ def backfill(day: str) -> int:
 
         print(f"backfill: {filled} of {len(picks)} picks filled for {day}, "
               f"{disagreements} source disagreements, {failed} unavailable")
+        job_status.produced("picks filled", _FILLED[0] + filled)
+        _FILLED[0] += filled
         _gap_report(connection, _CRIT.integer("backfill", "gap_report_sessions"))
 
     # The definitive collector volume check, for the record.
@@ -244,4 +255,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("backfill", main))

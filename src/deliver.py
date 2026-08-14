@@ -20,6 +20,7 @@ from pathlib import Path
 import config
 import eodhd
 import ettime
+import job_status
 
 
 def deliver(html_path: Path) -> int:
@@ -35,6 +36,9 @@ def deliver(html_path: Path) -> int:
             "and delete that file to go live. The report is on disk at "
             f"{html_path}."
         )
+        # Gated is a correct outcome, not a failure. Zero recipients is what
+        # distinguishes it from a morning that really did send.
+        job_status.produced("recipients emailed", 0)
         return 0
 
     api_key = config.resend_api_key()
@@ -48,6 +52,7 @@ def deliver(html_path: Path) -> int:
             reasons.append("EMAIL_TO is not set")
         print(f"deliver: skipping email, {' and '.join(reasons)}. "
               f"The report is on disk at {html_path}.")
+        job_status.produced("recipients emailed", 0)
         return 0
 
     html = html_path.read_text(encoding="utf-8")
@@ -84,6 +89,7 @@ def deliver(html_path: Path) -> int:
         message_id = None
     print(f"deliver: sent to {', '.join(recipients)}"
           + (f", Resend id {message_id}" if message_id else ""))
+    job_status.produced("recipients emailed", len(recipients))
     return 0
 
 
@@ -106,4 +112,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(job_status.run("deliver", main))

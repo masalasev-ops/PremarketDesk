@@ -232,6 +232,69 @@ def claim_six(failures: list[str]) -> None:
     print(f"  claim 6 build {build.get('commit')} dirty={build.get('dirty')}")
 
 
+def claim_seven(failures: list[str]) -> None:
+    """A subscribed silent symbol and a never subscribed one are not the same row.
+
+    Monday is the first morning at fifty subscriptions and the socket has only
+    ever been load tested at thirty eight, so the packet has to be able to say
+    which of the fifty produced nothing. It can only say that if it knows what
+    was asked for, which is why the collector writes its subscription list at
+    subscribe time rather than leaving it to be inferred from the bars.
+    """
+    _packet, bars = _load()
+    served = [symbol for symbol, rows in bars.items() if rows][:3]
+    if len(served) < 3:
+        failures.append("the frozen snapshot has fewer than three symbols with bars")
+        return
+
+    silent = "SILENT.US"
+    never = served[-1]
+    requested = served[:-1] + [silent]
+
+    day = "2026-08-14"
+    path = collect_premarket.subscriptions_path(day)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "subscribed_at": "2026-08-14T07:20:00-04:00",
+        "requested_count": len(requested),
+        "socket_cap": 50,
+        "symbols": sorted(requested),
+        "dropped_to_fit_cap": [],
+    }), encoding="utf-8")
+
+    coverage = scan.collector_coverage(bars, day)
+
+    if coverage["requested"] != len(requested):
+        failures.append(f"coverage reported {coverage['requested']} requested, "
+                        f"expected {len(requested)}")
+    if silent not in coverage["silent_symbols"]:
+        failures.append(f"{silent} was subscribed and produced no bars but is not "
+                        f"named as silent: {coverage['silent_symbols']}")
+    if never in coverage["silent_symbols"]:
+        failures.append(f"{never} was never subscribed but is reported as silent, "
+                        "which is the distinction this claim exists to hold")
+    if never not in coverage["unsubscribed_with_bars"]:
+        failures.append(f"{never} produced bars without being subscribed and is not "
+                        "reported as such")
+    if not coverage["peak_trades_per_minute"]:
+        failures.append("no peak trade rate was measured from bars that carry "
+                        "a trade count per minute")
+    if coverage["late_trades"] is not None or not coverage["late_trades_reason"]:
+        failures.append("the late trade count must be null with its reason recorded "
+                        "at scan time, not filled with a stale number")
+
+    # And with no subscription list at all, coverage must say so rather than
+    # silently reporting every absent symbol as never subscribed.
+    path.unlink()
+    blind = scan.collector_coverage(bars, day)
+    if blind["silent"] is not None or not blind.get("reason"):
+        failures.append("with no subscription list, coverage claimed to know which "
+                        f"symbols were silent: {blind}")
+
+    print(f"  claim 7 coverage names {silent} silent, keeps {never} out of that list, "
+          f"peak {coverage['peak_trades_per_minute']} trades/min")
+
+
 def main() -> int:
     if not PACKET_PATH.is_file() or not SNAPSHOT_PATH.is_file():
         print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
@@ -243,13 +306,15 @@ def main() -> int:
     claim_three(failures)
     claim_four(failures)
     claim_six(failures)
+    claim_seven(failures)
 
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")
         return 1
     print("PASS  repricing from the collector, dropping the uncovered, flooring the "
-          "RVOL denominator and naming the build all hold on the 2026-08-14 packet")
+          "RVOL denominator, naming the build and telling a silent subscription "
+          "from an absent one all hold on the 2026-08-14 packet")
     return 0
 
 

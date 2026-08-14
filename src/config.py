@@ -35,6 +35,13 @@ DATA_DIR = PROJECT_ROOT / "data"
 PREMARKET_DIR = DATA_DIR / "premarket"
 RUNS_DIR = PROJECT_ROOT / "runs"
 LOGS_DIR = PROJECT_ROOT / "logs"
+# The published archive. It lives here rather than being built from
+# PROJECT_ROOT inside build_archive because a path a module constructs itself
+# is a path the test sandbox cannot redirect, and the entrypoint tests caught
+# exactly that: build_archive rewrote the real site/PremarketDesk.html from
+# inside the sandbox, and the mtime check did not see it because it watches
+# runs/ and data/, which is where the previous escapes happened.
+SITE_DIR = PROJECT_ROOT / "site"
 
 DB_PATH = DATA_DIR / "premarketdesk.db"
 UNIVERSE_PATH = DATA_DIR / "universe.json"

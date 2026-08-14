@@ -5,10 +5,87 @@ settled them and the date it was settled. Appended to, never rewritten. When a
 decision is reversed, the new entry says so and the old one stays where it is,
 because the reasoning that turned out to be wrong is the part worth keeping.
 
+Errors of fact are corrected in place and carry a `[corrected YYYY-MM-DD: was
+X]` marker; superseded decisions keep their original text and are answered by
+a later entry. The distinction is whether the statement was true when it was
+written. A measurement that was misreported is a mistake and is fixed where it
+stands, because a decision resting on a number nobody can reproduce is worse
+than no record. A decision that was right and has since been overtaken keeps
+its text, because that reasoning is the point of this file.
+
 What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
+
+## 2026-08-14: a scheduled step records its outcome whether or not its exit code gates anything
+
+**Decision.** Every step the scheduler invokes appends a status record as it
+exits, in a `finally` block, regardless of whether anything acts on its exit
+code. Recording the outcome and gating the chain are separated: the exit code
+is for the scheduler, the record is for the human. A step that must not break
+the chain keeps returning zero and calls `job_status.failed(reason)` to
+correct its own record.
+
+**The reasoning.** pool_recall raised NameError on every nightly run for a
+week and produced nothing, and the entry above citing it as accumulating
+evidence nightly was false the whole time. Three deliberate decisions hid it,
+and a fourth that was not a decision at all:
+
+- the nightly `.bat` ignores that step's exit code so a diagnostic cannot fail
+  the chain;
+- its main caught RuntimeError only, so a NameError escaped;
+- the watchdog reads each job's final step marker, and pool_recall is not the
+  final step, so the nightly looked finished every night;
+- and the only test exercised the pure function underneath it.
+
+The first and third are correct and stay. A diagnostic that can fail the
+nightly is worse than one that cannot, and a watchdog that failed the whole
+job because a measurement died would train its reader to ignore it. So the
+concealment was not caused by a wrong decision anywhere; it was caused by the
+absence of a channel that reports outcome without gating anything, which is
+what this decision adds.
+
+The general principle: **an ignored exit code is a decision about control
+flow, never a decision about visibility.** Whenever those two are conflated,
+a failure that was deliberately made harmless is also made invisible, and an
+absent measurement becomes indistinguishable from a measurement that says
+nothing is happening. The second is far worse than the first, because
+something gets built on it. Here, an OPEN decision cited a nightly measurement
+that had never run.
+
+**Why sessions rather than hours.** Staleness is counted in trading sessions.
+A weekday job that last succeeded on Friday is one session stale on Monday,
+not three days. Hours would need a tolerance wide enough for a long weekend,
+which is wide enough to hide four days of a real failure; sessions need no
+tolerance at all and use the exchange calendar the morning guard already
+reads.
+
+**Why the report line is written in Python.** The overdue line is appended to
+the report by `analyst.annotate_job_health` rather than requested of the model
+in the prompt. This follows the rule that Python decides and the model
+narrates, and it follows the precedent of `annotate_unvalidated`. A prompt
+rule can be forgotten by a model having an off morning, and the morning it is
+forgotten is the morning the line mattered.
+
+**Why silence is the normal case.** The line appears only when something is
+overdue. A status line that appears every morning is a line nobody reads,
+which would rebuild the exact failure this replaces.
+
+**Alternatives rejected.** Making the diagnostic fail the chain was rejected:
+it inverts a correct decision to fix a reporting problem, and it would mean a
+recall measurement can cost a morning's report. Widening the watchdog to check
+every step marker rather than the final one was rejected as a second, parallel
+mechanism reading log text with regular expressions, when the steps can simply
+say what they did. Alerting by email was rejected because delivery is gated
+behind the UNVERIFIED marker and an alerting path that only works once
+delivery is armed is not an alerting path.
+
+**What would change this.** If the status file itself ever fails to be written,
+nothing reports that, and the recorder prints to stdout and gives up rather
+than failing the job. That is the deliberate floor: the recorder must never be
+the reason a job dies. If this file ever starts mattering enough that its own
+absence needs detecting, the check belongs in the watchdog, not here.
 
 ## 2026-08-14: the scan prices from the collector, and drops what it cannot price
 
@@ -119,7 +196,14 @@ holds for tier 1 and fails below it: sorting the news tiers by dollar volume
 descending sorts toward the names least likely to gap. The obvious candidates
 for the next change are sub-ranking the news tiers by something other than
 size, or raising the cap, and neither should be made on one session. Left open
-deliberately, with pool_recall now accumulating the evidence nightly.
+deliberately, with pool_recall accumulating the evidence nightly from
+2026-08-14.
+[corrected 2026-08-14: was "with pool_recall now accumulating the evidence
+nightly", written on 2026-08-14 while pool_recall had in fact raised NameError
+on every nightly run since it was scheduled and had written nothing. The
+evidence began accumulating on 2026-08-14, when the fix landed. Nothing else
+in this entry rests on it: the 2026-08-13 figures above came from the backtest
+cache, not from the nightly, and they reproduce exactly]
 
 **Alternatives rejected.** Keeping the gap ranking and labelling it as
 yesterday's was rejected for the same reason the stale price was: a correctly
