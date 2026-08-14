@@ -310,29 +310,39 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("")
     add("## Day watchlist")
     add("")
+    # The header row goes down whether or not there is anything under it. An
+    # omitted table takes its Ticker header with it, and that header is what
+    # the containment guard locates ticker claims by, so an empty screen used
+    # to switch the guard off for the whole report. See REPORT_TEMPLATE.md.
+    add("| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |")
+    add("|---|---|---|---|---|---|---|---|")
     if day:
-        add("| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |")
-        add("|---|---|---|---|---|---|---|---|")
         for c in day:
             add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
                 f"| {_f(c.get('pm_rvol'))} | {_f(c.get('pm_high'), 4)} | {_f(c.get('pm_vwap'), 4)} "
                 f"| {_f(c.get('score'), 1)} | {_conviction(c)} |")
     else:
-        add("No candidate is day eligible this morning.")
+        add("| none | | | | | | | |")
     add("")
+    if not day:
+        add("No candidate is day eligible this morning.")
+        add("")
     add("## Swing watchlist")
     add("")
+    add("| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | Score | Conviction |")
+    add("|---|---|---|---|---|---|---|---|")
     if swing:
-        add("| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | Score | Conviction |")
-        add("|---|---|---|---|---|---|---|---|")
         for c in swing:
             quote = c.get("quote") or {}
             add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
                 f"| {_f(c.get('prior_high'))} | {_f(quote.get('twoHundredDayAveragePrice'))} "
                 f"| {c.get('catalyst_class')} | {_f(c.get('score'), 1)} | {_conviction(c)} |")
     else:
-        add("No candidate is swing eligible this morning.")
+        add("| none | | | | | | | |")
     add("")
+    if not swing:
+        add("No candidate is swing eligible this morning.")
+        add("")
     add("## Market trends")
     add("")
     add("| Label | Last | Change % | Source |")
@@ -471,15 +481,49 @@ def _claimable_symbols() -> set[str] | None:
     return universe | context
 
 
-def _ticker_claims(report_text: str) -> tuple[set[str], int]:
-    """The tokens the report presents AS tickers, and the columns scanned.
+_TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|A\.M\.|P\.M\.)?\s*"
+                      r"(?:ET|EST|EDT|UTC|GMT)?", re.IGNORECASE)
+_ISO_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.+-]+)?")
 
-    Prose is not scanned: an acronym like CEO or FOMC in a sentence is not a
-    ticker claim and must never trip containment. A claim is a token in a
-    table column whose header names it a ticker column, or a token anywhere
-    carrying a $ prefix, which is unambiguous. Other table cells are prose in
-    a grid ("2:48 PM ET" in a headline cell must not read as Philip Morris),
-    so they are not scanned either.
+
+def _prose_tokens(report_text: str) -> set[str]:
+    """Ticker shaped tokens from the report's prose, tables excluded.
+
+    Prose is ambiguous where a Ticker column is not, so two filters run before
+    anything is called a token. Time expressions and ISO dates are stripped
+    first, because "06:37 ET" is a time and ET is also Energy Transfer. Then
+    the stopword list in CRITERIA.md removes the finance and unit acronyms that
+    survive. What is left is intersected with the known symbols by the caller,
+    so an ordinary capitalised word never becomes a claim.
+    """
+    stopwords = {
+        s.strip().upper()
+        for s in _CRIT.text_list("analyst", "prose_token_stopwords")
+        if s.strip()
+    }
+    prose = "\n".join(
+        line for line in report_text.splitlines() if not line.strip().startswith("|")
+    )
+    prose = _ISO_RE.sub(" ", prose)
+    prose = _TIME_RE.sub(" ", prose)
+    return {token for token in _TOKEN_RE.findall(prose) if token not in stopwords}
+
+
+def _ticker_claims(report_text: str) -> tuple[set[str], int, set[str]]:
+    """The tokens the report presents AS tickers, the columns scanned, and prose.
+
+    A claim is a token in a table column whose header names it a ticker column,
+    or a token anywhere carrying a $ prefix, which is unambiguous. Other table
+    cells are prose in a grid ("2:48 PM ET" in a headline cell must not read as
+    Philip Morris), so they are not scanned.
+
+    Prose tokens are returned separately. They used to be ignored entirely, on
+    the reasoning that an acronym in a sentence is not a ticker claim. That
+    reasoning holds for what prose tokens may FAIL, and it broke down for what
+    their presence PROVES: on 2026-08-14 both watchlist tables were omitted
+    because both screens were empty, so zero columns were scanned, and the
+    check reported a clean pass over a report that named twelve tickers in
+    bold prose. Prose mentions are how that vacuum is now detected.
 
     The columns count exists because a check that scanned nothing must not be
     reported as a check that passed. REPORT_TEMPLATE.md pins the header
@@ -516,7 +560,7 @@ def _ticker_claims(report_text: str) -> tuple[set[str], int]:
         for position in ticker_columns:
             if position < len(cells):
                 claims.update(_TOKEN_RE.findall(cells[position]))
-    return claims, columns_scanned
+    return claims, columns_scanned, _prose_tokens(report_text)
 
 
 def check_report(
@@ -539,12 +583,33 @@ def check_report(
     must say so where the reader will see it.
     """
     known_symbols = _claimable_symbols()
-    claims, columns_scanned = _ticker_claims(report_text)
+    table_claims, columns_scanned, prose_tokens = _ticker_claims(report_text)
+    prose_claims = (
+        sorted(token for token in prose_tokens if token in known_symbols)
+        if known_symbols is not None
+        else []
+    )
+    claims = table_claims | set(prose_claims)
+
+    # The vacuum detector. A report that names real tickers in its prose while
+    # carrying no ticker column at all has not passed containment, it has
+    # escaped it: the tables the guard reads were never written. That is a
+    # structural failure of the report, reported as a failure rather than as a
+    # pass with a footnote.
+    structure_failed = columns_scanned == 0 and bool(prose_claims)
     coverage: dict[str, Any] = {
         "universe_available": known_symbols is not None,
         "columns_scanned": columns_scanned,
         "tokens_examined": len(claims),
         "claims_checked": len(claims) if known_symbols is not None else 0,
+        "prose_claims": prose_claims,
+        "structure_failed": structure_failed,
+        "structure_reason": (
+            f"{len(prose_claims)} ticker claim(s) appear in the prose "
+            f"({', '.join(prose_claims)}) but no table carried a Ticker or Symbol "
+            "header, so no ticker column was scanned. REPORT_TEMPLATE.md requires "
+            "both watchlist tables to be written even when empty."
+        ) if structure_failed else None,
     }
     if known_symbols is None:
         print("analyst: containment note: universe.json is unavailable, so ticker "
@@ -573,6 +638,11 @@ def check_report(
 def _why_unvalidated(coverage: dict[str, Any]) -> str:
     if not coverage.get("universe_available"):
         return "universe.json was unavailable"
+    if coverage.get("structure_failed"):
+        claims = coverage.get("prose_claims") or []
+        return ("the report omitted its watchlist tables, so no ticker column "
+                f"existed to check the {len(claims)} ticker(s) it names in prose "
+                f"({', '.join(claims)})")
     if not coverage.get("columns_scanned") and not coverage.get("tokens_examined"):
         return ("no table carried a recognisable Ticker or Symbol header and "
                 "no $ prefixed claims were found, so nothing was examined")
@@ -625,7 +695,7 @@ def write_report(packet_path: Path) -> int:
     print(f"analyst: wrote {report_path} ({len(report_text)} chars, status {usage['status']})")
 
     invented, missing, coverage = check_report(report_text, packet_text)
-    if coverage["claims_checked"] == 0:
+    if coverage["claims_checked"] == 0 or coverage["structure_failed"]:
         # A pass that examined nothing is not a pass, and the reader must be
         # able to tell. The disclaimer line gets the statement.
         report_text = annotate_unvalidated(report_text, coverage)
@@ -664,6 +734,11 @@ def write_report(packet_path: Path) -> int:
         )
         print("analyst: the report was written for inspection but must not be delivered.")
         return 2
+    if coverage["structure_failed"]:
+        print("analyst: FAILED the containment check on structure. "
+              + coverage["structure_reason"])
+        print("analyst: the report was written for inspection but must not be delivered.")
+        return 2
     if coverage["claims_checked"]:
         print(f"analyst: containment check passed: {coverage['claims_checked']} "
               f"ticker claims validated across {coverage['columns_scanned']} "
@@ -698,6 +773,10 @@ def main(argv: list[str] | None = None) -> int:
             print("analyst: candidates missing from the report: " + ", ".join(missing))
         if invented:
             print("analyst: tickers not in the packet: " + ", ".join(invented))
+            return 2
+        if coverage["structure_failed"]:
+            print("analyst: FAILED the containment check on structure. "
+                  + coverage["structure_reason"])
             return 2
         if coverage["claims_checked"] == 0:
             print("analyst: containment examined nothing "

@@ -47,6 +47,15 @@ decide nothing.
     containment guard that validates every ticker claim locates ticker
     columns by those exact headers, so a reworded header silently weakens a
     safety check.
+
+    Both tables are written every morning, including mornings when no
+    candidate is eligible. An empty screen gets the header row, the separator
+    row, and a single row reading `| none | | | | | | | |`, followed by the
+    sentence explaining what failed. Do not replace an empty table with prose.
+    Dropping the table drops the header, and dropping the header switches the
+    guard off for the whole report, which is what happened on 2026-08-14: both
+    screens were empty, both tables were omitted, and the twelve tickers named
+    in the prose went unchecked. A report that omits a table is rejected.
 13. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.
 

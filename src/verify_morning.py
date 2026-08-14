@@ -2,10 +2,16 @@
 
 Until a human has watched one real morning's numbers and agreed they are sane,
 the system must not email anyone. The gate has two parts. This script prints
-the evidence table for the first few candidates of today's packet: raw
-ethVolume, the cached baseline median, the RVOL those two produce, the
-collector's premarket high, and how many bars stand behind it. And a marker
-file, data/UNVERIFIED, which deliver.py refuses to send past while it exists.
+the evidence table for the first few candidates of today's packet: the
+collector's premarket volume, the cached baseline median, the RVOL those two
+produce, the price and the minute it was printed, and how many bars stand
+behind it. And a marker file, data/UNVERIFIED, which deliver.py refuses to
+send past while it exists.
+
+The price and the minute it was printed are in that table because the failure
+that made this gate earn its keep was invisible without them: on 2026-08-14
+every number was internally consistent and a session old. A price with no
+clock beside it cannot be checked by eye.
 
 When the table looks sane on a live morning, the human deletes the marker and
 the next morning goes out. Nothing in the code ever deletes it, and nothing
@@ -50,27 +56,36 @@ def print_table(packet_path: Path, count: int = 3) -> int:
 
     print(f"gate: verification table for {packet.get('session_date')}, "
           f"packet generated {packet.get('generated_at')}")
+    build = packet.get("build") or {}
+    print(f"gate: build {build.get('commit') or 'unknown'}"
+          f"{' (working tree dirty)' if build.get('dirty') else ''}")
     header = (
-        f"  {'ticker':<10} {'ethVolume':>13} {'baseline med':>13} {'pm_rvol':>9} "
-        f"{'pm_high':>10} {'bars':>6}"
+        f"  {'ticker':<10} {'price':>9} {'priced at':>17} {'pm volume':>12} "
+        f"{'baseline med':>13} {'pm_rvol':>10} {'bars':>5}"
     )
     print(header)
     for candidate in candidates:
-        quote = candidate.get("quote") or {}
         baseline_row = candidate.get("baseline") or {}
-        eth = quote.get("ethVolume")
         median = baseline_row.get("median_volume")
+        pm_volume = candidate.get("pm_volume")
+        priced_at = str(candidate.get("price_time") or "null")
         print(
             f"  {candidate.get('symbol', ''):<10} "
-            f"{eth if eth is not None else 'null':>13} "
+            f"{candidate.get('price') if candidate.get('price') is not None else 'null':>9} "
+            f"{priced_at[11:] if len(priced_at) > 11 else priced_at:>17} "
+            f"{pm_volume if pm_volume is not None else 'null':>12} "
             f"{median if median is not None else 'null':>13} "
-            f"{candidate.get('pm_rvol') if candidate.get('pm_rvol') is not None else 'null':>9} "
-            f"{candidate.get('pm_high') if candidate.get('pm_high') is not None else 'null':>10} "
-            f"{candidate.get('bars_collected', 0):>6}"
+            f"{candidate.get('pm_rvol') if candidate.get('pm_rvol') is not None else 'null':>10} "
+            f"{candidate.get('bars_collected', 0):>5}"
         )
         reason = candidate.get("pm_rvol_reason")
         if reason:
             print(f"             rvol null because: {reason}")
+
+    dropped = packet.get("dropped_no_coverage") or []
+    if dropped:
+        print(f"gate: {len(dropped)} candidate(s) dropped for no collector coverage: "
+              + ", ".join(row["symbol"] for row in dropped))
 
     print()
     if UNVERIFIED_MARKER.exists():

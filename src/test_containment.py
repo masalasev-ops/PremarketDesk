@@ -111,12 +111,72 @@ def main() -> int:
     if "NOT validated" not in disclaimer_line:
         failures.append("the unvalidated note did not land on the disclaimer line")
 
+    # Claim 5: the vacuum. The real 2026-08-14 report omitted both watchlist
+    # tables because both screens were empty, so no ticker column existed, and
+    # the check reported a clean pass over a report naming twelve tickers in
+    # bold prose. That must now be a failure, with those tickers listed.
+    real_report = config.RUNS_DIR / "2026-08-14" / "report.md"
+    real_packet = config.RUNS_DIR / "2026-08-14" / "packet.json"
+    if real_report.is_file() and real_packet.is_file():
+        report_text = real_report.read_text(encoding="utf-8")
+        real_packet_text = real_packet.read_text(encoding="utf-8")
+        _invented, _missing, coverage = analyst.check_report(report_text, real_packet_text)
+        if coverage["columns_scanned"] != 0:
+            failures.append("the 2026-08-14 report was expected to carry no ticker "
+                            f"column, got {coverage['columns_scanned']}")
+        if not coverage["structure_failed"]:
+            failures.append("the 2026-08-14 report still passes containment")
+        named = set(coverage["prose_claims"])
+        candidates = {
+            str(c["symbol"]).split(".")[0]
+            for c in json.loads(real_packet_text).get("candidates", [])
+        }
+        if not candidates <= named:
+            failures.append(f"prose claims missed {sorted(candidates - named)}")
+        annotated = analyst.annotate_unvalidated(report_text, coverage)
+        disclaimer_line = next(
+            line for line in annotated.splitlines() if "Nothing here is advice" in line
+        )
+        if "omitted its watchlist tables" not in disclaimer_line:
+            failures.append("the disclaimer does not say the tables were omitted")
+        print(f"  claim 5 the 2026-08-14 report fails on structure: "
+              f"{len(named)} prose ticker claims across {coverage['columns_scanned']} "
+              f"ticker columns, all {len(candidates)} candidates among them")
+    else:
+        print("  claim 5 SKIPPED, the 2026-08-14 artifacts are not on this machine")
+
+    # Claim 6: an empty table that is still written keeps the guard switched
+    # on. The header is present, one 'none' row sits under it, and nothing in
+    # the prose names a ticker.
+    empty_table_report = (
+        "# PremarketDesk test\n\n"
+        "Nothing here is advice, the screen thresholds are unvalidated seed values.\n\n"
+        "## Day watchlist\n\n"
+        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP "
+        "| Score | Conviction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| none | | | | | | | |\n\n"
+        "The day screen produced nothing today, and the most common failed "
+        "condition was the premarket price sitting below the prior day high.\n"
+    )
+    invented, _, coverage = analyst.check_report(empty_table_report, packet_text)
+    if coverage["columns_scanned"] < 1:
+        failures.append(f"the empty but present table scanned no columns: {coverage}")
+    if coverage["structure_failed"]:
+        failures.append(f"an empty but present table was called a structure "
+                        f"failure: {coverage}")
+    if invented:
+        failures.append(f"the empty table report invented tickers: {invented}")
+    print(f"  claim 6 an empty but present table scans "
+          f"{coverage['columns_scanned']} ticker column(s) and passes")
+
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")
         return 1
     print(f"PASS  acronyms in prose pass, {absent} absent from the packet fails "
-          "both as a table cell and as a $ mention")
+          "both as a table cell and as a $ mention, an omitted table is a "
+          "structure failure, and an empty but present one is not")
     return 0
 
 

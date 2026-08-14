@@ -387,6 +387,32 @@ actually happened to it, dated, so none of them silently becomes folklore.
   cannot starve the other. Until then, the preflight and the 429 circuit
   breaker are the defense.
 
+## The first live morning, 2026-08-14
+
+The first fully scheduled morning ran clean at every step and published a
+report about the previous session. The bulk /real-time endpoint serves the last
+completed session, so at 08:45 it priced yesterday, while prior_high came from
+end of day history and was correct; the two met in a gate that compared a
+session's close against its own high and could never pass, which is why both
+watchlists were empty and why the report explained that as a dull tape.
+
+From this date the running record splits in two. What changed and when is in
+doc/CHANGELOG.md. Why a choice went the way it did is in doc/DECISIONS.md.
+This file keeps the build history up to that morning and the open items below.
+
+Open after that morning:
+
+- The candidate pool is still seeded by discover at 07:15 from the same
+  lagging bulk feed, so the morning starts from names that moved in the
+  previous session. No premarket source covering the full 2,745 name
+  universe has been confirmed on this plan. See DECISIONS.md 2026-08-14.
+- pm_rvol's numerator covers 07:20 onward while its denominator accumulates
+  from 04:00, so the ratio understates. Closing that needs a second baseline
+  keyed to the collector window and a rewarm of the cache.
+- The gate marker data/UNVERIFIED is still in place and should stay there
+  until a morning's gate table has been read with the new price and clock
+  columns in it.
+
 ## Operating notes
 
 - The machine must be awake at trigger times; Task Scheduler does not wake

@@ -36,6 +36,7 @@ LOOKBACK_SESSIONS = _CRIT.integer("baseline", "lookback_sessions")
 SESSION_START = _CRIT.clock("baseline", "session_start")
 REFRESH_AFTER_DAYS = _CRIT.integer("baseline", "refresh_after_days")
 MIN_SESSIONS_FOR_RVOL = _CRIT.integer("baseline", "min_sessions_for_rvol")
+MIN_BASELINE_VOLUME = _CRIT.number("baseline", "min_baseline_premarket_volume")
 
 
 def normalize_cutoff(value: str | tuple[int, int]) -> str:
@@ -98,6 +99,15 @@ def usable_for_rvol(row: dict[str, Any] | None) -> tuple[bool, str | None]:
     median = row.get("median_volume")
     if median is None or median <= 0:
         return False, "baseline median volume is zero or missing"
+    if median < MIN_BASELINE_VOLUME:
+        # See the denominator floor note in CRITERIA.md. A median this small
+        # cannot carry a ratio: the arithmetic still works and the answer is
+        # meaningless.
+        return False, (
+            f"baseline median volume {median:,.1f} shares is below the "
+            f"{MIN_BASELINE_VOLUME:,.0f} share floor, so the denominator is "
+            "too thin to divide by"
+        )
     return True, None
 
 

@@ -51,9 +51,23 @@ character, because the containment guard locates ticker columns by it:
 | Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
 
 A candidate whose score is null gets the word unscored in the conviction
-column, never a bucket color. If none are eligible, one sentence saying the
-day screen produced nothing today and the most common failed condition.
-Membership is decided by the day_eligible boolean alone.}
+column, never a bucket color. Membership is decided by the day_eligible
+boolean alone.
+
+If none are eligible the table is still written, header and separator and one
+row, exactly like this:
+
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| none | | | | | | | |
+
+then one sentence below it saying the day screen produced nothing today and
+the most common failed condition. The table is never omitted. An omitted table
+takes the header with it, and the header is what the containment guard uses to
+find ticker claims, so a morning with no eligible names would silently switch
+that guard off. On 2026-08-14 exactly that happened: both tables were dropped,
+zero columns were scanned, and twelve ticker claims in the prose went
+unvalidated.}
 
 ## Swing watchlist
 
@@ -64,9 +78,18 @@ character, because the containment guard locates ticker columns by it:
 | Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | Score | Conviction |
 
 A candidate whose score is null gets the word unscored in the conviction
-column, never a bucket color. If none are eligible, one sentence saying so
-and the most common failed condition. Membership is decided by the
-swing_eligible boolean alone.}
+column, never a bucket color. Membership is decided by the swing_eligible
+boolean alone.
+
+If none are eligible the table is still written, header and separator and one
+row, exactly like this:
+
+| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | Score | Conviction |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| none | | | | | | | |
+
+then one sentence below it saying so and the most common failed condition. As
+with the day table, it is never omitted.}
 
 ## Market trends
 

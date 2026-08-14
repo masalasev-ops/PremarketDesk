@@ -168,6 +168,9 @@ a key wrong and the strict reader fails loudly rather than defaulting.
 
 Other documents:
 
+- `doc/CHANGELOG.md` records what changed and when, newest first, and
+  `doc/DECISIONS.md` records why the choices that could have gone another
+  way went the way they did. Both start at 2026-08-14.
 - `doc/BUILD_PLAN.md` records how the system was built and verified,
   checkpoint by checkpoint, including the environment traps that were
   actually hit. Paths in it refer to the original build machine.

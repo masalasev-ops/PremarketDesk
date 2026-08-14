@@ -176,6 +176,78 @@ def scrub_secrets(text: Any) -> str:
     return out
 
 
+GIT_DIR = PROJECT_ROOT / ".git"
+
+
+def _resolved_head() -> str | None:
+    """The commit .git/HEAD points at, read from the files rather than from git.
+
+    A detached HEAD holds the hash directly. A normal HEAD holds a ref, whose
+    hash is either in .git/refs/ or, once git has packed them, in packed-refs.
+    All three are handled because the failure mode of missing one is a packet
+    that cannot say which build wrote it.
+    """
+    try:
+        head = (GIT_DIR / "HEAD").read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not head.startswith("ref:"):
+        return head or None
+
+    ref = head[4:].strip()
+    try:
+        return (GIT_DIR / ref).read_text(encoding="utf-8").strip() or None
+    except OSError:
+        pass
+    try:
+        packed = (GIT_DIR / "packed-refs").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in packed.splitlines():
+        if line.startswith("#") or " " not in line:
+            continue
+        commit, _, name = line.partition(" ")
+        if name.strip() == ref:
+            return commit.strip()
+    return None
+
+
+def build_identifier() -> dict[str, Any]:
+    """Which build produced this run: the commit, and whether the tree was edited.
+
+    Recorded in every packet from 2026-08-14 on, because the first live morning
+    produced a report that could not be tied back to the code that wrote it.
+    A dirty tree is not an error, it is a fact about reproducibility: the run
+    cannot be recreated from the commit alone, and the reader should know.
+    """
+    import subprocess
+
+    commit = _resolved_head()
+    dirty: bool | None = None
+    dirty_reason = None
+    try:
+        finished = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if finished.returncode == 0:
+            dirty = bool(finished.stdout.strip())
+        else:
+            dirty_reason = f"git status exited {finished.returncode}"
+    except (OSError, subprocess.SubprocessError) as exc:
+        dirty_reason = f"{type(exc).__name__}: {exc}"
+
+    out: dict[str, Any] = {"commit": commit, "dirty": dirty}
+    if commit is None:
+        out["commit_reason"] = f"could not resolve HEAD under {GIT_DIR}"
+    if dirty_reason:
+        out["dirty_reason"] = dirty_reason
+    return out
+
+
 def resend_api_key() -> str | None:
     """Resend key, or None when delivery should be skipped."""
     return get("RESEND_API_KEY")

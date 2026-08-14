@@ -15,7 +15,10 @@ Two claims, both required:
 from __future__ import annotations
 
 import json
+import pathlib
+import shutil
 import sys
+import tempfile
 
 import requests
 
@@ -67,14 +70,25 @@ def main() -> int:
         failures.append("the raw token survived into the ledger's error notes")
 
     # Claim 2: a whole packet built through the failure carries no token.
+    #
+    # build_packet snapshots the collector file into runs/<today>/, so this
+    # runs against a throwaway runs directory. Without that it overwrites the
+    # frozen premarket_snapshot.jsonl of whatever real run happened today,
+    # which is the only record of what that morning's scan actually saw. It
+    # did exactly that on 2026-08-14 before this guard was added.
     stub = eodhd.EodhdClient(token=token, ledger=eodhd.LEDGER)
     stub._session = _ExplodingSession(token)
     eodhd.LEDGER.retries = eodhd.RETRY_BUDGET_PER_RUN
     eodhd._default_client = stub
+    real_runs_dir = config.RUNS_DIR
+    sandbox = tempfile.mkdtemp(prefix="premarketdesk-test-scrub-")
+    config.RUNS_DIR = pathlib.Path(sandbox)
     try:
         payload = scan.build_packet()
     finally:
         eodhd._default_client = None
+        config.RUNS_DIR = real_runs_dir
+        shutil.rmtree(sandbox, ignore_errors=True)
     serialized = json.dumps(payload)
     if token in serialized:
         failures.append("the raw token appears in the serialized packet")

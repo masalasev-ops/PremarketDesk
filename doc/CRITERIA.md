@@ -239,6 +239,26 @@ lookback_sessions             = 20         # prior sessions summed per cutoff
 session_start                 = 04:00      # premarket volume accumulates from here
 refresh_after_days            = 7
 min_sessions_for_rvol         = 10         # below this pm_rvol is null with a recorded reason
+min_baseline_premarket_volume = 1000       # shares; below this the denominator is degenerate and pm_rvol is null
+
+### The denominator floor note
+
+A seed value, chosen to exclude degenerate denominators, not a validated
+threshold. Nothing has been measured against it yet.
+
+It exists because a baseline median can be small enough that the ratio built
+on it stops meaning anything. On 2026-08-14 ARX had a median premarket volume
+of 23.5 shares and MH had 10, so any ordinary morning divided by them produces
+a number in the thousands, which then maxes the RVOL scoring band by
+construction rather than by evidence. Six of that morning's twelve candidates
+sat below this floor.
+
+The fix is a floor on the denominator, not a cap on the ratio. A cap would
+turn 882,728 into a plausible looking number and hide the fact that the
+denominator was never usable, which is the same class of error as substituting
+a stale price: it replaces a visible absurdity with an invisible one. Below
+the floor, pm_rvol is null with the reason recorded, the RVOL score component
+is unavailable, and the total score is null rather than partial credit.
 
 ## Backfill
 
@@ -309,6 +329,22 @@ model                         = opus       # owner's standing choice, re-asserte
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
 timeout_s                     = 293        # 3x the slowest of five measured opus medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds
 max_attempts                  = 2          # total tries, including the first
+prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI
+
+### The prose stopword note
+
+Containment reads ticker claims out of the report's prose as well as its
+tables. Prose is ambiguous in a way a Ticker column is not: "06:37 ET" is a
+time, and ET is also Energy Transfer, so a naive reader of prose would fail
+every report ever written. Time expressions and ISO dates are stripped before
+tokens are taken, and this list removes what survives.
+
+Some entries here are real tickers, ALL, ON, SO, IT, AI and ET among them.
+That is a deliberate, recorded fail-open: a claim about one of those names in
+prose alone will not be caught. The alternative is a guard that cries wolf
+every morning, and a guard that always fires is a guard nobody reads. Claims
+in the watchlist tables are unaffected, and those tables are now mandatory
+even when empty.
 
 Note on the invocation: the narrative pass is one text generation, not an
 agent loop. The CLI runs with --tools "" so there is nothing to loop on, a

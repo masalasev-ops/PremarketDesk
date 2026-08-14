@@ -36,6 +36,7 @@ import eodhd
 import ettime
 import store
 import universe
+import vintage
 
 _CRIT = criteria.load()
 
@@ -64,12 +65,38 @@ class Packet:
 
 # ------------------------------------------------------- 1. market snapshot
 
-def market_snapshot(api: eodhd.EodhdClient, packet: Packet) -> list[dict[str, Any]]:
+def _collector_last(bars: list[dict[str, Any]]) -> tuple[float | None, str | None]:
+    """The last premarket trade price the collector recorded, and its minute.
+
+    The bar is stamped at the minute it opens, so the timestamp returned is the
+    start of the last minute that carried a trade, never a wall clock read.
+    """
+    if not bars:
+        return None, None
+    last = max(bars, key=lambda b: b["minute_epoch"])
+    return (
+        _as_float(last.get("c")),
+        ettime.stamp(ettime.from_epoch_s(last["minute_epoch"])),
+    )
+
+
+def market_snapshot(
+    api: eodhd.EodhdClient, packet: Packet, bars_by_symbol: dict[str, list[dict[str, Any]]]
+) -> list[dict[str, Any]]:
     """Last and change versus prior close for the index and macro line.
 
-    Live is tried first. Indices, government bonds and the dollar index come
-    back as NA there but are current in the end of day feed, so that is the
-    fallback, and each row records which source answered.
+    The collector answers first, for the same reason it answers for candidates:
+    the /real-time family serves the last COMPLETED session, so at 08:45 its
+    close is yesterday's close and its previousClose is the day before that.
+    Reading it here is what put "SPY up 0.70 percent" in the 2026-08-14 report
+    when 0.70 percent was yesterday's move. See DECISIONS.md 2026-08-14.
+
+    The eight context tickers are subscribed every morning, so the index and
+    commodity rows come from the collector. Government bonds and the dollar
+    index are not subscribed and have no premarket tape here, so they fall back
+    to the end of day feed and the row says so: source 'eod' with
+    prior_session_only true, which the vintage check reads as a row that is
+    honestly labelled stale rather than one silently claiming to be current.
     """
     mapping = _CRIT.pair_map("scan_snapshot", "snapshot")
     proxies = {}
@@ -78,16 +105,9 @@ def market_snapshot(api: eodhd.EodhdClient, packet: Packet) -> list[dict[str, An
     except criteria.CriteriaError:
         pass
 
-    labels = list(mapping)
-    symbols = [mapping[label] for label in labels]
-    live, error = api.live_quotes(symbols)
-    if error and not live:
-        packet.gap(f"market snapshot live call failed: {error}")
-        live = {}
-
     today = ettime.today_et()
     rows: list[dict[str, Any]] = []
-    for label in labels:
+    for label in list(mapping):
         symbol = mapping[label]
         row: dict[str, Any] = {
             "label": label,
@@ -97,29 +117,41 @@ def market_snapshot(api: eodhd.EodhdClient, packet: Packet) -> list[dict[str, An
             "change": None,
             "change_pct": None,
             "source": None,
+            "as_of": None,
+            "prior_session_only": None,
         }
         if label.lower() in proxies:
             row["proxy_note"] = proxies[label.lower()]
 
-        quote = live.get(symbol) or {}
-        last = _as_float(quote.get("close"))
-        prior = _as_float(quote.get("previousClose"))
-        if last is not None and prior:
-            row.update({"last": last, "prior_close": prior, "source": "live"})
-        else:
-            bars, eod_error = api.eod(symbol, start=today - dt.timedelta(days=15), end=today)
-            if eod_error or not bars:
-                packet.gap(f"market snapshot {label} ({symbol}) unavailable: "
-                           f"{eod_error or 'no end of day rows'}")
-                rows.append(row)
-                continue
-            last = _as_float(bars[-1].get("close"))
-            prior = _as_float(bars[-2].get("close")) if len(bars) > 1 else None
+        bars, eod_error = api.eod(symbol, start=today - dt.timedelta(days=15), end=today)
+        completed = [
+            b for b in (bars or []) if ettime.parse_date(str(b.get("date"))) < today
+        ]
+        if eod_error or not completed:
+            packet.gap(f"market snapshot {label} ({symbol}) unavailable: "
+                       f"{eod_error or 'no completed end of day rows'}")
+            rows.append(row)
+            continue
+
+        collector_last, collector_at = _collector_last(bars_by_symbol.get(symbol, []))
+        if collector_last is not None:
             row.update({
-                "last": last,
-                "prior_close": prior,
+                "last": collector_last,
+                "prior_close": _as_float(completed[-1].get("close")),
+                "prior_session_date": completed[-1].get("date"),
+                "source": "collector",
+                "as_of": collector_at,
+                "prior_session_only": False,
+            })
+        else:
+            row.update({
+                "last": _as_float(completed[-1].get("close")),
+                "prior_close": _as_float(completed[-2].get("close"))
+                if len(completed) > 1 else None,
+                "prior_session_date": completed[-1].get("date"),
                 "source": "eod",
-                "as_of": bars[-1].get("date"),
+                "as_of": completed[-1].get("date"),
+                "prior_session_only": True,
             })
 
         if row["last"] is not None and row["prior_close"]:
@@ -136,11 +168,21 @@ def market_snapshot(api: eodhd.EodhdClient, packet: Packet) -> list[dict[str, An
 def final_candidates(
     api: eodhd.EodhdClient, packet: Packet, universe_payload: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Rebuild the candidate list from a fresh bulk call.
+    """Rebuild the candidate list from a fresh bulk call. MEMBERSHIP ONLY.
 
     watchlist.json is not trusted for membership. It was written ninety minutes
     ago and the tape has moved. It is still consulted, but only to answer a
     different question: was the collector listening to this name.
+
+    The bulk /real-time endpoint is kept here, and only here, because it is the
+    one call that can rank 2,745 names at once and something has to choose the
+    twelve. What it must never do again is PRICE them. It serves the last
+    completed session, so at 08:45 its close is yesterday's close and its
+    previousClose is the session before that, which is how the 2026-08-14
+    report published yesterday's moves as this morning's gaps. Every field it
+    produces below is therefore named selection_*, is used to rank and to cut,
+    and is overwritten by price_from_collector before anything is scored,
+    written to picks, or shown to a reader. See DECISIONS.md 2026-08-14.
     """
     keep = _CRIT.integer("scan", "candidate_count")
     price_rule = _CRIT.rule("discovery", "price")
@@ -167,16 +209,20 @@ def final_candidates(
         candidates.append(
             {
                 "symbol": symbol,
-                "gap_pct": round(gap, 4),
-                "price": round(price, 4),
-                "prior_close": round(prior_close, 4),
+                "selection_gap_pct": round(gap, 4),
+                "selection_price": round(price, 4),
+                "selection_prior_close": round(prior_close, 4),
+                "selection_source": (
+                    "bulk /real-time, which serves the last completed session. "
+                    "Used to rank and cut only, never to price."
+                ),
                 "bulk_volume": _as_float(row.get("volume")),
                 "quote_time": ettime.stamp(ettime.from_epoch_s(row.get("timestamp")))
                 if row.get("timestamp") else None,
             }
         )
 
-    candidates.sort(key=lambda r: abs(r["gap_pct"]), reverse=True)
+    candidates.sort(key=lambda r: abs(r["selection_gap_pct"]), reverse=True)
     provenance = {
         "universe_started_with": len(universe_symbols),
         "universe_generated_at": universe_payload.get("generated_at"),
@@ -203,7 +249,7 @@ def attach_quotes(
         quote = quotes.get(candidate["symbol"]) or {}
         if not quote:
             packet.gap(f"{candidate['symbol']} has no delayed quote, "
-                       "so ethVolume, market cap and the 200 day average are missing")
+                       "so market cap and the 200 day average are missing")
         candidate["quote"] = {
             "ethVolume": _as_float(quote.get("ethVolume")),
             "ethTime": quote.get("ethTime"),
@@ -222,30 +268,50 @@ def attach_quotes(
 def attach_daily_history(
     api: eodhd.EodhdClient, candidates: list[dict[str, Any]], packet: Packet
 ) -> None:
-    """Prior day high and 20 day average volume, from the end of day feed."""
+    """Prior session close, high and 20 day average volume, from the end of day feed.
+
+    prior_close and prior_high are read from THE SAME record and cannot be
+    sourced separately. When they came from different places, one from the bulk
+    feed's previousClose and one from this history, they silently drifted a
+    session apart: on 2026-08-14 six candidates carried a prior_high below
+    their prior_close, which cannot happen inside one OHLC bar, and the
+    require_above_prior_high gate compared a session's close against its own
+    high and could never pass. Aligned by construction here, that whole class
+    of error is unreachable rather than merely unlikely.
+    """
     lookback = _CRIT.integer("universe", "lookback_sessions")
     today = ettime.today_et()
     start = today - dt.timedelta(days=lookback * 2 + 10)
+
+    def unknown(candidate: dict[str, Any]) -> None:
+        candidate["prior_close"] = None
+        candidate["prior_high"] = None
+        candidate["prior_session_date"] = None
+        candidate["avg_volume_20d"] = None
 
     for candidate in candidates:
         bars, error = api.eod(candidate["symbol"], start=start, end=today)
         if error or not bars:
             packet.gap(f"{candidate['symbol']} end of day history unavailable: "
-                       f"{error or 'no rows'}. Prior day high and 20 day average volume are null.")
-            candidate["prior_high"] = None
-            candidate["avg_volume_20d"] = None
+                       f"{error or 'no rows'}. Prior session close, prior day high "
+                       "and 20 day average volume are null.")
+            unknown(candidate)
             continue
 
         # Today's own row is excluded. The prior day high means yesterday.
         completed = [b for b in bars if ettime.parse_date(str(b.get("date"))) < today]
         if not completed:
             packet.gap(f"{candidate['symbol']} has no completed session before today")
-            candidate["prior_high"] = None
-            candidate["avg_volume_20d"] = None
+            unknown(candidate)
             continue
 
-        candidate["prior_high"] = _as_float(completed[-1].get("high"))
-        candidate["prior_session_date"] = completed[-1].get("date")
+        prior = completed[-1]
+        candidate["prior_close"] = _as_float(prior.get("close"))
+        candidate["prior_high"] = _as_float(prior.get("high"))
+        candidate["prior_session_date"] = prior.get("date")
+        candidate["prior_source"] = (
+            f"one end of day record dated {prior.get('date')}, close and high together"
+        )
         volumes = [_as_float(b.get("volume")) for b in completed[-lookback:]]
         volumes = [v for v in volumes if v is not None]
         candidate["avg_volume_20d"] = round(sum(volumes) / len(volumes), 2) if volumes else None
@@ -324,23 +390,116 @@ def attach_premarket_path(
         candidate["pm_window_starts_late"] = window_start_hhmm > collector_start
 
 
+# --------------------------------- 4b. pricing, from the collector and nowhere else
+
+def price_from_collector(
+    candidates: list[dict[str, Any]],
+    packet: Packet,
+    bars_by_symbol: dict[str, list[dict[str, Any]]],
+) -> None:
+    """Today's price and premarket volume, from the collector file and nowhere else.
+
+    Runs straight after attach_premarket_path, before a single REST call is
+    spent on enrichment, so that a candidate with no collector coverage can be
+    dropped before it costs a quote and a history call.
+    """
+    for candidate in candidates:
+        bars = bars_by_symbol.get(candidate["symbol"], [])
+        price, price_at = _collector_last(bars)
+        candidate["price"] = round(price, 4) if price is not None else None
+        candidate["price_time"] = price_at
+        candidate["price_source"] = "collector" if price is not None else None
+        # Computed once, in attach_premarket_path, off these same bars.
+        candidate["pm_volume"] = candidate.get("pm_volume_collected")
+
+
+def attach_gap(candidates: list[dict[str, Any]]) -> None:
+    """This morning's premarket price against the prior session close.
+
+    The gap is recomputed here rather than carried over from selection. The
+    selection gap was measured between two completed sessions and is a fact
+    about yesterday; the published gap is this morning's premarket price
+    against the prior session close, which is what the word gap means in this
+    report and what CRITERIA.md's day and swing screens are written against.
+    """
+    for candidate in candidates:
+        price = candidate.get("price")
+        prior_close = candidate.get("prior_close")
+        if price is None or not prior_close:
+            candidate["gap_pct"] = None
+            candidate["gap_reason"] = (
+                "no premarket price from the collector"
+                if price is None
+                else "no prior session close to measure the gap against"
+            )
+            continue
+        candidate["gap_pct"] = round((price - prior_close) / prior_close * 100.0, 4)
+        candidate["gap_reason"] = None
+
+
+def drop_uncovered(
+    candidates: list[dict[str, Any]], packet: Packet
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Split off the candidates the collector never subscribed to.
+
+    Once price comes from the collector, a name the collector was not listening
+    to has no price at all, and there is no honest way to publish it: the only
+    other number available is the stale one this whole change exists to remove.
+    Substituting it would be exactly the defect, reintroduced through the
+    exception path. So the candidate leaves the packet's candidate list, is
+    named with its reason in dropped_no_coverage, and never reaches picks.
+    """
+    kept: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    for candidate in candidates:
+        if candidate.get("price") is not None:
+            kept.append(candidate)
+            continue
+        dropped.append({
+            "symbol": candidate["symbol"],
+            "reason": candidate.get("pm_reason")
+            or "the collector recorded no bars for it, so it has no premarket price",
+            "selection_gap_pct": candidate.get("selection_gap_pct"),
+        })
+    if dropped:
+        packet.gap(
+            f"{len(dropped)} candidate(s) dropped for having no collector coverage and "
+            "therefore no premarket price, rather than being published at a stale one: "
+            + ", ".join(f"{d['symbol']} ({d['reason']})" for d in dropped)
+        )
+    return kept, dropped
+
+
 # ------------------------------------------------------- 5. premarket RVOL
 
 def attach_premarket_rvol(
-    candidates: list[dict[str, Any]], packet: Packet, cutoff: str,
-    quote_skip_reason: str | None = None,
+    candidates: list[dict[str, Any]], packet: Packet, cutoff: str
 ) -> None:
-    """ethVolume divided by the cached baseline median for the same clock cutoff.
+    """Collector premarket volume divided by the cached baseline median.
 
     Never full day relative volume. If the denominator is not trustworthy the
     answer is null and the reason is recorded, because a number computed off the
     wrong denominator is worse than no number.
 
-    quote_skip_reason is set when the delayed quote call was skipped on
-    purpose (the quota degrade path). The recorded reason must then say so:
-    blaming a vendor response that was never requested would be recording the
-    wrong reason, which is as bad as recording no reason.
+    The numerator used to be the delayed quote's ethVolume. It cannot be: that
+    field describes the previous extended session until the vendor rolls it,
+    which measurement on 2026-08-14 put after 08:45 and before 08:56. At 08:45
+    it gave ARX 20,744,130 shares, which was yesterday's post market, against a
+    premarket median of 23.5 shares, for an RVOL of 882,728. The collector is
+    the only source of today's premarket volume on this plan, so it is the
+    numerator, matching the rule that already governs premarket high, low and
+    VWAP.
+
+    One asymmetry is recorded rather than hidden. The baseline accumulates from
+    CRITERIA [baseline] session_start, 04:00, while the collector starts at
+    07:20, so the numerator covers a shorter window than the denominator and
+    the ratio is a LOWER BOUND. That direction is the safe one: it can only
+    understate relative volume, so it can only withhold a candidate from a
+    screen, never smuggle one in. Closing the gap needs a second baseline keyed
+    to the collector window; see DECISIONS.md 2026-08-14.
     """
+    numerator_window = _CRIT.clock_text("collector", "start_time")
+    denominator_window = _CRIT.clock_text("baseline", "session_start")
     with store.session() as connection:
         store.init(connection)
         for candidate in candidates:
@@ -348,7 +507,7 @@ def attach_premarket_rvol(
             candidate["pm_rvol_reason"] = None
             candidate["baseline"] = None
 
-            eth_volume = (candidate.get("quote") or {}).get("ethVolume")
+            pm_volume = candidate.get("pm_volume")
             row = baseline.get(candidate["symbol"], cutoff, connection)
             usable, why_not = baseline.usable_for_rvol(row)
             if row:
@@ -369,19 +528,25 @@ def attach_premarket_rvol(
                 candidate["pm_rvol_reason"] = why_not
                 packet.gap(f"{candidate['symbol']} premarket RVOL is null: {why_not}")
                 continue
-            if eth_volume is None:
-                if quote_skip_reason:
-                    # The collective quota gap already covers these, so no per
-                    # symbol gap line is added here.
-                    candidate["pm_rvol_reason"] = (
-                        f"ethVolume was never fetched: {quote_skip_reason}"
-                    )
-                else:
-                    candidate["pm_rvol_reason"] = "the delayed quote returned no ethVolume"
-                    packet.gap(f"{candidate['symbol']} premarket RVOL is null: no ethVolume")
+            if pm_volume is None:
+                candidate["pm_rvol_reason"] = (
+                    "the collector recorded no premarket volume for this name"
+                )
+                packet.gap(f"{candidate['symbol']} premarket RVOL is null: "
+                           "no collector premarket volume")
                 continue
 
-            candidate["pm_rvol"] = round(eth_volume / row["median_volume"], 4)
+            candidate["pm_rvol"] = round(pm_volume / row["median_volume"], 4)
+            candidate["pm_rvol_basis"] = {
+                "numerator": pm_volume,
+                "numerator_source": f"collector, from {numerator_window} ET",
+                "denominator": row["median_volume"],
+                "denominator_source": (
+                    f"baseline median, accumulated from {denominator_window} ET "
+                    f"to the {cutoff} cutoff over {row['sessions_used']} sessions"
+                ),
+                "is_lower_bound": numerator_window > denominator_window,
+            }
 
 
 # ---------------------------------------------------------- 6. catalyst news
@@ -640,13 +805,21 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
     """
     quote = candidate.get("quote") or {}
     price = candidate.get("price")
-    gap = abs(candidate.get("gap_pct") or 0.0)
+    gap_raw = candidate.get("gap_pct")
+    # None is unknown, not zero. `abs(x or 0.0)` would turn an ungapped
+    # unknown into a confident "gap_pct 0.00 fails > 3", which is a claim
+    # about the stock made out of a fact about the pipeline.
+    gap = abs(gap_raw) if gap_raw is not None else None
     market_cap = quote.get("marketCap")
     prior_high = candidate.get("prior_high")
     sma200 = quote.get("twoHundredDayAveragePrice")
 
     day_failed: list[str] = []
-    if not _CRIT.rule("day_setup", "gap_pct").test(gap):
+    if gap is None:
+        day_failed.append(
+            f"the gap was never computed: {candidate.get('gap_reason') or 'reason unrecorded'}"
+        )
+    elif not _CRIT.rule("day_setup", "gap_pct").test(gap):
         day_failed.append(f"gap_pct {gap:.2f} fails {_CRIT.rule('day_setup', 'gap_pct').describe()}")
     if not _CRIT.rule("day_setup", "price").test(price):
         day_failed.append(f"price {price} fails {_CRIT.rule('day_setup', 'price').describe()}")
@@ -664,7 +837,11 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
             day_failed.append(f"price {price} is not above the prior day high {prior_high}")
 
     swing_failed: list[str] = []
-    if not _CRIT.rule("swing_setup", "gap_pct").test(gap):
+    if gap is None:
+        swing_failed.append(
+            f"the gap was never computed: {candidate.get('gap_reason') or 'reason unrecorded'}"
+        )
+    elif not _CRIT.rule("swing_setup", "gap_pct").test(gap):
         swing_failed.append(
             f"gap_pct {gap:.2f} fails {_CRIT.rule('swing_setup', 'gap_pct').describe()}"
         )
@@ -850,43 +1027,58 @@ def build_packet() -> dict[str, Any]:
     if watchlist.get("missing"):
         packet.gap("watchlist.json is missing, so no candidate can be marked collector covered")
 
-    if thin:
-        packet.gap(f"market snapshot skipped: {quota_clause}, below the "
-                   f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]")
-        snapshot = []
-    else:
-        snapshot = market_snapshot(api, packet)
-    candidates, provenance = final_candidates(api, packet, universe_payload)
-
     # Snapshot the collector file before parsing it. The collector appends
     # until 09:25, so at 08:45 this read overlaps the write; the copy freezes
     # the bytes and a trailing partial line is discarded, not raised on.
+    #
+    # This moved ahead of the market snapshot because the market snapshot now
+    # prices from these bars too. Everything downstream reads one frozen copy.
     session_date = now.date().isoformat()
     snapshot_path = config.run_dir(session_date) / "premarket_snapshot.jsonl"
     bars_by_symbol, collector_stats = collect_premarket.snapshot_bars(
         session_date, snapshot_path
     )
     run_stats = collect_premarket.read_run_stats(session_date)
+
+    if thin:
+        packet.gap(f"market snapshot skipped: {quota_clause}, below the "
+                   f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]")
+        snapshot = []
+    else:
+        snapshot = market_snapshot(api, packet, bars_by_symbol)
+    candidates, provenance = final_candidates(api, packet, universe_payload)
     if collector_stats.get("partial_line_discarded"):
         print("scan: the collector was mid write, one partial trailing line discarded")
     if run_stats and (run_stats.get("reconnects") or 0) > 0:
         print(f"scan: the collector reconnected {run_stats['reconnects']} time(s) "
               "this morning, noted in the packet")
 
+    dropped: list[dict[str, Any]] = []
+    if candidates:
+        # Local work first: the premarket path, then the price it implies, then
+        # the drop. Everything after this point is spent only on names that
+        # actually have a price.
+        attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
+        price_from_collector(candidates, packet, bars_by_symbol)
+        candidates, dropped = drop_uncovered(candidates, packet)
+
     if candidates:
         if thin:
             # The collector file and the baseline cache are local, so the
-            # premarket path and RVOL denominators still run below. What is
-            # skipped is exactly the per candidate REST spend.
+            # premarket path, the price and the RVOL both sides still run.
+            # What is skipped is exactly the per candidate REST spend.
             packet.gap(
                 "delayed quotes, daily history and news skipped for every "
-                f"candidate: {quota_clause}. Market cap, ethVolume, the 200 day "
-                "average, prior day high and catalysts are null for quota "
-                "reasons, not vendor ones."
+                f"candidate: {quota_clause}. Market cap, the 200 day average, "
+                "the prior session close and high, the gap that is measured "
+                "against that close, and catalysts are null for quota reasons, "
+                "not vendor ones."
             )
             for candidate in candidates:
                 candidate["quote"] = {}
+                candidate["prior_close"] = None
                 candidate["prior_high"] = None
+                candidate["prior_session_date"] = None
                 candidate["avg_volume_20d"] = None
                 candidate["catalyst_found"] = None
                 candidate["catalyst_error"] = f"news call skipped: {quota_clause}"
@@ -894,9 +1086,8 @@ def build_packet() -> dict[str, Any]:
         else:
             attach_quotes(api, candidates, packet)
             attach_daily_history(api, candidates, packet)
-        attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
-        attach_premarket_rvol(candidates, packet, cutoff,
-                              quote_skip_reason=quota_clause if thin else None)
+        attach_gap(candidates)
+        attach_premarket_rvol(candidates, packet, cutoff)
         if not thin:
             attach_catalysts(api, candidates, packet)
 
@@ -908,13 +1099,18 @@ def build_packet() -> dict[str, Any]:
         events = economic_events(api, packet)
         earnings_block = earnings(api, candidates, packet)
 
+    # After pricing, before scoring. A violation ends the run here: nothing is
+    # stamped, no packet is written, and the chain stops before the analyst.
+    vintage.enforce({
+        "candidates": candidates,
+        "market_snapshot": snapshot,
+        "session_date": session_date,
+    })
+
     if candidates:
         stamp_all(candidates, earnings_block)
 
-    late_window = [
-        c["symbol"] for c in candidates
-        if c.get("pm_window_starts_late") or not c.get("collector_covered")
-    ]
+    late_window = [c["symbol"] for c in candidates if c.get("pm_window_starts_late")]
     if late_window:
         packet.gap(
             "these candidates have a partial or absent premarket window and must be "
@@ -924,6 +1120,14 @@ def build_packet() -> dict[str, Any]:
     return {
         "generated_at": ettime.stamp(now),
         "session_date": now.date().isoformat(),
+        # Which build wrote this. A report that cannot be tied to a commit
+        # cannot be explained six weeks later.
+        "build": config.build_identifier(),
+        "vintage": {
+            "checked_at": ettime.stamp(ettime.now_et()),
+            "violations": [],
+            "note": "every check in vintage.py passed, or this packet would not exist",
+        },
         "quota_preflight": quota,
         "run_time_et": ettime.hhmm(now),
         "rvol_cutoff_hhmm": cutoff,
@@ -951,6 +1155,10 @@ def build_packet() -> dict[str, Any]:
         "market_snapshot": snapshot,
         "candidate_provenance": provenance,
         "candidates": candidates,
+        # Named, not silently absent. These cleared the floors and then had no
+        # collector coverage, so they had no premarket price and were dropped
+        # rather than published at a stale one.
+        "dropped_no_coverage": dropped,
         "economic": events,
         "earnings": earnings_block,
         "criteria_summary": {
@@ -1124,6 +1332,12 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSING TO RUN: {exc}")
         eodhd.print_call_report()
         return 1
+    except vintage.StaleDataError as exc:
+        # enforce() has already named every failing row and rewritten the gate
+        # marker. Exiting non-zero is what stops the chain before the analyst.
+        print(f"REFUSING TO PUBLISH: {exc}")
+        eodhd.print_call_report()
+        return 1
 
     if thin_rerun_stands_down(payload):
         eodhd.print_call_report()
@@ -1133,7 +1347,9 @@ def main(argv: list[str] | None = None) -> int:
     write_picks(payload, force_test=args.test)
     print("")
     print(f"scan: wrote {path}")
+    dropped = payload.get("dropped_no_coverage") or []
     print(f"scan: {len(payload['candidates'])} candidates, "
+          f"{len(dropped)} dropped for no collector coverage, "
           f"{len(payload['gaps_to_fill'])} gaps to fill")
     for candidate in payload["candidates"]:
         if candidate["score"] is None:
@@ -1141,13 +1357,18 @@ def main(argv: list[str] | None = None) -> int:
                           f"missing {len(candidate.get('score_unavailable') or [])})")
         else:
             score_text = f"{candidate['score']:>4.1f} {candidate['conviction']:<7}"
+        gap = candidate.get("gap_pct")
+        gap_text = f"{gap:+7.2f}%" if gap is not None else "      ?%"
         print(
-            f"    {candidate['symbol']:<10} gap {candidate['gap_pct']:+7.2f}%  "
+            f"    {candidate['symbol']:<10} gap {gap_text}  "
             f"score {score_text} "
             f"day={'Y' if candidate['day_eligible'] else 'n'} "
             f"swing={'Y' if candidate['swing_eligible'] else 'n'}  "
-            f"rvol={candidate.get('pm_rvol')}  covered={candidate.get('collector_covered')}"
+            f"rvol={candidate.get('pm_rvol')}  price={candidate.get('price')} "
+            f"from {candidate.get('price_source')}"
         )
+    for row in dropped:
+        print(f"    dropped: {row['symbol']:<10} {row['reason']}")
     for gap in payload["gaps_to_fill"]:
         print(f"    gap: {gap}")
     eodhd.print_call_report()
