@@ -29,13 +29,13 @@ import json
 import sys
 from typing import Any
 
-import collect_premarket
-import config
-import criteria
-import eodhd
-import ettime
-import job_status
-import store
+from collect import collect_premarket
+from core import config
+from core import criteria
+from core import eodhd
+from core import ettime
+from ops import job_status
+from core import store
 
 _CRIT = criteria.load()
 

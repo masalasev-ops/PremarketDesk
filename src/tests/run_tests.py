@@ -27,18 +27,18 @@ import importlib
 import sys
 import traceback
 
-import conftest
+from tests import conftest
 
 SUITE = (
-    "test_store",
-    "test_scrub",
-    "test_containment",
-    "test_vintage",
-    "test_repricing",
-    "test_pool",
-    "test_backtest",
-    "test_txn_guard",
-    "test_entrypoints",
+    "tests.test_store",
+    "tests.test_scrub",
+    "tests.test_containment",
+    "tests.test_vintage",
+    "tests.test_repricing",
+    "tests.test_pool",
+    "tests.test_backtest",
+    "tests.test_txn_guard",
+    "tests.test_entrypoints",
 )
 
 

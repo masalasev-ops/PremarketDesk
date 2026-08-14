@@ -32,11 +32,11 @@ import sys
 import time
 from typing import Any
 
-import config
-import eodhd
-import ettime
+from core import config
+from core import eodhd
+from core import ettime
 
-import collect_premarket
+from collect import collect_premarket
 
 SELF_CALLS = 2  # the before and after user endpoint reads
 
@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
           "during the run, the delta is contaminated.")
 
     command = [
-        sys.executable, str(config.SRC_DIR / "collect_premarket.py"),
+        sys.executable, str(config.SRC_DIR / "collect" / "collect_premarket.py"),
         "--minutes", str(args.minutes),
     ]
     if args.chaos_reconnects:

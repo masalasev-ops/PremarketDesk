@@ -28,11 +28,11 @@ from typing import Any
 
 import markdown
 
-import config
-import criteria
-import ettime
-import job_status
-import render_report
+from core import config
+from core import criteria
+from core import ettime
+from ops import job_status
+from morning import render_report
 
 _CRIT = criteria.load()
 

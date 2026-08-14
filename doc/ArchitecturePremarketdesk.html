@@ -796,7 +796,7 @@ tbody tr:hover{background:var(--ground)}
   <h2><span class="n">10</span> &nbsp;Failure</h2>
   <h3>Failure behaviour</h3>
   <p>No job in the data path retries another and no job waits on one. The watchdog
-  (<code>src/monitor_jobs.py</code>, fired every 30 minutes for two hours from 07:25 and again at
+  (<code>src/ops/monitor_jobs.py</code>, fired every 30 minutes for two hours from 07:25 and again at
   22:45) is the deliberate exception: it checks Task Scheduler's record against each job's dated log
   and relaunches only what is idempotent, at most <code>max_reruns_per_job_per_day</code> = 1 rerun
   per job per day, so a hard failure cannot loop. The nightly is always safe to rerun, the morning

@@ -19,11 +19,11 @@ the design, not a config value.
 1. **One data source.** Every market number comes from EODHD All-In-One
    (REST and the US trades websocket). Nothing is fetched from anywhere else.
 2. **Every threshold lives in `doc/CRITERIA.md`.** The strict reader in
-   `src/criteria.py` raises on a missing key, and no decision literal is
+   `src/core/criteria.py` raises on a missing key, and no decision literal is
    allowed in Python. To retune the system you edit a markdown file.
 3. **The narrative pass uses the claude CLI as a subprocess**, authenticated
    by a logged in Claude subscription. There is no Anthropic SDK anywhere,
-   and `src/config.py` actively refuses to read or pass `ANTHROPIC_API_KEY`.
+   and `src/core/config.py` actively refuses to read or pass `ANTHROPIC_API_KEY`.
 4. **Missing evidence stays missing.** A field the pipeline could not get is
    null with a recorded reason. It is never filled from another day, another
    source, or a guess.
@@ -77,7 +77,7 @@ reads every day. It exists because `pool_recall.py` raised NameError on every
 nightly run for a week: its exit code is ignored by design so a diagnostic
 cannot break the chain, and nothing recorded that it had failed.
 
-Every weekday job first runs `src/market_today.py`, a trading day guard built
+Every weekday job first runs `src/ops/market_today.py`, a trading day guard built
 on the cached EODHD exchange calendar. It exits 3 on a weekend or an official
 holiday and the calling `.bat` logs one line and stops cleanly, so the tasks
 stay registered plain Monday to Friday and holidays take care of themselves.
@@ -104,7 +104,7 @@ rebuild every week, and the rebuild is what keeps the following week alive.
   window. Task Scheduler triggers are machine local time; if your machine
   keeps another zone, re-derive the times in `tasks/register_tasks.ps1` from
   the clocks in `doc/CRITERIA.md` before registering. The Python code itself
-  computes Eastern time internally (`src/ettime.py`) regardless of the
+  computes Eastern time internally (`src/core/ettime.py`) regardless of the
   machine zone.
 
 ## Setup
@@ -129,20 +129,21 @@ rebuild every week, and the rebuild is what keeps the following week alive.
    versions:
 
    ```
-   .venv\Scripts\python.exe src\config.py
+   set PYTHONPATH=%CD%\src
+   .venv\Scripts\python.exe -m core.config
    ```
 
 4. **Arm the delivery gate.** This creates `data\UNVERIFIED`, and
    `deliver.py` refuses to email while that file exists:
 
    ```
-   .venv\Scripts\python.exe src\verify_morning.py --arm
+   .venv\Scripts\python.exe -m morning.verify_morning --arm
    ```
 
 5. **Build the first universe.** Normally the Sunday job's work:
 
    ```
-   .venv\Scripts\python.exe src\universe.py
+   .venv\Scripts\python.exe -m selection.universe
    ```
 
 6. **Register the scheduled jobs:**
@@ -159,7 +160,7 @@ rebuild every week, and the rebuild is what keeps the following week alive.
    structurally. Details and caveats are in `tasks/README.md`.
 
 7. **Let a real morning run**, then read the gate table that
-   `src/verify_morning.py` prints into `logs\morning-chain-YYYY-MM-DD.log`.
+   `src/morning/verify_morning.py` prints into `logs\morning-chain-YYYY-MM-DD.log`.
    For the first three candidates it lays the evidence out on one line: the
    price and the minute it printed, the collector's premarket volume, the
    cached baseline median, the RVOL those two produce, and the bar count
@@ -213,7 +214,7 @@ Other documents:
 
 - **EODHD:** the websocket collector was measured at zero against the
   vendor's own API counter (connections, subscribes, and reconnects
-  included; `src/measure_socket_cost.py` reproduces the measurement). REST
+  included; `src/research/measure_socket_cost.py` reproduces the measurement). REST
   usage is a few hundred counted calls a day. Discovery spends two bulk end
   of day calls at a measured 98 counted calls each, plus one earnings
   calendar call and up to five news calls; the baseline warm spends one
@@ -233,13 +234,13 @@ Other documents:
 
 ## When things go wrong
 
-- **The watchdog usually acts first.** `src/monitor_jobs.py` reruns anything
+- **The watchdog usually acts first.** `src/ops/monitor_jobs.py` reruns anything
   idempotent at most once per day, restarts a dead collector only while the
   premarket window is open and no collector is alive, and never reruns
   discovery after the collector starts. Its reasoning is in
   `logs\monitor-YYYY-MM-DD.log`.
 - **Antivirus TLS interception** (Norton and similar re-sign HTTPS with
-  their own root): `src/config.py` detects the local root and widens the
+  their own root): `src/core/config.py` detects the local root and widens the
   trust store instead of turning verification off. The same suites
   occasionally deny a first file write; scripts retry, and a one line
   permission error in a log that still ends `rc=0` was a survived retry.

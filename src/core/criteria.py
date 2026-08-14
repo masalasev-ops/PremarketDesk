@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import config
+from core import config
 
 # Suffixes allowed on a number so a market cap floor stays readable.
 _MAGNITUDE = {"K": 1_000.0, "M": 1_000_000.0, "B": 1_000_000_000.0}

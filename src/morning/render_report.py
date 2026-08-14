@@ -14,9 +14,9 @@ from pathlib import Path
 
 import markdown
 
-import config
-import ettime
-import job_status
+from core import config
+from core import ettime
+from ops import job_status
 
 _EXTENSIONS = ["tables", "fenced_code", "sane_lists"]
 

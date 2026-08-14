@@ -44,7 +44,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterator
 
-import config
+from core import config
 
 # Every config attribute that names something writable, and the modules that
 # copied one at import time. A new module holding a path constant has to be
@@ -55,13 +55,13 @@ _CONFIG_PATHS = (
 )
 
 _DERIVED = (
-    ("backtest_pool", "CACHE_DIR", lambda c: c.DATA_DIR / "backtest"),
-    ("backtest_pool", "EOD_DIR", lambda c: c.DATA_DIR / "backtest" / "eod"),
-    ("backtest_pool", "SESSION_DIR", lambda c: c.DATA_DIR / "backtest" / "sessions"),
-    ("job_status", "RECORD_PATH", lambda c: c.DATA_DIR / "job-status.jsonl"),
-    ("market_today", "CACHE_PATH", lambda c: c.DATA_DIR / "exchange-details.json"),
-    ("monitor_jobs", "STATE_PATH", lambda c: c.DATA_DIR / "monitor-reruns.json"),
-    ("verify_morning", "UNVERIFIED_MARKER", lambda c: c.DATA_DIR / "UNVERIFIED"),
+    ("research.backtest_pool", "CACHE_DIR", lambda c: c.DATA_DIR / "backtest"),
+    ("research.backtest_pool", "EOD_DIR", lambda c: c.DATA_DIR / "backtest" / "eod"),
+    ("research.backtest_pool", "SESSION_DIR", lambda c: c.DATA_DIR / "backtest" / "sessions"),
+    ("ops.job_status", "RECORD_PATH", lambda c: c.DATA_DIR / "job-status.jsonl"),
+    ("ops.market_today", "CACHE_PATH", lambda c: c.DATA_DIR / "exchange-details.json"),
+    ("ops.monitor_jobs", "STATE_PATH", lambda c: c.DATA_DIR / "monitor-reruns.json"),
+    ("morning.verify_morning", "UNVERIFIED_MARKER", lambda c: c.DATA_DIR / "UNVERIFIED"),
 )
 
 # Real roots, captured before anything is redirected. Kept because the escape

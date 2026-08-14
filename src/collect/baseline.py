@@ -24,12 +24,12 @@ import datetime as dt
 import statistics
 from typing import Any
 
-import config
-import criteria
-import eodhd
-import ettime
-import job_status
-import store
+from core import config
+from core import criteria
+from core import eodhd
+from core import ettime
+from ops import job_status
+from core import store
 
 _CRIT = criteria.load()
 
@@ -321,7 +321,7 @@ def main(argv: list[str] | None = None) -> int:
 
     tickers = [t.upper() for t in args.ticker]
     if not tickers:
-        import discover
+        from selection import discover
 
         watchlist = discover.load_watchlist()
         # Subscribed names only. Warming a baseline for a name the collector

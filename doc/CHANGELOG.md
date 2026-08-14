@@ -15,6 +15,52 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-14, seventh: src/ is organised into packages by role
+
+Forty files sat flat in src/: production modules, tests, one off probes and
+measurement scripts, indistinguishable from each other. They are now eight
+packages, and src/ itself is the import root.
+
+| package | what belongs there |
+|---|---|
+| `core` | config, criteria, ettime, store, eodhd. Infrastructure everything rests on; nothing here knows what a gapper is. |
+| `ops` | job_status, market_today, monitor_jobs. Whether the machine is running correctly. |
+| `selection` | universe, discover, gap_stats. Which names are worth watching, decided before the open. |
+| `collect` | collect_premarket, baseline. Today's tape and the baseline its RVOL is measured against. |
+| `morning` | scan, vintage, analyst, render_report, verify_morning, deliver. The 08:45 chain in order. |
+| `night` | backfill_premarket, fill_outcomes, pool_recall, build_archive. |
+| `research` | backtest_pool, probe_live_v1, the two measure_ scripts. Instruments, not pipeline. |
+| `tests` | conftest, run_tests and the nine test_ modules. |
+
+**Module names did not change, only where they live.** `import config` became
+`from core import config`, so every `config.X` usage in the codebase stayed
+valid and the change was about 200 import lines rather than a rewrite of
+thousands of call sites. That was the whole point of choosing this shape over
+a renamed package hierarchy.
+
+Scripts run as `python -m package.module` with `PYTHONPATH` set to src, which
+is what every `.bat` now does. Running a file by path would put its own
+package directory on `sys.path` instead of src, and every import would fail.
+
+**The one genuinely dangerous edit** was `config.PROJECT_ROOT`. It was
+`Path(__file__).parent.parent`, and config.py moved down a level, so it would
+have silently pointed every writable path at src/ instead of the repository.
+It is now spelled out in three named steps rather than chained, with a comment
+saying why.
+
+Verified before commit: every module imports in its new home; all 24 module
+invocations across the seven `.bat` files resolve; `job_monitor.bat` runs end
+to end through real Task Scheduler semantics and writes its dated log; nine
+suites pass; both sandbox escape provers still fail correctly; `criteria.py`
+resolves every key; and `config.build_identifier()` still finds `.git`.
+
+One first run after the move reported a single changed path that could not be
+captured and has not reproduced across five subsequent runs, including a
+deliberate cold run with every `__pycache__` deleted. It left nothing behind
+in the working tree. Recorded as unexplained rather than attributed, since the
+last thing recorded as a transient in this project turned out to be a real
+defect of our own making.
+
 ## 2026-08-14, sixth: everything outstanding, in the order it had to run
 
 ### The news window counts trading sessions
@@ -176,7 +222,7 @@ from 09:30 would return the prior close all morning and be indistinguishable
 from the bulk endpoint until the bell. Treating the regular hours reading as
 the answer would be the same overreach that produced Thursday's report.
 
-So `src/probe_live_v1.py` samples five context tickers every three minutes
+So `src/research/probe_live_v1.py` samples five context tickers every three minutes
 from 08:00 to 09:15 and puts the collector's own bar for the same minute
 beside each reading, the collector being ground truth because it is a trade
 socket. Roughly 26 calls, five symbols to a request. It is standalone: nothing
@@ -454,7 +500,7 @@ a watchdog that failed the nightly because a diagnostic died would be worse.
 
 ### Every job now records whether it succeeded
 
-`src/job_status.py`. Every scheduled step appends one line to
+`src/ops/job_status.py`. Every scheduled step appends one line to
 `data/job-status.jsonl` as it exits: job name, start and end in ET, status,
 exception type, and one count of what it produced. Written in a `finally`
 block, catching BaseException, so a collector killed with Ctrl-C and a nightly
@@ -487,7 +533,7 @@ worst few, because sixteen named steps is one problem rather than sixteen.
 
 ### Tests cover entrypoints now, not only the functions beneath them
 
-`src/test_entrypoints.py` drives all sixteen scheduled entrypoints through
+`src/tests/test_entrypoints.py` drives all sixteen scheduled entrypoints through
 their own `main`, with the arguments the `.bat` passes, against the sandbox
 roots. The HTTP client is stubbed with a scripted session that records every
 path, so each step asserts the endpoints it actually asked for. Two steps
@@ -663,7 +709,7 @@ named `selection_*` and overwritten before scoring. See DECISIONS.md.
 ### A vintage assertion that ends the run
 
 Nothing in the pipeline had ever asked whether the data was from today, so
-nothing objected. `src/vintage.py` now asks, after pricing and before scoring,
+nothing objected. `src/morning/vintage.py` now asks, after pricing and before scoring,
 and a violation ends the run: the gate marker is rewritten naming every failing
 row and scan exits non-zero, which stops the morning chain before the analyst
 call. There is no degrade path, because a stale price is not thin evidence to
@@ -681,7 +727,7 @@ Check (b) alone would have caught this morning without a single vendor call:
 six of the twelve candidates carried a `prior_high` below their own
 `prior_close`. Replaying that packet through the check now fires (a), (b) and
 (d), leaves (c) silent because that field was in fact correct, and names all
-six impossible rows in the marker file. `src/test_vintage.py`.
+six impossible rows in the marker file. `src/tests/test_vintage.py`.
 
 ### A floor under the RVOL denominator
 
@@ -820,7 +866,7 @@ against it and it says the assumption is wrong below tier 1.
 
 The tool that produced the 2026-08-13 recall numbers was a scratchpad script.
 It is the instrument that decides the tier ordering, so it is now
-src/backtest_pool.py, version controlled and tested, and split into two stages
+src/research/backtest_pool.py, version controlled and tested, and split into two stages
 that never run together.
 
 **fetch** reconstructs one historical session's inputs, the earnings calendar,
@@ -831,7 +877,7 @@ the only stage that touches the network.
 
 **evaluate** reads the cache and nothing else, applies a named ordering
 configuration, and reports pool recall, subscribed recall, per tier hit rates
-and the missed names. src/test_backtest.py arms every outbound path to raise
+and the missed names. src/tests/test_backtest.py arms every outbound path to raise
 and then runs every ordering to completion, so the zero network claim is
 asserted rather than asserted-to.
 
@@ -850,7 +896,7 @@ exactly: 99 gapped, pool held 72 at 0.7273, subscribed held 28 at 0.2828.
 
 ### Gap propensity, measured rather than proxied
 
-src/gap_stats.py computes, for every universe name over a trailing 250
+src/selection/gap_stats.py computes, for every universe name over a trailing 250
 sessions, the fraction of sessions whose open sat beyond the discovery gap
 floor from the prior close, the median absolute gap on those sessions, and 20
 day ATR as a percent of price. It rides the universe rebuild schedule in
@@ -941,9 +987,9 @@ anything.
 
 ### Test isolation became structural
 
-src/conftest.py redirects every writable root, sourced from config so a test
+src/tests/conftest.py redirects every writable root, sourced from config so a test
 cannot bypass it by building a path itself, and rebinds the six module level
-constants that captured one at import time. src/run_tests.py wraps the suite in
+constants that captured one at import time. src/tests/run_tests.py wraps the suite in
 it and photographs the real runs/ and data/ before and after, failing on any
 difference. Deliberately not a pytest conftest: pytest is not a dependency and
 requirements.txt is three lines on purpose.
@@ -1015,7 +1061,7 @@ sqlite3.Connection cannot be weak referenced, so connect() returns a
 _TrackedConnection subclass that can, and the registry holds those weakly so a
 closed connection drops out on its own.
 
-src/test_txn_guard.py asserts three things: a request under a deliberately
+src/tests/test_txn_guard.py asserts three things: a request under a deliberately
 opened transaction raises and names the endpoint; a connection that has only
 read is not a transaction and does not trip it, while the same connection does
 the moment a write begins one; and the whole morning chain runs clean, having

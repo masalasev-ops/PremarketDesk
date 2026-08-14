@@ -5,6 +5,13 @@ the project root, runs its scripts with the project venv, and appends stdout
 and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped by the
 project's own ET clock so a locale change cannot mangle the file name.
 
+Each .bat sets `PYTHONPATH` to the project's `src` directory and invokes its
+steps as `python -m package.module`. src/ is the import root and every module
+lives in a package under it (core, ops, selection, collect, morning, night,
+research, tests), so running a file by path would put that package's own
+directory on `sys.path` instead of src, and every `from core import config`
+would fail. If you add a step, use `-m`, not a path.
+
 Each .bat also sets `PMD_JOB` to its own name. Every step it runs appends one
 line to `data\job-status.jsonl` as it exits, and that name is what says which
 job the step ran under. Running a script by hand records `manual` instead,

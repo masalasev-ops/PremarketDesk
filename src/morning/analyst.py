@@ -27,10 +27,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import config
-import criteria
-import ettime
-import job_status
+from core import config
+from core import criteria
+from core import ettime
+from ops import job_status
 
 _CRIT = criteria.load()
 

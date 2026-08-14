@@ -22,11 +22,11 @@ import json
 import sys
 from typing import Any
 
-import config
-import criteria
-import eodhd
-import ettime
-import job_status
+from core import config
+from core import criteria
+from core import eodhd
+from core import ettime
+from ops import job_status
 
 _CRIT = criteria.load()
 

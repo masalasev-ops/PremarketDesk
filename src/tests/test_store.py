@@ -20,7 +20,7 @@ import sqlite3
 import sys
 import tempfile
 
-import store
+from core import store
 
 
 def _is_closed(connection: sqlite3.Connection) -> bool:
@@ -40,7 +40,7 @@ def main() -> int:
     # machine rather than of the code under test. It also means a test could
     # corrupt the outcome history. Same reasoning as the runs/ sandbox in
     # test_scrub.py.
-    import config
+    from core import config
 
     real_db = config.DB_PATH
     sandbox = tempfile.mkdtemp(prefix="premarketdesk-test-store-")

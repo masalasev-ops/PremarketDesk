@@ -23,11 +23,11 @@ import datetime as dt
 import sys
 from typing import Any
 
-import criteria
-import eodhd
-import ettime
-import job_status
-import store
+from core import criteria
+from core import eodhd
+from core import ettime
+from ops import job_status
+from core import store
 
 _CRIT = criteria.load()
 

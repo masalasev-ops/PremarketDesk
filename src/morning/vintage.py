@@ -24,9 +24,9 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any
 
-import criteria
-import ettime
-import market_today
+from core import criteria
+from core import ettime
+from ops import market_today
 
 _CRIT = criteria.load()
 
@@ -219,7 +219,7 @@ def enforce(payload: dict[str, Any]) -> None:
     if not violations:
         return
 
-    import verify_morning
+    from morning import verify_morning
 
     session_date = payload.get("session_date")
     body = (

@@ -38,11 +38,11 @@ from typing import Any, Iterable
 
 import websocket
 
-import config
-import criteria
-import discover
-import ettime
-import job_status
+from core import config
+from core import criteria
+from selection import discover
+from core import ettime
+from ops import job_status
 
 _CRIT = criteria.load()
 
@@ -570,7 +570,7 @@ def run_poll(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str, Any]
     Every row is stamped src=poll, and any premarket high derived from it
     understates the real one.
     """
-    import eodhd
+    from core import eodhd
 
     api = eodhd.client()
     previous_volume: dict[str, float] = {}
@@ -619,7 +619,7 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     """
     import statistics as stats
 
-    import eodhd
+    from core import eodhd
 
     api = eodhd.client()
     bars = read_bars(day)
@@ -699,13 +699,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.verify_intraday:
         day = ettime.today_str() if args.verify_intraday == "today" else args.verify_intraday
         result = verify_against_intraday(day)
-        import eodhd as _eodhd
+        from core import eodhd as _eodhd
 
         _eodhd.print_call_report()
         return 0 if result else 1
 
     config.ensure_dirs()
-    import eodhd  # imported here so the atexit call report covers every mode
+    from core import eodhd  # imported here so the atexit call report covers every mode
 
     watchlist = discover.load_watchlist()
     if watchlist.get("missing"):
@@ -839,7 +839,7 @@ def _poll_snapshot(symbols: list[str], label: str) -> dict[str, tuple[float, flo
     roughly seventeen minutes behind, and using the wall clock instead is what
     made the first verification attempt meaningless.
     """
-    import eodhd
+    from core import eodhd
 
     api = eodhd.client()
     data, error = api.live_quotes(symbols)

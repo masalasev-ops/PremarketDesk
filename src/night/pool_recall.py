@@ -28,12 +28,12 @@ import json
 import sys
 from typing import Any
 
-import config
-import criteria
-import eodhd
-import ettime
-import job_status
-import universe
+from core import config
+from core import criteria
+from core import eodhd
+from core import ettime
+from ops import job_status
+from selection import universe
 
 _CRIT = criteria.load()
 
@@ -133,8 +133,8 @@ def measure(
 
 def build(session_date: str | None = None, write: bool = True) -> dict[str, Any]:
     config.ensure_dirs()
-    import discover
-    import vintage
+    from selection import discover
+    from morning import vintage
 
     today = ettime.parse_date(session_date) if session_date else ettime.today_et()
     # The same floor the morning screen uses, so recall is measured against the

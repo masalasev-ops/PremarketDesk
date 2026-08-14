@@ -55,11 +55,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-import collect_premarket
-import config
-import criteria
-import eodhd
-import ettime
+from collect import collect_premarket
+from core import config
+from core import criteria
+from core import eodhd
+from core import ettime
 
 _CRIT = criteria.load()
 

@@ -22,10 +22,10 @@ import sys
 
 import requests
 
-import config
-import eodhd
-import scan
-import store
+from core import config
+from core import eodhd
+from morning import scan
+from core import store
 
 
 class _DeadSession:

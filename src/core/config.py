@@ -22,8 +22,12 @@ from typing import Any
 # The one environment variable this project refuses to touch.
 FORBIDDEN_KEYS = frozenset({"ANTHROPIC_API_KEY"})
 
-# Code lives in src/, documents in doc/, so the project root is one level up.
-SRC_DIR = Path(__file__).resolve().parent
+# This file lives at src/core/config.py, so the project root is two levels up
+# from the directory holding it. Getting this wrong relocates every writable
+# path in the project by one directory, silently, which is why it is spelled
+# out rather than chained: SRC_DIR is src/, PROJECT_ROOT is the repository.
+CORE_DIR = Path(__file__).resolve().parent
+SRC_DIR = CORE_DIR.parent
 PROJECT_ROOT = SRC_DIR.parent
 DOC_DIR = PROJECT_ROOT / "doc"
 

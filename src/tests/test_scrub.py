@@ -22,9 +22,9 @@ import tempfile
 
 import requests
 
-import config
-import eodhd
-import scan
+from core import config
+from core import eodhd
+from morning import scan
 
 
 class _ExplodingSession:

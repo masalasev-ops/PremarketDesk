@@ -42,12 +42,12 @@ from typing import Any, Iterable, NamedTuple
 
 import requests
 
-import config
-import criteria
-import ettime
+from core import config
+from core import criteria
+from core import ettime
 # store imports config only, so this cannot cycle. The dependency exists so the
 # HTTP chokepoint can refuse to fire underneath an open database transaction.
-import store
+from core import store
 
 _CRIT = criteria.load()
 

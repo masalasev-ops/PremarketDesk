@@ -17,17 +17,17 @@ import json
 import sys
 from pathlib import Path
 
-import config
-import eodhd
-import ettime
-import job_status
+from core import config
+from core import eodhd
+from core import ettime
+from ops import job_status
 
 
 def deliver(html_path: Path) -> int:
     # The first morning verification gate. verify_morning.py owns the marker;
     # a human deletes it after watching one real morning's numbers, and until
     # then no email leaves this machine no matter what keys are configured.
-    import verify_morning
+    from morning import verify_morning
 
     if verify_morning.UNVERIFIED_MARKER.exists():
         print(

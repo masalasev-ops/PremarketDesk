@@ -37,12 +37,12 @@ import statistics
 import sys
 from typing import Any, Callable
 
-import config
-import criteria
-import discover
-import eodhd
-import ettime
-import universe
+from core import config
+from core import criteria
+from selection import discover
+from core import eodhd
+from core import ettime
+from selection import universe
 
 _CRIT = criteria.load()
 
@@ -520,7 +520,7 @@ def evaluate_session(
     cap: int,
     tier_floor: int = 0,
 ) -> dict[str, Any]:
-    import pool_recall
+    from night import pool_recall
 
     inputs, outcome = load_session(session_date)
     pool = build_pool(inputs, metrics)
@@ -575,7 +575,7 @@ def load_metrics(as_of: str | None = None) -> dict[str, dict[str, Any]]:
     partly from the sessions it is being scored on and every key derived from it
     gets a look ahead advantage over dollar volume, which has none.
     """
-    import gap_stats
+    from selection import gap_stats
 
     universe_payload = universe.load_universe(require_fresh=False)
     metrics: dict[str, dict[str, Any]] = {}
@@ -712,7 +712,7 @@ def blindspot(as_of: str | None = None) -> dict[str, Any]:
     of a propensity and one 95 short are not the same problem: the first fixes
     itself in a fortnight.
     """
-    import gap_stats
+    from selection import gap_stats
 
     stats = gap_stats.load_all(as_of)
     sessions = cached_sessions()

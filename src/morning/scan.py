@@ -27,17 +27,17 @@ import json
 from typing import Any
 from urllib.parse import urlparse
 
-import baseline
-import collect_premarket
-import config
-import criteria
-import discover
-import eodhd
-import ettime
-import job_status
-import store
-import universe
-import vintage
+from collect import baseline
+from collect import collect_premarket
+from core import config
+from core import criteria
+from selection import discover
+from core import eodhd
+from core import ettime
+from ops import job_status
+from core import store
+from selection import universe
+from morning import vintage
 
 _CRIT = criteria.load()
 
@@ -1232,7 +1232,7 @@ def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) 
 # ------------------------------------------------------------------- runner
 
 def _calendar_cache_state() -> dict[str, Any]:
-    import market_today
+    from ops import market_today
 
     return market_today.cache_state(
         _CRIT.integer("calendar", "refresh_after_days"))
@@ -1243,7 +1243,7 @@ def build_packet() -> dict[str, Any]:
     # The 08:45 window does not spend itself fetching a calendar. The nightly
     # refreshes it; if it is stale anyway the run proceeds on the cached copy
     # and calendar_cache in the packet records that it did.
-    import market_today
+    from ops import market_today
 
     market_today.ALLOW_NETWORK = False
 

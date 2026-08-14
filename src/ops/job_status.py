@@ -45,9 +45,9 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
-import config
-import criteria
-import ettime
+from core import config
+from core import criteria
+from core import ettime
 
 _CRIT = criteria.load()
 
@@ -206,7 +206,7 @@ def sessions_between(day: dt.date, now: dt.date) -> int:
     the calendar cannot answer, weekdays are counted instead, which errs
     towards reporting a job as stale rather than towards silence.
     """
-    import market_today
+    from ops import market_today
 
     if now <= day:
         return 0

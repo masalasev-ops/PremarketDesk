@@ -44,37 +44,37 @@ brain, no merge step, no yfinance, no Anthropic API key anywhere.
 ## Repository layout
 
 The owner asked mid build for code under src/ and documents under doc/.
-config.py owns every path and resolves the project root as the parent of
-src/, so scripts are invoked as `.venv\Scripts\python.exe src\<name>.py` from
-the project root. Everything a script generates (data/, runs/, logs/) stays
+On 2026-08-14 src/ was split into packages by role: core, ops, selection,
+collect, morning, night, research and tests. Module names did not change,
+only where they live, so `import config` became `from core import config`
+and every `config.X` usage stayed valid. src/ is the import root, so
+scripts run as `.venv\Scripts\python.exe -m <package>.<module>` with
+PYTHONPATH set to src, which is what every .bat now does. config.py sits
+at src/core/config.py and resolves the project root two levels up. Everything a script generates (data/, runs/, logs/) stays
 at the root and is gitignored along with .env.
 
-- src/: config, ettime, criteria, eodhd, store, universe, discover,
-  collect_premarket, baseline, scan, analyst, render_report, deliver,
-  backfill_premarket, fill_outcomes, verify_morning, build_archive,
-  vintage (the today or refuse check scan runs after pricing and before
-  scoring), pool_recall (the nightly measurement of what the candidate pool
-  missed), gap_stats (per name gap propensity, weekly, on the universe
-  schedule), backtest_pool (the fetch and evaluate harness that decides the
-  pool ordering), job_status (the append only record of what every scheduled
-  step did, and the overdue line the morning report carries),
-  conftest and run_tests (the test sandbox and the mtime
-  check that proves the suite wrote nothing under runs/ or data/),
-  market_today (the trading day guard every weekday job runs first: exit 3
-  on weekends and official holidays from the cached EODHD exchange-details
-  calendar, the .bat logs one line and stops; calendar unreachable with no
-  cache assumes open on purpose), monitor_jobs (the watchdog: cross checks
-  Task Scheduler's last run record against each job's dated log markers,
-  reruns only what is idempotent per CRITERIA [monitor], never starts a
-  second live collector, caps reruns at one per job per day; scheduled
-  07:25 to 09:25 every 30 minutes and once at 22:45),
-  measure_socket_cost (vendor counter before and after a collector-only
-  run)
+- src/ is split into packages by role, and src/ itself is the import root:
+  - core/    config, criteria, ettime, store, eodhd. Infrastructure every
+             other package rests on; nothing here knows what a gapper is.
+  - ops/     job_status, market_today, monitor_jobs. Whether the machine is
+             running correctly: the status record, the trading day guard and
+             the watchdog.
+  - selection/ universe, discover, gap_stats. Which names are worth watching,
+             decided before the open.
+  - collect/ collect_premarket, baseline. Today's tape, and the volume
+             baseline its RVOL is measured against.
+  - morning/ scan, vintage, analyst, render_report, verify_morning, deliver.
+             The 08:45 chain in order.
+  - night/   backfill_premarket, fill_outcomes, pool_recall, build_archive.
+             What runs once the vendor has published the full day.
+  - research/ backtest_pool, probe_live_v1, the two measure_ scripts.
+             Instruments, not pipeline. Nothing downstream reads their output.
+  - tests/   conftest, run_tests and the nine test_ modules.
 - doc/: this file, CHANGELOG.md, DECISIONS.md, CRITERIA.md,
   REPORT_TEMPLATE.md, prompt_analyst.md, the two architecture pages,
   sample_report.html
-- tasks/: six job .bat files, register_tasks.ps1, README.md. The six .bat
-  files register as eight scheduled tasks: job_nightly runs twice, at
+- tasks/: seven job .bat files, register_tasks.ps1, README.md. They
+  register as nine scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
   repeating weekday trigger and once more at 22:45
 - data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,
@@ -238,7 +238,7 @@ at the root and is gitignored along with .env.
   they reach SQL; and the collector scrubs the API token out of exception
   text before printing (config.scrub_secrets), because the websocket URL
   carries the token and a handshake exception can quote the URL into a
-  log. Proofs: src/test_store.py, the extended src/test_containment.py
+  log. Proofs: src/tests/test_store.py, the extended src/tests/test_containment.py
   (Sym headed column produces the unvalidated disclaimer), and a forced
   connection failure that logged only the masked URL, with a grep of
   logs/ for the token prefix returning nothing. Extended the same day: the
@@ -248,7 +248,7 @@ at the root and is gitignored along with .env.
   and a belt scrub at the exit); deliver.py scrubs its Resend failure
   prints the same way; config.mask now shows only the last four characters,
   because first-and-last-four reveals enough to identify a token against a
-  list; and src/test_scrub.py forces a tokenised network failure through
+  list; and src/tests/test_scrub.py forces a tokenised network failure through
   the chokepoint and through a whole packet build, asserting the mask
   appears and the raw token appears nowhere in the returned error, the
   ledger, gaps_to_fill, or the serialized packet.
@@ -301,7 +301,7 @@ CP9 deterministic score: `--rescore` run twice on the same packet produced
 byte identical output (fc: no differences).
 
 CP10 analyst: doc/REPORT_TEMPLATE.md (eleven fixed sections),
-doc/prompt_analyst.md (the numbered rules), src/analyst.py. Pipes prompt plus
+doc/prompt_analyst.md (the numbered rules), src/morning/analyst.py. Pipes prompt plus
 template plus packet to the CLI on stdin, parses the JSON envelope, writes
 report.md and analyst_usage.json, logs tokens and cost, then runs the
 containment checker: every uppercase token in the report must exist in the
@@ -319,7 +319,7 @@ timeout_s = 218, three times the slowest of the five measured runs named in
 CRITERIA.md. The containment checker was also rebuilt: a claim is an
 uppercase token in a table cell or with a $ prefix that names a real
 universe member; prose acronyms (CEO, FOMC, CPI...) can no longer trip it,
-src/test_containment.py proves both directions, and a containment failure is
+src/tests/test_containment.py proves both directions, and a containment failure is
 fatal again on every path including the fallback.
 
 CP11 render and deliver: report.html via the markdown library (tables,
@@ -331,7 +331,7 @@ CP12 picks: one row per candidate upserted on (date, ticker) from scan.py.
 Ran scan twice: 12 rows both times, no duplicates. entry_ref is pm_high,
 stop_ref is pm_low, the reasoning is documented in CRITERIA.md [picks].
 
-CP13 backfill: src/backfill_premarket.py widens picks with pm_high_true,
+CP13 backfill: src/night/backfill_premarket.py widens picks with pm_high_true,
 pm_low_true, pm_vwap_true, pm_true_bars, pm_source_disagreement, and writes
 the true 04:00 to 09:30 window from intraday 1m bars next to the morning
 values, never over them. A true high below the live high is a feed
@@ -343,7 +343,7 @@ recent sessions, and writes verify_intraday.json for the record. The fill
 math was proven against 2026-08-12 (AAPL 330 of 330 premarket minutes);
 today's rows fill tonight when intraday catches up.
 
-CP14 outcomes: src/fill_outcomes.py fills next session open, high, low,
+CP14 outcomes: src/night/fill_outcomes.py fills next session open, high, low,
 close, fifth session close, whether pm_high broke the next day, and the
 excursions around entry_ref and stop_ref, on the SPY session calendar, never
 weekday math. Proven idempotent: a seeded synthetic pick filled correctly
@@ -358,7 +358,7 @@ baseline cache, an addition to the original brief, because scan must never
 fetch baselines), collector 07:20, morning chain 08:45, nightly 22:15, all
 Mon to Fri, universe Sunday 20:00.
 
-CP16 gate: src/verify_morning.py prints the evidence table (ethVolume,
+CP16 gate: src/morning/verify_morning.py prints the evidence table (ethVolume,
 baseline median, pm_rvol, collector premarket high, bars) for the top
 candidates and the chain logs it every morning. data/UNVERIFIED exists;
 deliver.py refuses to email while it does, proven with keys present in the

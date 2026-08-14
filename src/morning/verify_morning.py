@@ -27,9 +27,9 @@ import json
 import sys
 from pathlib import Path
 
-import config
-import ettime
-import job_status
+from core import config
+from core import ettime
+from ops import job_status
 
 UNVERIFIED_MARKER = config.DATA_DIR / "UNVERIFIED"
 

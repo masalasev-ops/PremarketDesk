@@ -211,7 +211,7 @@ min_ranked_fraction_to_subscribe = 0.5     # SEED, not measured. Below this shar
 
 ### The ordering note
 
-These two are not seeds. They were chosen by src/backtest_pool.py over 60
+These two are not seeds. They were chosen by src/research/backtest_pool.py over 60
 cached trading sessions, 2026-05-19 to 2026-08-13, a full quarterly earnings
 cycle, with the ranking metric computed as of 2026-05-18 so every replayed
 session is strictly out of sample.

@@ -17,7 +17,7 @@ import sqlite3
 import weakref
 from typing import Any, Iterable, Iterator
 
-import config
+from core import config
 
 # Table and column names are interpolated into SQL text and therefore must be
 # code literals, never data. This pattern is the enforcement.

@@ -16,8 +16,8 @@ from __future__ import annotations
 import json
 import sys
 
-import analyst
-import config
+from morning import analyst
+from core import config
 
 ACRONYMS = ["ETF", "CEO", "FDA", "SEC", "EPS", "IPO", "GDP", "CPI", "FOMC"]
 

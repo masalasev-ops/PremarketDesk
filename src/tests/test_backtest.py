@@ -26,9 +26,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-import backtest_pool
-import discover
-import eodhd
+from research import backtest_pool
+from selection import discover
+from core import eodhd
 
 PUBLISHED_0813 = {
     "gapped": 99, "pool_held": 72, "recall": 0.7273,

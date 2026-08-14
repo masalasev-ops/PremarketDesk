@@ -33,10 +33,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import config
-import criteria
-import ettime
-import job_status
+from core import config
+from core import criteria
+from core import ettime
+from ops import job_status
 
 _CRIT = criteria.load()
 
@@ -44,22 +44,22 @@ _CRIT = criteria.load()
 # .bat passes. Kept as data so the CRITERIA.md step list can be checked
 # against it, since a step missing from that list is never reported overdue.
 SCHEDULED = [
-    ("calendar", "market_today", []),
-    ("universe", "universe", []),
-    ("gap_stats", "gap_stats", []),
-    ("discover", "discover", []),
-    ("baseline", "baseline", []),
-    ("collector", "collect_premarket", []),
-    ("scan", "scan", []),
-    ("analyst", "analyst", []),
-    ("render", "render_report", []),
-    ("verify", "verify_morning", []),
-    ("deliver", "deliver", []),
-    ("archive", "build_archive", []),
-    ("backfill", "backfill_premarket", []),
-    ("outcomes", "fill_outcomes", []),
-    ("pool_recall", "pool_recall", []),
-    ("monitor", "monitor_jobs", ["--dry-run"]),
+    ("calendar", "ops.market_today", []),
+    ("universe", "selection.universe", []),
+    ("gap_stats", "selection.gap_stats", []),
+    ("discover", "selection.discover", []),
+    ("baseline", "collect.baseline", []),
+    ("collector", "collect.collect_premarket", []),
+    ("scan", "morning.scan", []),
+    ("analyst", "morning.analyst", []),
+    ("render", "morning.render_report", []),
+    ("verify", "morning.verify_morning", []),
+    ("deliver", "morning.deliver", []),
+    ("archive", "night.build_archive", []),
+    ("backfill", "night.backfill_premarket", []),
+    ("outcomes", "night.fill_outcomes", []),
+    ("pool_recall", "night.pool_recall", []),
+    ("monitor", "ops.monitor_jobs", ["--dry-run"]),
 ]
 
 
@@ -119,7 +119,7 @@ class _ScriptedSession:
 
 def _install(routes: list[tuple[str, Any]]) -> _ScriptedSession:
     """Point the shared client at a scripted session."""
-    import eodhd
+    from core import eodhd
 
     session = _ScriptedSession(routes)
     client = eodhd.EodhdClient(token="stub-token", ledger=eodhd.CallLedger())
@@ -129,7 +129,7 @@ def _install(routes: list[tuple[str, Any]]) -> _ScriptedSession:
 
 
 def _uninstall() -> None:
-    import eodhd
+    from core import eodhd
 
     eodhd._default_client = None
 
@@ -390,7 +390,7 @@ def claim_step_list_matches(failures: list[str]) -> None:
 
 
 def claim_calendar(failures: list[str]) -> None:
-    outcome = _drive("calendar", "market_today", [])
+    outcome = _drive("calendar", "ops.market_today", [])
     # A trading day exits 0, a holiday exits 3, and both are successes.
     _check(outcome, failures, expect_code=outcome.code,
            expect_status=job_status.STATUS_OK)
@@ -399,26 +399,26 @@ def claim_calendar(failures: list[str]) -> None:
 
 
 def claim_universe(failures: list[str]) -> None:
-    outcome = _drive("universe", "universe", [])
+    outcome = _drive("universe", "selection.universe", [])
     _check(outcome, failures,
            expect_endpoints=["exchange-symbol-list", "eod-bulk-last-day"])
 
 
 def claim_gap_stats(failures: list[str]) -> None:
     _write_universe()
-    outcome = _drive("gap_stats", "gap_stats", [])
+    outcome = _drive("gap_stats", "selection.gap_stats", [])
     _check(outcome, failures, expect_endpoints=["eod"])
 
 
 def claim_discover(failures: list[str]) -> None:
     _write_universe()
-    outcome = _drive("discover", "discover", [])
+    outcome = _drive("discover", "selection.discover", [])
     _check(outcome, failures, expect_endpoints=["calendar", "news"])
 
 
 def claim_baseline(failures: list[str]) -> None:
     _write_watchlist()
-    outcome = _drive("baseline", "baseline", [])
+    outcome = _drive("baseline", "collect.baseline", [])
     _check(outcome, failures)
 
 
@@ -431,13 +431,13 @@ def claim_collector(failures: list[str]) -> None:
     for two of the three subscribed symbols, which is also what proves the
     coverage report distinguishes a silent symbol from an absent one.
     """
-    import collect_premarket
+    from collect import collect_premarket
 
     _write_watchlist()
     real_connect = collect_premarket._connect
     collect_premarket._connect = lambda symbols: _ReplaySocket(symbols)
     try:
-        outcome = _drive("collector", "collect_premarket", ["--minutes", "0.05"])
+        outcome = _drive("collector", "collect.collect_premarket", ["--minutes", "0.05"])
     finally:
         collect_premarket._connect = real_connect
     _check(outcome, failures)
@@ -478,7 +478,7 @@ class _ReplaySocket:
 def claim_scan(failures: list[str]) -> None:
     _write_universe()
     _write_watchlist()
-    outcome = _drive("scan", "scan", [])
+    outcome = _drive("scan", "morning.scan", [])
     # The vintage gate can legitimately refuse canned data, and a refusal is
     # the gate working. What must not happen is an unhandled exception.
     if outcome.error:
@@ -498,7 +498,7 @@ def claim_analyst(failures: list[str]) -> None:
     an API key, which is a hard rule of this project rather than a test
     convenience.
     """
-    import analyst
+    from morning import analyst
 
     _write_packet()
     real = analyst.invoke_claude
@@ -510,7 +510,7 @@ def claim_analyst(failures: list[str]) -> None:
         "ok",
     )
     try:
-        outcome = _drive("analyst", "analyst", [])
+        outcome = _drive("analyst", "morning.analyst", [])
     finally:
         analyst.invoke_claude = real
     _check(outcome, failures)
@@ -518,24 +518,24 @@ def claim_analyst(failures: list[str]) -> None:
 
 def claim_render(failures: list[str]) -> None:
     _write_report()
-    outcome = _drive("render", "render_report", [])
+    outcome = _drive("render", "morning.render_report", [])
     _check(outcome, failures)
 
 
 def claim_verify(failures: list[str]) -> None:
     _write_packet()
-    outcome = _drive("verify", "verify_morning", [])
+    outcome = _drive("verify", "morning.verify_morning", [])
     _check(outcome, failures)
 
 
 def claim_deliver(failures: list[str]) -> None:
     """Delivery must refuse while the gate marker exists, and record refusing."""
-    import verify_morning
+    from morning import verify_morning
 
     _write_report()
-    _drive("render", "render_report", [])
+    _drive("render", "morning.render_report", [])
     verify_morning.ensure_marker()
-    outcome = _drive("deliver", "deliver", [])
+    outcome = _drive("deliver", "morning.deliver", [])
     _check(outcome, failures)
     if outcome.record.get("produced_count") != 0:
         failures.append("deliver recorded a non zero recipient count while the "
@@ -543,17 +543,17 @@ def claim_deliver(failures: list[str]) -> None:
 
 
 def claim_archive(failures: list[str]) -> None:
-    outcome = _drive("archive", "build_archive", [])
+    outcome = _drive("archive", "night.build_archive", [])
     _check(outcome, failures)
 
 
 def claim_backfill(failures: list[str]) -> None:
-    outcome = _drive("backfill", "backfill_premarket", [])
+    outcome = _drive("backfill", "night.backfill_premarket", [])
     _check(outcome, failures)
 
 
 def claim_outcomes(failures: list[str]) -> None:
-    outcome = _drive("outcomes", "fill_outcomes", [])
+    outcome = _drive("outcomes", "night.fill_outcomes", [])
     _check(outcome, failures)
 
 
@@ -566,7 +566,7 @@ def claim_pool_recall(failures: list[str]) -> None:
     record is what tells the two apart.
     """
     _write_universe()
-    outcome = _drive("pool_recall", "pool_recall", [])
+    outcome = _drive("pool_recall", "night.pool_recall", [])
     if outcome.error:
         failures.append(f"pool_recall raised out of main: {outcome.error}")
         return
@@ -582,7 +582,7 @@ def claim_pool_recall(failures: list[str]) -> None:
 
 def claim_monitor(failures: list[str]) -> None:
     """The watchdog, with Task Scheduler stubbed at the subprocess boundary."""
-    import monitor_jobs
+    from ops import monitor_jobs
 
     real = monitor_jobs.query_task
     monitor_jobs.query_task = lambda task_name: {
@@ -590,7 +590,7 @@ def claim_monitor(failures: list[str]) -> None:
         "status": "Ready",
     }
     try:
-        outcome = _drive("monitor", "monitor_jobs", ["--dry-run"])
+        outcome = _drive("monitor", "ops.monitor_jobs", ["--dry-run"])
     finally:
         monitor_jobs.query_task = real
     if outcome.error:
@@ -653,7 +653,7 @@ def claim_broad_catches_record(failures: list[str]) -> None:
     proceeds on, that the market is open, now appears in the record instead of
     only in a log line.
     """
-    import market_today
+    from ops import market_today
 
     real = market_today.is_trading_day
 
@@ -662,7 +662,7 @@ def claim_broad_catches_record(failures: list[str]) -> None:
 
     market_today.is_trading_day = exploding
     try:
-        outcome = _drive("calendar", "market_today", [])
+        outcome = _drive("calendar", "ops.market_today", [])
     finally:
         market_today.is_trading_day = real
 
@@ -692,7 +692,7 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
     nightly killed before the archive writes no pool_recall record at all, so
     the step check sees nothing wrong and the marker check is what catches it.
     """
-    import monitor_jobs
+    from ops import monitor_jobs
 
     day = TODAY.isoformat()
     log_dir = config.LOGS_DIR
@@ -746,7 +746,7 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
 
 def claim_report_line(failures: list[str]) -> None:
     """A stale step reaches the morning report, and a healthy machine says nothing."""
-    import analyst
+    from morning import analyst
 
     fresh = [
         {"step": step, "status": job_status.STATUS_OK,

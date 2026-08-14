@@ -15,19 +15,24 @@ rem that is meant to stop existing.
 setlocal
 cd /d "%~dp0.."
 set PY=.venv\Scripts\python.exe
-for /f "usebackq delims=" %%d in (`%PY% -c "import sys; sys.path.insert(0, 'src'); import ettime; print(ettime.today_str())"`) do set TODAY=%%d
+rem src/ is the import root and every module lives in a package under it,
+rem so scripts are run with -m rather than by path. PYTHONPATH is what puts
+rem src/ on sys.path; running a file by path would put its own package
+rem directory there instead and every `from core import config` would fail.
+set PYTHONPATH=%CD%\src
+for /f "usebackq delims=" %%d in (`%PY% -c "from core import ettime; print(ettime.today_str())"`) do set TODAY=%%d
 if "%TODAY%"=="" set TODAY=undated
 if not exist logs mkdir logs
 set LOG=logs\probe-live-v1-%TODAY%.log
 
-%PY% src\market_today.py >> "%LOG%" 2>&1
+%PY% -m ops.market_today >> "%LOG%" 2>&1
 if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, probe skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
 
 echo ===== probe started %DATE% %TIME% ===== >> "%LOG%"
-%PY% src\probe_live_v1.py >> "%LOG%" 2>&1
+%PY% -m research.probe_live_v1 >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== probe finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

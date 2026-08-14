@@ -40,14 +40,14 @@ import datetime as dt
 import json
 from typing import Any
 
-import config
-import criteria
-import eodhd
-import ettime
-import job_status
-import store
-import universe
-import vintage
+from core import config
+from core import criteria
+from core import eodhd
+from core import ettime
+from ops import job_status
+from core import store
+from selection import universe
+from morning import vintage
 
 _CRIT = criteria.load()
 
@@ -137,7 +137,7 @@ def news_window_start(session: dt.date) -> dt.datetime:
     is the old behaviour: too narrow rather than too wide, because a window
     that reaches back too far pulls in news that is already priced in.
     """
-    import vintage
+    from morning import vintage
 
     prior = vintage.previous_trading_session(session)
     if prior is None:
@@ -384,7 +384,7 @@ def load_metrics() -> dict[str, dict[str, Any]]:
     universe rebuild and the gap statistics by gap_stats.py on the same
     schedule, so nothing here is computed or fetched in the morning.
     """
-    import gap_stats
+    from selection import gap_stats
 
     try:
         universe_payload = universe.load_universe(require_fresh=False)

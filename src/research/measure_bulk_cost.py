@@ -36,10 +36,10 @@ import argparse
 import sys
 import time
 
-import criteria
-import eodhd
-import ettime
-from measure_socket_cost import read_counter
+from core import criteria
+from core import eodhd
+from core import ettime
+from research.measure_socket_cost import read_counter
 
 _CRIT = criteria.load()
 

@@ -31,15 +31,15 @@ import sys
 import tempfile
 from pathlib import Path
 
-import config
-import criteria
-import discover
-import eodhd
-import ettime
-import pool_recall
-import scan
-import universe
-import store
+from core import config
+from core import criteria
+from selection import discover
+from core import eodhd
+from core import ettime
+from night import pool_recall
+from morning import scan
+from selection import universe
+from core import store
 
 _CRIT = criteria.load()
 
@@ -270,7 +270,7 @@ def claim_eight(failures: list[str]) -> None:
     was ignored by the nightly batch file. A unit that tests the pure function
     and never the one the scheduler calls is not coverage.
     """
-    import pool_recall
+    from night import pool_recall
 
     class _Api:
         def eod_bulk_last_day(self, exchange="US", day=None, symbols=None, extended=False):
@@ -372,7 +372,7 @@ def claim_nine(failures: list[str]) -> None:
         failures.append("a midweek window no longer starts at the prior day")
 
     # And the backtest must ask the same function, which is the actual fix.
-    import backtest_pool
+    from research import backtest_pool
     source = inspect.getsource(backtest_pool.fetch_session)
     if "discover.news_window_start" not in source:
         failures.append("backtest_pool computes its own news window again, which "
