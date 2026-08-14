@@ -15,7 +15,123 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
-## 2026-08-14, last: silent failure is made impossible, and two numbers close
+## 2026-08-14, fourth: the isolation guard is inverted, and two numbers distributed
+
+### The isolation check photographs the tree
+
+The check that proves the suite wrote nothing outside its sandbox used to name
+the roots it watched, and gained one per escape: runs/, then data/, then the
+database, then site/ when the entrypoint tests caught build_archive rewriting
+the published archive. Four fixes, each correct about the root it had just
+been taught and blind to the next. That is what a check written as a list of
+what to guard does.
+
+It is inverted now. `conftest.snapshot_tree()` photographs every file and
+directory under the repository before the suite and again after, and anything
+that appears, disappears or changes outside a two entry allowlist,
+`__pycache__` and `.pytest_cache`, fails the run and is named.
+
+**The numbers.** The tree-wide photograph covers **1,379 paths**. The
+enumerated version watched **275** of them. The other **1,104 paths were the
+exposure**, and they include every one of src/, doc/, tasks/, logs/, .git/ and
+the virtual environment. That is what could have been written to by a test
+that hardcoded a path, at any point before this entry, without the suite
+saying a word.
+
+Directories are tracked for existence but not for mtime, because a directory's
+mtime moves whenever anything inside it is created and an allowed
+`__pycache__` write would otherwise fail the run through its parent. A new
+directory still fails, so a test creating runs/2026-08-15/ is caught before it
+writes anything into it.
+
+`--prove-check` still writes to runs/ and still fails, naming the file.
+`--prove-check-outside` is new and writes to tasks/, a root no version of the
+enumerated check ever watched: it fails too, which is the point.
+
+### The mains that were returning zero without recording
+
+pool_recall got `job_status.failed()` in the previous entry. Auditing every
+other main that returns zero on an exception path found six more, and the list
+is written down here rather than quietly closed, because the size of what the
+status record was missing is the useful part:
+
+1. **collect_premarket**, on `KeyboardInterrupt`. A collector stopped at 08:10
+   produced a genuine file covering half the window and exited zero. Nothing
+   distinguished that from a quiet morning.
+2. **discover**, when `load_metrics` could not read the universe. It catches
+   every exception and continues with empty metrics, which does not stop the
+   pool being built, it stops it being ranked: every name falls to the fallback
+   band and the cut becomes arbitrary. This was the worst of the six.
+3. **discover**, when a pool source raised. It was recorded in watchlist.json
+   as `not_fetched` with its reason, which is the right place for the audit
+   trail and the wrong place for a human to find out that the morning is being
+   built from three priors instead of four.
+4. **gap_stats**, which has always returned the list of symbols it could not
+   fetch, and whose main has always thrown that list away. Every symbol could
+   fail and it exited zero.
+5. **build_archive**, on an unreadable packet.json. The session is archived
+   without its counts, which is how the archive quietly stops being the record
+   it exists to be.
+6. **monitor_jobs**, on an unreadable rerun state file. It reads as "nothing
+   has been rerun today", which silently stops `max_reruns_per_job_per_day`
+   being enforced and lets a hard failure loop.
+
+Every exit code is unchanged. Only the record changed. Where the failure is
+per item rather than fatal, the trigger is producing nothing at all, which is
+unambiguous and needs no threshold to judge.
+
+test_entrypoints forces the calendar guard to raise and asserts both halves:
+it still exits zero and still assumes the market is open, and it now records
+the RuntimeError. That guard runs at the head of five of the six jobs, so it
+was five of the twelve silent step invocations on its own.
+
+### The watchdog reads step records, not only the final marker
+
+The nightly reported OK every night for a week with pool_recall failing inside
+it, because the marker it reads belongs to the archive and the archive really
+did finish. `monitor_jobs.failed_steps()` now reads every status record for a
+job on the day and reports the job as failed naming any step that recorded
+one. A step that failed and was later rerun successfully is not reported,
+because the last record is the one describing the state the machine is in now.
+
+The marker check stays exactly as it was. The two answer different questions: a
+step record catches a step that failed, and a marker catches a job that died
+before writing any record at all. Both cases are asserted, including a nightly
+killed before the archive, which writes no pool_recall record and would be
+invisible to the step check alone.
+
+### Screen passes, distributed
+
+6.57 is a mean over a population whose gapper counts run 42 to 518 a session.
+The socket decision was resting on it and on the 12.33 and 15.62 beside it.
+
+| cap | min | p25 | median | mean | p75 | max |
+|---|---|---|---|---|---|---|
+| 42 | 0 | 2 | 5.0 | 6.6 | 11 | 25 |
+| 67 | 0 | 3 | 7.5 | 9.8 | 15 | 38 |
+| 92 | 0 | 4 | 8.5 | 12.3 | 18 | 54 |
+| 142 | 0 | 5 | 9.5 | 15.6 | 23 | 70 |
+
+The median differs from the mean materially and it steps differently. On means
+the four caps go +3.2, +2.5, +3.3, which is the flat decay the record
+described. On medians they go +2.5, +1.0, +1.0. The median to mean ratio falls
+as the cap rises, 0.758, 0.765, 0.691, 0.609, which says extra slots pay off
+disproportionately on sessions that were already busy: tripling the cap takes
+the typical morning from 5 publishable names to 9.5 and the busiest from 25 to
+70. At every cap the minimum is 0, so no amount of capacity buys a report on
+the emptiest mornings.
+
+**The socket arithmetic does change.** On means the third socket buys 58
+percent of what the second buys and reads as a smaller version of the same
+deal. On medians it buys 29 percent: the second socket adds 3.5 publishable
+names to a normal morning, the third adds 1.0. The second remains the better
+purchase either way, which is unchanged. The DECISIONS cap item carries the
+distributions and three correction markers.
+
+`backtest_pool` reports `screen_passed_distribution` alongside the mean, and
+`blindspot` already reports its own after the previous entry.
+
+## 2026-08-14, third: silent failure is made impossible, and two numbers close
 
 pool_recall failed on every nightly run for a week and left nothing anybody
 would see. The fix for that one step landed with the documentation
@@ -191,7 +307,7 @@ a marker, superseded decisions keep their original text. The DECISIONS item
 citing pool_recall as accumulating evidence nightly is corrected to say the
 evidence began accumulating on the date the fix landed.
 
-## 2026-08-14, later: the documentation was reconciled and it found a bug
+## 2026-08-14, second: the documentation was reconciled and it found a bug
 
 Five commits in one day changed discovery, pricing, ranking, the schedule and
 the schema, and the documents were audited against the code rather than

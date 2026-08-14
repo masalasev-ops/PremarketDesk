@@ -1,11 +1,20 @@
 """The watchdog: did every scheduled job run, and does anything need a rerun?
 
-Two sources of truth, checked against each other. Task Scheduler's own record
+Three sources of truth, checked against each other. Task Scheduler's own record
 (last run time, last result, status) says whether the machine fired the task.
 The job's dated log says whether the work finished, because every .bat writes
 a "===== <step> finished rc=0 =====" marker as its last act. A task that never
 fired reads differently from a task that fired and died, and the fix differs
 too, so both are reported by name.
+
+The third is the step records in data/job-status.jsonl, and it was added
+because the first two agreed on a lie. The nightly reported OK every night for
+a week while pool_recall raised NameError inside it: the task fired, and the
+marker belongs to the archive, which runs after pool_recall and really did
+finish. A marker answers "did the job reach its end", which is a different
+question from "did everything in it work". Both are asked now, and neither
+replaces the other: the step records catch a step that failed, the marker
+catches a job that died before writing any record at all.
 
 Rerun policy lives in CRITERIA.md [monitor] and follows one principle: only
 rerun what is idempotent, and never start a second live collector, because
@@ -49,6 +58,18 @@ JOBS = {
                 r"===== archive finished rc=0"),
 }
 
+# This module's job key -> the PMD_JOB name the .bat stamps on every status
+# record its steps write. They differ for exactly one job and the mapping is
+# explicit rather than derived, because a silent mismatch here would mean the
+# step records for a job are never read and the watchdog quietly returns to
+# reading only the final marker.
+JOB_STATUS_NAMES = {
+    "discover": "discover",
+    "collector": "collector",
+    "chain": "morning-chain",
+    "nightly": "nightly",
+}
+
 
 # ------------------------------------------------------- task scheduler side
 
@@ -85,6 +106,41 @@ def query_task(task_name: str) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- log side
 
+def failed_steps(job: str, day: str) -> list[str]:
+    """Steps of this job that recorded a failure today, as readable phrases.
+
+    The final step marker answers "did the job reach the end", which is not
+    the same question as "did everything in it work". The nightly reported OK
+    every night for a week with pool_recall raising NameError inside it,
+    because the marker belongs to the archive and the archive really did
+    finish. Both checks are kept: this one sees a step that failed, the marker
+    sees a job that died before writing any record at all.
+
+    A step that failed and was later rerun successfully on the same day is not
+    reported, because the last record for that step is the one that describes
+    the state the machine is now in.
+    """
+    wanted = JOB_STATUS_NAMES.get(job)
+    if wanted is None:
+        return []
+
+    latest: dict[str, dict[str, Any]] = {}
+    for row in job_status.records():
+        if row.get("job") != wanted:
+            continue
+        if str(row.get("started_at") or "")[:10] != day:
+            continue
+        latest[str(row.get("step"))] = row
+
+    out = []
+    for step, row in sorted(latest.items()):
+        if row.get("status") == job_status.STATUS_OK:
+            continue
+        reason = row.get("exception") or f"exit {row.get('exit_code')}"
+        out.append(f"{step} recorded {row.get('status')}: {reason}")
+    return out
+
+
 def log_verdict(prefix: str, marker: str, day: str) -> str:
     """finished | skipped_closed | started_not_finished | no_log"""
     path = config.LOGS_DIR / f"{prefix}-{day}.log"
@@ -106,7 +162,18 @@ def log_verdict(prefix: str, marker: str, day: str) -> str:
 def _load_state(day: str) -> dict[str, int]:
     try:
         state = json.loads(STATE_PATH.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):
+    except FileNotFoundError:
+        state = {}  # the ordinary first run of the day, not a failure
+    except (OSError, ValueError) as exc:
+        # An unreadable state file reads as "nothing has been rerun today",
+        # which silently stops max_reruns_per_job_per_day being enforced and
+        # lets a hard failure loop. The watchdog still runs, so the exit code
+        # is unchanged.
+        print(f"monitor: rerun state unreadable ({type(exc).__name__}: {exc}), "
+              "treating today as having no reruns yet; the per day rerun cap "
+              "is not being enforced on this pass")
+        job_status.failed(f"{type(exc).__name__}: the rerun state file is "
+                          "unreadable, so the per day rerun cap is not enforced")
         state = {}
     return state.get(day, {})
 
@@ -174,6 +241,23 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     def report(job: str, verdict: str, detail: str) -> None:
         print(f"monitor: {job:<10} {verdict:<12} {detail}")
 
+    def steps_ok(job: str) -> bool:
+        """Did every step inside this job record success today.
+
+        Asked in addition to the final step marker, never instead of it. The
+        marker says the job reached its end; this says nothing inside it
+        failed on the way. The nightly answered yes to the first and no to
+        the second every night for a week.
+        """
+        nonlocal problems
+        broken = failed_steps(job, day)
+        if not broken:
+            return True
+        problems += 1
+        for line in broken:
+            report(job, "STEP FAILED", line)
+        return False
+
     def maybe_rerun(job: str, reason: str) -> None:
         nonlocal actions
         if reruns_done.get(job, 0) >= max_reruns:
@@ -219,7 +303,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     else:
         verdict = log_verdict("discover", JOBS["discover"][3], day)
         if verdict in ("finished", "skipped_closed"):
-            report("discover", "OK", verdict)
+            if steps_ok("discover"):
+                report("discover", "OK", verdict)
         else:
             problems += 1
             task = query_task(JOBS["discover"][0])
@@ -248,7 +333,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     else:
         verdict = log_verdict("collector", JOBS["collector"][3], day)
         if verdict in ("finished", "skipped_closed"):
-            report("collector", "OK", verdict)
+            if steps_ok("collector"):
+                report("collector", "OK", verdict)
         else:
             problems += 1
             report("collector", "FAILED", f"window over, log says {verdict}. "
@@ -262,7 +348,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     else:
         verdict = log_verdict("morning-chain", JOBS["chain"][3], day)
         if verdict in ("finished", "skipped_closed"):
-            report("chain", "OK", verdict)
+            if steps_ok("chain"):
+                report("chain", "OK", verdict)
         else:
             problems += 1
             task = query_task(JOBS["chain"][0])
@@ -291,7 +378,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         # so the extra rerun is cheap.
         fired_ok = fired and task.get("last_result") == "0"
         if verdict == "skipped_closed" or (verdict == "finished" and fired_ok):
-            report("nightly", "OK", verdict)
+            if steps_ok("nightly"):
+                report("nightly", "OK", verdict)
         else:
             problems += 1
             maybe_rerun("nightly", ("fired but did not finish" if fired

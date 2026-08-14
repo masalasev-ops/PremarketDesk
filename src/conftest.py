@@ -16,9 +16,19 @@ at import time is rebound with it. run_tests.py wraps the whole suite in it.
 
 That still leaves a test free to hardcode an absolute path, which no redirect
 can prevent. So the second half of this is a check rather than a redirect:
-snapshot() records every file under the real runs/ and data/ before the suite
-and again after, and any difference fails it. A test that reaches around the
-sandbox is caught by the evidence rather than by the design.
+snapshot_tree() photographs the working tree before the suite and again after,
+and any difference outside a short allowlist fails it. A test that reaches
+around the sandbox is caught by the evidence rather than by the design.
+
+The check used to name the roots it watched, and grew one root per escape:
+runs/, then data/, then the database, then site/ when build_archive was found
+rewriting the published archive from inside the sandbox. Four fixes, each one
+correct about the root it had just been taught and blind to the next. That is
+the signature of a check written as a list of what to guard rather than as a
+statement of what may change, so it is now the second: everything under the
+repository is guarded, and the allowlist names the handful of paths a test run
+is permitted to touch. Adding a root is no longer possible to forget, because
+there are no roots to add.
 
 This is deliberately not a pytest conftest. pytest is not a dependency of this
 project and requirements.txt is three lines on purpose. The name is kept
@@ -54,41 +64,99 @@ _DERIVED = (
     ("verify_morning", "UNVERIFIED_MARKER", lambda c: c.DATA_DIR / "UNVERIFIED"),
 )
 
-# Real roots, captured before anything is redirected. site/ joined this list
-# after the entrypoint tests caught build_archive rewriting the published
-# archive from inside the sandbox: the redirect stops it, and the check is
-# what proves the redirect held.
+# Real roots, captured before anything is redirected. Kept because the escape
+# prover writes to one of them deliberately; the check itself no longer reads
+# this list, it photographs the whole tree.
 REAL_RUNS = config.RUNS_DIR
 REAL_DATA = config.DATA_DIR
 REAL_SITE = config.SITE_DIR
 
+# The working tree, which is what the check guards.
+TREE_ROOT = config.PROJECT_ROOT
 
-def snapshot(*roots: Path) -> dict[str, tuple[float, int]]:
-    """Every file under roots, with its mtime and size."""
-    out: dict[str, tuple[float, int]] = {}
-    for root in roots:
-        if not root.exists():
+# The only paths a test run may touch. Directory names, matched against any
+# component of a path, so src/__pycache__/scan.cpython-313.pyc is allowed and
+# so is anything pytest would drop if it were ever added. Everything else in
+# the tree is forbidden, including paths nobody has thought of yet, which is
+# the point of writing it this way round.
+ALLOWED_DIR_NAMES = frozenset({"__pycache__", ".pytest_cache"})
+
+
+def _allowed(path: Path) -> bool:
+    try:
+        relative = path.relative_to(TREE_ROOT)
+    except ValueError:
+        return False
+    return any(part in ALLOWED_DIR_NAMES for part in relative.parts)
+
+
+def snapshot_tree(root: Path | None = None) -> dict[str, tuple[Any, ...]]:
+    """Every file and directory under the working tree, excluding the allowlist.
+
+    Files carry mtime and size. Directories carry only a marker, not their
+    mtime, because a directory's mtime moves whenever anything inside it is
+    created, and an allowed __pycache__ write would otherwise fail the run
+    through its parent. Directories are still tracked for existence, so a test
+    that creates runs/2026-08-15/ is caught even before it writes a file into
+    it.
+    """
+    base = root or TREE_ROOT
+    out: dict[str, tuple[Any, ...]] = {}
+    if not base.exists():
+        return out
+    stack = [base]
+    while stack:
+        current = stack.pop()
+        try:
+            entries = list(current.iterdir())
+        except OSError:
             continue
-        for path in root.rglob("*"):
-            if path.is_file():
-                try:
-                    stat = path.stat()
-                except OSError:
+        for path in entries:
+            if path.name in ALLOWED_DIR_NAMES:
+                continue
+            try:
+                if path.is_dir():
+                    out[str(path)] = ("dir",)
+                    stack.append(path)
                     continue
-                out[str(path)] = (stat.st_mtime, stat.st_size)
+                stat = path.stat()
+            except OSError:
+                continue
+            out[str(path)] = ("file", stat.st_mtime, stat.st_size)
     return out
 
 
+# Kept under the old name so the call reads the same at both ends of the suite.
+snapshot = snapshot_tree
+
+
 def differences(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
-    """What changed between two snapshots, as readable lines."""
+    """What changed between two snapshots, as readable lines.
+
+    A modification says whether the size moved as well as the mtime. The
+    distinction matters when this fires: a test that wrote a file almost
+    always changes its size, while a virus scanner or an indexer touching a
+    file it did not alter moves only the mtime. Both still fail the run, on
+    purpose, because a same size overwrite is a real escape mode and the check
+    must not start guessing which is which. Saying which one happened is for
+    whoever has to read the failure, and an intermittent failure nobody can
+    classify is an intermittent failure everybody learns to ignore.
+    """
     out: list[str] = []
     for path in sorted(set(after) - set(before)):
         out.append(f"created  {path}")
     for path in sorted(set(before) - set(after)):
         out.append(f"deleted  {path}")
     for path in sorted(set(before) & set(after)):
-        if before[path] != after[path]:
-            out.append(f"modified {path}  {before[path]} -> {after[path]}")
+        was, now = before[path], after[path]
+        if was == now:
+            continue
+        if was[:1] == ("file",) and now[:1] == ("file",) and was[2] == now[2]:
+            out.append(f"modified {path}  mtime only, size unchanged at {now[2]} "
+                       "bytes (an external toucher looks like this; so does a "
+                       "same size overwrite)")
+        else:
+            out.append(f"modified {path}  {was} -> {now}")
     return out
 
 

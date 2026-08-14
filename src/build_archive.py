@@ -201,6 +201,11 @@ def _counts_from_packet(run_dir: Path) -> dict[str, Any] | None:
         packet = json.loads(packet_path.read_text(encoding="utf-8"))
     except (ValueError, OSError) as exc:
         print(f"archive: {run_dir.name} packet.json unreadable ({exc}), counts omitted")
+        # The archive still rebuilds and still carries the session, so the
+        # exit code stays zero. A session that silently loses its counts is
+        # how the archive quietly stops being the record it exists to be.
+        job_status.failed(f"{type(exc).__name__}: {run_dir.name}/packet.json is "
+                          "unreadable, so that session is archived without counts")
         return None
     candidates = packet.get("candidates", [])
     tally = {"green": 0, "yellow": 0, "red": 0}

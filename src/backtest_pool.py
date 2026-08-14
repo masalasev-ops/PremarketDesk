@@ -664,6 +664,11 @@ def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any
         "sessions": len(rows),
         "per_tier": dict(sorted(per_tier.items())),
         "mean_screen_passed": round(sum(screens) / len(screens), 4) if screens else None,
+        # The socket decision reads off this number, and it is a mean over a
+        # population whose gapper counts run 42 to 518 a session. A report is
+        # thin or full on a given morning, never on average, so the whole
+        # distribution is reported and the median is the figure to plan on.
+        "screen_passed_distribution": _distribution(screens),
         "total_screen_passed": sum(screens),
         "mean_without_primary": round(
             sum(r.get("subscribed_without_primary", 0) for r in rows) / len(rows), 3
@@ -873,6 +878,20 @@ def main(argv: list[str] | None = None) -> int:
             cells.append(f"{'-':>16}" if not bucket else
                          f"{bucket['gapped']}/{bucket['subscribed']} = {bucket['hit_rate']:.2f}".rjust(16))
         print(f"{key:<12} " + " ".join(cells))
+
+    # Screen passes per session, distributed. The mean alone is what the cap
+    # decision was first read off, and on this population the median is two
+    # thirds of it and steps very differently, so both are printed together.
+    print("")
+    print("screen passes per session, distributed")
+    print(f"{'config':<20} {'min':>5} {'p25':>5} {'median':>7} {'mean':>7} "
+          f"{'p75':>5} {'max':>5}")
+    for key, block in outcome["results"].items():
+        dist = block["summary"].get("screen_passed_distribution") or {}
+        if not dist:
+            continue
+        print(f"{key:<20} {dist['min']:>5} {dist['p25']:>5} {dist['median']:>7} "
+              f"{dist['mean']:>7} {dist['p75']:>5} {dist['max']:>5}")
 
     if args.json:
         from pathlib import Path

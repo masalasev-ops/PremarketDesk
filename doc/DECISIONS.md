@@ -303,18 +303,44 @@ Swept on the existing cache, shipped configuration, 60 sessions:
 | 92 | 0.1864 | 12.33 | 25 | 0.0286 | 0.001144 | 2.58 | 0.103 |
 | 142 | 0.2236 | 15.62 | 50 | 0.0372 | 0.000744 | 3.28 | 0.066 |
 
-**It does not flatten in this range.** Gain per slot decays, roughly halving
-from the first step to the last, but every step still buys real recall: at the
-92 to 142 step an extra slot is still worth 0.066 of a screen passing candidate
-a session, which is one more publishable name for roughly every fifteen slots.
-Tripling the cap from 42 to 142 nearly doubles recall, 0.1164 to 0.2236, and
-takes screen passes from 6.6 to 15.6 a session.
+**The screen pass column above is a mean, and it should not be read alone.**
+[corrected 2026-08-14: the paragraph that stood here read "It does not flatten
+in this range... every step still buys real recall", which is true of the mean
+and false of the median. The conclusion it supported, that the third socket is
+worth roughly half the second, is corrected below.] Those means sit over a
+population whose gapper counts run 42 to 518 a session, and a report is thin
+or full on a given morning rather than on average. The distribution, same
+cache, same configuration, 60 sessions:
+
+| cap | min | p25 | median | mean | p75 | max |
+|---|---|---|---|---|---|---|
+| 42 | 0 | 2 | 5.0 | 6.6 | 11 | 25 |
+| 67 | 0 | 3 | 7.5 | 9.8 | 15 | 38 |
+| 92 | 0 | 4 | 8.5 | 12.3 | 18 | 54 |
+| 142 | 0 | 5 | 9.5 | 15.6 | 23 | 70 |
+
+**The median differs from the mean materially, and it is the figure to plan
+on.** Read off means the steps are +3.2, +2.5, +3.3, which is the flat decay
+the old paragraph described. Read off medians they are +2.5, +1.0, +1.0: the
+first quarter of the extra capacity buys most of what there is to buy and the
+rest buys one name a morning per step.
+
+The median to mean ratio falls as the cap rises, 0.758, 0.765, 0.691, 0.609.
+That is the whole finding in one line: extra slots pay off disproportionately
+on sessions that were already busy. Tripling the cap takes the typical morning
+from 5 publishable names to 9.5 while taking the busiest from 25 to 70. On the
+quietest quarter of mornings it moves 2 to 5, and at every cap the minimum
+stays 0, so no amount of capacity buys a report on the emptiest days.
 
 **Why this is not a code decision.** The 50 socket cap is the vendor's, not a
 constant in this repository, so buying past it means buying capacity, and
-whether 15.6 publishable candidates a morning is worth more than 6.6 depends on
-what the report is for and what the plan costs. Both are the owner's to weigh.
-What the measurement supplies is the exchange rate.
+whether a typical morning going from 5 publishable candidates to 9.5 is worth
+the price depends on what the report is for and what the plan costs. Both are
+the owner's to weigh. What the measurement supplies is the exchange rate.
+[corrected 2026-08-14: this compared 15.6 against 6.6, both means. The
+comparison a buyer should make is between medians, because the question is
+what a normal morning looks like after the purchase, not what the average of
+sixty mornings looks like.]
 
 **What would change the answer.** The screen column here applies four of the
 five day_setup conditions; premarket_rvol cannot be replayed historically, so
@@ -326,18 +352,31 @@ at a time and a socket carries fifty subscriptions, of which eight go to the
 context tickers on the first one only. So the sweep's caps map onto whole
 sockets, and this is the per session gain at each step:
 
-| sockets | cap | recall | screen passes | gain over the step before |
-|---|---|---|---|---|
-| 1 | 42 | 0.1164 | 6.6 | |
-| 2 | 92 | 0.1864 | 12.3 | +0.070 recall, +5.8 publishable names a session |
-| 3 | 142 | 0.2236 | 15.6 | +0.037 recall, +3.3 publishable names a session |
+| sockets | cap | recall | mean passes | median passes | gain over the step before |
+|---|---|---|---|---|---|
+| 1 | 42 | 0.1164 | 6.6 | 5.0 | |
+| 2 | 92 | 0.1864 | 12.3 | 8.5 | +0.070 recall, +5.7 mean but +3.5 median |
+| 3 | 142 | 0.2236 | 15.6 | 9.5 | +0.037 recall, +3.3 mean but +1.0 median |
 
-The 67 row in the table above is not buyable on its own; it is shown because
-the sweep ran it, and it says the first half of the second socket carries most
-of that socket's value. Reading the two buyable steps: the second socket is
-worth roughly 5.8 extra publishable candidates a morning and the third roughly
-3.3, so the second is comfortably the better purchase and the third is where
-this stops being obvious.
+**Yes, the socket arithmetic changes when read off medians.**
+[corrected 2026-08-14: this paragraph read "the second socket is worth roughly
+5.8 extra publishable candidates a morning and the third roughly 3.3, so the
+second is comfortably the better purchase and the third is where this stops
+being obvious". Both figures were means. On medians the gap between the two
+purchases is far wider than that sentence implied.] On means the third socket
+buys 58 percent of what the second buys, which reads as diminishing but
+comparable. On medians it buys 29 percent: the second socket adds 3.5
+publishable names to a typical morning, the third adds 1.0. The second socket
+remains the better purchase on either reading, and that much is unchanged.
+What changes is the third: on means it is a smaller version of the same deal,
+on medians it is a different deal, buying one extra name on a normal morning
+and most of its value on the busiest ones.
+
+The 67 row is not buyable on its own; it is shown because the sweep ran it,
+and on the median it is the sharpest row in the table, carrying +2.5 of the
++3.5 that the whole second socket buys. The first half of the second socket
+really does carry most of that socket's value, and on medians it carries even
+more of it than the means suggested.
 
 **A precondition, not a follow up.** The collector has only ever been load
 tested at 38 symbols, and that figure is from the OLD configuration: a 30 name

@@ -643,6 +643,107 @@ def claim_failure_is_recorded(failures: list[str]) -> None:
           "exit code unchanged")
 
 
+def claim_broad_catches_record(failures: list[str]) -> None:
+    """A main that swallows an exception keeps its exit code and records the failure.
+
+    The calendar guard is the sharpest case and the most repeated: it runs at
+    the head of five of the six jobs, catches every exception, and returns
+    zero so that a guard fault can never kill a real morning. That decision is
+    right and is not changed here. What changes is that the assumption it
+    proceeds on, that the market is open, now appears in the record instead of
+    only in a log line.
+    """
+    import market_today
+
+    real = market_today.is_trading_day
+
+    def exploding(date):
+        raise RuntimeError("simulated calendar fault")
+
+    market_today.is_trading_day = exploding
+    try:
+        outcome = _drive("calendar", "market_today", [])
+    finally:
+        market_today.is_trading_day = real
+
+    if outcome.error:
+        failures.append(f"the calendar guard raised out of main: {outcome.error}. "
+                        "It must never kill a morning.")
+        return
+    if outcome.code != 0:
+        failures.append(f"the calendar guard exited {outcome.code} on an internal "
+                        "fault; it must exit zero and assume the market is open")
+    if outcome.status != job_status.STATUS_ERROR:
+        failures.append(f"the calendar guard swallowed an exception and recorded "
+                        f"{outcome.status!r}")
+    if "RuntimeError" not in (outcome.record.get("exception") or ""):
+        failures.append("the calendar guard did not record the exception type: "
+                        f"{outcome.record.get('exception')!r}")
+    print(f"  broad catch  calendar exited {outcome.code} and recorded "
+          f"{outcome.status}: {(outcome.record.get('exception') or '')[:48]}")
+
+
+def claim_watchdog_reads_steps(failures: list[str]) -> None:
+    """The nightly that reported OK every night now reports the failed step.
+
+    Two cases, and both have to hold. A nightly whose pool_recall failed and
+    whose archive succeeded is the exact shape that hid for a week: the task
+    fired, the final marker is present, and the marker is the archive's. A
+    nightly killed before the archive writes no pool_recall record at all, so
+    the step check sees nothing wrong and the marker check is what catches it.
+    """
+    import monitor_jobs
+
+    day = TODAY.isoformat()
+    log_dir = config.LOGS_DIR
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"nightly-{day}.log"
+
+    def record(step: str, status: str, exception: str | None = None) -> None:
+        job_status.append({
+            "job": "nightly", "step": step,
+            "started_at": f"{day} 22:15:00 ET", "ended_at": f"{day} 22:16:00 ET",
+            "status": status, "exit_code": 0, "exception": exception,
+            "produced_label": None, "produced_count": None, "seconds": 1.0,
+        })
+
+    # Case one: every step finished, the marker is present, pool_recall failed.
+    log_path.write_text("===== archive finished rc=0 =====\n", encoding="utf-8")
+    for step in ("backfill", "outcomes", "archive"):
+        record(step, job_status.STATUS_OK)
+    record("pool_recall", job_status.STATUS_ERROR,
+           "NameError: name 'floor' is not defined")
+
+    verdict = monitor_jobs.log_verdict("nightly", monitor_jobs.JOBS["nightly"][3], day)
+    broken = monitor_jobs.failed_steps("nightly", day)
+    if verdict != "finished":
+        failures.append(f"the marker check should still say finished, said {verdict}")
+    if not any("pool_recall" in line for line in broken):
+        failures.append("the watchdog did not name pool_recall as a failed step "
+                        f"in a nightly whose marker says finished: {broken}")
+    if any("archive" in line for line in broken):
+        failures.append(f"the watchdog named a step that succeeded: {broken}")
+
+    # A rerun that succeeded clears it, because the last record is the state.
+    record("pool_recall", job_status.STATUS_OK)
+    if monitor_jobs.failed_steps("nightly", day):
+        failures.append("a step that was rerun successfully is still reported "
+                        f"as failed: {monitor_jobs.failed_steps('nightly', day)}")
+
+    # Case two: killed before the archive. No record for it, marker absent.
+    log_path.write_text("===== backfill finished rc=0 =====\n", encoding="utf-8")
+    verdict = monitor_jobs.log_verdict("nightly", monitor_jobs.JOBS["nightly"][3], day)
+    if verdict == "finished":
+        failures.append("a nightly killed before the archive was reported finished")
+    if monitor_jobs.failed_steps("nightly", day):
+        failures.append("the step check invented a failure for a job that simply "
+                        "never got that far; that case belongs to the marker")
+
+    log_path.unlink(missing_ok=True)
+    print("  watchdog     names pool_recall in a nightly whose marker says "
+          "finished, and the marker still catches one killed early")
+
+
 def claim_report_line(failures: list[str]) -> None:
     """A stale step reaches the morning report, and a healthy machine says nothing."""
     import analyst
@@ -714,6 +815,8 @@ def main(argv: list[str] | None = None) -> int:
     print("")
     print("the recording itself:")
     claim_failure_is_recorded(failures)
+    claim_broad_catches_record(failures)
+    claim_watchdog_reads_steps(failures)
     claim_report_line(failures)
 
     if failures:

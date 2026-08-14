@@ -247,6 +247,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     result = build(dates)
     job_status.produced("symbols measured", result["written"])
+    # build() has always returned the names it could not fetch and main has
+    # always thrown that list away, so a run where every symbol failed exited
+    # zero and looked identical to a clean one. Zero written is the
+    # unambiguous case and needs no threshold to judge: the propensity
+    # ranking discover depends on would be running on nothing new.
+    if not result["written"]:
+        job_status.failed(
+            f"nothing was written: all {len(result['failed'])} symbol(s) failed"
+            + (f", first was {result['failed'][0]}" if result["failed"] else "")
+        )
     eodhd.print_call_report()
     return 0
 

@@ -357,7 +357,16 @@ def load_metrics() -> dict[str, dict[str, Any]]:
 
     try:
         universe_payload = universe.load_universe(require_fresh=False)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        # Empty metrics do not stop the pool being built, they stop it being
+        # ranked: every name falls to the bottom band with no propensity and
+        # no ATR, so the cut becomes arbitrary. That used to happen in silence
+        # behind a zero exit.
+        print(f"discover: ranking metrics unavailable, {type(exc).__name__}: {exc}. "
+              "Every name will rank in the fallback band.")
+        job_status.failed(f"{type(exc).__name__}: the universe could not be read "
+                          "for ranking metrics, so the pool was cut without "
+                          "propensity or ATR to rank on")
         universe_payload = {"symbols": []}
 
     metrics: dict[str, dict[str, Any]] = {}
@@ -691,6 +700,20 @@ def main(argv: list[str] | None = None) -> int:
     try:
         payload = build(write=not args.dry_run)
         job_status.produced("names subscribed", payload.get("subscribed_count"))
+        # A source that raised is already recorded in watchlist.json as
+        # not_fetched with its reason, which is the right place for the audit
+        # trail and the wrong place for a human to find out. The pool is built
+        # from four priors and losing one narrows what the morning can see, so
+        # it belongs in the status record too.
+        broken = sorted(
+            name for name, source in (payload.get("pool_sources") or {}).items()
+            if source.get("status") == NOT_FETCHED
+        )
+        if broken:
+            job_status.failed(
+                f"{len(broken)} pool source(s) could not be fetched: "
+                + ", ".join(broken)
+            )
     except (universe.StaleUniverseError, eodhd.QuotaRefusal) as exc:
         print(f"REFUSING TO RUN: {exc}")
         eodhd.print_call_report()

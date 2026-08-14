@@ -764,6 +764,13 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("collector: interrupted, flushing completed minutes")
         stats = {"interrupted": True}
+        # Exit zero, because the minutes already folded are real and worth
+        # keeping. Record the interruption, because a collector that stopped
+        # at 08:10 produced a genuine file covering half the window, and
+        # nothing else in the packet distinguishes that from a quiet morning.
+        job_status.failed("KeyboardInterrupt: the collector was interrupted "
+                          "before its stop time, so the bar file covers only "
+                          "part of the premarket window")
     finally:
         builder.flush(time.time(), force=True)
 
