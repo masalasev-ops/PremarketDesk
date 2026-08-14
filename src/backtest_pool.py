@@ -687,9 +687,78 @@ def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any
     }
 
 
+HISTORY_BUCKETS = ((0, 10), (10, 25), (25, 50), (50, 100))
+
+
+def blindspot(as_of: str | None = None) -> dict[str, Any]:
+    """How many of the day's real gappers propensity structurally cannot score.
+
+    The fallback tying told us about the SUBSCRIBED set: only 0.2 names a
+    session reach the cap without a propensity. That is a different question
+    from this one. If a large share of the names that actually gap carry under
+    100 sessions of history, propensity ranking has a blind spot the fallback
+    cannot reach, because those names never get near the cap to be reordered.
+
+    Broken out by how much history each had, because a name 10 sessions short
+    of a propensity and one 95 short are not the same problem: the first fixes
+    itself in a fortnight.
+    """
+    import gap_stats
+
+    stats = gap_stats.load_all(as_of)
+    sessions = cached_sessions()
+    rows: list[dict[str, Any]] = []
+    buckets = {f"{low}-{high - 1}": 0 for low, high in HISTORY_BUCKETS}
+    buckets["not in gap_stats"] = 0
+    total_gapped = 0
+    total_null = 0
+
+    for session_date in sessions:
+        _inputs, outcome = load_session(session_date)
+        gappers = outcome["gappers"]
+        null_names = []
+        for symbol in gappers:
+            row = stats.get(symbol)
+            if row is None:
+                null_names.append(symbol)
+                buckets["not in gap_stats"] += 1
+                continue
+            if row.get("gap_propensity") is not None:
+                continue
+            null_names.append(symbol)
+            used = int(row.get("sessions_used") or 0)
+            for low, high in HISTORY_BUCKETS:
+                if low <= used < high:
+                    buckets[f"{low}-{high - 1}"] += 1
+                    break
+        total_gapped += len(gappers)
+        total_null += len(null_names)
+        rows.append({
+            "session_date": session_date,
+            "gapped": len(gappers),
+            "null_propensity": len(null_names),
+            "fraction": round(len(null_names) / len(gappers), 4) if gappers else None,
+            "names": sorted(null_names),
+        })
+
+    return {
+        "as_of": as_of or "newest",
+        "sessions": rows,
+        "total_gapped": total_gapped,
+        "total_null": total_null,
+        "overall_fraction": round(total_null / total_gapped, 4) if total_gapped else None,
+        "history_buckets": buckets,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Backtest the candidate pool.")
     sub = parser.add_subparsers(dest="stage", required=True)
+
+    blind = sub.add_parser("blindspot", help="Gappers propensity cannot score. Cache only.")
+    blind.add_argument("--as-of", help="gap_stats window. Defaults to the newest.")
+    blind.add_argument("--sessions", type=int, default=12,
+                       help="How many per session rows to print. 0 for all.")
 
     fetch = sub.add_parser("fetch", help="Cache historical sessions. Touches the network.")
     fetch.add_argument("--sessions", type=int, default=60)
@@ -709,6 +778,26 @@ def main(argv: list[str] | None = None) -> int:
                           "before the earliest session to stay out of sample.")
     evaluate.add_argument("--json", metavar="PATH", help="Write the full results here.")
     args = parser.parse_args(argv)
+
+    if args.stage == "blindspot":
+        report = blindspot(args.as_of)
+        print(f"backtest: {len(report['sessions'])} sessions, gap_stats as of "
+              f"{report['as_of']}")
+        print(f"{'session':<12} {'gapped':>7} {'null':>6} {'fraction':>9}")
+        shown = report["sessions"] if args.sessions == 0 else report["sessions"][:args.sessions]
+        for row in shown:
+            print(f"{row['session_date']:<12} {row['gapped']:>7} "
+                  f"{row['null_propensity']:>6} {row['fraction']:>9}")
+        if args.sessions and len(report["sessions"]) > args.sessions:
+            print(f"... {len(report['sessions']) - args.sessions} more sessions")
+        print()
+        print(f"total gapped {report['total_gapped']}, of which "
+              f"{report['total_null']} carried a null propensity, "
+              f"fraction {report['overall_fraction']}")
+        print("history of the null ones, in sessions:")
+        for bucket, count in report["history_buckets"].items():
+            print(f"    {bucket:>16}: {count}")
+        return 0
 
     if args.stage == "fetch":
         try:

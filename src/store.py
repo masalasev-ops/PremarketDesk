@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import re
 import sqlite3
+import weakref
 from typing import Any, Iterable, Iterator
 
 import config
@@ -91,12 +92,79 @@ _PICKS_LATER_COLUMNS = (
 )
 
 
+class TransactionHeldError(RuntimeError):
+    """Raised when a network call is attempted with a write transaction open."""
+
+
+class _TrackedConnection(sqlite3.Connection):
+    """A connection the guard can hold weakly.
+
+    sqlite3.Connection itself cannot be weak referenced, so connect() builds
+    this subclass instead, which can. Behaviour is otherwise identical: the
+    subclass exists only so a closed connection can drop out of the registry on
+    its own rather than being leaked by it.
+    """
+
+
+# Every connection this module has handed out, weakly held so a closed or
+# garbage collected one drops out on its own. This is the whole registry: no
+# other code in this project calls sqlite3.connect, so anything talking to the
+# database is in here.
+_LIVE: "weakref.WeakSet[_TrackedConnection]" = weakref.WeakSet()
+
+
+def open_transactions() -> list[sqlite3.Connection]:
+    """Connections with a write transaction currently open.
+
+    Read from sqlite3's own in_transaction, which is true only once a statement
+    has actually begun a transaction. Nothing here consults a flag the calling
+    code sets, because the failures this exists to catch are precisely the ones
+    where the calling code did not know it was holding anything: three of the
+    four sites found by audit looked innocent, and the fourth held its
+    transaction behind a recursion where no lexical scan could see it.
+    """
+    return [connection for connection in list(_LIVE) if _in_transaction(connection)]
+
+
+def _in_transaction(connection: sqlite3.Connection) -> bool:
+    try:
+        return bool(connection.in_transaction)
+    except (sqlite3.ProgrammingError, ReferenceError):
+        return False  # already closed
+
+
+def assert_no_open_transaction(context: str) -> None:
+    """Refuse to let a network call happen underneath an open transaction.
+
+    A transaction spanning a request holds SQLite's write lock for the length
+    of that request, so every other writer on the machine fails with "database
+    is locked" for a reason that has nothing to do with it. It happened three
+    times in three weeks and each local fix was followed by another instance
+    somewhere else, which is what says the rule needs enforcing rather than
+    auditing.
+
+    The fix at every call site is the same shape: read, close, fetch, reopen,
+    write.
+    """
+    held = open_transactions()
+    if not held:
+        return
+    raise TransactionHeldError(
+        f"{context} was attempted with {len(held)} open database transaction(s). "
+        "A transaction must not span a network call: it holds the write lock "
+        "for the length of the request and every other writer fails with "
+        "'database is locked'. Restructure as read, close, fetch, then write. "
+        "See conftest.py and the changelog entry for 2026-08-14."
+    )
+
+
 def connect() -> sqlite3.Connection:
     config.ensure_dirs()
-    connection = sqlite3.connect(config.DB_PATH, timeout=30)
+    connection = sqlite3.connect(config.DB_PATH, timeout=30, factory=_TrackedConnection)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA journal_mode=WAL")
     connection.execute("PRAGMA foreign_keys=ON")
+    _LIVE.add(connection)
     return connection
 
 

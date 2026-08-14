@@ -29,6 +29,7 @@ SUITE = (
     "test_repricing",
     "test_pool",
     "test_backtest",
+    "test_txn_guard",
 )
 
 

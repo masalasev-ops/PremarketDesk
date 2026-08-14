@@ -45,6 +45,9 @@ import requests
 import config
 import criteria
 import ettime
+# store imports config only, so this cannot cycle. The dependency exists so the
+# HTTP chokepoint can refuse to fire underneath an open database transaction.
+import store
 
 _CRIT = criteria.load()
 
@@ -241,6 +244,17 @@ class EodhdClient:
         if self.ledger.circuit_open_reason:
             self.ledger.suppressed += 1
             return ApiResult(None, f"{label} failed: {self.ledger.circuit_open_reason}")
+
+        # Nothing goes out with the database write lock held. Checked here, at
+        # the one chokepoint every HTTP call passes through, and read from
+        # sqlite3's own connection state rather than from anything a caller
+        # declares, so a path that does not know it is holding a transaction is
+        # caught exactly like one that does. This enforces at runtime what an
+        # audit could only inspect: three sites were found by reading the code
+        # and a fourth hid behind a recursion. Raises rather than warns, because
+        # the failure it prevents is another job dying on "database is locked"
+        # for a reason that has nothing to do with it.
+        store.assert_no_open_transaction(f"an EODHD request to {label}")
 
         query: dict[str, Any] = {"api_token": self._token, "fmt": "json"}
         query.update(params or {})

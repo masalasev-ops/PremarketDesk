@@ -349,6 +349,57 @@ backfill_premarket at both sites, baseline.get, baseline `--show`,
 discover.recent_runners, gap_stats.load_all, scan.attach_premarket_rvol,
 scan.write_picks and store.init.
 
+### The null-propensity question is closed
+
+The ATR fallback tying told us about the subscribed set, where only 0.2 names a
+session lack a propensity. That is not the same question as how much of the
+target population propensity structurally cannot see, so the target population
+was measured directly: `backtest_pool.py blindspot`, cache only, no fetch.
+
+Across the 60 cached sessions, 10,424 universe names gapped beyond the floor.
+355 of them carried a null propensity, a fraction of **0.0341**, ranked with the
+2026-05-18 window the sweep used. Against the 2026-08-13 window, by which the
+same names have another sixty sessions of history, it falls to 230 and
+**0.0221**. Those two bracket the real figure, because the shipped system
+recomputes weekly and so sits between them.
+
+Per session the null fraction runs from 0.005 to 0.143 with a median of 0.034,
+which is 5.9 unreachable gappers out of 173.7. History of the null ones, in
+sessions, on the earlier window: 169 had under 10, 34 had 10 to 24, 43 had 25
+to 49, and 109 had 50 to 99. So half of them are within a fortnight or two of
+scoring a propensity on their own.
+
+The fraction is small, so the question is closed on the first of the two
+conclusions: the fallback stays as inert insurance, and no reserved allocation
+for short-history names is proposed. The arithmetic that settles it is that
+capturing every one of those 5.9 names would add at most 3.4 points of recall,
+against a cap that currently misses 88 percent of gappers for want of slots.
+The binding constraint is the cap, which is already the open item.
+
+### The lock rule is enforced rather than audited
+
+store.assert_no_open_transaction is called at the HTTP chokepoint before any
+request goes out, and raises TransactionHeldError if any live connection has a
+write transaction open. It reads sqlite3's own in_transaction through a
+registry of connections store.connect handed out, so nothing depends on a
+caller declaring its state. That matters because three of the four sites found
+by audit looked innocent and the fourth held its transaction behind a
+recursion, where no lexical scan could reach it.
+
+sqlite3.Connection cannot be weak referenced, so connect() returns a
+_TrackedConnection subclass that can, and the registry holds those weakly so a
+closed connection drops out on its own.
+
+src/test_txn_guard.py asserts three things: a request under a deliberately
+opened transaction raises and names the endpoint; a connection that has only
+read is not a transaction and does not trip it, while the same connection does
+the moment a write begins one; and the whole morning chain runs clean, having
+made 42 guarded requests and tripped none.
+
+The nine sites cleared by the earlier audit are now enforced rather than
+inspected, and so is every path nobody has read yet, including ones not yet
+written.
+
 ### Packet schema
 
 New keys: `build`, `vintage`, `dropped_no_coverage`. New candidate fields:

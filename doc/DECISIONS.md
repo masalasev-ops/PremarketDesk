@@ -237,6 +237,36 @@ five day_setup conditions; premarket_rvol cannot be replayed historically, so
 these counts are upper bounds. If the missing condition rejects at a steady
 rate the ranking between caps is unaffected, but the absolute figures fall.
 
+**The arithmetic, in sockets rather than slots.** Capacity is bought a socket
+at a time and a socket carries fifty subscriptions, of which eight go to the
+context tickers on the first one only. So the sweep's caps map onto whole
+sockets, and this is the per session gain at each step:
+
+| sockets | cap | recall | screen passes | gain over the step before |
+|---|---|---|---|---|
+| 1 | 42 | 0.1164 | 6.6 | |
+| 2 | 92 | 0.1864 | 12.3 | +0.070 recall, +5.8 publishable names a session |
+| 3 | 142 | 0.2236 | 15.6 | +0.037 recall, +3.3 publishable names a session |
+
+The 67 row in the table above is not buyable on its own; it is shown because
+the sweep ran it, and it says the first half of the second socket carries most
+of that socket's value. Reading the two buyable steps: the second socket is
+worth roughly 5.8 extra publishable candidates a morning and the third roughly
+3.3, so the second is comfortably the better purchase and the third is where
+this stops being obvious.
+
+**A precondition, not a follow up.** The collector has only ever been load
+tested at 38 symbols, which is what the current cap plus the context tickers
+comes to. Nothing is known about its behaviour at 92 or 142 subscriptions:
+message rate, the late trade grace period, the bar builder's per minute
+flush, and the reconnect path have all been exercised at one scale only. A cap
+change therefore carries a throughput check before it ships, not after. The
+sequence is buy the socket, run the collector at the new subscription count
+against a live tape, confirm the bar file stays complete and late_volume stays
+proportionate, and only then raise max_subscribed_candidates. Doing it the
+other way round would put an untested collector in front of the first morning
+that depends on it.
+
 ## 2026-08-14: containment reads prose, with a recorded fail-open
 
 **Decision.** Ticker claims are extracted from report prose as well as from
