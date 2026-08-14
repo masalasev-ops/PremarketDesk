@@ -202,9 +202,24 @@ def build(write: bool = True) -> dict[str, Any]:
         }
     )
 
+    # The same contract as the packet: reasons for degraded evidence live in
+    # gaps_to_fill. Discover's one bulk call is unskippable, so a degraded
+    # reading skips nothing here, but the reading itself is a gap the morning
+    # must know about, and the baseline warm that follows in the same
+    # scheduled job reads its own preflight and skips itself.
+    gaps: list[str] = []
+    if quota["degraded"]:
+        gaps.append(
+            f"quota preflight: {eodhd.describe_preflight(quota)}, below the "
+            f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]. The one "
+            "bulk call this job cannot skip was still made; everything skippable "
+            "downstream should stand down."
+        )
+
     payload: dict[str, Any] = {
         "generated_at": ettime.stamp(now),
         "quota_preflight": quota,
+        "gaps_to_fill": gaps,
         "universe_started_with": universe_started_with,
         "universe_generated_at": universe_payload.get("generated_at"),
         "floors": {

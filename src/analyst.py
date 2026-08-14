@@ -236,6 +236,11 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     day = [c for c in candidates if c.get("day_eligible")]
     swing = [c for c in candidates if c.get("swing_eligible")]
     no_catalyst = [_bare(c["symbol"]) for c in candidates if c.get("catalyst_found") is False]
+    # None is a third state: the news feed was never checked (failed call or
+    # quota skip). Unknown must never be rendered as checked and clean.
+    unknown_catalyst = [
+        _bare(c["symbol"]) for c in candidates if c.get("catalyst_found") is None
+    ]
 
     lines: list[str] = []
     add = lines.append
@@ -340,8 +345,12 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("")
     add("## Economic data and rates")
     add("")
-    events = (packet.get("economic") or {}).get("events", [])
-    if events:
+    economic = packet.get("economic") or {}
+    events = economic.get("events", [])
+    if economic.get("skipped"):
+        add(f"The economic calendar was not checked this run: {economic['skipped']}. "
+            "An unchecked calendar is not an empty one.")
+    elif events:
         for event in events:
             add(f"- {event.get('time_et')}: {event.get('title')} "
                 f"(forecast {event.get('forecast')}, previous {event.get('previous')}, "
@@ -351,8 +360,12 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("")
     add("## Coming up")
     add("")
-    tomorrow = (packet.get("earnings") or {}).get("notable_tomorrow", [])
-    if tomorrow:
+    earnings_block = packet.get("earnings") or {}
+    tomorrow = earnings_block.get("notable_tomorrow", [])
+    if earnings_block.get("skipped"):
+        add(f"The earnings calendar was not checked this run: {earnings_block['skipped']}. "
+            "An unchecked calendar is not an empty one.")
+    elif tomorrow:
         add("| Ticker | Mkt cap | Report date | Session |")
         add("|---|---|---|---|")
         for row in tomorrow:
@@ -365,9 +378,12 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("")
     if no_catalyst:
         add(f"Moving on no found catalyst, a skip: {', '.join(no_catalyst)}.")
+    if unknown_catalyst:
+        add(f"Catalyst status is unknown for {', '.join(unknown_catalyst)}: the news "
+            "feed was never checked this run, so no catalyst judgment exists for them.")
     if partial:
         add(f"Premarket path partial or absent, treat any level as partial: {', '.join(partial)}.")
-    if not no_catalyst and not partial:
+    if not no_catalyst and not unknown_catalyst and not partial:
         add("Every candidate carries a found catalyst and full evidence.")
     add("")
     add("Trap judgment (a gap up on bad news) needs the narrative pass and is "

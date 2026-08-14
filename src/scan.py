@@ -327,13 +327,19 @@ def attach_premarket_path(
 # ------------------------------------------------------- 5. premarket RVOL
 
 def attach_premarket_rvol(
-    candidates: list[dict[str, Any]], packet: Packet, cutoff: str
+    candidates: list[dict[str, Any]], packet: Packet, cutoff: str,
+    quote_skip_reason: str | None = None,
 ) -> None:
     """ethVolume divided by the cached baseline median for the same clock cutoff.
 
     Never full day relative volume. If the denominator is not trustworthy the
     answer is null and the reason is recorded, because a number computed off the
     wrong denominator is worse than no number.
+
+    quote_skip_reason is set when the delayed quote call was skipped on
+    purpose (the quota degrade path). The recorded reason must then say so:
+    blaming a vendor response that was never requested would be recording the
+    wrong reason, which is as bad as recording no reason.
     """
     with store.connect() as connection:
         store.init(connection)
@@ -364,8 +370,15 @@ def attach_premarket_rvol(
                 packet.gap(f"{candidate['symbol']} premarket RVOL is null: {why_not}")
                 continue
             if eth_volume is None:
-                candidate["pm_rvol_reason"] = "the delayed quote returned no ethVolume"
-                packet.gap(f"{candidate['symbol']} premarket RVOL is null: no ethVolume")
+                if quote_skip_reason:
+                    # The collective quota gap already covers these, so no per
+                    # symbol gap line is added here.
+                    candidate["pm_rvol_reason"] = (
+                        f"ethVolume was never fetched: {quote_skip_reason}"
+                    )
+                else:
+                    candidate["pm_rvol_reason"] = "the delayed quote returned no ethVolume"
+                    packet.gap(f"{candidate['symbol']} premarket RVOL is null: no ethVolume")
                 continue
 
             candidate["pm_rvol"] = round(eth_volume / row["median_volume"], 4)
@@ -576,12 +589,17 @@ def earnings(
 
 def classify_catalyst(
     candidate: dict[str, Any], earnings_symbols: set[str]
-) -> tuple[str, str]:
+) -> tuple[str | None, str]:
     """Catalyst class from structured data only. Returns (class, why).
 
     Two sources, in order. The earnings calendar, which is a fact rather than an
     interpretation. Then the EODHD news tags, mapped through the table in
     CRITERIA.md. Headlines are never pattern matched.
+
+    catalyst_found None means the news feed was never successfully checked
+    (call failed, or skipped for quota). That is unknown, not absent: the
+    class is None, the why names the real reason, and nothing downstream may
+    read it as "the window was checked and empty".
     """
     class_points = {
         key: float(value) for key, value in _CRIT.pair_map("score_catalyst_class", "class").items()
@@ -590,6 +608,10 @@ def classify_catalyst(
 
     if candidate["symbol"] in earnings_symbols:
         return "earnings", "on the earnings calendar in the window"
+
+    if candidate.get("catalyst_found") is None:
+        reason = candidate.get("catalyst_error") or "the news feed was never checked"
+        return None, f"catalyst is unknown, not absent: {reason}"
 
     best_class = "none"
     best_points = -1.0
@@ -688,8 +710,8 @@ def score_candidate(candidate: dict[str, Any]) -> None:
     def add(name: str, points: float, why: str) -> None:
         components.append({"component": name, "points": points, "why": why})
 
-    add("catalyst_class", class_points.get(catalyst_class, 0.0),
-        f"class {catalyst_class}: {candidate.get('catalyst_why', '')}")
+    add("catalyst_class", class_points.get(catalyst_class, 0.0) if catalyst_class else 0.0,
+        f"class {catalyst_class or 'unknown'}: {candidate.get('catalyst_why', '')}")
 
     rvol = candidate.get("pm_rvol")
     add("premarket_rvol", _CRIT.band_number("score_premarket_rvol", rvol),
@@ -826,7 +848,8 @@ def build_packet() -> dict[str, Any]:
             attach_quotes(api, candidates, packet)
             attach_daily_history(api, candidates, packet)
         attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
-        attach_premarket_rvol(candidates, packet, cutoff)
+        attach_premarket_rvol(candidates, packet, cutoff,
+                              quote_skip_reason=quota_clause if thin else None)
         if not thin:
             attach_catalysts(api, candidates, packet)
 
@@ -895,6 +918,36 @@ def build_packet() -> dict[str, Any]:
         "gaps_to_fill": packet.gaps,
         "api_calls": eodhd.call_count(),
     }
+
+
+def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
+    """True when this quota thinned payload must not replace a fuller day.
+
+    A rerun is only idempotent when it carries at least as much evidence as
+    what it replaces. A quota thinned rerun of a day that already has a full
+    width packet must not overwrite that packet, and must not upsert nulls
+    over real values in picks, so it is written alongside as
+    packet_degraded.json instead and the caller stands down. The watchdog's
+    rerun of a broken chain then proceeds against the fuller packet.
+    """
+    quota = payload.get("quota_preflight") or {}
+    if not quota.get("degraded"):
+        return False
+    existing_path = config.run_dir(payload["session_date"]) / "packet.json"
+    if not existing_path.is_file():
+        return False
+    try:
+        prior = json.loads(existing_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return False
+    if (prior.get("quota_preflight") or {}).get("degraded"):
+        return False  # equally thin; the fresher run may replace it
+    side_path = config.run_dir(payload["session_date"]) / "packet_degraded.json"
+    side_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    print(f"scan: a full width packet already exists for {payload['session_date']} "
+          f"and this rerun is quota thinned. Wrote {side_path.name} for the "
+          "record; packet.json and the picks table keep the fuller evidence.")
+    return True
 
 
 def write_packet(payload: dict[str, Any]) -> Any:
@@ -1000,6 +1053,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"REFUSING TO RUN: {exc}")
         eodhd.print_call_report()
         return 1
+
+    if thin_rerun_stands_down(payload):
+        eodhd.print_call_report()
+        return 0
 
     path = write_packet(payload)
     write_picks(payload)

@@ -76,13 +76,17 @@ carry the word partial. No indicator not present in the packet.}
 {The economic events from the packet with their ET times, plus the 10Y, 3M,
 and DXY rows from the snapshot. Note events whose actual is already published
 versus still pending. One sentence on what the rate picture does to the gap
-trade this morning.}
+trade this morning. If the packet's economic block carries a skipped field,
+state that the calendar was not checked and quote that reason; an unchecked
+calendar must never be written as an empty one.}
 
 ## Coming up
 
 {Tomorrow's high importance economic events from the packet window, and the
 notable_tomorrow earnings list with market caps. Nothing speculative, only
-what the packet carries.}
+what the packet carries. If the packet's earnings block carries a skipped
+field, state that the calendar was not checked and quote that reason instead
+of claiming there are no notable earnings.}
 
 ## Skips and traps
 

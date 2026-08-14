@@ -18,11 +18,16 @@ the raw delta around the bulk call belongs to the bulk call alone. A drift
 of one is tolerated with a warning, so a future change in the vendor's
 metering of /user shows itself instead of silently skewing the figure.
 
-The decision this number feeds: if one bulk call costs at or above roughly
-1,000, the two bulk calls a day are the dominant cost on the shared account
-and the design has to change. This script only reports the figure. The
-redesign, if the figure demands one, happens in its own commit where the
-alternatives can be weighed against a real number rather than a range.
+The decision this number feeds: if one bulk call costs at or above the
+bulk_redesign_line in CRITERIA.md [quota], the two bulk calls a day are the
+dominant cost on the shared account and the design has to change. This
+script only reports the figure against that line. The redesign, if the
+figure demands one, happens in its own commit where the alternatives can be
+weighed against a real number rather than a range.
+
+The counter resets at midnight UTC. A run that straddles the reset would
+report a nonsense negative delta as a fact, so the script refuses to record
+anything when the quota day changed mid run or the delta came back negative.
 """
 
 from __future__ import annotations
@@ -31,9 +36,12 @@ import argparse
 import sys
 import time
 
+import criteria
 import eodhd
 import ettime
 from measure_socket_cost import read_counter
+
+_CRIT = criteria.load()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -48,15 +56,21 @@ def main(argv: list[str] | None = None) -> int:
 
     session = eodhd.build_session()
 
+    day_at_start = eodhd.quota_day()
     first, limit = read_counter(session)
     print(f"measure: meter reads {first:,} of {limit:,} "
-          f"({ettime.stamp(ettime.now_et())}), quota day {eodhd.quota_day()}")
+          f"({ettime.stamp(ettime.now_et())}), quota day {day_at_start}")
     print(f"measure: watching for {args.settle_seconds:.0f}s of quiet. The counter "
           "is account wide; a moving meter is another consumer spending.")
     time.sleep(args.settle_seconds)
     before, _ = read_counter(session)
 
     drift = before - first
+    if drift < 0:
+        print(f"measure: the meter went BACKWARDS by {-drift:,} during the quiet "
+              "watch, which means the daily reset happened mid watch. Nothing "
+              "recorded; rerun clear of the midnight UTC boundary.")
+        return 1
     quiet = drift <= 1  # zero expected; one tolerated in case /user metering changes
     if drift == 1:
         print("measure: the meter moved by exactly 1 during the quiet watch. "
@@ -82,6 +96,12 @@ def main(argv: list[str] | None = None) -> int:
 
     after, _ = read_counter(session)
     delta = after - before  # /user reads measured free, so this is the bulk call
+    if delta < 0 or eodhd.quota_day() != day_at_start:
+        print(f"measure: the run straddled the midnight UTC reset (quota day "
+              f"{day_at_start} at the start, {eodhd.quota_day()} now, delta "
+              f"{delta:,}). A negative or split day delta is not a measurement. "
+              "Nothing recorded; rerun clear of the boundary.")
+        return 1
 
     print("")
     print(f"measure: meter before   {before:,}")
@@ -94,14 +114,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"measure: implied per symbol rate {delta / symbols:.6f} "
               "counted calls per returned symbol")
     contaminated = "" if quiet else " CONTAMINATED, another consumer was active."
-    over = delta >= 1000
+    redesign_line = _CRIT.integer("quota", "bulk_redesign_line")
+    over = delta >= redesign_line
     print(f"measure: VERDICT one bulk live request moved the vendor counter by "
           f"{delta:,}.{contaminated}")
     print("measure: " + (
-        "at or above the 1,000 line: the two daily bulk calls dominate the shared "
-        "account and the design has to change, in its own commit, not this one."
+        f"at or above the {redesign_line:,} redesign line in CRITERIA.md [quota]: "
+        "the two daily bulk calls dominate the shared account and the design has "
+        "to change, in its own commit, not this one."
         if over else
-        "below the 1,000 line: the two daily bulk calls are not the dominant cost."))
+        f"below the {redesign_line:,} redesign line in CRITERIA.md [quota]: the "
+        "two daily bulk calls are not the dominant cost."))
     return 0
 
 

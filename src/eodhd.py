@@ -110,9 +110,12 @@ class CallLedger:
         self.by_endpoint: Counter[str] = Counter()
         self.errors: list[str] = []
         self.started = ettime.now_et()
+        self.first_call_quota_day: str | None = None
         self._reported = False
 
     def record(self, endpoint: str, attempts: int, error: str | None) -> None:
+        if self.first_call_quota_day is None:
+            self.first_call_quota_day = quota_day()
         self.calls += attempts
         self.retries += attempts - 1
         self.by_endpoint[endpoint] += attempts
@@ -129,8 +132,18 @@ class CallLedger:
             f"  of which retries   {self.retries}",
             f"  failed endpoints   {self.failures}",
             f"  wall clock         {elapsed:.1f}s",
-            f"  quota day          {quota_day()} (the shared counter resets 00:00 UTC)",
         ]
+        # The day is captured at the first recorded call, because a run that
+        # straddles the 00:00 UTC reset would otherwise label all of its spend
+        # with the post boundary day, defeating the line's whole purpose.
+        exit_day = quota_day()
+        billed_day = self.first_call_quota_day or exit_day
+        if billed_day != exit_day:
+            lines.append(f"  quota day          {billed_day} at the first call, "
+                         f"{exit_day} at exit; the run straddled the 00:00 UTC reset")
+        else:
+            lines.append(f"  quota day          {billed_day} "
+                         "(the shared counter resets 00:00 UTC)")
         for endpoint, count in self.by_endpoint.most_common():
             lines.append(f"    {count:>5}  {endpoint}")
         for note in self.errors:
@@ -585,6 +598,7 @@ def preflight(job: str) -> dict[str, Any]:
     floor = _CRIT.integer("quota", "refuse_below_remaining")
     record: dict[str, Any] = {
         "quota_day": quota_day(),
+        "meter_day": None,
         "read_at": ettime.stamp(ettime.now_et()),
         "api_requests": None,
         "daily_limit": None,
@@ -602,8 +616,42 @@ def preflight(job: str) -> dict[str, Any]:
               "Proceeding at full width: an unknown meter is not a zero meter.")
         return record
 
-    used = int(data.get("apiRequests") or 0)
-    limit = int(data.get("dailyRateLimit") or 0)
+    # A 200 payload is still untrusted input. A missing or null field must not
+    # collapse into limit 0 and a fabricated "0 remaining": that would refuse
+    # the morning on evidence that was never read, the exact substitution this
+    # project forbids. Unreadable fields mean an unknown meter, full width.
+    try:
+        used = int(data.get("apiRequests"))
+        limit = int(data.get("dailyRateLimit"))
+    except (TypeError, ValueError):
+        used = limit = -1
+    if used < 0 or limit <= 0:
+        record["error"] = (
+            f"the meter payload was unreadable: apiRequests="
+            f"{data.get('apiRequests')!r}, dailyRateLimit={data.get('dailyRateLimit')!r}"
+        )
+        print(f"{job}: quota preflight got an unreadable meter payload "
+              f"({record['error']}). Proceeding at full width: an unknown meter "
+              "is not a zero meter.")
+        return record
+
+    # The payload dates its own counter. A reading dated before the current
+    # quota day is the prior day's spend still waiting to roll over, and acting
+    # on it would thin or kill a morning whose budget is actually full.
+    meter_day = str(data.get("apiRequestsDate") or "").strip() or None
+    record["meter_day"] = meter_day
+    if meter_day is not None and meter_day != record["quota_day"]:
+        record["error"] = (
+            f"the meter reading is dated {meter_day}, not the current quota day "
+            f"{record['quota_day']}, so it describes another day's spend"
+        )
+        record.update({"api_requests": used, "daily_limit": limit})
+        print(f"{job}: quota preflight read {used:,} of {limit:,}, but the reading "
+              f"is dated {meter_day} while the current quota day is "
+              f"{record['quota_day']}. A stale reading is another day's spend. "
+              "Proceeding at full width and recording the reading as dated.")
+        return record
+
     remaining = max(0, limit - used)
     record.update({"api_requests": used, "daily_limit": limit, "remaining": remaining})
     print(f"{job}: quota preflight reads {used:,} of {limit:,} daily calls used "

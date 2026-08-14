@@ -176,6 +176,23 @@ at the root and is gitignored along with .env.
   and the opus report's disclaimer named the reading. The same evening made
   the case for the feature unprompted: 49,999 of 100,000 were already gone
   at 23:03 on a quota day that had opened at 20:00, none of it this project.
+- Review hardening on the preflight, same night, after a 28 agent
+  adversarial review: a 200 meter payload with missing or null fields, or
+  one whose apiRequestsDate is not the current quota day, is an unknown
+  meter and never degrades or refuses (fail open, the reading recorded as
+  dated; the vendor really sends apiRequestsDate, verified live).
+  catalyst_found None classifies as unknown with class NULL in picks, never
+  as "checked and empty"; the thin path's rvol reason says the quote was
+  never fetched, not that the vendor returned nothing. A quota thinned scan
+  rerun of a day holding a full width packet stands down and writes
+  packet_degraded.json instead of upserting nulls over real picks. The
+  baseline warm preflights itself and stands down on a degraded meter (the
+  warm is skippable spend). The fallback report renders skipped calendars
+  as "not checked", never as empty, and names unknown catalyst candidates.
+  The call report captures the quota day at the first call so a run
+  straddling the reset prints both days. bulk_redesign_line = 1000 lives in
+  CRITERIA [quota]; measure_bulk_cost.py reads it and refuses to record a
+  measurement that straddled the reset.
 - The quota day is the UTC calendar date (eodhd.quota_day). One ET weekday
   spans two quota days: the morning jobs bill to the day that opened at
   20:00 ET the previous evening (19:00 in standard time), and the 22:15

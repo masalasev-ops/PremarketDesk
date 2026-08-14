@@ -71,10 +71,19 @@ skip and writes the reading into gaps_to_fill. Below the refuse floor it
 does not run at all: with almost nothing left, every call is a likely 429
 and the retry backoff would burn minutes learning what one meter read
 already said. 5000 covers roughly two full mornings of headroom; 500 is
-less than one degraded scan can need.
+less than one degraded scan can need. The baseline warm that follows
+discover in the same scheduled job reads its own preflight and stands down
+on a degraded meter, because the warm is skippable spend and the scan
+records null RVOL with the reason when the cache is cold.
+
+The redesign line is the measured cost of one bulk live call at which the
+two bulk calls a day would dominate the shared account and force a design
+change. measure_bulk_cost.py judges its verdict against this number; the
+measured fact on 2026-08-13 was a flat 100 per call.
 
 degrade_below_remaining       = 5000       # skip skippable calls below this, record why
 refuse_below_remaining        = 500        # refuse to run outright below this
+bulk_redesign_line            = 1000       # one bulk live call at or above this forces a redesign
 
 ## Day setup
 

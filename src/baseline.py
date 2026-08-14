@@ -284,6 +284,21 @@ def main(argv: list[str] | None = None) -> int:
         print("baseline: nothing to warm. Pass --ticker or run discover.py first.")
         return 1
 
+    # The warm is skippable spend: one intraday call per stale ticker, up to
+    # the whole watchlist plus the context symbols. The scan survives a cold
+    # baseline honestly (pm_rvol null with the reason recorded), so on a
+    # degraded shared meter this job stands down rather than burn the calls
+    # the 08:45 scan needs for the packet. Exit 0 either way: a skipped warm
+    # is a completed job, not a failed one, and must not trip the watchdog.
+    quota = eodhd.preflight("baseline")
+    if quota["degraded"]:
+        print("baseline: standing down without warming anything. The warm is "
+              "skippable spend and the reading above says the shared key cannot "
+              "afford it; the scan will record null RVOL with this reason for "
+              "any name whose cache is stale.")
+        eodhd.print_call_report()
+        return 0
+
     print(f"baseline: cutoff {cutoff} ET, {len(tickers)} tickers, "
           f"{LOOKBACK_SESSIONS} session lookback, refresh after {REFRESH_AFTER_DAYS} days")
     warm(tickers, cutoff, force=args.force)
