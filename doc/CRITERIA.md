@@ -76,10 +76,17 @@ discover in the same scheduled job reads its own preflight and stands down
 on a degraded meter, because the warm is skippable spend and the scan
 records null RVOL with the reason when the cache is cold.
 
-The redesign line is the measured cost of one bulk live call at which the
-two bulk calls a day would dominate the shared account and force a design
-change. measure_bulk_cost.py judges its verdict against this number; the
-measured fact on 2026-08-13 was a flat 100 per call.
+The redesign line is the cost of one bulk call at which the day's bulk calls
+would dominate the shared account and force a design change. Nothing in the
+pipeline calls the bulk live endpoint any more, so the day's bulk calls are all
+end of day: two at 07:15 for discover's prior session movers source, and two at
+22:15 for the nightly pool recall, at a measured 98 counted calls each, about
+392 a day against a shared 100,000. The weekly universe rebuild buys
+lookback_sessions more of the same call in one Sunday run.
+measure_bulk_cost.py still judges its verdict against this number using the
+bulk live endpoint, because that is the call whose price would force the
+redesign if selection ever needed it back; the measured fact on 2026-08-13 was
+a flat 100 per call.
 
 The circuit breaker bounds the grind when the meter is unreadable and the
 quota is also genuinely gone. Without it, every call discovers the limit
@@ -104,7 +111,7 @@ when every line here passes.
 gap_pct                       = > 3        # absolute gap versus prior close, percent
 price                         = > 3        # dollars, latest premarket print
 market_cap                    = > 1B
-premarket_rvol                = > 1.5      # ethVolume divided by the cached baseline median
+premarket_rvol                = > 1.5      # collector premarket volume divided by the cached baseline median
 require_above_prior_high      = true       # latest premarket print above prior regular session high
 
 ## Swing setup
@@ -153,13 +160,12 @@ pass chose, the error propagated into every morning downstream of it. Nothing
 here reads a price from today any more, because at 07:15 no source on this plan
 has one for the whole universe. See the pool note below and DECISIONS.md.
 
-price                         = > 3        # matches the day setup price floor
-gap_pct                       = > 3        # matches the day setup gap floor
+price                         = > 3        # applied by the 08:45 scan, not here, matches the day setup price floor
+gap_pct                       = > 3        # applied by the 08:45 scan to the measured gap, matches the day setup gap floor
 run_time                      = 07:15
-max_quote_age_hours           = 96         # see the ghost row note below
 max_subscribed_candidates     = 42         # seed: the collector's 50 subscription cap less the 8 context tickers
 within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
-within_tier_fallback          = atr_pct_20d      # for names propensity cannot score, see the fallback note
+within_tier_fallback          = atr_pct_20d      # for names propensity cannot score: it needs 100 sessions, this needs 20
 min_slots_per_tier            = 4          # MEASURED, see the ordering note below
 
 ### The ordering note
@@ -176,11 +182,13 @@ day average dollar volume it replaces:
   gap propensity, no floor           0.1147
   20 day dollar volume, no floor     0.0842      what this replaces
 
-The margin is wider where it matters. On light-calendar sessions propensity
-gives 0.1053 against dollar volume's 0.0674, and the same window shows the
-light case is the ordinary one: the median session had two before-open
-reporters against 2026-08-13's maximum of 37, so on most mornings tier 1 fills
-two slots and this key decides the other forty.
+The margin is wider where it matters. Splitting the sixty sessions at eight
+before-open reporters, the no-floor propensity run gives 0.1053 on the light
+ones against dollar volume's 0.0674, and light is the ordinary case: the median
+session in the window carried two before-open reporters against 2026-08-13's
+37. On such a morning tier 1 fills a couple of slots and this key decides the
+rest, which is why a key pointed the wrong way costs most on the commonest kind
+of day.
 
 Dollar volume was not merely worse, it was pointed the wrong way. It measures
 how much a name trades, and the largest names are the steadiest, so inside the
@@ -250,9 +258,10 @@ their tier rather than treating them as zero.
 
 ## Pool tiers
 
-The order the pool is ranked in, best tier first, with 20 day average dollar
-volume descending as the tiebreak inside a tier. A name qualifying under
-several sources takes its best tier and records all of them.
+The order the pool is ranked in, best tier first, with the Discovery
+within_tier_key descending as the tiebreak inside a tier, the fallback below it
+and names carrying neither last. A name qualifying under several sources takes
+its best tier and records all of them.
 
 This ordering is a seed. It is an assumption about which priors most often
 precede a premarket gap, not a measured base rate. pool_recall.json in the
@@ -264,7 +273,7 @@ tier = news_stale : 3
 tier = prior_session_mover : 4
 tier = recent_runner : 5
 
-### The ghost row note
+### The ghost row note, history rather than current behaviour
 
 The bulk live feed returns some tickers twice. One row is current, the other is
 a frozen snapshot from an old session that never aged out. On 2026-08-13 it
@@ -273,11 +282,20 @@ quiet -0.4 percent, and the ghost row was 188.41 against a 92.77 prior close, a
 fabricated +103 percent that sorted straight to the top of the watchlist. The
 ADT ghost was timestamped February 2023.
 
-So the feed is deduplicated by taking the newest timestamp per ticker, and any
-row older than max_quote_age_hours is dropped outright. A long weekend with a
-holiday Monday is about 87 hours from Friday's close to Tuesday's premarket,
-which is what 96 leaves room for. Every run reports how many rows it dropped.
-Watch that number. If it moves a lot, the feed changed.
+That deduplication is history, not current behaviour. The feed was normalised
+by taking the newest timestamp per ticker, and any row older than 96 hours was
+dropped outright, 96 chosen because a holiday Monday puts about 87 hours
+between Friday's close and Tuesday's premarket. No code does that now.
+Discovery builds the pool from the earnings calendar, the overnight news sweep,
+two bulk end of day calls and the picks table, and the scan prices every
+candidate from the collector file, so no scheduled job reads the bulk live feed
+and a ghost row cannot reach a watchlist. The threshold it used,
+max_quote_age_hours, has been removed from the block above along with its last
+reader.
+
+This note is kept as the reason the live feed is not trusted for selection, not
+as a description of anything that runs. If bulk live is ever consumed for
+selection again, the dedup and the age drop have to come back with it.
 
 ## Collector
 
@@ -287,7 +305,7 @@ price path.
 start_time                    = 07:20
 stop_time                     = 09:25
 context_symbols               = SPY, QQQ, IWM, DIA, TLT, USO, UUP, VIXY
-max_subscriptions             = 50         # hard cap, lowest absolute gap dropped first
+max_subscriptions             = 50         # hard socket cap including the 8 context tickers, so 42 candidate slots. Overflow comes off the tail of discover's ranked list, the collector does not reorder
 bar_seconds                   = 60
 reconnect_backoff_start_s     = 1
 reconnect_backoff_max_s       = 60
@@ -382,9 +400,8 @@ true high over recent sessions, which is the standing measurement of how much
 premarket the 07:20 collector start actually misses.
 
 market_open                   = 09:30
-run_after                     = 22:00      # ET, the day's intraday is usually complete by then
 gap_report_sessions           = 20
-catchup_days                  = 5          # prior days with unfilled true columns retried each night, because the vendor sometimes publishes later than run_after
+catchup_days                  = 5          # prior days with unfilled true columns retried each night, because the vendor usually publishes after the 22:15 run
 
 ## Outcomes
 
@@ -406,7 +423,7 @@ horizon_sessions_long         = 5
 
 The 08:45 gathering pass that writes packet.json.
 
-candidate_count               = 12         # top N by absolute gap, recomputed on a fresh bulk call
+candidate_count               = 12         # top N by the absolute gap measured from the collector against the pool's prior close
 news_lookback_hours           = 24
 news_keep                     = 3
 economic_country              = US
@@ -423,9 +440,10 @@ cache is warmed for run_time. The scan stamps its cutoff from the wall clock,
 so a scheduler that fires at 08:46 instead of 08:45 would miss the cache on an
 exact match and null out every RVOL over sixty seconds of jitter. So when the
 wall clock is within rvol_cutoff_snap_minutes of run_time, the scan uses the
-run_time cutoff. The numerator, ethVolume, is still read at the actual scan
-moment, so a snapped run compares up to that many extra minutes of volume
-against the run_time baseline. That skew is bounded and recorded: the packet
+run_time cutoff. The numerator, the collector's premarket volume, is
+still summed over every bar in the snapshot taken at the actual scan moment, so
+a snapped run compares up to that many extra minutes of volume against the
+run_time baseline. That skew is bounded and recorded: the packet
 carries both run_time_et and rvol_cutoff_hhmm, and they differ when snapped.
 Outside the snap window nothing is snapped, which is why an off hours test run
 honestly reports no cached baseline.
@@ -517,9 +535,20 @@ embed_sessions                = 120
 
 The market snapshot line, as report label to EODHD symbol. Order is preserved.
 
-Resolution is tried live first, then end of day. Indices, government bonds and
-the dollar index return NA on the live endpoint but are current in the end of
-day feed, so both paths are needed and the packet records which one answered.
+Resolution takes the collector's premarket price first and falls back to end of
+day. The end of day call is made for every label regardless, because the prior
+close comes from it; the collector only ever supplies the last price.
+
+Five of the nine are also on the collector's context list, so those rows are
+priced from this morning's tape and record source collector with
+prior_session_only false. The index, bond and dollar symbols are not subscribed
+and have no premarket tape on this plan, so they report the last completed
+session and say so: source eod, prior_session_only true. Every row records
+which path answered, which is what lets the vintage check tell a row that is
+honestly labelled stale from one silently claiming to be current.
+
+The live endpoint is not read here at all. The /real-time family serves the
+last completed session, so at 08:45 it published yesterday's move as today's.
 
 snapshot = SPY : SPY.US
 snapshot = QQQ : QQQ.US

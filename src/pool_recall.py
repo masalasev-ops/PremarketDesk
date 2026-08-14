@@ -14,7 +14,10 @@ that source been looking. That list is what tells you whether the tier ordering
 in CRITERIA.md is wrong, whether a source needs widening, or whether the
 subscription cap is simply too small.
 
-It costs one bulk end of day call, which the nightly pass is making anyway.
+It costs two bulk end of day calls, today's and the prior session's, because
+the gap is measured open against prior close and one call gives only one of
+them. At a measured 98 counted calls each that is the nightly's whole bulk
+spend; nothing else in that pass makes one.
 """
 
 from __future__ import annotations
@@ -162,12 +165,12 @@ def build(session_date: str | None = None, write: bool = True) -> dict[str, Any]
         if code and close:
             prior_closes[code if "." in code else f"{code}.US"] = close
 
-    gappers = actual_gappers(today_rows, prior_closes, universe_symbols, floor)
+    gappers = actual_gappers(today_rows, prior_closes, universe_symbols, gap_rule)
     result = measure(gappers, pool_rows)
     payload = {
         "session_date": today.isoformat(),
         "generated_at": ettime.stamp(ettime.now_et()),
-        "gap_floor_pct": floor,
+        "gap_floor": gap_rule.describe(),
         "measured_against": (
             "the open of today's end of day bar versus the prior session close, "
             "for every name in universe.json"
@@ -178,8 +181,8 @@ def build(session_date: str | None = None, write: bool = True) -> dict[str, Any]
         **result,
     }
 
-    print(f"pool_recall: {payload['gapped']} universe names gapped beyond "
-          f"{floor:g} percent at the open")
+    print(f"pool_recall: {payload['gapped']} universe names gapped "
+          f"{gap_rule.describe()} percent at the open")
     print(f"pool_recall: the pool held {payload['pool_held']}, recall "
           f"{payload['recall']}, of which {payload['subscribed_held']} were "
           f"actually subscribed (recall {payload['subscribed_recall']})")
@@ -207,10 +210,15 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         build(session_date=args.date, write=not args.dry_run)
-    except RuntimeError as exc:
+    except Exception as exc:
         # A recall measurement that cannot be made is not a reason to fail the
-        # nightly pass: nothing downstream depends on it.
-        print(f"pool_recall: skipped, {exc}")
+        # nightly pass: nothing downstream depends on it. Broad on purpose,
+        # and it prints the type: this used to catch RuntimeError only, so a
+        # NameError in build() escaped into a non zero exit that the nightly
+        # batch file ignores, and the step wrote nothing for a week without
+        # anyone noticing. A diagnostic that fails silently is worse than no
+        # diagnostic, so the reason is always printed.
+        print(f"pool_recall: skipped, {type(exc).__name__}: {exc}")
         eodhd.print_call_report()
         return 0
 

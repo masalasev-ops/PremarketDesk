@@ -1,7 +1,8 @@
 @echo off
 rem PremarketDesk 07:20 collector job. Runs the trades websocket until the
-rem CRITERIA.md stop time, 09:25 ET, writing one minute bars for the
-rem watchlist. This process is the only source of premarket high, low, VWAP.
+rem CRITERIA.md stop time, 09:25 ET, writing one minute bars for the context
+rem tickers plus the watchlist rows discover marked subscribed, in the order
+rem discover ranked them. This process is the only source of premarket price.
 setlocal
 cd /d "%~dp0.."
 set PY=.venv\Scripts\python.exe

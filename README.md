@@ -38,31 +38,40 @@ All times are US Eastern, which the machine is expected to keep locally.
 
 | Time | Job | What it does |
 | --- | --- | --- |
-| Sun 20:00 | universe | Weekly rebuild of the discovery universe |
+| Sun 20:00 | universe | Weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, measured at 2,745 calls and 421 seconds. That propensity is what discovery ranks the pool by inside each tier |
 | 07:00 | nightly-catchup | The nightly again: the vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not |
-| 07:15 | discover | Picks today's watchlist from the universe, warms the volume baseline |
+| 07:15 | discover | Builds today's candidate pool from four priors, ranks it, subscribes the collector to the top of it, warms the volume baseline |
 | 07:20 to 09:25 | collector | Websocket trades to one minute bars on disk, one file per day |
 | 07:25, every 30 min | monitor | The watchdog: checks each job fired and finished, reruns what is safe |
 | 08:45 | morning chain | scan, analyst, render, deliver, archive, stopping at the first failure |
-| 22:15 | nightly | Backfills the true premarket window, fills trade outcomes, rebuilds the archive |
+| 22:15 | nightly | Backfills the true premarket window, fills trade outcomes, measures what the morning's pool missed into `runs/YYYY-MM-DD/pool_recall.json`, rebuilds the archive |
 | 22:45 | monitor-night | The watchdog once more, over the nightly |
 
 ```mermaid
 flowchart LR
-    U[universe.py<br>weekly] --> D[discover.py<br>watchlist]
+    U[universe.py<br>weekly] --> G[gap_stats.py<br>gap propensity]
+    G --> D[discover.py<br>ranked candidate pool]
+    U --> D
     D --> C[collect_premarket.py<br>live 1m bars]
-    C --> S[scan.py<br>evidence packet]
-    S --> A[analyst.py<br>claude CLI, one completion]
+    C --> S[scan.py<br>prices from the collector]
+    S --> X{vintage.py<br>is this today?}
+    X -->|no| STOP[run refused,<br>gate re-armed]
+    X -->|yes| A[analyst.py<br>claude CLI, one completion]
     A --> R[render_report.py<br>HTML report]
     R --> V[deliver.py<br>email, gated]
     R --> W[build_archive.py<br>single file archive]
     S -. picks .-> B[(SQLite)]
     N[backfill_premarket.py<br>+ fill_outcomes.py<br>nightly truth] --> B
+    P[pool_recall.py<br>what the pool missed] -. reads .-> B
 ```
 
-Every job first runs `src/market_today.py`, a trading day guard built on the
-cached EODHD exchange calendar, so weekends and holidays skip themselves and
-the tasks stay registered plain Monday to Friday.
+Every weekday job first runs `src/market_today.py`, a trading day guard built
+on the cached EODHD exchange calendar. It exits 3 on a weekend or an official
+holiday and the calling `.bat` logs one line and stops cleanly, so the tasks
+stay registered plain Monday to Friday and holidays take care of themselves.
+The Sunday universe job is the one exception and runs no guard: that guard
+counts Sunday as a non trading day, so wiring it in would skip the weekly
+rebuild every week, and the rebuild is what keeps the following week alive.
 
 ## What you need
 
@@ -102,8 +111,10 @@ the tasks stay registered plain Monday to Friday.
    `EODHD_API_TOKEN`. Leave the Resend keys blank for now; you want the
    verification gate (below) to pass before any email goes out.
 
-3. **Self check.** This prints the masked token, the dependency versions,
-   and the TLS trust decision, and creates the working directories:
+3. **Self check.** This creates the working directories and prints the project
+   root, whether `ANTHROPIC_API_KEY` is set anywhere (it must not be), the
+   masked EODHD token, whether the Resend keys are set, and the dependency
+   versions:
 
    ```
    .venv\Scripts\python.exe src\config.py
@@ -137,8 +148,13 @@ the tasks stay registered plain Monday to Friday.
 
 7. **Let a real morning run**, then read the gate table that
    `src/verify_morning.py` prints into `logs\morning-chain-YYYY-MM-DD.log`.
-   It checks the day's evidence chain end to end. You can also run any step
-   by hand in pipeline order; every script is idempotent and safe to rerun.
+   For the first three candidates it lays the evidence out on one line: the
+   price and the minute it printed, the collector's premarket volume, the
+   cached baseline median, the RVOL those two produce, and the bar count
+   behind it, plus any candidate dropped for having no collector coverage.
+   A price with no clock beside it cannot be checked by eye, which is the
+   lesson of the first live morning. You can also run any step by hand in
+   pipeline order; every script is idempotent and safe to rerun.
 
 8. **Go live.** When a morning looks right: delete `data\UNVERIFIED`, put
    `RESEND_API_KEY` and `EMAIL_TO` into `.env`. The next morning's report
@@ -151,9 +167,9 @@ Everything generated at runtime is git ignored and created on demand:
 
 | Path | What |
 | --- | --- |
-| `data/premarketdesk.db` | SQLite (WAL): the picks table, one row per (date, ticker), and the volume baseline |
+| `data/premarketdesk.db` | SQLite (WAL): the picks table, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; the premarket volume baseline; and gap_stats, one row per (ticker, as_of) |
 | `data/premarket/` | The collector's one minute bar files and per run stats |
-| `data/universe.json`, `data/watchlist.json` | The weekly universe and the day's watchlist |
+| `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line |
 | `site/PremarketDesk.html` | The whole report history as one self contained file, newest sessions embedded, older ones linked. Opens from disk, no server, no network |
@@ -185,13 +201,20 @@ Other documents:
 - **EODHD:** the websocket collector was measured at zero against the
   vendor's own API counter (connections, subscribes, and reconnects
   included; `src/measure_socket_cost.py` reproduces the measurement). REST
-  usage is a few hundred calls a day: discovery and baseline in the morning,
-  one intraday call per pick in the nightly backfill, a weekly universe
-  rebuild, a cached exchange calendar. The daily call counter is account
-  wide across everything using your token, and it resets at midnight UTC.
+  usage is a few hundred counted calls a day. Discovery spends two bulk end
+  of day calls at a measured 98 counted calls each, plus one earnings
+  calendar call and up to five news calls; the baseline warm spends one
+  intraday call per stale name; the 08:45 scan spends a few dozen across
+  quotes, history and news; the nightly spends one intraday call per pick
+  plus one bulk end of day for the pool recall measurement. The weekly job
+  is the largest single spend: the universe rebuild plus one call per name
+  for gap propensity, measured at 2,745. Every job preflights the shared
+  counter first, which is account wide across everything using your token
+  and resets at midnight UTC.
 - **Claude:** one non agentic completion per market day (plus at most one
-  retry), on the subscription. Measured 65 to 78 seconds per report at low
-  reasoning effort. If the CLI fails or times out, the morning still ships:
+  retry), on the subscription. Measured 86.5 to 97.7 seconds per report over five
+  opus runs at medium reasoning effort on 2026-08-14, which is where the 293
+  second timeout in `doc/CRITERIA.md` comes from, three times the slowest. If the CLI fails or times out, the morning still ships:
   `analyst.py` falls back to a plain table report built from the packet and
   says so in the report itself.
 

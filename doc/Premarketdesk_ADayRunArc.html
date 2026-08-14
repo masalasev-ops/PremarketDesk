@@ -170,21 +170,32 @@
 <header>
   <p class="eyebrow">PremarketDesk architecture</p>
   <h1>A Day in PremarketDesk</h1>
-  <p class="lede">There is no server and no queue. The whole system is five Windows
-  Task Scheduler jobs on one machine, each waking at its clock time, reading the
-  files earlier jobs left behind, and leaving files for the next. The architecture
-  is the clock.</p>
+  <p class="lede">There is no server and no queue. The whole system is six .bat
+  files on one machine, registered as eight Windows Task Scheduler tasks: two of
+  the six are registered twice, the nightly at 22:15 and again at 07:00, and the
+  watchdog every 30 minutes from 07:25 to 09:25 and once more at 22:45. Each task
+  wakes at its clock time, reads the files earlier jobs left behind, and leaves
+  files for the next. The architecture is the clock.</p>
 </header>
 
 <section>
   <p class="eyebrow">The weekday, end to end</p>
-  <h2>Five jobs, one timeline</h2>
+  <h2>The jobs that build the day, one timeline</h2>
   <div class="prose">
-    <p>Every weekday runs itself. Discovery picks the morning's gappers, the
-    collector listens to live trades, the 08:45 chain turns evidence into an
-    emailed report, and the night jobs, shown in amber here and throughout this
-    page, come back at 22:15 to write down what was really true. Sunday evening a
-    sixth pass rebuilds the discovery universe for the coming week.</p>
+    <p>Every weekday runs itself. Discovery reads no price from today, because at
+    07:15 no source on this plan has one for the whole universe. It builds a
+    candidate pool from four things that are knowable before the open (earnings
+    before today's open, overnight news, prior session movers, and recent
+    runners), ranks it by tier and then by measured gap propensity, and
+    subscribes the collector to at most 42 names, with a floor of four slots per
+    populated tier so a heavy earnings morning cannot spend the whole cap on one
+    tier. The rest of the pool is written to watchlist.json marked
+    not_subscribed, so the cut is auditable rather than invisible. The collector
+    listens to live trades, the 08:45 chain turns evidence into an emailed
+    report, and the night jobs, shown in amber here and throughout this page,
+    come back at 22:15 to write down what was really true. Sunday evening a sixth
+    pass rebuilds the discovery universe for the coming week and measures the gap
+    propensity the weekday pool is ordered by.</p>
   </div>
 
   <figure>
@@ -244,11 +255,11 @@
       <text x="760" y="60" text-anchor="middle" font-size="10" class="svg-accent-text svg-mono">22:15 nightly</text>
       <text x="760" y="78" text-anchor="middle" font-size="11" fill="currentColor">backfill_premarket.py</text>
       <text x="760" y="93" text-anchor="middle" font-size="11" fill="currentColor">fill_outcomes.py</text>
-      <text x="760" y="108" text-anchor="middle" font-size="11" fill="currentColor">build_archive.py</text>
+      <text x="760" y="108" text-anchor="middle" font-size="11" fill="currentColor">pool_recall.py, build_archive.py</text>
       <text x="760" y="128" text-anchor="middle" font-size="10" class="svg-muted">writes the truth into picks</text>
       <line x1="760" y1="138" x2="760" y2="154" stroke="currentColor" stroke-width="1"/>
 
-      <text x="60" y="210" font-size="10.5" class="svg-muted">Sunday 20:00, off this timeline: universe.py rebuilds the 2,700 name discovery population the whole week reads.</text>
+      <text x="60" y="210" font-size="10.5" class="svg-muted">Sunday 20:00, off this timeline: universe.py rebuilds the 2,745 name discovery population, then gap_stats.py measures the gap propensity the 07:15 pool ranks on.</text>
       <text x="60" y="224" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST): the nightly and next morning spend from the same day; every job logs its quota day.</text>
     </svg>
     <figcaption>One weekday. Morning jobs gather live evidence while it exists;
@@ -304,8 +315,8 @@
         <text x="233" y="45">07:15</text>
         <text x="386" y="45">07:20-09:25</text>
         <text x="539" y="45">08:45</text>
-        <text x="692" y="45">08:45:10</text>
-        <text x="845" y="45">08:46:25</text>
+        <text x="692" y="45">08:45:16</text>
+        <text x="845" y="45">08:46:52</text>
       </g>
       <g font-size="11.5" fill="currentColor" text-anchor="middle">
         <text x="80"  y="63">universe.py</text>
@@ -339,7 +350,7 @@
         <ellipse cx="539" cy="175" rx="85" ry="12"/>
       </g>
       <text x="539" y="208" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">premarketdesk.db</text>
-      <text x="539" y="224" text-anchor="middle" font-size="10" class="svg-muted">baseline + picks tables</text>
+      <text x="539" y="224" text-anchor="middle" font-size="10" class="svg-muted">baseline, picks, gap_stats tables</text>
 
       <!-- discover writes baselines -->
       <path d="M233 76 v112 h212" fill="none" stroke="currentColor" stroke-width="1.2" marker-end="url(#fl-arrow)"/>
@@ -357,13 +368,14 @@
       <text x="870" y="258" text-anchor="end" font-size="10" class="svg-muted">write truth columns into the same picks rows</text>
       <path d="M632 252 q-14 -4 -14 -18" fill="none" stroke="none"/>
     </svg>
-    <figcaption>The morning relay, stage times as measured on 2026-08-13: the
-    scan takes about 10 seconds, the analyst (opus, one completion, low
-    effort) 65 to 78 seconds over five measured runs, and render, deliver,
-    and the archive rebuild under two seconds together, so the chain
-    completes by about 08:46:30 with roughly 43 minutes of slack before the
-    09:30 open. A morning that rides both analyst timeouts into the fallback
-    report still finishes by about 08:53, leaving 37. The dashed amber arrow is the night returning to the same
+    <figcaption>The morning relay, stage times from the first fully scheduled
+    morning, 2026-08-14: the scan took about 15 seconds (on the build whose
+    scan still made a bulk call it no longer makes), the analyst (opus, one
+    completion, medium effort) 86.5 to 97.7 seconds over five measured runs,
+    and render, deliver, and the archive rebuild 0.7 seconds together, so the
+    chain finished at 08:46:53 with roughly 43 minutes of slack before the
+    09:30 open. A morning that rides both analyst timeouts, 293 seconds each,
+    into the fallback report still finishes by about 08:55, leaving 35. The dashed amber arrow is the night returning to the same
     database rows the 08:45 scan created, hours after the report already
     went out.</figcaption>
   </figure>
@@ -438,7 +450,11 @@
       <li>That runs <span class="mono">tasks\job_nightly.bat</span>, which runs
         <span class="mono">src\backfill_premarket.py</span>, then
         <span class="mono">src\fill_outcomes.py</span>, then
-        <span class="mono">src\build_archive.py</span> on this machine.</li>
+        <span class="mono">src\pool_recall.py</span>, then
+        <span class="mono">src\build_archive.py</span> on this machine. The recall
+        step is the one that never fails the chain: it measures which real
+        gappers the morning's pool missed, and since nothing downstream reads
+        the answer, a bad measurement must not cost the archive its rebuild.</li>
       <li>Backfill writes the true premarket columns into the
         <span class="mono">picks</span> table of <span class="mono">data\premarketdesk.db</span>,
         and while the intraday feed is open it also runs the definitive collector
@@ -470,11 +486,14 @@
         <li>date, ticker</li>
         <li>day_eligible, swing_eligible</li>
         <li>score, conviction</li>
+        <li>score_partial, score_unavailable</li>
         <li>gap_pct, pm_rvol</li>
         <li>pm_high, pm_low, pm_vwap</li>
         <li>collector_covered, pm_window_start</li>
         <li>prior_high, catalyst_class</li>
         <li>entry_ref, stop_ref</li>
+        <li>pool_source, pool_tier</li>
+        <li>source</li>
       </ul>
     </div>
     <div class="card night">
@@ -508,10 +527,18 @@
   <h2>When something fails</h2>
   <div class="prose">
     <p>The chain stops at the first failure, evidence gaps degrade to nulls
-    with written reasons, and staleness is refused loudly: any job reading
-    universe.json exits and names the file's age once it passes ten days.
-    While the <code>data/UNVERIFIED</code> gate marker exists, no email goes
-    out in any of these rows regardless of what else succeeded.</p>
+    with written reasons, and staleness is refused loudly in two places. Any
+    job reading universe.json exits and names the file's age once it passes
+    ten days. And scan.py calls vintage.py after pricing and before scoring,
+    so a packet whose price timestamps, prior close dating, or high against
+    close consistency say it is not this morning's data is refused outright.
+    That second gate has no degrade path, because a stale price is not thin
+    evidence a report can hedge around, it is a wrong number wearing the
+    costume of a right one. vintage.py rewrites <code>data/UNVERIFIED</code>
+    with every failing row named, nothing is scored, no packet is written, and
+    scan exits non-zero, which stops the chain before the analyst. While the
+    <code>data/UNVERIFIED</code> gate marker exists, no email goes out in any
+    of these rows regardless of what else succeeded.</p>
   </div>
   <div class="table-wrap">
   <table class="files">
@@ -535,15 +562,25 @@
       <td>discover.py fails at 07:15</td>
       <td>No fresh watchlist and no warmed baselines. The collector exits
       naming the missing file (or runs on yesterday's list if one is on
-      disk). Scan still builds candidates from its own fresh bulk call, marks
-      them collector uncovered with RVOL null and reasons. The report goes
-      out with the holes named in the disclaimer.</td>
+      disk). Scan no longer rebuilds membership and makes no bulk call of its
+      own: it reads the subscribed rows of watchlist.json, so a missing
+      watchlist leaves it with no candidates at all and gaps_to_fill says
+      exactly that. A stale watchlist still on disk gives it yesterday's pool,
+      which is also what the collector subscribed to, so the morning runs on
+      the wrong names rather than on none. Either way the report goes out with
+      the holes named in the disclaimer.</td>
     </tr>
     <tr>
       <td>collector never connects</td>
-      <td>No minute bars. Every premarket high, low, VWAP, and RVOL is null
-      with a reason, gaps_to_fill names every candidate. The report goes out,
-      thin and saying so.</td>
+      <td>No minute bars, and price comes from the collector and nowhere
+      else, so no candidate has a premarket price. Every subscribed name
+      leaves the candidate list for the packet's dropped_no_coverage with its
+      reason instead of being published at a stale price, so the packet
+      carries zero candidates and gaps_to_fill names the missing collector
+      file and every dropped name. The report still goes out: the market
+      snapshot falls back to the end of day feed, each row labelled source eod
+      and prior_session_only, the candidate tables are empty, and the
+      disclaimer carries the reason.</td>
     </tr>
     <tr>
       <td>scan.py fails at 08:45</td>
@@ -552,8 +589,9 @@
     </tr>
     <tr>
       <td>analyst.py fails or times out</td>
-      <td>Two attempts at 233 seconds each, three times the slowest of five
-      measured runs, then the deterministic fallback:
+      <td>Two attempts at 293 seconds each, three times the slowest of five
+      measured opus medium runs on 2026-08-14 (97.4, 86.5, 97.7, 91.1 and 92.4
+      seconds), then the deterministic fallback:
       report.md is rebuilt as plain tables straight from packet.json, the
       disclaimer carries the failure reason, analyst_usage.json records
       status timeout or failed. Render and deliver carry on, the email still
@@ -615,9 +653,9 @@
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>all code: config, ettime (the one ET clock), criteria, eodhd, store, universe, discover, collect_premarket, baseline, scan, analyst, render_report, deliver, backfill_premarket, fill_outcomes, verify_morning, build_archive, market_today (the trading day guard)</td></tr>
-    <tr><td>doc\</td><td>CRITERIA.md (every threshold), REPORT_TEMPLATE.md, prompt_analyst.md, BUILD_PLAN.md, this page</td></tr>
-    <tr><td>tasks\</td><td>five job .bat files, register_tasks.ps1, README with scheduling notes</td></tr>
+    <tr><td>src\</td><td>all code: config, ettime (the one ET clock), criteria, eodhd, store, universe, gap_stats (per name gap propensity, measured weekly on the universe rebuild), discover, collect_premarket, baseline, scan, vintage (the assertion that the priced data is today's, which rewrites the gate marker and ends the run when it is not), analyst, render_report, deliver, backfill_premarket, fill_outcomes, pool_recall (the nightly measurement of which real gappers the morning pool missed), verify_morning, build_archive, market_today (the trading day guard), monitor_jobs (the watchdog that checks each job fired and finished), backtest_pool (the recall harness, whose fetch stage is the only thing here that calls the vendor for history and whose evaluate stage scores an ordering from that cache with no calls at all), the two measure_ scripts that priced the bulk and socket calls, plus conftest, run_tests and the eight test_ modules run_tests runs</td></tr>
+    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md, prompt_analyst.md, BUILD_PLAN.md, sample_report.html, this page and the system architecture page beside it</td></tr>
+    <tr><td>tasks\</td><td>six job .bat files registered as eight scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, and job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45), register_tasks.ps1, README with scheduling notes</td></tr>
     <tr><td>data\</td><td>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl minute bars, premarketdesk.db, exchange-details.json holiday cache, UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, verify_intraday.json</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>

@@ -214,10 +214,14 @@ tbody tr:hover{background:var(--ground)}
   <div class="eyebrow">doc / architecture</div>
   <h1>PremarketDesk</h1>
   <p class="sub">There is no server, no queue, and no service. PremarketDesk is six Windows Task Scheduler
-  jobs on one machine, each waking at its own time, reading files the earlier jobs left behind, and
-  leaving files for the next. The schedule is the architecture.</p>
+  job scripts on one machine, registered as eight tasks: the nightly runs twice (22:15, and again at
+  07:00 as nightly-catchup) and the watchdog runs twice (07:25, repeating every 30 minutes for two
+  hours, and once at 22:45). Five of the scripts wake on their clock time, read the files the earlier
+  jobs left behind, and leave files for the next. The sixth is the watchdog, which reads the others'
+  dated logs and Task Scheduler's own record, then relaunches the .bat of whatever is safe to rerun.
+  The schedule is the architecture.</p>
   <div class="meta">
-    <span>37 components</span><span>6 scheduled jobs</span><span>1 data vendor</span><span>1 model call per day</span>
+    <span>47 components</span><span>6 job scripts, 8 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
   </div>
 </header>
 
@@ -270,9 +274,18 @@ tbody tr:hover{background:var(--ground)}
 <section id="s2">
   <h2><span class="n">02</span> &nbsp;Timeline</h2>
   <h3>The weekday, end to end</h3>
-  <p>Each job wakes on its clock time, does one thing, and exits. No job calls another. What passes
-  between them is files on disk, which is why a dead job shows up downstream as a missing file with a
-  stated reason rather than as a crash.</p>
+  <p>Each job wakes on its clock time, does one thing, and exits. No job in the data path calls
+  another. What passes between them is files on disk, which is why a dead job shows up downstream as
+  a missing file with a stated reason rather than as a crash.</p>
+  <p>The one exception is the watchdog (<code>tasks/job_monitor.bat</code>, registered as monitor,
+  which runs every 30 minutes for two hours from 07:25, and as monitor-night at 22:45). It reads Task
+  Scheduler's own record for each job alongside that job's dated log, and relaunches the job's .bat
+  when the job fired and died, when it never fired at all because the machine was asleep, when no
+  collector is alive inside the collector window, or when <code>universe.json</code> has gone past
+  <code>universe_rerun_after_days</code> = 8. Only idempotent work is rerun, at most
+  <code>max_reruns_per_job_per_day</code> = 1 per job per day so a hard failure cannot loop, and
+  never a second collector while one is still writing bars, because two collectors folding the same
+  tape write duplicate minutes and double the premarket volume downstream.</p>
 
   <figure>
     <div class="rail">
@@ -280,35 +293,54 @@ tbody tr:hover{background:var(--ground)}
       <div class="c conf">
         <h5>Rebuild the discovery population</h5>
         <p>Pulls the NYSE and NASDAQ symbol lists, keeps common stock only, and admits roughly 2,700
-        names on price, dollar volume, market cap, and history. The whole week screens against this file.</p>
-        <div class="ids">C02 fires C12 &rarr; writes C26</div>
+        names on price, dollar volume, market cap, and history. The whole week screens against this
+        file. A second step then measures gap propensity over 250 sessions and 20 day ATR for every
+        admitted name, one end of day call each, so about 2,745 calls and seven minutes. It rides
+        this schedule because every 07:15 pass of the coming week orders its pool within tier by
+        those numbers, and seven minutes is not available at 07:15.</p>
+        <div class="ids">C02 fires C12 then C40 &rarr; writes C26, C41</div>
       </div>
 
       <div class="t"><b>07:15</b>ET</div>
       <div class="c morn">
-        <h5>Find the morning's gappers, warm the baselines</h5>
-        <p>One bulk quote call across the population, gap computed against prior close, top 30 by
-        absolute gap written to the watchlist. In the same pass it refreshes any stale premarket
-        volume medians, which keeps that fetch off the 08:45 critical path.</p>
+        <h5>Build the candidate pool, warm the baselines</h5>
+        <p>No price from today is read here, because at 07:15 no source on this plan has one for the
+        whole universe, and reading one that only looked current is what ranked yesterday's movers
+        every morning. The pool is unioned from four priors instead: earnings before today's open, an
+        overnight news sweep from 16:00 the prior day, prior session movers measured close to close
+        over two bulk end of day calls, and recent runners from the picks table, decay weighted so a
+        name from three days ago outranks one from three weeks. It is ranked by tier, then within
+        tier by gap propensity, with 20 day ATR percent as the fallback for names carrying too little
+        history to score. Subscriptions are capped at 42, the collector's 50 slot limit less the
+        eight context tickers, and each populated tier takes a floor of four slots before the
+        remainder fills by overall rank, because strict priority never gave tiers 3 or 4 a single
+        slot across 60 replayed sessions. Everything below the cut is written out too, marked
+        <code>not_subscribed</code>, so the cut is auditable. In the same pass it refreshes any stale
+        premarket volume medians, which keeps that fetch off the 08:45 critical path.</p>
         <div class="ids">C03 fires C13 and C14 &rarr; writes C27, C30</div>
       </div>
 
       <div class="t"><b>07:20</b>to 09:25</div>
       <div class="c morn">
         <h5>Listen to live trades</h5>
-        <p>Opens the trades websocket, subscribes to the 30 watchlist names plus eight fixed context
-        tickers, and aggregates incoming prints into one-minute bars on disk. This is the only source
-        of today's premarket price path.</p>
+        <p>Opens the trades websocket, subscribes to the eight fixed context tickers plus the names
+        discover marked subscribed, at most 42, which is the socket's 50 subscription cap less the
+        context tickers, and aggregates incoming prints into one-minute bars on disk. This is the
+        only source of today's premarket price path.</p>
         <div class="ids">C04 fires C15 &rarr; writes C28</div>
       </div>
 
       <div class="t"><b>08:45</b>ET</div>
       <div class="c morn">
         <h5>Gather the evidence and decide</h5>
-        <p>Fresh gap pass, top 12 candidates, per-candidate enrichment, premarket relative volume
-        against the cached median, catalyst headlines by symbol tag, economic events, earnings. Then
-        the eligibility booleans and the confluence score, both computed in Python. Every decision in
-        the system is made here.</p>
+        <p>No vendor call decides membership: the candidates are the names discover chose at 07:15
+        and the collector subscribed to at 07:20, since the collector is the only source of today's
+        tape and a name found at 08:45 could not be priced anyway. Each is priced from the collector
+        file, its gap measured against the prior session close, and the top 12 by that measured gap
+        are kept. Then per-candidate enrichment, premarket relative volume against the cached median,
+        catalyst headlines by symbol tag, economic events, earnings. Then the eligibility booleans
+        and the confluence score, both computed in Python. Every decision in the system is made
+        here.</p>
         <div class="ids">C05 fires C16 &rarr; writes C29, C31</div>
       </div>
 
@@ -333,7 +365,7 @@ tbody tr:hover{background:var(--ground)}
       <div class="c open">
         <h5>Market opens</h5>
         <p>The system has already finished. Nothing it does after this point affects today's report.</p>
-        <div class="ids">&mdash;</div>
+        <div class="ids">none</div>
       </div>
 
       <div class="t"><b>20:00</b>ET</div>
@@ -385,50 +417,59 @@ tbody tr:hover{background:var(--ground)}
   <table>
     <thead><tr><th>ID</th><th>Component</th><th>Layer</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
     <tbody>
-      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06</td></tr>
-      <tr><td class="id">C02</td><td class="nm">job_universe.bat</td><td><span class="lay sched">Scheduler</span></td><td>Sun 20:00</td><td>&mdash;</td><td>C12, C34</td></tr>
-      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:15</td><td>&mdash;</td><td>C13, C14, C34</td></tr>
-      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:20</td><td>&mdash;</td><td>C15, C34</td></tr>
-      <tr><td class="id">C05</td><td class="nm">job_morning.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>&mdash;</td><td>C16-C19, C34</td></tr>
-      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15</td><td>&mdash;</td><td>C20, C21, C34</td></tr>
+      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46</td></tr>
+      <tr><td class="id">C02</td><td class="nm">job_universe.bat</td><td><span class="lay sched">Scheduler</span></td><td>Sun 20:00</td><td>none</td><td>C12, C40, C34</td></tr>
+      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
+      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:20</td><td>none</td><td>C15, C34</td></tr>
+      <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C16-C19, C22, C34</td></tr>
+      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15 and 07:00</td><td>none</td><td>C20, C21, C42, C34</td></tr>
+      <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
+      <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34</td><td>Relaunches C02-C06, C34</td></tr>
 
-      <tr><td class="id">C07</td><td class="nm">config.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>.env, paths</td><td>&mdash;</td></tr>
-      <tr><td class="id">C08</td><td class="nm">ettime.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>System clock</td><td>&mdash;</td></tr>
-      <tr><td class="id">C09</td><td class="nm">criteria.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C23</td><td>&mdash;</td></tr>
+      <tr><td class="id">C07</td><td class="nm">config.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>.env, paths</td><td>none</td></tr>
+      <tr><td class="id">C08</td><td class="nm">ettime.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>System clock</td><td>none</td></tr>
+      <tr><td class="id">C09</td><td class="nm">criteria.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C23</td><td>none</td></tr>
       <tr><td class="id">C10</td><td class="nm">eodhd.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C35, C36</td><td>Call counter</td></tr>
       <tr><td class="id">C11</td><td class="nm">store.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C30, C31</td><td>C30, C31</td></tr>
+      <tr><td class="id">C45</td><td class="nm">conftest.py</td><td><span class="lay found">Foundation</span></td><td>Imported by C44</td><td>C07 paths</td><td>A temporary sandbox</td></tr>
+      <tr><td class="id">C44</td><td class="nm">run_tests.py</td><td><span class="lay found">Foundation</span></td><td>By hand</td><td>C45, the whole test suite</td><td>Console</td></tr>
 
       <tr><td class="id">C12</td><td class="nm">universe.py</td><td><span class="lay morn">Morning</span></td><td>Weekly</td><td>C35</td><td>C26</td></tr>
-      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C26, C35</td><td>C27</td></tr>
+      <tr><td class="id">C40</td><td class="nm">gap_stats.py</td><td><span class="lay morn">Morning</span></td><td>Sun 20:00</td><td>C26, C35</td><td>C41</td></tr>
+      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
       <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C27, C30, C35</td><td>C30</td></tr>
       <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>07:20-09:25</td><td>C27, C36</td><td>C28</td></tr>
-      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C28, C30, C35</td><td>C29, C31, C32</td></tr>
+      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
+      <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
       <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:53</td><td>C32</td><td>C32</td></tr>
+      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay morn">Morning</span></td><td>08:53, and by hand</td><td>C29, C31, C32</td><td>Console</td></tr>
       <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:53</td><td>C32, C33, C38</td><td>C34</td></tr>
 
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
-      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay night">Night</span></td><td>By hand</td><td>C29, C31, C32</td><td>Console</td></tr>
+      <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C26, C27, C35</td><td>C32</td></tr>
+      <tr><td class="id">C43</td><td class="nm">backtest_pool.py</td><td><span class="lay night">Night</span></td><td>By hand</td><td>C26, C35, C41</td><td>data\backtest\ cache, a JSON report on request</td></tr>
 
-      <tr><td class="id">C23</td><td class="nm">CRITERIA.md</td><td><span class="lay conf">Authored</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C24</td><td class="nm">prompt_analyst.md</td><td><span class="lay conf">Authored</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C25</td><td class="nm">REPORT_TEMPLATE.md</td><td><span class="lay conf">Authored</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C23</td><td class="nm">CRITERIA.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C24</td><td class="nm">prompt_analyst.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C25</td><td class="nm">REPORT_TEMPLATE.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
 
-      <tr><td class="id">C26</td><td class="nm">universe.json</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C27</td><td class="nm">watchlist.json</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C28</td><td class="nm">premarket/&lt;date&gt;.jsonl</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C29</td><td class="nm">packet.json</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C30</td><td class="nm">db: baseline table</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C31</td><td class="nm">db: picks table</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>Deleted by hand</td></tr>
-      <tr><td class="id">C34</td><td class="nm">logs/</td><td><span class="lay store">Store</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C26</td><td class="nm">universe.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C27</td><td class="nm">watchlist.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C28</td><td class="nm">premarket/&lt;date&gt;.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C29</td><td class="nm">packet.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C30</td><td class="nm">db: baseline table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C31</td><td class="nm">db: picks table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C41</td><td class="nm">db: gap_stats table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>Rewritten by C16 on a vintage violation, deleted by hand</td></tr>
+      <tr><td class="id">C34</td><td class="nm">logs/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
 
-      <tr><td class="id">C35</td><td class="nm">EODHD REST</td><td><span class="lay ext">External</span></td><td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C36</td><td class="nm">EODHD trades socket</td><td><span class="lay ext">External</span></td><td>04:00-20:00</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C37</td><td class="nm">claude CLI</td><td><span class="lay ext">External</span></td><td>On call</td><td>&mdash;</td><td>&mdash;</td></tr>
-      <tr><td class="id">C38</td><td class="nm">Resend</td><td><span class="lay ext">External</span></td><td>On call</td><td>&mdash;</td><td>&mdash;</td></tr>
+      <tr><td class="id">C35</td><td class="nm">EODHD REST</td><td><span class="lay ext">External</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C36</td><td class="nm">EODHD trades socket</td><td><span class="lay ext">External</span></td><td>04:00-20:00</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C37</td><td class="nm">claude CLI</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C38</td><td class="nm">Resend</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
     </tbody>
   </table>
   </div>
@@ -449,7 +490,7 @@ tbody tr:hover{background:var(--ground)}
     <div class="relay">
       <div class="box conf"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 20:00. Common stock only, ~2,700 names.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">07:15. One bulk call, gap vs prior close, top 30.</span></div>
+      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">07:15. Four priors unioned, ranked by tier then gap propensity, 42 subscribed with 4 slots floored per tier.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">07:20-09:25. Websocket trades to 1m bars.</span></div>
       <div class="ar">&rarr;</div>
@@ -493,15 +534,27 @@ tbody tr:hover{background:var(--ground)}
   <h2><span class="n">05</span> &nbsp;Opened up</h2>
   <h3>Inside the scan</h3>
   <p>The scan does more work than anything else in the system and it is the only place where a
-  decision is made. Eight ordered steps, no model involved in any of them.</p>
+  decision is made. Eight ordered steps, no model involved in any of them, and between the seventh
+  step and the eighth an assertion that can end the run outright. After every price and prior close
+  is attached and before any eligibility flag or score is computed, <code>vintage.py</code> checks
+  four things: that every priced candidate's <code>price_time</code> is dated today and falls inside
+  the 04:00 to 09:30 premarket window, that no <code>prior_high</code> sits below its own
+  <code>prior_close</code> (two fields read from one OHLC bar cannot do that), that the prior close
+  is dated to the prior trading session per the exchange calendar rather than merely to some earlier
+  date, and that every market snapshot row is either dated today or labelled
+  <code>prior_session_only</code> and dated to that session. A violation rewrites
+  <code>data/UNVERIFIED</code> naming each failing row and the check that caught it, and the scan
+  exits non-zero, so nothing is stamped, no packet is written, and the morning chain stops before the
+  analyst call. There is deliberately no degrade path: a stale price is not thin evidence a report
+  can hedge around, it is a wrong number wearing the costume of a right one.</p>
 
   <figure>
     <ol class="steps">
       <li><b>Market snapshot</b><span>The index, volatility, rates, oil, and dollar tickers, last price and change against prior close. Context for the narrative, never an input to eligibility.</span></li>
-      <li><b>Final candidates</b><span>A fresh bulk quote call rather than trusting the 07:15 watchlist, gap recomputed, top 12 by absolute gap. The universe size that produced them is recorded.</span></li>
-      <li><b>Per-candidate enrichment</b><span>Extended-hours volume and last price, market cap, float, average volume, 200-day average, previous close. Prior-day high and 20-day average volume from the end-of-day feed.</span></li>
-      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else. A candidate that first gapped after 07:20 was never subscribed, so its levels are null with <code>collector_covered</code> false rather than filled from a snapshot.</span></li>
-      <li><b>Premarket relative volume</b><span>Extended-hours volume as of the run divided by the cached median for the same clock cutoff. Fewer than ten baseline sessions, or a missing collector file, produces null plus a written reason. Full-day relative volume is never substituted.</span></li>
+      <li><b>Final candidates</b><span>The names discover subscribed the collector to at 07:20, with no bulk call made here: a name first found at 08:45 has no premarket tape and could not be priced at all. Ranking is by the gap actually measured from the collector's own last bar, keeping the top 12. The size of the pool those names were drawn from, and how many of it were subscribed, is recorded. The pool tier that put each name in front of the collector is carried as a recorded field and never as an ordering, so a prior about who might move cannot reach the report looking like a finding.</span></li>
+      <li><b>Per-candidate enrichment</b><span>Runs after the ranking rather than before it, so the vendor calls land on names that already survived the cut. Extended-hours volume and its timestamp, market cap, float, average volume, and the 200-day average from the delayed quote. Prior session close, prior session high, that session's date, and 20-day average volume from one end-of-day record: close and high are read out of the same daily bar, because when they came from separate places, one from the bulk feed's previousClose and one from end-of-day history, they silently drifted a session apart. On 2026-08-14 six candidates carried a prior high below their own prior close, which cannot happen inside one OHLC bar, and the <code>require_above_prior_high</code> gate could never pass. Aligned by construction, that whole class of error is unreachable rather than merely unlikely. Two things break the order. A subscribed name that reached the scan with no prior close from the pool buys one end-of-day call before the ranking, since otherwise it is unrankable. And under a quota-thinned run the quote, history, and news calls are skipped altogether, so these fields are null for quota reasons rather than vendor ones.</span></li>
+      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else. Membership is the subscribed list, so a name that first gaps after 07:20 is never a candidate at all. A subscribed name the collector recorded nothing for has no price either, because the price is read from those same bars, and the only substitute on offer is a vendor field that at 08:45 still describes the last completed session. So it leaves the candidate list entirely and is named with its reason in <code>dropped_no_coverage</code>, rather than being published at a stale price or carried as a row of nulls.</span></li>
+      <li><b>Premarket relative volume</b><span>The collector's premarket volume divided by the cached median for the same clock cutoff. Never the quote's extended-hours volume, which describes the previous extended session until the vendor rolls it (measured on 2026-08-14 as after 08:45 and before 08:56, where at 08:45 it gave ARX 20,744,130 shares against a premarket median of 23.5, an RVOL of 882,728), and never full-day relative volume. Fewer than ten baseline sessions, a median below the 1,000 share floor, or a missing collector file produces null plus a written reason. The numerator covers 07:20 onward while the denominator accumulates from 04:00, so the ratio is a lower bound, a direction that can only withhold a candidate from a screen and never smuggle one in.</span></li>
       <li><b>Catalyst</b><span>Vendor news filtered by symbol tag over 24 hours, top three with headline, publisher, link, time, and sentiment. No keyword matching and no company-name regex, because the feed is already tagged. No tagged story means <code>catalyst_found</code> false.</span></li>
       <li><b>Calendar</b><span>High-importance US economic events for today and tomorrow, and earnings for the candidates plus notable names reporting tomorrow.</span></li>
       <li><b>Flags and score</b><span>Eligibility booleans read straight from the criteria file with the names of any failed conditions recorded. Then a confluence score from 0 to 10 built from catalyst class, relative volume band, gap band, position against prior high and premarket average, and market cap, bucketed green, yellow, or red. The per-component breakdown is stored, not just the total, so the score can be argued with later.</span></li>
@@ -525,11 +578,11 @@ tbody tr:hover{background:var(--ground)}
     <div class="flow">
       <div class="box conf"><span class="cid">C24</span><span class="nm">prompt_analyst.md</span><span class="dt">The contract: what may not be invented.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box conf"><span class="cid">C25</span><span class="nm">REPORT_TEMPLATE.md</span><span class="dt">Eleven fixed sections, in order.</span></div>
+      <div class="box conf"><span class="cid">C25</span><span class="nm">REPORT_TEMPLATE.md</span><span class="dt">Nine fixed sections, in order, under a title, subtitle and disclaimer line.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box store"><span class="cid">C29</span><span class="nm">packet.json</span><span class="dt">Every number, already decided.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box ext"><span class="cid">C37</span><span class="nm">claude -p --model sonnet</span><span class="dt">Subscription auth. No API key exists in this project.</span></div>
+      <div class="box ext"><span class="cid">C37</span><span class="nm">claude -p --model opus</span><span class="dt">Subscription auth. No API key exists in this project.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box store"><span class="cid">C32</span><span class="nm">report.md</span><span class="dt">Prose only.</span></div>
     </div>
@@ -547,11 +600,15 @@ tbody tr:hover{background:var(--ground)}
     <h4>What stops it going wrong</h4>
     <p style="font-size:13.5px">A containment check compares every ticker in the report against the
     packet and fails the run on any name that is not there. The prompt requires the disclaimer line to
-    name any candidate with a null relative volume or a partial premarket window. A run that exceeds
-    240 seconds, exits non-zero, or is refused for any reason falls back to rendering the packet as
-    plain tables stamped with the reason, so a report always goes out.</p>
+    name any candidate with a null relative volume or a partial premarket window. The claude CLI gets
+    two attempts, each capped at 293 seconds, three times the slowest of five measured opus medium
+    runs (97.4, 86.5, 97.7, 91.1, 92.4 seconds). When both attempts time out, exit non-zero, or come
+    back refused, <code>analyst.py</code> writes the packet out itself as plain tables stamped with
+    the reason, so a report always goes out.</p>
 
-    <figcaption><b>One model call per weekday.</b> Roughly 12,000 input tokens and 2,000 output,
+    <figcaption><b>One model call per weekday.</b> The two runs on disk measure the prompt at about
+    25,200 tokens (25,202 written to cache on 2026-08-14, 25,381 read back on 2026-08-13) and the
+    report at 7,697 and 5,173 output tokens,
     against the existing Claude subscription rather than a metered API key. Token counts are written to
     <code>runs/&lt;date&gt;/analyst_usage.json</code> so the real cost is measured rather than assumed.</figcaption>
   </figure>
@@ -570,10 +627,10 @@ tbody tr:hover{background:var(--ground)}
     <div class="cov">
       <div class="scale"><span>04:00</span><span>07:20</span><span>09:30 open</span></div>
       <div class="bar">
-        <div class="seg blind">NO LISTENER &mdash; by design</div>
+        <div class="seg blind">NO LISTENER, by design</div>
         <div class="seg live">C15 COLLECTOR, LIVE &rarr; C28</div>
       </div>
-      <div class="truth">C35 INTRADAY 1m &mdash; the whole session, published hours later &rarr; C20 at 22:15</div>
+      <div class="truth">C35 INTRADAY 1m: the whole session, published hours later &rarr; C20 at 22:15</div>
     </div>
     <figcaption><b>Coverage of the 04:00 to 09:30 premarket session.</b> The morning writes what the
     collector actually heard, labelled partial where it was partial. The night writes
@@ -609,10 +666,17 @@ tbody tr:hover{background:var(--ground)}
   45 second quiet window, made exactly one bulk live OHLCV request, and read the meter again. The
   counter moved by 100 for 18,341 returned symbol rows in one HTTP attempt. That reads as a flat
   per request rate, not a per symbol one, and the quiet watch saw zero drift from the script's own
-  meter reads, so the whole 100 belongs to the bulk request. The design makes two of these calls
-  each weekday, discover at 07:15 and scan at 08:45, about 200 counted calls a day against the
-  shared 100,000: well under the 1,000 per call line at which the bulk calls would dominate the
-  account, so the two call design stands. The same session recorded why the meter must be read
+  meter reads, so the whole 100 belongs to the bulk request. That was the bulk live endpoint, and
+  the morning path no longer calls it: it serves the last completed session, so ranking by it ranked
+  yesterday's movers. It survives only inside <code>measure_bulk_cost.py</code>, and
+  <code>test_pool.py</code> fails if <code>discover.py</code> names it again. What the morning buys
+  instead is two end of day bulk calls, both in discover at 07:15, the prior session and the one
+  before it so the move is read close to close, measured at 98 counted calls each, about 196 counted
+  calls a morning. The nightly recall pass buys two more of the same call at 22:15 and the weekly
+  universe rebuild buys twenty, one per lookback session. At 98 each, every one of them sits far
+  below the 1,000 per call <code>bulk_redesign_line</code> in <code>CRITERIA.md</code> at which bulk
+  calls would dominate the account, so the conclusion this measurement settled holds for the
+  endpoint that replaced it. The same session recorded why the meter must be read
   rather than inferred: at 23:03 ET the counter already showed 49,999 used on a quota day that had
   opened at 20:00, none of it this project's spending.</p></div>
 </section>
@@ -629,7 +693,7 @@ tbody tr:hover{background:var(--ground)}
     <div class="life">
       <div class="col">
         <h5>Scan creates it</h5>
-        <span class="when">C16 &mdash; 08:45, same morning</span>
+        <span class="when">C16 at 08:45, same morning</span>
         <ul>
           <li>date, ticker</li>
           <li>day_eligible, swing_eligible</li>
@@ -640,12 +704,15 @@ tbody tr:hover{background:var(--ground)}
           <li>pm_window_start</li>
           <li>prior_high, catalyst_class</li>
           <li>entry_ref, stop_ref</li>
+          <li>source</li>
+          <li>score_partial, score_unavailable</li>
+          <li>pool_source, pool_tier</li>
         </ul>
       </div>
       <div class="ar night">&rarr;<small>same night</small></div>
       <div class="col n2">
         <h5>Backfill widens it</h5>
-        <span class="when">C20 &mdash; 22:15, same night</span>
+        <span class="when">C20 at 22:15, same night</span>
         <ul>
           <li>pm_high_true</li>
           <li>pm_low_true</li>
@@ -658,7 +725,7 @@ tbody tr:hover{background:var(--ground)}
       <div class="ar night">&rarr;<small>+1, +5</small></div>
       <div class="col n3">
         <h5>Outcomes finish it</h5>
-        <span class="when">C21 &mdash; once 1 and 5 sessions have passed</span>
+        <span class="when">C21, once 1 and 5 sessions have passed</span>
         <ul>
           <li>next_day_open, high</li>
           <li>next_day_low, close</li>
@@ -682,7 +749,11 @@ tbody tr:hover{background:var(--ground)}
   <h3>Data store read and write matrix</h3>
   <p>Every store has exactly one writer in the morning path, which is what makes a missing file
   unambiguous. The picks table is the single exception and is written by three components at three
-  different times, always to different columns of the same row.</p>
+  different times, always to different columns of the same row. The gate marker has two writers,
+  <code>verify_morning.py</code> by hand and <code>vintage.py</code> from inside the scan, and one
+  reader, <code>deliver.py</code>, which refuses to send while it exists. One store is not columned
+  here because nothing in the morning path writes it: the gap_stats table (C41) is written weekly by
+  C40 and read at 07:15 by C13.</p>
 
   <div class="tw">
   <table class="mx">
@@ -693,15 +764,17 @@ tbody tr:hover{background:var(--ground)}
     </tr></thead>
     <tbody>
       <tr><td class="id">C12</td><td class="nm">universe.py</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
-      <tr><td class="id">C13</td><td class="nm">discover.py</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C40</td><td class="nm">gap_stats.py</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C13</td><td class="nm">discover.py</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C14</td><td class="nm">baseline.py</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td class="dash">&middot;</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
-      <tr><td class="id">C16</td><td class="nm">scan.py</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="w">W</td><td class="r">R</td><td class="w">W</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C16</td><td class="nm">scan.py</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="w">W</td><td class="r">R</td><td class="w">W</td><td class="w">W</td><td class="w">W&dagger;</td><td class="w">W</td></tr>
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C18</td><td class="nm">render_report.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C19</td><td class="nm">deliver.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="w">W</td></tr>
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td></tr>
     </tbody>
   </table>
@@ -711,26 +784,39 @@ tbody tr:hover{background:var(--ground)}
   <span class="w" style="font-family:var(--mono);font-weight:600">W</span> writes &nbsp;
   <span class="rw" style="font-family:var(--mono);font-weight:600">RW</span> reads then writes the same store.
   The scan reads the collector's file while the collector is still appending to it, so it copies to a
-  snapshot first, parses only complete lines, and discards any trailing partial line.</p>
+  snapshot first, parses only complete lines, and discards any trailing partial line.
+  &dagger; C16 writes C33 only when it refuses. <code>vintage.py</code> runs after pricing and before
+  scoring, and if the packet's own timestamps say the data is not from today, the scan rewrites the
+  marker with every failing row named and exits non-zero. On that path the other writes in this row
+  do not happen: no packet, no picks row, no <code>runs/</code> file.</p>
 </section>
 
 <!-- 10 -->
 <section id="s10">
   <h2><span class="n">10</span> &nbsp;Failure</h2>
   <h3>Failure behaviour</h3>
-  <p>No job retries another job and no job waits on one. The design question for each failure is only
-  what is missing downstream, what the next stage does about it, and whether the email still goes.</p>
+  <p>No job in the data path retries another and no job waits on one. The watchdog
+  (<code>src/monitor_jobs.py</code>, fired every 30 minutes for two hours from 07:25 and again at
+  22:45) is the deliberate exception: it checks Task Scheduler's record against each job's dated log
+  and relaunches only what is idempotent, at most <code>max_reruns_per_job_per_day</code> = 1 rerun
+  per job per day, so a hard failure cannot loop. The nightly is always safe to rerun, the morning
+  chain is rerun only until <code>rerun_chain_until</code> = 09:30 because after the open a premarket
+  report is history, and the collector is restarted only when no collector is alive, because two
+  collectors folding the same tape write duplicate minutes and double the premarket volume
+  downstream. The design question for each failure is otherwise only what is missing downstream, what
+  the next stage does about it, and whether the email still goes.</p>
 
   <div class="tw">
   <table>
     <thead><tr><th>What fails</th><th>Missing downstream</th><th>What the next stage does</th><th>Email?</th></tr></thead>
     <tbody>
       <tr><td class="nm">C12 universe.py<br><span style="font-family:var(--sans);color:var(--ink-3)">Sunday rebuild</span></td><td>Nothing immediately. Last week's C26 is still on disk.</td><td>C13 and C16 run against the stale file until it passes ten days old, then refuse and name the age.</td><td>Yes, until day 10</td></tr>
-      <tr><td class="nm">C13 discover.py<br><span style="font-family:var(--sans);color:var(--ink-3)">07:15</span></td><td>C27 absent or stale, baselines not warmed.</td><td>C15 has nothing to subscribe to and exits with a logged reason. C16 still runs its own gap pass, so candidates are found, but every premarket level is null and baselines are fetched inline.</td><td>Yes, degraded</td></tr>
-      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">07:20 to 09:25</span></td><td>C28 absent or short.</td><td>C16 sets premarket high, low, average, and relative volume to null with <code>collector_covered</code> false and a written reason. The disclaimer line names every affected candidate.</td><td>Yes, degraded</td></tr>
+      <tr><td class="nm">C13 discover.py<br><span style="font-family:var(--sans);color:var(--ink-3)">07:15</span></td><td>C27 absent or stale, baselines not warmed.</td><td>C15 finds nothing to subscribe to, prints that discover.py must be run first, and exits 1. C16 builds no candidate list of its own any more: membership is exactly the names discover marked subscribed, because the collector is the only source of today's premarket tape and it holds bars only for what was subscribed at 07:20. So an absent <code>watchlist.json</code> leaves the packet with no candidates at all rather than degraded ones, and that morning's tape is gone for good, because nobody listened to it. Baselines are not fetched inline either: CRITERIA [baseline] forbids fetching during the morning run and the warm step lives in job_discover.bat, so the scan reads the cache and publishes a null <code>pm_rvol</code> naming the reason when the cached row is missing or unusable. A stale watchlist fails differently, because nothing reads its date: C15 subscribes to yesterday's names, C16 prices them from today's tape, and a full width report goes out about the previous morning's pool.</td><td>Yes, no candidates</td></tr>
+      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">07:20 to 09:25</span></td><td>C28 absent or short.</td><td>C16 prices every candidate from that file and nowhere else, so a name the collector recorded no bars for has no price at all: it is removed into <code>dropped_no_coverage</code> with its reason rather than published at a stale price, and it never reaches picks. An absent file drops the whole subscribed list, so the packet is written with no candidates and the drop list is the record of who was lost. A short file drops only the uncovered names, and a name whose bars start after 07:20 is kept with <code>pm_window_starts_late</code> set, which is what the disclaimer line names.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
-      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 240 seconds, non-zero exit, or a refused request, C18 renders C29 directly as plain tables stamped "narrative unavailable" with the reason. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
+      <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. On 2026-08-14 the chain exited zero at every step and published a report describing the previous session, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>
+      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 293 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
       <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:53</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
       <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
       <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals.</td><td>Already sent</td></tr>
@@ -742,7 +828,9 @@ tbody tr:hover{background:var(--ground)}
   <div class="note"><p><b>Only one failure is unrecoverable.</b> A scan that dies at 08:45 loses that
   session permanently, because premarket state is live and cannot be fetched again afterwards. Every
   other failure either degrades the report or self-heals on the next run. That asymmetry is why the
-  scan catches everything and raises nothing.</p></div>
+  scan catches every missing field and raises on none of them. It raises on exactly one thing, a
+  vintage violation, because a missing field costs the report a line and a stale field costs it its
+  meaning.</p></div>
 </section>
 
 <!-- 11 -->
@@ -801,24 +889,28 @@ tbody tr:hover{background:var(--ground)}
   <dl class="fm">
     <dt>src\</dt>
     <dd>config, ettime, criteria, eodhd, store, universe, discover, baseline, collect_premarket,
-    scan, analyst, render_report, deliver, backfill_premarket, fill_outcomes, verify_morning
-    <span style="color:var(--ink-3)">(C07-C22)</span></dd>
+    scan, vintage, analyst, render_report, deliver, backfill_premarket, fill_outcomes,
+    verify_morning, gap_stats, pool_recall, backtest_pool, monitor_jobs, conftest, run_tests
+    <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47)</span></dd>
 
     <dt>doc\</dt>
     <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md, BUILD_PLAN.md, and this page
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
     <dt>tasks\</dt>
-    <dd>the job batch files, register_tasks.ps1, and scheduling notes
-    <span style="color:var(--ink-3)">(C02-C06)</span></dd>
+    <dd>the six job batch files, register_tasks.ps1, and scheduling notes
+    <span style="color:var(--ink-3)">(C02-C06, C46)</span></dd>
 
     <dt>data\</dt>
-    <dd>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl, premarketdesk.db, UNVERIFIED
-    <span style="color:var(--ink-3)">(C26-C28, C30, C31, C33)</span></dd>
+    <dd>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl, premarketdesk.db, UNVERIFIED,
+    backtest\ <span style="color:var(--ink-3)">(C26-C28, C30, C31, C33, C41)</span></dd>
 
     <dt>runs\&lt;date&gt;\</dt>
     <dd>packet.json, report.md, report.html, analyst_usage.json, verify_intraday.json,
-    premarket_snapshot.jsonl <span style="color:var(--ink-3)">(C29, C32)</span></dd>
+    premarket_snapshot.jsonl, pool_recall.json (written by the nightly recall pass, which measures
+    what the morning pool missed), and packet_degraded.json (written only when a quota thinned rerun
+    would otherwise overwrite a full width packet, so the thin evidence is kept beside the fuller day
+    rather than replacing it) <span style="color:var(--ink-3)">(C29, C32)</span></dd>
 
     <dt>logs\</dt>
     <dd>one dated log per job per day <span style="color:var(--ink-3)">(C34)</span></dd>

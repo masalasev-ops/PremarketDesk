@@ -1,10 +1,15 @@
 # PremarketDesk build plan and session handoff
 
-Last updated: 2026-08-13, evening ET. All sixteen checkpoints are built,
-verified, and committed. The five Task Scheduler jobs are registered. The
-system is armed but gated: it will run every weekday morning, produce a
-report, and refuse to email until a human reviews one real morning and
-deletes data/UNVERIFIED. Read "What remains" below for the two open items.
+Last updated: 2026-08-14, after the first live morning and the five commits
+that followed it. All sixteen checkpoints are built, verified, and committed,
+and the eight Task Scheduler jobs are registered. The system is armed but
+gated: it runs every weekday morning, produces a report, and refuses to email
+until a human reviews one real morning and deletes data/UNVERIFIED.
+
+The build history below is kept as written. Where a checkpoint describes
+behaviour that has since changed, the change is recorded in doc/CHANGELOG.md
+and the reasoning in doc/DECISIONS.md, both of which start on 2026-08-14.
+Read "What remains" and "The first live morning" below for the open items.
 
 ## What this project is
 
@@ -47,6 +52,12 @@ at the root and is gitignored along with .env.
 - src/: config, ettime, criteria, eodhd, store, universe, discover,
   collect_premarket, baseline, scan, analyst, render_report, deliver,
   backfill_premarket, fill_outcomes, verify_morning, build_archive,
+  vintage (the today or refuse check scan runs after pricing and before
+  scoring), pool_recall (the nightly measurement of what the candidate pool
+  missed), gap_stats (per name gap propensity, weekly, on the universe
+  schedule), backtest_pool (the fetch and evaluate harness that decides the
+  pool ordering), conftest and run_tests (the test sandbox and the mtime
+  check that proves the suite wrote nothing under runs/ or data/),
   market_today (the trading day guard every weekday job runs first: exit 3
   on weekends and official holidays from the cached EODHD exchange-details
   calendar, the .bat logs one line and stops; calendar unreachable with no
@@ -57,13 +68,18 @@ at the root and is gitignored along with .env.
   07:25 to 09:25 every 30 minutes and once at 22:45),
   measure_socket_cost (vendor counter before and after a collector-only
   run)
-- doc/: this file, CRITERIA.md, REPORT_TEMPLATE.md, prompt_analyst.md
-- tasks/: five job .bat files, register_tasks.ps1, README.md
+- doc/: this file, CHANGELOG.md, DECISIONS.md, CRITERIA.md,
+  REPORT_TEMPLATE.md, prompt_analyst.md, the two architecture pages,
+  sample_report.html
+- tasks/: six job .bat files, register_tasks.ps1, README.md. The six .bat
+  files register as eight scheduled tasks: job_nightly runs twice, at
+  22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
+  repeating weekday trigger and once more at 22:45
 - data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,
   premarketdesk.db, ca-bundle.pem, UNVERIFIED (the delivery gate marker)
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
-  report.html, analyst_usage.json, verify_intraday.json once the nightly job
-  has run
+  report.html, analyst_usage.json, and once the nightly job has run,
+  verify_intraday.json and pool_recall.json
 - site/PremarketDesk.html: the single file report archive, rebuilt from
   runs/ at the end of every morning chain and every nightly run
   (build_archive.py, embed_sessions knob in CRITERIA [archive]). Opens by
@@ -115,10 +131,12 @@ at the root and is gitignored along with .env.
   none), --effort low (default effort spent ~35k thinking tokens and 340s on
   a job with no decisions to make), a one line --system-prompt, everything
   piped on stdin. The model is opus, the owner's standing choice, re-asserted
-  after a review batch had said sonnet. Five measured opus runs on
-  2026-08-13: 65.3, 70.1, 67.0, 77.6, 65.8 seconds, num_turns 1 every time,
-  ~31k tokens, about 17 cents equivalent; timeout_s is 233, three times the
-  slowest.
+  after a review batch had said sonnet. Five measured opus runs at low effort
+  on 2026-08-13: 65.3, 70.1, 67.0, 77.6, 65.8 seconds, num_turns 1 every
+  time, ~31k tokens, about 17 cents equivalent. Effort moved to medium on
+  2026-08-14 after the comparison recorded under the reinstated review items
+  below, and five medium runs measured 97.4, 86.5, 97.7, 91.1 and 92.4
+  seconds, so timeout_s is now 293, three times the slowest.
 - .env holds the real EODHD token (100k daily request limit). RESEND_API_KEY
   and EMAIL_TO are empty, so delivery skips even without the gate.
 - `.claude/settings.local.json` grants broad tool permissions.
@@ -141,8 +159,12 @@ at the root and is gitignored along with .env.
 - Symbol formats disagree: bulk live returns `A.US`, bulk EOD returns bare
   `VASO`, the websocket wants bare `AAPL`, everything else wants `AAPL.US`.
 - Bulk live carries ghost rows: stale frozen snapshots that fabricate
-  enormous gaps. discover.normalize_bulk_live dedupes by newest timestamp
-  and drops rows older than max_quote_age_hours. Never consume bulk live raw.
+  enormous gaps. That was handled by a deduplication in discover which no
+  longer exists: the pool rewrite on 2026-08-14 removed the endpoint from
+  discovery entirely, and test_pool.py now fails if the name reappears
+  there. The fact is kept because it is the reason the feed is not trusted
+  for selection. If it is ever consumed for selection again, the newest
+  timestamp dedup and the age drop have to come back with it.
 - The /user endpoint counter (apiRequests against dailyRateLimit) is
   ACCOUNT WIDE and this account runs other projects too. Never attribute
   that counter to this project without a controlled before and after
@@ -159,15 +181,19 @@ at the root and is gitignored along with .env.
   OHLCV request (real-time/AAPL.US?ex=US) moved the vendor counter by
   exactly 100 for 18,341 returned rows, in one HTTP attempt, after a 45
   second quiet watch showed zero meter drift. A flat per request rate, not
-  per symbol. Verdict against the 1,000 line: NOT crossed. The two daily
-  bulk calls (discover 07:15, scan 08:45) cost about 200 a day on the
-  shared 100,000 and the two call design stands unchanged.
+  per symbol. Verdict against the 1,000 line: NOT crossed. That measurement
+  was of the bulk live call, which no scheduled job makes any more. The
+  day's bulk calls are now end of day: two at 07:15 for discover's prior
+  session movers, and two at 22:15 for the pool recall, at a measured 98
+  counted calls each, so about 392 a day on the shared 100,000.
 - Quota preflight, same night: discover.py and scan.py read /api/user on
   entry (eodhd.preflight) and act on the shared meter, never the local
   ledger, because the key is shared and remaining quota is not a function
   of this project's own usage. Below CRITERIA.md [quota]
-  degrade_below_remaining (5000) each keeps only its one unskippable bulk
-  call and writes the reading into gaps_to_fill; the report disclaimer
+  degrade_below_remaining (5000) scan keeps only the calls it cannot skip
+  and writes the reading into gaps_to_fill, while discover records the
+  reading and proceeds, its sources being the thing the morning cannot do
+  without; the report disclaimer
   states the reading on both paths (REPORT_TEMPLATE.md instructs the model,
   analyst.fallback_report appends it deterministically); below
   refuse_below_remaining (500) the job exits 1 before spending anything.
@@ -237,8 +263,10 @@ at the root and is gitignored along with .env.
 - Live v1 cumulative volume is NOT a sound short window reference (measured
   up to +1113 percent disagreement). The definitive check is
   `collect_premarket.py --verify-intraday` against EODHD 1m bars, evenings.
-- US10Y.GBOND, US3M.GBOND, DXY.INDX are NA on live but current on eod; the
-  snapshot falls back and records the source. No commodity symbols on this
+- US10Y.GBOND, US3M.GBOND, DXY.INDX are NA on live but current on eod. The
+  vendor fact still holds; the snapshot no longer asks the live endpoint at
+  all, reading end of day for every label and overwriting the last price
+  from the collector where the symbol has bars. The snapshot falls back and records the source. No commodity symbols on this
   plan; USO.US stands in for WTI, labelled a proxy.
 
 ## Checkpoint status: all sixteen DONE
@@ -268,7 +296,7 @@ CP9 deterministic score: `--rescore` run twice on the same packet produced
 byte identical output (fc: no differences).
 
 CP10 analyst: doc/REPORT_TEMPLATE.md (eleven fixed sections),
-doc/prompt_analyst.md (the twelve rules), src/analyst.py. Pipes prompt plus
+doc/prompt_analyst.md (the numbered rules), src/analyst.py. Pipes prompt plus
 template plus packet to the CLI on stdin, parses the JSON envelope, writes
 report.md and analyst_usage.json, logs tokens and cost, then runs the
 containment checker: every uppercase token in the report must exist in the
@@ -426,9 +454,10 @@ Open after that morning:
 
 - The machine must be awake at trigger times; Task Scheduler does not wake
   it by default. See tasks/README.md.
-- The analyst step spends roughly 1 to 2 dollars of Claude subscription
-  per morning at opus medium effort. The knobs are CRITERIA.md [analyst]
-  model and effort.
+- The analyst step spent 0.47 dollars equivalent on the one opus medium
+  morning measured so far, 2026-08-14, recorded in that day's
+  analyst_usage.json. One morning is not a range, and no second measurement
+  exists yet. The knobs are CRITERIA.md [analyst] model and effort.
 - Every job appends to a dated log in logs/. The morning chain stops on the
   first failure, so an empty inbox with a log that stops at scan means the
   packet failed, not the mail.

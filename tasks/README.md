@@ -7,12 +7,12 @@ project's own ET clock so a locale change cannot mangle the file name.
 
 | Job | Time (ET, machine local) | Days | What it runs |
 | --- | --- | --- | --- |
-| job_discover.bat | 07:15 | Mon to Fri | discover.py, then baseline.py to warm the RVOL cache for the new watchlist |
+| job_discover.bat | 07:15 | Mon to Fri | discover.py builds and ranks the candidate pool, then baseline.py warms the RVOL cache for the subscribed names only, not the whole pool |
 | job_collector.bat | 07:20 | Mon to Fri | collect_premarket.py, runs to the 09:25 stop time |
-| job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, deliver.py, build_archive.py, stopping on the first failure |
-| job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, fill_outcomes.py, then build_archive.py so a broken morning still gets archived that evening |
+| job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, verify_morning.py, deliver.py, build_archive.py, stopping on the first failure. verify_morning.py is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver.py |
+| job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, fill_outcomes.py, pool_recall.py to measure what the morning's pool missed against every universe name that actually gapped, then build_archive.py so a broken morning still gets archived that evening |
 | job_nightly.bat (again, as nightly-catchup) | 07:00 | Mon to Fri | the same idempotent run before the market day: the vendor usually publishes intraday overnight, so this fills yesterday via the catch-up sweep and finishes the volume verification before the new morning's collection is trusted |
-| job_universe.bat | 20:00 | Sunday | universe.py weekly rebuild |
+| job_universe.bat | 20:00 | Sunday | universe.py weekly rebuild, then gap_stats.py over every name in it. The gap statistics step is the larger of the two, measured at 2,745 calls and 421 seconds, and it produces the gap propensity discover ranks the pool by |
 | job_monitor.bat | 07:25, repeating every 30 min until 09:25, and once at 22:45 | Mon to Fri | monitor_jobs.py, the watchdog: checks that each job fired and finished, reruns what is safe |
 
 ## Registering
@@ -48,7 +48,10 @@ were registered, the tree does not refresh itself.
   (at most once per day each), a dead collector is restarted only while its
   window is open and no collector is alive, discover is never rerun after
   the collector window opens, and a missed Sunday universe build is caught
-  on the next weekday morning. Everything it decides is in
+  on a later weekday morning rather than the next one: the rerun triggers on
+  universe.json's age against CRITERIA [monitor] universe_rerun_after_days,
+  so a file written the previous Sunday is not stale enough to trip it until
+  that many days have passed. Everything it decides is in
   logs\monitor-YYYY-MM-DD.log, and a nonzero Last Result on the monitor
   task means something needs a human eye.
 - Norton occasionally denies the first write of a file. Every script retries

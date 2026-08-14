@@ -1,6 +1,8 @@
 @echo off
-rem PremarketDesk 07:15 discovery job: write watchlist.json, then warm the
-rem premarket volume baseline cache for it at the scan cutoff. The baseline
+rem PremarketDesk 07:15 discovery job: build and rank the candidate pool into
+rem watchlist.json, then warm the premarket volume baseline cache at the scan
+rem cutoff for the names that pool subscribed the collector to, not the whole
+rem file, which also carries the rows below the cut. The baseline
 rem warm lives here and not in the 08:45 chain because CRITERIA.md says the
 rem baseline is never fetched during the morning run.
 setlocal

@@ -256,8 +256,10 @@ worth roughly 5.8 extra publishable candidates a morning and the third roughly
 this stops being obvious.
 
 **A precondition, not a follow up.** The collector has only ever been load
-tested at 38 symbols, which is what the current cap plus the context tickers
-comes to. Nothing is known about its behaviour at 92 or 142 subscriptions:
+tested at 38 symbols, and that figure is from the OLD configuration: a 30 name
+watchlist plus the 8 context tickers, measured on 2026-08-13. The current cap
+already asks for more than that, 42 candidates plus the same 8, so the socket
+is untested at today's setting before any purchase is considered. Nothing is known about its behaviour at 92 or 142 subscriptions:
 message rate, the late trade grace period, the bar builder's per minute
 flush, and the reconnect path have all been exercised at one scale only. A cap
 change therefore carries a throughput check before it ships, not after. The

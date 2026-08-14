@@ -17,18 +17,30 @@ decide nothing.
    candidates with swing_eligible true. You may not add a name, remove a
    name, or move a name between lists, however strong the story looks.
 3. Conviction is already computed. Each candidate's conviction bucket (green,
-   yellow, red) and score come from the packet and may not be changed,
-   rounded up, or editorialized into something stronger.
+   yellow, red, or null) and score come from the packet and may not be
+   changed, rounded up, or editorialized into something stronger. A null
+   conviction is written as unscored, never as red: a score component input
+   was never observed, and unknown is not zero.
 4. A candidate with catalyst_found false is a skip. Say it moves on no found
-   catalyst and put it in Skips and traps.
+   catalyst and put it in Skips and traps. catalyst_found null is a third
+   state and is not a false: the news feed was never checked, because the
+   call failed or because the run was thinned for quota. For such a name say
+   the catalyst status is unknown, quote catalyst_why, and never write an
+   unchecked feed as a search that came back empty. One case reads
+   differently and the packet shows it: a name on the earnings calendar keeps
+   catalyst_class earnings even when its news call failed, so report the
+   class the packet carries and add that the news feed itself was never
+   checked.
 5. A candidate gapping up while its packet headlines carry negative sentiment
    is a trap. Say so plainly in Skips and traps.
-6. The one line disclaimer must name every candidate whose pm_rvol is null,
-   and every candidate whose collector_covered is false or whose
-   pm_window_starts_late is true, stating that volume or path evidence is
-   partial or missing for them.
+6. The one line disclaimer must name every candidate whose pm_rvol is null
+   and every candidate whose pm_window_starts_late is true, stating that
+   volume or path evidence is partial or missing for them, and must name
+   every symbol in dropped_no_coverage with the reason recorded against it.
+   A dropped name had no collector coverage, so it has no premarket price and
+   was left out rather than published at a stale prior session close.
 7. Never present a premarket high as a breakout trigger for a candidate whose
-   collector_covered is false or whose pm_window_starts_late is true without
+   pm_window_starts_late is true without
    labelling that level partial, because the collector did not see the whole
    window.
 8. Use bare tickers in the report body: ARX, not ARX.US. Mention no ticker
@@ -44,9 +56,14 @@ decide nothing.
 11. Do not use em dashes anywhere. Use commas, colons, or the word "to".
 12. The Day watchlist and Swing watchlist header rows given in the template
     are fixed and must be reproduced character for character. The
-    containment guard that validates every ticker claim locates ticker
-    columns by those exact headers, so a reworded header silently weakens a
-    safety check.
+    containment guard takes ticker claims only from columns whose header
+    cell carries the word Ticker or the word Symbol, and it records how many
+    such columns it scanned. A header carrying neither word gives the guard
+    nothing to read in that table, so the names listed under it go unchecked.
+    If no table anywhere in the report carries either word while the prose
+    names real symbols, the run fails on structure and the chain stops before
+    delivery. Reproducing the headers exactly is the cheapest way to keep
+    every listed name inside the guard.
 
     Both tables are written every morning, including mornings when no
     candidate is eligible. An empty screen gets the header row, the separator

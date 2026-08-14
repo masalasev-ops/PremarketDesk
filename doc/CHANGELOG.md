@@ -8,6 +8,54 @@ CRITERIA.md.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-14, later: the documentation was reconciled and it found a bug
+
+Five commits in one day changed discovery, pricing, ranking, the schedule and
+the schema, and the documents were audited against the code rather than
+against memory. Every document was read by a separate auditor and every claim
+it raised was verified against the source before being acted on: 114
+discrepancies confirmed, 11 refuted and left alone.
+
+**The audit found a live bug, which is the part worth recording.**
+pool_recall.build referred to a name, `floor`, that had been renamed to
+`gap_rule` when the gap threshold moved from a number to a rule. The signature
+and the one comparison were updated and three later uses were not, so every
+nightly run raised NameError before writing anything. Nothing caught it: main
+caught RuntimeError only, the nightly batch file ignores that step's exit code
+by design so a diagnostic cannot fail the chain, and the only test exercised
+pool_recall.measure, the pure function, never build, the one the scheduler
+calls. So the measurement that DECISIONS.md cites as "accumulating the evidence
+nightly" had accumulated nothing.
+
+Fixed, and the hole it came through closed with it. main now catches Exception
+and always prints the type, because a diagnostic that fails silently is worse
+than no diagnostic. test_pool.py gained claim 8, which runs build end to end
+against a stubbed client and a synthetic universe and asserts the file is
+written with the right arithmetic in it: one gapper, recall 0.0, the missed
+name listed.
+
+**What else was wrong.** Both architecture pages predated all five commits.
+CRITERIA still documented `max_quote_age_hours` and `run_after`, two keys with
+no readers left, and described the bulk live deduplication and the live-first
+market snapshot as though either still ran. REPORT_TEMPLATE and the analyst
+prompt still told the model to report `collector_covered false`, a state that
+can no longer reach the packet because drop_uncovered removes those candidates
+before enrichment. The README described a low effort analyst measured at 65 to
+78 seconds, a self check that prints a TLS line it does not print, and a
+trading day guard on every job including the Sunday one that does not have it.
+tasks/README listed five jobs and missed three steps. BUILD_PLAN said five
+scheduled jobs and a 233 second timeout.
+
+Four numbers in the append-only records were wrong when written and were
+corrected in place, since a record that misstates its own measurement is not a
+record: pool_recall makes two bulk calls not one, sixty sessions cost sixty two
+bulk days not sixty one, 109 of 355 null-propensity gappers is 31 percent not
+half, and the 88 percent miss is the whole miss rather than the cap's share,
+which splits about 50 points to the cap and 38 to the pool's reach. The
+collector load test figure of 38 symbols was the OLD configuration, 30 plus 8,
+and the current cap already asks for 50, which makes the throughput
+precondition on the cap decision stronger rather than weaker.
+
 ## 2026-08-14
 
 ### The bulk real-time endpoint lags a session, and nothing noticed
@@ -184,8 +232,9 @@ bulk_redesign_line.
 The nightly pass reads today's end of day for the whole exchange, works out
 which universe names actually gapped at the open against their prior close,
 and writes runs/<date>/pool_recall.json: how many gapped, how many the pool
-held, the recall fraction, and the names it missed. One bulk call, which that
-pass was making anyway.
+held, the recall fraction, and the names it missed. Two bulk end of day
+calls, today's and the prior session's, because the gap is measured open
+against prior close and one call carries only one of them.
 
 Backtested against 2026-08-13, whose real gappers are known:
 
@@ -228,7 +277,8 @@ The split is the point. Fetching is slow, dated and expensive enough to afford
 once; evaluating is free and will be run once per ordering candidate, and every
 comparison has to come from the same bytes. Bulk end of day is cached per day
 rather than per session because consecutive sessions share it, so sixty
-sessions cost sixty one bulk days rather than a hundred and twenty.
+sessions cost sixty two bulk days rather than a hundred and eighty, a session
+needing its own day, its prior and the one before that.
 
 From cache alone the harness reproduces the published 2026-08-13 figures
 exactly: 99 gapped, pool held 72 at 0.7273, subscribed held 28 at 0.2828.
@@ -366,14 +416,18 @@ recomputes weekly and so sits between them.
 Per session the null fraction runs from 0.005 to 0.143 with a median of 0.034,
 which is 5.9 unreachable gappers out of 173.7. History of the null ones, in
 sessions, on the earlier window: 169 had under 10, 34 had 10 to 24, 43 had 25
-to 49, and 109 had 50 to 99. So half of them are within a fortnight or two of
-scoring a propensity on their own.
+to 49, and 109 had 50 to 99. Those 109 are 31 percent of the 355, and they are
+the ones within a couple of months of crossing the 100 session line on their
+own; the 169 with under 10 sessions are a year away from it.
 
 The fraction is small, so the question is closed on the first of the two
 conclusions: the fallback stays as inert insurance, and no reserved allocation
 for short-history names is proposed. The arithmetic that settles it is that
-capturing every one of those 5.9 names would add at most 3.4 points of recall,
-against a cap that currently misses 88 percent of gappers for want of slots.
+capturing every one of those 5.9 names would add at most 3.4 points of recall.
+Set against the same sixty sessions, the shipped configuration reaches 0.1164
+of the gappers, so 88 points are missed in total: about 50 of them because the
+pool held the name and the cap cut it, and about 38 because the pool never held
+it at all.
 The binding constraint is the cap, which is already the open item.
 
 ### The lock rule is enforced rather than audited

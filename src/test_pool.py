@@ -16,6 +16,8 @@ Claims, one per clause of the pool rework:
   6. Scan ranks on the measured gap, so a tier 5 recent runner with the
      morning's largest gap comes first and still records tier 5.
   7. Recall is measured against what actually gapped, naming what was missed.
+  8. pool_recall.build runs end to end and writes its file. claim 7 tests the
+     pure function; this tests the one the scheduler actually calls.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -34,6 +37,7 @@ import eodhd
 import ettime
 import pool_recall
 import scan
+import universe
 import store
 
 _CRIT = criteria.load()
@@ -257,6 +261,74 @@ def claim_seven(failures: list[str]) -> None:
           f"missed {missed}, {result['subscribed_held']} of the hits subscribed")
 
 
+def claim_eight(failures: list[str]) -> None:
+    """build() end to end, because measure() alone never caught a NameError.
+
+    claim 7 exercises pool_recall.measure and passed happily for a week while
+    pool_recall.build raised NameError on every real run, wrote nothing, and
+    was ignored by the nightly batch file. A unit that tests the pure function
+    and never the one the scheduler calls is not coverage.
+    """
+    import pool_recall
+
+    class _Api:
+        def eod_bulk_last_day(self, exchange="US", day=None, symbols=None, extended=False):
+            rows = [
+                {"code": "GAPPER", "open": 12.0, "close": 12.5, "volume": 1000.0},
+                {"code": "QUIET", "open": 10.0, "close": 10.0, "volume": 1000.0},
+            ]
+            if day is not None and day.isoformat() == "2026-08-12":
+                rows = [
+                    {"code": "GAPPER", "open": 10.0, "close": 10.0, "volume": 900.0},
+                    {"code": "QUIET", "open": 10.0, "close": 10.0, "volume": 900.0},
+                ]
+            return eodhd.ApiResult(rows, None)
+
+    original_client, original_runs = eodhd.client, config.RUNS_DIR
+    original_universe, original_watchlist = universe.load_universe, discover.load_watchlist
+    sandbox = Path(tempfile.mkdtemp(prefix="premarketdesk-recall-"))
+    eodhd.client = lambda: _Api()
+    config.RUNS_DIR = sandbox
+    # A synthetic universe and pool, so the assertion is about the arithmetic
+    # rather than about whether two invented tickers happen to be listed.
+    universe.load_universe = lambda require_fresh=True: {
+        "symbols": [{"symbol": "GAPPER.US"}, {"symbol": "QUIET.US"}]
+    }
+    discover.load_watchlist = lambda: {
+        "generated_at": "2026-08-13T07:15:00-04:00",
+        "symbols": [{"symbol": "QUIET.US", "pool_tier": 2, "pool_rank": 1,
+                     "subscribed": True, "pool_source": ["news"]}],
+    }
+    try:
+        payload = pool_recall.build(session_date="2026-08-13", write=True)
+    except Exception as exc:
+        failures.append(f"pool_recall.build raised {type(exc).__name__}: {exc}")
+        payload = None
+    finally:
+        eodhd.client, config.RUNS_DIR = original_client, original_runs
+        universe.load_universe, discover.load_watchlist = original_universe, original_watchlist
+
+    if payload is not None:
+        # GAPPER opened 12.0 against a 10.0 prior close, so it gapped and the
+        # pool did not hold it. QUIET did not gap. Recall is therefore 0 of 1.
+        if payload.get("gapped") != 1:
+            failures.append(f"build() counted {payload.get('gapped')} gappers, expected 1")
+        if payload.get("recall") != 0.0:
+            failures.append(f"build() reported recall {payload.get('recall')}, expected 0.0")
+        if [r["symbol"] for r in payload.get("missed", [])] != ["GAPPER.US"]:
+            failures.append(f"build() missed list is {payload.get('missed')}")
+        for key in ("gapped", "pool_held", "recall", "missed", "session_date"):
+            if key not in payload:
+                failures.append(f"pool_recall payload has no {key}")
+        written = sandbox / "2026-08-13" / "pool_recall.json"
+        if not written.is_file():
+            failures.append("pool_recall.build wrote no pool_recall.json")
+        else:
+            print(f"  claim 8 build() wrote {written.name} with "
+                  f"{payload['gapped']} gapper(s) and recall {payload['recall']}")
+    shutil.rmtree(sandbox, ignore_errors=True)
+
+
 def main() -> int:
     failures: list[str] = []
     claim_one(failures)
@@ -265,6 +337,7 @@ def main() -> int:
     claim_five(failures)
     claim_six(failures)
     claim_seven(failures)
+    claim_eight(failures)
 
     if failures:
         for failure in failures:

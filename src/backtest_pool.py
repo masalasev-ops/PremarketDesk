@@ -23,8 +23,9 @@ that refetched while it evaluated would make every comparison a measurement of
 two different things.
 
 Bulk end of day is cached per DAY rather than per session, because consecutive
-sessions share it: session N's outcome read is session N+1's prior read. Sixty
-sessions therefore cost sixty one bulk days, not a hundred and twenty.
+sessions share it: session N's outcome read is session N+1's prior read. A
+session needs three days, its own, its prior and the one before that, so sixty
+consecutive sessions cost sixty two bulk days rather than a hundred and eighty.
 """
 
 from __future__ import annotations
