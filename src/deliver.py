@@ -68,11 +68,14 @@ def deliver(html_path: Path) -> int:
             timeout=60,
         )
     except Exception as exc:
-        print(f"deliver: FAILED to reach Resend: {exc}")
+        # Broad catch, so the text is untrusted: scrub before it can reach a
+        # log. scrub_secrets covers the Resend key as well as the data token.
+        print(f"deliver: FAILED to reach Resend: {config.scrub_secrets(exc)}")
         return 1
 
     if response.status_code >= 300:
-        print(f"deliver: Resend answered {response.status_code}: {response.text[:400]}")
+        print(f"deliver: Resend answered {response.status_code}: "
+              f"{config.scrub_secrets(response.text[:400])}")
         return 1
 
     try:

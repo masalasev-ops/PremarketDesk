@@ -149,9 +149,15 @@ def eodhd_token() -> str:
 
 
 def mask(secret: str) -> str:
-    """The display form of a secret: first four, ellipsis, last four."""
+    """The display form of a secret: an ellipsis and the last four characters.
+
+    Last four only, not first-and-last: eight visible characters are enough
+    to identify a token against a list even though they cannot be used, and
+    identification is itself a leak. Four is enough for a human to tell
+    which credential a log line is talking about.
+    """
     if len(secret) > 8:
-        return secret[:4] + "..." + secret[-4:]
+        return "..." + secret[-4:]
     return "***"
 
 

@@ -264,7 +264,11 @@ class EodhdClient:
                     url, params=query, timeout=timeout or TIMEOUT_S
                 )
             except requests.RequestException as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
+                # Exception text can quote the full URL, token included.
+                # Scrubbed here, at the one chokepoint every HTTP call goes
+                # through, so no error string leaving this function can carry
+                # a credential regardless of which caller records it.
+                last_error = config.scrub_secrets(f"{type(exc).__name__}: {exc}")
                 if may_retry(attempts):
                     time.sleep(_sleep_for(attempts, None))
                     continue
@@ -304,20 +308,25 @@ class EodhdClient:
                 break
 
             if response.status_code != 200:
-                body = (response.text or "")[:200].replace("\n", " ")
+                # A vendor error body can echo the request, so it is scrubbed
+                # like exception text.
+                body = config.scrub_secrets((response.text or "")[:200].replace("\n", " "))
                 last_error = f"HTTP {response.status_code}: {body}"
                 break
 
             try:
                 payload = response.json()
             except (ValueError, json.JSONDecodeError) as exc:
-                body = (response.text or "")[:200].replace("\n", " ")
+                body = config.scrub_secrets((response.text or "")[:200].replace("\n", " "))
                 last_error = f"response was not JSON ({exc}): {body}"
                 break
 
             self.ledger.record(label, attempts, None)
             return ApiResult(payload, None)
 
+        # Belt over the branch level scrubs: nothing recorded, printed or
+        # returned from the chokepoint may carry a credential.
+        last_error = config.scrub_secrets(last_error)
         self.ledger.record(label, attempts, last_error)
         print(f"eodhd: {label} failed, {last_error}")
         return ApiResult(None, f"{label} failed: {last_error}")

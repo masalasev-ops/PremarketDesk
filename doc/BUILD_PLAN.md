@@ -210,7 +210,17 @@ at the root and is gitignored along with .env.
   log. Proofs: src/test_store.py, the extended src/test_containment.py
   (Sym headed column produces the unvalidated disclaimer), and a forced
   connection failure that logged only the masked URL, with a grep of
-  logs/ for the token prefix returning nothing.
+  logs/ for the token prefix returning nothing. Extended the same day: the
+  scrub moved into eodhd._request itself, the one chokepoint every HTTP
+  call passes through, so no error string can leave it with a credential
+  regardless of which caller records it (exception text, non 200 bodies,
+  and a belt scrub at the exit); deliver.py scrubs its Resend failure
+  prints the same way; config.mask now shows only the last four characters,
+  because first-and-last-four reveals enough to identify a token against a
+  list; and src/test_scrub.py forces a tokenised network failure through
+  the chokepoint and through a whole packet build, asserting the mask
+  appears and the raw token appears nowhere in the returned error, the
+  ledger, gaps_to_fill, or the serialized packet.
 - The quota day is the UTC calendar date (eodhd.quota_day). One ET weekday
   spans two quota days: the morning jobs bill to the day that opened at
   20:00 ET the previous evening (19:00 in standard time), and the 22:15
