@@ -91,6 +91,17 @@ at the root and is gitignored along with .env.
 - Backslash paths inside Python docstrings: `data\UNVERIFIED` in a docstring
   is a unicode escape error at import time. Use forward slashes in prose.
 - PowerShell 5.1: no `&&`, use `if ($?) { }` or separate statements.
+- schtasks /Create /TR stored this project's spaced path UNQUOTED, and every
+  task then died at fire time with 0x80070002 file not found before its .bat
+  even started (discovered when the first real scheduled fire, the 22:15
+  nightly on 2026-08-13, failed). register_tasks.ps1 therefore uses the
+  ScheduledTasks PowerShell module, which stores the action structurally.
+  If a task ever shows Last Result -2147024894, suspect quoting again.
+- EODHD sometimes publishes the day's intraday later than the 22:15
+  nightly. The backfill sweeps up to catchup_days prior sessions whose true
+  premarket columns are still null, so a late vendor never leaves a day
+  permanently unfilled; the 2026-08-13 verification lands whenever the
+  vendor publishes, via that sweep.
 - The claude CLI lives at C:\Users\udaya\AppData\Roaming\npm\. The .cmd shim
   MANGLES empty string arguments (it forwards through cmd.exe), which
   silently breaks --tools "". analyst.resolve_cli therefore invokes the real

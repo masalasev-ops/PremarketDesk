@@ -285,8 +285,11 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         fired = task.get("last_run") is not None and task["last_run"].date() == now.date()
         # A finished log alone is not enough here: an ad hoc afternoon run
         # also writes the marker, and it must not mask a scheduled run that
-        # never fired. The job is idempotent, so the extra rerun is cheap.
-        if verdict == "skipped_closed" or (verdict == "finished" and fired):
+        # never fired or died before the bat even started (the 0x80070002
+        # quoting failure looked exactly like that). The job is idempotent,
+        # so the extra rerun is cheap.
+        fired_ok = fired and task.get("last_result") == "0"
+        if verdict == "skipped_closed" or (verdict == "finished" and fired_ok):
             report("nightly", "OK", verdict)
         else:
             problems += 1

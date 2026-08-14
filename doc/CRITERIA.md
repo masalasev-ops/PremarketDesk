@@ -208,8 +208,9 @@ true high over recent sessions, which is the standing measurement of how much
 premarket the 07:20 collector start actually misses.
 
 market_open                   = 09:30
-run_after                     = 22:00      # ET, the day's intraday is complete by then
+run_after                     = 22:00      # ET, the day's intraday is usually complete by then
 gap_report_sessions           = 20
+catchup_days                  = 5          # prior days with unfilled true columns retried each night, because the vendor sometimes publishes later than run_after
 
 ## Outcomes
 

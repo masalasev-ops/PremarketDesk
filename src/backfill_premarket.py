@@ -205,12 +205,36 @@ def backfill(day: str) -> int:
     return 0
 
 
+def _catchup_dates(before_day: str, limit: int) -> list[str]:
+    """Recent prior sessions whose picks still lack a true premarket high.
+
+    The vendor sometimes publishes intraday later than the nightly runs, and
+    a day the nightly could not fill must not stay unfilled forever just
+    because the calendar moved on.
+    """
+    with store.connect() as connection:
+        store.init(connection)
+        rows = connection.execute(
+            "SELECT DISTINCT date FROM picks WHERE date < ? AND pm_high_true IS NULL "
+            "ORDER BY date DESC LIMIT ?",
+            (before_day, limit),
+        ).fetchall()
+    return [row["date"] for row in rows]
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fill the true premarket window into picks.")
     parser.add_argument("--date", metavar="YYYY-MM-DD", default=ettime.today_et().isoformat(),
                         help="Session to backfill. Defaults to today in ET.")
+    parser.add_argument("--no-catchup", action="store_true",
+                        help="Only the named day, no sweep of unfilled prior days.")
     args = parser.parse_args(argv)
-    return backfill(args.date)
+    result = backfill(args.date)
+    if not args.no_catchup:
+        for day in _catchup_dates(args.date, _CRIT.integer("backfill", "catchup_days")):
+            print(f"backfill: catching up {day}, its true premarket columns are still null")
+            backfill(day)
+    return result
 
 
 if __name__ == "__main__":
