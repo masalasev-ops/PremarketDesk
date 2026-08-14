@@ -28,6 +28,7 @@ Endpoints wrapped, and only these:
     financial news                     /news?s=...
     economic events                    /economic-events
     earnings calendar                  /calendar/earnings
+    the account meter                  /user
 """
 
 from __future__ import annotations
@@ -128,6 +129,7 @@ class CallLedger:
             f"  of which retries   {self.retries}",
             f"  failed endpoints   {self.failures}",
             f"  wall clock         {elapsed:.1f}s",
+            f"  quota day          {quota_day()} (the shared counter resets 00:00 UTC)",
         ]
         for endpoint, count in self.by_endpoint.most_common():
             lines.append(f"    {count:>5}  {endpoint}")
@@ -144,6 +146,23 @@ class CallLedger:
 
 LEDGER = CallLedger()
 atexit.register(LEDGER.report)
+
+
+def quota_day(when: dt.datetime | None = None) -> str:
+    """The vendor quota day a moment bills to: the UTC calendar date.
+
+    The daily counter resets at midnight UTC, which is 20:00 ET in daylight
+    time and 19:00 in standard time. One ET weekday therefore spans two quota
+    days: the morning jobs bill to the day that opened the previous evening,
+    and the 22:15 nightly bills to the next one. A sibling project running in
+    the evening competes with the following morning, not with the day it
+    feels like it belongs to.
+    """
+    return (when or ettime.now_et()).astimezone(ettime.UTC).date().isoformat()
+
+
+class QuotaRefusal(RuntimeError):
+    """Raised when the preflight reading is below the refuse floor."""
 
 
 def print_call_report() -> None:
@@ -423,6 +442,19 @@ class EodhdClient:
             return ApiResult(None, f"eod {symbol} failed: payload was not a list")
         return ApiResult(rows, None)
 
+    def user_status(self) -> ApiResult:
+        """The account meter: apiRequests used today against dailyRateLimit.
+
+        The counter is account wide, shared by every consumer of the key, and
+        resets at midnight UTC. Reading it is itself one API call.
+        """
+        result = self._request("user", endpoint="user")
+        if not result.ok:
+            return result
+        if not isinstance(result.data, dict):
+            return ApiResult(None, "user: payload was not an object")
+        return result
+
     def exchange_details(self, exchange: str) -> ApiResult:
         """Exchange metadata: official holidays, early closes, trading hours."""
         result = self._request(
@@ -532,6 +564,75 @@ def client() -> EodhdClient:
     if _default_client is None:
         _default_client = EodhdClient()
     return _default_client
+
+
+def preflight(job: str) -> dict[str, Any]:
+    """Read the shared account meter before a job spends anything.
+
+    The key is shared across projects, so the quota remaining to this project
+    is not a function of its own usage and cannot be inferred from the client
+    side ledger. One call to /api/user answers what no local accounting can,
+    and answers it before the retry budget is burned discovering it via 429s.
+
+    Returns a record for the packet. Two thresholds from CRITERIA.md [quota]
+    shape the verdict: below degrade_below_remaining the job should skip every
+    call it can and say why, below refuse_below_remaining it should not run at
+    all. The caller owns acting on the verdict; this function only reads,
+    prints and records. A failed reading is an unknown meter, not a zero, so
+    it degrades nothing.
+    """
+    threshold = _CRIT.integer("quota", "degrade_below_remaining")
+    floor = _CRIT.integer("quota", "refuse_below_remaining")
+    record: dict[str, Any] = {
+        "quota_day": quota_day(),
+        "read_at": ettime.stamp(ettime.now_et()),
+        "api_requests": None,
+        "daily_limit": None,
+        "remaining": None,
+        "degrade_below": threshold,
+        "refuse_below": floor,
+        "degraded": False,
+        "refused": False,
+        "error": None,
+    }
+    data, error = client().user_status()
+    if error:
+        record["error"] = error
+        print(f"{job}: quota preflight could not read the meter ({error}). "
+              "Proceeding at full width: an unknown meter is not a zero meter.")
+        return record
+
+    used = int(data.get("apiRequests") or 0)
+    limit = int(data.get("dailyRateLimit") or 0)
+    remaining = max(0, limit - used)
+    record.update({"api_requests": used, "daily_limit": limit, "remaining": remaining})
+    print(f"{job}: quota preflight reads {used:,} of {limit:,} daily calls used "
+          f"on the shared key, {remaining:,} remaining, "
+          f"billing to quota day {record['quota_day']}")
+
+    if remaining < floor:
+        record["refused"] = True
+        record["degraded"] = True
+        print(f"{job}: quota exhausted by another consumer on the shared key: "
+              f"{remaining:,} of {limit:,} remain, below the refuse floor of {floor:,} "
+              "in CRITERIA.md [quota]. Running would spend the retry budget "
+              "against 429s, so the job refuses outright.")
+    elif remaining < threshold:
+        record["degraded"] = True
+        print(f"{job}: quota exhausted by another consumer on the shared key: "
+              f"{remaining:,} of {limit:,} remain, below the {threshold:,} threshold "
+              "in CRITERIA.md [quota]. Proceeding only with the calls this job "
+              "cannot skip.")
+    return record
+
+
+def describe_preflight(record: dict[str, Any]) -> str:
+    """The quota reading as one clause, for gaps_to_fill and disclaimers."""
+    if record.get("remaining") is None:
+        return "the quota preflight could not read the shared meter"
+    return (f"the shared API key had {record['remaining']:,} of "
+            f"{record['daily_limit']:,} daily calls remaining at preflight "
+            f"(quota day {record['quota_day']})")
 
 
 def _smoke() -> int:

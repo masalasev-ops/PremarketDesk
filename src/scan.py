@@ -744,6 +744,23 @@ def build_packet() -> dict[str, Any]:
     config.ensure_dirs()
     packet = Packet()
     api = eodhd.client()
+
+    # The shared key preflight, before anything is spent. Below the refuse
+    # floor the exception ends the run. Below the degrade threshold the run
+    # narrows to the one call it cannot skip, the bulk call that decides
+    # membership, and every skipped section records the reading, because a
+    # thin packet that says why it is thin beats a fat packet that burned the
+    # last of a shared day's quota.
+    quota = eodhd.preflight("scan")
+    if quota["refused"]:
+        raise eodhd.QuotaRefusal(
+            "quota exhausted by another consumer on the shared key: "
+            f"{eodhd.describe_preflight(quota)}, below the refuse floor of "
+            f"{quota['refuse_below']:,} in CRITERIA.md [quota]"
+        )
+    thin = quota["degraded"]
+    quota_clause = eodhd.describe_preflight(quota)
+
     now = ettime.now_et()
     cutoff = baseline.normalize_cutoff((now.hour, now.minute))
     # The baseline cache is warmed for the configured run time. Sixty seconds
@@ -764,7 +781,12 @@ def build_packet() -> dict[str, Any]:
     if watchlist.get("missing"):
         packet.gap("watchlist.json is missing, so no candidate can be marked collector covered")
 
-    snapshot = market_snapshot(api, packet)
+    if thin:
+        packet.gap(f"market snapshot skipped: {quota_clause}, below the "
+                   f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]")
+        snapshot = []
+    else:
+        snapshot = market_snapshot(api, packet)
     candidates, provenance = final_candidates(api, packet, universe_payload)
 
     # Snapshot the collector file before parsing it. The collector appends
@@ -783,14 +805,38 @@ def build_packet() -> dict[str, Any]:
               "this morning, noted in the packet")
 
     if candidates:
-        attach_quotes(api, candidates, packet)
-        attach_daily_history(api, candidates, packet)
+        if thin:
+            # The collector file and the baseline cache are local, so the
+            # premarket path and RVOL denominators still run below. What is
+            # skipped is exactly the per candidate REST spend.
+            packet.gap(
+                "delayed quotes, daily history and news skipped for every "
+                f"candidate: {quota_clause}. Market cap, ethVolume, the 200 day "
+                "average, prior day high and catalysts are null for quota "
+                "reasons, not vendor ones."
+            )
+            for candidate in candidates:
+                candidate["quote"] = {}
+                candidate["prior_high"] = None
+                candidate["avg_volume_20d"] = None
+                candidate["catalyst_found"] = None
+                candidate["catalyst_error"] = f"news call skipped: {quota_clause}"
+                candidate["headlines"] = []
+        else:
+            attach_quotes(api, candidates, packet)
+            attach_daily_history(api, candidates, packet)
         attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
         attach_premarket_rvol(candidates, packet, cutoff)
-        attach_catalysts(api, candidates, packet)
+        if not thin:
+            attach_catalysts(api, candidates, packet)
 
-    events = economic_events(api, packet)
-    earnings_block = earnings(api, candidates, packet)
+    if thin:
+        packet.gap(f"economic events and the earnings calendar skipped: {quota_clause}")
+        events = {"events": [], "skipped": quota_clause}
+        earnings_block = {"candidates": [], "notable_tomorrow": [], "skipped": quota_clause}
+    else:
+        events = economic_events(api, packet)
+        earnings_block = earnings(api, candidates, packet)
 
     if candidates:
         stamp_all(candidates, earnings_block)
@@ -808,6 +854,7 @@ def build_packet() -> dict[str, Any]:
     return {
         "generated_at": ettime.stamp(now),
         "session_date": now.date().isoformat(),
+        "quota_preflight": quota,
         "run_time_et": ettime.hhmm(now),
         "rvol_cutoff_hhmm": cutoff,
         "collector_file": collect_premarket.bar_path().name,
@@ -949,7 +996,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = build_packet()
-    except universe.StaleUniverseError as exc:
+    except (universe.StaleUniverseError, eodhd.QuotaRefusal) as exc:
         print(f"REFUSING TO RUN: {exc}")
         eodhd.print_call_report()
         return 1

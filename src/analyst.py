@@ -255,6 +255,17 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
         disclaimer += (
             f"; premarket path evidence is partial or missing for {', '.join(partial)}"
         )
+    quota = packet.get("quota_preflight") or {}
+    if quota.get("degraded"):
+        if quota.get("remaining") is not None:
+            disclaimer += (
+                f"; the shared API key had {quota['remaining']:,} of "
+                f"{quota['daily_limit']:,} daily calls remaining at preflight "
+                f"(quota day {quota.get('quota_day')}), so the skippable evidence "
+                "here is thin for quota reasons, not a vendor outage"
+            )
+        else:
+            disclaimer += "; the quota preflight could not read the shared meter"
     add(disclaimer + ".")
     add("")
     add("## Summary")

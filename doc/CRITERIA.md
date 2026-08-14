@@ -54,6 +54,28 @@ bulk_timeout_s                = 180        # the bulk feed returns every US tick
 quote_batch_size              = 20         # symbols per us-quote-delayed call
 news_limit                    = 50
 
+## Quota
+
+The EODHD key is shared across projects and the daily counter is account
+wide, so the quota remaining to this project is not a function of its own
+usage and cannot be inferred from the client side call ledger. discover.py
+and scan.py read /api/user once on entry, before spending anything, and act
+on what the meter actually says rather than discovering the limit through
+429s. The counter resets at midnight UTC, which is 20:00 ET in daylight time
+and 19:00 in standard time, so one ET weekday spans two quota days: the
+morning jobs bill to the quota day that opened the previous evening, and the
+22:15 nightly bills to the next one.
+
+Below the degrade threshold the job proceeds only with the calls it cannot
+skip and writes the reading into gaps_to_fill. Below the refuse floor it
+does not run at all: with almost nothing left, every call is a likely 429
+and the retry backoff would burn minutes learning what one meter read
+already said. 5000 covers roughly two full mornings of headroom; 500 is
+less than one degraded scan can need.
+
+degrade_below_remaining       = 5000       # skip skippable calls below this, record why
+refuse_below_remaining        = 500        # refuse to run outright below this
+
 ## Day setup
 
 Applies to the intraday gap and go screen. A candidate is day_eligible only

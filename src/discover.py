@@ -109,6 +109,19 @@ def normalize_bulk_live(rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str,
 
 def build(write: bool = True) -> dict[str, Any]:
     config.ensure_dirs()
+
+    # The shared key preflight. The one bulk call below is the call this job
+    # cannot skip: without it there is no watchlist and the collector has
+    # nothing to subscribe to. So a degraded reading changes nothing here
+    # except being recorded, and only the refuse floor stops the run.
+    quota = eodhd.preflight("discover")
+    if quota["refused"]:
+        raise eodhd.QuotaRefusal(
+            f"quota exhausted by another consumer on the shared key: "
+            f"{eodhd.describe_preflight(quota)}, below the refuse floor of "
+            f"{quota['refuse_below']:,} in CRITERIA.md [quota]"
+        )
+
     universe_payload = universe.require_fresh_universe()
     universe_symbols = set(universe.universe_symbols(universe_payload))
     universe_started_with = len(universe_symbols)
@@ -191,6 +204,7 @@ def build(write: bool = True) -> dict[str, Any]:
 
     payload: dict[str, Any] = {
         "generated_at": ettime.stamp(now),
+        "quota_preflight": quota,
         "universe_started_with": universe_started_with,
         "universe_generated_at": universe_payload.get("generated_at"),
         "floors": {
@@ -247,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         build(write=not args.dry_run)
-    except universe.StaleUniverseError as exc:
+    except (universe.StaleUniverseError, eodhd.QuotaRefusal) as exc:
         print(f"REFUSING TO RUN: {exc}")
         eodhd.print_call_report()
         return 1

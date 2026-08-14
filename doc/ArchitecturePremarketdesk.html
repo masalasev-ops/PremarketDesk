@@ -336,6 +336,18 @@ tbody tr:hover{background:var(--ground)}
         <div class="ids">&mdash;</div>
       </div>
 
+      <div class="t"><b>20:00</b>ET</div>
+      <div class="c open">
+        <h5>The shared quota day turns over</h5>
+        <p>The EODHD counter resets at midnight UTC, 20:00 ET in daylight time and 19:00 in
+        standard time, so one calendar weekday spans two quota days. Tonight's 22:15 nightly and
+        tomorrow's 07:15 and 08:45 jobs all bill to the quota day that opens now, which means any
+        sibling project spending on the shared key this evening is spending tomorrow morning's
+        budget, not today's. Every job log names the quota day it billed to, and discover and scan
+        read the meter on entry, before spending anything.</p>
+        <div class="ids">C13, C16 read /api/user &rarr; recorded in C27, C29</div>
+      </div>
+
       <div class="t"><b>22:15</b>ET</div>
       <div class="c night">
         <h5>Write down what was really true</h5>
@@ -591,6 +603,18 @@ tbody tr:hover{background:var(--ground)}
   message cost on a heavy live tape is the one number still owed. It is measurable any weekday by
   running <code>measure_socket_cost.py</code> inside the 04:00 to 07:15 window, before the
   scheduled jobs wake and while no other project touches the key.</p></div>
+
+  <div class="note"><p><b>What one bulk live snapshot costs, measured 2026-08-13 at 23:05 ET.</b>
+  <code>measure_bulk_cost.py</code> read <code>/api/user</code>, watched the meter sit still for a
+  45 second quiet window, made exactly one bulk live OHLCV request, and read the meter again. The
+  counter moved by 100 for 18,341 returned symbol rows in one HTTP attempt. That reads as a flat
+  per request rate, not a per symbol one, and the quiet watch saw zero drift from the script's own
+  meter reads, so the whole 100 belongs to the bulk request. The design makes two of these calls
+  each weekday, discover at 07:15 and scan at 08:45, about 200 counted calls a day against the
+  shared 100,000: well under the 1,000 per call line at which the bulk calls would dominate the
+  account, so the two call design stands. The same session recorded why the meter must be read
+  rather than inferred: at 23:03 ET the counter already showed 49,999 used on a quota day that had
+  opened at 20:00, none of it this project's spending.</p></div>
 </section>
 
 <!-- 8 -->

@@ -155,6 +155,34 @@ at the root and is gitignored along with .env.
   by exactly zero. The /user reads themselves did not register either. Still
   owed: the per message cost on a heavy live tape, measurable any weekday by
   running measure_socket_cost.py inside 04:00 to 07:15 before the jobs wake.
+- Measured 2026-08-13 at 23:05 ET with measure_bulk_cost.py: ONE bulk live
+  OHLCV request (real-time/AAPL.US?ex=US) moved the vendor counter by
+  exactly 100 for 18,341 returned rows, in one HTTP attempt, after a 45
+  second quiet watch showed zero meter drift. A flat per request rate, not
+  per symbol. Verdict against the 1,000 line: NOT crossed. The two daily
+  bulk calls (discover 07:15, scan 08:45) cost about 200 a day on the
+  shared 100,000 and the two call design stands unchanged.
+- Quota preflight, same night: discover.py and scan.py read /api/user on
+  entry (eodhd.preflight) and act on the shared meter, never the local
+  ledger, because the key is shared and remaining quota is not a function
+  of this project's own usage. Below CRITERIA.md [quota]
+  degrade_below_remaining (5000) each keeps only its one unskippable bulk
+  call and writes the reading into gaps_to_fill; the report disclaimer
+  states the reading on both paths (REPORT_TEMPLATE.md instructs the model,
+  analyst.fallback_report appends it deterministically); below
+  refuse_below_remaining (500) the job exits 1 before spending anything.
+  Proven by forcing the thresholds above the live reading: the refusal cost
+  one call and wrote nothing, the degraded packet ran on exactly two calls,
+  and the opus report's disclaimer named the reading. The same evening made
+  the case for the feature unprompted: 49,999 of 100,000 were already gone
+  at 23:03 on a quota day that had opened at 20:00, none of it this project.
+- The quota day is the UTC calendar date (eodhd.quota_day). One ET weekday
+  spans two quota days: the morning jobs bill to the day that opened at
+  20:00 ET the previous evening (19:00 in standard time), and the 22:15
+  nightly bills to the next one, so an evening sibling project competes
+  with the following morning. Every EODHD call report now names the quota
+  day the run billed to, so a starved morning is traceable to the evening
+  before.
 - Websocket wss://ws.eodhistoricaldata.com/ws/us: wait for the
   {"status_code":200} Authorized frame before subscribing, or the socket
   dies silently. ws.eodhd.com has a bad TLS cert, keep eodhistoricaldata.com.
