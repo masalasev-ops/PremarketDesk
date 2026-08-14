@@ -71,6 +71,12 @@ def _synthetic_cache(directory: Path) -> None:
         session.mkdir(parents=True, exist_ok=True)
         (session / "inputs.json").write_text(json.dumps({
             "session_date": date,
+            # screen_passed reads the end of day cache for these two days. No
+            # such cache exists for a synthetic session, so it returns zero,
+            # which is the point: the offline claim must hold even when a
+            # metric has nothing to work with.
+            "prior_session": "2026-01-02",
+            "earlier_session": "2025-12-31",
             "run_clock": f"{date}T07:15:00-05:00",
             "earnings": {"status": discover.FETCHED,
                          "names": {"EARN.US": {"timing": "BeforeMarket"}}},

@@ -279,6 +279,76 @@ partial cache is usable; evaluate takes whatever sessions it finds.
 - gap_stats.py held one write transaction open across two thousand HTTP calls,
   which is what locked the database. It now fetches first and writes once.
 
+### The measured ordering was adopted
+
+within_tier_key is gap_propensity and min_slots_per_tier is 4, both in
+CRITERIA.md with a citation rather than a seed marking: the sweep window, the
+session count, the out-of-sample date and the recall of the chosen
+configuration against the one it replaces. Replayed under the shipped
+configuration the 60 cached sessions give 0.1164 mean subscribed recall against
+0.0842 for the dollar volume key it replaces, and 0.0893 for that key given the
+same floor.
+
+The harness gained a SHIPPED configuration that ranks through
+discover.rank_value rather than a copy of it, so the row that claims to measure
+production moves when CRITERIA moves.
+
+### Null propensity falls back to ATR
+
+gap_propensity needs 100 sessions, and newly listed names are over-represented
+among hard gappers: SECZ gapped 25.6 percent on 2026-08-13 with a null
+propensity. within_tier_fallback is atr_pct_20d, which needs only 20 sessions.
+A name with neither sorts last and discover records the count.
+
+It did not improve anything measurable, and it did not cost anything either:
+with the fallback the sweep gives 0.1164, bit identical to plain propensity.
+The reason is in the same table: only 0.2 subscribed names per session lack a
+propensity, so the band the fallback reorders is almost always empty. Kept
+under the clause that says keep it if it does not lose. Under the dollar volume
+key that count was 1.3 per session, so the fallback would have mattered more to
+the ordering it replaced than to the one it serves.
+
+### Two new evaluate metrics
+
+**screen_passed**, the count of subscribed names that would have cleared the
+replayable part of the CRITERIA day screen, not merely gapped. Recall counts
+names that moved; this counts names the morning could have published, which is
+what the product is made of. The shipped configuration gives 6.57 per session
+against 5.77 for dollar volume. Only gap_pct, price, market_cap and
+require_above_prior_high are applied: premarket_rvol cannot be replayed for a
+historical session because there is no premarket tape for names that were never
+subscribed, so this is an upper bound on the real screen and SCREEN_SKIPPED in
+the module says so.
+
+**subscribed_without_primary**, the per session count of subscribed names the
+ranking key cannot score, which is what says whether the fallback is doing
+anything.
+
+### Test isolation became structural
+
+src/conftest.py redirects every writable root, sourced from config so a test
+cannot bypass it by building a path itself, and rebinds the six module level
+constants that captured one at import time. src/run_tests.py wraps the suite in
+it and photographs the real runs/ and data/ before and after, failing on any
+difference. Deliberately not a pytest conftest: pytest is not a dependency and
+requirements.txt is three lines on purpose.
+
+The full suite now runs with 203 files under the real roots before and 203
+unchanged after. `run_tests.py --prove-check` appends a test that writes
+straight to the real runs/ and the run fails naming the file, so the check is
+demonstrated rather than assumed.
+
+The audit that came with it found the lock problem was not one function. Three
+sites held a transaction across a network call: gap_stats.build, fixed earlier;
+baseline.warm, which held one across an intraday call per ticker for up to
+fifty tickers at 07:15; and fill_outcomes, which held one across an end of day
+call per pick. All three are now read, then fetch, then write. baseline.ensure
+was a fourth, latent: nothing calls it any more, and it opened a session and
+recursed so that compute() ran inside the transaction. Cleared as network free:
+backfill_premarket at both sites, baseline.get, baseline `--show`,
+discover.recent_runners, gap_stats.load_all, scan.attach_premarket_rvol,
+scan.write_picks and store.init.
+
 ### Packet schema
 
 New keys: `build`, `vintage`, `dropped_no_coverage`. New candidate fields:

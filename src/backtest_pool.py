@@ -339,19 +339,31 @@ def build_pool(inputs: dict[str, Any], metrics: dict[str, dict[str, Any]]) -> li
                    "closes": {}},
         "runners": {"status": discover.FETCHED_EMPTY, "names": {}},
     }
-    dollar_volume = {symbol: (metric.get("avg_dollar_volume_20d") or 0.0)
-                     for symbol, metric in metrics.items()}
     now = dt.datetime.fromisoformat(inputs["run_clock"])
-    return discover.assemble(sources, dollar_volume, now)
+    return discover.assemble(sources, metrics, now)
 
 
 ORDERINGS: dict[str, dict[str, Any]] = {
+    "SHIPPED": {
+        # Not a copy of the shipped rule, the shipped rule itself: this config
+        # sorts with discover.rank_value, which reads CRITERIA. If someone
+        # changes the key in CRITERIA, this row moves and the others do not.
+        "label": "shipped, CRITERIA within_tier_key through discover.rank_value",
+        "use_shipped_rank": True,
+    },
     "A": {
         "label": "20 day average dollar volume descending",
         "key": "avg_dollar_volume_20d",
-        "shipped": True,
     },
     "B": {"label": "gap propensity descending", "key": "gap_propensity"},
+    "COLLAPSED": {
+        # Tiers 2, 3 and 4 all convert at 0.35 to 0.40 under a floor, so the
+        # boundaries between them may be structure the ranking key then has to
+        # fight. This config keeps tier 1 and merges the rest into one tier.
+        "label": "tier 1 kept, tiers 2 to 4 collapsed into one",
+        "use_shipped_rank": True,
+        "collapse_tiers": {3: 2, 4: 2},
+    },
     "C": {"label": "median absolute gap descending", "key": "median_abs_gap_pct"},
     "D": {"label": "20 day ATR as a percent of price descending", "key": "atr_pct_20d"},
     "E": {
@@ -379,7 +391,6 @@ def order_pool(
     gapped in 250 sessions, and collapsing the two would quietly promote every
     name with too little history above every name with a real, low reading.
     """
-    key = ordering["key"]
     floor = ordering.get("min_dollar_volume")
 
     rows = list(pool)
@@ -389,10 +400,23 @@ def order_pool(
             if (metrics.get(row["symbol"], {}).get("avg_dollar_volume_20d") or 0.0) >= floor
         ]
 
-    def sort_key(row: dict[str, Any]) -> tuple:
-        value = metrics.get(row["symbol"], {}).get(key)
-        return (row["pool_tier"], 0 if value is not None else 1,
-                -(value or 0.0), row["symbol"])
+    if ordering.get("use_shipped_rank"):
+        def sort_key(row: dict[str, Any]) -> tuple:
+            return (row["pool_tier"], *discover.rank_value(row["symbol"], metrics),
+                    row["symbol"])
+    else:
+        key = ordering["key"]
+
+        def sort_key(row: dict[str, Any]) -> tuple:
+            value = metrics.get(row["symbol"], {}).get(key)
+            return (row["pool_tier"], 0 if value is not None else 1,
+                    -(value or 0.0), row["symbol"])
+
+    collapse = ordering.get("collapse_tiers") or {}
+    if collapse:
+        rows = [dict(row) for row in rows]
+        for row in rows:
+            row["pool_tier"] = collapse.get(row["pool_tier"], row["pool_tier"])
 
     rows.sort(key=sort_key)
     for index, row in enumerate(rows):
@@ -405,38 +429,84 @@ def order_pool(
 def apply_cap(
     rows: list[dict[str, Any]], cap: int, tier_floor: int = 0
 ) -> list[dict[str, Any]]:
-    """Mark the subscribed rows, optionally guaranteeing each tier a minimum.
+    """Mark the subscribed rows, guaranteeing each tier a minimum.
 
-    With tier_floor zero this is strict priority: the cap is filled from the
-    top of the overall order. Above zero, each tier that has candidates takes
-    its floor first and the remainder fills by overall rank, so a heavy
-    earnings morning cannot spend every slot on tier 1 and a light one cannot
-    hand the whole cap to whatever sorts first below it.
+    Delegates to discover.apply_slots so the harness measures the slot
+    allocation production actually runs. A sweep that scored a private copy of
+    the shipped logic would be measuring the copy.
     """
-    chosen: list[dict[str, Any]] = []
-    if tier_floor:
-        by_tier: dict[int, list[dict[str, Any]]] = {}
-        for row in rows:
-            by_tier.setdefault(row["pool_tier"], []).append(row)
-        for tier in sorted(by_tier):
-            chosen.extend(by_tier[tier][:tier_floor])
-            if len(chosen) >= cap:
-                break
-    picked = {id(row) for row in chosen}
-    for row in rows:
-        if len(chosen) >= cap:
-            break
-        if id(row) not in picked:
-            chosen.append(row)
-            picked.add(id(row))
+    return discover.apply_slots(rows, cap, tier_floor)
 
-    subscribed = {row["symbol"] for row in chosen[:cap]}
-    out = []
-    for row in rows:
-        row = dict(row)
-        row["subscribed"] = row["symbol"] in subscribed
-        out.append(row)
-    return out
+
+def _eod_cache(day: str) -> dict[str, Any]:
+    path = EOD_DIR / f"{day}.json"
+    if not path.is_file():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return {}
+
+
+# Which CRITERIA day_setup conditions this cache can and cannot test. Named
+# here rather than left implicit, because a "screen pass" count that quietly
+# skipped a condition would read as stronger evidence than it is.
+SCREEN_APPLIED = ("gap_pct", "price", "market_cap", "require_above_prior_high")
+SCREEN_SKIPPED = {
+    "premarket_rvol": (
+        "needs the collector's premarket volume, which exists only for names "
+        "subscribed on the day. There is no premarket tape for a historical "
+        "session, so this condition cannot be replayed and is not applied."
+    ),
+}
+
+
+def screen_passed(
+    subscribed_rows: list[dict[str, Any]],
+    inputs: dict[str, Any],
+    outcome: dict[str, Any],
+    metrics: dict[str, dict[str, Any]],
+) -> int:
+    """Subscribed names that would have cleared the replayable day screen.
+
+    Recall counts names that gapped. This counts names the morning could have
+    actually published, which is what the product is made of: a name that
+    gapped three percent on no volume against a prior high it never cleared is
+    not a candidate, it is a row in a feed.
+
+    Only the conditions in SCREEN_APPLIED are tested. premarket_rvol cannot be
+    replayed for a historical session at all, so this is an upper bound on the
+    real screen rather than the screen itself.
+    """
+    session_bars = _eod_cache(inputs["session_date"])
+    prior_bars = _eod_cache(inputs["prior_session"])
+    if not session_bars or not prior_bars:
+        return 0
+
+    price_rule = _CRIT.rule("day_setup", "price")
+    gap_rule = _CRIT.rule("day_setup", "gap_pct")
+    cap_rule = _CRIT.rule("day_setup", "market_cap")
+    require_high = _CRIT.flag("day_setup", "require_above_prior_high")
+    prior_closes = inputs.get("prior_closes") or {}
+
+    passed = 0
+    for row in subscribed_rows:
+        symbol = row["symbol"]
+        bar = session_bars.get(symbol) or {}
+        open_price = bar.get("o")
+        prior_close = prior_closes.get(symbol)
+        prior_high = (prior_bars.get(symbol) or {}).get("h")
+        if open_price is None or not prior_close:
+            continue
+        gap = (open_price - prior_close) / prior_close * 100.0
+        if not gap_rule.test(abs(gap)) or not price_rule.test(open_price):
+            continue
+        if not cap_rule.test((metrics.get(symbol) or {}).get("market_cap")):
+            continue
+        if require_high and (prior_high is None or open_price <= prior_high):
+            continue
+        passed += 1
+    return passed
 
 
 def evaluate_session(
@@ -464,6 +534,16 @@ def evaluate_session(
         if row["symbol"] in gappers:
             bucket["gapped"] += 1
 
+    # How many subscribed names the primary key could not score, which is the
+    # population the fallback exists for. Reported per session because it is
+    # the number that says whether the fallback is doing anything at all.
+    primary = _CRIT.text("discovery", "within_tier_key")
+    subscribed_rows = [row for row in capped if row["subscribed"]]
+    without_primary = [
+        row["symbol"] for row in subscribed_rows
+        if (metrics.get(row["symbol"]) or {}).get(primary) is None
+    ]
+
     return {
         "session_date": session_date,
         "gapped": result["gapped"],
@@ -471,6 +551,11 @@ def evaluate_session(
         "recall": result["recall"],
         "subscribed_held": result["subscribed_held"],
         "subscribed_recall": result["subscribed_recall"],
+        "screen_passed": screen_passed(subscribed_rows, inputs, outcome, metrics),
+        "subscribed_without_primary": len(without_primary),
+        "without_primary_that_gapped": sum(
+            1 for symbol in without_primary if symbol in gappers
+        ),
         "pool_size": len(ranked),
         "earnings_names": len(inputs["earnings"]["names"]),
         "per_tier": per_tier,
@@ -496,6 +581,7 @@ def load_metrics(as_of: str | None = None) -> dict[str, dict[str, Any]]:
             continue
         metrics[symbol] = {
             "avg_dollar_volume_20d": _as_float(row.get("avg_dollar_volume_20d")) or 0.0,
+            "market_cap": _as_float(row.get("market_cap")),
             "gap_propensity": None,
             "median_abs_gap_pct": None,
             "atr_pct_20d": None,
@@ -512,9 +598,10 @@ def load_metrics(as_of: str | None = None) -> dict[str, dict[str, Any]]:
 
 def sweep(
     orderings: list[str], floors: list[int], sessions: list[str] | None = None,
-    as_of: str | None = None,
+    as_of: str | None = None, caps: list[int] | None = None,
 ) -> dict[str, Any]:
-    cap = _CRIT.integer("discovery", "max_subscribed_candidates")
+    caps = caps or [_CRIT.integer("discovery", "max_subscribed_candidates")]
+    cap = caps[0]
     metrics = load_metrics(as_of)
     sessions = sessions or cached_sessions()
     if not sessions:
@@ -524,16 +611,22 @@ def sweep(
     for name in orderings:
         ordering = ORDERINGS[name]
         for floor in floors:
-            rows = [
-                evaluate_session(session, metrics, ordering, cap, tier_floor=floor)
-                for session in sessions
-            ]
-            results[f"{name}/floor{floor}"] = {
-                "ordering": name,
-                "label": ordering["label"],
-                "tier_floor": floor,
-                "sessions": rows,
-            }
+            for this_cap in caps:
+                rows = [
+                    evaluate_session(session, metrics, ordering, this_cap,
+                                     tier_floor=floor)
+                    for session in sessions
+                ]
+                label = f"{name}/floor{floor}"
+                if len(caps) > 1:
+                    label += f"/cap{this_cap}"
+                results[label] = {
+                    "ordering": name,
+                    "label": ordering["label"],
+                    "tier_floor": floor,
+                    "cap": this_cap,
+                    "sessions": rows,
+                }
     return {"cap": cap, "sessions": sessions, "metrics_as_of": as_of,
             "results": results}
 
@@ -565,9 +658,18 @@ def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any
             round(bucket["gapped"] / bucket["subscribed"], 4) if bucket["subscribed"] else None
         )
 
+    screens = [r.get("screen_passed") for r in rows if r.get("screen_passed") is not None]
     return {
         "sessions": len(rows),
         "per_tier": dict(sorted(per_tier.items())),
+        "mean_screen_passed": round(sum(screens) / len(screens), 4) if screens else None,
+        "total_screen_passed": sum(screens),
+        "mean_without_primary": round(
+            sum(r.get("subscribed_without_primary", 0) for r in rows) / len(rows), 3
+        ) if rows else None,
+        "without_primary_that_gapped": sum(
+            r.get("without_primary_that_gapped", 0) for r in rows
+        ),
         "mean_subscribed_recall": mean(recalls),
         "median_subscribed_recall": round(statistics.median(recalls), 4) if recalls else None,
         "min_subscribed_recall": round(min(recalls), 4) if recalls else None,
@@ -601,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
                           help="Tier floor, repeatable. Defaults to 0.")
     evaluate.add_argument("--heavy-threshold", type=int, default=20,
                           help="Earnings names at or above which a session counts as heavy.")
+    evaluate.add_argument("--cap", action="append", type=int, default=[],
+                          help="Subscription cap, repeatable. Defaults to CRITERIA.")
     evaluate.add_argument("--as-of", help="gap_stats window to rank with. Use a date "
                           "before the earliest session to stay out of sample.")
     evaluate.add_argument("--json", metavar="PATH", help="Write the full results here.")
@@ -618,13 +722,13 @@ def main(argv: list[str] | None = None) -> int:
 
     orderings = args.ordering or list(ORDERINGS)
     floors = args.floor or [0]
-    outcome = sweep(orderings, floors, as_of=args.as_of)
+    outcome = sweep(orderings, floors, as_of=args.as_of, caps=args.cap or None)
     sessions = outcome["sessions"]
     print(f"backtest: {len(sessions)} cached sessions, {sessions[0]} to {sessions[-1]}, "
           f"cap {outcome['cap']}, ranking metrics as of {outcome['metrics_as_of'] or 'newest'}")
     print()
     header = (f"{'config':<12} {'ordering':<52} {'floor':>5} {'mean':>7} {'median':>7} "
-              f"{'min':>6} {'max':>6} {'sd':>6} {'heavy':>7} {'light':>7} {'pool':>7}")
+              f"{'min':>6} {'max':>6} {'sd':>6} {'heavy':>7} {'light':>7} {'pool':>7} {'screen':>7} {'noKey':>6}")
     print(header)
     print("-" * len(header))
     for key, block in outcome["results"].items():
@@ -635,7 +739,8 @@ def main(argv: list[str] | None = None) -> int:
               f"{stats['min_subscribed_recall']:>6} {stats['max_subscribed_recall']:>6} "
               f"{stats['stdev_subscribed_recall']:>6} "
               f"{stats['heavy_mean_recall']:>7} {stats['light_mean_recall']:>7} "
-              f"{stats['mean_pool_recall']:>7}")
+              f"{stats['mean_pool_recall']:>7} {stats['mean_screen_passed']:>7} "
+              f"{stats['mean_without_primary']:>6}")
 
     print()
     print("per tier hit rate: subscribed slots given to that tier, and how many gapped")

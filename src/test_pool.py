@@ -167,20 +167,25 @@ def _pool_sources(count: int) -> dict:
 def claim_five(failures: list[str]) -> None:
     count = 300
     cap = _CRIT.integer("discovery", "max_subscribed_candidates")
-    dollar_volume = {f"S{index:03d}.US": float(count - index) * 1_000_000
-                     for index in range(count)}
+    key = _CRIT.text("discovery", "within_tier_key")
+    # Descending in the ranking key, so the expected order is S000 first.
+    metrics = {
+        f"S{index:03d}.US": {
+            "avg_dollar_volume_20d": float(index) * 1_000_000,
+            key: float(count - index) / count,
+        }
+        for index in range(count)
+    }
     now = ettime.at(dt.date(2026, 8, 14), 7, 15)
 
-    first = discover.assemble(_pool_sources(count), dollar_volume, now)
-    second = discover.assemble(_pool_sources(count), dollar_volume, now)
+    first = discover.assemble(_pool_sources(count), metrics, now)
+    second = discover.assemble(_pool_sources(count), metrics, now)
     if [r["symbol"] for r in first] != [r["symbol"] for r in second]:
         failures.append("the ranking is not deterministic across two runs")
     if len(first) != count:
         failures.append(f"the pool holds {len(first)} names, expected {count}")
 
-    for index, row in enumerate(first):
-        row["subscribed"] = index < cap
-        row["not_subscribed"] = index >= cap
+    discover.apply_slots(first, cap, _CRIT.integer("discovery", "min_slots_per_tier"))
     subscribed = [r for r in first if r["subscribed"]]
     if len(subscribed) != cap:
         failures.append(f"{len(subscribed)} subscribed, expected the cap of {cap}")
@@ -189,9 +194,9 @@ def claim_five(failures: list[str]) -> None:
         failures.append(f"{len(below)} below the cut, expected {count - cap}")
     if not all(r["not_subscribed"] for r in below):
         failures.append("a name below the cut is not marked not_subscribed")
-    volumes = [r["avg_dollar_volume_20d"] for r in first]
-    if volumes != sorted(volumes, reverse=True):
-        failures.append("the tiebreak is not dollar volume descending")
+    values = [(metrics[r["symbol"]] or {})[key] for r in first]
+    if values != sorted(values, reverse=True):
+        failures.append(f"the tiebreak is not {key} descending")
     if any(not r["pool_source"] for r in first):
         failures.append("a pooled name carries an empty pool_source")
     print(f"  claim 5 {count} names rank deterministically, {len(subscribed)} subscribed "

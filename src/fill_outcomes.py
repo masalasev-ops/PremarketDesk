@@ -71,27 +71,34 @@ def fill(day_limit: str | None = None) -> int:
     long_n = _CRIT.integer("outcomes", "horizon_sessions_long")
     api = eodhd.client()
 
+    # Read, then fetch, then write. Three phases on purpose: a transaction must
+    # never span a network call, because one held open across an end of day
+    # request per pick locks the database for the length of the job and every
+    # other writer fails with "database is locked" for reasons that have
+    # nothing to do with it. See conftest.py for the incidents that taught this.
     with store.session() as connection:
         store.init(connection)
         added = store.ensure_columns(connection, "picks", _OUTCOME_COLUMNS)
-        if added:
-            print(f"outcomes: widened picks with {', '.join(added)}")
-
         # source = 'live' only: outcomes are the record the thresholds will
         # one day be calibrated against, and test rows have no business in it.
-        candidates = connection.execute(
+        candidates = [dict(row) for row in connection.execute(
             "SELECT * FROM picks WHERE (next_day_close IS NULL OR day5_close IS NULL) "
             "AND source='live' ORDER BY date, ticker"
-        ).fetchall()
-        if not candidates:
-            print("outcomes: every live pick already has its outcomes "
-                  "(test rows are never filled), nothing to do")
-            return 0
+        ).fetchall()]
 
-        calendar = _session_calendar(api, back_days=40)
-        filled = skipped = unavailable = 0
-        now_stamp = ettime.stamp(ettime.now_et())
+    if added:
+        print(f"outcomes: widened picks with {', '.join(added)}")
+    if not candidates:
+        print("outcomes: every live pick already has its outcomes "
+              "(test rows are never filled), nothing to do")
+        return 0
 
+    calendar = _session_calendar(api, back_days=40)
+    filled = skipped = unavailable = 0
+    now_stamp = ettime.stamp(ettime.now_et())
+    writes: list[tuple[dict[str, Any], str, str]] = []
+
+    if True:
         for pick in candidates:
             date, ticker = pick["date"], pick["ticker"]
             if day_limit and date > day_limit:
@@ -147,13 +154,16 @@ def fill(day_limit: str | None = None) -> int:
                 skipped += 1
                 continue
             updates["outcomes_filled_at"] = now_stamp
+            writes.append((updates, date, ticker))
+            filled += 1
+
+    with store.session() as connection:
+        for updates, date, ticker in writes:
             assignments = ", ".join(f"{column}=?" for column in updates)
             connection.execute(
                 f"UPDATE picks SET {assignments} WHERE date=? AND ticker=?",
                 [*updates.values(), date, ticker],
             )
-            filled += 1
-
         connection.commit()
 
         # Rows are not observations. Candidates from one morning share the

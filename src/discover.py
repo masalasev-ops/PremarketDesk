@@ -345,16 +345,119 @@ def _tier_map() -> dict[str, int]:
     return {key: int(value) for key, value in _CRIT.pair_map("pool_tiers", "tier").items()}
 
 
+def load_metrics() -> dict[str, dict[str, Any]]:
+    """Per name ranking inputs: dollar volume from the universe, the rest cached.
+
+    Both are free at 07:15. avg_dollar_volume_20d was written by the weekly
+    universe rebuild and the gap statistics by gap_stats.py on the same
+    schedule, so nothing here is computed or fetched in the morning.
+    """
+    import gap_stats
+
+    try:
+        universe_payload = universe.load_universe(require_fresh=False)
+    except Exception:
+        universe_payload = {"symbols": []}
+
+    metrics: dict[str, dict[str, Any]] = {}
+    for row in universe_payload.get("symbols", []):
+        symbol = str(row.get("symbol", "")).upper()
+        if symbol:
+            metrics[symbol] = {
+                "avg_dollar_volume_20d": _as_float(row.get("avg_dollar_volume_20d")) or 0.0,
+                "gap_propensity": None,
+                "atr_pct_20d": None,
+                "median_abs_gap_pct": None,
+            }
+    for symbol, stats in gap_stats.load_all().items():
+        if symbol in metrics:
+            metrics[symbol].update({
+                "gap_propensity": stats.get("gap_propensity"),
+                "atr_pct_20d": stats.get("atr_pct_20d"),
+                "median_abs_gap_pct": stats.get("median_abs_gap_pct"),
+            })
+    return metrics
+
+
+def rank_value(symbol: str, metrics: dict[str, dict[str, Any]]) -> tuple[int, float]:
+    """The within tier sort value for one name. Three bands, best first.
+
+    The leading band is what keeps a null out of the way of a measured zero: a
+    name nobody has measured and a name that has not gapped in a year are
+    different facts, and collapsing them would promote every recent listing
+    above every genuinely quiet name. See the null note in CRITERIA.md.
+
+    Band 0 is the primary key. Band 1 is the fallback, for names the primary
+    structurally cannot score: gap propensity needs 100 sessions, and newly
+    listed names are over-represented among hard gappers, so ranking them last
+    cuts the population most worth watching. SECZ gapped 25.6 percent on
+    2026-08-13 with a null propensity. The fallback needs only 20 sessions.
+    Band 2 is neither, which is recorded by the caller rather than left silent.
+    """
+    row = metrics.get(symbol) or {}
+    value = row.get(_CRIT.text("discovery", "within_tier_key"))
+    if value is not None:
+        return (0, -float(value))
+    fallback_key = _CRIT.text("discovery", "within_tier_fallback")
+    fallback = row.get(fallback_key) if fallback_key else None
+    if fallback is not None:
+        return (1, -float(fallback))
+    return (2, 0.0)
+
+
+def apply_slots(
+    ranked: list[dict[str, Any]], cap: int, min_slots_per_tier: int
+) -> list[dict[str, Any]]:
+    """Mark subscribed rows, giving each populated tier its floor first.
+
+    With a floor of zero this is strict priority, which in 60 replayed sessions
+    never gave tiers 3 or 4 a single slot. Above zero each tier that has
+    candidates takes its floor before the remainder fills by overall rank, so a
+    heavy earnings morning cannot spend the whole cap on tier 1 and a light one
+    cannot hand it all to whatever sorts first below.
+    """
+    chosen: list[dict[str, Any]] = []
+    picked: set[int] = set()
+    if min_slots_per_tier:
+        by_tier: dict[int, list[dict[str, Any]]] = {}
+        for row in ranked:
+            by_tier.setdefault(row["pool_tier"], []).append(row)
+        for tier in sorted(by_tier):
+            for row in by_tier[tier][:min_slots_per_tier]:
+                if len(chosen) >= cap:
+                    break
+                chosen.append(row)
+                picked.add(id(row))
+            if len(chosen) >= cap:
+                break
+    for row in ranked:
+        if len(chosen) >= cap:
+            break
+        if id(row) not in picked:
+            chosen.append(row)
+            picked.add(id(row))
+
+    subscribed = {id(row) for row in chosen}
+    for row in ranked:
+        row["subscribed"] = id(row) in subscribed
+        row["not_subscribed"] = not row["subscribed"]
+    return ranked
+
+
 def assemble(
     sources: dict[str, dict[str, Any]],
-    dollar_volume_20d: dict[str, float],
+    metrics: dict[str, dict[str, Any]],
     now: dt.datetime,
 ) -> list[dict[str, Any]]:
     """Union the sources, assign each name its best tier, and rank the pool.
 
-    Ranking is by tier, then by 20 day average dollar volume descending, then
+    Ranking is by tier, then by the CRITERIA within_tier_key descending, then
     by symbol so the order is total and a rerun is reproducible. No field from
     today is involved, because none exists yet.
+
+    The key is gap propensity, chosen by measurement rather than assumption;
+    see the ordering note in CRITERIA.md for the sweep that picked it over the
+    20 day dollar volume it replaced.
     """
     tiers = _tier_map()
     fresh_hours = _CRIT.number("discovery", "news_fresh_hours")
@@ -362,12 +465,15 @@ def assemble(
     pool: dict[str, dict[str, Any]] = {}
 
     def touch(symbol: str) -> dict[str, Any]:
+        row = metrics.get(symbol) or {}
         return pool.setdefault(symbol, {
             "symbol": symbol,
             "pool_source": [],
             "pool_tier": None,
             "pool_evidence": {},
-            "avg_dollar_volume_20d": dollar_volume_20d.get(symbol),
+            "avg_dollar_volume_20d": row.get("avg_dollar_volume_20d"),
+            "gap_propensity": row.get("gap_propensity"),
+            "atr_pct_20d": row.get("atr_pct_20d"),
         })
 
     def claim(symbol: str, source_name: str, tier_key: str, evidence: Any) -> None:
@@ -404,11 +510,8 @@ def assemble(
 
     ranked = sorted(
         pool.values(),
-        key=lambda row: (
-            row["pool_tier"],
-            -(row["avg_dollar_volume_20d"] or 0.0),
-            row["symbol"],
-        ),
+        key=lambda row: (row["pool_tier"], *rank_value(row["symbol"], metrics),
+                         row["symbol"]),
     )
     return ranked
 
@@ -426,12 +529,15 @@ def build(write: bool = True) -> dict[str, Any]:
 
     universe_payload = universe.require_fresh_universe()
     universe_symbols = set(universe.universe_symbols(universe_payload))
+    metrics = load_metrics()
     dollar_volume_20d = {
-        str(row.get("symbol", "")).upper(): _as_float(row.get("avg_dollar_volume_20d")) or 0.0
-        for row in universe_payload.get("symbols", [])
-        if row.get("symbol")
+        symbol: (row.get("avg_dollar_volume_20d") or 0.0)
+        for symbol, row in metrics.items()
     }
     cap = _CRIT.integer("discovery", "max_subscribed_candidates")
+    min_slots = _CRIT.integer("discovery", "min_slots_per_tier")
+    ranking_key = _CRIT.text("discovery", "within_tier_key")
+    scored = sum(1 for row in metrics.values() if row.get(ranking_key) is not None)
 
     now = ettime.now_et()
     today = now.date()
@@ -461,13 +567,20 @@ def build(write: bool = True) -> dict[str, Any]:
                 "which is not the same as that source having nothing to contribute."
             )
 
-    ranked = assemble(sources, dollar_volume_20d, now)
+    ranked = assemble(sources, metrics, now)
     for index, row in enumerate(ranked):
-        row["subscribed"] = index < cap
-        row["not_subscribed"] = index >= cap
         row["pool_rank"] = index + 1
+    apply_slots(ranked, cap, min_slots)
 
     subscribed = [row for row in ranked if row["subscribed"]]
+    unscored = [row["symbol"] for row in subscribed
+                if (metrics.get(row["symbol"]) or {}).get(ranking_key) is None]
+    if unscored:
+        gaps.append(
+            f"{len(unscored)} subscribed name(s) have no {ranking_key} and were "
+            f"ranked last within their tier: {', '.join(sorted(unscored)[:10])}"
+            + (" and more" if len(unscored) > 10 else "")
+        )
 
     if quota["degraded"]:
         gaps.append(
@@ -503,6 +616,16 @@ def build(write: bool = True) -> dict[str, Any]:
             for name, source in sources.items()
         },
         "tier_order": _CRIT.pair_map("pool_tiers", "tier"),
+        "ranking": {
+            "within_tier_key": ranking_key,
+            "min_slots_per_tier": min_slots,
+            "universe_names_with_a_key": scored,
+            "universe_names_without": len(metrics) - scored,
+            "basis": (
+                "measured over 60 sessions by src/backtest_pool.py, see the "
+                "ordering note in CRITERIA.md"
+            ),
+        },
         "max_subscribed_candidates": cap,
         "pool_size": len(ranked),
         "subscribed_count": len(subscribed),
@@ -517,10 +640,14 @@ def build(write: bool = True) -> dict[str, Any]:
         by_tier[row["pool_tier"]] = by_tier.get(row["pool_tier"], 0) + 1
     for tier in sorted(by_tier):
         print(f"    tier {tier}: {by_tier[tier]:>4} names")
+    print(f"discover: ranking within tier by {ranking_key} descending, "
+          f"{min_slots} slot(s) floored per tier, {scored} of {len(metrics)} "
+          "universe names carry that key")
     for row in subscribed[:10]:
-        volume = row["avg_dollar_volume_20d"] or 0.0
+        value = (metrics.get(row["symbol"]) or {}).get(ranking_key)
+        shown = "null" if value is None else f"{value:.4f}"
         print(f"    {row['symbol']:<12} tier {row['pool_tier']}  "
-              f"{'+'.join(row['pool_source']):<40} avg $vol {volume:>15,.0f}")
+              f"{'+'.join(row['pool_source']):<40} {ranking_key} {shown:>8}")
 
     if write:
         config.WATCHLIST_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")

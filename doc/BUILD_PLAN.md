@@ -406,13 +406,15 @@ Open after that morning:
   all; selection is a prior built from earnings, overnight news, prior
   session movers and recent runners. See DECISIONS.md 2026-08-14,
   "selection is a prior built before the open".
-- OPEN, and now measured rather than argued: the tier ordering below tier 1
-  is wrong. Swept over 60 sessions with src/backtest_pool.py, ranking gap
-  propensity beats the shipped dollar volume key 0.1147 against 0.0842 mean
-  subscribed recall, and 0.1053 against 0.0674 on light-calendar sessions,
-  which are the ordinary case. Full table and caveats in DECISIONS.md
-  2026-08-14, "The ordering sweep". Nothing was changed: replacing the seed
-  values is its own commit so the measurement is citable at the edit.
+- CLOSED 2026-08-14: the ordering was measured and adopted. gap_propensity
+  within tier with a floor of 4 slots, 0.1164 mean subscribed recall against
+  the dollar volume key's 0.0842. See DECISIONS.md 2026-08-14.
+- OPEN, replacing it: the subscription cap, which now bounds recall far more
+  than ordering does. Ordering fully retuned moved recall from 0.0842 to
+  0.1164; the pool being ordered holds 0.6193, and the gap is the cap. At
+  caps of 42, 67, 92 and 142 recall runs 0.1164, 0.1578, 0.1864, 0.2236 and
+  does not flatten. This is a purchasing decision, not a code one: the 50
+  socket cap belongs to the vendor. Table in DECISIONS.md.
 - pm_rvol's numerator covers 07:20 onward while its denominator accumulates
   from 04:00, so the ratio understates. Closing that needs a second baseline
   keyed to the collector window and a rewarm of the cache.

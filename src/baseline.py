@@ -186,20 +186,31 @@ def ensure(
 
     A fresh cache entry costs zero API calls. That is the whole point: the
     morning run must never wait on this.
+
+    Read, compute, write, in three separate steps, and when this function owns
+    the connection it opens one for the read and another for the write rather
+    than holding a single transaction across compute(). compute() makes an
+    intraday call, and a transaction spanning a network call locks the database
+    for the length of the request. Passing a connection in makes the caller
+    responsible for that, which is why warm() no longer does.
     """
-    if connection is None:
-        with store.session() as owned:
-            return ensure(api, ticker, cutoff, force=force, connection=owned)
     ticker = ticker.upper()
     cutoff = normalize_cutoff(cutoff)
-    store.init(connection)
-    existing = get(ticker, cutoff, connection)
+
+    if connection is None:
+        with store.session() as owned:
+            store.init(owned)
+            existing = get(ticker, cutoff, owned)
+    else:
+        store.init(connection)
+        existing = get(ticker, cutoff, connection)
+
     if existing and is_fresh(existing) and not force:
         return existing, None
-
     if api is None:
         return existing, "cache is stale and no API client was supplied"
 
+    # Nothing is held here.
     median, sessions_used, _per_session, note = compute(api, ticker, cutoff)
     if median is None:
         # Keep a stale row rather than throwing away the only number we have.
@@ -212,38 +223,71 @@ def ensure(
         "sessions_used": int(sessions_used),
         "computed_at": ettime.stamp(),
     }
+    if connection is None:
+        with store.session() as owned:
+            store.init(owned)
+            store.upsert(owned, "baseline", ["ticker", "cutoff_hhmm"], values)
+            owned.commit()
+            return get(ticker, cutoff, owned), note
     store.upsert(connection, "baseline", ["ticker", "cutoff_hhmm"], values)
     connection.commit()
     return get(ticker, cutoff, connection), note
 
 
 def warm(tickers: list[str], cutoff: str, force: bool = False) -> dict[str, Any]:
-    """Populate the cache for a list of tickers ahead of the morning."""
+    """Populate the cache for a list of tickers ahead of the morning.
+
+    Read, then fetch, then write. This used to hold one transaction open across
+    an intraday call per ticker, which locks the database for the length of the
+    warm and makes every other writer fail with "database is locked" for
+    reasons that have nothing to do with it. The morning chain runs this at
+    07:15 against up to fifty names, so that window was minutes long. See
+    conftest.py for the incidents that taught this.
+    """
     api = eodhd.client()
     cutoff = normalize_cutoff(cutoff)
     computed = 0
     cached = 0
     failed: list[str] = []
 
+    # Phase one, a short read: which tickers actually need computing.
+    stale: list[str] = []
     with store.session() as connection:
         store.init(connection)
         for ticker in tickers:
-            before = eodhd.call_count()
-            row, note = ensure(api, ticker, cutoff, force=force, connection=connection)
-            spent = eodhd.call_count() - before
-            if row is None:
-                failed.append(f"{ticker}: {note}")
-                print(f"baseline: {ticker:<10} FAILED  {note}")
-                continue
-            if spent:
-                computed += 1
-                print(
-                    f"baseline: {ticker:<10} computed median {row['median_volume']:>12,.0f} "
-                    f"from {row['sessions_used']} sessions"
-                    + (f"  ({note})" if note else "")
-                )
-            else:
+            existing = get(ticker, cutoff, connection)
+            if existing and is_fresh(existing) and not force:
                 cached += 1
+            else:
+                stale.append(ticker)
+
+    # Phase two, the network, with nothing held.
+    fresh_rows: list[dict[str, Any]] = []
+    for ticker in stale:
+        median, sessions_used, _per_session, note = compute(api, ticker.upper(), cutoff)
+        if median is None:
+            failed.append(f"{ticker}: {note}")
+            print(f"baseline: {ticker:<10} FAILED  {note}")
+            continue
+        fresh_rows.append({
+            "ticker": ticker.upper(),
+            "cutoff_hhmm": cutoff,
+            "median_volume": float(median),
+            "sessions_used": int(sessions_used),
+            "computed_at": ettime.stamp(),
+        })
+        computed += 1
+        print(f"baseline: {ticker:<10} computed median {float(median):>12,.0f} "
+              f"from {sessions_used} sessions" + (f"  ({note})" if note else ""))
+
+    # Phase three, a short write.
+    if fresh_rows:
+        with store.session() as connection:
+            store.init(connection)
+            for row in fresh_rows:
+                store.upsert(connection, "baseline", ["ticker", "cutoff_hhmm"], row)
+            connection.commit()
+
     print(f"baseline: {computed} computed, {cached} already fresh, {len(failed)} failed")
     return {"computed": computed, "cached": cached, "failed": failed}
 

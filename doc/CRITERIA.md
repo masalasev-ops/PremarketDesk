@@ -158,6 +158,41 @@ gap_pct                       = > 3        # matches the day setup gap floor
 run_time                      = 07:15
 max_quote_age_hours           = 96         # see the ghost row note below
 max_subscribed_candidates     = 42         # seed: the collector's 50 subscription cap less the 8 context tickers
+within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
+within_tier_fallback          = atr_pct_20d      # for names propensity cannot score, see the fallback note
+min_slots_per_tier            = 4          # MEASURED, see the ordering note below
+
+### The ordering note
+
+These two are not seeds. They were chosen by src/backtest_pool.py over 60
+cached trading sessions, 2026-05-19 to 2026-08-13, a full quarterly earnings
+cycle, with the ranking metric computed as of 2026-05-18 so every replayed
+session is strictly out of sample.
+
+Mean subscribed recall per session, gap propensity descending against the 20
+day average dollar volume it replaces:
+
+  gap propensity, 4 slots per tier   0.1164      the shipped configuration
+  gap propensity, no floor           0.1147
+  20 day dollar volume, no floor     0.0842      what this replaces
+
+The margin is wider where it matters. On light-calendar sessions propensity
+gives 0.1053 against dollar volume's 0.0674, and the same window shows the
+light case is the ordinary one: the median session had two before-open
+reporters against 2026-08-13's maximum of 37, so on most mornings tier 1 fills
+two slots and this key decides the other forty.
+
+Dollar volume was not merely worse, it was pointed the wrong way. It measures
+how much a name trades, and the largest names are the steadiest, so inside the
+news tiers it sorted toward the least likely to gap: 361 of 1,736 subscribed
+tier 2 slots gapped under dollar volume against 611 of 1,736 under propensity.
+
+min_slots_per_tier exists because strict priority never gave tiers 3 and 4 a
+single slot in 60 sessions, and when a floor of 4 gives them some they convert
+at 0.40 and 0.35, which is at or above tier 2's 0.37. The floor costs
+heavy-calendar recall, 0.1262 down to 0.1211, and buys light-calendar recall,
+0.1053 up to 0.1126, which is the trade worth making on a window whose median
+session is light.
 prior_session_move_pct        = 5          # seed, not validated: absolute close to close percent that makes a name a continuation candidate
 prior_session_dollar_multiple = 3          # seed, not validated: prior session dollar volume this many times its 20 day average counts as unusual
 recent_runner_lookback        = 10         # seed, not validated: sessions of picks history a recent runner can come from

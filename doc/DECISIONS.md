@@ -183,11 +183,59 @@ failure does not hold up: MU scores 0.324 and AMD 0.216, higher than most of
 the names that gapped and were cut, while SECZ, which gapped 25 percent, is
 null for want of history. The sweep is the evidence, not the anecdote.
 
-**Nothing changes yet.** The shipped ordering stays as it is, and the 8/14
-replay is byte identical to d224837 to prove it. Replacing a seed value with a
-measured one is its own change, so that the measurement is citable at the point
-of the edit rather than recorded a commit away from it. This item stays open
-until that change is made.
+**CLOSED 2026-08-14.** Adopted: within_tier_key = gap_propensity,
+min_slots_per_tier = 4, with within_tier_fallback = atr_pct_20d for the names
+propensity structurally cannot score. Replayed under the shipped configuration
+the 60 cached sessions give 0.1164 mean subscribed recall against the dollar
+volume key's 0.0842, and 6.57 screen passes per session against 5.77. The
+citation lives in CRITERIA.md's ordering note, at the values themselves.
+
+The fallback ties rather than wins, 0.1164 either way, because only 0.2
+subscribed names per session lack a propensity. It is kept because it does not
+lose and because the population it protects, recent listings, is the one the
+primary key cannot see at all.
+
+Two things measured in the same round and NOT adopted. Collapsing tiers 2 to 4
+into one tier is worse: 0.1154 against 0.1164 on recall, 5.88 against 6.57 on
+screen passes, and a wider spread, 0.0483 against 0.0438. The tier boundaries
+below earnings carry real information and were kept. And the tier hit rates
+that suggested the collapse are not evidence for it: under the floor, tiers 2,
+3 and 4 convert at 0.37, 0.40 and 0.35, which says each tier earns its slots,
+not that they are interchangeable.
+
+## 2026-08-14: the subscription cap is a purchasing decision, OPEN
+
+**The question.** Recall is bounded far more by how many names can be
+subscribed than by how they are ordered. Ordering, fully retuned on measured
+data, moved mean subscribed recall from 0.0842 to 0.1164. The pool it is
+ordering holds 0.6193. Everything between those two numbers is the cap.
+
+Swept on the existing cache, shipped configuration, 60 sessions:
+
+| cap | mean recall | screen passes | extra slots | recall gained | recall per slot | screen gained | screen per slot |
+|---|---|---|---|---|---|---|---|
+| 42 | 0.1164 | 6.57 | | | | | |
+| 67 | 0.1578 | 9.75 | 25 | 0.0414 | 0.001656 | 3.18 | 0.127 |
+| 92 | 0.1864 | 12.33 | 25 | 0.0286 | 0.001144 | 2.58 | 0.103 |
+| 142 | 0.2236 | 15.62 | 50 | 0.0372 | 0.000744 | 3.28 | 0.066 |
+
+**It does not flatten in this range.** Gain per slot decays, roughly halving
+from the first step to the last, but every step still buys real recall: at the
+92 to 142 step an extra slot is still worth 0.066 of a screen passing candidate
+a session, which is one more publishable name for roughly every fifteen slots.
+Tripling the cap from 42 to 142 nearly doubles recall, 0.1164 to 0.2236, and
+takes screen passes from 6.6 to 15.6 a session.
+
+**Why this is not a code decision.** The 50 socket cap is the vendor's, not a
+constant in this repository, so buying past it means buying capacity, and
+whether 15.6 publishable candidates a morning is worth more than 6.6 depends on
+what the report is for and what the plan costs. Both are the owner's to weigh.
+What the measurement supplies is the exchange rate.
+
+**What would change the answer.** The screen column here applies four of the
+five day_setup conditions; premarket_rvol cannot be replayed historically, so
+these counts are upper bounds. If the missing condition rejects at a steady
+rate the ranking between caps is unaffected, but the absolute figures fall.
 
 ## 2026-08-14: containment reads prose, with a recorded fail-open
 
