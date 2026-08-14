@@ -576,6 +576,21 @@ tbody tr:hover{background:var(--ground)}
   so a legitimate feed difference will trip this. The backfill records the size of the discrepancy as
   a percentage rather than a boolean, so small feed noise stays visibly distinct from a real fault,
   and a human decides. Nothing is silently corrected.</p></div>
+
+  <div class="note"><p><b>What the socket costs on the vendor's counter, measured 2026-08-13.</b>
+  The old claim that the collector consumes no API calls was a client side observation about this
+  process. It is now a vendor side measurement: <code>measure_socket_cost.py</code> read
+  <code>/api/user</code> before and after collector-only runs while nothing else used the key. A 20
+  minute run with 10 connections, 10 full 38 symbol resubscriptions, and 9 reconnects moved the
+  daily counter by exactly zero, and a second 20 minute run with 3 forced drops added (13
+  connections, 13 resubscriptions, 12 reconnects) also moved it by zero, so the per reconnect and
+  per resubscribe cost is a measured zero, not an assumption. Reconnect and resubscription counts
+  now land in each morning's packet next to bars_total, so a flaky morning is on the record. Scope:
+  both runs rode the quiet evening tape; an earlier window that streamed 1,574 live trade messages
+  straddled the counter's daily reset (20:00 ET, midnight UTC, also learned here), so the per
+  message cost on a heavy live tape is the one number still owed. It is measurable any weekday by
+  running <code>measure_socket_cost.py</code> inside the 04:00 to 07:15 window, before the
+  scheduled jobs wake and while no other project touches the key.</p></div>
 </section>
 
 <!-- 8 -->

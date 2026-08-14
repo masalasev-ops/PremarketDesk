@@ -775,8 +775,12 @@ def build_packet() -> dict[str, Any]:
     bars_by_symbol, collector_stats = collect_premarket.snapshot_bars(
         session_date, snapshot_path
     )
+    run_stats = collect_premarket.read_run_stats(session_date)
     if collector_stats.get("partial_line_discarded"):
         print("scan: the collector was mid write, one partial trailing line discarded")
+    if run_stats and (run_stats.get("reconnects") or 0) > 0:
+        print(f"scan: the collector reconnected {run_stats['reconnects']} time(s) "
+              "this morning, noted in the packet")
 
     if candidates:
         attach_quotes(api, candidates, packet)
@@ -813,6 +817,14 @@ def build_packet() -> dict[str, Any]:
             "last_complete_bar_et": collector_stats.get("last_bar_et"),
             "partial_line_discarded": collector_stats.get("partial_line_discarded"),
             "bad_lines_skipped": collector_stats.get("bad_lines_skipped"),
+            # Connection health from the collector's own run stats sidecar. A
+            # flaky morning (reconnects above zero) is a fact the report reader
+            # deserves to see next to the bar count it explains.
+            "runs": (run_stats or {}).get("runs"),
+            "connections": (run_stats or {}).get("connections"),
+            "reconnects": (run_stats or {}).get("reconnects"),
+            "resubscriptions": (run_stats or {}).get("resubscriptions"),
+            "messages": (run_stats or {}).get("messages"),
         },
         "collector_window_configured": [
             _CRIT.clock_text("collector", "start_time"),

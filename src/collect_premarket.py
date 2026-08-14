@@ -13,8 +13,11 @@ revised. Restarting mid morning is safe: the already written minutes are read
 back at startup and never rewritten, which is also why a second run inside the
 same minute adds no duplicate rows.
 
-The websocket path spends zero REST calls. That is checked at the end of every
-run, not assumed.
+The websocket path makes zero REST requests from this process, which is
+checked at the end of every run. That is a client side fact and says nothing
+about what the vendor meters for the socket itself; the vendor side answer
+comes from measure_socket_cost.py, which reads the account counter before and
+after a run and records the delta as a measured fact.
 
 Symbol budget. The feed allows 50 concurrent subscriptions. The eight context
 symbols are never dropped, because a premarket price path with no idea what
@@ -55,6 +58,35 @@ VERIFY_WINDOW_MINUTES = _CRIT.number("collector", "verify_window_minutes")
 
 def bar_path(day: str | None = None) -> Path:
     return config.PREMARKET_DIR / f"{day or ettime.today_str()}.jsonl"
+
+
+def stats_path(day: str | None = None) -> Path:
+    return config.PREMARKET_DIR / f"{day or ettime.today_str()}-stats.jsonl"
+
+
+def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
+    """Aggregate connection stats across every collector run of the day.
+
+    One JSON line is appended per run, so a restarted morning sums honestly
+    instead of the last run overwriting the first.
+    """
+    path = stats_path(day)
+    if not path.exists():
+        return None
+    totals = {"runs": 0, "connections": 0, "reconnects": 0,
+              "resubscriptions": 0, "messages": 0}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        totals["runs"] += 1
+        for key in ("connections", "reconnects", "resubscriptions", "messages"):
+            totals[key] += int(row.get(key) or 0)
+    return totals if totals["runs"] else None
 
 
 def _bare(symbol: str) -> str:
@@ -351,11 +383,24 @@ def _connect(symbols: list[str]) -> websocket.WebSocket:
     return socket
 
 
-def run_websocket(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str, Any]:
+def run_websocket(
+    symbols: list[str], stop_at, builder: BarBuilder, chaos_reconnects: int = 0
+) -> dict[str, Any]:
+    """Collect until stop_at. chaos_reconnects deliberately drops the socket
+    that many times, spread across the run, so the cost of a flaky morning
+    (reconnect plus full resubscribe) can be measured rather than assumed."""
     backoff = BACKOFF_START_S
     connections = 0
     reconnects = 0
+    messages = 0
     last_status = 0.0
+
+    chaos_remaining = max(0, int(chaos_reconnects))
+    chaos_next: float | None = None
+    if chaos_remaining:
+        window_s = max((stop_at - ettime.now_et()).total_seconds(), 60.0)
+        chaos_interval = window_s / (chaos_remaining + 1)
+        chaos_next = time.time() + chaos_interval
 
     while ettime.now_et() < stop_at:
         socket = None
@@ -366,6 +411,13 @@ def run_websocket(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str,
             backoff = BACKOFF_START_S
 
             while ettime.now_et() < stop_at:
+                if (chaos_remaining and chaos_next is not None
+                        and time.time() >= chaos_next):
+                    chaos_remaining -= 1
+                    chaos_next = time.time() + chaos_interval
+                    raise ConnectionError(
+                        "forced chaos reconnect for the cost measurement"
+                    )
                 try:
                     raw = socket.recv()
                 except websocket.WebSocketTimeoutException:
@@ -374,6 +426,7 @@ def run_websocket(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str,
                     raise ConnectionError(str(exc)) from exc
 
                 if raw:
+                    messages += 1
                     _handle_message(raw, builder)
 
                 now = time.time()
@@ -399,7 +452,14 @@ def run_websocket(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str,
                 except Exception:
                     pass
 
-    return {"connections": connections, "reconnects": reconnects}
+    # Every successful connection sends exactly one subscribe frame covering
+    # the full symbol list, so resubscriptions equals connections.
+    return {
+        "connections": connections,
+        "reconnects": reconnects,
+        "resubscriptions": connections,
+        "messages": messages,
+    }
 
 
 def _handle_message(raw: str, builder: BarBuilder) -> None:
@@ -559,6 +619,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="Fall back to Live v1 polling for a day the socket is down.")
     parser.add_argument("--minutes", type=float, default=None,
                         help="Run for this many minutes instead of until the CRITERIA.md stop time.")
+    parser.add_argument("--chaos-reconnects", type=int, default=0, metavar="N",
+                        help="Deliberately drop the socket N times, spread across the "
+                             "run, so measure_socket_cost.py can price a flaky morning.")
     parser.add_argument("--verify", action="store_true",
                         help="Bracket the run with two Live v1 polls and compare volume. "
                              "Directional only, see the verification note in CRITERIA.md.")
@@ -623,7 +686,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.poll:
             stats = run_poll(symbols, stop_at, builder)
         else:
-            stats = run_websocket(symbols, stop_at, builder)
+            stats = run_websocket(symbols, stop_at, builder,
+                                  chaos_reconnects=args.chaos_reconnects)
     except KeyboardInterrupt:
         print("collector: interrupted, flushing completed minutes")
         stats = {"interrupted": True}
@@ -640,10 +704,29 @@ def main(argv: list[str] | None = None) -> int:
     print(f"collector: late trades dropped  {builder.late_trades} "
           f"({builder.late_volume:,.0f} shares, {late_share:.2f}% of volume)")
     print(f"collector: connection stats     {stats}")
-    print(f"collector: REST calls during    {calls_during}")
+    print(f"collector: REST calls during    {calls_during} (this process, client side; "
+          "what the vendor meters for the socket is measured by measure_socket_cost.py)")
     if not args.verify and not args.poll and calls_during != 0:
-        print("collector: WARNING the websocket path is supposed to spend zero REST calls")
+        print("collector: WARNING this process made REST requests on the websocket "
+              "path; it should make none")
     print(f"collector: file                 {bar_path()}")
+
+    if isinstance(stats, dict) and not args.verify:
+        record = {
+            "finished_at": ettime.stamp(ettime.now_et()),
+            "mode": "poll" if args.poll else "ws",
+            "connections": stats.get("connections"),
+            "reconnects": stats.get("reconnects"),
+            "resubscriptions": stats.get("resubscriptions"),
+            "messages": stats.get("messages"),
+            "trades_folded": builder.trades_seen,
+            "minutes_written": builder.rows_written,
+            "chaos_reconnects_requested": args.chaos_reconnects,
+        }
+        with stats_path().open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+            handle.flush()
+        print(f"collector: run stats appended to {stats_path().name}")
 
     if args.verify and isinstance(stats, dict) and stats.get("polls"):
         _report_verification(stats["polls"][0], stats["polls"][1], symbols)

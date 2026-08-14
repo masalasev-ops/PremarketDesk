@@ -123,6 +123,18 @@ at the root and is gitignored along with .env.
 - Bulk live carries ghost rows: stale frozen snapshots that fabricate
   enormous gaps. discover.normalize_bulk_live dedupes by newest timestamp
   and drops rows older than max_quote_age_hours. Never consume bulk live raw.
+- The /user endpoint counter (apiRequests against dailyRateLimit) is
+  ACCOUNT WIDE and this account runs other projects too. Never attribute
+  that counter to this project without a controlled before and after
+  measurement while nothing else is running; measure_socket_cost.py is the
+  tool for that. The counter resets at 20:00 ET, midnight UTC.
+- Measured 2026-08-13 evening with that tool: websocket connections,
+  38 symbol subscribe frames, and reconnects are NOT metered. A 20 minute
+  collector-only run (10 connections, 9 reconnects) and a second with 3
+  forced drops (13 connections, 12 reconnects) both moved the vendor counter
+  by exactly zero. The /user reads themselves did not register either. Still
+  owed: the per message cost on a heavy live tape, measurable any weekday by
+  running measure_socket_cost.py inside 04:00 to 07:15 before the jobs wake.
 - Websocket wss://ws.eodhistoricaldata.com/ws/us: wait for the
   {"status_code":200} Authorized frame before subscribing, or the socket
   dies silently. ws.eodhd.com has a bad TLS cert, keep eodhistoricaldata.com.
