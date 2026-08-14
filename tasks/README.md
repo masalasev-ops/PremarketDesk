@@ -1,6 +1,6 @@
 # Scheduled jobs
 
-Five Windows Task Scheduler jobs run PremarketDesk. Each .bat here changes to
+Eight Windows Task Scheduler tasks run PremarketDesk. Each .bat here changes to
 the project root, runs its scripts with the project venv, and appends stdout
 and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped by the
 project's own ET clock so a locale change cannot mangle the file name.
@@ -19,7 +19,7 @@ project's own ET clock so a locale change cannot mangle the file name.
 
     powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
 
-Remove all five again with `-Unregister`. The times come from the clocks in
+Remove them all again with `-Unregister`. The times come from the clocks in
 `doc\CRITERIA.md`. If a clock there changes, change the register script to
 match and re-register.
 
