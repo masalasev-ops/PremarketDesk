@@ -175,6 +175,7 @@ Other documents:
   are the architecture pages; open them in a browser.
 - `doc/REPORT_TEMPLATE.md` and `doc/prompt_analyst.md` are the report shape
   and the narrative instructions piped to the CLI.
+- `doc/sample_report.html` is what a finished morning report looks like.
 
 ## What it costs to run
 
