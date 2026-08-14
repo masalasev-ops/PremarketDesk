@@ -348,7 +348,30 @@ class EodhdClient:
     # ---- endpoints --------------------------------------------------------
 
     def bulk_live_us(self) -> ApiResult:
-        """Latest live OHLCV for every US listed ticker, in one call.
+        """OHLCV for every US listed ticker from the LAST COMPLETED SESSION.
+
+        Not today's. The name of this method and the vendor's name for the
+        endpoint both say live, and that is the claim that published the wrong
+        prices on 2026-08-14: at 08:45 the close field held the previous
+        session's close and previousClose the one before that, so a whole
+        report was written about yesterday. See CHANGELOG.md 2026-08-14, "the
+        scan prices from the collector", and the identical warning at the top
+        of scan.pool_candidates.
+
+        So this is never a source of today's premarket, under any conditions,
+        at any hour. Nothing in any scheduled job calls it: the only caller in
+        the repository is measure_bulk_cost.py, which exists to price the
+        endpoint on the vendor's own counter, and test_pool.py fails if the
+        name reappears in discover. It is retained for that measurement alone.
+
+        Note that the PER TICKER form of the same endpoint family, which
+        live_quotes() below uses as real-time/{symbol}, does NOT behave this
+        way. Measured on 2026-08-14 at 13:42 ET, it returned a timestamp of
+        13:26 the same day, about sixteen minutes behind the wall clock but
+        unambiguously the current session. Whether it also ticks during
+        premarket is what src/probe_live_v1.py was written to settle. The two
+        forms differing is the whole reason that probe exists, so do not
+        reason from one to the other.
 
         The ticker in the path is a placeholder. ex=US is what makes it bulk.
         Returns a list of dicts carrying code, timestamp, open, high, low,

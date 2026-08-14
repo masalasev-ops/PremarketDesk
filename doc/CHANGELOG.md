@@ -15,6 +15,136 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-14, fifth: the premarket source question, and two fields corrected
+
+### real-time/(symbol) is not real-time/?ex=US, and that had never been checked
+
+`bulk_live_us()` hits `real-time/AAPL.US?ex=US` and serves the last completed
+session, which is the defect that published the wrong prices on 2026-08-14.
+`live_quotes()` hits the same endpoint family per ticker as
+`real-time/{symbol}`, and nobody had ever checked whether the per ticker form
+behaves the same way. The two answers lead to different systems: if it serves
+the last completed session it is useless before the open and the candidate
+pool prior is the only way to choose names at 07:15; if it serves today, a
+2,745 name sweep at 07:15 sees the real overnight move for the whole universe
+and replaces the prior outright at about 2,745 counted calls.
+
+**A single call on 2026-08-14 at 13:42 ET settled half of it.** SPY came back
+with a timestamp of 13:26 the same day, sixteen minutes behind the wall clock
+but unambiguously the current session: close 775.65 against a previousClose of
+777.88, volume 14.5M. A second sample two minutes later had advanced to 13:29.
+So the per ticker form is **not** the exchange wide form's
+last-completed-session behaviour. It is Live v1 with the roughly seventeen
+minute delay this project already documents.
+
+**That is not the answer to the question.** Whether the feed ticks during the
+premarket window is a different fact from whether it ticks during regular
+hours, and a lunchtime reading says nothing about it. A feed that only updates
+from 09:30 would return the prior close all morning and be indistinguishable
+from the bulk endpoint until the bell. Treating the regular hours reading as
+the answer would be the same overreach that produced Thursday's report.
+
+So `src/probe_live_v1.py` samples five context tickers every three minutes
+from 08:00 to 09:15 and puts the collector's own bar for the same minute
+beside each reading, the collector being ground truth because it is a trade
+socket. Roughly 26 calls, five symbols to a request. It is standalone: nothing
+imports it, nothing reads its output, it writes no status record, and
+CRITERIA.md [job status steps] deliberately does not carry it. Registered as a
+one time task for Monday 2026-08-17 at 07:55 and meant to be deleted after.
+
+Its `--report` mode counts how many readings carried a feed timestamp inside
+the premarket window and refuses to conclude anything about 07:15 from
+readings that did not. On today's lunchtime sample it correctly reports
+PARTIAL.
+
+The lag column is what will decide the follow up even if the answer is yes: a
+sweep at 07:15 reading a feed that is seventeen minutes behind is reading
+06:58, which is early in the premarket session and may or may not carry the
+overnight move.
+
+### A field that could never be populated
+
+`scan.py` read `selection_gap_pct` into every `dropped_no_coverage` record.
+Nothing has written it since d224837, when discover stopped computing a
+selection gap, so it was always null. That is worse than useless in this
+project specifically: the rule is that missing evidence stays null with a
+recorded reason, so a permanently null field reads as evidence that was
+sought and not found rather than as a field with no writer.
+
+Replaced with `pool_tier` and `pool_source`, which discover does write and
+which answer the question the field was presumably there for: why this name
+was in front of the collector at all. No document referenced the old key, and
+the only other occurrences are in test_repricing, which builds its own in a
+test-local fixture to stand for what a stale packet said. That fixture is why
+the orphan stayed invisible: the regression test hands the read the value no
+production path supplies.
+
+### The same check found a second one, and it would have fired on Monday
+
+The read-without-writer scan covered **446 reads** across every consumer of a
+candidate, packet, watchlist row, picks row, market snapshot row or bar row,
+in all sixteen scheduled modules plus the report template and the analyst
+prompt. Two orphans, both from the same commit, both left behind by the same
+rewrite.
+
+The second is `collect_premarket.py`, printing the names it dropped to fit the
+socket cap:
+
+    print(f"    dropped {row['symbol']:<12} gap {float(row.get('gap_pct') or 0):+7.2f}%")
+
+discover stopped writing `gap_pct` onto watchlist rows at d224837, the same
+commit that stranded `selection_gap_pct`. The collector's own docstring even
+records the removal, saying the re-sort by gap was dropped because the field
+"no longer exists on a watchlist row". The re-sort went. This print did not.
+
+**It has not fired yet only by an accident of timing.** d224837 landed at
+10:02 on 2026-08-14 and the watchlist on disk was generated at 07:15:04 the
+same morning, so the only watchlist the new code has ever met was written by
+the old code and still carries the key. Monday 2026-08-17 at 07:15 is the
+first watchlist written under the current code, and at 07:20 the collector
+would have printed a confident `gap +0.00%` for every dropped name.
+
+That `or 0` is the whole defect. A missing key becoming a plausible number is
+the same failure as the stale price, one log line further down, in the exact
+line that justifies which names were cut. The header lied too: "lowest
+absolute gap first" has not been the order since d224837. The line now reports
+tier, rank and pool source, which are fields that exist, and says it is
+discover's ranking, which is what it is.
+
+Both were found by an audit of reads rather than by a test, because a test
+that replays an old packet supplies the very key that production stopped
+writing. The general lesson is the one from the pool_recall week in a
+different costume: a fixture that is more generous than reality hides exactly
+the defect it is meant to catch.
+
+### bulk_live_us has no caller in any scheduled job
+
+The 9b5e43a report described the endpoint as retained for membership. It is
+not used for that or for anything else in the pipeline. Audited: the only
+caller in the repository is `measure_bulk_cost.py`, which exists to price the
+endpoint on the vendor's own counter, and `test_pool.py` fails if the name
+reappears in discover. None of the sixteen scheduled entrypoints reach it.
+
+Its docstring opened with "Latest live OHLCV for every US listed ticker, in
+one call", which is the claim that produced Thursday's report, and which
+`scan.pool_candidates` had already been corrected to contradict while the
+client itself still asserted it. It now names the actual behaviour, says it is
+never a source of today's premarket, records that it is retained only for the
+cost measurement, and warns explicitly that the per ticker form does not
+behave the same way, so nobody reasons from one to the other in either
+direction.
+
+### Still open after this entry
+
+The premarket half of the source question, which needs Monday's sampling run.
+If `real-time/{symbol}` does tick before the bell, the follow up is a costed
+comparison between a 2,745 call universe sweep at 07:15 and the pool prior,
+and that is a bigger change than it sounds: the pool exists because no source
+on this plan had today's move for the whole universe at 07:15. If that premise
+is wrong, the tier ordering, the propensity ranking and the cap measurement
+are all answers to a question that need not have been asked. None of that
+should move before the probe reports.
+
 ## 2026-08-14, fourth: the isolation guard is inverted, and two numbers distributed
 
 ### The isolation check photographs the tree

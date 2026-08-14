@@ -717,9 +717,25 @@ def main(argv: list[str] | None = None) -> int:
     print(f"collector: subscribing to {len(symbols)} symbols "
           f"(cap {MAX_SUBSCRIPTIONS}, {len(_CRIT.text_list('collector', 'context_symbols'))} of them context)")
     if dropped:
-        print(f"collector: DROPPED {len(dropped)} names to fit the cap, lowest absolute gap first:")
+        # Reported by tier and rank, which is what discover actually cut on.
+        # This used to print gap_pct, a key discover stopped writing at
+        # d224837, through `float(row.get("gap_pct") or 0)`. That `or 0` is
+        # the part that mattered: it would have printed a confident
+        # "gap +0.00%" for every dropped name from Monday onwards, since the
+        # 2026-08-14 watchlist on disk was the last one written by the old
+        # code. A fabricated flat gap in the exact line that justifies which
+        # names were cut is the same failure as the stale price, one log line
+        # further down. The header lied too: select_symbols has not re-sorted
+        # by gap since d224837, it keeps discover's ranking.
+        print(f"collector: DROPPED {len(dropped)} names to fit the cap, "
+              "lowest ranked by discover first:")
         for row in dropped:
-            print(f"    dropped {row['symbol']:<12} gap {float(row.get('gap_pct') or 0):+7.2f}%")
+            tier = row.get("pool_tier")
+            rank = row.get("pool_rank")
+            sources = ", ".join(row.get("pool_source") or []) or "no source recorded"
+            print(f"    dropped {row['symbol']:<12} "
+                  f"tier {tier if tier is not None else '?'} "
+                  f"rank {rank if rank is not None else '?':>4}  {sources}")
     else:
         print("collector: no names dropped, the whole watchlist fits under the cap")
 

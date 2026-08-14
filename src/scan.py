@@ -580,7 +580,16 @@ def drop_uncovered(
             "symbol": candidate["symbol"],
             "reason": candidate.get("pm_reason")
             or "the collector recorded no bars for it, so it has no premarket price",
-            "selection_gap_pct": candidate.get("selection_gap_pct"),
+            # Why this name was in front of the collector at all. These come
+            # from the watchlist row and discover really writes them, which
+            # selection_gap_pct did not: it was read here until 2026-08-14 and
+            # no producer had written it since discover stopped computing a
+            # selection gap at d224837. A key with no writer reads as missing
+            # evidence rather than as a field nobody fills, and this project
+            # has one rule about missing evidence, so it cannot afford fields
+            # that fake it.
+            "pool_tier": candidate.get("pool_tier"),
+            "pool_source": candidate.get("pool_source") or [],
         })
     if dropped:
         packet.gap(
