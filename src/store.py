@@ -11,10 +11,26 @@ of the schema rather than something each script has to remember.
 
 from __future__ import annotations
 
+import contextlib
+import re
 import sqlite3
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import config
+
+# Table and column names are interpolated into SQL text and therefore must be
+# code literals, never data. This pattern is the enforcement.
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _require_identifier(name: str) -> str:
+    """Refuse anything that is not a plain SQL identifier, before it reaches SQL."""
+    if not isinstance(name, str) or not _IDENTIFIER_RE.fullmatch(name):
+        raise ValueError(
+            f"not a valid SQL identifier: {name!r}. Table and column names are "
+            "interpolated into SQL and must be code literals, never data."
+        )
+    return name
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS baseline (
@@ -78,6 +94,24 @@ def connect() -> sqlite3.Connection:
     return connection
 
 
+@contextlib.contextmanager
+def session() -> Iterator[sqlite3.Connection]:
+    """A connection that commits on success, rolls back on error, and CLOSES.
+
+    sqlite3's own context manager is a transaction manager, not a closing
+    one: `with connect() as c:` commits or rolls back and leaves the
+    connection open, which reads as correct and is not. A lingering WAL
+    handle on Windows can block file operations for a later job. Every
+    script-lifetime use goes through here instead.
+    """
+    connection = connect()
+    try:
+        with connection:
+            yield connection
+    finally:
+        connection.close()
+
+
 def init(connection: sqlite3.Connection | None = None) -> None:
     """Create anything missing, widen anything old. Safe to call on every run."""
     owned = connection is None
@@ -102,10 +136,15 @@ def ensure_columns(
 
     Later checkpoints widen the picks table. This lets them do so without
     dropping a database that already holds outcome history.
+
+    table and column names are interpolated into the SQL and must be code
+    literals, never data; anything failing the identifier check raises.
     """
+    _require_identifier(table)
     existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
     added: list[str] = []
     for name, declaration in columns:
+        _require_identifier(name)
         if name in existing:
             continue
         connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {declaration}")
@@ -121,7 +160,15 @@ def upsert(
     key_columns: list[str],
     values: dict[str, Any],
 ) -> None:
-    """Insert or update on the natural key. This is what makes re-runs safe."""
+    """Insert or update on the natural key. This is what makes re-runs safe.
+
+    table, key column and value column names are interpolated into the SQL
+    and must be code literals, never data; anything failing the identifier
+    check raises before touching the database.
+    """
+    _require_identifier(table)
+    for name in list(values) + list(key_columns):
+        _require_identifier(name)
     columns = list(values)
     placeholders = ", ".join("?" for _ in columns)
     updates = ", ".join(f"{c}=excluded.{c}" for c in columns if c not in key_columns)
@@ -137,7 +184,7 @@ def upsert(
 
 def _self_check() -> int:
     init()
-    with connect() as connection:
+    with session() as connection:
         tables = [
             row["name"]
             for row in connection.execute(

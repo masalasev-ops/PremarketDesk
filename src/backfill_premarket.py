@@ -138,7 +138,7 @@ def _gap_report(connection, sessions: int) -> None:
 
 def backfill(day: str) -> int:
     api = eodhd.client()
-    with store.connect() as connection:
+    with store.session() as connection:
         store.init(connection)
         added = store.ensure_columns(connection, "picks", _TRUE_COLUMNS)
         if added:
@@ -218,7 +218,7 @@ def _catchup_dates(before_day: str, limit: int) -> list[str]:
     a day the nightly could not fill must not stay unfilled forever just
     because the calendar moved on.
     """
-    with store.connect() as connection:
+    with store.session() as connection:
         store.init(connection)
         rows = connection.execute(
             "SELECT DISTINCT date FROM picks WHERE date < ? AND pm_high_true IS NULL "

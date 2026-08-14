@@ -341,7 +341,7 @@ def attach_premarket_rvol(
     blaming a vendor response that was never requested would be recording the
     wrong reason, which is as bad as recording no reason.
     """
-    with store.connect() as connection:
+    with store.session() as connection:
         store.init(connection)
         for candidate in candidates:
             candidate["pm_rvol"] = None
@@ -683,7 +683,15 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
         if sma200 is None or price is None or price <= sma200:
             swing_failed.append(f"premarket price {price} is not above the 200 day average {sma200}")
     if _CRIT.flag("swing_setup", "require_catalyst"):
-        if not candidate.get("catalyst_found"):
+        # Three states, not two. None means the news feed was never fetched
+        # (failed call or quota skip), and an unchecked feed must not produce
+        # a sentence claiming a search came back empty. Either way the
+        # requirement is unmet, so both fail the screen; only the reason
+        # differs, and the reason is what the report shows the reader.
+        found = candidate.get("catalyst_found")
+        if found is None:
+            swing_failed.append("the news feed was never checked, so catalyst is unknown")
+        elif not found:
             swing_failed.append("no catalyst was found")
 
     candidate["day_eligible"] = not day_failed
@@ -1032,7 +1040,7 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
         print(f"scan: picks rows will carry source='test' ({why})")
 
     written = 0
-    with store.connect() as connection:
+    with store.session() as connection:
         store.init(connection)
         for candidate in payload.get("candidates", []):
             store.upsert(connection, "picks", ["date", "ticker"], {

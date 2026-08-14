@@ -61,7 +61,7 @@ def main() -> int:
         "| ARX | 43.02 | 19.51 | Workday jumps on report, 2:48 PM ET |\n\n"
         "Prose mention of $ARX is also fine.\n"
     )
-    invented, _ = analyst.check_report(prose_report, packet_text)
+    invented, _, _ = analyst.check_report(prose_report, packet_text)
     if invented:
         failures.append(f"acronym prose or grid prose tripped containment: {invented}")
 
@@ -69,13 +69,13 @@ def main() -> int:
     table_report = prose_report + (
         f"\n## Swing watchlist\n\n| Ticker | Gap % |\n|---|---|\n| {absent} | 9.99 |\n"
     )
-    invented, _ = analyst.check_report(table_report, packet_text)
+    invented, _, _ = analyst.check_report(table_report, packet_text)
     if absent not in invented:
         failures.append(f"table cell naming {absent} was not caught: {invented}")
 
     # Claim 2b: the same ticker fails via a $ prefix in prose.
     dollar_report = prose_report + f"\nWatch ${absent} for sympathy.\n"
-    invented, _ = analyst.check_report(dollar_report, packet_text)
+    invented, _, _ = analyst.check_report(dollar_report, packet_text)
     if absent not in invented:
         failures.append(f"$ prefixed {absent} was not caught: {invented}")
 
@@ -86,9 +86,30 @@ def main() -> int:
     context_report = prose_report + (
         "\n## Swing watchlist\n\n| Ticker | Gap % |\n|---|---|\n| QQQ | 1.23 |\n"
     )
-    invented, _ = analyst.check_report(context_report, packet_text)
+    invented, _, _ = analyst.check_report(context_report, packet_text)
     if "QQQ" not in invented:
         failures.append(f"context ETF QQQ absent from the packet was not caught: {invented}")
+
+    # Claim 4: coverage is honest. A report whose only table is headed "Sym"
+    # scans zero ticker columns, and with no $ claims either, claims_checked
+    # is zero: the caller must then say validation did not run, and the
+    # annotation helper must put that sentence on the disclaimer line.
+    sym_report = (
+        "# PremarketDesk test\n\n"
+        "Nothing here is advice, the screen thresholds are unvalidated seed values.\n\n"
+        f"## Day watchlist\n\n| Sym | Gap % |\n|---|---|\n| {absent} | 9.99 |\n"
+    )
+    invented, _, coverage = analyst.check_report(sym_report, packet_text)
+    if invented:
+        failures.append(f"a Sym headed column should scan nothing, got: {invented}")
+    if coverage["columns_scanned"] != 0 or coverage["claims_checked"] != 0:
+        failures.append(f"coverage should show nothing examined, got: {coverage}")
+    annotated = analyst.annotate_unvalidated(sym_report, coverage)
+    disclaimer_line = next(
+        line for line in annotated.splitlines() if "Nothing here is advice" in line
+    )
+    if "NOT validated" not in disclaimer_line:
+        failures.append("the unvalidated note did not land on the disclaimer line")
 
     if failures:
         for failure in failures:

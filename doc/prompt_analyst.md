@@ -42,7 +42,12 @@ decide nothing.
     caps in billions or millions. gap_pct is a percent value already, so
     43.02 is written 43.02 percent, never multiplied or divided.
 11. Do not use em dashes anywhere. Use commas, colons, or the word "to".
-12. Output only the finished report markdown, starting at the title line.
+12. The Day watchlist and Swing watchlist header rows given in the template
+    are fixed and must be reproduced character for character. The
+    containment guard that validates every ticker claim locates ticker
+    columns by those exact headers, so a reworded header silently weakens a
+    safety check.
+13. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.
 
 ## Why these rules exist

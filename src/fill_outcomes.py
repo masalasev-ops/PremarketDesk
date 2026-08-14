@@ -71,7 +71,7 @@ def fill(day_limit: str | None = None) -> int:
     long_n = _CRIT.integer("outcomes", "horizon_sessions_long")
     api = eodhd.client()
 
-    with store.connect() as connection:
+    with store.session() as connection:
         store.init(connection)
         added = store.ensure_columns(connection, "picks", _OUTCOME_COLUMNS)
         if added:

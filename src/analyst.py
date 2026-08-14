@@ -471,8 +471,8 @@ def _claimable_symbols() -> set[str] | None:
     return universe | context
 
 
-def _ticker_claims(report_text: str) -> set[str]:
-    """The tokens the report presents AS tickers.
+def _ticker_claims(report_text: str) -> tuple[set[str], int]:
+    """The tokens the report presents AS tickers, and the columns scanned.
 
     Prose is not scanned: an acronym like CEO or FOMC in a sentence is not a
     ticker claim and must never trip containment. A claim is a token in a
@@ -480,8 +480,14 @@ def _ticker_claims(report_text: str) -> set[str]:
     carrying a $ prefix, which is unambiguous. Other table cells are prose in
     a grid ("2:48 PM ET" in a headline cell must not read as Philip Morris),
     so they are not scanned either.
+
+    The columns count exists because a check that scanned nothing must not be
+    reported as a check that passed. REPORT_TEMPLATE.md pins the header
+    wording the detector matches on; the count is how a drift from that
+    wording becomes visible instead of silently weakening the guard.
     """
     claims: set[str] = set(_DOLLAR_RE.findall(report_text))
+    columns_scanned = 0
     separator = re.compile(r"[|\s:\-]+")
     lines = report_text.splitlines()
     ticker_columns: list[int] | None = None
@@ -503,17 +509,20 @@ def _ticker_claims(report_text: str) -> set[str]:
                 position for position, cell in enumerate(cells)
                 if "ticker" in cell.lower() or "symbol" in cell.lower()
             ]
+            columns_scanned += len(ticker_columns)
             continue
         if not ticker_columns:
             continue
         for position in ticker_columns:
             if position < len(cells):
                 claims.update(_TOKEN_RE.findall(cells[position]))
-    return claims
+    return claims, columns_scanned
 
 
-def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[str]]:
-    """Returns (invented_tickers, candidates_missing_from_report).
+def check_report(
+    report_text: str, packet_text: str
+) -> tuple[list[str], list[str], dict[str, Any]]:
+    """Returns (invented_tickers, candidates_missing_from_report, coverage).
 
     A token is an invented ticker only when all three hold: the report
     presents it as a ticker (table cell or $ prefix), it names a real symbol
@@ -521,8 +530,22 @@ def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[st
     carry it. The known-symbol test is what keeps ordinary uppercase words
     out: CEO in a table cell is not a known symbol, so it is not a claim
     about a tradeable name.
+
+    coverage records what the check actually examined, because this check
+    fails open in three ways (no universe file, no recognisable ticker
+    column, no $ claims) and a pass that examined nothing must be visibly
+    different from a pass that examined everything. claims_checked zero
+    means validation did not run in any meaningful sense, and the caller
+    must say so where the reader will see it.
     """
     known_symbols = _claimable_symbols()
+    claims, columns_scanned = _ticker_claims(report_text)
+    coverage: dict[str, Any] = {
+        "universe_available": known_symbols is not None,
+        "columns_scanned": columns_scanned,
+        "tokens_examined": len(claims),
+        "claims_checked": len(claims) if known_symbols is not None else 0,
+    }
     if known_symbols is None:
         print("analyst: containment note: universe.json is unavailable, so ticker "
               "claims cannot be validated this run")
@@ -530,7 +553,7 @@ def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[st
     else:
         allowed = _packet_uppercase_tokens(packet_text)
         invented = sorted(
-            token for token in _ticker_claims(report_text)
+            token for token in claims
             if token in known_symbols and token not in allowed
         )
 
@@ -538,13 +561,42 @@ def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[st
     try:
         packet = json.loads(packet_text)
     except json.JSONDecodeError:
-        return invented, missing
+        return invented, missing, coverage
     report_tokens = set(_TOKEN_RE.findall(report_text))
     for candidate in packet.get("candidates", []):
         bare = str(candidate.get("symbol", "")).split(".")[0]
         if bare and bare not in report_tokens:
             missing.append(bare)
-    return invented, missing
+    return invented, missing, coverage
+
+
+def _why_unvalidated(coverage: dict[str, Any]) -> str:
+    if not coverage.get("universe_available"):
+        return "universe.json was unavailable"
+    if not coverage.get("columns_scanned") and not coverage.get("tokens_examined"):
+        return ("no table carried a recognisable Ticker or Symbol header and "
+                "no $ prefixed claims were found, so nothing was examined")
+    return "no ticker claims were found to examine"
+
+
+def annotate_unvalidated(report_text: str, coverage: dict[str, Any]) -> str:
+    """Make a vacuous containment pass say so where the reader will see it.
+
+    The sentence is appended to the disclaimer line, the one line the
+    template guarantees exists and the reader is told to trust. If the
+    disclaimer cannot be found the note goes at the end rather than nowhere.
+    """
+    note = (f"ticker claims in this report were NOT validated: "
+            f"{_why_unvalidated(coverage)}")
+    lines = report_text.splitlines()
+    for index, line in enumerate(lines):
+        if "Nothing here is advice" in line:
+            trimmed = line.rstrip()
+            if trimmed.endswith("."):
+                trimmed = trimmed[:-1]
+            lines[index] = f"{trimmed}; {note}."
+            return "\n".join(lines) + "\n"
+    return report_text.rstrip("\n") + f"\n\n{note[0].upper() + note[1:]}.\n"
 
 
 # ------------------------------------------------------------------- runner
@@ -572,8 +624,23 @@ def write_report(packet_path: Path) -> int:
     report_path.write_text(report_text, encoding="utf-8")
     print(f"analyst: wrote {report_path} ({len(report_text)} chars, status {usage['status']})")
 
+    invented, missing, coverage = check_report(report_text, packet_text)
+    if coverage["claims_checked"] == 0:
+        # A pass that examined nothing is not a pass, and the reader must be
+        # able to tell. The disclaimer line gets the statement.
+        report_text = annotate_unvalidated(report_text, coverage)
+        report_path.write_text(report_text, encoding="utf-8")
+        print("analyst: containment examined nothing "
+              f"({_why_unvalidated(coverage)}); the disclaimer now states that "
+              "ticker claims were not validated")
+
     usage["generated_at"] = ettime.stamp(ettime.now_et())
     usage["packet"] = str(packet_path)
+    usage["containment"] = {
+        **coverage,
+        "invented": invented,
+        "candidates_missing_from_report": missing,
+    }
     usage_path = run_directory / "analyst_usage.json"
     usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True), encoding="utf-8")
     if usage["status"] == "ok":
@@ -584,7 +651,6 @@ def write_report(packet_path: Path) -> int:
             f"cost ${usage.get('total_cost_usd')}, {usage.get('duration_ms')} ms"
         )
 
-    invented, missing = check_report(report_text, packet_text)
     if missing:
         print(
             "analyst: WARNING these packet candidates never appear in the report: "
@@ -598,7 +664,10 @@ def write_report(packet_path: Path) -> int:
         )
         print("analyst: the report was written for inspection but must not be delivered.")
         return 2
-    print("analyst: containment check passed, every ticker claim exists in the packet")
+    if coverage["claims_checked"]:
+        print(f"analyst: containment check passed: {coverage['claims_checked']} "
+              f"ticker claims validated across {coverage['columns_scanned']} "
+              "ticker columns, every claim exists in the packet")
     return 0
 
 
@@ -620,16 +689,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check:
         report_path = Path(args.check)
-        invented, missing = check_report(
+        invented, missing, coverage = check_report(
             report_path.read_text(encoding="utf-8"),
             packet_path.read_text(encoding="utf-8"),
         )
+        print(f"analyst: coverage {coverage}")
         if missing:
             print("analyst: candidates missing from the report: " + ", ".join(missing))
         if invented:
             print("analyst: tickers not in the packet: " + ", ".join(invented))
             return 2
-        print("analyst: containment check passed")
+        if coverage["claims_checked"] == 0:
+            print("analyst: containment examined nothing "
+                  f"({_why_unvalidated(coverage)}), which is not a pass")
+        else:
+            print("analyst: containment check passed")
         return 0
 
     return write_report(packet_path)

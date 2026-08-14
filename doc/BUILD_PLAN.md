@@ -193,6 +193,24 @@ at the root and is gitignored along with .env.
   straddling the reset prints both days. bulk_redesign_line = 1000 lives in
   CRITERIA [quota]; measure_bulk_cost.py reads it and refuses to record a
   measurement that straddled the reset.
+- Third hardening batch, 2026-08-14 before the first live morning:
+  swing_failed distinguishes a never checked news feed from a checked and
+  empty one; containment records its coverage (universe_available,
+  columns_scanned, tokens_examined, claims_checked) into
+  analyst_usage.json, appends "ticker claims were NOT validated" to the
+  disclaimer whenever it examined nothing, and the day and swing table
+  header rows are literal in REPORT_TEMPLATE.md with prompt rule 12
+  pinning them character for character, so the guard no longer depends on
+  the model's word choice; store.session() commits, rolls back and CLOSES
+  (sqlite3's own context manager leaves connections open) and every call
+  site uses it; store refuses non identifier table and column names before
+  they reach SQL; and the collector scrubs the API token out of exception
+  text before printing (config.scrub_secrets), because the websocket URL
+  carries the token and a handshake exception can quote the URL into a
+  log. Proofs: src/test_store.py, the extended src/test_containment.py
+  (Sym headed column produces the unvalidated disclaimer), and a forced
+  connection failure that logged only the masked URL, with a grep of
+  logs/ for the token prefix returning nothing.
 - The quota day is the UTC calendar date (eodhd.quota_day). One ET weekday
   spans two quota days: the morning jobs bill to the day that opened at
   20:00 ET the previous evening (19:00 in standard time), and the 22:15

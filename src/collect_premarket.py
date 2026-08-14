@@ -442,7 +442,11 @@ def run_websocket(
             if ettime.now_et() >= stop_at:
                 break
             reconnects += 1
-            print(f"collector: connection lost ({exc}). Reconnecting in {backoff:.0f}s")
+            # The websocket URL carries the API token as a query parameter,
+            # and a handshake exception can quote the URL. This print lands
+            # in a log that sits on disk for months, so it is scrubbed.
+            print(f"collector: connection lost ({config.scrub_secrets(exc)}). "
+                  f"Reconnecting in {backoff:.0f}s")
             time.sleep(backoff)
             backoff = min(backoff * 2, BACKOFF_MAX_S)
         finally:

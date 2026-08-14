@@ -44,22 +44,29 @@ say, and never add a headline the packet does not carry.}
 
 ## Day watchlist
 
-{A markdown table of exactly the candidates whose day_eligible is true, with
-columns: ticker, gap percent, price, premarket RVOL, premarket high, premarket
-VWAP, score, conviction. A candidate whose score is null gets the word
-unscored in the conviction column, never a bucket color. If none are
-eligible, one sentence saying the day screen produced nothing today and the
-most common failed condition. Membership is decided by the day_eligible
-boolean alone.}
+{A markdown table of exactly the candidates whose day_eligible is true. The
+header row is fixed and is reproduced exactly as this line, character for
+character, because the containment guard locates ticker columns by it:
+
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
+
+A candidate whose score is null gets the word unscored in the conviction
+column, never a bucket color. If none are eligible, one sentence saying the
+day screen produced nothing today and the most common failed condition.
+Membership is decided by the day_eligible boolean alone.}
 
 ## Swing watchlist
 
-{A markdown table of exactly the candidates whose swing_eligible is true, with
-columns: ticker, gap percent, price, prior day high, 200 day average, catalyst
-class, score, conviction. A candidate whose score is null gets the word
-unscored in the conviction column, never a bucket color. If none are
-eligible, one sentence saying so and the most common failed condition.
-Membership is decided by the swing_eligible boolean alone.}
+{A markdown table of exactly the candidates whose swing_eligible is true. The
+header row is fixed and is reproduced exactly as this line, character for
+character, because the containment guard locates ticker columns by it:
+
+| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | Score | Conviction |
+
+A candidate whose score is null gets the word unscored in the conviction
+column, never a bucket color. If none are eligible, one sentence saying so
+and the most common failed condition. Membership is decided by the
+swing_eligible boolean alone.}
 
 ## Market trends
 

@@ -61,19 +61,16 @@ def _start_minutes() -> int:
 # ------------------------------------------------------------------- reading
 
 def get(ticker: str, cutoff: str, connection=None) -> dict[str, Any] | None:
+    if connection is None:
+        with store.session() as owned:
+            return get(ticker, cutoff, owned)
     cutoff = normalize_cutoff(cutoff)
-    owned = connection is None
-    connection = connection or store.connect()
-    try:
-        store.init(connection)
-        row = connection.execute(
-            "SELECT * FROM baseline WHERE ticker=? AND cutoff_hhmm=?",
-            (ticker.upper(), cutoff),
-        ).fetchone()
-        return dict(row) if row else None
-    finally:
-        if owned:
-            connection.close()
+    store.init(connection)
+    row = connection.execute(
+        "SELECT * FROM baseline WHERE ticker=? AND cutoff_hhmm=?",
+        (ticker.upper(), cutoff),
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def is_fresh(row: dict[str, Any] | None) -> bool:
@@ -180,37 +177,34 @@ def ensure(
     A fresh cache entry costs zero API calls. That is the whole point: the
     morning run must never wait on this.
     """
+    if connection is None:
+        with store.session() as owned:
+            return ensure(api, ticker, cutoff, force=force, connection=owned)
     ticker = ticker.upper()
     cutoff = normalize_cutoff(cutoff)
-    owned = connection is None
-    connection = connection or store.connect()
-    try:
-        store.init(connection)
-        existing = get(ticker, cutoff, connection)
-        if existing and is_fresh(existing) and not force:
-            return existing, None
+    store.init(connection)
+    existing = get(ticker, cutoff, connection)
+    if existing and is_fresh(existing) and not force:
+        return existing, None
 
-        if api is None:
-            return existing, "cache is stale and no API client was supplied"
+    if api is None:
+        return existing, "cache is stale and no API client was supplied"
 
-        median, sessions_used, _per_session, note = compute(api, ticker, cutoff)
-        if median is None:
-            # Keep a stale row rather than throwing away the only number we have.
-            return existing, note or f"could not compute a baseline for {ticker}"
+    median, sessions_used, _per_session, note = compute(api, ticker, cutoff)
+    if median is None:
+        # Keep a stale row rather than throwing away the only number we have.
+        return existing, note or f"could not compute a baseline for {ticker}"
 
-        values = {
-            "ticker": ticker,
-            "cutoff_hhmm": cutoff,
-            "median_volume": float(median),
-            "sessions_used": int(sessions_used),
-            "computed_at": ettime.stamp(),
-        }
-        store.upsert(connection, "baseline", ["ticker", "cutoff_hhmm"], values)
-        connection.commit()
-        return get(ticker, cutoff, connection), note
-    finally:
-        if owned:
-            connection.close()
+    values = {
+        "ticker": ticker,
+        "cutoff_hhmm": cutoff,
+        "median_volume": float(median),
+        "sessions_used": int(sessions_used),
+        "computed_at": ettime.stamp(),
+    }
+    store.upsert(connection, "baseline", ["ticker", "cutoff_hhmm"], values)
+    connection.commit()
+    return get(ticker, cutoff, connection), note
 
 
 def warm(tickers: list[str], cutoff: str, force: bool = False) -> dict[str, Any]:
@@ -221,7 +215,7 @@ def warm(tickers: list[str], cutoff: str, force: bool = False) -> dict[str, Any]
     cached = 0
     failed: list[str] = []
 
-    with store.connect() as connection:
+    with store.session() as connection:
         store.init(connection)
         for ticker in tickers:
             before = eodhd.call_count()
@@ -258,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.show:
         store.init()
-        with store.connect() as connection:
+        with store.session() as connection:
             rows = connection.execute(
                 "SELECT * FROM baseline ORDER BY ticker, cutoff_hhmm"
             ).fetchall()

@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 # The one environment variable this project refuses to touch.
 FORBIDDEN_KEYS = frozenset({"ANTHROPIC_API_KEY"})
@@ -145,6 +146,28 @@ def require(name: str) -> str:
 def eodhd_token() -> str:
     """The EODHD All-In-One token. The only market data credential we hold."""
     return require("EODHD_API_TOKEN")
+
+
+def mask(secret: str) -> str:
+    """The display form of a secret: first four, ellipsis, last four."""
+    if len(secret) > 8:
+        return secret[:4] + "..." + secret[-4:]
+    return "***"
+
+
+def scrub_secrets(text: Any) -> str:
+    """Replace any known credential appearing in text with its masked form.
+
+    Exception text can carry a URL with the API token embedded as a query
+    parameter, and an exception string is exactly the kind of thing that gets
+    printed into a log that sits on disk for months. Anything that might
+    reach output goes through here first.
+    """
+    out = str(text)
+    for secret in (get("EODHD_API_TOKEN"), get("RESEND_API_KEY")):
+        if secret:
+            out = out.replace(secret, mask(secret))
+    return out
 
 
 def resend_api_key() -> str | None:
@@ -305,8 +328,7 @@ def _self_check() -> int:
         print(f"FAIL              {exc}")
         return 1
 
-    masked = token[:4] + "..." + token[-4:] if len(token) > 8 else "set"
-    print(f"EODHD_API_TOKEN   loaded ({masked}), length {len(token)}")
+    print(f"EODHD_API_TOKEN   loaded ({mask(token)}), length {len(token)}")
     print(f"RESEND_API_KEY    {'set' if resend_api_key() else 'not set, delivery will skip'}")
     print(f"EMAIL_TO          {email_to() or 'not set, delivery will skip'}")
 
