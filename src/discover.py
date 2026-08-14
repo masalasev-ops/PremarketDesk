@@ -1,36 +1,61 @@
-"""Morning discovery pass. Runs at 07:15 ET and writes the watchlist.
+"""Morning discovery pass. Runs at 07:15 ET and builds the candidate pool.
 
-One bulk live call against the whole universe, one gap calculation, one sort.
-That is the entire job. It costs exactly one API call no matter how large the
-universe is, which is the reason the universe is allowed to be large.
+This pass decides one thing: which names the collector should be listening to
+from 07:20. Everything downstream is limited by that choice, because the
+collector is the only source of today's premarket tape and it can only tell you
+about names it subscribed to.
 
-This pass does not judge anything. It does not score, it does not check
-catalysts, it does not decide what is tradeable. It answers one question: which
-names are moving enough that the collector should be listening to them from
-07:20. The scan at 08:45 rebuilds the candidate list from a fresh call and does
-not trust this file for membership.
+It used to answer that question by ranking the whole universe by gap off one
+bulk /real-time call and keeping the top 30. That endpoint serves the last
+COMPLETED session, so the ranking was of yesterday's movers wearing this
+morning's label, and the error was structural: every morning's evidence was
+gathered for the wrong names before the scan ever ran. Fixing the scan's
+pricing did not touch it.
 
-A note on what the live feed can and cannot tell us at 07:15. The bulk live
-endpoint reports a last trade price and its timestamp. If that timestamp is
-from yesterday's close rather than this morning, the gap is not a gap, it is
-the absence of a premarket print. So every run reports how fresh the feed
-actually was, and the watchlist carries those numbers. Do not skip that line.
+So nothing here reads a price from today. At 07:15 no source on this plan has
+one for the whole universe, and pretending otherwise is what caused the
+problem. Instead the pass assembles a PRIOR from four things that are all
+knowable before the open:
+
+  earnings before open today   the largest single source of premarket gaps,
+                               and known in advance by definition
+  overnight news               what was said between yesterday's close and now
+  prior session movers         continuation, correctly labelled as a prior
+                               rather than mistaken for today's gap
+  recent runners               names that have been in play lately
+
+The four are unioned, deduplicated, intersected with universe.json, ranked by
+tier and then by 20 day average dollar volume, and cut at the subscription cap.
+The names below the cut are written out too, marked not_subscribed, so the cut
+is auditable rather than invisible.
+
+A prior has blind spots by construction. pool_recall.json, written by the
+nightly pass, measures them against what actually gapped.
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
-import statistics
 from typing import Any
 
 import config
 import criteria
 import eodhd
 import ettime
+import store
 import universe
+import vintage
 
 _CRIT = criteria.load()
+
+# A source that failed and a source that succeeded with nothing are different
+# facts and must never collapse into "the pool has no earnings names today".
+# The same distinction catalyst_why already draws for the news feed.
+FETCHED = "fetched"
+FETCHED_EMPTY = "fetched_and_empty"
+NOT_FETCHED = "not_fetched"
 
 
 def _as_float(value: Any) -> float | None:
@@ -43,77 +68,354 @@ def _as_float(value: Any) -> float | None:
     return out if out == out else None
 
 
-def gap_percent(price: float, prior_close: float) -> float | None:
-    """Percent versus prior close. A zero or missing prior close has no gap."""
-    if not prior_close:
-        return None
-    return (price - prior_close) / prior_close * 100.0
+def _source(status: str, names: dict[str, Any], **extra: Any) -> dict[str, Any]:
+    return {"status": status, "names": names, **extra}
 
 
-def normalize_bulk_live(rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
-    """Deduplicate the bulk live feed and throw away its ghost rows.
+# --------------------------------------------------- source 1, earnings today
 
-    The feed returns some tickers twice: one current row and one frozen
-    snapshot from an old session that never aged out. Both look perfectly well
-    formed. On 2026-08-13 the AZN ghost row read 188.41 against a 92.77 prior
-    close, which is a fabricated +103 percent gap, and it sorted to the top of
-    the watchlist ahead of every real mover. The ADT ghost was from 2023.
+def earnings_before_open(
+    api: eodhd.EodhdClient, universe_symbols: set[str], today: dt.date
+) -> dict[str, Any]:
+    """Names in the universe reporting before today's open.
 
-    Two defences. Keep only the newest timestamp per ticker, and drop anything
-    older than max_quote_age_hours outright. Both counts are reported, because
-    a sudden change in them means the feed changed and this code needs looking
-    at again.
-
-    Returns the surviving rows keyed by symbol, plus the statistics.
+    EODHD's calendar gives before_after_market and a report_date. It does NOT
+    give a clock time, so a name reporting at 07:00 and one reporting at 08:30
+    are indistinguishable in this feed. The field is recorded as the vendor
+    supplies it rather than invented, and timing_precision says so.
     """
-    max_age_seconds = _CRIT.number("discovery", "max_quote_age_hours") * 3600.0
-    now = ettime.now_et()
+    rows, error = api.earnings_calendar(today, today)
+    if error:
+        return _source(NOT_FETCHED, {}, error=error)
 
-    newest: dict[str, dict[str, Any]] = {}
-    duplicates_collapsed = 0
-    for row in rows:
-        symbol = str(row.get("code") or "").strip().upper()
-        if not symbol:
+    names: dict[str, Any] = {}
+    for row in rows or []:
+        code = str(row.get("code") or "").strip().upper()
+        if not code:
             continue
-        existing = newest.get(symbol)
-        if existing is None:
-            newest[symbol] = row
+        symbol = code if "." in code else f"{code}.US"
+        if symbol not in universe_symbols:
             continue
-        duplicates_collapsed += 1
-        if (_as_float(row.get("timestamp")) or 0) > (_as_float(existing.get("timestamp")) or 0):
-            newest[symbol] = row
+        timing = str(row.get("before_after_market") or "").strip()
+        if timing.lower() != "beforemarket":
+            continue
+        names[symbol] = {
+            "timing": timing,
+            "timing_precision": (
+                "before or after market only; EODHD's calendar carries no clock "
+                "time, so 07:00 and 08:30 reporters are not distinguishable here"
+            ),
+            "report_date": row.get("report_date"),
+            "estimate": row.get("estimate"),
+        }
+    return _source(FETCHED if names else FETCHED_EMPTY, names,
+                   rows_in_window=len(rows or []))
 
-    kept: dict[str, dict[str, Any]] = {}
-    dropped_stale: list[str] = []
-    for symbol, row in newest.items():
-        stamp = _as_float(row.get("timestamp"))
-        if stamp is None:
-            dropped_stale.append(symbol)
-            continue
-        age = (now - ettime.from_epoch_s(stamp)).total_seconds()
-        if age > max_age_seconds:
-            dropped_stale.append(symbol)
-            continue
-        kept[symbol] = row
 
-    stats = {
-        "rows_in": len(rows),
-        "unique_symbols": len(newest),
-        "duplicate_rows_collapsed": duplicates_collapsed,
-        "dropped_as_stale": len(dropped_stale),
-        "dropped_examples": sorted(dropped_stale)[:10],
-        "max_quote_age_hours": _CRIT.number("discovery", "max_quote_age_hours"),
+# ---------------------------------------------------- source 2, overnight news
+
+def overnight_news(
+    api: eodhd.EodhdClient, universe_symbols: set[str], since: dt.datetime,
+    until: dt.datetime,
+) -> dict[str, Any]:
+    """Universe names carrying news between the prior close and now.
+
+    One symbol-less sweep of the feed, paged, then intersected with the
+    universe. Asking per symbol is not affordable across 2,745 names, and the
+    feed is global, so most of what comes back is discarded here.
+    """
+    page_size = _CRIT.integer("discovery", "news_sweep_page_size")
+    max_pages = _CRIT.integer("discovery", "news_sweep_max_pages")
+
+    names: dict[str, Any] = {}
+    items_seen = 0
+    pages = 0
+    truncated = False
+    for page in range(max_pages):
+        rows, error = api.news_feed(
+            since.date(), until.date(), limit=page_size, offset=page * page_size
+        )
+        if error:
+            if page == 0:
+                return _source(NOT_FETCHED, {}, error=error)
+            # A later page failing still leaves a usable, partial sweep.
+            truncated = True
+            break
+        pages += 1
+        rows = rows or []
+        items_seen += len(rows)
+
+        oldest_on_page: dt.datetime | None = None
+        for row in rows:
+            when = _news_time(row.get("date"))
+            if when is None:
+                continue
+            if oldest_on_page is None or when < oldest_on_page:
+                oldest_on_page = when
+            if not since <= when <= until:
+                continue
+            for raw in row.get("symbols") or []:
+                symbol = str(raw).strip().upper()
+                if symbol not in universe_symbols:
+                    continue
+                current = names.get(symbol)
+                if current is None or when > dt.datetime.fromisoformat(current["newest_item_at"]):
+                    names[symbol] = {
+                        "newest_item_at": when.isoformat(),
+                        "newest_title": row.get("title"),
+                        "items": (current or {}).get("items", 0) + 1,
+                    }
+                else:
+                    current["items"] += 1
+
+        if len(rows) < page_size:
+            break
+        # The feed runs newest first, so once a whole page predates the window
+        # there is nothing older worth paging for.
+        if oldest_on_page is not None and oldest_on_page < since:
+            break
+        if page == max_pages - 1:
+            truncated = True
+
+    return _source(
+        FETCHED if names else FETCHED_EMPTY, names,
+        items_seen=items_seen, pages=pages, truncated=truncated,
+        window=[since.isoformat(), until.isoformat()],
+    )
+
+
+def _news_time(raw: Any) -> dt.datetime | None:
+    if not raw:
+        return None
+    try:
+        when = dt.datetime.fromisoformat(str(raw))
+    except (TypeError, ValueError):
+        return None
+    return ettime.to_et(when)
+
+
+# ----------------------------------------------- source 3, prior session movers
+
+def prior_session_movers(
+    api: eodhd.EodhdClient, universe_symbols: set[str],
+    dollar_volume_20d: dict[str, float], today: dt.date,
+) -> dict[str, Any]:
+    """Names that moved hard, or traded unusually heavily, in the prior session.
+
+    Two bulk end of day calls, the prior trading session and the one before it,
+    so the move is close to close. A single call would only give the intraday
+    move and would miss a name that gapped and held, which is exactly the kind
+    of name this source exists to catch.
+
+    This is the input the pool has always had. What changed is the label: it is
+    a continuation prior about yesterday, not a reading of today.
+    """
+    prior = vintage.previous_trading_session(today)
+    if prior is None:
+        return _source(NOT_FETCHED, {}, error="the exchange calendar could not "
+                                              "name the prior trading session")
+    before = vintage.previous_trading_session(prior)
+    if before is None:
+        return _source(NOT_FETCHED, {}, error="the exchange calendar could not "
+                                              "name the session before the prior one")
+
+    move_floor = _CRIT.number("discovery", "prior_session_move_pct")
+    dollar_multiple = _CRIT.number("discovery", "prior_session_dollar_multiple")
+
+    prior_rows, error = api.eod_bulk_last_day("US", day=prior)
+    if error:
+        return _source(NOT_FETCHED, {}, error=f"prior session bulk failed: {error}")
+    before_rows, error = api.eod_bulk_last_day("US", day=before)
+    if error:
+        return _source(NOT_FETCHED, {}, error=f"earlier session bulk failed: {error}")
+
+    def by_symbol(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for row in rows or []:
+            code = str(row.get("code") or "").strip().upper()
+            if not code:
+                continue
+            out[code if "." in code else f"{code}.US"] = row
+        return out
+
+    prior_by = by_symbol(prior_rows)
+    before_by = by_symbol(before_rows)
+
+    names: dict[str, Any] = {}
+    for symbol in universe_symbols:
+        prior_row = prior_by.get(symbol)
+        before_row = before_by.get(symbol)
+        if not prior_row or not before_row:
+            continue
+        close = _as_float(prior_row.get("close"))
+        prior_close = _as_float(before_row.get("close"))
+        volume = _as_float(prior_row.get("volume")) or 0.0
+        if close is None or not prior_close:
+            continue
+
+        move = (close - prior_close) / prior_close * 100.0
+        dollar_volume = close * volume
+        average = dollar_volume_20d.get(symbol) or 0.0
+        heavy = bool(average) and dollar_volume >= average * dollar_multiple
+        if abs(move) < move_floor and not heavy:
+            continue
+        names[symbol] = {
+            "prior_session": prior.isoformat(),
+            "move_pct": round(move, 4),
+            "dollar_volume": round(dollar_volume, 2),
+            "dollar_volume_multiple": round(dollar_volume / average, 3) if average else None,
+            "qualified_on": (
+                ["move", "dollar_volume"] if abs(move) >= move_floor and heavy
+                else ["move"] if abs(move) >= move_floor else ["dollar_volume"]
+            ),
+        }
+
+    # The prior session close for every universe name, carried out of the same
+    # two calls at no extra cost. The 08:45 scan needs one to rank the
+    # subscribed names by measured gap, and buying it again there would be a
+    # third bulk call for a number already in hand. It is used for RANKING
+    # only: the published prior_close and prior_high still come together out of
+    # one per name end of day record, so they cannot drift a session apart.
+    closes = {
+        symbol: {"close": _as_float(row.get("close")), "date": row.get("date")}
+        for symbol, row in prior_by.items()
+        if symbol in universe_symbols and _as_float(row.get("close")) is not None
     }
-    return kept, stats
+    return _source(FETCHED if names else FETCHED_EMPTY, names,
+                   prior_session=prior.isoformat(), earlier_session=before.isoformat(),
+                   closes=closes)
+
+
+# ------------------------------------------------- source 4, recent runners
+
+def recent_runners(universe_symbols: set[str], today: dt.date) -> dict[str, Any]:
+    """Names that were candidates recently, weighted so recent counts for more.
+
+    Reads the picks table, live rows only. An empty table is a normal state on
+    a new install and returns nothing rather than failing.
+    """
+    lookback = _CRIT.integer("discovery", "recent_runner_lookback")
+    decay = _CRIT.number("discovery", "recent_runner_decay")
+
+    try:
+        with store.session() as connection:
+            store.init(connection)
+            dates = [
+                row[0] for row in connection.execute(
+                    "SELECT DISTINCT date FROM picks WHERE source='live' AND date < ? "
+                    "ORDER BY date DESC LIMIT ?",
+                    (today.isoformat(), lookback),
+                ).fetchall()
+            ]
+            if not dates:
+                return _source(FETCHED_EMPTY, {}, sessions_considered=0)
+            placeholders = ", ".join("?" for _ in dates)
+            rows = connection.execute(
+                f"SELECT ticker, date FROM picks WHERE source='live' "
+                f"AND date IN ({placeholders})",
+                dates,
+            ).fetchall()
+    except Exception as exc:  # a missing or unreadable database is not fatal here
+        return _source(NOT_FETCHED, {}, error=f"{type(exc).__name__}: {exc}")
+
+    sessions_ago = {date: index for index, date in enumerate(dates)}
+    names: dict[str, Any] = {}
+    for ticker, date in rows:
+        symbol = str(ticker).strip().upper()
+        if symbol not in universe_symbols:
+            continue
+        weight = decay ** sessions_ago.get(date, len(dates))
+        current = names.get(symbol)
+        if current is None or weight > current["weight"]:
+            names[symbol] = {
+                "weight": round(weight, 6),
+                "last_seen": date,
+                "sessions_ago": sessions_ago.get(date),
+                "appearances": (current or {}).get("appearances", 0) + 1,
+            }
+        else:
+            current["appearances"] += 1
+    return _source(FETCHED if names else FETCHED_EMPTY, names,
+                   sessions_considered=len(dates))
+
+
+# ------------------------------------------------------- assembling and ranking
+
+def _tier_map() -> dict[str, int]:
+    return {key: int(value) for key, value in _CRIT.pair_map("pool_tiers", "tier").items()}
+
+
+def assemble(
+    sources: dict[str, dict[str, Any]],
+    dollar_volume_20d: dict[str, float],
+    now: dt.datetime,
+) -> list[dict[str, Any]]:
+    """Union the sources, assign each name its best tier, and rank the pool.
+
+    Ranking is by tier, then by 20 day average dollar volume descending, then
+    by symbol so the order is total and a rerun is reproducible. No field from
+    today is involved, because none exists yet.
+    """
+    tiers = _tier_map()
+    fresh_hours = _CRIT.number("discovery", "news_fresh_hours")
+
+    pool: dict[str, dict[str, Any]] = {}
+
+    def touch(symbol: str) -> dict[str, Any]:
+        return pool.setdefault(symbol, {
+            "symbol": symbol,
+            "pool_source": [],
+            "pool_tier": None,
+            "pool_evidence": {},
+            "avg_dollar_volume_20d": dollar_volume_20d.get(symbol),
+        })
+
+    def claim(symbol: str, source_name: str, tier_key: str, evidence: Any) -> None:
+        entry = touch(symbol)
+        if source_name not in entry["pool_source"]:
+            entry["pool_source"].append(source_name)
+        entry["pool_evidence"][source_name] = evidence
+        tier = tiers[tier_key]
+        if entry["pool_tier"] is None or tier < entry["pool_tier"]:
+            entry["pool_tier"] = tier
+            entry["pool_tier_reason"] = tier_key
+
+    for symbol, evidence in sources["earnings"]["names"].items():
+        claim(symbol, "earnings", "earnings_before_open", evidence)
+
+    for symbol, evidence in sources["news"]["names"].items():
+        when = dt.datetime.fromisoformat(evidence["newest_item_at"])
+        age_hours = (now - when).total_seconds() / 3600.0
+        evidence = {**evidence, "age_hours": round(age_hours, 3)}
+        claim(symbol, "news",
+              "news_fresh" if age_hours <= fresh_hours else "news_stale", evidence)
+
+    for symbol, evidence in sources["movers"]["names"].items():
+        claim(symbol, "prior_session_mover", "prior_session_mover", evidence)
+
+    for symbol, evidence in sources["runners"]["names"].items():
+        claim(symbol, "recent_runner", "recent_runner", evidence)
+
+    closes = sources["movers"].get("closes") or {}
+    for symbol, entry in pool.items():
+        prior = closes.get(symbol) or {}
+        entry["pool_prior_close"] = prior.get("close")
+        entry["pool_prior_session_date"] = prior.get("date")
+
+    ranked = sorted(
+        pool.values(),
+        key=lambda row: (
+            row["pool_tier"],
+            -(row["avg_dollar_volume_20d"] or 0.0),
+            row["symbol"],
+        ),
+    )
+    return ranked
 
 
 def build(write: bool = True) -> dict[str, Any]:
     config.ensure_dirs()
 
-    # The shared key preflight. The one bulk call below is the call this job
-    # cannot skip: without it there is no watchlist and the collector has
-    # nothing to subscribe to. So a degraded reading changes nothing here
-    # except being recorded, and only the refuse floor stops the run.
     quota = eodhd.preflight("discover")
     if quota["refused"]:
         raise eodhd.QuotaRefusal(
@@ -124,133 +426,101 @@ def build(write: bool = True) -> dict[str, Any]:
 
     universe_payload = universe.require_fresh_universe()
     universe_symbols = set(universe.universe_symbols(universe_payload))
-    universe_started_with = len(universe_symbols)
-
-    price_rule = _CRIT.rule("discovery", "price")
-    gap_rule = _CRIT.rule("discovery", "gap_pct")
-    keep = _CRIT.integer("discovery", "watchlist_size")
-
-    print(f"discover: universe started with {universe_started_with} names")
-    print(f"discover: floors are price {price_rule.describe()} and "
-          f"absolute gap {gap_rule.describe()} percent")
-
-    api = eodhd.client()
-    rows, error = api.bulk_live_us()
-    if error:
-        raise RuntimeError(f"the single bulk live call failed: {error}")
-
-    live, feed_stats = normalize_bulk_live(rows)
-    print(f"discover: feed had {feed_stats['rows_in']} rows, "
-          f"{feed_stats['duplicate_rows_collapsed']} duplicate rows collapsed, "
-          f"{feed_stats['dropped_as_stale']} dropped as older than "
-          f"{feed_stats['max_quote_age_hours']:g}h")
+    dollar_volume_20d = {
+        str(row.get("symbol", "")).upper(): _as_float(row.get("avg_dollar_volume_20d")) or 0.0
+        for row in universe_payload.get("symbols", [])
+        if row.get("symbol")
+    }
+    cap = _CRIT.integer("discovery", "max_subscribed_candidates")
 
     now = ettime.now_et()
     today = now.date()
-    matched = 0
-    ages: list[float] = []
-    stale_rows = 0
-    candidates: list[dict[str, Any]] = []
+    news_start_h, news_start_m = _CRIT.clock("discovery", "news_window_start")
+    news_since = ettime.at(today - dt.timedelta(days=1), news_start_h, news_start_m)
 
-    for symbol, row in live.items():
-        if symbol not in universe_symbols:
-            continue
-        matched += 1
+    print(f"discover: universe started with {len(universe_symbols)} names")
+    print(f"discover: building a pool from four priors, no price from today is read")
 
-        price = _as_float(row.get("close"))
-        prior_close = _as_float(row.get("previousClose"))
-        if price is None or prior_close is None:
-            continue
+    api = eodhd.client()
+    sources = {
+        "earnings": earnings_before_open(api, universe_symbols, today),
+        "news": overnight_news(api, universe_symbols, news_since, now),
+        "movers": prior_session_movers(api, universe_symbols, dollar_volume_20d, today),
+        "runners": recent_runners(universe_symbols, today),
+    }
 
-        stamp = _as_float(row.get("timestamp"))
-        if stamp is not None:
-            bar_time = ettime.from_epoch_s(stamp)
-            ages.append((now - bar_time).total_seconds())
-            if bar_time.date() < today:
-                stale_rows += 1
-
-        gap = gap_percent(price, prior_close)
-        if gap is None:
-            continue
-        if not price_rule.test(price):
-            continue
-        if not gap_rule.test(abs(gap)):
-            continue
-
-        candidates.append(
-            {
-                "symbol": symbol,
-                "gap_pct": round(gap, 4),
-                "prior_close": round(prior_close, 4),
-                "price": round(price, 4),
-                "volume": _as_float(row.get("volume")),
-                "quote_time": ettime.stamp(ettime.from_epoch_s(stamp)) if stamp else None,
-            }
-        )
-
-    passed = len(candidates)
-    candidates.sort(key=lambda row: abs(row["gap_pct"]), reverse=True)
-    watchlist = candidates[:keep]
-
-    median_age = statistics.median(ages) if ages else None
-    feed = dict(feed_stats)
-    feed.update(
-        {
-            "matched_universe": matched,
-            "median_quote_age_seconds": round(median_age, 1) if median_age is not None else None,
-            "rows_timestamped_before_today": stale_rows,
-        }
-    )
-
-    # The same contract as the packet: reasons for degraded evidence live in
-    # gaps_to_fill. Discover's one bulk call is unskippable, so a degraded
-    # reading skips nothing here, but the reading itself is a gap the morning
-    # must know about, and the baseline warm that follows in the same
-    # scheduled job reads its own preflight and skips itself.
     gaps: list[str] = []
+    for name, source in sources.items():
+        count = len(source["names"])
+        print(f"discover: source {name:<20} {source['status']:<18} {count:>5} names"
+              + (f"  ({source['error']})" if source.get("error") else ""))
+        if source["status"] == NOT_FETCHED:
+            gaps.append(
+                f"the {name} pool source was never fetched: {source.get('error')}. "
+                "The pool is missing whatever that source would have contributed, "
+                "which is not the same as that source having nothing to contribute."
+            )
+
+    ranked = assemble(sources, dollar_volume_20d, now)
+    for index, row in enumerate(ranked):
+        row["subscribed"] = index < cap
+        row["not_subscribed"] = index >= cap
+        row["pool_rank"] = index + 1
+
+    subscribed = [row for row in ranked if row["subscribed"]]
+
     if quota["degraded"]:
         gaps.append(
             f"quota preflight: {eodhd.describe_preflight(quota)}, below the "
-            f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]. The one "
-            "bulk call this job cannot skip was still made; everything skippable "
-            "downstream should stand down."
+            f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]."
+        )
+    if not subscribed:
+        gaps.append(
+            "the pool is empty, so the collector has nothing to subscribe to and "
+            "the morning will have no premarket evidence for any name"
         )
 
     payload: dict[str, Any] = {
         "generated_at": ettime.stamp(now),
         "quota_preflight": quota,
         "gaps_to_fill": gaps,
-        "universe_started_with": universe_started_with,
+        "universe_started_with": len(universe_symbols),
         "universe_generated_at": universe_payload.get("generated_at"),
-        "floors": {
-            "price": price_rule.describe(),
-            "gap_pct_absolute": gap_rule.describe(),
+        "selection_method": (
+            "a prior assembled from earnings, overnight news, prior session "
+            "movers and recent runners. No price from today is read here, "
+            "because no source on this plan has one for the whole universe at "
+            "07:15. See DECISIONS.md 2026-08-14."
+        ),
+        # names and closes are per symbol payloads carried on the pool rows
+        # themselves; repeating them here would put the whole universe's closes
+        # into watchlist.json.
+        "pool_sources": {
+            name: {
+                key: value for key, value in source.items()
+                if key not in ("names", "closes")
+            }
+            for name, source in sources.items()
         },
-        "passed_floors": passed,
-        "watchlist_size": len(watchlist),
-        "feed": feed,
+        "tier_order": _CRIT.pair_map("pool_tiers", "tier"),
+        "max_subscribed_candidates": cap,
+        "pool_size": len(ranked),
+        "subscribed_count": len(subscribed),
         "api_calls": eodhd.call_count(),
-        "symbols": watchlist,
+        "symbols": ranked,
     }
 
-    print(f"discover: {len(live)} usable symbols, {matched} matched the universe")
-    if median_age is not None:
-        print(f"discover: median quote age {median_age:.0f}s, "
-              f"{stale_rows} rows still carry a timestamp from before today")
-        if stale_rows > matched / 2:
-            warning = (
-                f"{stale_rows} of {matched} live rows are timestamped before today. "
-                "The bulk live feed is not printing premarket for most names, so these "
-                "gaps are close to close, not premarket gaps. Treat the watchlist as "
-                "provisional and check the 08:45 scan."
-            )
-            payload["feed_warning"] = warning
-            print(f"WARNING  {warning}")
-    print(f"discover: {passed} cleared the floors, keeping the top {len(watchlist)} by absolute gap")
-
-    for row in watchlist[:10]:
-        print(f"    {row['symbol']:<12} gap {row['gap_pct']:+7.2f}%  "
-              f"prior close {row['prior_close']:>9.2f}  last {row['price']:>9.2f}")
+    print(f"discover: pool holds {len(ranked)} names, "
+          f"subscribing to the top {len(subscribed)} of a {cap} cap")
+    by_tier: dict[int, int] = {}
+    for row in ranked:
+        by_tier[row["pool_tier"]] = by_tier.get(row["pool_tier"], 0) + 1
+    for tier in sorted(by_tier):
+        print(f"    tier {tier}: {by_tier[tier]:>4} names")
+    for row in subscribed[:10]:
+        volume = row["avg_dollar_volume_20d"] or 0.0
+        print(f"    {row['symbol']:<12} tier {row['pool_tier']}  "
+              f"{'+'.join(row['pool_source']):<40} avg $vol {volume:>15,.0f}")
 
     if write:
         config.WATCHLIST_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -269,8 +539,24 @@ def load_watchlist() -> dict[str, Any]:
         return {"symbols": [], "generated_at": None, "missing": True}
 
 
+def subscribed_symbols(watchlist: dict[str, Any]) -> list[str]:
+    """The names the collector was asked to listen to.
+
+    Rows written before the pool rewrite carry no subscribed flag. They were
+    all subscribed, so a missing flag reads as true rather than as false, which
+    would silently empty the collector's subscription list on the first run
+    after an upgrade.
+    """
+    out: list[str] = []
+    for row in watchlist.get("symbols", []):
+        symbol = str(row.get("symbol", "")).upper()
+        if symbol and row.get("subscribed", True):
+            out.append(symbol)
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Write the morning watchlist.")
+    parser = argparse.ArgumentParser(description="Build the morning candidate pool.")
     parser.add_argument("--dry-run", action="store_true", help="Do not write watchlist.json.")
     args = parser.parse_args(argv)
 

@@ -402,10 +402,16 @@ This file keeps the build history up to that morning and the open items below.
 
 Open after that morning:
 
-- The candidate pool is still seeded by discover at 07:15 from the same
-  lagging bulk feed, so the morning starts from names that moved in the
-  previous session. No premarket source covering the full 2,745 name
-  universe has been confirmed on this plan. See DECISIONS.md 2026-08-14.
+- CLOSED 2026-08-14, same day. Discover no longer ranks on the bulk feed at
+  all; selection is a prior built from earnings, overnight news, prior
+  session movers and recent runners. See DECISIONS.md 2026-08-14,
+  "selection is a prior built before the open".
+- OPEN, replacing it: the tier ordering below tier 1 is measurably wrong.
+  Backtested on 2026-08-13 the pool held 72 of 99 real gappers but the 42
+  subscribed held only 28, and every one of those 28 came from tier 1. The
+  dollar volume tiebreak sorts the news tiers toward the largest names in
+  the market, which are the least likely to gap. Do not retune on one
+  session; pool_recall.json now accumulates the evidence nightly.
 - pm_rvol's numerator covers 07:20 onward while its denominator accumulates
   from 04:00, so the ratio understates. Closing that needs a second baseline
   keyed to the collector window and a rewarm of the cache.

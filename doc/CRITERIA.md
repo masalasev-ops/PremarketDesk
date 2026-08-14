@@ -144,13 +144,65 @@ max_age_days                  = 10         # every later script refuses to run p
 
 ## Discovery
 
-The 07:15 pass that writes watchlist.json off one bulk call.
+The 07:15 pass that builds the candidate pool and writes watchlist.json.
+
+It used to rank the whole universe by gap off one bulk /real-time call and keep
+the top 30. That feed serves the last completed session, so the ranking was of
+yesterday's movers, and since the collector only ever subscribes to what this
+pass chose, the error propagated into every morning downstream of it. Nothing
+here reads a price from today any more, because at 07:15 no source on this plan
+has one for the whole universe. See the pool note below and DECISIONS.md.
 
 price                         = > 3        # matches the day setup price floor
 gap_pct                       = > 3        # matches the day setup gap floor
-watchlist_size                = 30         # top N by absolute gap
 run_time                      = 07:15
 max_quote_age_hours           = 96         # see the ghost row note below
+max_subscribed_candidates     = 42         # seed: the collector's 50 subscription cap less the 8 context tickers
+prior_session_move_pct        = 5          # seed, not validated: absolute close to close percent that makes a name a continuation candidate
+prior_session_dollar_multiple = 3          # seed, not validated: prior session dollar volume this many times its 20 day average counts as unusual
+recent_runner_lookback        = 10         # seed, not validated: sessions of picks history a recent runner can come from
+recent_runner_decay           = 0.85       # seed, not validated: per session weight decay, so 3 days ago outranks 3 weeks ago
+news_window_start             = 16:00      # prior day ET, the close after which overnight news starts counting
+news_fresh_hours              = 6          # seed: news newer than this is tier 2, older but inside the window is tier 3
+news_sweep_page_size          = 1000       # rows per news call
+news_sweep_max_pages          = 5          # hard bound on the sweep, truncation is recorded rather than silent
+
+### The pool note
+
+Selection is now a prior assembled from information that exists before the
+open, not a reading of today's tape. Four sources, unioned, deduplicated, and
+intersected with universe.json:
+
+  earnings before open today, from the calendar API
+  overnight news, from a symbol-less news sweep over the window above
+  prior session movers, from two bulk end of day calls
+  recent runners, from the picks table
+
+Every name records which sources put it there. A source that fails is recorded
+as not-fetched and a source that succeeds with nothing is recorded as
+fetched-and-empty, the same distinction catalyst_why already draws, so a pool
+missing its earnings names is never mistaken for a morning with no earnings.
+
+Cost: two bulk end of day calls at a measured 98 counted calls each, plus one
+calendar call and up to five news calls, against the one bulk live call at 100
+that this replaces. Roughly 100 counted calls a morning more than before, far
+below the bulk_redesign_line in the Quota section.
+
+## Pool tiers
+
+The order the pool is ranked in, best tier first, with 20 day average dollar
+volume descending as the tiebreak inside a tier. A name qualifying under
+several sources takes its best tier and records all of them.
+
+This ordering is a seed. It is an assumption about which priors most often
+precede a premarket gap, not a measured base rate. pool_recall.json in the
+nightly pass is what will eventually replace the assumption with a measurement.
+
+tier = earnings_before_open : 1
+tier = news_fresh : 2
+tier = news_stale : 3
+tier = prior_session_mover : 4
+tier = recent_runner : 5
 
 ### The ghost row note
 

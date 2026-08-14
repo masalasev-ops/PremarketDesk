@@ -28,6 +28,13 @@ set RC=%ERRORLEVEL%
 echo ===== outcomes finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 if %RC% neq 0 exit /b %RC%
 
+rem What the morning's candidate pool missed, measured against every name in
+rem the universe that actually gapped at the open. Never fails the chain: a
+rem recall measurement is a diagnostic and nothing downstream reads it.
+echo ===== pool recall started %DATE% %TIME% ===== >> "%LOG%"
+%PY% src\pool_recall.py >> "%LOG%" 2>&1
+echo ===== pool recall finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
 rem The archive also rebuilds here so a morning that failed after the scan
 rem still gets archived the same evening.
 echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"

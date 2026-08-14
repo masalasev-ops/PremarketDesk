@@ -165,75 +165,112 @@ def market_snapshot(
 
 # ------------------------------------------------------- 2. final candidates
 
-def final_candidates(
-    api: eodhd.EodhdClient, packet: Packet, universe_payload: dict[str, Any]
+def pool_candidates(
+    watchlist: dict[str, Any], packet: Packet
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Rebuild the candidate list from a fresh bulk call. MEMBERSHIP ONLY.
+    """The names the collector was subscribed to, carrying their pool provenance.
 
-    watchlist.json is not trusted for membership. It was written ninety minutes
-    ago and the tape has moved. It is still consulted, but only to answer a
-    different question: was the collector listening to this name.
+    Membership is no longer rebuilt here. It cannot be: the collector is the
+    only source of today's premarket tape and it only has bars for what
+    discover subscribed to at 07:20, so a name discovered at 08:45 could not be
+    priced anyway. What this pass does instead is RANK, on the gap actually
+    measured from the collector, which is done further down once there is a
+    price to measure.
 
-    The bulk /real-time endpoint is kept here, and only here, because it is the
-    one call that can rank 2,745 names at once and something has to choose the
-    twelve. What it must never do again is PRICE them. It serves the last
-    completed session, so at 08:45 its close is yesterday's close and its
-    previousClose is the session before that, which is how the 2026-08-14
-    report published yesterday's moves as this morning's gaps. Every field it
-    produces below is therefore named selection_*, is used to rank and to cut,
-    and is overwritten by price_from_collector before anything is scored,
-    written to picks, or shown to a reader. See DECISIONS.md 2026-08-14.
+    Until 2026-08-14 this function made a fresh bulk /real-time call and ranked
+    the universe by its gap. That endpoint serves the last completed session,
+    so the ranking was of yesterday's movers. Nothing in the morning path calls
+    it now. The pool tier that put each name here is carried through as a
+    recorded field, never as an ordering, because a prior about who might move
+    must not reach the report looking like a finding.
     """
-    keep = _CRIT.integer("scan", "candidate_count")
+    rows = [r for r in watchlist.get("symbols", []) if r.get("symbol")]
+    subscribed = [r for r in rows if r.get("subscribed", True)]
+
+    candidates: list[dict[str, Any]] = []
+    for row in subscribed:
+        candidates.append({
+            "symbol": str(row["symbol"]).upper(),
+            "pool_source": row.get("pool_source") or [],
+            "pool_tier": row.get("pool_tier"),
+            "pool_tier_reason": row.get("pool_tier_reason"),
+            "pool_rank": row.get("pool_rank"),
+            "pool_evidence": row.get("pool_evidence") or {},
+            # Ranking only. The published prior_close comes from
+            # attach_daily_history together with prior_high, out of one record.
+            "pool_prior_close": row.get("pool_prior_close"),
+            "avg_dollar_volume_20d": row.get("avg_dollar_volume_20d"),
+        })
+
+    provenance = {
+        "membership": "the names discover subscribed the collector to at 07:20",
+        "pool_size": len(rows),
+        "subscribed": len(subscribed),
+        "not_subscribed": len(rows) - len(subscribed),
+        "watchlist_generated_at": watchlist.get("generated_at"),
+        "selection_method": watchlist.get("selection_method"),
+        "pool_sources": watchlist.get("pool_sources"),
+    }
+    if watchlist.get("missing"):
+        packet.gap("watchlist.json is missing, so there is no subscribed list and "
+                   "no candidate can be built")
+    print(f"scan: {len(subscribed)} subscribed names from a pool of {len(rows)}")
+    return candidates, provenance
+
+
+def rank_by_measured_gap(
+    candidates: list[dict[str, Any]], packet: Packet, keep: int
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Order by the gap actually measured this morning, then cut to keep.
+
+    This is the only ranking in the system that uses a number from today. The
+    pool tier decided who got listened to; what they did is decided here, and
+    a tier 5 recent runner with the morning's biggest gap ranks first.
+
+    The gap used for ranking is provisional, measured against the prior close
+    the pool carried from discover's bulk read. The published gap is recomputed
+    in attach_gap from the authoritative prior close, so the two can differ in
+    the last decimal without either being wrong.
+    """
     price_rule = _CRIT.rule("discovery", "price")
     gap_rule = _CRIT.rule("discovery", "gap_pct")
-    universe_symbols = set(universe.universe_symbols(universe_payload))
 
-    rows, error = api.bulk_live_us()
-    if error:
-        packet.gap(f"the fresh bulk live call failed: {error}. No candidates could be built.")
-        return [], {"universe_started_with": len(universe_symbols), "failed": error}
-
-    live, feed_stats = discover.normalize_bulk_live(rows)
-    candidates: list[dict[str, Any]] = []
-    for symbol, row in live.items():
-        if symbol not in universe_symbols:
-            continue
-        price = _as_float(row.get("close"))
-        prior_close = _as_float(row.get("previousClose"))
+    ranked: list[dict[str, Any]] = []
+    below_floor = 0
+    unrankable = 0
+    for candidate in candidates:
+        price = candidate.get("price")
+        prior_close = candidate.get("pool_prior_close")
         if price is None or not prior_close:
+            candidate["provisional_gap_pct"] = None
+            unrankable += 1
             continue
         gap = (price - prior_close) / prior_close * 100.0
+        candidate["provisional_gap_pct"] = round(gap, 4)
         if not price_rule.test(price) or not gap_rule.test(abs(gap)):
+            below_floor += 1
             continue
-        candidates.append(
-            {
-                "symbol": symbol,
-                "selection_gap_pct": round(gap, 4),
-                "selection_price": round(price, 4),
-                "selection_prior_close": round(prior_close, 4),
-                "selection_source": (
-                    "bulk /real-time, which serves the last completed session. "
-                    "Used to rank and cut only, never to price."
-                ),
-                "bulk_volume": _as_float(row.get("volume")),
-                "quote_time": ettime.stamp(ettime.from_epoch_s(row.get("timestamp")))
-                if row.get("timestamp") else None,
-            }
-        )
+        ranked.append(candidate)
 
-    candidates.sort(key=lambda r: abs(r["selection_gap_pct"]), reverse=True)
-    provenance = {
-        "universe_started_with": len(universe_symbols),
-        "universe_generated_at": universe_payload.get("generated_at"),
-        "cleared_floors": len(candidates),
-        "kept": min(keep, len(candidates)),
+    ranked.sort(key=lambda r: abs(r["provisional_gap_pct"]), reverse=True)
+    kept = ranked[:keep]
+    if unrankable:
+        packet.gap(
+            f"{unrankable} subscribed name(s) could not be ranked: no premarket "
+            "price from the collector, or no prior session close carried by the pool"
+        )
+    stats = {
+        "subscribed_considered": len(candidates),
+        "cleared_floors": len(ranked),
+        "kept": len(kept),
+        "below_floor": below_floor,
+        "unrankable": unrankable,
         "floors": {"price": price_rule.describe(), "gap_pct_absolute": gap_rule.describe()},
-        "feed": feed_stats,
+        "ranked_on": "the premarket gap measured from the collector, not the pool tier",
     }
-    print(f"scan: universe started with {len(universe_symbols)} names, "
-          f"{len(candidates)} cleared the floors, keeping the top {min(keep, len(candidates))}")
-    return candidates[:keep], provenance
+    print(f"scan: {len(ranked)} of {len(candidates)} subscribed names cleared the "
+          f"floors on their measured gap, keeping the top {len(kept)}")
+    return kept, stats
 
 
 # ----------------------------------- 3 and 4. enrichment and window provenance
@@ -333,9 +370,7 @@ def attach_premarket_path(
     with nulls, not filled in from a quote, because it started gapping after
     the collector had already chosen what to listen to.
     """
-    watchlist_symbols = {
-        str(r.get("symbol", "")).upper() for r in watchlist.get("symbols", [])
-    }
+    watchlist_symbols = set(discover.subscribed_symbols(watchlist))
     collector_start = _CRIT.clock_text("collector", "start_time")
 
     if not bars_by_symbol:
@@ -1046,7 +1081,7 @@ def build_packet() -> dict[str, Any]:
         snapshot = []
     else:
         snapshot = market_snapshot(api, packet, bars_by_symbol)
-    candidates, provenance = final_candidates(api, packet, universe_payload)
+    candidates, provenance = pool_candidates(watchlist, packet)
     if collector_stats.get("partial_line_discarded"):
         print("scan: the collector was mid write, one partial trailing line discarded")
     if run_stats and (run_stats.get("reconnects") or 0) > 0:
@@ -1054,13 +1089,37 @@ def build_packet() -> dict[str, Any]:
               "this morning, noted in the packet")
 
     dropped: list[dict[str, Any]] = []
+    rank_stats: dict[str, Any] = {}
     if candidates:
-        # Local work first: the premarket path, then the price it implies, then
-        # the drop. Everything after this point is spent only on names that
-        # actually have a price.
+        # All local: the premarket path, the price it implies, the drop, then
+        # the ranking on that measured price. Not one API call has been spent
+        # on a candidate yet, so the cut below costs nothing to be wrong about.
         attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
         price_from_collector(candidates, packet, bars_by_symbol)
         candidates, dropped = drop_uncovered(candidates, packet)
+
+        # Ranking needs a prior close per name. The pool normally carries one
+        # out of discover's bulk read at no extra cost. A watchlist written
+        # before the pool rewrite has none, and so would a morning where the
+        # movers source failed, and in either case every name would be
+        # unrankable and the report would come out empty for a reason that has
+        # nothing to do with the market. So buy them here when they are absent.
+        unpriced = [c for c in candidates if c.get("pool_prior_close") is None]
+        if unpriced and not thin:
+            packet.gap(
+                f"{len(unpriced)} subscribed name(s) reached the scan without a prior "
+                "close from the pool, so one end of day call each was spent here to "
+                "make them rankable. A watchlist written before the pool rewrite, or "
+                "a morning where the movers source failed, both look like this."
+            )
+            attach_daily_history(api, unpriced, packet)
+            for candidate in unpriced:
+                candidate["pool_prior_close"] = candidate.get("prior_close")
+
+        candidates, rank_stats = rank_by_measured_gap(
+            candidates, packet, _CRIT.integer("scan", "candidate_count")
+        )
+    provenance["ranking"] = rank_stats
 
     if candidates:
         if thin:
@@ -1272,6 +1331,8 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 "source": source,
                 "score_partial": candidate.get("score_partial"),
                 "score_unavailable": ", ".join(candidate.get("score_unavailable") or []) or None,
+                "pool_source": ", ".join(candidate.get("pool_source") or []) or None,
+                "pool_tier": candidate.get("pool_tier"),
             })
             written += 1
         connection.commit()

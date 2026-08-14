@@ -108,15 +108,34 @@ def minute_floor(epoch_seconds: float) -> int:
 # ------------------------------------------------------------ symbol budget
 
 def select_symbols(watchlist: dict[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
-    """Context symbols plus as much of the watchlist as the cap allows."""
+    """Context symbols plus the names discover marked subscribed.
+
+    The ordering decision belongs to discover, which ranks the pool by tier and
+    then by 20 day average dollar volume and marks everything past the cap
+    not_subscribed. This used to re-sort by gap_pct, a field that no longer
+    exists on a watchlist row and which came from the stale bulk feed when it
+    did. Re-deriving the cut here would mean two places deciding the same
+    thing, and the audit trail in watchlist.json would stop matching what was
+    actually subscribed.
+
+    The socket cap is still enforced as a backstop, because the socket is a
+    hard limit and CRITERIA's two numbers could drift apart.
+    """
     context = [_full(s) for s in _CRIT.text_list("collector", "context_symbols")]
 
-    rows = [r for r in watchlist.get("symbols", []) if r.get("symbol")]
-    rows.sort(key=lambda r: abs(float(r.get("gap_pct") or 0.0)), reverse=True)
-    rows = [r for r in rows if _full(r["symbol"]) not in context]
+    rows = [
+        r for r in watchlist.get("symbols", [])
+        if r.get("symbol") and r.get("subscribed", True)
+        and _full(r["symbol"]) not in context
+    ]
 
     budget = max(MAX_SUBSCRIPTIONS - len(context), 0)
     kept, dropped = rows[:budget], rows[budget:]
+    if dropped:
+        print(f"collector: {len(dropped)} name(s) discover marked subscribed do not "
+              f"fit the {MAX_SUBSCRIPTIONS} socket cap alongside {len(context)} "
+              "context tickers. Check max_subscribed_candidates in CRITERIA.md "
+              "[discovery] against max_subscriptions in [collector].")
 
     subscribed = context + [_full(r["symbol"]) for r in kept]
     return subscribed, dropped

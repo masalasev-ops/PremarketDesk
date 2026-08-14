@@ -330,7 +330,7 @@ def _self_check() -> int:
     print(f"    day market cap          {crit.rule('day_setup', 'market_cap').describe()}")
     print(f"    universe dollar volume  {crit.rule('universe', 'avg_dollar_volume_20d').describe()}")
     print(f"    universe max age days   {crit.integer('universe', 'max_age_days')}")
-    print(f"    watchlist size          {crit.integer('discovery', 'watchlist_size')}")
+    print(f"    subscribed candidates   {crit.integer('discovery', 'max_subscribed_candidates')}")
     print(f"    collector window        {crit.clock_text('collector', 'start_time')} to "
           f"{crit.clock_text('collector', 'stop_time')}")
     print(f"    context symbols         {crit.text_list('collector', 'context_symbols')}")

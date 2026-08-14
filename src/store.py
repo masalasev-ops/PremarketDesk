@@ -82,6 +82,12 @@ _PICKS_LATER_COLUMNS = (
     # means unscored, never low.
     ("score_partial", "REAL"),
     ("score_unavailable", "TEXT"),
+    # Which prior put this name in front of the collector, and at what rank.
+    # Kept beside the morning's measured numbers, never instead of them: the
+    # pool is itself under evaluation and cannot be evaluated if the reason a
+    # name was watched is not recorded next to what it went on to do.
+    ("pool_source", "TEXT"),
+    ("pool_tier", "INTEGER"),
 )
 
 

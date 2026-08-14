@@ -279,7 +279,10 @@ def main(argv: list[str] | None = None) -> int:
         import discover
 
         watchlist = discover.load_watchlist()
-        tickers = [r["symbol"] for r in watchlist.get("symbols", []) if r.get("symbol")]
+        # Subscribed names only. Warming a baseline for a name the collector
+        # never listened to spends an intraday call on a denominator that can
+        # never get a numerator.
+        tickers = discover.subscribed_symbols(watchlist)
         tickers += [
             s if "." in s else f"{s}.US"
             for s in _CRIT.text_list("collector", "context_symbols")

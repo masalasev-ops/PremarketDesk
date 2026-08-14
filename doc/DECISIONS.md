@@ -84,6 +84,49 @@ which start each cached row was computed under, and a rewarm of the cache. That
 is a real change with an API cost and it is the owner's call, so it is left
 open rather than taken here.
 
+## 2026-08-14: selection is a prior built before the open, not a read of today
+
+**Decision.** discover.py no longer reads any price from today. It assembles a
+candidate pool from four sources that are all knowable before the open,
+earnings before open, overnight news, prior session movers and recent runners,
+ranks the union by tier and 20 day average dollar volume, and subscribes the
+collector to the top max_subscribed_candidates. The gap ranking it used to do
+against the bulk /real-time feed is removed entirely.
+
+**Why.** That endpoint serves the last completed session. Ranking the universe
+by its gap at 07:15 ranked the previous session's movers, and because the
+collector can only ever listen to what this pass chose, the error was upstream
+of everything: the 08:45 scan could fix what it did with its numbers but could
+not fix which names it had numbers for. No source on this plan is confirmed to
+carry premarket prices for the full 2,745 name universe at 07:15, so there is
+nothing to rank on. A prior assembled from information that genuinely exists
+before the open is the honest alternative to a ranking that looks like a
+measurement and is not.
+
+**What it costs, measured rather than assumed.** Backtested against
+2026-08-13: 99 universe names gapped beyond the 3 percent floor at the open,
+the pool held 72 of them for a recall of 0.727, and the 42 subscribed held 28
+for a recall of 0.283. Reproduce by building the four sources for the target
+date, assembling and capping them, then measuring with pool_recall.measure
+against pool_recall.actual_gappers for that session.
+
+**What the measurement already says.** All 28 subscribed hits came from tier 1:
+of 37 subscribed earnings names, 28 gapped. The five remaining slots went by
+dollar volume to MU, NVDA, AAPL, MSFT and AMD, and none of them gapped. The
+tier ordering is recorded in CRITERIA.md as a seed and an assumption about base
+rates. This is the first measurement against it, and it says the assumption
+holds for tier 1 and fails below it: sorting the news tiers by dollar volume
+descending sorts toward the names least likely to gap. The obvious candidates
+for the next change are sub-ranking the news tiers by something other than
+size, or raising the cap, and neither should be made on one session. Left open
+deliberately, with pool_recall now accumulating the evidence nightly.
+
+**Alternatives rejected.** Keeping the gap ranking and labelling it as
+yesterday's was rejected for the same reason the stale price was: a correctly
+labelled wrong input is still the wrong input, and here it selects what the
+whole morning can see. Subscribing to more names than the socket allows is not
+available; the 50 slot cap is the vendor's.
+
 ## 2026-08-14: containment reads prose, with a recorded fail-open
 
 **Decision.** Ticker claims are extracted from report prose as well as from

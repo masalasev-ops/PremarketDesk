@@ -132,6 +132,79 @@ stopword note there.
   failure that made the gate earn its keep was invisible without a clock beside
   the price.
 
+### Discover stopped ranking a stale feed and started building a pool
+
+The stale vintage fix above repaired what the 08:45 scan did with its numbers.
+It did not touch where the names came from. discover.py was still calling the
+bulk /real-time endpoint at 07:15, ranking the whole universe by its gap, and
+keeping the top 30, so it was still ranking the previous session's movers. The
+collector only ever subscribes to what discover chose, so every morning's
+evidence was still being gathered for the wrong names before the scan ran.
+
+Gap ranking is gone from discover. Nothing there reads a price from today,
+because at 07:15 no source on this plan has one for the whole universe.
+Selection is now a prior assembled from four things knowable before the open,
+unioned, deduplicated, and intersected with universe.json:
+
+- **earnings before open today**, from the calendar API. EODHD supplies
+  before_after_market and a report_date but no clock time, so a 07:00 reporter
+  and an 08:30 reporter are not distinguishable in this feed. The field is
+  recorded as the vendor gives it and timing_precision says so.
+- **overnight news**, from a symbol-less sweep of the news feed over the window
+  from 16:00 ET the prior day to the run clock, paged and bounded, with each
+  name carrying the timestamp of its newest item.
+- **prior session movers**, from two bulk end of day calls so the move is close
+  to close. This is the input the pool always had, now labelled as the
+  continuation prior it is rather than mistaken for today's gap.
+- **recent runners**, from the picks table, weighted by a per session decay so
+  three days ago outranks three weeks ago.
+
+A source that fails records not_fetched and a source that succeeds with nothing
+records fetched_and_empty, the distinction catalyst_why already draws, so a
+pool missing its earnings names is never mistaken for a morning without
+earnings.
+
+The pool is ranked by tier, then by 20 day average dollar volume descending,
+and cut at max_subscribed_candidates, seeded to 42 so it fits the collector's
+50 socket slots alongside the 8 context tickers. Everything below the cut is
+written to watchlist.json marked not_subscribed, so the cut is auditable.
+
+At 08:45 the pool tier becomes a recorded field and nothing more. scan ranks
+the subscribed names by the gap it actually measured from the collector, so a
+tier 5 recent runner with the morning's biggest move ranks first. pool_source
+and pool_tier are carried into the packet and the picks row.
+
+Cost: two bulk end of day calls at a measured 98 counted calls each, one
+calendar call and up to five news calls, against the one bulk live call at 100
+that this replaces. About 100 counted calls a morning more, far below the
+bulk_redesign_line.
+
+### pool_recall, and what it already says
+
+The nightly pass reads today's end of day for the whole exchange, works out
+which universe names actually gapped at the open against their prior close,
+and writes runs/<date>/pool_recall.json: how many gapped, how many the pool
+held, the recall fraction, and the names it missed. One bulk call, which that
+pass was making anyway.
+
+Backtested against 2026-08-13, whose real gappers are known:
+
+- 99 universe names gapped beyond the 3 percent floor at the open.
+- The pool held 72 of them. Recall 0.727.
+- The 42 actually subscribed held 28. Recall 0.283.
+- All 28 hits came from tier 1. Of 37 subscribed earnings names, 28 gapped.
+- The five tier 2 slots that remained went to MU, NVDA, AAPL, MSFT and AMD by
+  dollar volume. None of them gapped.
+
+So the pool finds the gappers and the cut throws most of them away, and the
+dollar volume tiebreak is what throws them: inside the news tiers it sorts
+toward the largest names in the market, which are the least likely to gap.
+On 2026-08-13 that cost little because 37 earnings names filled 37 of the 42
+slots. On 2026-08-14, a light calendar with 2 earnings names, it would have
+spent 40 of 42 slots on mega caps. The tier ordering is marked in CRITERIA.md
+as a seed and an assumption about base rates; this is the first measurement
+against it and it says the assumption is wrong below tier 1.
+
 ### Packet schema
 
 New keys: `build`, `vintage`, `dropped_no_coverage`. New candidate fields:

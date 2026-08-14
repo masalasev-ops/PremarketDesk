@@ -581,6 +581,35 @@ class EodhdClient:
             return ApiResult(None, f"news {symbol}: payload was not a list")
         return result
 
+    def news_feed(
+        self,
+        start: dt.date,
+        end: dt.date,
+        limit: int = 1000,
+        offset: int = 0,
+    ) -> ApiResult:
+        """The whole news feed for a window, with no symbol filter.
+
+        news() answers "what was said about this name". This answers "what was
+        said", which is the question the 07:15 pool has to ask: it does not yet
+        know which names to care about, and asking per symbol across a 2,745
+        name universe is not a thing anyone can afford.
+
+        The feed is global and carries crypto and non US listings, so the
+        caller intersects the symbols array against universe.json. Verified on
+        2026-08-14 that omitting the s parameter returns a general feed rather
+        than an error.
+        """
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
+        params["from"] = start.isoformat()
+        params["to"] = end.isoformat()
+        result = self._request("news", params=params, endpoint="news-feed")
+        if not result.ok:
+            return result
+        if not isinstance(result.data, list):
+            return ApiResult(None, "news feed: payload was not a list")
+        return result
+
     def economic_events(
         self,
         country: str,
