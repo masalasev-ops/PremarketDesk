@@ -34,7 +34,21 @@ import job_status
 
 _CRIT = criteria.load()
 
-_TOKEN_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,5}\b")
+# One to six characters. It was two to six until 2026-08-14, which made every
+# single letter listing invisible to the containment check: a fabricated F or
+# T row returned invented=[] and the run printed that containment passed.
+# Those are the symbols a model is most likely to invent, because they are the
+# most familiar ones in the market.
+#
+# Widening it costs almost nothing measurably. Across both archived reports it
+# produced zero new invented-ticker findings and raised the claims examined
+# from 25 to 29 and from 20 to 23. But two reports is a small sample and a
+# stray capital letter in prose is a plausible false alarm, so single
+# character tokens are additionally required to be real listings, which
+# _single_letter_listings supplies from universe.json. A one letter token that
+# is not a listing cannot be a ticker claim and is dropped before it can
+# become one.
+_TOKEN_RE = re.compile(r"\b[A-Z][A-Z0-9]{0,5}\b")
 _DOLLAR_RE = re.compile(r"\$([A-Z][A-Z0-9]{0,5})\b")
 
 

@@ -23,6 +23,7 @@ Claims, one per clause of the pool rework:
 from __future__ import annotations
 
 import datetime as dt
+import inspect
 import json
 import re
 import shutil
@@ -329,6 +330,183 @@ def claim_eight(failures: list[str]) -> None:
     shutil.rmtree(sandbox, ignore_errors=True)
 
 
+def claim_nine(failures: list[str]) -> None:
+    """The news window counts trading sessions, so Monday reaches Friday's close.
+
+    Production built the window from a calendar day and backtest_pool from the
+    prior trading session. They agree from Tuesday to Friday and are two days
+    apart on a Monday, which is when it costs the most: a calendar day back
+    from Monday is Sunday 16:00, and the window then never reaches Friday's
+    close or anything published across the weekend. Twelve of the sixty cached
+    sessions were affected, eleven Mondays and the Tuesday after Memorial Day.
+    """
+    monday = dt.date(2026, 8, 17)
+    if monday.weekday() != 0:
+        failures.append("the fixture date is not a Monday")
+        return
+
+    start = discover.news_window_start(monday)
+    friday = dt.date(2026, 8, 14)
+
+    if start.date() != friday:
+        failures.append(f"Monday's news window starts {start.date()}, expected "
+                        f"{friday}, the prior trading session")
+    if start.hour != 16:
+        failures.append(f"the window opens at {start.hour}:00, expected 16:00")
+
+    # The calendar day form, which is what this replaces.
+    naive = ettime.at(monday - dt.timedelta(days=1), 16, 0)
+    if naive.date() <= friday:
+        # The calendar form must start LATER than Friday's close, which is
+        # precisely how it loses the weekend. If it does not, this Monday
+        # cannot demonstrate the defect and the claim proves nothing.
+        failures.append(f"the fixture cannot demonstrate the defect: the calendar "
+                        f"form starts {naive.date()}, not after {friday}")
+    lost = (naive - start).total_seconds() / 3600.0
+    if lost < 47:
+        failures.append(f"only {lost:.0f}h separates the two forms on a Monday")
+
+    # A midweek session must be unchanged, or this would widen every window.
+    wednesday = dt.date(2026, 8, 12)
+    if discover.news_window_start(wednesday).date() != dt.date(2026, 8, 11):
+        failures.append("a midweek window no longer starts at the prior day")
+
+    # And the backtest must ask the same function, which is the actual fix.
+    import backtest_pool
+    source = inspect.getsource(backtest_pool.fetch_session)
+    if "discover.news_window_start" not in source:
+        failures.append("backtest_pool computes its own news window again, which "
+                        "is the drift this claim exists to prevent")
+
+    print(f"  claim 9 Monday's window opens {start.date()} 16:00, {lost:.0f}h "
+          "earlier than the calendar day form, and both callers share one function")
+
+
+def claim_ten(failures: list[str]) -> None:
+    """An interrupted universe write leaves the previous file whole.
+
+    The Sunday job has never fired, its roughly 4,700 calls bill to Monday's
+    quota day, and the key is shared. A refused or interrupted run is a real
+    possibility, and a plain write_text leaves a truncated file that reads as
+    a real universe.
+    """
+    original = config.UNIVERSE_PATH
+    sandbox = Path(tempfile.mkdtemp(prefix="premarketdesk-universe-"))
+    config.UNIVERSE_PATH = sandbox / "universe.json"
+    try:
+        good = {"generated_at": ettime.stamp(ettime.now_et()), "count": 2745,
+                "symbols": [{"symbol": f"S{i}.US"} for i in range(2745)]}
+        universe.write_atomically(good)
+        before = config.UNIVERSE_PATH.read_text(encoding="utf-8")
+
+        # Failure mode one: the payload cannot be serialised, so the write dies
+        # before any file is touched.
+        try:
+            universe.write_atomically({"symbols": {1, 2, 3}})  # a set, not JSON
+        except TypeError:
+            pass
+        else:
+            failures.append("an unserialisable payload did not raise")
+
+        # Failure mode two: the temporary file is written and the rename then
+        # fails. This is the one the atomic write exists for, and the only way
+        # to reach it is to break the rename itself.
+        import os as _os
+
+        real_replace = _os.replace
+
+        def broken_replace(src, dst):
+            raise OSError("simulated rename failure")
+
+        universe.os.replace = broken_replace
+        try:
+            universe.write_atomically({"count": 1, "symbols": [{"symbol": "X.US"}]})
+        except OSError:
+            pass
+        else:
+            failures.append("a failing rename did not raise")
+        finally:
+            universe.os.replace = real_replace
+
+        after = config.UNIVERSE_PATH.read_text(encoding="utf-8")
+        if after != before:
+            failures.append("an interrupted universe write changed the previous file")
+        if list(sandbox.glob("*.partial")):
+            failures.append("a partial file was left behind after a failed rename")
+
+        # And the count floor: a universe truncated to 200 names is refused.
+        truncated = {"generated_at": ettime.stamp(ettime.now_et()), "count": 200,
+                     "previous_count": 2745,
+                     "symbols": [{"symbol": f"S{i}.US"} for i in range(200)]}
+        reason = universe.check_admissible(truncated)
+        if not reason or "200" not in reason:
+            failures.append(f"a 200 name universe against 2745 was admitted: {reason!r}")
+        whole = universe.check_admissible(good | {"previous_count": 2745})
+        if whole is not None:
+            failures.append(f"a full universe was refused: {whole}")
+        first_ever = universe.check_admissible({"count": 200, "previous_count": None})
+        if first_ever is not None:
+            failures.append("a first ever build with nothing to compare was refused")
+    finally:
+        config.UNIVERSE_PATH = original
+        shutil.rmtree(sandbox, ignore_errors=True)
+    print("  claim 10 an interrupted write leaves the prior universe intact, and a "
+          "200 of 2745 rebuild is refused")
+
+
+def claim_eleven(failures: list[str]) -> None:
+    """An unranked pool is refused rather than cut to the cap arbitrarily."""
+    real = discover.load_metrics
+    universe_payload = {
+        "generated_at": ettime.stamp(ettime.now_et()), "count": 100,
+        "previous_count": 100,
+        "symbols": [{"symbol": f"S{i:03d}.US", "avg_dollar_volume_20d": 1e9}
+                    for i in range(100)],
+    }
+    original = config.UNIVERSE_PATH
+    sandbox = Path(tempfile.mkdtemp(prefix="premarketdesk-ranked-"))
+    config.UNIVERSE_PATH = sandbox / "universe.json"
+    key = _CRIT.text("discovery", "within_tier_key")
+
+    def metrics_with(share: float):
+        rows = {}
+        for index in range(100):
+            row = {"avg_dollar_volume_20d": 1e9}
+            if index < int(share * 100):
+                row[key] = 0.2
+            rows[f"S{index:03d}.US"] = row
+        return lambda: rows
+
+    try:
+        config.UNIVERSE_PATH.write_text(json.dumps(universe_payload), encoding="utf-8")
+        for share, should_refuse in ((0.0, True), (0.6, False)):
+            discover.load_metrics = metrics_with(share)
+            watchlist_before = config.WATCHLIST_PATH.exists()
+            try:
+                discover.build(write=False)
+            except discover.UnrankedPoolError as exc:
+                if not should_refuse:
+                    failures.append(f"a {share:.0%} ranked universe was refused: {exc}")
+                elif str(int(share * 100)) not in str(exc) and "0 of 100" not in str(exc):
+                    failures.append(f"the refusal did not name the count: {exc}")
+            except Exception as exc:  # noqa: BLE001
+                # Any other failure is the network stub missing, not this claim.
+                if should_refuse:
+                    failures.append(f"a 0% ranked universe raised {type(exc).__name__} "
+                                    f"instead of UnrankedPoolError: {exc}")
+            else:
+                if should_refuse:
+                    failures.append(f"a {share:.0%} ranked universe was NOT refused")
+            if config.WATCHLIST_PATH.exists() != watchlist_before:
+                failures.append("a refused discover wrote a watchlist")
+    finally:
+        discover.load_metrics = real
+        config.UNIVERSE_PATH = original
+        shutil.rmtree(sandbox, ignore_errors=True)
+    print("  claim 11 a wholly unranked universe is refused and writes nothing, "
+          "60 percent proceeds")
+
+
 def main() -> int:
     failures: list[str] = []
     claim_one(failures)
@@ -338,6 +516,9 @@ def main() -> int:
     claim_six(failures)
     claim_seven(failures)
     claim_eight(failures)
+    claim_nine(failures)
+    claim_ten(failures)
+    claim_eleven(failures)
 
     if failures:
         for failure in failures:

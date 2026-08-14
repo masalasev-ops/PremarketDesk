@@ -331,7 +331,18 @@ def report_line(now: dt.date | None = None,
     Silence is the normal case and has to stay silent. A line that appears
     every morning is a line nobody reads.
     """
-    late = overdue(now, rows)
+    all_rows = rows if rows is not None else records()
+    if not all_rows:
+        # Silence has to mean one thing. An empty record file is the loudest
+        # possible state, not the quietest: it says nothing has recorded
+        # anything, which includes the recorder itself not running. Returning
+        # None here would have made it identical to sixteen healthy steps.
+        return ("Scheduled jobs: no step has recorded anything at all, so nothing "
+                "below can be vouched for. Either no job has run since the "
+                "recorder was added, or the recorder is not writing "
+                f"{RECORD_PATH.name}.")
+
+    late = overdue(now, all_rows)
     if not late:
         return None
 

@@ -106,7 +106,7 @@ def query_task(task_name: str) -> dict[str, Any]:
 
 # ---------------------------------------------------------------- log side
 
-def failed_steps(job: str, day: str) -> list[str]:
+def failed_steps(job: str, day: str) -> tuple[list[str], int]:
     """Steps of this job that recorded a failure today, as readable phrases.
 
     The final step marker answers "did the job reach the end", which is not
@@ -119,10 +119,13 @@ def failed_steps(job: str, day: str) -> list[str]:
     A step that failed and was later rerun successfully on the same day is not
     reported, because the last record for that step is the one that describes
     the state the machine is now in.
+
+    Returns (failure phrases, number of step records read). The second is
+    what stops an empty record set reading as a clean job.
     """
     wanted = JOB_STATUS_NAMES.get(job)
     if wanted is None:
-        return []
+        return [], 0
 
     latest: dict[str, dict[str, Any]] = {}
     for row in job_status.records():
@@ -138,7 +141,9 @@ def failed_steps(job: str, day: str) -> list[str]:
             continue
         reason = row.get("exception") or f"exit {row.get('exit_code')}"
         out.append(f"{step} recorded {row.get('status')}: {reason}")
-    return out
+    # The count is the denominator: a caller cannot tell "every step passed"
+    # from "no step recorded anything" without it.
+    return out, len(latest)
 
 
 def log_verdict(prefix: str, marker: str, day: str) -> str:
@@ -250,12 +255,22 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         the second every night for a week.
         """
         nonlocal problems
-        broken = failed_steps(job, day)
+        broken, examined = failed_steps(job, day)
+        if not examined:
+            # Zero step records is not zero failures. It is the state a job
+            # that died before writing anything leaves, and it is also what a
+            # renamed PMD_JOB or a deleted record file leaves. This source of
+            # truth was added because the other two agreed on a lie; its own
+            # empty case would restore exactly that.
+            problems += 1
+            report(job, "NO RECORDS", "no step of this job recorded anything today, "
+                   "so nothing inside it can be vouched for")
+            return False
         if not broken:
             return True
         problems += 1
         for line in broken:
-            report(job, "STEP FAILED", line)
+            report(job, "STEP FAILED", f"{line} ({examined} step record(s) read)")
         return False
 
     def maybe_rerun(job: str, reason: str) -> None:

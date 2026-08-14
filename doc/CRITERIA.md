@@ -103,6 +103,27 @@ bulk_redesign_line            = 1000       # one bulk live call at or above this
 consecutive_429_trip          = 5          # this many 429s in a row opens the circuit for the run
 retry_budget_per_run          = 10         # total retries one run may spend across all calls
 
+## Price age
+
+How old the last collector print behind a published price may be, measured
+against the scan clock rather than against the premarket window.
+
+The vintage check answers a different question. It asks whether a price is
+from today's premarket session, which a print from 07:22 satisfies perfectly
+while being 83 minutes stale at 08:45. A collector interrupted at 08:10 leaves
+exactly that: prints inside today's window, correctly dated, and describing a
+market that has moved on. The gap computed from one is not this morning's gap,
+and nothing in the packet said so.
+
+max_price_age_seconds         = 900        # SEED, not measured. Fifteen minutes,
+                                           # chosen because it is short enough that
+                                           # a gap is still recognisably the same
+                                           # gap and long enough that a thinly
+                                           # traded name with sparse prints is not
+                                           # dropped for being quiet. No measurement
+                                           # supports it yet. Widen it if real
+                                           # mornings show liquid names being cut.
+
 ## Day setup
 
 Applies to the intraday gap and go screen. A candidate is day_eligible only
@@ -148,6 +169,16 @@ session_calendar_symbol       = SPY.US   # its EOD history supplies the real ses
 expected_count_min            = 1000       # a smaller result means the build went wrong
 expected_count_max            = 3000       # a larger result means the type filter went wrong
 max_age_days                  = 10         # every later script refuses to run past this
+min_count_fraction_of_previous = 0.5       # SEED, not measured. A rebuild that
+                                           # admits less than this share of the
+                                           # previous run's names is treated as a
+                                           # partial run rather than as a market
+                                           # that halved overnight, and discover
+                                           # refuses it. 0.5 is a guess chosen to
+                                           # sit far below any plausible real
+                                           # weekly change and far above a
+                                           # truncated file. Revisit once a few
+                                           # real rebuilds have been observed.
 
 ## Discovery
 
@@ -167,6 +198,16 @@ max_subscribed_candidates     = 42         # seed: the collector's 50 subscripti
 within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
 within_tier_fallback          = atr_pct_20d      # for names propensity cannot score: it needs 100 sessions, this needs 20
 min_slots_per_tier            = 4          # MEASURED, see the ordering note below
+min_ranked_fraction_to_subscribe = 0.5     # SEED, not measured. Below this share
+                                           # of the universe carrying a ranking
+                                           # key, discover writes no watchlist and
+                                           # exits non zero rather than cutting an
+                                           # unranked pool to the cap. An arbitrary
+                                           # 42 names looks exactly like a real 42
+                                           # downstream, and a missing report is
+                                           # recoverable where a plausible wrong
+                                           # one is not. 0.5 is a guess; the
+                                           # observed value is above 0.98.
 
 ### The ordering note
 
@@ -459,7 +500,7 @@ model                         = opus       # owner's standing choice, re-asserte
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
 timeout_s                     = 293        # 3x the slowest of five measured opus medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds
 max_attempts                  = 2          # total tries, including the first
-prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI
+prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI, A, I
 
 ### The prose stopword note
 
@@ -468,6 +509,14 @@ tables. Prose is ambiguous in a way a Ticker column is not: "06:37 ET" is a
 time, and ET is also Energy Transfer, so a naive reader of prose would fail
 every report ever written. Time expressions and ISO dates are stripped before
 tokens are taken, and this list removes what survives.
+
+A and I joined the list on 2026-08-14, when the token pattern widened from two
+characters to one so that single letter listings stop being invisible to the
+check. A is Agilent and it is also the English article; I is not a listing at
+all. Both are stopped in PROSE only. A Ticker column cell reading A is
+unambiguous and is still checked, which is the case that matters: the guard
+exists to catch a fabricated single letter row, and F, T and the other
+nineteen remain checked everywhere.
 
 Some entries here are real tickers, ALL, ON, SO, IT, AI and ET among them.
 That is a deliberate, recorded fail-open: a claim about one of those names in

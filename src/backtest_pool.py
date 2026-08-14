@@ -135,8 +135,11 @@ def fetch_session(
         return None
 
     run_clock = ettime.at(session, *_CRIT.clock("discovery", "run_time"))
-    news_start_h, news_start_m = _CRIT.clock("discovery", "news_window_start")
-    news_since = ettime.at(prior, news_start_h, news_start_m)
+    # The same function production calls, so a replayed session sees the
+    # window the live run would have seen. Passing through discover rather
+    # than recomputing from `prior` here is the whole point: the two drifting
+    # apart is what made every Monday in this cache unrepresentative.
+    news_since = discover.news_window_start(session)
 
     earnings = discover.earnings_before_open(api, universe_symbols, session)
     news = discover.overnight_news(api, universe_symbols, news_since, run_clock)

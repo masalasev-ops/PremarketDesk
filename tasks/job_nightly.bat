@@ -19,6 +19,15 @@ if %ERRORLEVEL% equ 3 (
     exit /b 0
 )
 
+rem Refresh the exchange calendar here so the 08:45 chain never fetches it.
+rem scan.py sets ALLOW_NETWORK false, so a stale calendar in the morning is
+rem used as it stands and recorded rather than blocking the window on a fetch
+rem and its retries. Never fails the chain: a stale calendar is survivable and
+rem the morning says so in the packet.
+echo ===== calendar refresh started %DATE% %TIME% ===== >> "%LOG%"
+%PY% src\market_today.py --refresh >> "%LOG%" 2>&1
+echo ===== calendar refresh finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
 echo ===== backfill started %DATE% %TIME% ===== >> "%LOG%"
 %PY% src\backfill_premarket.py >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%

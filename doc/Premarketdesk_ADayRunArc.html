@@ -170,9 +170,9 @@
 <header>
   <p class="eyebrow">PremarketDesk architecture</p>
   <h1>A Day in PremarketDesk</h1>
-  <p class="lede">There is no server and no queue. The whole system is six .bat
-  files on one machine, registered as eight Windows Task Scheduler tasks: two of
-  the six are registered twice, the nightly at 22:15 and again at 07:00, and the
+  <p class="lede">There is no server and no queue. The whole system is seven .bat
+  files on one machine, registered as nine Windows Task Scheduler tasks: two of
+  them are registered twice, the nightly at 22:15 and again at 07:00, and the
   watchdog every 30 minutes from 07:25 to 09:25 and once more at 22:45. Each task
   wakes at its clock time, reads the files earlier jobs left behind, and leaves
   files for the next. The architecture is the clock.</p>
@@ -615,7 +615,12 @@
       <td>nightly jobs fail</td>
       <td>The true premarket columns and outcomes stay null. Both jobs are
       idempotent and fill only what is missing, so the next night's run picks
-      up the backlog on its own. The morning report is unaffected.</td>
+      up the backlog on its own. The morning report is no longer unaffected,
+      and that is deliberate: every scheduled step records its outcome to
+      data/job-status.jsonl as it exits, and the next morning's disclaimer
+      names any step that has not succeeded inside the window CRITERIA.md
+      gives it. A nightly failing quietly is precisely what went unnoticed for
+      a week before that record existed.</td>
     </tr>
   </table>
   </div>
@@ -653,10 +658,10 @@
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>all code: config, ettime (the one ET clock), criteria, eodhd, store, universe, gap_stats (per name gap propensity, measured weekly on the universe rebuild), discover, collect_premarket, baseline, scan, vintage (the assertion that the priced data is today's, which rewrites the gate marker and ends the run when it is not), analyst, render_report, deliver, backfill_premarket, fill_outcomes, pool_recall (the nightly measurement of which real gappers the morning pool missed), verify_morning, build_archive, market_today (the trading day guard), monitor_jobs (the watchdog that checks each job fired and finished), backtest_pool (the recall harness, whose fetch stage is the only thing here that calls the vendor for history and whose evaluate stage scores an ordering from that cache with no calls at all), the two measure_ scripts that priced the bulk and socket calls, plus conftest, run_tests and the eight test_ modules run_tests runs</td></tr>
+    <tr><td>src\</td><td>all code: config, ettime (the one ET clock), criteria, eodhd, store, universe, gap_stats (per name gap propensity, measured weekly on the universe rebuild), discover, collect_premarket, baseline, scan, vintage (the assertion that the priced data is today's, which rewrites the gate marker and ends the run when it is not), analyst, render_report, deliver, backfill_premarket, fill_outcomes, pool_recall (the nightly measurement of which real gappers the morning pool missed), verify_morning, build_archive, market_today (the trading day guard), monitor_jobs (the watchdog, which checks that each job fired, that its log carries the final step marker, and that every step inside it recorded success), job_status (the append only record of what every scheduled step did, and the source of the overdue line the morning report carries), probe_live_v1 (a standalone one off asking whether real-time/{symbol} serves today's premarket, not part of any chain), backtest_pool (the recall harness, whose fetch stage is the only thing here that calls the vendor for history and whose evaluate stage scores an ordering from that cache with no calls at all), the two measure_ scripts that priced the bulk and socket calls, plus conftest, run_tests and the nine test_ modules run_tests runs</td></tr>
     <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md, prompt_analyst.md, BUILD_PLAN.md, sample_report.html, this page and the system architecture page beside it</td></tr>
-    <tr><td>tasks\</td><td>six job .bat files registered as eight scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, and job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45), register_tasks.ps1, README with scheduling notes</td></tr>
-    <tr><td>data\</td><td>universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl minute bars, premarketdesk.db, exchange-details.json holiday cache, UNVERIFIED gate marker</td></tr>
+    <tr><td>tasks\</td><td>seven job .bat files registered as nine scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, and job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45), register_tasks.ps1, README with scheduling notes</td></tr>
+    <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl minute bars, premarketdesk.db, exchange-details.json holiday cache, UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, verify_intraday.json</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>
     <tr><td>logs\</td><td>one dated log per job per day</td></tr>

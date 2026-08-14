@@ -15,6 +15,138 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-14, sixth: everything outstanding, in the order it had to run
+
+### The news window counts trading sessions
+
+Production built the overnight news window from a calendar day and
+`backtest_pool` from the prior trading session. They agree from Tuesday to
+Friday and are two days apart on a Monday, which is when it costs most: a
+calendar day back from Monday is Sunday 16:00, so the window never reached
+Friday's close or anything published across the weekend. Both now call
+`discover.news_window_start`, and the drift, not either choice, was the defect.
+
+**Twelve of the sixty cached sessions were affected**, eleven Mondays and the
+Tuesday after Memorial Day, each losing 48 or 72 hours. The conclusion
+survives without qualification, because the cache was always built on the
+corrected window: the backtest used the prior trading session from the start,
+so the ordering was measured correctly and only production drifted. A re-run
+reproduces the recorded figures exactly, 0.1164 for propensity against 0.0893
+for dollar volume, with tier hit rates 0.56, 0.37, 0.40, 0.35.
+
+### The universe write is atomic, and a partial one is refused
+
+`universe.json` is written to a sibling `.partial` and renamed with
+`os.replace`, which is atomic on both platforms, so a reader sees the whole
+previous file or the whole new one. The Sunday job has never fired, its
+roughly 4,700 calls bill to Monday's quota day on a key another project took
+50,199 of 100,000 from, and a refused or interrupted run is a real
+possibility.
+
+Age was already enforced by `load_universe` through `max_age_days = 10`, so no
+second threshold was added for it. What is new is `check_admissible`, which
+compares the count against `previous_count` carried in the file itself, under
+`min_count_fraction_of_previous`, seeded at 0.5. A stale universe is a usable
+input and every later script knows how to refuse one. A half written one is
+not, and nothing could tell them apart.
+
+### An unranked pool is not cut
+
+When `load_metrics` could not read the universe, discover still built the pool
+and still cut it to 42, but every name sat in the fallback band with no key,
+so the subscribed names were arbitrary and the morning looked entirely normal.
+Below `min_ranked_fraction_to_subscribe`, seeded at 0.5 against an observed
+0.98, discover now records the failure, writes no watchlist and exits non
+zero. A missing report is recoverable; a plausible one built from a random
+sample is not, because nothing downstream can tell it from a real one.
+
+### A price inside the premarket window can still be hours old
+
+The vintage gate asks whether a price is from today's premarket session, which
+a 07:22 print satisfies perfectly while being 83 minutes stale at 08:45. That
+is exactly what a collector killed at 08:10 leaves. Every candidate now
+carries `price_age_seconds` against the scan clock, and beyond
+`max_price_age_seconds`, seeded at 900, it drops into `dropped_stale_price`
+with its own reason. Counted separately from `dropped_no_coverage` because the
+fixes differ: a subscription slot versus a socket that went quiet.
+
+`collector_window_observed` puts the first and last bar beside the scheduled
+window, with `minutes_since_last_bar`, so a truncated morning is visible in
+the packet that morning rather than in a status record the next day.
+
+### Zero examined is never a pass
+
+`probe_live_v1` printed "Every reading is from today" over a log of nulls. It
+now computes its denominator before any branch that could conclude, and an
+empty one reports EXAMINED NOTHING. The rule is in DECISIONS.md, and this was
+the fifth instance of one shape in three weeks.
+
+**The audit found a sixth, in the machinery written yesterday.**
+`job_status.report_line(rows=[])` returned None and
+`monitor_jobs.failed_steps` returned an empty list when no step had recorded
+anything, so an absent record file read identically to sixteen healthy steps,
+in the mechanism added because the other two sources of truth had agreed on a
+lie. Both now report the empty case: the morning line says nothing has
+recorded anything at all, and the watchdog reports NO RECORDS as its own
+verdict rather than folding it into OK. `failed_steps` returns
+`(failures, records_read)`, so no caller can mistake the two again.
+
+180 guards were audited against the rule across all sixteen scheduled modules.
+The great majority already comply, most of them deliberately: `score_partial`
+and `score_unavailable`, the three-state source constants, `pm_rvol_reason`,
+`collector_coverage`, `check_report`'s coverage block. The audit's list of
+non-compliers is recorded for future work rather than fixed wholesale, since
+several are latent shapes rather than live holes and the week before a first
+Monday is the wrong time to change twenty guards.
+
+### Containment sees single letter tickers
+
+The token pattern needed two characters, so all 21 single letter listings were
+invisible and a fabricated F or T row returned no findings while the run
+printed that containment passed. Those are the symbols a model is most likely
+to invent, being the most familiar in the market.
+
+The measured cost of widening: across both archived reports, **zero new
+invented-ticker findings**, and claims examined rose from 25 to 29 and from 20
+to 23. Two reports is a small sample, so A and I joined the prose stopword
+list. A is Agilent and also the English article; I is not a listing at all.
+Both are stopped in prose only, and a Ticker column cell reading A is still
+checked, which is the case the guard exists for.
+
+### The build identifier no longer writes to the tree it measures
+
+`git status` refreshes and rewrites `.git/index`, so the whole-tree isolation
+check failed on a file the check itself had caused to change. It is
+`git --no-optional-locks status` now, and three consecutive suite runs pass
+with no allowlist addition. `.git` stays watched.
+
+[corrected 2026-08-14: the session that introduced this reported the resulting
+intermittent failure as a transient filesystem oddity consistent with a virus
+scanner, and left a comment in conftest.py saying so. It was neither transient
+nor external. The `universe.json` and git-object transients from the same
+session remain genuinely unexplained and are left recorded as such.]
+
+### The morning never fetches the calendar
+
+`market_today.get_details` had no in-process cache, and `job_status.overdue()`
+walks day by day per step while scan calls it twice, so a ten day gap across
+sixteen steps was hundreds of re-reads and, once the cache went stale on
+20 August, would have been hundreds of sequential HTTP attempts inside the
+08:45 window. There is now a per-process memo, the nightly refreshes the
+calendar with `market_today.py --refresh`, and scan sets `ALLOW_NETWORK` false
+so a stale calendar is used as it stands with `calendar_cache` in the packet
+recording that it was. Measured: zero network clients built across fourteen
+lookups with a fresh cache, and zero with a 2,417 day old one.
+
+### The short side, measured and left alone
+
+Recorded in DECISIONS.md with the full tables. In one line: an upward-gap-only
+propensity is worse on this cache at both caps, tier 1 is unchanged at 0.55
+because direction cannot be known at 07:15, and the comparison is confounded
+because the variant has 60 sessions of history against the shipped key's 250.
+Nothing shipped changed, and the 2026-08-14 replay is byte identical to
+4cd4a3b, digest 9918b22d.
+
 ## 2026-08-14, fifth: the premarket source question, and two fields corrected
 
 ### real-time/(symbol) is not real-time/?ex=US, and that had never been checked

@@ -17,6 +17,7 @@ Four claims, one per clause of the fix:
 from __future__ import annotations
 
 import json
+from datetime import date as dt_date
 import sys
 from pathlib import Path
 
@@ -24,6 +25,7 @@ import baseline
 import collect_premarket
 import config
 import criteria
+import ettime
 import scan
 import store
 
@@ -295,6 +297,59 @@ def claim_seven(failures: list[str]) -> None:
           f"peak {coverage['peak_trades_per_minute']} trades/min")
 
 
+def claim_eight(failures: list[str]) -> None:
+    """A price inside the premarket window can still be too old to publish.
+
+    The vintage gate asks whether a price is from today's premarket session,
+    which a 07:22 print satisfies perfectly while being 83 minutes stale at
+    08:45. That is exactly what a collector killed at 08:10 leaves behind.
+    """
+    import datetime as dtm
+
+    limit = criteria.load().number("price_age", "max_price_age_seconds")
+    scan_clock = ettime.at(dt_date(2026, 8, 14), 8, 45)
+
+    fresh_at = ettime.stamp(scan_clock - dtm.timedelta(seconds=60))
+    stale_at = ettime.stamp(ettime.at(dt_date(2026, 8, 14), 7, 22))
+
+    candidates = [
+        {"symbol": "FRESH.US", "price": 10.0, "price_time": fresh_at,
+         "pool_tier": 1, "pool_source": ["earnings_before_open"]},
+        {"symbol": "STALE.US", "price": 20.0, "price_time": stale_at,
+         "pool_tier": 2, "pool_source": ["overnight_news"]},
+    ]
+    for candidate in candidates:
+        candidate["price_age_seconds"] = scan._price_age_seconds(
+            candidate["price_time"], scan_clock)
+
+    if candidates[0]["price_age_seconds"] is None or candidates[1]["price_age_seconds"] is None:
+        failures.append("price_age_seconds was not recorded for both candidates")
+        return
+    if candidates[1]["price_age_seconds"] <= limit:
+        failures.append(f"the 07:22 print measured {candidates[1]['price_age_seconds']}s, "
+                        f"which does not exceed the {limit}s limit; the fixture is wrong")
+
+    kept, dropped = scan.drop_stale_prices(candidates, scan.Packet())
+    if [c["symbol"] for c in kept] != ["FRESH.US"]:
+        failures.append(f"kept {[c['symbol'] for c in kept]}, expected the 08:44 print only")
+    if [d["symbol"] for d in dropped] != ["STALE.US"]:
+        failures.append(f"dropped {[d['symbol'] for d in dropped]}, expected the 07:22 print")
+    elif "vintage" not in dropped[0]["reason"]:
+        failures.append("the stale reason does not explain why vintage passes it")
+
+    # And the observed window, from the real frozen snapshot.
+    _packet, bars = _load()
+    window = scan.observed_collector_window(bars, scan_clock)
+    for key in ("first_bar_et", "last_bar_et", "minutes_since_last_bar",
+                "scheduled_start_et", "scheduled_stop_et"):
+        if window.get(key) is None:
+            failures.append(f"the observed window has no {key}")
+    print(f"  claim 8 kept the 08:44 print, dropped the 07:22 one at "
+          f"{candidates[1]['price_age_seconds']:,.0f}s; observed window "
+          f"{str(window['first_bar_et'])[11:16]} to {str(window['last_bar_et'])[11:16]}, "
+          f"{window['minutes_since_last_bar']:.0f}m of silence at the scan clock")
+
+
 def main() -> int:
     if not PACKET_PATH.is_file() or not SNAPSHOT_PATH.is_file():
         print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
@@ -307,6 +362,7 @@ def main() -> int:
     claim_four(failures)
     claim_six(failures)
     claim_seven(failures)
+    claim_eight(failures)
 
     if failures:
         for failure in failures:

@@ -233,8 +233,16 @@ def build_identifier() -> dict[str, Any]:
     dirty: bool | None = None
     dirty_reason = None
     try:
+        # --no-optional-locks is what keeps this read only. Plain `git status`
+        # refreshes the index to cache stat information, which REWRITES
+        # .git/index, and the test suite's whole-tree isolation check then
+        # fails on a file the check itself caused to change. That produced an
+        # intermittent failure that looked like a filesystem oddity for a day.
+        # Adding .git to the allowlist would have hidden it at the cost of
+        # blinding the check to a directory it currently watches, so the
+        # measurement stopped writing instead.
         finished = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "--no-optional-locks", "status", "--porcelain"],
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,

@@ -187,8 +187,17 @@ def report(day: str | None = None) -> int:
           f"{window_close[0]:02d}:{window_close[1]:02d} premarket window, "
           f"{premarket_today} of them dated to {session}")
 
-    if not total:
-        print("probe: nothing to conclude from")
+    # Structurally, before any branch that could conclude. The denominator is
+    # not the number of readings, it is the number of readings that carried a
+    # usable timestamp: a log of five nulls is five readings and zero
+    # observations, and every conclusion below divides by observations.
+    observations = seen_today + seen_stale
+    if not observations:
+        print(f"probe: EXAMINED NOTHING. {total} reading(s) were logged and none "
+              "carried a feed timestamp, so there is no observation to draw on. "
+              "This is not a pass and not a failure, it is an empty measurement. "
+              "The usual cause is the shared quota refusing the calls; check the "
+              "error field in the log.")
         return 0
 
     if seen_stale == total:

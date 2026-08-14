@@ -146,6 +146,56 @@ def collector_coverage(
     }
 
 
+def observed_collector_window(
+    bars_by_symbol: dict[str, list[dict[str, Any]]], now: dt.datetime
+) -> dict[str, Any]:
+    """The window the collector actually covered, against the one it was given.
+
+    The scheduled window is a fact about CRITERIA.md; the observed window is a
+    fact about this morning. They differ whenever the collector started late,
+    died early, or lost the socket in the middle, and until now that only
+    showed up in a status record the following day. A morning where the tape
+    stops at 08:10 is visible here, in the packet, on the morning it happens.
+
+    Silence at the end is the one that matters and is reported as its own
+    number: minutes_since_last_bar is the distance from the newest bar in the
+    whole file to the scan clock, so a socket that dropped at 08:10 reads as
+    35 rather than as a slightly short window.
+    """
+    minutes = [
+        int(bar["minute_epoch"])
+        for bars in bars_by_symbol.values()
+        for bar in bars
+        if bar.get("minute_epoch") is not None
+    ]
+    scheduled_start = _CRIT.clock_text("collector", "start_time")
+    scheduled_stop = _CRIT.clock_text("collector", "stop_time")
+
+    if not minutes:
+        return {
+            "scheduled_start_et": scheduled_start,
+            "scheduled_stop_et": scheduled_stop,
+            "first_bar_et": None,
+            "last_bar_et": None,
+            "minutes_since_last_bar": None,
+            "reason": "the collector file holds no bars at all",
+        }
+
+    first = ettime.from_epoch_s(min(minutes))
+    last = ettime.from_epoch_s(max(minutes))
+    return {
+        "scheduled_start_et": scheduled_start,
+        "scheduled_stop_et": scheduled_stop,
+        "first_bar_et": ettime.stamp(first),
+        "last_bar_et": ettime.stamp(last),
+        "started_late_minutes": round(
+            (first - ettime.at_hm(now.date(),
+                                  _CRIT.clock("collector", "start_time"))
+             ).total_seconds() / 60.0, 1),
+        "minutes_since_last_bar": round((now - last).total_seconds() / 60.0, 1),
+    }
+
+
 def _peak_trades_per_minute(
     bars_by_symbol: dict[str, list[dict[str, Any]]]
 ) -> int | None:
@@ -524,14 +574,79 @@ def price_from_collector(
     spent on enrichment, so that a candidate with no collector coverage can be
     dropped before it costs a quote and a history call.
     """
+    now = ettime.now_et()
     for candidate in candidates:
         bars = bars_by_symbol.get(candidate["symbol"], [])
         price, price_at = _collector_last(bars)
         candidate["price"] = round(price, 4) if price is not None else None
         candidate["price_time"] = price_at
         candidate["price_source"] = "collector" if price is not None else None
+        # How stale the print is against the scan clock. Recorded for every
+        # candidate whether or not it passes, because "the price was 40
+        # seconds old" and "the price was 83 minutes old" are different
+        # reports even when both are inside today's premarket window.
+        candidate["price_age_seconds"] = _price_age_seconds(price_at, now)
         # Computed once, in attach_premarket_path, off these same bars.
         candidate["pm_volume"] = candidate.get("pm_volume_collected")
+
+
+def _price_age_seconds(price_at: Any, now: dt.datetime) -> float | None:
+    if not price_at:
+        return None
+    try:
+        when = dt.datetime.fromisoformat(str(price_at))
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=ettime.ET)
+    return round((now - when).total_seconds(), 1)
+
+
+def drop_stale_prices(
+    candidates: list[dict[str, Any]], packet: Packet
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Drop candidates whose last print is older than the scan can stand behind.
+
+    Counted separately from dropped_no_coverage because the two are different
+    failures with different fixes. No coverage means the collector never heard
+    the name and the answer is a subscription slot. A stale price means the
+    collector heard it and then stopped, and the answer is to find out why the
+    socket went quiet.
+
+    The vintage gate cannot catch this: a print from 07:22 is genuinely from
+    today's premarket window and passes every check it makes. This is the case
+    a collector killed at 08:10 produces, and until now the packet published
+    those prices as current.
+    """
+    limit = _CRIT.number("price_age", "max_price_age_seconds")
+    kept: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    for candidate in candidates:
+        age = candidate.get("price_age_seconds")
+        if age is not None and age > limit:
+            dropped.append({
+                "symbol": candidate["symbol"],
+                "reason": (f"the last collector print is {age:,.0f}s old at the scan "
+                           f"clock, past the {limit:,.0f}s limit in "
+                           f"{config.CRITERIA_PATH.name} [price age]. It is inside "
+                           "today's premarket window, so the vintage check passes, "
+                           "but it is not this morning's price."),
+                "price_age_seconds": age,
+                "price_time": candidate.get("price_time"),
+                "pool_tier": candidate.get("pool_tier"),
+                "pool_source": candidate.get("pool_source") or [],
+            })
+            continue
+        kept.append(candidate)
+
+    if dropped:
+        packet.gap(
+            f"{len(dropped)} candidate(s) dropped for a stale premarket price, "
+            "collected but too old to publish as this morning's: "
+            + ", ".join(f"{d['symbol']} ({d['price_age_seconds']:,.0f}s)"
+                        for d in dropped)
+        )
+    return kept, dropped
 
 
 def attach_gap(candidates: list[dict[str, Any]]) -> None:
@@ -1116,8 +1231,22 @@ def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) 
 
 # ------------------------------------------------------------------- runner
 
+def _calendar_cache_state() -> dict[str, Any]:
+    import market_today
+
+    return market_today.cache_state(
+        _CRIT.integer("calendar", "refresh_after_days"))
+
+
 def build_packet() -> dict[str, Any]:
     config.ensure_dirs()
+    # The 08:45 window does not spend itself fetching a calendar. The nightly
+    # refreshes it; if it is stale anyway the run proceeds on the cached copy
+    # and calendar_cache in the packet records that it did.
+    import market_today
+
+    market_today.ALLOW_NETWORK = False
+
     packet = Packet()
     api = eodhd.client()
 
@@ -1192,6 +1321,9 @@ def build_packet() -> dict[str, Any]:
         attach_premarket_path(candidates, watchlist, packet, bars_by_symbol)
         price_from_collector(candidates, packet, bars_by_symbol)
         candidates, dropped = drop_uncovered(candidates, packet)
+        # After the coverage cut, because a name with no bars at all has no age
+        # to judge and belongs in dropped_no_coverage rather than here.
+        candidates, dropped_stale = drop_stale_prices(candidates, packet)
 
         # Ranking needs a prior close per name. The pool normally carries one
         # out of discover's bulk read at no extra cost. A watchlist written
@@ -1314,6 +1446,13 @@ def build_packet() -> dict[str, Any]:
         # this describes the subscription, and the two answer different
         # questions when a symbol is missing from the file.
         "collector_coverage": collector_coverage(bars_by_symbol, session_date),
+        # What the tape actually covered this morning, against what the
+        # collector was scheduled for.
+        "collector_window_observed": observed_collector_window(bars_by_symbol, now),
+        # The morning never fetches the exchange calendar. If it is stale, the
+        # packet says so and the run proceeds on the cached copy rather than
+        # blocking the 08:45 window on a fetch and its retries.
+        "calendar_cache": _calendar_cache_state(),
         "collector_window_configured": [
             _CRIT.clock_text("collector", "start_time"),
             _CRIT.clock_text("collector", "stop_time"),
@@ -1326,6 +1465,10 @@ def build_packet() -> dict[str, Any]:
         # collector coverage, so they had no premarket price and were dropped
         # rather than published at a stale one.
         "dropped_no_coverage": dropped,
+        # Collected but too old to publish as this morning's price. Separate
+        # from the list above because the fixes differ: a subscription slot
+        # versus a collector that stopped listening.
+        "dropped_stale_price": dropped_stale,
         "economic": events,
         "earnings": earnings_block,
         "criteria_summary": {

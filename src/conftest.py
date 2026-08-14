@@ -133,14 +133,21 @@ snapshot = snapshot_tree
 def differences(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
     """What changed between two snapshots, as readable lines.
 
-    A modification says whether the size moved as well as the mtime. The
-    distinction matters when this fires: a test that wrote a file almost
-    always changes its size, while a virus scanner or an indexer touching a
-    file it did not alter moves only the mtime. Both still fail the run, on
-    purpose, because a same size overwrite is a real escape mode and the check
-    must not start guessing which is which. Saying which one happened is for
-    whoever has to read the failure, and an intermittent failure nobody can
-    classify is an intermittent failure everybody learns to ignore.
+    A modification says whether the size moved as well as the mtime, because
+    a test that wrote a file almost always changes its size while something
+    that merely touched it does not. Both still fail the run, on purpose: a
+    same size overwrite is a real escape mode and the check must not start
+    guessing which is which.
+
+    [corrected 2026-08-14: this note previously offered "a virus scanner or an
+    indexer" as the likely cause of an mtime-only change, and the session that
+    wrote it attributed an observed intermittent failure to exactly that. The
+    real cause was config.build_identifier() running `git status`, which
+    refreshes and rewrites .git/index, so the suite failed on a file the check
+    itself had caused to change. It now runs `git --no-optional-locks status`
+    and the failure is gone across repeated runs. Reaching for an external
+    explanation before exhausting the internal ones is what let it survive a
+    day.]
     """
     out: list[str] = []
     for path in sorted(set(after) - set(before)):

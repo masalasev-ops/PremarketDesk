@@ -115,6 +115,37 @@ def earnings_before_open(
 
 # ---------------------------------------------------- source 2, overnight news
 
+class UnrankedPoolError(RuntimeError):
+    """Raised when too little of the universe carries a ranking key to cut on."""
+
+
+def news_window_start(session: dt.date) -> dt.datetime:
+    """When the overnight news window opens for a session, in ET.
+
+    The prior TRADING session's close, not yesterday's. Both are the same
+    thing from Tuesday to Friday and they are two days apart on a Monday,
+    which is exactly when the difference costs the most: a calendar day back
+    from Monday is Sunday 16:00, and the window then never reaches Friday's
+    close or anything published over the weekend.
+
+    Production used the calendar day and backtest_pool used the trading
+    session, so every Monday and post-holiday session in the cache was
+    measured with a window production would not have used. The drift between
+    them was the defect rather than either choice, so both now call this.
+
+    A calendar the guard cannot answer falls back to one calendar day, which
+    is the old behaviour: too narrow rather than too wide, because a window
+    that reaches back too far pulls in news that is already priced in.
+    """
+    import vintage
+
+    prior = vintage.previous_trading_session(session)
+    if prior is None:
+        prior = session - dt.timedelta(days=1)
+    hour, minute = _CRIT.clock("discovery", "news_window_start")
+    return ettime.at(prior, hour, minute)
+
+
 def overnight_news(
     api: eodhd.EodhdClient, universe_symbols: set[str], since: dt.datetime,
     until: dt.datetime,
@@ -538,6 +569,14 @@ def build(write: bool = True) -> dict[str, Any]:
         )
 
     universe_payload = universe.require_fresh_universe()
+    # require_fresh_universe answers "is it too old". This answers "is it whole".
+    # A stale universe is a usable input and every later script knows how to
+    # refuse one; a half written one is not usable, and until the Sunday job
+    # wrote atomically nothing distinguished them.
+    incomplete = universe.check_admissible(universe_payload)
+    if incomplete:
+        raise universe.StaleUniverseError(incomplete)
+
     universe_symbols = set(universe.universe_symbols(universe_payload))
     metrics = load_metrics()
     dollar_volume_20d = {
@@ -549,10 +588,29 @@ def build(write: bool = True) -> dict[str, Any]:
     ranking_key = _CRIT.text("discovery", "within_tier_key")
     scored = sum(1 for row in metrics.values() if row.get(ranking_key) is not None)
 
+    # An unranked pool must not be cut. When load_metrics cannot read the
+    # universe or the gap_stats table is empty, the pool still builds and the
+    # cap still applies, but every name sits in the fallback band with no key,
+    # so which 42 get subscribed is arbitrary. Nothing downstream can tell that
+    # from a real selection: the watchlist looks normal, the collector
+    # subscribes, the report publishes. A missing report is recoverable. A
+    # plausible one built from a random sample is not.
+    ranked_floor = _CRIT.number("discovery", "min_ranked_fraction_to_subscribe")
+    ranked_fraction = (scored / len(universe_symbols)) if universe_symbols else 0.0
+    if ranked_fraction < ranked_floor:
+        raise UnrankedPoolError(
+            f"only {scored} of {len(universe_symbols)} universe names carry a "
+            f"{ranking_key}, a fraction of {ranked_fraction:.3f} against the "
+            f"{ranked_floor:g} floor in {config.CRITERIA_PATH.name} [discovery] "
+            "min_ranked_fraction_to_subscribe. The pool would be cut to the cap "
+            "with nothing to rank on, and an arbitrary selection is "
+            "indistinguishable from a real one everywhere downstream. Run "
+            "gap_stats.py, or check that universe.json is readable."
+        )
+
     now = ettime.now_et()
     today = now.date()
-    news_start_h, news_start_m = _CRIT.clock("discovery", "news_window_start")
-    news_since = ettime.at(today - dt.timedelta(days=1), news_start_h, news_start_m)
+    news_since = news_window_start(today)
 
     print(f"discover: universe started with {len(universe_symbols)} names")
     print(f"discover: building a pool from four priors, no price from today is read")
@@ -714,8 +772,13 @@ def main(argv: list[str] | None = None) -> int:
                 f"{len(broken)} pool source(s) could not be fetched: "
                 + ", ".join(broken)
             )
-    except (universe.StaleUniverseError, eodhd.QuotaRefusal) as exc:
+    except (universe.StaleUniverseError, eodhd.QuotaRefusal, UnrankedPoolError) as exc:
         print(f"REFUSING TO RUN: {exc}")
+        # Non zero exit and no watchlist written, so the collector finds either
+        # nothing or yesterday's file and says which. The record carries the
+        # reason so the next morning's report names it even though this job
+        # never got far enough to write anything else.
+        job_status.failed(f"{type(exc).__name__}: {exc}")
         eodhd.print_call_report()
         return 1
     except RuntimeError as exc:

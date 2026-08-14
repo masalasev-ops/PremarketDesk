@@ -18,6 +18,107 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-14: a short side screen is a separate product question, NOT STARTED
+
+**The finding.** Both screens require the premarket price to sit above the
+prior session high. A stock gapping DOWN is below its prior close, so it can
+essentially never clear a level above that close, and neither screen can ever
+pass one. Discovery and the propensity ranking meanwhile use the ABSOLUTE gap.
+Over the 60 cached sessions, 10,424 gappers split 5,809 up and 4,615 down, so
+**44.3 percent of what the socket spends its slots on cannot pass either
+screen**. Not one candidate has been day or swing eligible across the only
+live session on record, and every one of the twelve failed on this condition.
+
+**What was measured.** An upward-gap-only propensity, computed from the cache
+with no new fetch, scored beside the shipped configuration at caps 42 and 92,
+40 sessions after a 20 session warmup:
+
+| configuration | cap | recall | screen median | screen mean |
+|---|---|---|---|---|
+| shipped, absolute propensity | 42 | 0.1097 | 5.5 | 6.33 |
+| upward-gap-only propensity | 42 | 0.0560 | 2.5 | 3.73 |
+| shipped, absolute propensity | 92 | 0.1860 | 8.5 | 12.57 |
+| upward-gap-only propensity | 92 | 0.1247 | 5.0 | 7.50 |
+
+Per tier hit rate, subscribed slots that went to a name that gapped:
+
+| configuration | cap | tier 1 | tier 2 | tier 3 | tier 4 |
+|---|---|---|---|---|---|
+| shipped | 42 | 0.55 | 0.37 | 0.39 | 0.34 |
+| up only | 42 | 0.55 | 0.06 | 0.04 | 0.06 |
+| shipped | 92 | 0.56 | 0.28 | 0.39 | 0.34 |
+| up only | 92 | 0.55 | 0.14 | 0.04 | 0.06 |
+
+**Tier 1 is unchanged, and that is the structural point.** 0.55 against 0.55.
+Tier 1 is earnings before the open, where direction cannot be known at 07:15:
+the calendar says a company reports, not which way it will move. A direction
+filter cannot reach the tier that supplies most of the hits, so the whole
+effect lands on tiers 2 to 4, where it is destructive.
+
+**The comparison is confounded and must not be read as settling anything.**
+The shipped key is a propensity over 250 sessions of end of day history. The
+variant is computed from at most 60 cached sessions, so it is a far noisier
+estimator of the same kind of quantity, and a name that gapped up twice in
+three appearances scores 0.67 on almost no evidence. What the table shows is
+that a short-window up-propensity is worse than a long-window absolute one. It
+does not show that direction filtering is worthless. The clean test needs an
+up-only propensity over the same 250 session window, which is a 2,745 call
+fetch this measurement was explicitly not allowed to make.
+
+**Decision: nothing changes, and no work is attached.** Whether to screen the
+short side at all is a product question, not a tuning one. A short setup is a
+different instrument with different entries, different risk and a different
+report section, and CRITERIA.md's swing block already says the two screens
+must be allowed to drift apart. The options, none of them chosen:
+
+- leave it, and accept that the report is a long-only instrument that spends
+  44 percent of its socket on context it can never publish as a setup;
+- filter discovery to upward gaps, which frees those slots but needs the clean
+  250 session measurement first, and cannot help tier 1 either way;
+- add a short screen, which is a new product.
+
+Recorded so that the next person meets the finding rather than rediscovering
+it, and so the cap purchasing decision above is read in its light: the recall
+figure it rests on counts down gappers as successes.
+
+## 2026-08-14: every check reports its denominator, and zero examined is never a pass
+
+**Decision.** Any check that can pass reports what it examined alongside what
+it found. Zero examined is a distinct outcome from zero failures, named as
+such, and never reported as a pass. Where the check can be written so that it
+is structurally incapable of concluding on an empty denominator, it is written
+that way rather than relying on a branch that happens to be ordered correctly.
+
+**The reasoning.** This is the fifth instance of one shape in three weeks:
+
+1. The containment check passed a report it had examined nothing in, because
+   the model wrote prose and the check looks for table columns.
+2. `pool_recall` produced nothing for a week and the record cited it as
+   accumulating evidence.
+3. The collector could not tell a subscribed symbol that stayed silent from
+   one never subscribed.
+4. The vintage gate passes a price from 07:22 at 08:45, because it asks
+   whether the price is from today's window and not how old it is.
+5. `probe_live_v1` printed "Every reading is from today" over a log of nulls.
+
+Each was found separately and fixed separately. They are one defect: a check
+whose output has no denominator, so an absence of findings reads identically
+whether the check looked at everything or at nothing. The absence of evidence
+is being reported as evidence of absence, and in every case the empty
+denominator arose from the exact failure the check existed to catch.
+
+**What it costs.** Some noise. A check that reports "examined 0" on a quiet
+morning says so out loud, and a reader has to learn that this is information
+rather than an error. That is the trade, and it is worth it: the alternative
+is what happened four times above, where the quiet was indistinguishable from
+the healthy.
+
+**Alternatives rejected.** Making an empty denominator a failure was rejected:
+it is not one. A morning with no eligible candidates genuinely has no ticker
+claims to validate, and failing the run would train the reader to ignore it.
+The distinction is three-valued, pass, fail and examined-nothing, and
+collapsing it back to two is what created the problem.
+
 ## 2026-08-14: a scheduled step records its outcome whether or not its exit code gates anything
 
 **Decision.** Every step the scheduler invokes appends a status record as it

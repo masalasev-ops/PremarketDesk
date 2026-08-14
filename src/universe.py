@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
 from typing import Any
 
@@ -317,6 +318,10 @@ def build(write: bool = True) -> dict[str, Any]:
             "last": session_dates[-1].isoformat() if session_dates else None,
         },
         "expected_count_range": [count_min, count_max],
+        # What the file this one replaces held. Carried so discover can tell a
+        # market that moved from a rebuild that was cut short, which the count
+        # alone cannot distinguish.
+        "previous_count": _previous_count(),
         "listed_common_stocks": len(exchange_of),
         "cleared_price_and_liquidity": len(staged),
         "notes": notes,
@@ -335,12 +340,77 @@ def build(write: bool = True) -> dict[str, Any]:
         print(f"WARNING  {warning}")
 
     if write:
-        config.UNIVERSE_PATH.write_text(
-            json.dumps(payload, indent=2), encoding="utf-8"
-        )
+        write_atomically(payload)
         print(f"universe: wrote {config.UNIVERSE_PATH} with {len(admitted)} names")
 
     return payload
+
+
+def _previous_count() -> int | None:
+    """The name count of the universe file this build is about to replace."""
+    try:
+        existing = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    count = existing.get("count")
+    return int(count) if isinstance(count, (int, float)) else None
+
+
+def check_admissible(payload: dict[str, Any]) -> str | None:
+    """Why this universe must not be used, or None when it is fine.
+
+    Two questions, and they fail differently. Age is answered by
+    load_universe, which raises. This answers the other one: is the file
+    complete. A rebuild that admits far fewer names than the one before it is
+    a partial run, not a market that halved overnight, and the count on its
+    own cannot tell those apart. previous_count is what makes it decidable.
+    """
+    fraction = _CRIT.number("universe", "min_count_fraction_of_previous")
+    count = payload.get("count")
+    previous = payload.get("previous_count")
+    if not isinstance(count, (int, float)):
+        return "universe.json carries no count"
+    if not isinstance(previous, (int, float)) or previous <= 0:
+        return None  # nothing to compare against, which is not a failure
+    floor = previous * fraction
+    if count < floor:
+        return (f"universe.json holds {int(count)} names against {int(previous)} in "
+                f"the run before it, below the {fraction:g} floor of {floor:.0f} "
+                f"in {config.CRITERIA_PATH.name} [universe] "
+                "min_count_fraction_of_previous. That reads as a rebuild that was "
+                "cut short rather than as a market that shrank, and a pool built "
+                "from a partial universe is indistinguishable from a real one "
+                "downstream.")
+    return None
+
+
+def write_atomically(payload: dict[str, Any]) -> None:
+    """Write to a temporary file in the same directory, then rename into place.
+
+    os.replace is atomic on Windows and on POSIX, so a reader either sees the
+    whole previous file or the whole new one and never a half written one. The
+    temporary file is a sibling because rename is only atomic within a
+    filesystem.
+
+    This matters more than it looks. The Sunday 20:00 job has never fired, its
+    roughly 4,700 calls bill to the same quota day as Monday morning, and the
+    key is shared with another project that had already taken half of it on
+    2026-08-14. A refused or interrupted run is a real possibility, and a
+    plain write_text leaves a truncated file behind when it happens. A stale
+    universe from last Sunday is a usable input and every later script knows
+    how to refuse one that is too old. A half written one is not usable, and
+    until now nothing could tell the two apart.
+    """
+    target = config.UNIVERSE_PATH
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".partial")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(temporary, target)
+    finally:
+        # A crash between the write and the replace leaves the partial file
+        # behind; it is never read by anything, but it should not accumulate.
+        temporary.unlink(missing_ok=True)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -715,7 +715,7 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
            "NameError: name 'floor' is not defined")
 
     verdict = monitor_jobs.log_verdict("nightly", monitor_jobs.JOBS["nightly"][3], day)
-    broken = monitor_jobs.failed_steps("nightly", day)
+    broken, examined = monitor_jobs.failed_steps("nightly", day)
     if verdict != "finished":
         failures.append(f"the marker check should still say finished, said {verdict}")
     if not any("pool_recall" in line for line in broken):
@@ -726,16 +726,16 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
 
     # A rerun that succeeded clears it, because the last record is the state.
     record("pool_recall", job_status.STATUS_OK)
-    if monitor_jobs.failed_steps("nightly", day):
+    if monitor_jobs.failed_steps("nightly", day)[0]:
         failures.append("a step that was rerun successfully is still reported "
-                        f"as failed: {monitor_jobs.failed_steps('nightly', day)}")
+                        f"as failed: {monitor_jobs.failed_steps('nightly', day)[0]}")
 
     # Case two: killed before the archive. No record for it, marker absent.
     log_path.write_text("===== backfill finished rc=0 =====\n", encoding="utf-8")
     verdict = monitor_jobs.log_verdict("nightly", monitor_jobs.JOBS["nightly"][3], day)
     if verdict == "finished":
         failures.append("a nightly killed before the archive was reported finished")
-    if monitor_jobs.failed_steps("nightly", day):
+    if monitor_jobs.failed_steps("nightly", day)[0]:
         failures.append("the step check invented a failure for a job that simply "
                         "never got that far; that case belongs to the marker")
 

@@ -90,6 +90,38 @@ def main() -> int:
     if "QQQ" not in invented:
         failures.append(f"context ETF QQQ absent from the packet was not caught: {invented}")
 
+    # Claim 3b: a fabricated single letter row must fail. The token pattern
+    # required two characters until 2026-08-14, so all 21 single letter
+    # listings were invisible and a made up F or T row returned invented=[]
+    # while the run printed that containment passed. Those are the symbols a
+    # model is most likely to invent, being the most familiar in the market.
+    single_report = prose_report + (
+        "\n## Swing watchlist\n\n| Ticker | Gap % |\n|---|---|\n| F | 4.10 |\n"
+    )
+    invented, _, _ = analyst.check_report(single_report, packet_text)
+    if "F" not in invented:
+        failures.append(f"a fabricated single letter row for F was not caught: {invented}")
+
+    # And the other side of the widening: A is Agilent and also the English
+    # article, so it is a prose stopword. Prose must not trip on it while a
+    # Ticker column cell reading A still does.
+    article_report = (
+        "# PremarketDesk test\n\n"
+        "A quiet tape this morning. A single name cleared the floors.\n\n"
+        "## Day watchlist\n\n| Ticker | Gap % |\n|---|---|\n| ARX | 43.02 |\n"
+    )
+    invented, _, _ = analyst.check_report(article_report, packet_text)
+    if invented:
+        failures.append(f"the English article A tripped containment in prose: {invented}")
+
+    a_row_report = prose_report + (
+        "\n## Swing watchlist\n\n| Ticker | Gap % |\n|---|---|\n| A | 2.00 |\n"
+    )
+    invented, _, _ = analyst.check_report(a_row_report, packet_text)
+    if "A" not in invented:
+        failures.append("a Ticker column cell reading A was not checked, so the "
+                        f"stopword is too broad: {invented}")
+
     # Claim 4: coverage is honest. A report whose only table is headed "Sym"
     # scans zero ticker columns, and with no $ claims either, claims_checked
     # is zero: the caller must then say validation did not run, and the
