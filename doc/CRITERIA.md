@@ -290,6 +290,27 @@ report.
 exchange                      = US
 refresh_after_days            = 7
 
+## Monitor
+
+The watchdog. It runs a few times each weekday, asks Task Scheduler whether
+each PremarketDesk job fired and what it returned, reads the job's own dated
+log for the final step marker, and reruns what is safe to rerun. Safe means
+idempotent: the morning chain and the nightly can always be rerun, the
+collector may only be restarted when no collector is alive (two live
+collectors would write duplicate minutes), discover is only rerun before the
+collector window opens (a later rewrite would desync the watchlist from what
+the collector actually subscribed to), and the universe is rebuilt on a
+weekday only when the Sunday build was missed. Each job gets at most
+max_reruns_per_job_per_day so a hard failure cannot loop.
+
+discover_due                  = 07:25      # discover plus baseline warm should be done by here
+chain_due                     = 09:00      # the 08:45 chain worst case ends about 08:53
+nightly_due                   = 22:45      # the 22:15 nightly is minutes long
+rerun_chain_until             = 09:30      # after the open a premarket report is history, report only
+collector_stale_after_s       = 180        # no bar file write for this long inside the window means dead
+universe_rerun_after_days     = 8          # a fresh weekly build is 7 days old at most
+max_reruns_per_job_per_day    = 1
+
 ## Archive
 
 The single file report archive at site/PremarketDesk.html, rebuilt from

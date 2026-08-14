@@ -15,7 +15,10 @@ $jobs = @(
     @{ Name = "PremarketDesk\collector";     Bat = "job_collector.bat";     Schedule = "WEEKLY"; Days = "MON,TUE,WED,THU,FRI"; Start = "07:20" },
     @{ Name = "PremarketDesk\morning-chain"; Bat = "job_morning_chain.bat"; Schedule = "WEEKLY"; Days = "MON,TUE,WED,THU,FRI"; Start = "08:45" },
     @{ Name = "PremarketDesk\nightly";       Bat = "job_nightly.bat";       Schedule = "WEEKLY"; Days = "MON,TUE,WED,THU,FRI"; Start = "22:15" },
-    @{ Name = "PremarketDesk\universe";      Bat = "job_universe.bat";      Schedule = "WEEKLY"; Days = "SUN";                 Start = "20:00" }
+    @{ Name = "PremarketDesk\universe";      Bat = "job_universe.bat";      Schedule = "WEEKLY"; Days = "SUN";                 Start = "20:00" },
+    # The watchdog: repeats through the morning window, once after the nightly.
+    @{ Name = "PremarketDesk\monitor";       Bat = "job_monitor.bat";       Schedule = "WEEKLY"; Days = "MON,TUE,WED,THU,FRI"; Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
+    @{ Name = "PremarketDesk\monitor-night"; Bat = "job_monitor.bat";       Schedule = "WEEKLY"; Days = "MON,TUE,WED,THU,FRI"; Start = "22:45" }
 )
 
 # One time cleanup: the first registration used flat root level names.
@@ -37,8 +40,17 @@ foreach ($job in $jobs) {
         Write-Output "MISSING   $bat, skipped"
         continue
     }
-    schtasks /Create /F /TN $job.Name /TR "`"$bat`"" /SC $job.Schedule /D $job.Days /ST $job.Start | Out-Null
-    if ($LASTEXITCODE -eq 0) { Write-Output "registered $($job.Name) at $($job.Start) ($($job.Days))" }
+    if ($job.RepeatMin) {
+        $duration = "{0:0000}:{1:00}" -f [int]$job.RepeatHours, 0
+        schtasks /Create /F /TN $job.Name /TR "`"$bat`"" /SC $job.Schedule /D $job.Days /ST $job.Start /RI $job.RepeatMin /DU $duration | Out-Null
+    } else {
+        schtasks /Create /F /TN $job.Name /TR "`"$bat`"" /SC $job.Schedule /D $job.Days /ST $job.Start | Out-Null
+    }
+    if ($LASTEXITCODE -eq 0) {
+        $repeat = ""
+        if ($job.RepeatMin) { $repeat = ", repeating every $($job.RepeatMin)m for $($job.RepeatHours)h" }
+        Write-Output "registered $($job.Name) at $($job.Start) ($($job.Days))$repeat"
+    }
     else { Write-Output "FAILED    $($job.Name), run this script from an elevated prompt if access was denied" }
 }
 

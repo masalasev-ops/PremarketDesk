@@ -50,7 +50,13 @@ at the root and is gitignored along with .env.
   market_today (the trading day guard every weekday job runs first: exit 3
   on weekends and official holidays from the cached EODHD exchange-details
   calendar, the .bat logs one line and stops; calendar unreachable with no
-  cache assumes open on purpose)
+  cache assumes open on purpose), monitor_jobs (the watchdog: cross checks
+  Task Scheduler's last run record against each job's dated log markers,
+  reruns only what is idempotent per CRITERIA [monitor], never starts a
+  second live collector, caps reruns at one per job per day; scheduled
+  07:25 to 09:25 every 30 minutes and once at 22:45),
+  measure_socket_cost (vendor counter before and after a collector-only
+  run)
 - doc/: this file, CRITERIA.md, REPORT_TEMPLATE.md, prompt_analyst.md
 - tasks/: five job .bat files, register_tasks.ps1, README.md
 - data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,

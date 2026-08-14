@@ -12,6 +12,7 @@ project's own ET clock so a locale change cannot mangle the file name.
 | job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, deliver.py, build_archive.py, stopping on the first failure |
 | job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, fill_outcomes.py, then build_archive.py so a broken morning still gets archived that evening |
 | job_universe.bat | 20:00 | Sunday | universe.py weekly rebuild |
+| job_monitor.bat | 07:25, repeating every 30 min until 09:25, and once at 22:45 | Mon to Fri | monitor_jobs.py, the watchdog: checks that each job fired and finished, reruns what is safe |
 
 ## Registering
 
@@ -41,6 +42,14 @@ were registered, the tree does not refresh itself.
 - deliver.py sends nothing while `data\UNVERIFIED` exists (the first morning
   verification gate) and skips cleanly while RESEND_API_KEY or EMAIL_TO are
   unset, so registering these tasks before going live is safe.
+- The watchdog's rerun policy lives in CRITERIA.md [monitor]. In short: the
+  morning chain and the nightly are idempotent and get rerun automatically
+  (at most once per day each), a dead collector is restarted only while its
+  window is open and no collector is alive, discover is never rerun after
+  the collector window opens, and a missed Sunday universe build is caught
+  on the next weekday morning. Everything it decides is in
+  logs\monitor-YYYY-MM-DD.log, and a nonzero Last Result on the monitor
+  task means something needs a human eye.
 - Norton occasionally denies the first write of a file. Every script retries
   or fails loudly into its log; a one line Permission denied in a log that
   ends with rc=0 was a retry that succeeded.
