@@ -219,6 +219,13 @@ def _bare(symbol: str) -> str:
     return str(symbol).split(".")[0]
 
 
+def _conviction(candidate: dict[str, Any]) -> str:
+    """A null score is unscored, never a low bucket. See CRITERIA Score buckets."""
+    if candidate.get("score") is None:
+        return "unscored"
+    return str(candidate.get("conviction"))
+
+
 def fallback_report(packet: dict[str, Any], reason: str) -> str:
     """The report the morning gets when the model cannot be reached.
 
@@ -259,6 +266,12 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     if partial:
         disclaimer += (
             f"; premarket path evidence is partial or missing for {', '.join(partial)}"
+        )
+    unscored = [_bare(c["symbol"]) for c in candidates if c.get("score") is None]
+    if unscored:
+        disclaimer += (
+            f"; {', '.join(unscored)} are unscored, not low conviction: a score "
+            "component input was never observed, and unknown is not zero"
         )
     quota = packet.get("quota_preflight") or {}
     if quota.get("degraded"):
@@ -303,7 +316,7 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
         for c in day:
             add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
                 f"| {_f(c.get('pm_rvol'))} | {_f(c.get('pm_high'), 4)} | {_f(c.get('pm_vwap'), 4)} "
-                f"| {_f(c.get('score'), 1)} | {c.get('conviction')} |")
+                f"| {_f(c.get('score'), 1)} | {_conviction(c)} |")
     else:
         add("No candidate is day eligible this morning.")
     add("")
@@ -316,7 +329,7 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
             quote = c.get("quote") or {}
             add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
                 f"| {_f(c.get('prior_high'))} | {_f(quote.get('twoHundredDayAveragePrice'))} "
-                f"| {c.get('catalyst_class')} | {_f(c.get('score'), 1)} | {c.get('conviction')} |")
+                f"| {c.get('catalyst_class')} | {_f(c.get('score'), 1)} | {_conviction(c)} |")
     else:
         add("No candidate is swing eligible this morning.")
     add("")
@@ -341,7 +354,7 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
         add(f"| {_bare(c['symbol'])} | {pm_high}{mark if c.get('pm_high') is not None else ''} "
             f"| {_f(c.get('pm_low'), 4)} | {_f(c.get('pm_vwap'), 4)} | {_f(c.get('prior_high'))} "
             f"| {_f(quote.get('twoHundredDayAveragePrice'))} | {_f(c.get('score'), 1)} "
-            f"| {c.get('conviction')} |")
+            f"| {_conviction(c)} |")
     add("")
     add("## Economic data and rates")
     add("")
@@ -437,6 +450,27 @@ def _universe_bare_symbols() -> set[str] | None:
     }
 
 
+def _claimable_symbols() -> set[str] | None:
+    """The symbols a ticker claim is validated against, or None when unknowable.
+
+    The universe alone is not enough: it holds common stock only, so every
+    ETF is outside it, including the eight context tickers the report talks
+    about every single morning (SPY, QQQ and friends). A claim check that
+    cannot see them is fail open for exactly the names the model is most
+    likely to write. So claims are validated against the union of the
+    universe and the fixed context list from CRITERIA.md.
+    """
+    universe = _universe_bare_symbols()
+    if universe is None:
+        return None
+    context = {
+        str(s).split(".")[0].upper()
+        for s in _CRIT.text_list("collector", "context_symbols")
+        if str(s).strip()
+    }
+    return universe | context
+
+
 def _ticker_claims(report_text: str) -> set[str]:
     """The tokens the report presents AS tickers.
 
@@ -483,12 +517,13 @@ def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[st
 
     A token is an invented ticker only when all three hold: the report
     presents it as a ticker (table cell or $ prefix), it names a real symbol
-    in the universe file, and the packet does not carry it. The universe test
-    is what keeps ordinary uppercase words out: CEO in a table cell is not a
-    universe member, so it is not a claim about a tradeable name.
+    in the universe file or the fixed context list, and the packet does not
+    carry it. The known-symbol test is what keeps ordinary uppercase words
+    out: CEO in a table cell is not a known symbol, so it is not a claim
+    about a tradeable name.
     """
-    universe_symbols = _universe_bare_symbols()
-    if universe_symbols is None:
+    known_symbols = _claimable_symbols()
+    if known_symbols is None:
         print("analyst: containment note: universe.json is unavailable, so ticker "
               "claims cannot be validated this run")
         invented: list[str] = []
@@ -496,7 +531,7 @@ def check_report(report_text: str, packet_text: str) -> tuple[list[str], list[st
         allowed = _packet_uppercase_tokens(packet_text)
         invented = sorted(
             token for token in _ticker_claims(report_text)
-            if token in universe_symbols and token not in allowed
+            if token in known_symbols and token not in allowed
         )
 
     missing: list[str] = []

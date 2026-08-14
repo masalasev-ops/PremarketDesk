@@ -51,6 +51,8 @@ _CRIT = criteria.load()
 MAX_ATTEMPTS = _CRIT.integer("api", "max_attempts")
 BACKOFF_START_S = _CRIT.number("api", "retry_backoff_start_s")
 BACKOFF_MAX_S = _CRIT.number("api", "retry_backoff_max_s")
+CONSECUTIVE_429_TRIP = _CRIT.integer("quota", "consecutive_429_trip")
+RETRY_BUDGET_PER_RUN = _CRIT.integer("quota", "retry_budget_per_run")
 TIMEOUT_S = _CRIT.number("api", "timeout_s")
 BULK_TIMEOUT_S = _CRIT.number("api", "bulk_timeout_s")
 QUOTE_BATCH_SIZE = _CRIT.integer("api", "quote_batch_size")
@@ -111,6 +113,13 @@ class CallLedger:
         self.errors: list[str] = []
         self.started = ettime.now_et()
         self.first_call_quota_day: str | None = None
+        # Circuit breaker state, per run. Consecutive 429s prove the shared
+        # quota is gone; once tripped, every later call in this process fails
+        # fast with the reason recorded instead of rediscovering the limit
+        # through its own backoff. See CRITERIA.md [quota].
+        self.consecutive_429 = 0
+        self.circuit_open_reason: str | None = None
+        self.suppressed = 0
         self._reported = False
 
     def record(self, endpoint: str, attempts: int, error: str | None) -> None:
@@ -133,6 +142,9 @@ class CallLedger:
             f"  failed endpoints   {self.failures}",
             f"  wall clock         {elapsed:.1f}s",
         ]
+        if self.suppressed:
+            lines.append(f"  suppressed calls   {self.suppressed} "
+                         "(quota circuit open, failed fast without HTTP)")
         # The day is captured at the first recorded call, because a run that
         # straddles the 00:00 UTC reset would otherwise label all of its spend
         # with the post boundary day, defeating the line's whole purpose.
@@ -216,13 +228,34 @@ class EodhdClient:
         endpoint: str | None = None,
         timeout: float | None = None,
     ) -> ApiResult:
-        """Every HTTP call in this project goes through here. It never raises."""
+        """Every HTTP call in this project goes through here. It never raises.
+
+        Two run wide bounds live here, both from CRITERIA.md [quota]. Once
+        consecutive 429s reach the trip count the circuit opens: this call and
+        every later one in the process fails fast with the reason recorded,
+        because each call rediscovering an exhausted quota through its own
+        backoff is how a morning grinds past the open. And once the run has
+        spent its total retry budget, every remaining call gets one attempt.
+        """
         label = endpoint or path
+        if self.ledger.circuit_open_reason:
+            self.ledger.suppressed += 1
+            return ApiResult(None, f"{label} failed: {self.ledger.circuit_open_reason}")
+
         query: dict[str, Any] = {"api_token": self._token, "fmt": "json"}
         query.update(params or {})
         url = f"{config.EODHD_BASE_URL}/{path.lstrip('/')}"
         attempts = 0
         last_error = "no attempt was made"
+
+        def may_retry(current_attempts: int) -> bool:
+            if current_attempts >= MAX_ATTEMPTS:
+                return False
+            if self.ledger.retries + (current_attempts - 1) >= RETRY_BUDGET_PER_RUN:
+                print(f"eodhd: {label} not retried, the run's retry budget of "
+                      f"{RETRY_BUDGET_PER_RUN} is spent (CRITERIA.md [quota])")
+                return False
+            return True
 
         while attempts < MAX_ATTEMPTS:
             attempts += 1
@@ -232,14 +265,35 @@ class EodhdClient:
                 )
             except requests.RequestException as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
-                if attempts < MAX_ATTEMPTS:
+                if may_retry(attempts):
                     time.sleep(_sleep_for(attempts, None))
                     continue
                 break
 
+            if response.status_code == 429:
+                self.ledger.consecutive_429 += 1
+                last_error = f"HTTP 429 after {attempts} attempts"
+                if self.ledger.consecutive_429 >= CONSECUTIVE_429_TRIP:
+                    self.ledger.circuit_open_reason = (
+                        f"quota circuit open: {self.ledger.consecutive_429} consecutive "
+                        "429s say the shared key is exhausted; failing fast for the "
+                        "rest of this run (CRITERIA.md [quota] consecutive_429_trip)"
+                    )
+                    print(f"eodhd: {self.ledger.circuit_open_reason}")
+                    last_error = self.ledger.circuit_open_reason
+                    break
+                if may_retry(attempts):
+                    wait = _sleep_for(attempts, response.headers.get("Retry-After"))
+                    print(f"eodhd: {label} returned 429, retrying in {wait:.0f}s "
+                          f"(attempt {attempts} of {MAX_ATTEMPTS})")
+                    time.sleep(wait)
+                    continue
+                break
+
+            self.ledger.consecutive_429 = 0
             if response.status_code in _RETRY_STATUSES:
                 last_error = f"HTTP {response.status_code} after {attempts} attempts"
-                if attempts < MAX_ATTEMPTS:
+                if may_retry(attempts):
                     wait = _sleep_for(attempts, response.headers.get("Retry-After"))
                     print(
                         f"eodhd: {label} returned {response.status_code}, "

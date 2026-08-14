@@ -79,6 +79,17 @@ def main() -> int:
     if absent not in invented:
         failures.append(f"$ prefixed {absent} was not caught: {invented}")
 
+    # Claim 3: context tickers are ETFs, outside the universe file, and were
+    # once fail open. A context symbol claimed in a table but absent from the
+    # packet must now be caught via the universe-plus-context union. QQQ is on
+    # the fixed context list and the test packet carries only SPY.
+    context_report = prose_report + (
+        "\n## Swing watchlist\n\n| Ticker | Gap % |\n|---|---|\n| QQQ | 1.23 |\n"
+    )
+    invented, _ = analyst.check_report(context_report, packet_text)
+    if "QQQ" not in invented:
+        failures.append(f"context ETF QQQ absent from the packet was not caught: {invented}")
+
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")

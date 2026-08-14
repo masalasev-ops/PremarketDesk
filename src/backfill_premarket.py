@@ -112,8 +112,9 @@ def _gap_report(connection, sessions: int) -> None:
     rows = connection.execute(
         """
         SELECT date, ticker, pm_high, pm_high_true FROM picks
-        WHERE pm_high IS NOT NULL AND pm_high_true IS NOT NULL
-          AND date IN (SELECT DISTINCT date FROM picks ORDER BY date DESC LIMIT ?)
+        WHERE pm_high IS NOT NULL AND pm_high_true IS NOT NULL AND source='live'
+          AND date IN (SELECT DISTINCT date FROM picks WHERE source='live'
+                       ORDER BY date DESC LIMIT ?)
         """,
         (sessions,),
     ).fetchall()
@@ -129,8 +130,8 @@ def _gap_report(connection, sessions: int) -> None:
     median = ordered[len(ordered) // 2]
     worst = max(gaps, key=abs)
     print(
-        f"backfill: over the last {sessions} sessions ({len(gaps)} rows), the true "
-        f"premarket high exceeds the live one by median {median:+.2f} percent, "
+        f"backfill: over the last {sessions} sessions ({len(gaps)} live rows), the "
+        f"true premarket high exceeds the live one by median {median:+.2f} percent, "
         f"worst case {worst:+.2f} percent"
     )
 
@@ -143,11 +144,16 @@ def backfill(day: str) -> int:
         if added:
             print(f"backfill: widened picks with {', '.join(added)}")
 
+        # source = 'live' only: true premarket columns are outcome evidence,
+        # and spending intraday calls widening test rows would pollute the
+        # record this table exists to build.
         picks = connection.execute(
-            "SELECT * FROM picks WHERE date=? ORDER BY ticker", (day,)
+            "SELECT * FROM picks WHERE date=? AND source='live' ORDER BY ticker",
+            (day,),
         ).fetchall()
         if not picks:
-            print(f"backfill: no picks for {day}, nothing to do")
+            print(f"backfill: no live picks for {day} (test rows are not backfilled), "
+                  "nothing to do")
             return 0
 
         filled = disagreements = failed = 0
@@ -216,7 +222,7 @@ def _catchup_dates(before_day: str, limit: int) -> list[str]:
         store.init(connection)
         rows = connection.execute(
             "SELECT DISTINCT date FROM picks WHERE date < ? AND pm_high_true IS NULL "
-            "ORDER BY date DESC LIMIT ?",
+            "AND source='live' ORDER BY date DESC LIMIT ?",
             (before_day, limit),
         ).fetchall()
     return [row["date"] for row in rows]

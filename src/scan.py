@@ -697,53 +697,92 @@ def score_candidate(candidate: dict[str, Any]) -> None:
 
     The breakdown is the point. A total on its own cannot be argued with, and a
     score you cannot argue with is a score you cannot improve.
+
+    A component whose input was never observed is unknown, and unknown must
+    not price as zero: zero says "checked and weak", a claim about the stock,
+    where unknown is a fact about the pipeline. When any component is unknown
+    the total is null, the sum over the known components is kept as
+    score_partial next to the names in score_unavailable, and the conviction
+    bucket is null, rendered downstream as unscored, never red. Calibration
+    queries exclude null scores rather than folding them into low.
     """
     quote = candidate.get("quote") or {}
-    gap = abs(candidate.get("gap_pct") or 0.0)
     class_points = {
         key: float(value) for key, value in _CRIT.pair_map("score_catalyst_class", "class").items()
     }
 
     catalyst_class = candidate.get("catalyst_class", "none")
     components: list[dict[str, Any]] = []
+    unavailable: list[str] = []
 
     def add(name: str, points: float, why: str) -> None:
         components.append({"component": name, "points": points, "why": why})
 
-    add("catalyst_class", class_points.get(catalyst_class, 0.0) if catalyst_class else 0.0,
-        f"class {catalyst_class or 'unknown'}: {candidate.get('catalyst_why', '')}")
+    def unknown(name: str, why: str) -> None:
+        components.append({"component": name, "points": None, "why": why})
+        unavailable.append(name)
+
+    if catalyst_class is None:
+        unknown("catalyst_class",
+                candidate.get("catalyst_why") or "the news feed was never checked")
+    else:
+        add("catalyst_class", class_points.get(catalyst_class, 0.0),
+            f"class {catalyst_class}: {candidate.get('catalyst_why', '')}")
 
     rvol = candidate.get("pm_rvol")
-    add("premarket_rvol", _CRIT.band_number("score_premarket_rvol", rvol),
-        f"pm_rvol {rvol}" if rvol is not None
-        else f"pm_rvol is null ({candidate.get('pm_rvol_reason')}), which scores zero")
+    if rvol is None:
+        unknown("premarket_rvol", f"pm_rvol is null ({candidate.get('pm_rvol_reason')})")
+    else:
+        add("premarket_rvol", _CRIT.band_number("score_premarket_rvol", rvol),
+            f"pm_rvol {rvol}")
 
-    add("gap", _CRIT.band_number("score_gap", gap), f"absolute gap {gap:.2f} percent")
+    gap_raw = candidate.get("gap_pct")
+    if gap_raw is None:
+        unknown("gap", "the gap itself was never computed")
+    else:
+        gap = abs(gap_raw)
+        add("gap", _CRIT.band_number("score_gap", gap), f"absolute gap {gap:.2f} percent")
 
     price = candidate.get("price")
     prior_high = candidate.get("prior_high")
-    above_high = prior_high is not None and price is not None and price > prior_high
-    add("above_prior_high",
-        _CRIT.number("score_booleans", "above_prior_high") if above_high else 0.0,
-        f"price {price} against prior day high {prior_high}")
+    if prior_high is None or price is None:
+        unknown("above_prior_high",
+                f"prior day high {prior_high} or price {price} was never observed")
+    else:
+        add("above_prior_high",
+            _CRIT.number("score_booleans", "above_prior_high") if price > prior_high else 0.0,
+            f"price {price} against prior day high {prior_high}")
 
     vwap = candidate.get("pm_vwap")
-    above_vwap = vwap is not None and price is not None and price > vwap
-    add("above_premarket_vwap",
-        _CRIT.number("score_booleans", "above_premarket_vwap") if above_vwap else 0.0,
-        f"price {price} against premarket VWAP {vwap}"
-        if vwap is not None else "no premarket VWAP was collected, which scores zero")
+    if vwap is None or price is None:
+        unknown("above_premarket_vwap", "no premarket VWAP was collected")
+    else:
+        add("above_premarket_vwap",
+            _CRIT.number("score_booleans", "above_premarket_vwap") if price > vwap else 0.0,
+            f"price {price} against premarket VWAP {vwap}")
 
     cap_rule = _CRIT.rule("score_booleans", "market_cap_above")
-    cap_ok = cap_rule.test(quote.get("marketCap"))
-    add("market_cap",
-        _CRIT.number("score_booleans", "market_cap_above_points") if cap_ok else 0.0,
-        f"market cap {quote.get('marketCap')} against {cap_rule.describe()}")
+    market_cap = quote.get("marketCap")
+    if market_cap is None:
+        unknown("market_cap", "market cap was never observed")
+    else:
+        add("market_cap",
+            _CRIT.number("score_booleans", "market_cap_above_points")
+            if cap_rule.test(market_cap) else 0.0,
+            f"market cap {market_cap} against {cap_rule.describe()}")
 
-    total = sum(c["points"] for c in components)
+    known_total = sum(c["points"] for c in components if c["points"] is not None)
     candidate["score_components"] = components
-    candidate["score"] = round(total, 4)
-    candidate["conviction"] = _CRIT.band_result("score_buckets", total)
+    if unavailable:
+        candidate["score"] = None
+        candidate["score_partial"] = round(known_total, 4)
+        candidate["score_unavailable"] = unavailable
+        candidate["conviction"] = None
+    else:
+        candidate["score"] = round(known_total, 4)
+        candidate["score_partial"] = None
+        candidate["score_unavailable"] = []
+        candidate["conviction"] = _CRIT.band_result("score_buckets", known_total)
 
 
 def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) -> None:
@@ -958,13 +997,19 @@ def write_packet(payload: dict[str, Any]) -> Any:
     return path
 
 
-def write_picks(payload: dict[str, Any]) -> int:
+def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
     """One picks row per candidate, upserted on (date, ticker).
 
     The natural key is what makes a re-run of the same day an update rather
     than a second copy. entry_ref and stop_ref follow the field choices
     documented in CRITERIA.md, and a null level stays null: a reference that
     was never observed is not a reference.
+
+    Every row carries a source. 'live' only when this run happened inside
+    the CRITERIA.md [picks] live window and --test was not passed; anything
+    else is 'test', because a packet gathered at noon describes a different
+    market than the one the report is about, and test rows must never
+    interleave silently with the real record.
     """
     reference_fields = {"pm_high", "pm_low", "pm_vwap"}
     entry_field = _CRIT.text("picks", "entry_ref_field")
@@ -974,6 +1019,17 @@ def write_picks(payload: dict[str, Any]) -> int:
             raise criteria.CriteriaError(
                 f"picks reference field {field!r} is not one of {sorted(reference_fields)}"
             )
+
+    window_start = _CRIT.clock_text("picks", "live_window_start")
+    window_end = _CRIT.clock_text("picks", "live_window_end")
+    run_hhmm = str(payload.get("run_time_et") or "")
+    in_window = bool(run_hhmm) and window_start <= run_hhmm <= window_end
+    source = "test" if (force_test or not in_window) else "live"
+    if source == "test":
+        why = ("--test was passed" if force_test else
+               f"the run clock {run_hhmm or 'unknown'} is outside the live window "
+               f"{window_start} to {window_end}")
+        print(f"scan: picks rows will carry source='test' ({why})")
 
     written = 0
     with store.connect() as connection:
@@ -997,15 +1053,19 @@ def write_picks(payload: dict[str, Any]) -> int:
                 "catalyst_class": candidate.get("catalyst_class"),
                 "entry_ref": candidate.get(entry_field),
                 "stop_ref": candidate.get(stop_field),
+                "source": source,
+                "score_partial": candidate.get("score_partial"),
+                "score_unavailable": ", ".join(candidate.get("score_unavailable") or []) or None,
             })
             written += 1
         connection.commit()
-        total, distinct = connection.execute(
-            "SELECT COUNT(*), COUNT(DISTINCT ticker) FROM picks WHERE date=?",
+        total, live = connection.execute(
+            "SELECT COUNT(*), SUM(CASE WHEN source='live' THEN 1 ELSE 0 END) "
+            "FROM picks WHERE date=?",
             (payload["session_date"],),
         ).fetchone()
-    print(f"scan: picks upserted {written} rows for {payload['session_date']}, "
-          f"table now holds {total} rows ({distinct} distinct tickers) for the day")
+    print(f"scan: picks upserted {written} rows for {payload['session_date']} "
+          f"as source='{source}'; the day now holds {total} rows, {live or 0} live")
     return written
 
 
@@ -1024,6 +1084,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Gather the morning packet.")
     parser.add_argument("--rescore", metavar="PACKET",
                         help="Recompute scores from an existing packet and print them.")
+    parser.add_argument("--test", action="store_true",
+                        help="Force picks rows to source='test'. Off clock runs "
+                             "are marked test automatically.")
     args = parser.parse_args(argv)
 
     if args.rescore:
@@ -1059,15 +1122,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     path = write_packet(payload)
-    write_picks(payload)
+    write_picks(payload, force_test=args.test)
     print("")
     print(f"scan: wrote {path}")
     print(f"scan: {len(payload['candidates'])} candidates, "
           f"{len(payload['gaps_to_fill'])} gaps to fill")
     for candidate in payload["candidates"]:
+        if candidate["score"] is None:
+            score_text = (f"unscored (partial {candidate.get('score_partial')}, "
+                          f"missing {len(candidate.get('score_unavailable') or [])})")
+        else:
+            score_text = f"{candidate['score']:>4.1f} {candidate['conviction']:<7}"
         print(
             f"    {candidate['symbol']:<10} gap {candidate['gap_pct']:+7.2f}%  "
-            f"score {candidate['score']:>4.1f} {candidate['conviction']:<7} "
+            f"score {score_text} "
             f"day={'Y' if candidate['day_eligible'] else 'n'} "
             f"swing={'Y' if candidate['swing_eligible'] else 'n'}  "
             f"rvol={candidate.get('pm_rvol')}  covered={candidate.get('collector_covered')}"

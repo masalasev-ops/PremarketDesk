@@ -81,9 +81,20 @@ two bulk calls a day would dominate the shared account and force a design
 change. measure_bulk_cost.py judges its verdict against this number; the
 measured fact on 2026-08-13 was a flat 100 per call.
 
+The circuit breaker bounds the grind when the meter is unreadable and the
+quota is also genuinely gone. Without it, every call discovers the limit
+independently: four attempts with backoff each, which across a morning's
+worth of calls plus the analyst timeout can push the chain past the open.
+Consecutive 429s open the circuit; every later call in the run fails fast
+with the reason recorded, and the packet completes thin instead of late.
+The retry budget is the total number of retry attempts one run may spend
+across all its calls before every remaining call gets a single attempt.
+
 degrade_below_remaining       = 5000       # skip skippable calls below this, record why
 refuse_below_remaining        = 500        # refuse to run outright below this
 bulk_redesign_line            = 1000       # one bulk live call at or above this forces a redesign
+consecutive_429_trip          = 5          # this many 429s in a row opens the circuit for the run
+retry_budget_per_run          = 10         # total retries one run may spend across all calls
 
 ## Day setup
 
@@ -295,8 +306,8 @@ narrates numbers already decided in Python, so these are operational knobs
 like the Api section above, not screen criteria.
 
 model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
-effort                        = low        # measured: default effort spent ~35k thinking tokens and 340s on a job with no decisions to make
-timeout_s                     = 233        # 3x the slowest of five measured opus runs on 2026-08-13: 65.3, 70.1, 67.0, 77.6, 65.8 seconds
+effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
+timeout_s                     = 293        # 3x the slowest of five measured opus medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds
 max_attempts                  = 2          # total tries, including the first
 
 Note on the invocation: the narrative pass is one text generation, not an
@@ -391,6 +402,20 @@ can drag. Excursion math against a traded extreme stays interpretable.
 
 entry_ref_field               = pm_high
 stop_ref_field                = pm_low
+
+Every picks row carries a source: 'live' for rows written by the scheduled
+morning inside the window below, 'test' for rows from manual or off clock
+runs, and 'reconstructed' reserved for any future row rebuilt after the
+fact. The writer decides at write time: the --test flag forces 'test', and
+so does a run clock outside the window, because a packet gathered at noon
+describes a different market than the one the report is about. Every query
+and every screen filters to source = 'live' and says so in its header when
+it does not; test rows must never leak into outcome or calibration math.
+The migration on 2026-08-14 marked every earlier row 'test', which every
+one of them was.
+
+live_window_start             = 07:00      # rows written inside this ET window are source live
+live_window_end               = 09:30
 
 ## Economic importance
 
@@ -505,6 +530,12 @@ market_cap_above_points       = 1         # the points it is worth
 ## Score buckets
 
 Ordered. First match wins. The total runs 0 to 10.
+
+A null score is unscored, not low. It means at least one component input was
+never observed (the unavailable components are listed next to the partial
+total in the packet and the row), and the conviction bucket is null,
+rendered as unscored. Calibration and threshold queries must exclude
+unscored rows, never fold them into red.
 
 band = >= 7 : green
 band = >= 4 : yellow

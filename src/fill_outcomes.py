@@ -77,12 +77,15 @@ def fill(day_limit: str | None = None) -> int:
         if added:
             print(f"outcomes: widened picks with {', '.join(added)}")
 
+        # source = 'live' only: outcomes are the record the thresholds will
+        # one day be calibrated against, and test rows have no business in it.
         candidates = connection.execute(
-            "SELECT * FROM picks WHERE next_day_close IS NULL OR day5_close IS NULL "
-            "ORDER BY date, ticker"
+            "SELECT * FROM picks WHERE (next_day_close IS NULL OR day5_close IS NULL) "
+            "AND source='live' ORDER BY date, ticker"
         ).fetchall()
         if not candidates:
-            print("outcomes: every pick already has its outcomes, nothing to do")
+            print("outcomes: every live pick already has its outcomes "
+                  "(test rows are never filled), nothing to do")
             return 0
 
         calendar = _session_calendar(api, back_days=40)
@@ -159,11 +162,11 @@ def fill(day_limit: str | None = None) -> int:
         # correlated rows for twelve data points.
         total_rows, total_sessions = connection.execute(
             "SELECT COUNT(*), COUNT(DISTINCT date) FROM picks "
-            "WHERE next_day_close IS NOT NULL"
+            "WHERE next_day_close IS NOT NULL AND source='live'"
         ).fetchone()
         print(f"outcomes: {filled} picks filled, {skipped} not yet due, "
               f"{unavailable} had no data")
-        print(f"outcomes: the table now holds {total_rows} outcome rows across "
+        print(f"outcomes: the table now holds {total_rows} live outcome rows across "
               f"{total_sessions} sessions; the sample unit is the session")
     return 0
 

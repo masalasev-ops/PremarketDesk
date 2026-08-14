@@ -307,16 +307,14 @@ recreates it deliberately.
 
 ## What remains
 
-1. Tonight after 22:15 (or any evening): the nightly job runs the definitive
-   collector volume verification. Check logs/nightly-2026-08-13.log and
-   runs/2026-08-13/verify_intraday.json. Healthy means most symbols within
-   one percent on identical minutes. This is the last CP6 debt. Note today's
-   collector file holds midday test bars, not a real premarket window, which
-   is fine: the comparison is minute for minute regardless of the hour. Also
-   expect and ignore source disagreement flags on today's picks, because the
-   live values came from those midday test bars while the true window is the
-   real 04:00 to 09:30 premarket. That mismatch is synthetic and disappears
-   on real mornings.
+1. The definitive collector volume verification (the last CP6 debt) now
+   lands with the FIRST LIVE morning's nightly. The 2026-08-13 rows were
+   all marked source='test' by the 2026-08-14 migration and the backfill
+   only touches live rows, so no verify_intraday.json will appear for
+   2026-08-13 and none is owed: its collector file held midday test bars,
+   not a premarket window. Check runs/(first live date)/verify_intraday.json
+   after that evening's 22:15 run. Healthy means most symbols within one
+   percent on identical minutes.
 2. First real morning (tomorrow is scheduled): everything fires from Task
    Scheduler. Review the gate table in logs/morning-chain-YYYY-MM-DD.log.
    When ethVolume, baseline medians, RVOLs, premarket highs and bar counts
@@ -326,12 +324,48 @@ recreates it deliberately.
 3. Longer term, as CRITERIA.md's header says: once picks holds a few hundred
    filled outcome rows, revisit the seed thresholds because the data said so.
 
+## Reinstated review items, with outcomes
+
+Items that surfaced in review and kept falling off. Each line records what
+actually happened to it, dated, so none of them silently becomes folklore.
+
+- Containment fail open outside the universe: FIXED 2026-08-14. The universe
+  holds common stock only, so every ETF, including the eight context tickers
+  the report names every morning, was invisible to the claim check. Claims
+  are now validated against the union of universe.json and the CRITERIA.md
+  [collector] context list (analyst._claimable_symbols), and the regression
+  test gained the case: QQQ claimed in a table while absent from the packet
+  is caught.
+- The --effort setting: COMPARED AND SWITCHED 2026-08-14. One medium effort
+  run on the 2026-08-13 packet against that morning's low effort report:
+  medium covered all 12 candidates individually in Technical signals where
+  low compressed six names into one vague sentence ("mostly sit below their
+  prior day highs"), and its Skips and traps carried actionable per name
+  lines (WDAY: trade only against the confirmed prior day high, not a
+  premarket level). Five timed medium runs: 97.4, 86.5, 97.7, 91.1, 92.4
+  seconds, all clean single completions, about 25 seconds slower than low.
+  CRITERIA [analyst] now reads effort = medium with timeout_s = 293 (3x the
+  slowest of the five). One CRITERIA edit flips it back if a real morning
+  says otherwise.
+- The sibling consumer on the shared key: IDENTIFIED 2026-08-14. Three
+  sibling projects under the same parent directory reference EODHD:
+  AlphaFinanceLab, StockResearcherLab, and OptionsWheelLab. The 2026-08-13
+  evening burn (about 50k calls between 20:00 and 23:03 ET) lines up with
+  AlphaFinanceLab, an on demand .NET worker over an S&P 500 arena whose
+  repo was last touched at 19:55 that evening; none of the three runs from
+  Task Scheduler, so sibling spend is manual and unpredictable. Action for
+  the owner: EODHD issues more than one token per account; give
+  PremarketDesk its own so consumption becomes attributable and one project
+  cannot starve the other. Until then, the preflight and the 429 circuit
+  breaker are the defense.
+
 ## Operating notes
 
 - The machine must be awake at trigger times; Task Scheduler does not wake
   it by default. See tasks/README.md.
-- The analyst step spends roughly 1.2 to 1.6 dollars of Claude subscription
-  per morning at opus. The knob is CRITERIA.md [analyst] model.
+- The analyst step spends roughly 1 to 2 dollars of Claude subscription
+  per morning at opus medium effort. The knobs are CRITERIA.md [analyst]
+  model and effort.
 - Every job appends to a dated log in logs/. The morning chain stops on the
   first failure, so an empty inbox with a log that stops at scan means the
   packet failed, not the mail.

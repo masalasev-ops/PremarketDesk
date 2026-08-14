@@ -44,9 +44,29 @@ CREATE TABLE IF NOT EXISTS picks (
     catalyst_class    TEXT,
     entry_ref         REAL,
     stop_ref          REAL,
+    source            TEXT,
+    score_partial     REAL,
+    score_unavailable TEXT,
     PRIMARY KEY (date, ticker)
 );
 """
+
+# Columns added after the first schema shipped. init() widens existing
+# databases with these so no script depends on another having migrated first.
+_PICKS_LATER_COLUMNS = (
+    # 'live', 'test' or 'reconstructed'. The writer sets it explicitly on
+    # every row; NULL can only mean the row predates the column, and every
+    # row in the table on migration day (2026-08-14) was test data from
+    # midday runs, so init() marks NULL rows 'test'. That backfill statement
+    # is permanently idempotent: no writer ever leaves source NULL.
+    ("source", "TEXT"),
+    # The sum over the KNOWN score components when the total score is null
+    # because a component input was never observed, and the names of the
+    # unavailable components. See CRITERIA.md Score buckets: null score
+    # means unscored, never low.
+    ("score_partial", "REAL"),
+    ("score_unavailable", "TEXT"),
+)
 
 
 def connect() -> sqlite3.Connection:
@@ -59,11 +79,16 @@ def connect() -> sqlite3.Connection:
 
 
 def init(connection: sqlite3.Connection | None = None) -> None:
-    """Create anything missing. Safe to call on every run."""
+    """Create anything missing, widen anything old. Safe to call on every run."""
     owned = connection is None
     connection = connection or connect()
     try:
         connection.executescript(_SCHEMA)
+        ensure_columns(connection, "picks", _PICKS_LATER_COLUMNS)
+        # Any row without a source predates the source column, and everything
+        # written before it existed was test data. Writers always set source,
+        # so this can never touch a post migration row.
+        connection.execute("UPDATE picks SET source='test' WHERE source IS NULL")
         connection.commit()
     finally:
         if owned:
