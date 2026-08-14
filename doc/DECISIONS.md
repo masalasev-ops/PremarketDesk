@@ -127,6 +127,68 @@ labelled wrong input is still the wrong input, and here it selects what the
 whole morning can see. Subscribing to more names than the socket allows is not
 available; the 50 slot cap is the vendor's.
 
+**The ordering sweep, 2026-08-14. STILL OPEN, deliberately.** The tier ordering
+below tier 1 has now been measured over 60 sessions, 2026-05-19 to 2026-08-13,
+with the ranking metrics computed as of 2026-05-18 so every replayed session is
+out of sample. Mean subscribed recall per session, with the spread, and split
+by calendar weight at 8 before-open reporters:
+
+| key | mean | median | min | max | sd | heavy | light |
+|---|---|---|---|---|---|---|---|
+| A 20 day dollar volume, shipped | 0.0842 | 0.0769 | 0.0000 | 0.2828 | 0.0475 | 0.1046 | 0.0674 |
+| B gap propensity | 0.1147 | 0.1054 | 0.0467 | 0.2828 | 0.0473 | 0.1262 | 0.1053 |
+| C median absolute gap | 0.0548 | 0.0355 | 0.0000 | 0.2828 | 0.0548 | 0.0942 | 0.0226 |
+| D 20 day ATR percent | 0.1037 | 0.0916 | 0.0238 | 0.2929 | 0.0471 | 0.1231 | 0.0879 |
+| E propensity, 25M filter | 0.1072 | 0.1018 | 0.0187 | 0.1964 | 0.0390 | 0.1152 | 0.1007 |
+
+Per tier hit rate, slots given against slots that gapped, across all 60
+sessions. Tier 1 is insensitive to the key because it is small; the whole
+difference is tier 2:
+
+| key | tier 1 | tier 2 |
+|---|---|---|
+| A | 431/784 = 0.55 | 361/1736 = 0.21 |
+| B | 442/784 = 0.56 | 611/1736 = 0.35 |
+| C | 446/784 = 0.57 | 77/1736 = 0.04 |
+| D | 445/784 = 0.57 | 536/1736 = 0.31 |
+| E | 370/648 = 0.57 | 644/1872 = 0.34 |
+
+Tier floors against B, sweeping 0, 2 and 4 guaranteed slots per tier:
+
+| floor | mean | sd | max | heavy | light | tier 3 | tier 4 |
+|---|---|---|---|---|---|---|---|
+| 0 | 0.1147 | 0.0473 | 0.2828 | 0.1262 | 0.1053 | no slots | no slots |
+| 2 | 0.1163 | 0.0468 | 0.2727 | 0.1256 | 0.1087 | 47/120 = 0.39 | 42/120 = 0.35 |
+| 4 | 0.1164 | 0.0438 | 0.2525 | 0.1211 | 0.1126 | 95/240 = 0.40 | 83/240 = 0.35 |
+
+What the numbers say. B beats the shipped A by about a third in the mean and
+by more than half on light-calendar sessions, which is the ordinary case: the
+median session in this window had two before-open reporters and 2026-08-13's
+37 was the maximum, so on most mornings tier 1 fills two slots and the
+tiebreak decides the other forty. C is worse than shipped and should be
+dropped from consideration. D is close to B and has one property B lacks,
+being computable for a name with only 20 sessions of history, where propensity
+is null until 100. E buys a tighter spread by filtering the pool, and pays for
+it in pool recall, 0.5163 against 0.6193, because the filter removes gappers
+from the pool outright rather than just from the front of it. Floors trade
+heavy-calendar recall for light-calendar recall and tighten the spread, and
+tiers 3 and 4 hit 0.35 to 0.40 when they are given slots at all, which is as
+good as tier 2 and is not visible without a floor.
+
+Two caveats that belong with the numbers. Tier 5 never receives a slot in any
+configuration, because the backtest cannot honestly reconstruct recent runners
+from a picks table holding one live session, so nothing here measures it. And
+the one session spot check that suggested propensity would fix the 2026-08-13
+failure does not hold up: MU scores 0.324 and AMD 0.216, higher than most of
+the names that gapped and were cut, while SECZ, which gapped 25 percent, is
+null for want of history. The sweep is the evidence, not the anecdote.
+
+**Nothing changes yet.** The shipped ordering stays as it is, and the 8/14
+replay is byte identical to d224837 to prove it. Replacing a seed value with a
+measured one is its own change, so that the measurement is citable at the point
+of the edit rather than recorded a commit away from it. This item stays open
+until that change is made.
+
 ## 2026-08-14: containment reads prose, with a recorded fail-open
 
 **Decision.** Ticker claims are extracted from report prose as well as from

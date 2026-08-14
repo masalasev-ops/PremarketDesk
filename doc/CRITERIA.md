@@ -188,6 +188,31 @@ calendar call and up to five news calls, against the one bulk live call at 100
 that this replaces. Roughly 100 counted calls a morning more than before, far
 below the bulk_redesign_line in the Quota section.
 
+## Gap stats
+
+Per name gap propensity, written by gap_stats.py on the universe rebuild
+schedule and read at 07:15 at no cost. It measures the thing the pool ordering
+is trying to predict, rather than dollar volume, which measures how much a name
+trades and runs against gap propensity because the largest names are the
+steadiest.
+
+The gap threshold is not repeated here. Propensity counts sessions whose open
+sat beyond the Discovery gap_pct floor from the prior close, so the two can
+never drift apart.
+
+lookback_sessions             = 250        # about one trading year
+min_sessions                  = 100        # seed: below this the propensity is NULL, never a computed zero
+atr_sessions                  = 20         # sessions in the average true range
+
+### The null note
+
+A name with fewer than min_sessions of history stores a null propensity and its
+real sessions_used. Null and measured zero are different facts: one is a name
+nobody has measured, the other is a name that has not gapped in a year, and a
+ranking that collapsed them would promote every recent listing above every
+genuinely quiet name. Everything reading these fields sorts nulls last within
+their tier rather than treating them as zero.
+
 ## Pool tiers
 
 The order the pool is ranked in, best tier first, with 20 day average dollar

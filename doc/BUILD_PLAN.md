@@ -406,12 +406,13 @@ Open after that morning:
   all; selection is a prior built from earnings, overnight news, prior
   session movers and recent runners. See DECISIONS.md 2026-08-14,
   "selection is a prior built before the open".
-- OPEN, replacing it: the tier ordering below tier 1 is measurably wrong.
-  Backtested on 2026-08-13 the pool held 72 of 99 real gappers but the 42
-  subscribed held only 28, and every one of those 28 came from tier 1. The
-  dollar volume tiebreak sorts the news tiers toward the largest names in
-  the market, which are the least likely to gap. Do not retune on one
-  session; pool_recall.json now accumulates the evidence nightly.
+- OPEN, and now measured rather than argued: the tier ordering below tier 1
+  is wrong. Swept over 60 sessions with src/backtest_pool.py, ranking gap
+  propensity beats the shipped dollar volume key 0.1147 against 0.0842 mean
+  subscribed recall, and 0.1053 against 0.0674 on light-calendar sessions,
+  which are the ordinary case. Full table and caveats in DECISIONS.md
+  2026-08-14, "The ordering sweep". Nothing was changed: replacing the seed
+  values is its own commit so the measurement is citable at the edit.
 - pm_rvol's numerator covers 07:20 onward while its denominator accumulates
   from 04:00, so the ratio understates. Closing that needs a second baseline
   keyed to the collector window and a rewarm of the cache.

@@ -14,8 +14,11 @@ Two claims, both required:
 
 from __future__ import annotations
 
+import pathlib
+import shutil
 import sqlite3
 import sys
+import tempfile
 
 import store
 
@@ -30,6 +33,26 @@ def _is_closed(connection: sqlite3.Connection) -> bool:
 
 def main() -> int:
     failures: list[str] = []
+
+    # Against a throwaway database, never the live one. This test writes, and
+    # writing to data/premarketdesk.db means it fails with "database is locked"
+    # whenever a real job holds a write transaction, which is a property of the
+    # machine rather than of the code under test. It also means a test could
+    # corrupt the outcome history. Same reasoning as the runs/ sandbox in
+    # test_scrub.py.
+    import config
+
+    real_db = config.DB_PATH
+    sandbox = tempfile.mkdtemp(prefix="premarketdesk-test-store-")
+    config.DB_PATH = pathlib.Path(sandbox) / "test.db"
+    try:
+        return _run(failures)
+    finally:
+        config.DB_PATH = real_db
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+
+def _run(failures: list[str]) -> int:
 
     # Claim 1a: closed after a clean exit, with the write committed.
     with store.session() as connection:

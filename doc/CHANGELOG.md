@@ -205,6 +205,80 @@ spent 40 of 42 slots on mega caps. The tier ordering is marked in CRITERIA.md
 as a seed and an assumption about base rates; this is the first measurement
 against it and it says the assumption is wrong below tier 1.
 
+### The recall harness moved into the repository
+
+The tool that produced the 2026-08-13 recall numbers was a scratchpad script.
+It is the instrument that decides the tier ordering, so it is now
+src/backtest_pool.py, version controlled and tested, and split into two stages
+that never run together.
+
+**fetch** reconstructs one historical session's inputs, the earnings calendar,
+the overnight news sweep, the prior session end of day and universe membership,
+together with its outcome, the open against the prior close for every universe
+name. Both go to a cache keyed by session date under data/backtest/. This is
+the only stage that touches the network.
+
+**evaluate** reads the cache and nothing else, applies a named ordering
+configuration, and reports pool recall, subscribed recall, per tier hit rates
+and the missed names. src/test_backtest.py arms every outbound path to raise
+and then runs every ordering to completion, so the zero network claim is
+asserted rather than asserted-to.
+
+The split is the point. Fetching is slow, dated and expensive enough to afford
+once; evaluating is free and will be run once per ordering candidate, and every
+comparison has to come from the same bytes. Bulk end of day is cached per day
+rather than per session because consecutive sessions share it, so sixty
+sessions cost sixty one bulk days rather than a hundred and twenty.
+
+From cache alone the harness reproduces the published 2026-08-13 figures
+exactly: 99 gapped, pool held 72 at 0.7273, subscribed held 28 at 0.2828.
+
+### Gap propensity, measured rather than proxied
+
+src/gap_stats.py computes, for every universe name over a trailing 250
+sessions, the fraction of sessions whose open sat beyond the discovery gap
+floor from the prior close, the median absolute gap on those sessions, and 20
+day ATR as a percent of price. It rides the universe rebuild schedule in
+tasks/job_universe.bat, so nothing is computed at 07:15.
+
+Rows are keyed by (ticker, as_of), which is what lets a backtest rank on a
+window that ended before its earliest session instead of one that includes the
+sessions being scored. A name with fewer than min_sessions of history stores a
+null propensity and its real sessions_used, never a computed zero: a name
+nobody has measured and a name that has not gapped in a year are different
+facts, and order_pool sorts nulls last within their tier rather than as zero.
+
+Measured cost: 2,745 symbols in 2,745 counted calls and 421 seconds, zero
+failures. 2,708 measured and 37 null at the 2026-08-13 window.
+
+### Sixty sessions cached
+
+60 consecutive trading sessions from 2026-05-19 to 2026-08-13, spanning a full
+quarterly earnings cycle so the sweep sees the heavy calendar case and the
+light one rather than whichever the last fortnight happened to be. 62 bulk end
+of day days, 27MB, under data/backtest/, which is gitignored.
+
+Cost: the meter moved 52,888 to 62,736, so 9,848 counted calls, but the gap
+propensity run overlapped it and the shared key has a sibling consumer, so that
+figure is an upper bound rather than an attribution. The harness's own ledger
+records 373 HTTP calls for the fetch: 58 bulk end of day at a measured 98
+counted each, plus 249 news, 58 calendar and 8 others, which puts the fetch's
+own share near 6,000.
+
+The fetch checks the preflight every ten sessions and stops cleanly if the key
+drops to the degrade threshold, reporting how many sessions were cached. A
+partial cache is usable; evaluate takes whatever sessions it finds.
+
+### Also
+
+- test_store.py wrote to the live database, so it failed with "database is
+  locked" whenever a real job held a write transaction, which is a fact about
+  the machine rather than about the code under test. It now runs against a
+  throwaway database, the same reasoning as the runs/ sandbox added to
+  test_scrub.py.
+- gap_stats.py held one write transaction open across two thousand HTTP calls,
+  which is what locked the database. It now fetches first and writes once.
+
 ### Packet schema
 
 New keys: `build`, `vintage`, `dropped_no_coverage`. New candidate fields:
