@@ -18,6 +18,16 @@ job the step ran under. Running a script by hand records `manual` instead,
 which is worth being able to tell apart: an ad hoc rerun that succeeded is
 still a success, but it is not evidence that the schedule fired.
 
+`PMD_JOB` decides one more thing: who owns an artifact under `runs\`. A
+scheduled run sets it and may rewrite what it writes, including for past dates,
+because backfill's 07:00 catch-up pass legitimately fills yesterday. A hand run
+sets nothing, so `pool_recall`, `backfill_premarket` and the collector's
+`--snapshot` mode all REFUSE to replace an existing artifact and write beside it
+with a `.handrun` name instead, printing what they spared and its size. Pass
+`--overwrite` when you mean it. This exists because a hand run of `snapshot_bars`
+against a past session destroyed that morning's frozen 08:45 file, and the only
+reason it was noticed is that a test happened to read it.
+
 | Job | Time (ET, machine local) | Days | What it runs |
 | --- | --- | --- | --- |
 | job_discover.bat | 07:15 | Mon to Fri | discover.py builds and ranks the candidate pool, then baseline.py warms the RVOL cache for the subscribed names only, not the whole pool |

@@ -251,14 +251,14 @@ def claim_seven(failures: list[str]) -> None:
         failures.append(f"counted {result['gapped']} gappers, expected 5")
     if result["pool_held"] != 3:
         failures.append(f"pool held {result['pool_held']}, expected 3")
-    if result["recall"] != 0.6:
-        failures.append(f"recall {result['recall']}, expected 0.6")
+    if result["discovery_recall_all_gappers"] != 0.6:
+        failures.append(f"recall {result['discovery_recall_all_gappers']}, expected 0.6")
     missed = sorted(row["symbol"] for row in result["missed"])
     if missed != ["G3.US", "G4.US"]:
         failures.append(f"missed {missed}, expected G3.US and G4.US")
     if result["subscribed_held"] != 2:
         failures.append(f"subscribed hits {result['subscribed_held']}, expected 2")
-    print(f"  claim 7 recall {result['recall']} of {result['gapped']} gappers, "
+    print(f"  claim 7 recall {result['discovery_recall_all_gappers']} of {result['gapped']} gappers, "
           f"missed {missed}, {result['subscribed_held']} of the hits subscribed")
 
 
@@ -314,11 +314,11 @@ def claim_eight(failures: list[str]) -> None:
         # pool did not hold it. QUIET did not gap. Recall is therefore 0 of 1.
         if payload.get("gapped") != 1:
             failures.append(f"build() counted {payload.get('gapped')} gappers, expected 1")
-        if payload.get("recall") != 0.0:
+        if payload.get("discovery_recall_all_gappers") != 0.0:
             failures.append(f"build() reported recall {payload.get('recall')}, expected 0.0")
         if [r["symbol"] for r in payload.get("missed", [])] != ["GAPPER.US"]:
             failures.append(f"build() missed list is {payload.get('missed')}")
-        for key in ("gapped", "pool_held", "recall", "missed", "session_date"):
+        for key in ("gapped", "pool_held", "discovery_recall_all_gappers", "addressable", "missed", "session_date"):
             if key not in payload:
                 failures.append(f"pool_recall payload has no {key}")
         written = sandbox / "2026-08-13" / "pool_recall.json"
@@ -326,7 +326,7 @@ def claim_eight(failures: list[str]) -> None:
             failures.append("pool_recall.build wrote no pool_recall.json")
         else:
             print(f"  claim 8 build() wrote {written.name} with "
-                  f"{payload['gapped']} gapper(s) and recall {payload['recall']}")
+                  f"{payload['gapped']} gapper(s) and recall {payload['discovery_recall_all_gappers']}")
     shutil.rmtree(sandbox, ignore_errors=True)
 
 

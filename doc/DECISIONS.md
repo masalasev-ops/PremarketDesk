@@ -508,3 +508,86 @@ caught. The alternative is a guard that fires on "06:37 ET" every single
 morning, and a guard that always fires is a guard nobody reads. Claims in the
 watchlist tables are unaffected, and those tables are now mandatory even when
 empty, so the ordinary path for a ticker claim is still checked exactly.
+
+## 2026-08-15: recall is reported against the addressable target, and the market cap floor is KEPT
+
+**The objection, which was right.** Recall had been measured against every
+universe name that gapped. That denominator conflates a name discovery never
+saw with a name the day screen was built to reject, and only the first is a
+discovery failure. Tuning toward the combined figure chases a ceiling the
+screen cannot reach by design.
+
+**What changed.** `pool_recall` now reports three counts per session: gappers
+above the gap floor, gappers that also satisfy every non-premarket day_setup
+condition (the addressable target), and gappers actually published. Recall
+against the addressable target is the headline and the raw figure stays beside
+it. Every recall figure in the payload carries `numerator_is` and
+`denominator_is` strings, so no fraction can be read without its denominator.
+
+The split of day_setup is `gap_pct`, `price` and `market_cap` IN, with
+`premarket_rvol` and `require_above_prior_high` OUT. The two excluded lines
+need a premarket print, which is unknowable for a name that was never
+subscribed, and that is exactly the population being measured. Excluding them
+makes the addressable target an UPPER bound on what the day screen could
+publish, which is the safe direction: it cannot flatter discovery.
+
+**The measurement.** 61 sessions, 2026-05-18 to 2026-08-13, from the cached
+end of day files at zero API calls. Produced by
+`src/research/addressable_sweep.py`, written to `data/addressable_sweep.json`.
+
+| Per session | min | p25 | median | mean | p75 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Raw gappers | 42 | 89 | 130 | 172.3 | 227 | 518 |
+| **Addressable target** | **37** | **80** | **119** | **153.8** | **195** | **468** |
+| Removed by the 1B floor | 3 | 10 | 15 | 18.2 | 25 | 48 |
+| Percent removed by the floor | 4.4 | 8.4 | **10.3** | 10.8 | 12.0 | 20.5 |
+
+**The premise that prompted this was wrong, and the correction matters.** The
+argument was that the biggest gaps sit in the illiquid tail and the market cap
+floor excludes that tail by design. Dollar volume rank and market cap are
+different axes. ETON and HTFL ranked 1972nd and 1973rd of 2745 by dollar volume
+on 2026-08-14, and both clear the floor comfortably at 1.18B and 2.58B. The
+floor removes a median of 10.3 percent of gappers, not the bulk of them.
+
+So the addressable target is not two or three names. It is a median of 119, and
+recall against it is barely better than against the raw count: on 2026-08-14,
+1 of 52 addressable (0.0192) against 1 of 62 raw (0.0161). The cap analysis and
+the socket purchase decision were NOT being argued against the wrong number.
+Discovery is missing roughly 118 addressable names on a normal session, and
+that remains squarely a discovery failure rather than a screening artefact.
+
+**The floor is kept, on the number rather than on the reasoning.** Relaxing it
+buys less than it appears to:
+
+| Floor | Median addressable per session |
+| --- | ---: |
+| 1B, the CRITERIA floor | 119 |
+| 800M, the swing floor | 123 |
+| 500M, the universe floor | 130 |
+| 300M | 130 |
+| No floor | 130 |
+
+Removing the floor entirely recovers a median of 11 names per session, about 9
+percent. The rows at and below 500M are identical because the universe's own
+`market_cap >= 500M` already binds there, so the day_setup floor is not the
+constraint below that level and lowering it alone would change nothing.
+
+Two facts argue the other way and are recorded rather than hidden. The floor
+removes the largest mover of the day in 17 of 61 sessions, so 27.9 percent of
+the time the single biggest gap is unaddressable. And the removed population
+does gap harder: mean 7.57 percent against 5.54 percent for the addressable
+set, on 1,126 removed observations against 9,384 addressable. Big gaps do skew
+small, just far less than the original argument assumed.
+
+The decision is therefore to keep 1B until discovery recall is fixed. At a
+median addressable target of 119 and a published recall near 0.02, the floor is
+not the binding constraint on anything, and moving it now would shift the
+denominator underneath a discovery fix that has not landed yet. It should be
+revisited once recall against the addressable target is materially above zero,
+because at that point the 11 names it costs are real and measurable rather than
+theoretical.
+
+**One limitation, stated.** Market caps come from the current `universe.json`,
+so a May session is screened against an August market cap. For names sitting
+near the floor that is a real source of error. It is acceptable for a
+distribution and would not be acceptable for a per-name claim.

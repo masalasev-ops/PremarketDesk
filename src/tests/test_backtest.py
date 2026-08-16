@@ -31,8 +31,8 @@ from selection import discover
 from core import eodhd
 
 PUBLISHED_0813 = {
-    "gapped": 99, "pool_held": 72, "recall": 0.7273,
-    "subscribed_held": 28, "subscribed_recall": 0.2828,
+    "gapped": 99, "pool_held": 72, "discovery_recall_all_gappers": 0.7273,
+    "subscribed_held": 28, "subscribed_recall_all_gappers": 0.2828,
 }
 
 
@@ -189,8 +189,8 @@ def claim_four(failures: list[str]) -> None:
         elif actual != expected:
             failures.append(f"{session} {key} is {actual}, published {expected}")
     print(f"  claim 4 {session} from cache: {result['gapped']} gapped, pool "
-          f"{result['pool_held']} at {result['recall']}, subscribed "
-          f"{result['subscribed_held']} at {result['subscribed_recall']}")
+          f"{result['pool_held']} at {result['discovery_recall_all_gappers']}, subscribed "
+          f"{result['subscribed_held']} at {result['subscribed_recall_all_gappers']}")
 
 
 def main() -> int:

@@ -23,8 +23,11 @@ guarded and the allowlist is the exception, so there is no next root to forget.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import importlib
+import json
 import sys
+import time
 import traceback
 
 from tests import conftest
@@ -66,8 +69,81 @@ def _misbehave_outside() -> int:
     return 0
 
 
+# The time of day every frozen run uses. Held constant across the sweep so the
+# only thing varying between runs is the calendar day: a suite that fails on
+# some days and not others is day dependent, and one that fails on all six is
+# time dependent or simply broken at this hour, which the matrix tells apart.
+FREEZE_HHMM = (9, 0)
+
+
+def _freeze_clock(day: str) -> str:
+    """Pin the ET date so a day dependent assertion shows itself.
+
+    The clock is SHIFTED, not stopped. A truly frozen clock deadlocks the
+    project: `run_websocket` spins on `while ettime.now_et() < stop_at`, and a
+    now() that never advances never leaves that loop. The first attempt at this
+    sweep hung there and produced a zero byte log.
+
+    So time runs forward from the chosen hour at real speed. The date is what
+    was asked for, every wait loop still terminates, and the only thing varying
+    between runs of the sweep is the calendar day.
+
+    Patches the module rather than adding an environment variable, because the
+    shipped code must not grow a way to lie about the date. Nothing in src/
+    binds these functions directly (`from core.ettime import now_et`), so
+    replacing them on the module reaches every caller.
+    """
+    from core import ettime
+
+    base = ettime.at_hm(ettime.parse_date(day), FREEZE_HHMM)
+    origin = time.monotonic()
+
+    def now_et() -> dt.datetime:
+        return base + dt.timedelta(seconds=time.monotonic() - origin)
+
+    ettime.now_et = now_et
+    ettime.today_et = lambda: now_et().date()
+    ettime.today_str = lambda: now_et().date().isoformat()
+    return f"{base.isoformat()} ({base.strftime('%A')}), running forward from there"
+
+
+def _restamp_universe() -> None:
+    """Age the universe fixture relative to the frozen clock, not to 2026-08-13.
+
+    universe.json carries a fixed generated_at, and CRITERIA [universe]
+    max_age_days refuses anything older than ten days. Freezing the clock more
+    than ten days from that stamp therefore fails two suites for a reason that
+    has nothing to do with the day being tested: a Monday holiday 25 days out
+    and a plain Tuesday 26 days out fail identically, while a Friday 8 days out
+    passes.
+
+    That made the holiday case untestable, since every holiday in the cached
+    exchange calendar is more than ten days from the fixture. Restamping to one
+    day before the frozen clock removes the distance variable and leaves the
+    calendar as the only thing changing.
+
+    Writes to the sandbox copy, because config.DATA_DIR is already redirected
+    by the time this runs. The real fixture is never touched.
+    """
+    from core import config, ettime
+
+    path = config.DATA_DIR / "universe.json"
+    if not path.is_file():
+        return
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    was = payload.get("generated_at")
+    payload["generated_at"] = ettime.stamp(ettime.now_et() - dt.timedelta(days=1))
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    print(f"run_tests: universe.json restamped {was} -> {payload['generated_at']}, "
+          "so the frozen day is the only variable")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the suite under the sandbox.")
+    parser.add_argument("--freeze", metavar="YYYY-MM-DD",
+                        help="Freeze the ET clock to "
+                             f"{FREEZE_HHMM[0]:02d}:{FREEZE_HHMM[1]:02d} on that "
+                             "date, so day dependent assertions can be found.")
     parser.add_argument("--prove-check", action="store_true",
                         help="Append a test that writes to the real runs/, to "
                              "demonstrate the tree check catches it.")
@@ -79,6 +155,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     modules = args.only or list(SUITE)
+    if args.freeze:
+        print(f"run_tests: clock frozen to {_freeze_clock(args.freeze)}")
     before = conftest.snapshot_tree()
     enumerated = len([
         path for path in before
@@ -92,6 +170,8 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
     with conftest.activate() as sandbox:
         print(f"run_tests: sandbox at {sandbox}")
+        if args.freeze:
+            _restamp_universe()
         for name in modules:
             module = importlib.import_module(name)
             importlib.reload(module)

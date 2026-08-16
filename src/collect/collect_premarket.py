@@ -369,15 +369,28 @@ def read_bars(day: str | None = None) -> dict[str, list[dict[str, Any]]]:
     return bars
 
 
-def snapshot_bars(day: str, destination) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
+def snapshot_bars(
+    day: str, destination, overwrite: bool = False
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     """Copy the live bar file aside, then parse the copy.
 
     The collector appends until 09:25 and scan reads at 08:45, so the read
     overlaps the write. Copying first means the parse works on bytes that
     stopped moving, and the copy in runs/<date>/ records exactly what the
     packet saw.
+
+    overwrite defaults to FALSE because this function mutates a run directory.
+    scan owns today's snapshot and passes True, since a watchdog rerun of the
+    morning chain is meant to produce a fresh one. A human pointing this at a
+    past session to reproduce something is not the owner, and the default
+    spares the frozen artifact and writes beside it instead. That default
+    exists because on 2026-08-15 a hand run of this function replaced the
+    frozen 08:45 snapshot for 2026-08-14 with the whole trading day, and the
+    only reason it was noticed is that test_repricing reads that file.
     """
     import shutil
+
+    from core import artifacts
 
     source = bar_path(day)
     stats: dict[str, Any]
@@ -385,11 +398,16 @@ def snapshot_bars(day: str, destination) -> tuple[dict[str, list[dict[str, Any]]
         return {}, {
             "bars_total": 0, "last_bar_epoch": None, "last_bar_et": None,
             "partial_line_discarded": False, "bad_lines_skipped": 0,
-            "source_missing": True,
+            "source_missing": True, "destination": str(destination), "spared": False,
         }
+    destination, spared = artifacts.resolve(
+        Path(destination), overwrite, what="snapshot"
+    )
     shutil.copyfile(source, destination)
     bars, stats = read_bars_file(destination)
     stats["source_missing"] = False
+    stats["destination"] = str(destination)
+    stats["spared"] = spared
     return bars, stats
 
 
@@ -455,6 +473,10 @@ def run_websocket(
     reconnects = 0
     messages = 0
     last_status = 0.0
+    # Non fatal status frames, kept rather than only printed. A morning that
+    # saw six odd frames and still worked is a different morning from a clean
+    # one, and the run stats are where that difference has to survive.
+    status_frames: list[dict[str, Any]] = []
 
     chaos_remaining = max(0, int(chaos_reconnects))
     chaos_next: float | None = None
@@ -488,7 +510,7 @@ def run_websocket(
 
                 if raw:
                     messages += 1
-                    _handle_message(raw, builder)
+                    _handle_message(raw, builder, status_frames)
 
                 now = time.time()
                 builder.flush(now)
@@ -524,10 +546,36 @@ def run_websocket(
         "reconnects": reconnects,
         "resubscriptions": connections,
         "messages": messages,
+        "status_frames": len(status_frames),
+        "status_frames_seen": status_frames[:10],
     }
 
 
-def _handle_message(raw: str, builder: BarBuilder) -> None:
+class SubscriptionRefused(RuntimeError):
+    """The server refused the subscription, so this run is listening to nothing.
+
+    Deliberately NOT a ConnectionError, OSError or WebSocketException. Those
+    three are what the reconnect loop catches and retries, and retrying is
+    exactly the wrong response here: the 50 symbol pool is account wide, so a
+    refusal means another process is holding the slots and reconnecting will be
+    refused again every time until the window is gone.
+
+    Raising out of the loop ends the run with the reason recorded, which is the
+    whole point. Until 2026-08-15 this frame was printed and swallowed: the
+    collector then ran to its stop time, folded zero trades, wrote an empty bar
+    file and exited zero, and the first sign of trouble was a morning report
+    with no premarket data in it.
+    """
+
+
+# Status frames that mean the subscription did not take. Anything else non-200
+# is recorded and surfaced but does not stop a run that may still be working.
+_FATAL_STATUS_CODES = frozenset({422})
+
+
+def _handle_message(
+    raw: str, builder: BarBuilder, status_log: list[dict[str, Any]] | None = None
+) -> None:
     try:
         message = json.loads(raw)
     except ValueError:
@@ -535,8 +583,19 @@ def _handle_message(raw: str, builder: BarBuilder) -> None:
     if not isinstance(message, dict):
         return
     if "s" not in message or "p" not in message:
-        # Authorisation and status frames land here and are simply noted.
-        if message.get("status_code") and message.get("status_code") != 200:
+        # Authorisation and status frames land here.
+        code = message.get("status_code")
+        if code and code != 200:
+            if status_log is not None:
+                status_log.append(message)
+            if code in _FATAL_STATUS_CODES:
+                raise SubscriptionRefused(
+                    f"the server refused the subscription: {message}. The 50 symbol "
+                    "pool is account wide and shared across every connection on this "
+                    "token, so another process holding slots refuses this one. "
+                    "Nothing was collected. Check for a second collector, a probe or "
+                    "a hand run socket still open, then rerun."
+                )
             print(f"collector: server said {message}")
         return
 
@@ -678,6 +737,13 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     }
 
 
+# The exit codes that mean this step did its job. Declared at module level so
+# the __main__ line below and the entrypoint test harness read the same value:
+# a literal inside __main__ is invisible to a harness that imports the module
+# and calls main() directly. See ops/job_status.py for the contract.
+OK_CODES = (0,)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Collect the premarket price path.")
     parser.add_argument("--poll", action="store_true",
@@ -694,7 +760,29 @@ def main(argv: list[str] | None = None) -> int:
                         help="Compare an already collected day against EODHD 1m intraday "
                              "bars, minute for minute. The definitive check, run it in the "
                              "evening once intraday has caught up.")
+    parser.add_argument("--snapshot", metavar="DAY",
+                        help="Freeze that day's collector file into runs/DAY/ and report "
+                             "what it holds. Refuses to replace an existing snapshot "
+                             "unless --overwrite is given.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Allow --snapshot to replace an existing artifact under "
+                             "runs/. Without it the original is spared and the copy is "
+                             "written beside it.")
     args = parser.parse_args(argv)
+
+    if args.snapshot:
+        day = ettime.today_str() if args.snapshot == "today" else args.snapshot
+        destination = config.run_dir(day) / "premarket_snapshot.jsonl"
+        bars, stats = snapshot_bars(day, destination, overwrite=args.overwrite)
+        if stats.get("source_missing"):
+            print(f"snapshot: no collector file for {day}, nothing to freeze")
+            return 1
+        print(f"snapshot: wrote {stats['destination']}")
+        print(f"snapshot: {stats['bars_total']:,} bars, {len(bars):,} symbols, "
+              f"last complete bar {stats.get('last_bar_et')}")
+        if stats.get("spared"):
+            print("snapshot: the original was NOT replaced")
+        return 0
 
     if args.verify_intraday:
         day = ettime.today_str() if args.verify_intraday == "today" else args.verify_intraday
@@ -769,6 +857,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"collector: subscription list written to {written_to.name}")
 
     calls_before = eodhd.call_count()
+    refused: str | None = None
     try:
         if args.verify:
             stats = _run_verification(symbols, builder)
@@ -777,6 +866,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             stats = run_websocket(symbols, stop_at, builder,
                                   chaos_reconnects=args.chaos_reconnects)
+    except SubscriptionRefused as exc:
+        # Caught rather than allowed to propagate, so the log carries this
+        # sentence instead of a traceback and the run stats still get written.
+        # The exit code is what makes it a failure, and it must be non zero:
+        # this run collected nothing and the morning must not be told otherwise.
+        print("")
+        print(f"collector: FATAL {exc}")
+        stats = {"subscription_refused": True}
+        refused = str(exc)
+        job_status.failed(f"SubscriptionRefused: {config.scrub_secrets(exc)}")
     except KeyboardInterrupt:
         print("collector: interrupted, flushing completed minutes")
         stats = {"interrupted": True}
@@ -829,6 +928,10 @@ def main(argv: list[str] | None = None) -> int:
         _report_verification(stats["polls"][0], stats["polls"][1], symbols)
 
     eodhd.print_call_report()
+    if refused:
+        print("collector: exiting 1, this run was never subscribed and collected "
+              "nothing. The morning chain must not treat the bar file as a window.")
+        return 1
     return 0
 
 
@@ -958,4 +1061,4 @@ def _report_verification(
 
 
 if __name__ == "__main__":
-    raise SystemExit(job_status.run("collector", main))
+    raise SystemExit(job_status.run("collector", main, ok_codes=OK_CODES))

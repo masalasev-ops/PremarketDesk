@@ -207,6 +207,13 @@ def load_all(as_of: str | None = None) -> dict[str, dict[str, Any]]:
     return {row["ticker"]: dict(row) for row in rows}
 
 
+# The exit codes that mean this step did its job. Declared at module level so
+# the __main__ line below and the entrypoint test harness read the same value:
+# a literal inside __main__ is invisible to a harness that imports the module
+# and calls main() directly. See ops/job_status.py for the contract.
+OK_CODES = (0,)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Per name gap propensity and ATR.")
     parser.add_argument("--as-of", action="append", default=[],
@@ -262,4 +269,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(job_status.run("gap_stats", main))
+    sys.exit(job_status.run("gap_stats", main, ok_codes=OK_CODES))

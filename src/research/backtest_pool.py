@@ -552,9 +552,9 @@ def evaluate_session(
         "session_date": session_date,
         "gapped": result["gapped"],
         "pool_held": result["pool_held"],
-        "recall": result["recall"],
+        "discovery_recall_all_gappers": result["discovery_recall_all_gappers"],
         "subscribed_held": result["subscribed_held"],
-        "subscribed_recall": result["subscribed_recall"],
+        "subscribed_recall_all_gappers": result["subscribed_recall_all_gappers"],
         "screen_passed": screen_passed(subscribed_rows, inputs, outcome, metrics),
         "subscribed_without_primary": len(without_primary),
         "without_primary_that_gapped": sum(
@@ -636,7 +636,7 @@ def sweep(
 
 
 def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any]:
-    recalls = [r["subscribed_recall"] for r in rows if r["subscribed_recall"] is not None]
+    recalls = [r["subscribed_recall_all_gappers"] for r in rows if r["subscribed_recall_all_gappers"] is not None]
     heavy = [r for r in rows if r["earnings_names"] >= heavy_threshold]
     light = [r for r in rows if r["earnings_names"] < heavy_threshold]
 
@@ -644,7 +644,7 @@ def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any
         return round(sum(values) / len(values), 4) if values else None
 
     def recall_of(subset: list[dict[str, Any]]) -> float | None:
-        got = [r["subscribed_recall"] for r in subset if r["subscribed_recall"] is not None]
+        got = [r["subscribed_recall_all_gappers"] for r in subset if r["subscribed_recall_all_gappers"] is not None]
         return mean(got)
 
     # Per tier hit rate: of the slots this tier was given across every session,
@@ -686,7 +686,7 @@ def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any
         "stdev_subscribed_recall": (
             round(statistics.pstdev(recalls), 4) if len(recalls) > 1 else None
         ),
-        "mean_pool_recall": mean([r["recall"] for r in rows if r["recall"] is not None]),
+        "mean_pool_recall": mean([r["discovery_recall_all_gappers"] for r in rows if r["discovery_recall_all_gappers"] is not None]),
         "heavy_sessions": len(heavy),
         "heavy_mean_recall": recall_of(heavy),
         "light_sessions": len(light),

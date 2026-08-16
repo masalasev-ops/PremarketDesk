@@ -93,6 +93,13 @@ def deliver(html_path: Path) -> int:
     return 0
 
 
+# The exit codes that mean this step did its job. Declared at module level so
+# the __main__ line below and the entrypoint test harness read the same value:
+# a literal inside __main__ is invisible to a harness that imports the module
+# and calls main() directly. See ops/job_status.py for the contract.
+OK_CODES = (0,)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Email report.html through Resend.")
     parser.add_argument("--html", metavar="PATH",
@@ -112,4 +119,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(job_status.run("deliver", main))
+    sys.exit(job_status.run("deliver", main, ok_codes=OK_CODES))

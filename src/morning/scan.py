@@ -1294,8 +1294,11 @@ def build_packet() -> dict[str, Any]:
     # prices from these bars too. Everything downstream reads one frozen copy.
     session_date = now.date().isoformat()
     snapshot_path = config.run_dir(session_date) / "premarket_snapshot.jsonl"
+    # overwrite=True: scan owns today's snapshot. The watchdog reruns the
+    # morning chain on purpose and that rerun must produce a fresh copy of the
+    # collector file, not a numbered sibling the packet then fails to name.
     bars_by_symbol, collector_stats = collect_premarket.snapshot_bars(
-        session_date, snapshot_path
+        session_date, snapshot_path, overwrite=True
     )
     run_stats = collect_premarket.read_run_stats(session_date)
 
@@ -1608,6 +1611,13 @@ def rescore(path) -> dict[str, Any]:
     return payload
 
 
+# The exit codes that mean this step did its job. Declared at module level so
+# the __main__ line below and the entrypoint test harness read the same value:
+# a literal inside __main__ is invisible to a harness that imports the module
+# and calls main() directly. See ops/job_status.py for the contract.
+OK_CODES = (0,)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Gather the morning packet.")
     parser.add_argument("--rescore", metavar="PACKET",
@@ -1689,4 +1699,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(job_status.run("scan", main))
+    raise SystemExit(job_status.run("scan", main, ok_codes=OK_CODES))

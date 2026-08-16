@@ -15,6 +15,245 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-16, second: every hand invokable writer under runs/ is guarded, not just the collector
+
+The first pass guarded `snapshot_bars`, which was the tool that proved the
+hazard. Two others had exactly the same shape and were left open:
+`pool_recall --date` overwrites `runs/<date>/pool_recall.json` and
+`backfill_premarket --date` overwrites `runs/<date>/verify_intraday.json`.
+Both now route through `core/artifacts.py`.
+
+**The owner rule, and why it is PMD_JOB rather than the date.** The obvious rule
+is "a past date is spared". It is wrong here. backfill's 07:00 catch-up pass
+legitimately fills YESTERDAY as part of the schedule, so a past date rule would
+break the nightly rather than protect it.
+
+The real distinction is whether the scheduler or a human is running the module,
+and the project already had a name for that: the .bat files set `PMD_JOB` and a
+hand run records `manual` in the status record. `artifacts.scheduled_run()`
+reads that same variable, so there is one definition of "was this the
+scheduler" instead of two that can drift. A scheduled run owns what it writes
+and rewrites it freely. A hand run is spared unless it passes `--overwrite`.
+
+Measured both ways on the same command against a past session:
+
+    pool_recall: REFUSED to overwrite runs/2026-08-14/pool_recall.json
+                 (13,229 bytes, written 2026-08-14 22:15:31)
+    pool_recall: wrote runs/2026-08-14/pool_recall.handrun.json instead.
+
+    PMD_JOB=nightly
+    pool_recall: REPLACING runs/2026-08-14/pool_recall.json (13,229 bytes)
+
+**The test names the modules.** Rather than assert behaviour for the three that
+exist today, the claim reads each module's source and fails if a writer under
+runs/ never calls `artifacts.resolve`. A fourth tool that forgets is the whole
+failure mode returning, and it should fail the suite rather than wait for
+someone to notice a missing artifact months later.
+
+`tasks/README.md` records the ownership rule next to the existing PMD_JOB note.
+
+## 2026-08-16: the suite is swept against six frozen calendars, and what that found
+
+**Why.** test_entrypoints was green Monday to Friday and red on a Saturday, and
+was written on a Thursday. That is a class rather than an incident: trading day
+guards, staleness counters that count sessions rather than days, and the quota
+day boundary are all calendar sensitive, and nobody knew how many assertions
+moved with the date.
+
+**The instrument.** `run_tests.py --freeze YYYY-MM-DD` pins the ET date and runs
+the clock forward from 09:00 at real speed. It patches `ettime` on the module
+rather than reading an environment variable, because the shipped code must not
+grow a way to lie about the date, and nothing in src/ binds those functions
+directly so replacing them reaches every caller.
+
+The clock SHIFTS rather than stops, and that detail was learned the hard way.
+The first attempt froze it outright, and the suite hung with a zero byte log:
+`run_websocket` spins on `while ettime.now_et() < stop_at`, and a now() that
+never advances never leaves that loop.
+
+**The sweep.** Six calendars, identical conditions.
+
+| Frozen date | Day | Result |
+| --- | --- | --- |
+| 2026-08-10 | Monday | PASS |
+| 2026-08-12 | Wednesday | PASS |
+| 2026-08-14 | Friday | PASS |
+| 2026-08-15 | Saturday | PASS |
+| 2026-08-16 | Sunday | PASS |
+| 2026-09-07 | Labour Day, a market holiday | PASS |
+
+**Finding one: no day of week dependence remains.** The only genuine one was
+the calendar guard's ok_codes living in a `__main__` line no importing harness
+executes, fixed earlier the same day. Saturday and Sunday now pass where the
+suite was previously red on a Saturday, so the sweep is also the check on that
+fix.
+
+**Finding two, and it nearly went into this file as the wrong thing.** The
+holiday run first FAILED, taking test_scrub and test_txn_guard with it:
+
+    StaleUniverseError: universe.json was generated at 2026-08-13T11:51:26-04:00,
+    which is 24.9 days ago. The limit in CRITERIA.md is max_age_days = 10.
+
+Recording that as holiday dependence would have been wrong. A control run on
+2026-09-08, an ordinary Tuesday one day further out, failed identically, and
+2026-08-21, a Friday eight days from the fixture, passed. The dependence is on
+DISTANCE from a fixed fixture stamp, not on the calendar.
+
+That mattered more than a mislabelled entry. Every holiday in the cached
+exchange calendar is more than ten days from the fixture, the nearest being
+2026-07-03 at forty days before and 2026-09-07 at twenty five days after, so
+the holiday case could not be examined at all. The honest report would have
+been "holiday never tested", not "holiday fails".
+
+**The fix.** With `--freeze` active, the sandbox copy of universe.json is
+restamped to one day before the frozen clock, which removes the distance
+variable and leaves the calendar as the only thing changing. The real fixture
+is never touched: config.DATA_DIR is already redirected when the restamp runs.
+Both the holiday and its Tuesday control now pass, so a market holiday is
+genuinely exercised for the first time.
+
+**No test needed renaming.** The clause asked that any test which must depend
+on the day say so in its name. None does. What the sweep found was a fixture
+age dependence in two suites, which should never have been date sensitive, so
+it was injected rather than labelled.
+
+**Standing caveat.** The sweep pins the date and fixes the hour at 09:00. It
+therefore says nothing about TIME of day dependence, which is a separate class
+and is not measured here. The monitor's rerun windows and the collector's stop
+time are the obvious candidates.
+
+## 2026-08-15, second: a refused subscription ends the collector instead of being printed and ignored
+
+**The bug.** `{"status_code":422,"message":"Symbols limit reached"}` carries
+neither `s` nor `p`, so it fell into the branch that handles authorisation and
+status frames, printed `collector: server said {...}`, and returned. The run
+then continued to its stop time subscribed to nothing, folded zero trades,
+wrote an empty bar file and exited zero. Nothing downstream could tell that
+apart from a quiet morning: the log ends with rc=0, the status record says ok,
+and the packet simply has no premarket data.
+
+**Why it is worse than it looks.** Measured on 2026-08-15, the 50 symbol pool
+is ACCOUNT WIDE, not per connection as the vendor documents. Two sockets were
+opened on the same token; the first took 25 and the second took 25, and the
+second was then refused while holding only 25 of its own supposed 50, with the
+account at 50. A separate run had one socket accept 50 and refuse at 75.
+
+So a refusal does not mean "this socket asked for too much". It means another
+process on this token is holding slots: a probe, a hand run collector, a second
+scheduled instance. Any of those silently costs the whole morning.
+
+**The fix.** A new `SubscriptionRefused(RuntimeError)`, raised the moment a
+fatal status frame arrives. It is deliberately NOT a `ConnectionError`,
+`OSError` or `WebSocketException`, because those three are exactly what the
+reconnect loop catches and retries, and retrying is the wrong response: the
+slots are held by someone else and every reconnect is refused again until the
+window is gone. The test asserts the class is none of those three, so the bug
+cannot come back wearing a reconnect.
+
+`main` catches it rather than letting it propagate, so the log carries one
+sentence instead of a traceback and the run stats are still written, then exits
+1. A run that was never subscribed must not report success, and the morning
+chain must not treat its bar file as a window.
+
+Non fatal status frames are no longer only printed. `run_websocket` collects
+them and the returned stats carry `status_frames` and the first ten of
+`status_frames_seen`, because a morning that saw six odd frames and still
+worked is a different morning from a clean one.
+
+**Why now.** The rotation design under consideration, subscribing 50 at a time
+and cycling the universe, issues roughly 440 subscribe frames in a morning
+rather than one. A design that talks to the subscription endpoint 440 times
+cannot sit on top of a refusal that fails silently.
+
+## 2026-08-15: the two suite failures attributed, one real defect and one instrumentation defect
+
+Both failures on HEAD were treated as evidence rather than as broken tests, and
+they turned out to be different animals. The distinction matters for how much
+the rest of the status records can be trusted, so each is labelled.
+
+### backfill: A DEFECT THE INSTRUMENTATION SURFACED. The guard was right.
+
+`TransactionHeldError: an EODHD request to intraday-1m was attempted with 1
+open database transaction(s)` was a genuine read-fetch-write violation, the
+fifth site, and the lock audit's four did not include it.
+
+The mechanism, in `backfill()`. The loop held one `store.session()` open across
+its whole body. Each iteration called `_true_path`, which spends one intraday
+request, and ended with an `UPDATE`, with `commit()` only after the loop. So the
+UPDATE at the end of iteration N opened a write transaction that was still open
+when iteration N+1 made its network call, and a run over ten picks held the
+write lock for the sum of ten HTTP requests. Any other writer meets `database
+is locked`.
+
+Why the lexical scan missed it is worth recording, because it is a different
+blind spot from `baseline.ensure`, which hid behind a recursive call. Here the
+network call and the write are both plainly visible in the same block. The
+violation is not in their order within one iteration, where the fetch correctly
+precedes the write. It is in the order ACROSS iterations, where the write wraps
+around to the next fetch. A scan that reads a loop body once, in the order it is
+written, sees fetch then write and passes it.
+
+Fixed by splitting into three explicit phases: read and close, fetch with no
+connection open, then reopen and write. The `picks` rows are materialised into
+dicts because they now outlive their connection, and the DDL from
+`ensure_columns` is committed before the read phase exits so no transaction
+survives into the fetch.
+
+Implication: the runtime guard caught something nine lines of careful reading
+did not. That argues for trusting the other status records MORE, not less.
+
+### calendar: AN INSTRUMENTATION DEFECT, in the test harness only.
+
+`calendar recorded status 'failed', expected 'ok'` was not the calendar step
+failing at anything. The step exited 3, `EXIT_CLOSED`, which is correct: 2026-08-15
+is a Saturday.
+
+The shipped entrypoint has always been right. `market_today.py` ends with
+`job_status.run("calendar", main, ok_codes=(0, EXIT_CLOSED))`, so a closed
+market records `ok` in every real run. No live status record was ever wrong,
+and no weekend or holiday has ever been misreported.
+
+The defect was in `test_entrypoints._drive`, whose docstring claims it runs each
+entrypoint "the way the scheduler runs it" and which called
+`job_status.run(step, module.main, argv)` with no `ok_codes`, taking the default
+`(0,)`. The harness reaches the module and calls `main()` directly, so anything
+declared inside the `if __name__ == "__main__":` line is invisible to it. A
+literal in that line cannot be tested by a harness that never executes it.
+
+This was latent and day-of-week dependent. `EXIT_CLOSED` is only returned when
+the market is shut, so the suite was green Monday to Friday and red on a
+Saturday. It was written on a Thursday.
+
+Fixed by making the codes a module constant, `market_today.OK_CODES`, read both
+by that `__main__` line and by `_drive` through
+`getattr(module, "OK_CODES", (0,))`. Any future entrypoint with non-default
+codes is now covered without touching the harness. `market_today` is currently
+the only module in the project that passes `ok_codes` at all.
+
+### test_repricing: neither. Self-inflicted, and repaired.
+
+Recorded because it touched a committed artifact and because the hazard is
+general.
+
+While testing `price_from_collector` on 2026-08-15 I ran
+`collect_premarket.snapshot_bars('2026-08-14', ...)` against the existing run
+directory. That function is not read-only: it re-copies the live collector file
+over the snapshot. It replaced the frozen 08:45 artifact, 1,419 bars ending at
+08:43, with the full trading day, 2,155 bars ending at 09:24.
+`test_repricing` reads exactly that file, so all eleven of its expected gaps
+drifted and the suite went red for a reason unrelated to any code change.
+
+Restored by filtering `data/premarket/2026-08-14.jsonl` to
+`minute_epoch <= 08:43`. The reconstruction is exact rather than approximate:
+it yields 1,419 lines, matching `collector_snapshot.bars_total` in that
+morning's `packet.json`, and ARX returns to 37 bars closing 19.5842, the value
+measured from the original before it was overwritten.
+
+The general hazard: `snapshot_bars` mutates the run directory it is pointed at.
+Running it against a past session to reproduce a bug destroys the frozen
+evidence that session's tests depend on. It has no dry-run mode and nothing
+warns.
+
 ## 2026-08-14, seventh: src/ is organised into packages by role
 
 Forty files sat flat in src/: production modules, tests, one off probes and

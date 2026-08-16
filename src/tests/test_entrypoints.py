@@ -330,7 +330,13 @@ def _drive(step: str, module_name: str, argv: list[str],
     code: Any = None
     try:
         module = importlib.import_module(module_name)
-        code = job_status.run(step, module.main, argv)
+        # The scheduler runs each entrypoint through its own __main__ line, and
+        # that line is what carries ok_codes. This harness calls main() directly,
+        # so it has to read the same constant or it is not driving the
+        # entrypoint the way the scheduler does. Omitting it recorded the
+        # calendar guard's legitimate closed-market exit as a failure.
+        ok_codes = getattr(module, "OK_CODES", (0,))
+        code = job_status.run(step, module.main, argv, ok_codes=ok_codes)
     except SystemExit as exc:
         code = exc.code
     except BaseException as exc:  # noqa: BLE001
@@ -387,6 +393,198 @@ def claim_step_list_matches(failures: list[str]) -> None:
         failures.append(f"{extra} is in CRITERIA.md [job status steps] but no "
                         "test drives it, so it is either unscheduled or untested")
     print(f"  step list    {len(listed)} steps in CRITERIA.md, all driven here")
+
+
+def claim_subscription_refusal_is_fatal(failures: list[str]) -> None:
+    """A 422 from the socket stops the run instead of being printed and ignored.
+
+    The 50 symbol pool is account wide, measured on 2026-08-15 by subscribing
+    25 on one socket and 25 on a second and watching the second be refused at
+    its own 25. So a refusal means another process holds the slots, and
+    reconnecting is refused again every time until the window is gone.
+
+    Until 2026-08-15 this frame reached the branch for authorisation and status
+    messages, printed one line and returned. The collector then ran to its stop
+    time, folded zero trades, wrote an empty bar file and exited zero. Nothing
+    downstream could tell that from a quiet morning.
+    """
+    import websocket
+
+    from collect import collect_premarket
+
+    builder = collect_premarket.BarBuilder(
+        config.DATA_DIR / "refusal-probe.jsonl", "ws")
+    log: list[dict[str, Any]] = []
+
+    refusal = json.dumps({"status_code": 422, "message": "Symbols limit reached"})
+    try:
+        collect_premarket._handle_message(refusal, builder, log)
+    except collect_premarket.SubscriptionRefused as exc:
+        if "account wide" not in str(exc):
+            failures.append("SubscriptionRefused did not explain the account wide pool")
+    else:
+        failures.append("a 422 'Symbols limit reached' frame did NOT raise "
+                        "SubscriptionRefused, so a refused collector would again "
+                        "run to its stop time and fold nothing")
+
+    # The reconnect loop catches these three. If the refusal were any of them
+    # it would be retried instead of ending the run, which is the bug wearing
+    # a different hat.
+    for retried in (ConnectionError, OSError, websocket.WebSocketException):
+        if issubclass(collect_premarket.SubscriptionRefused, retried):
+            failures.append(f"SubscriptionRefused is a {retried.__name__}, so the "
+                            "reconnect loop would swallow and retry it")
+
+    # A non fatal status frame is recorded, not raised, and not lost either.
+    log.clear()
+    collect_premarket._handle_message(
+        json.dumps({"status_code": 500, "message": "Server error"}), builder, log)
+    if len(log) != 1:
+        failures.append(f"a non fatal status frame was not recorded, log holds {log}")
+
+    # A real trade still folds normally through the same function.
+    before = builder.trades_seen
+    collect_premarket._handle_message(
+        json.dumps({"s": "AAPL", "p": 10.0, "v": 5, "t": 1786700000000}), builder, log)
+    if builder.trades_seen != before + 1:
+        failures.append("a normal trade frame stopped folding after the 422 change")
+
+    print("  refusal      a 422 raises SubscriptionRefused, is not a retryable "
+          "error, and normal frames still fold")
+
+
+def claim_operator_tools_spare_artifacts(failures: list[str]) -> None:
+    """A hand run against a past session does not destroy that session's evidence.
+
+    snapshot_bars is the tool that proved this was needed: it mutates whatever
+    run directory it is pointed at, and pointing it at 2026-08-14 on 2026-08-15
+    replaced a frozen 1,419 bar artifact with the whole trading day. conftest
+    cannot reach it because it is not a test.
+
+    Driven here so that an accidental mutation from a tool is caught by the
+    same whole tree photograph that catches one from a test. TREE_ROOT is
+    already PROJECT_ROOT, so every tool path is photographed; what was missing
+    was anything invoking the tools inside the suite.
+    """
+    import importlib
+
+    from collect import collect_premarket
+    from core import artifacts
+
+    day = "2026-05-04"
+    source = collect_premarket.bar_path(day)
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        '{"symbol":"AAA.US","minute_epoch":1,"o":1,"h":1,"l":1,"c":1,"v":1,"pv":1}\n'
+        '{"symbol":"AAA.US","minute_epoch":61,"o":2,"h":2,"l":2,"c":2,"v":1,"pv":2}\n',
+        encoding="utf-8",
+    )
+    run_dir = config.run_dir(day)
+    frozen = run_dir / "premarket_snapshot.jsonl"
+    frozen.write_text('{"symbol":"FROZEN.US","minute_epoch":1,"o":9,"h":9,"l":9,'
+                      '"c":9,"v":9,"pv":9}\n', encoding="utf-8")
+    original = frozen.read_bytes()
+
+    # Default: the frozen artifact must survive and the copy must land beside it.
+    _bars, stats = collect_premarket.snapshot_bars(day, frozen)
+    if frozen.read_bytes() != original:
+        failures.append("snapshot_bars replaced a frozen artifact without --overwrite")
+    if not stats.get("spared"):
+        failures.append("snapshot_bars did not report that it spared the original")
+    beside = Path(stats["destination"])
+    if beside == frozen or not beside.exists():
+        failures.append(f"snapshot_bars wrote to {beside}, expected a sibling of {frozen}")
+    if artifacts.SPARED_INFIX not in beside.name:
+        failures.append(f"the spared copy {beside.name} does not carry "
+                        f"{artifacts.SPARED_INFIX!r} in its name")
+
+    # Explicit overwrite: the artifact is replaced, and only then.
+    _bars, stats = collect_premarket.snapshot_bars(day, frozen, overwrite=True)
+    if frozen.read_bytes() == original:
+        failures.append("snapshot_bars refused to replace the artifact even with overwrite=True")
+    if stats.get("spared"):
+        failures.append("snapshot_bars reported sparing the original despite overwrite=True")
+
+    print(f"  operator     snapshot_bars spared the frozen artifact and wrote "
+          f"{beside.name}; --overwrite replaced it")
+
+    # The owner rule. A scheduled run sets PMD_JOB and owns what it writes,
+    # including past dates: backfill's 07:00 catch-up pass legitimately fills
+    # yesterday, so "a past date is always spared" would break the schedule
+    # rather than protect it. A hand run sets nothing and is spared.
+    import os
+
+    saved = os.environ.get(job_status.JOB_ENV_VAR)
+    try:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+        if artifacts.scheduled_run():
+            failures.append("scheduled_run() is true with PMD_JOB unset")
+        os.environ[job_status.JOB_ENV_VAR] = "nightly"
+        if not artifacts.scheduled_run():
+            failures.append("scheduled_run() is false with PMD_JOB set")
+    finally:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+        if saved is not None:
+            os.environ[job_status.JOB_ENV_VAR] = saved
+
+    # Every module a human can point at a past run directory routes through
+    # the guard. A new one that forgets is the whole failure mode returning.
+    unguarded = []
+    for module_name, artifact in (
+        ("night.pool_recall", "pool_recall.json"),
+        ("night.backfill_premarket", "verify_intraday.json"),
+        ("collect.collect_premarket", "premarket_snapshot.jsonl"),
+    ):
+        source = Path(importlib.import_module(module_name).__file__).read_text(encoding="utf-8")
+        if "artifacts.resolve" not in source:
+            unguarded.append(f"{module_name} writes {artifact} under runs/ but never "
+                             "calls artifacts.resolve, so a hand run against a past "
+                             "session would replace it")
+    failures.extend(unguarded)
+    if not unguarded:
+        print("  operator     pool_recall, backfill and the collector all route "
+              "their runs/ writes through the guard")
+
+
+def claim_ok_codes_declared(failures: list[str]) -> None:
+    """Every entrypoint declares OK_CODES at module level.
+
+    The contract exists because a literal inside `if __name__ == "__main__":`
+    is unreachable from a harness that imports the module and calls main()
+    directly. market_today declared ok_codes only in that line, so _drive
+    recorded its legitimate closed market exit as a failure, and the suite was
+    green Monday to Friday and red on a Saturday.
+
+    Asserted for all sixteen rather than for the one module that needs a non
+    zero code today, because the next module to need one would otherwise
+    reintroduce exactly the same split. Declaring (0,) explicitly is the point:
+    it makes the value a property of the module that both callers read.
+    """
+    import importlib
+
+    missing = []
+    for step, module_name, _argv in SCHEDULED:
+        module = importlib.import_module(module_name)
+        codes = getattr(module, "OK_CODES", None)
+        if codes is None:
+            missing.append(f"{module_name} ({step}) does not declare OK_CODES")
+        elif not isinstance(codes, tuple) or not codes or not all(
+            isinstance(code, int) for code in codes
+        ):
+            missing.append(f"{module_name} ({step}) declares OK_CODES={codes!r}, "
+                           "expected a non empty tuple of ints")
+        elif 0 not in codes:
+            missing.append(f"{module_name} ({step}) declares OK_CODES={codes!r}, "
+                           "which excludes 0, so a clean run would record failed")
+    failures.extend(missing)
+    if not missing:
+        non_default = [
+            f"{step}={getattr(importlib.import_module(module_name), 'OK_CODES')}"
+            for step, module_name, _argv in SCHEDULED
+            if getattr(importlib.import_module(module_name), "OK_CODES") != (0,)
+        ]
+        print(f"  ok_codes     all {len(SCHEDULED)} entrypoints declare OK_CODES"
+              + (f", non default: {', '.join(non_default)}" if non_default else ""))
 
 
 def claim_calendar(failures: list[str]) -> None:
@@ -796,6 +994,9 @@ def main(argv: list[str] | None = None) -> int:
 
     print("scheduled entrypoints, each run the way its .bat runs it:")
     claim_step_list_matches(failures)
+    claim_ok_codes_declared(failures)
+    claim_subscription_refusal_is_fatal(failures)
+    claim_operator_tools_spare_artifacts(failures)
     claim_calendar(failures)
     claim_universe(failures)
     claim_gap_stats(failures)

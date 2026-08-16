@@ -33,6 +33,15 @@ _CRIT = criteria.load()
 CACHE_PATH = config.DATA_DIR / "exchange-details.json"
 EXIT_CLOSED = 3
 
+# The exit codes that mean this step did its job, read by __main__ below AND by
+# the entrypoint test harness. It is a module constant rather than a literal in
+# the __main__ line because the harness cannot reach inside that line: it
+# imports the module and calls main() directly, so a literal there is invisible
+# to the test that exists to prove this entrypoint behaves. That drift made the
+# suite pass Monday to Friday and fail on a Saturday, when a closed market is
+# the only time EXIT_CLOSED is returned at all.
+OK_CODES = (0, EXIT_CLOSED)
+
 _WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
@@ -219,4 +228,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     # A closed market is this guard working, not this guard failing.
-    sys.exit(job_status.run("calendar", main, ok_codes=(0, EXIT_CLOSED)))
+    sys.exit(job_status.run("calendar", main, ok_codes=OK_CODES))

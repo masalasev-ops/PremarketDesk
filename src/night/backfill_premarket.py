@@ -145,8 +145,20 @@ def _gap_report(connection, sessions: int) -> None:
 _FILLED = [0]
 
 
-def backfill(day: str) -> int:
+def backfill(day: str, overwrite: bool = False) -> int:
+    """Read, close, fetch, then write. The three phases are not cosmetic.
+
+    This loop spends one intraday request per pick. Run inside a single open
+    transaction, as it was until 2026-08-15, the UPDATE at the end of each
+    iteration opens a write transaction that is then held across the NEXT
+    iteration's network call, and the whole run holds the write lock for the
+    sum of every request it makes. Any other writer meets 'database is locked'.
+    The connection is therefore closed before the first request and reopened
+    after the last one.
+    """
     api = eodhd.client()
+
+    # ---- phase 1, read. No network call may happen inside this block.
     with store.session() as connection:
         store.init(connection)
         added = store.ensure_columns(connection, "picks", _TRUE_COLUMNS)
@@ -156,40 +168,56 @@ def backfill(day: str) -> int:
         # source = 'live' only: true premarket columns are outcome evidence,
         # and spending intraday calls widening test rows would pollute the
         # record this table exists to build.
-        picks = connection.execute(
-            "SELECT * FROM picks WHERE date=? AND source='live' ORDER BY ticker",
-            (day,),
-        ).fetchall()
-        if not picks:
-            print(f"backfill: no live picks for {day} (test rows are not backfilled), "
-                  "nothing to do")
-            return 0
+        #
+        # Materialised into dicts because the rows outlive this connection now.
+        picks = [
+            dict(row)
+            for row in connection.execute(
+                "SELECT * FROM picks WHERE date=? AND source='live' ORDER BY ticker",
+                (day,),
+            ).fetchall()
+        ]
+        # Commit the DDL from ensure_columns before leaving, so no transaction
+        # is still open when the fetch phase starts.
+        connection.commit()
 
-        filled = disagreements = failed = 0
-        now_stamp = ettime.stamp(ettime.now_et())
-        for pick in picks:
-            ticker = pick["ticker"]
-            true_row, error = _true_path(api, ticker, day)
-            if error:
-                print(f"backfill: {ticker} left alone: {error}")
-                failed += 1
-                continue
+    if not picks:
+        print(f"backfill: no live picks for {day} (test rows are not backfilled), "
+              "nothing to do")
+        return 0
 
-            live_high = pick["pm_high"]
-            true_high = true_row["pm_high_true"]
-            disagree = None
-            if live_high is not None and true_high is not None and live_high > 0:
-                shortfall = (live_high - true_high) / live_high * 100.0
-                disagree = round(shortfall, 4) if shortfall > 0 else 0.0
-                if disagree > 0:
-                    disagreements += 1
-                    print(
-                        f"backfill: SOURCE DISAGREEMENT {ticker}: true high {true_high} is "
-                        f"{disagree:.4f} percent below the live collector high {live_high}. "
-                        "The true window contains the collector window, so this is a feed "
-                        "difference or a bad bar. Recorded, nothing overwritten."
-                    )
+    # ---- phase 2, fetch. No database connection is open here.
+    fetched: list[tuple[dict[str, Any], dict[str, Any], float | None]] = []
+    disagreements = failed = 0
+    for pick in picks:
+        ticker = pick["ticker"]
+        true_row, error = _true_path(api, ticker, day)
+        if error:
+            print(f"backfill: {ticker} left alone: {error}")
+            failed += 1
+            continue
 
+        live_high = pick["pm_high"]
+        true_high = true_row["pm_high_true"]
+        disagree = None
+        if live_high is not None and true_high is not None and live_high > 0:
+            shortfall = (live_high - true_high) / live_high * 100.0
+            disagree = round(shortfall, 4) if shortfall > 0 else 0.0
+            if disagree > 0:
+                disagreements += 1
+                print(
+                    f"backfill: SOURCE DISAGREEMENT {ticker}: true high {true_high} is "
+                    f"{disagree:.4f} percent below the live collector high {live_high}. "
+                    "The true window contains the collector window, so this is a feed "
+                    "difference or a bad bar. Recorded, nothing overwritten."
+                )
+        fetched.append((pick, true_row, disagree))
+
+    # ---- phase 3, write. Every network call is already done.
+    filled = 0
+    now_stamp = ettime.stamp(ettime.now_et())
+    with store.session() as connection:
+        for pick, true_row, disagree in fetched:
             connection.execute(
                 """
                 UPDATE picks SET pm_high_true=?, pm_low_true=?, pm_vwap_true=?,
@@ -199,7 +227,7 @@ def backfill(day: str) -> int:
                 (
                     true_row["pm_high_true"], true_row["pm_low_true"],
                     true_row["pm_vwap_true"], true_row["pm_true_bars"],
-                    disagree, now_stamp, day, ticker,
+                    disagree, now_stamp, day, pick["ticker"],
                 ),
             )
             filled += 1
@@ -214,7 +242,13 @@ def backfill(day: str) -> int:
     # The definitive collector volume check, for the record.
     summary = collect_premarket.verify_against_intraday(day, quiet=True)
     if summary is not None:
-        verify_path = config.run_dir(day) / "verify_intraday.json"
+        from core import artifacts
+
+        verify_path, _spared = artifacts.resolve(
+            config.run_dir(day) / "verify_intraday.json",
+            overwrite or artifacts.scheduled_run(),
+            what="backfill",
+        )
         verify_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
         print(f"backfill: collector volume verification written to {verify_path}")
     else:
@@ -239,20 +273,32 @@ def _catchup_dates(before_day: str, limit: int) -> list[str]:
     return [row["date"] for row in rows]
 
 
+# The exit codes that mean this step did its job. Declared at module level so
+# the __main__ line below and the entrypoint test harness read the same value:
+# a literal inside __main__ is invisible to a harness that imports the module
+# and calls main() directly. See ops/job_status.py for the contract.
+OK_CODES = (0,)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Fill the true premarket window into picks.")
     parser.add_argument("--date", metavar="YYYY-MM-DD", default=ettime.today_et().isoformat(),
                         help="Session to backfill. Defaults to today in ET.")
     parser.add_argument("--no-catchup", action="store_true",
                         help="Only the named day, no sweep of unfilled prior days.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Replace an existing verify_intraday.json under runs/. "
+                             "Without it a hand run is spared and the copy is written "
+                             "beside the original. The scheduled nightly always "
+                             "overwrites, including for the catch-up days it owns.")
     args = parser.parse_args(argv)
-    result = backfill(args.date)
+    result = backfill(args.date, overwrite=args.overwrite)
     if not args.no_catchup:
         for day in _catchup_dates(args.date, _CRIT.integer("backfill", "catchup_days")):
             print(f"backfill: catching up {day}, its true premarket columns are still null")
-            backfill(day)
+            backfill(day, overwrite=args.overwrite)
     return result
 
 
 if __name__ == "__main__":
-    sys.exit(job_status.run("backfill", main))
+    sys.exit(job_status.run("backfill", main, ok_codes=OK_CODES))
