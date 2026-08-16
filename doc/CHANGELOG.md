@@ -15,6 +15,185 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-16, fourth: the rotation bands are re-derived on the right population, and the schedule leaves the quota boundary
+
+### The float rotation bands were fitted to names that never receive them
+
+The bands added earlier today were matched to RVOL's payout on the OVERLAP, the
+names carrying both measures. Those names are scored by RVOL and never reach
+the rotation bands. The only names that do are the rescued ones, and they sit
+materially lower: median ratio 0.6115 on the scored population and 0.4587
+across all addressable.
+
+So `> 0.0006 / >= 0.0003` paid full marks to 45.87 percent of the rescued names
+against a 53.87 percent target, an 8 point shortfall in the direction that
+penalises a name for having no history. That is the exact bias the alternatives
+design existed to remove.
+
+Re-derived on the rescued population: **`> 0.0004` and `>= 0.0002`**, paying
+55.45 and 12.21 percent against a target of 53.87 and 12.43. Both distributions
+and the edges' percentile position in each are in DECISIONS.md 2026-08-16
+second.
+
+Recorded with it: the edges are conditional on [Scan] candidate_count, because
+the scored population is the top N by gap and rotation rises with gap size. The
+two slices genuinely disagree about the direction of the fix, and the note in
+CRITERIA says which one governs and how to re-derive.
+
+### The overlap count reconciles
+
+The earlier entry quoted 362 where the coverage table implied 5,282. Both are
+right and they are different quantities: 5,282 is every addressable gapper with
+both measures, 362 is that intersection restricted to the top candidate_count
+by gap. The earlier entry gave the restricted number without naming the
+restriction. `paired_n_all_addressable` is now measured directly and comes to
+5,282, matching the coverage table exactly.
+
+### The Monday probe records the lag, not just the outcome
+
+`probe_alpaca_live` now writes a per sweep table of wall clock, newest bar
+timestamp anywhere in the universe, the observed lag between them, that lag
+against the documented 15 minutes, and the count of names with any premarket
+bar plus its growth since the previous sweep. Whether the feed works decides
+whether the design is possible; the lag decides what freeze time is achievable
+and therefore what the report can contain, and a feed that works an hour behind
+is the 2026-08-14 defect wearing a different vendor's name.
+
+The table is rewritten to `data/probe-alpaca-live-table-<date>.md` after EVERY
+sweep rather than once at the end. The run spans nearly two hours of a morning
+that cannot be repeated and a crash at 09:00 must not take the first ninety
+minutes with it.
+
+Added `--dry-run YYYY-MM-DD`, which sweeps a completed session at five pinned
+clock times. This probe gets exactly one Monday, so the plumbing was exercised
+against 2026-08-14 first: the active count climbed 1,461 to 1,845 across the
+morning and every column filled. The lag reads 0.0 there by construction, since
+the bars were complete before the pinned clock reached them, and the written
+table carries a loud banner saying so, because a zero minute lag is exactly the
+number that gets quoted later by someone who did not read what produced it.
+
+### The packet's build block is now asserted, not just written
+
+scan.py has built a `build` block carrying the commit and a dirty flag into its
+payload since 2026-08-14, and `write_packet` writes the whole payload, so live
+packets do carry it. Nothing tested that it survives to the file. The existing
+claim tested `config.build_identifier()` in isolation, which keeps passing if
+the key is dropped from the payload or the writer stops writing it.
+
+Neither runs/2026-08-13/packet.json nor runs/2026-08-14/packet.json has the
+key, because both predate the line, and 2026-08-14 is the morning whose report
+could not be tied back to the code that produced it. New claim in
+test_entrypoints reads the packet off disk and fails if the block is absent. A
+NULL commit is allowed, since an export with no .git is a legitimate way to run
+this; what must not happen is the key being missing, because then the packet
+cannot even say that it does not know.
+
+### No scheduled job fires at the quota reset any more
+
+The EODHD counter resets at 00:00 UTC, which is 20:00 ET in daylight time and
+19:00 in standard. The Sunday universe rebuild was registered at 20:00, the
+exact reset instant for half the year, so which quota day it billed to was a
+race. It is the largest single job in the schedule, buying lookback_sessions
+bulk calls in one run, and losing that race means spending them against a
+counter that has been accumulating since the previous evening.
+
+Moved to 20:30 in both `register_tasks.ps1` and the live task, which clears the
+boundary in both halves of the year. Every other job is a morning or late
+evening step and none sits near either reset time.
+
+## 2026-08-16, third: a name with no baseline can be scored, and two probes are set for Monday
+
+Three pieces of work, one of which changes what the morning publishes.
+
+### Float rotation fills the volume score slot when RVOL cannot
+
+**The defect.** `pm_rvol` divides by a cached baseline, so it is null for any
+name nobody has baselined. A null component made the whole score null, which
+meant a name appearing for the first time arrived UNSCORED, and a first
+appearance is often exactly the morning it is worth looking at. Measured over
+61 cached sessions: 2,615 of 8,302 addressable gappers, 31.5 percent,
+unscorable for want of history rather than for want of evidence.
+
+**The fix.** `premarket_float_rotation`, premarket volume over shares float,
+computed in scan.py beside pm_rvol from the same collector numerator and
+carrying the same lower bound flag. It needs no history. The two are scored as
+ALTERNATIVES filling one slot: RVOL when available because it is the better
+measure, rotation otherwise, and only a candidate with neither is unscored.
+The unscorable population falls from 2,615 to 145, down 94.5 percent.
+
+The component is NAMED for whichever measure filled it, so the breakdown says
+what made a name scorable, and `volume_measure_used` carries the same fact
+under a stable key. Both land in picks, because a null pm_rvol beside a real
+score reads as a bug unless the row says rotation stood in.
+
+**The denominator costs nothing.** `sharesFloat` was already in the
+us-quote-delayed response scan reads marketCap from. `sharesOutstanding` was
+added to the kept fields purely so the float can be sanity checked against it.
+
+**The bands are matched, not chosen.** Setting them from the rotation
+distribution alone would have followed the instruction and still been a defect:
+the two measures share one slot, so unmatched bands make the slot pay
+differently depending on which measure filled it, and a name would score
+differently for the mere fact of having no baseline. The edges are read off the
+rotation distribution at the quantiles reproducing what the RVOL bands pay, on
+the 362 names where both measures exist. RVOL pays two points to 53.87 percent
+and one to 12.43; `> 0.0006` and `>= 0.0003` pay 54.42 and 12.71. Full
+distribution in DECISIONS.md 2026-08-16.
+
+**Two limits, recorded rather than buried.** [Day setup] `premarket_rvol` is
+unchanged, so a rescued name is SCORED but still not day_eligible; scoring was
+the clause and eligibility is left OPEN. And the matching inherits RVOL's own
+calibration, which looks loose on this population at two points for 53.87
+percent of the names it scores. That is recorded as an open question rather
+than fixed quietly, because changing it moves every score in the table.
+
+**Supporting work.** `research/float_cache.py` caches sharesFloat for the 1,870
+distinct addressable gappers, once, at about one credit each, refusing to start
+if the quota meter cannot cover it. `research/float_rotation_study.py`
+reconstructs RVOL from Alpaca over the same window the live path uses and
+produces the distribution above. Neither is a live dependency and neither is
+imported by anything that runs in a morning.
+
+### Silence and absence are not the same thing, and only one vendor can tell them apart
+
+Prompted by the question of why an untraded stock is worth watching at all. The
+reasoning is right about the stock and wrong about 8 percent of gappers:
+measured over 20 sessions, 177 of 2,244 addressable UP gaps, 7.89 percent,
+printed NOTHING between 04:00 and 08:30 and still gapped at the open. Nine of
+those were 10 percent or more. The largest were re-checked against the raw tape
+rather than the cache, so they are not artifacts.
+
+That 7.89 percent is a ceiling on the product, not a vendor problem: no feed
+shows a trade that did not happen.
+
+The vendor problem is the other half. A name cannot be known not to have traded
+unless something watched it, and with 50 slots against 2,745 names the other
+2,695 are indistinguishable from names that did not trade. EODHD REST cannot
+separate the two in premarket, since it returns the previous close for
+everybody. Alpaca can, since bars come back only for symbols that printed.
+Reasoning and numbers in DECISIONS.md 2026-08-16. NOT ADOPTED pending the probe
+below.
+
+### Two probes are registered for Monday 2026-08-17
+
+`probe-live-v1` at 07:55 was already set. `probe-alpaca-live` is new, at 07:25,
+sweeping the whole universe every five minutes from 07:30 to 09:20. It settles
+what doc/ALPACA_PROBE.md could not: that probe ran on a Saturday against a
+completed session, so it proved historical access and said nothing about a live
+morning, and the whole argument above rests on the live case. It spends no
+EODHD quota, taking prior closes from Alpaca daily bars, so it cannot compete
+with discover or the scan for the shared counter.
+
+### Test changes
+
+`test_repricing` claim 4 asserted the unavailable component was named
+`premarket_rvol`. It is now `premarket_volume`, the neutral name meaning the
+slot was never filled, so the claim was updated rather than the code bent to
+keep it. New claim 9 covers the clause directly: a first appearance name with
+no baseline gets a numeric score, the breakdown names float rotation as what
+made it scorable, RVOL still wins the slot when both exist, both float guards
+refuse to divide, and a name with neither measure still scores null.
+
 ## 2026-08-16, second: every hand invokable writer under runs/ is guarded, not just the collector
 
 The first pass guarded `snapshot_bars`, which was the tool that proved the

@@ -206,16 +206,28 @@ def claim_four(failures: list[str]) -> None:
             failures.append(f"{symbol} still scores {candidate['score']} with a null RVOL")
         if candidate["score_partial"] is None:
             failures.append(f"{symbol} has no score_partial beside its null score")
-        if "premarket_rvol" not in (candidate["score_unavailable"] or []):
-            failures.append(f"{symbol} does not list premarket_rvol as unavailable")
+        # premarket_volume, not premarket_rvol. Since 2026-08-16 the slot is
+        # filled by whichever volume measure was available and is NAMED for
+        # it, so the unavailable name is the neutral one that means the slot
+        # was never filled at all. These two fixtures carry no sharesFloat, so
+        # neither measure is available and the slot is genuinely empty.
+        if "premarket_volume" not in (candidate["score_unavailable"] or []):
+            failures.append(f"{symbol} does not list premarket_volume as unavailable, "
+                            f"it lists {candidate['score_unavailable']}")
+        if candidate.get("volume_measure_used") is not None:
+            failures.append(f"{symbol} claims to have scored on "
+                            f"{candidate['volume_measure_used']} with no measure available")
         if candidate["conviction"] is not None:
             failures.append(f"{symbol} has conviction {candidate['conviction']}, "
                             "expected null")
-        rvol_component = next(
-            c for c in candidate["score_components"] if c["component"] == "premarket_rvol"
+        volume_component = next(
+            (c for c in candidate["score_components"]
+             if c["component"] == "premarket_volume"), None
         )
-        if rvol_component["points"] is not None:
-            failures.append(f"{symbol} scored {rvol_component['points']} on the RVOL "
+        if volume_component is None:
+            failures.append(f"{symbol} has no premarket_volume component at all")
+        elif volume_component["points"] is not None:
+            failures.append(f"{symbol} scored {volume_component['points']} on the volume "
                             "component instead of nothing")
         print(f"  claim 4 {symbol:<8} median "
               f"{row['median_volume']:>8,.1f} < {floor:,.0f} floor, pm_rvol null, "
@@ -350,6 +362,108 @@ def claim_eight(failures: list[str]) -> None:
           f"{window['minutes_since_last_bar']:.0f}m of silence at the scan clock")
 
 
+def claim_nine(failures: list[str]) -> None:
+    """A name with no baseline is scored by float rotation, and says so.
+
+    This is the clause the float rotation work was for. Before 2026-08-16 a
+    first appearance name had a null pm_rvol, which made one score component
+    unavailable, which made the whole score null. The name arrived unscored on
+    the morning it was most interesting. Float rotation needs no history, so it
+    fills the same slot and the name gets a number.
+
+    Two properties are checked, and the second matters as much as the first. It
+    is not enough that the name is scored: the breakdown has to name float
+    rotation as the thing that scored it, or a reader cannot tell a rescued
+    name from an ordinary one and the two populations can never be calibrated
+    apart.
+
+    The guards are tested here too, against the real reason each exists. A
+    float above shares outstanding is impossible and a float far below it is a
+    vendor artifact; both must refuse to divide rather than produce a number.
+    """
+    def newcomer(**overrides) -> dict:
+        base = {
+            "symbol": "NEWCO.US", "collector_covered": True, "pm_volume": 250_000.0,
+            "quote": {"sharesFloat": 20_000_000.0, "sharesOutstanding": 25_000_000.0,
+                      "marketCap": 3e9},
+            "pm_rvol": None,
+            "pm_rvol_reason": "no cached baseline for this ticker and cutoff",
+            "gap_pct": 9.4, "price": 12.0, "prior_high": 11.0, "pm_vwap": 11.5,
+            "catalyst_class": "earnings", "catalyst_why": "test fixture",
+        }
+        base.update(overrides)
+        return base
+
+    packet = scan.Packet()
+    candidate = newcomer()
+    scan.attach_float_rotation([candidate], packet)
+    scan.score_candidate(candidate)
+
+    expected = 250_000.0 / 20_000_000.0
+    if candidate["pm_float_rotation"] != round(expected, 8):
+        failures.append(f"float rotation is {candidate['pm_float_rotation']}, "
+                        f"expected {round(expected, 8)}")
+    if candidate["score"] is None:
+        failures.append("a first appearance name with no baseline is still unscored: "
+                        f"partial {candidate['score_partial']}, "
+                        f"unavailable {candidate['score_unavailable']}")
+    if candidate.get("conviction") is None:
+        failures.append("the rescued name has a null conviction bucket")
+    if candidate.get("volume_measure_used") != "premarket_float_rotation":
+        failures.append(f"volume_measure_used is {candidate.get('volume_measure_used')!r}, "
+                        "expected premarket_float_rotation")
+    component = next(
+        (c for c in candidate["score_components"]
+         if c["component"] == "premarket_float_rotation"), None)
+    if component is None:
+        failures.append("the breakdown does not name premarket_float_rotation as a "
+                        "component: "
+                        f"{[c['component'] for c in candidate['score_components']]}")
+    elif "pm_rvol is null" not in component["why"]:
+        failures.append("the float rotation component does not say it stood in for a "
+                        f"null pm_rvol: {component['why']}")
+    if not (candidate["pm_float_rotation_basis"] or {}).get("is_lower_bound"):
+        failures.append("float rotation is not flagged as a lower bound, but the "
+                        "collector starts after the premarket does")
+
+    # RVOL wins the slot when both are available, so the better measure is not
+    # displaced by the fallback merely because the fallback is newer.
+    both = newcomer(pm_rvol=4.0, pm_rvol_reason=None)
+    scan.attach_float_rotation([both], scan.Packet())
+    scan.score_candidate(both)
+    if both.get("volume_measure_used") != "premarket_rvol":
+        failures.append(f"with both measures available the slot used "
+                        f"{both.get('volume_measure_used')}, expected premarket_rvol")
+
+    # The two guards, each against the class of bad datum it was written for.
+    impossible = newcomer(quote={"sharesFloat": 30_000_000.0,
+                                 "sharesOutstanding": 25_000_000.0, "marketCap": 3e9})
+    artifact = newcomer(quote={"sharesFloat": 51_810.0,
+                               "sharesOutstanding": 392_075_056.0, "marketCap": 3e9})
+    for label, subject in (("float above outstanding", impossible),
+                           ("float implausibly small", artifact)):
+        scan.attach_float_rotation([subject], scan.Packet())
+        if subject["pm_float_rotation"] is not None:
+            failures.append(f"{label}: divided anyway and got "
+                            f"{subject['pm_float_rotation']}")
+        if not subject["pm_float_rotation_reason"]:
+            failures.append(f"{label}: refused to divide but recorded no reason")
+
+    # And with neither measure, the score is still null. Float rotation must
+    # not have quietly become a way for an unmeasured name to score zero.
+    neither = newcomer(quote={"marketCap": 3e9})
+    scan.attach_float_rotation([neither], scan.Packet())
+    scan.score_candidate(neither)
+    if neither["score"] is not None:
+        failures.append(f"a name with neither volume measure scored "
+                        f"{neither['score']}, expected null")
+
+    print(f"  claim 9 no baseline: rotation {candidate['pm_float_rotation']:.6f}, "
+          f"score {candidate['score']}, conviction {candidate['conviction']}, "
+          f"scored by {candidate['volume_measure_used']}; both available uses "
+          f"{both['volume_measure_used']}; both guards refused; neither stays null")
+
+
 def main() -> int:
     if not PACKET_PATH.is_file() or not SNAPSHOT_PATH.is_file():
         print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
@@ -363,14 +477,16 @@ def main() -> int:
     claim_six(failures)
     claim_seven(failures)
     claim_eight(failures)
+    claim_nine(failures)
 
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")
         return 1
     print("PASS  repricing from the collector, dropping the uncovered, flooring the "
-          "RVOL denominator, naming the build and telling a silent subscription "
-          "from an absent one all hold on the 2026-08-14 packet")
+          "RVOL denominator, naming the build, telling a silent subscription "
+          "from an absent one and scoring a name with no baseline all hold on the "
+          "2026-08-14 packet")
     return 0
 
 

@@ -591,3 +591,260 @@ theoretical.
 so a May session is screened against an August market cap. For names sitting
 near the floor that is a real source of error. It is acceptable for a
 distribution and would not be acceptable for a per-name claim.
+
+## 2026-08-16: a premarket feed must tell silence apart from absence, and EODHD cannot
+
+**The question that started it.** If a stock has not traded, it cannot have
+gapped, so why watch it at all. The reasoning is sound about the stock. It is
+wrong about the subscription, and it is wrong about 8 percent of gappers.
+
+**How often the rule is wrong.** Twenty sessions, every addressable gapper,
+checked against whether Alpaca recorded a single print between 04:00 and 08:30.
+
+| Population | Total | Silent in premarket | Share |
+| --- | ---: | ---: | ---: |
+| addressable gaps UP | 2,244 | 177 | 7.89% |
+| addressable gaps DOWN | 1,621 | 125 | 7.71% |
+
+Silent share of up-gaps, median session 7.12 percent, worst session 21.21
+percent. Nine silent up-gaps of 10 percent or more across the twenty sessions,
+so roughly one double digit mover per session prints nothing before the bell.
+
+These are not cache artifacts. The largest were re-checked against the raw
+tape, taking the prior close and the first regular session bar from Alpaca
+rather than from the end of day cache:
+
+| Name | Session | Gap | Premarket bars | Tape confirms |
+| --- | --- | ---: | ---: | --- |
+| PLPC | 2026-07-30 | +22.42% | 0 | +22.4% |
+| PAY | 2026-08-04 | +17.27% | 0 | +18.6% |
+| WLFC | 2026-07-21 | -65.81% | 0 | -66.0% |
+| IDCC | 2026-07-30 | +17.93% | 0 | +14.9%, the gap between the two reads as a corporate action |
+
+**The consequence that is not a vendor problem.** No feed can show a trade that
+did not happen, so 7.89 percent of addressable up-gaps are unreachable by any
+premarket source at any price. Best achievable premarket recall of addressable
+up-gaps is about 92 percent. That is a ceiling on the product, and it should be
+quoted as one rather than chased.
+
+**The consequence that is.** The rule is about the stock; the failure is about
+the subscription. A name cannot be known not to have traded unless something
+was watching it. With 50 websocket slots against 2,745 names, 2,695 names send
+nothing, and every one of them is indistinguishable from a name that did not
+trade. Applying the silence rule to an unsubscribed name converts "never
+looked" into "confirmed flat", which is the denominator rule of 2026-08-14
+being violated in the most expensive direction available.
+
+**Where the rule does pay, and what it needs.** As a filter it is valid, but
+only with a source that can tell traded from untraded, and that is exactly the
+discriminator between the two vendors.
+
+EODHD REST cannot. In premarket it returns the previous close for every symbol,
+so a name that ran 20 percent and a name that has not traded since Friday come
+back identical. There is no signal to filter on.
+
+Alpaca can. Bars are returned only for symbols that printed. Median 1,807 of
+2,745 universe names traded in premarket, so the rule removes about 34 percent
+of the universe, in 4 requests and about one second.
+
+**What this changes, and what it does not.** 1,807 is still 36 times the 50
+slot cap, so the filter does not rescue the websocket for discovery. What it
+does is make the division of labour obvious: the Alpaca sweep already carries
+prices for everything that traded, so gaps are computable universe wide in one
+second, and the 50 slots are then only needed for the handful of names actually
+published, where 12 is comfortably under 50. That reframes the cap from fatal
+to irrelevant and makes the rotation design of 2026-08-15 unnecessary.
+
+**NOT ADOPTED, and why not yet.** Every number above is from completed
+sessions. Whether Alpaca's free tier serves that sweep LIVE at 08:30 on a
+weekday is untested, and the whole design rests on it. probe-live-v1 is
+extended on 2026-08-17 to measure it against the live morning. Adopting Alpaca
+would also break the standing rule that EODHD is the only data source, which is
+a decision for the operator and not one this entry makes.
+
+## 2026-08-16: float rotation fills the volume slot when RVOL cannot, and its bands are matched to RVOL's payout
+
+**The defect.** pm_rvol divides by a cached baseline, so it is null for any
+name that has never been baselined. A null component made the entire score
+null. So a name appearing for the first time, which is often the most
+interesting name of the morning, arrived unscored precisely because it was new.
+Over 61 cached sessions that was 2,615 of 8,302 addressable gappers, 31.5
+percent, unscorable for want of history rather than for want of evidence.
+
+**The measure.** premarket float rotation, premarket volume over shares float.
+It needs no history, so it is computable from a name's first minute. The
+numerator is the collector's volume, the same field RVOL uses, so the lower
+bound of 2026-08-14 applies unchanged and is flagged the same way. The
+denominator is sharesFloat from us-quote-delayed, the same response the scan
+already reads marketCap from, so it costs no extra call.
+
+**They are alternatives in one slot, not two components.** Two components would
+break the 0 to 10 scale for any name carrying both and would leave a first
+appearance name unscored anyway, which is the thing being fixed. RVOL wins the
+slot when available because it is the better measure: it asks whether a name is
+busy against its own history, where rotation asks only whether the float is
+turning over. The component is named for whichever measure filled it, and
+volume_measure_used carries the same fact under a stable key.
+
+**Coverage, over 61 sessions.**
+
+| Measure | Names scored |
+| --- | ---: |
+| RVOL available | 5,687 |
+| float rotation available | 7,752 |
+| either | 8,157 |
+| NEITHER, still unscored | 145 |
+| rescued by rotation alone | 2,470 |
+
+The unscorable population falls from 2,615 to 145, a 94.5 percent reduction.
+
+**The distribution, measured over the collector window 07:20 to 08:45.** The
+window is not the whole premarket, deliberately: the live numerator is summed
+from the collector's 07:20 start, so measuring 04:00 to 08:30 would have set
+the bands against a numerator far larger than the one the scan computes and
+every live name would land a band too low.
+
+| Population | n | p25 | median | p75 | p90 | p95 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| float rotation, all addressable | 7,752 | 0.00002 | 0.00010 | 0.00041 | 0.00125 | 0.00250 | 0.2382 |
+| float rotation, top 12 by gap | 665 | 0.00014 | 0.00063 | 0.00243 | 0.00816 | 0.01508 | 0.2382 |
+| RVOL rebuilt, all addressable | 5,687 | 0.327 | 0.676 | 1.638 | 5.128 | 13.560 | 5516.99 |
+| RVOL rebuilt, top 12 by gap | 379 | 0.918 | 3.592 | 17.122 | 66.851 | 214.227 | 5516.99 |
+
+**How the bands were set, which is the part that could have gone wrong.**
+Setting them from the rotation distribution alone would have been enough to
+follow the instruction and would still have been a defect. The two measures
+share one slot, so if their bands are not matched the slot pays differently
+depending on which measure filled it, and a name would score higher or lower
+for the mere fact of having no baseline.
+
+So the edges are read off the rotation distribution at the quantiles that
+reproduce what the RVOL bands pay. The matching is done on the 362 top-by-gap
+names where BOTH measures exist, because RVOL is available for barely half the
+scored population and that half is not a random half, it is the established
+names.
+
+| | two points | one point |
+| --- | ---: | ---: |
+| what RVOL pays on the paired set | 53.87% | 12.43% |
+| rotation quantile reproducing it | 0.00063175 | 0.00032431 |
+| rounded to one significant figure | > 0.0006 | >= 0.0003 |
+| what the rounded band then pays | 54.42% | 12.71% |
+
+Rounding is downward so it can never make a band stricter than the share it was
+matched to.
+
+**The float guards are measured, unlike the RVOL denominator floor.** Across
+the 1,785 addressable gappers carrying a float: smallest 51,810 shares, median
+89,831,112. Exactly one sat below one percent of its own shares outstanding
+(YPF at 0.013 percent, a vendor error rather than a small float) and the next
+lowest was VG at 2.169 percent, so the one percent line falls in an empty
+stretch of the distribution, which is where a threshold belongs. No name had a
+float above its shares outstanding, so that guard caught nothing on the day it
+was written and exists for the impossible value rather than the observed one.
+The degeneracy that forced the RVOL floor cannot arise here: a baseline median
+can be ten shares, a float cannot.
+
+**Two limits, stated rather than buried.**
+
+Eligibility is unchanged and that is deliberate. [Day setup] premarket_rvol
+still requires a real RVOL, and Rule.test(None) is false, so a name rescued by
+float rotation is SCORED but is still not day_eligible. Scoring was the clause;
+eligibility is a separate question about what gets published and is left OPEN.
+
+The matching inherits whatever calibration RVOL already had, and RVOL's bands
+look loose on this population: they award full marks to 53.87 percent of the
+names they score. That may well be too generous for both measures now. It is
+recorded here as an OPEN question rather than fixed quietly, because changing
+it would move every score in the table and that deserves its own decision.
+
+## 2026-08-16, second: the float rotation bands were calibrated on a population that never sees them, and are re-derived
+
+**Correcting the entry above, not superseding it.** The reasoning there stands:
+one score slot, two measures, bands matched so the slot pays the same either
+way. The execution was wrong. The bands were matched to RVOL's payout on the
+OVERLAP, the names carrying both measures, and an overlap name is scored by
+RVOL and never reaches the rotation bands at all. The only names those bands
+ever touch are the rescued ones. Calibrating on the overlap set the rate using
+a population that never gets it.
+
+**First, the overlap count reconciles.** The earlier entry quoted 362 while the
+coverage table implies 5,687 + 7,752 - 8,157 = 5,282. Both are correct and they
+are different quantities. 5,282 is every addressable gapper carrying both
+measures. 362 is that same intersection restricted to the top
+[Scan] candidate_count by absolute gap at open, per session, which is the
+population a packet actually scores. The earlier entry gave the restricted
+number without naming the restriction. Measured directly, `paired_n_all_addressable`
+is 5,282, matching the coverage table exactly.
+
+**Second, the mapping does not transfer.** Both distributions, same quantiles,
+over 61 cached sessions on the collector window.
+
+Top candidate_count by gap, the population a packet scores:
+
+| Population | n | p25 | median | p75 | p90 | p95 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| overlap, scored by RVOL, never sees these bands | 362 | 0.00019 | 0.00086 | 0.00282 | 0.00802 | 0.01466 | 0.1000 |
+| rescued, the only names these bands touch | 303 | 0.00010 | 0.00054 | 0.00202 | 0.00743 | 0.01340 | 0.2382 |
+
+All addressable, the wider slice:
+
+| Population | n | p25 | median | p75 | p90 | p95 | max |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| overlap | 5,282 | 0.000035 | 0.000123 | 0.000451 | 0.001260 | 0.002393 | 0.1000 |
+| rescued | 2,470 | 0.000014 | 0.000056 | 0.000296 | 0.001229 | 0.002725 | 0.2382 |
+
+The rescued population sits materially LOWER: median ratio 0.6115 on the scored
+slice and 0.4587 across all addressable. It is not a uniform shift. The right
+tail is fatter, p95 0.002725 against 0.002393 and a maximum more than twice the
+overlap's, which fits what these names are: no baseline correlates with being
+newly listed or thinly covered, and those skew to smaller floats, so most are
+quieter but the few that move rotate harder.
+
+**Where the old edges sat, and what they paid.**
+
+| | edge 0.0006 (two points) | edge 0.0003 (one point) |
+| --- | ---: | ---: |
+| percentile in overlap | 0.4558 | 0.3287 |
+| percentile in rescued | 0.5413 | 0.3960 |
+
+| Population the edges were applied to | two points | one point |
+| --- | ---: | ---: |
+| overlap, which never gets them | 54.42% | 12.71% |
+| **rescued, which always gets them** | **45.87%** | **14.52%** |
+| RVOL target | 53.87% | 12.43% |
+
+So the fallback paid full marks to 45.87 percent of the names it serves against
+a 53.87 percent target, an 8 percentage point shortfall, in the direction that
+penalises a name for having no history. That is precisely the bias the
+alternatives design existed to remove, reintroduced by the calibration step.
+
+**The re-derivation.** Reading the same quantiles off the RESCUED distribution
+gives 0.00045075 and 0.00021475, rounded down to one significant figure as
+before:
+
+| | old | new | pays on rescued | RVOL target |
+| --- | ---: | ---: | ---: | ---: |
+| two points | > 0.0006 | **> 0.0004** | 55.45% | 53.87% |
+| one point | >= 0.0003 | **>= 0.0002** | 12.21% | 12.43% |
+
+**Which slice governs, and why it matters.** The two slices disagree about the
+direction of the fix: on all addressable the re-derived two point edge moves UP
+to 0.0007, on the scored slice it moves DOWN to 0.0004. That is not
+inconsistency in the measurement, it is RVOL's own payout differing between the
+slices, 15.35 percent against 53.87 percent, because selecting the top names by
+gap selects busier names. The scored slice governs, because scoring only ever
+happens to candidates in a packet.
+
+The consequence is a dependency worth naming: **these edges are conditional on
+[Scan] candidate_count = 12.** Change that and the population they were fitted
+to changes with it, and they must be re-derived. That is recorded in CRITERIA
+beside the bands rather than left implicit, and candidate_count is already an
+open question elsewhere, so this will come up.
+
+**What is not fixed.** The target itself is still whatever RVOL's bands pay,
+and they remain loose at full marks for 53.87 percent of what they score. The
+open question from the entry above stands unchanged. Re-deriving against a
+loose target reproduces the looseness in the fallback, which is the correct
+behaviour for a slot that must pay alike, and the wrong behaviour for a score
+that should discriminate. Both bands want revisiting together, as one decision.

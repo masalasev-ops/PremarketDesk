@@ -89,3 +89,32 @@ were registered, the tree does not refresh itself.
 - Norton occasionally denies the first write of a file. Every script retries
   or fails loudly into its log; a one line Permission denied in a log that
   ends with rc=0 was a retry that succeeded.
+
+## One off probes
+
+Two tasks in this folder are NOT scheduled steps. They answer a single open
+question against a live morning and are meant to be deleted once it is
+answered. Neither sets PMD_JOB, neither writes a status record, and neither
+appears in CRITERIA.md [job status steps], because a step that is meant to stop
+existing does not belong in a list of steps the watchdog expects.
+
+- `job_probe_live_v1.bat`, 07:55, one time. Samples EODHD `real-time/{symbol}`
+  every three minutes from 08:00 to 09:15 with the collector's own bars beside
+  each reading, to settle whether that endpoint ticks during premarket or
+  serves the last completed session the way the exchange wide form does.
+  Costs about 26 EODHD calls.
+- `job_probe_alpaca_live.bat`, 07:25, one time. Sweeps the whole universe from
+  Alpaca every five minutes from 07:30 to 09:20 and records how many symbols
+  have bars for TODAY and how far behind the wall clock the newest one is.
+  doc/ALPACA_PROBE.md measured the same sweep at 4 requests and about a second,
+  but on a Saturday against a completed session, so it proved historical access
+  and nothing about a live morning. DECISIONS.md 2026-08-16 proposes moving
+  discovery off the 50 slot websocket onto this sweep, and that proposal does
+  not stand unless it works live. Costs NO EODHD quota at all: prior closes
+  come from Alpaca daily bars, so it cannot compete with the 07:15 discover or
+  the 08:45 scan for the shared counter.
+
+Read either back with `--report`, and delete the task when done:
+
+    schtasks /Delete /TN "\PremarketDesk\probe-live-v1" /F
+    schtasks /Delete /TN "\PremarketDesk\probe-alpaca-live" /F

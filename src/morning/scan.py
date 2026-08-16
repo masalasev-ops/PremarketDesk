@@ -430,6 +430,11 @@ def attach_quotes(
             if quote.get("ethTime") else None,
             "marketCap": _as_float(quote.get("marketCap")),
             "sharesFloat": _as_float(quote.get("sharesFloat")),
+            # Kept only so float rotation can sanity check the float against
+            # it. A float far below shares outstanding, or above it, is a
+            # vendor artifact rather than a small free float, and without the
+            # second number there is no way to tell one from the other.
+            "sharesOutstanding": _as_float(quote.get("sharesOutstanding")),
             "averageVolume": _as_float(quote.get("averageVolume")),
             "twoHundredDayAveragePrice": _as_float(quote.get("twoHundredDayAveragePrice")),
             "previousClosePrice": _as_float(quote.get("previousClosePrice")),
@@ -792,6 +797,104 @@ def attach_premarket_rvol(
                 ),
                 "is_lower_bound": numerator_window > denominator_window,
             }
+
+
+def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> None:
+    """Collector premarket volume divided by shares float.
+
+    The second volume measure, and the reason it exists is the first one's
+    blind spot. RVOL divides by a cached baseline, so it is null for any name
+    that has never been baselined, which is every name on its first appearance
+    and every name the weekly universe rebuild has just admitted. Those are not
+    marginal names: a name showing up for the first time is often exactly the
+    one worth looking at. Float rotation needs no history at all, so it is
+    computable from the first minute a name trades, and the two are scored as
+    alternatives filling one slot rather than as two requirements.
+
+    The numerator is the same collector volume RVOL uses, so the same lower
+    bound applies and is flagged the same way: the collector starts at 07:20
+    and the premarket opens at 04:00, so this understates rotation over the
+    full session. That direction is the safe one, as it can only hold a
+    candidate down a band, never lift it up one.
+
+    The denominator has no window, which is the whole point, but it does have a
+    trustworthiness problem of its own. A float reported far below shares
+    outstanding is a vendor artifact rather than a genuinely tiny free float,
+    and a float above shares outstanding is impossible. Both are rejected with
+    the reason recorded rather than divided by. See CRITERIA.md
+    [Float rotation] for the floors and what they were measured against.
+    """
+    numerator_window = _CRIT.clock_text("collector", "start_time")
+    true_open = _CRIT.clock_text("baseline", "session_start")
+    min_float = _CRIT.number("float_rotation", "min_shares_float")
+    min_ratio = _CRIT.number("float_rotation", "min_float_to_shares_outstanding")
+    max_ratio = _CRIT.number("float_rotation", "max_float_to_shares_outstanding")
+
+    for candidate in candidates:
+        candidate["pm_float_rotation"] = None
+        candidate["pm_float_rotation_reason"] = None
+        candidate["pm_float_rotation_basis"] = None
+
+        quote = candidate.get("quote") or {}
+        share_float = _as_float(quote.get("sharesFloat"))
+        outstanding = _as_float(quote.get("sharesOutstanding"))
+        pm_volume = candidate.get("pm_volume")
+
+        if not candidate.get("collector_covered"):
+            candidate["pm_float_rotation_reason"] = (
+                "the collector did not cover this name, so there is no evidence "
+                "for the premarket window and no float rotation is published"
+            )
+            continue
+        if pm_volume is None:
+            candidate["pm_float_rotation_reason"] = (
+                "the collector recorded no premarket volume for this name"
+            )
+            continue
+        if share_float is None or share_float <= 0:
+            candidate["pm_float_rotation_reason"] = (
+                "the delayed quote carried no sharesFloat, so there is no denominator"
+            )
+            packet.gap(f"{candidate['symbol']} float rotation is null: no sharesFloat "
+                       "in the delayed quote")
+            continue
+        if outstanding and share_float > outstanding * max_ratio:
+            candidate["pm_float_rotation_reason"] = (
+                f"sharesFloat {share_float:,.0f} exceeds sharesOutstanding "
+                f"{outstanding:,.0f}, which is impossible, so the vendor figure is "
+                "not divided by"
+            )
+            packet.gap(f"{candidate['symbol']} float rotation is null: float above "
+                       "shares outstanding")
+            continue
+        if outstanding and share_float < outstanding * min_ratio:
+            candidate["pm_float_rotation_reason"] = (
+                f"sharesFloat {share_float:,.0f} is {share_float / outstanding * 100:.3f} "
+                f"percent of sharesOutstanding {outstanding:,.0f}, below the "
+                f"{min_ratio * 100:g} percent floor, so it reads as a vendor artifact "
+                "rather than a small free float"
+            )
+            packet.gap(f"{candidate['symbol']} float rotation is null: float implausibly "
+                       "small against shares outstanding")
+            continue
+        if outstanding is None and share_float < min_float:
+            candidate["pm_float_rotation_reason"] = (
+                f"sharesFloat {share_float:,.0f} is below the {min_float:,.0f} share "
+                "floor and there is no sharesOutstanding to check it against"
+            )
+            continue
+
+        candidate["pm_float_rotation"] = round(pm_volume / share_float, 8)
+        candidate["pm_float_rotation_basis"] = {
+            "numerator": pm_volume,
+            "numerator_source": f"collector, from {numerator_window} ET",
+            "denominator": share_float,
+            "denominator_source": "sharesFloat from the delayed quote",
+            "shares_outstanding": outstanding,
+            # True for the same reason RVOL's is: the collector starts after
+            # the premarket does, so the numerator is short of the full window.
+            "is_lower_bound": numerator_window > true_open,
+        }
 
 
 # ---------------------------------------------------------- 6. catalyst news
@@ -1159,12 +1262,41 @@ def score_candidate(candidate: dict[str, Any]) -> None:
         add("catalyst_class", class_points.get(catalyst_class, 0.0),
             f"class {catalyst_class}: {candidate.get('catalyst_why', '')}")
 
+    # The two volume measures are alternatives filling ONE slot, not two
+    # components. Two components would break the 0 to 10 scale for any name
+    # carrying both, and would leave a first-appearance name unscored anyway,
+    # which is the thing this is here to fix.
+    #
+    # RVOL is preferred when it is available because it is the better measure:
+    # it asks whether this name is busy against its own history, where rotation
+    # asks only whether the float is turning over. Rotation is the fallback,
+    # and it is the only one of the two computable on a name nobody has
+    # baselined yet. Their bands are matched so the slot pays the same either
+    # way; see CRITERIA.md [Score premarket float rotation].
+    #
+    # The component is NAMED for the measure that filled it, so the breakdown
+    # says which one made the name scorable rather than hiding it behind a
+    # neutral label. volume_measure_used carries the same fact under a stable
+    # key for anything reading this programmatically.
     rvol = candidate.get("pm_rvol")
-    if rvol is None:
-        unknown("premarket_rvol", f"pm_rvol is null ({candidate.get('pm_rvol_reason')})")
-    else:
+    rotation = candidate.get("pm_float_rotation")
+    if rvol is not None:
+        candidate["volume_measure_used"] = "premarket_rvol"
         add("premarket_rvol", _CRIT.band_number("score_premarket_rvol", rvol),
             f"pm_rvol {rvol}")
+    elif rotation is not None:
+        candidate["volume_measure_used"] = "premarket_float_rotation"
+        add("premarket_float_rotation",
+            _CRIT.band_number("score_premarket_float_rotation", rotation),
+            f"float rotation {rotation:.6f} of the float traded since "
+            f"{_CRIT.clock_text('collector', 'start_time')} ET, used because "
+            f"pm_rvol is null ({candidate.get('pm_rvol_reason')})")
+    else:
+        candidate["volume_measure_used"] = None
+        unknown("premarket_volume",
+                f"neither measure is available. pm_rvol is null "
+                f"({candidate.get('pm_rvol_reason')}) and float rotation is null "
+                f"({candidate.get('pm_float_rotation_reason')})")
 
     gap_raw = candidate.get("gap_pct")
     if gap_raw is None:
@@ -1377,6 +1509,9 @@ def build_packet() -> dict[str, Any]:
             attach_daily_history(api, candidates, packet)
         attach_gap(candidates)
         attach_premarket_rvol(candidates, packet, cutoff)
+        # After the quotes, which carry sharesFloat, and after the RVOL pass,
+        # whose reason string this one quotes when it has to stand in.
+        attach_float_rotation(candidates, packet)
         if not thin:
             attach_catalysts(api, candidates, packet)
 
@@ -1573,6 +1708,11 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 "conviction": candidate.get("conviction"),
                 "gap_pct": candidate.get("gap_pct"),
                 "pm_rvol": candidate.get("pm_rvol"),
+                "pm_float_rotation": candidate.get("pm_float_rotation"),
+                # Which of the two volume measures actually scored this row.
+                # Without it a null pm_rvol next to a real score looks like a
+                # bug, and calibration cannot separate the two populations.
+                "volume_measure_used": candidate.get("volume_measure_used"),
                 "pm_high": candidate.get("pm_high"),
                 "pm_low": candidate.get("pm_low"),
                 "pm_vwap": candidate.get("pm_vwap"),

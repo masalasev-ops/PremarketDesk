@@ -25,7 +25,15 @@ $jobs = @(
     # yesterday via the catch-up sweep and completes the volume verification
     # before the new morning's collection is trusted.
     @{ Name = "nightly-catchup"; Bat = "job_nightly.bat";      Days = $weekdays;    Start = "07:00" },
-    @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "20:00" },
+    # 20:30, NOT 20:00. The EODHD quota counter resets at 00:00 UTC, which is
+    # 20:00 ET in daylight time and 19:00 in standard, so a Sunday 20:00 start
+    # fired at the exact instant of the reset for half the year and which quota
+    # day it billed to was a race. The universe rebuild is the largest single
+    # job in the schedule, buying lookback_sessions bulk calls in one run, so
+    # losing that race means spending it against a counter that has been
+    # accumulating since the previous evening. 20:30 sits clear of the boundary
+    # in both halves of the year.
+    @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "20:30" },
     # The watchdog: repeats through the morning window, once after the nightly.
     @{ Name = "monitor";       Bat = "job_monitor.bat";       Days = $weekdays;    Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
     @{ Name = "monitor-night"; Bat = "job_monitor.bat";       Days = $weekdays;    Start = "22:45" }

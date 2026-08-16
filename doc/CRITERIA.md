@@ -431,6 +431,44 @@ a stale price: it replaces a visible absurdity with an invisible one. Below
 the floor, pm_rvol is null with the reason recorded, the RVOL score component
 is unavailable, and the total score is null rather than partial credit.
 
+## Float rotation
+
+Premarket volume divided by shares float, the second of the two volume
+measures. Its whole reason for existing is that it needs no history: RVOL is
+null on a name's first appearance because there is no cached baseline, and a
+null RVOL used to make the entire score null. Float rotation is computable from
+the first minute a name trades, so the two are scored as alternatives filling
+one slot. See [Score premarket float rotation] for the bands and DECISIONS.md
+2026-08-16 for how they were set.
+
+The numerator is the collector's premarket volume, the same field RVOL uses,
+so the same lower bound applies: the collector starts at 07:20 and the true
+premarket opens at 04:00, so the rotation understates the full session. It can
+therefore withhold a candidate from a band, never smuggle one into it.
+
+The denominator is sharesFloat from us-quote-delayed, the same response the
+scan already reads marketCap from, so this costs no extra call.
+
+min_shares_float              = 500000     # absolute floor, used when shares outstanding is unavailable
+min_float_to_shares_outstanding = 0.01     # a float below this share of outstanding is a vendor artifact, not a real free float
+max_float_to_shares_outstanding = 1.01     # a float above outstanding is impossible; the 1 percent allowance is for rounding between the two fields
+
+### The float floor note
+
+Unlike the RVOL denominator floor above, these are measured rather than seeded.
+Across the 1,785 addressable gappers carrying a float on 2026-08-16: the
+smallest was 51,810 shares and the median 89,831,112, and exactly one name sat
+below one percent of its own shares outstanding (YPF at 0.013 percent, which is
+a vendor error rather than a small float). The next lowest was VG at 2.169
+percent, so the one percent line falls in an empty stretch of the distribution,
+which is where a threshold should sit. No name had a float above its shares
+outstanding, so max_float_to_shares_outstanding caught nothing on the day it
+was written and exists for the impossible value rather than the observed one.
+
+The degeneracy that forced the RVOL floor does not arise here. A baseline
+median can be ten shares; a float cannot, because a company with ten tradeable
+shares is not in the universe.
+
 ## Backfill
 
 The nightly job that writes the true premarket window into picks, from EODHD
@@ -789,6 +827,46 @@ tag = initiated coverage : analyst_action
 
 band = > 3 : 2
 band = >= 1.5 : 1
+band = else : 0
+
+## Score premarket float rotation
+
+Premarket volume as a fraction of shares float. The alternative to
+[Score premarket rvol], used when RVOL is unavailable. Only one of the two ever
+contributes, so the two band sets must pay alike, or a name would score
+differently for the mere fact of having no baseline.
+
+The edges are not free choices. They are read off the rotation distribution at
+the quantiles reproducing what the RVOL bands pay, and they are read off the
+RESCUED population specifically: the names with no usable baseline, which are
+the only names these bands ever touch. Names carrying both measures are scored
+by RVOL and never reach this section, so calibrating against them would set the
+rate for a population that never gets it.
+
+That distinction was got wrong first time and is worth stating rather than
+hiding. The first edges, `> 0.0006` and `>= 0.0003`, were matched on the
+overlap. The rescued names sit materially lower, at a median 0.61 of the
+overlap's on the scored population, so those edges paid two points to only
+45.87 percent of rescued names against a 53.87 percent target: the fallback
+under-paid the very names it exists for. Corrected 2026-08-16 in the same
+day's work. See DECISIONS.md for both distributions and the full comparison.
+
+On the 303 rescued names among the top candidate_count by gap, over 61 cached
+sessions, the edges below pay two points to 55.45 percent and one point to
+12.21 percent, against an RVOL target of 53.87 and 12.43.
+
+**These edges are conditional on [Scan] candidate_count.** The scored
+population is the top N by gap, and rotation rises with gap size, so changing
+candidate_count changes the population these were fitted to and they must be
+re-derived. Run `research/float_rotation_study.py` and read
+`mapping_transfer.top_N_by_gap.rederived_on_rescued`.
+
+Read these as small numbers because the window is small: 0.0004 is four
+hundredths of one percent of the float changing hands between 07:20 and 08:45,
+not over the whole premarket.
+
+band = > 0.0004 : 2
+band = >= 0.0002 : 1
 band = else : 0
 
 ## Score gap

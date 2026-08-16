@@ -89,6 +89,14 @@ _PICKS_LATER_COLUMNS = (
     # name was watched is not recorded next to what it went on to do.
     ("pool_source", "TEXT"),
     ("pool_tier", "INTEGER"),
+    # Premarket volume over shares float, the volume measure that needs no
+    # baseline, and the name of whichever measure actually scored the row.
+    # Both are needed to read a score honestly: a null pm_rvol beside a real
+    # score is a bug unless volume_measure_used says float rotation stood in,
+    # and calibrating the two bands against each other later is impossible if
+    # the rows do not record which band they were scored under.
+    ("pm_float_rotation", "REAL"),
+    ("volume_measure_used", "TEXT"),
 )
 
 

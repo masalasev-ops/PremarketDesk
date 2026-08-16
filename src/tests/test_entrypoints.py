@@ -687,6 +687,52 @@ def claim_scan(failures: list[str]) -> None:
         print(f"  {'scan':<12} exit {str(outcome.code):<5} {outcome.status:<7} "
               f"endpoints {','.join(outcome.session.endpoints())}")
 
+    claim_packet_names_its_build(failures)
+
+
+def claim_packet_names_its_build(failures: list[str]) -> None:
+    """A packet that reached disk can say which commit wrote it.
+
+    scan.py has built the `build` block into its payload since 2026-08-14, but
+    nothing asserted that it survives to the file. The existing check tested
+    config.build_identifier() in isolation, which passes even if the key is
+    dropped from the payload or write_packet stops writing it.
+
+    That gap is not academic. Neither runs/2026-08-13/packet.json nor
+    runs/2026-08-14/packet.json carries the key, because both were written
+    before the line existed, and 2026-08-14 is precisely the morning whose
+    report could not be tied back to the code that produced it. The whole
+    point of the block is to make that impossible a second time, and an
+    untested guarantee is not one.
+
+    A null commit is allowed and is not a failure: an export with no .git is a
+    legitimate way to run this. What must not happen is the key being ABSENT,
+    because then the packet cannot even say that it does not know.
+    """
+    from core import config
+    from morning import scan
+
+    day = ettime.today_str()
+    path = config.run_dir(day) / "packet.json"
+    if not path.is_file():
+        # The vintage gate refused this run's canned data, which is the gate
+        # working. Build a payload straight from the writer instead, so the
+        # claim is still exercised rather than silently skipped.
+        payload = {"session_date": day, "build": config.build_identifier()}
+        path = scan.write_packet(payload)
+
+    written = json.loads(path.read_text(encoding="utf-8"))
+    if "build" not in written:
+        failures.append(f"{path.name} has no build block, so the report it feeds "
+                        "cannot be tied to a commit")
+        return
+    build = written["build"] or {}
+    for key in ("commit", "dirty"):
+        if key not in build:
+            failures.append(f"{path.name} build block has no {key}: {build}")
+    print(f"  {'packet':<12} names its build: commit "
+          f"{str(build.get('commit'))[:12]} dirty={build.get('dirty')}")
+
 
 def claim_analyst(failures: list[str]) -> None:
     """The analyst, with the claude CLI stubbed at invoke_claude.
