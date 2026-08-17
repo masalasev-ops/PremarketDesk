@@ -33,6 +33,7 @@ from pathlib import Path
 
 from core import config
 from core import criteria
+from tests import conftest
 from selection import discover
 from core import eodhd
 from core import ettime
@@ -455,7 +456,16 @@ def claim_ten(failures: list[str]) -> None:
 
 
 def claim_eleven(failures: list[str]) -> None:
-    """An unranked pool is refused rather than cut to the cap arbitrarily."""
+    """An unranked pool is refused rather than cut to the cap arbitrarily.
+
+    The meter is pinned healthy for the duration. This claim is about how the
+    pool ranks, not about quota, and discover.build preflights before it
+    reaches the unranked check, so an ambient meter below the refuse floor
+    would raise QuotaRefusal first and this claim would report a pool defect
+    that does not exist. That is exactly what happened on 2026-08-16. Pinning
+    it here means the claim holds at ANY ambient reading rather than merely at
+    the healthy one conftest installs by default.
+    """
     real = discover.load_metrics
     universe_payload = {
         "generated_at": ettime.stamp(ettime.now_et()), "count": 100,
@@ -479,32 +489,98 @@ def claim_eleven(failures: list[str]) -> None:
 
     try:
         config.UNIVERSE_PATH.write_text(json.dumps(universe_payload), encoding="utf-8")
-        for share, should_refuse in ((0.0, True), (0.6, False)):
-            discover.load_metrics = metrics_with(share)
-            watchlist_before = config.WATCHLIST_PATH.exists()
-            try:
-                discover.build(write=False)
-            except discover.UnrankedPoolError as exc:
-                if not should_refuse:
-                    failures.append(f"a {share:.0%} ranked universe was refused: {exc}")
-                elif str(int(share * 100)) not in str(exc) and "0 of 100" not in str(exc):
-                    failures.append(f"the refusal did not name the count: {exc}")
-            except Exception as exc:  # noqa: BLE001
-                # Any other failure is the network stub missing, not this claim.
-                if should_refuse:
-                    failures.append(f"a 0% ranked universe raised {type(exc).__name__} "
-                                    f"instead of UnrankedPoolError: {exc}")
-            else:
-                if should_refuse:
-                    failures.append(f"a {share:.0%} ranked universe was NOT refused")
-            if config.WATCHLIST_PATH.exists() != watchlist_before:
-                failures.append("a refused discover wrote a watchlist")
+        # Pinned once around the whole loop, not per leg: both legs call
+        # discover.build, and both preflight before reaching anything this
+        # claim is about.
+        with conftest.meter_reading():
+            for share, should_refuse in ((0.0, True), (0.6, False)):
+                discover.load_metrics = metrics_with(share)
+                watchlist_before = config.WATCHLIST_PATH.exists()
+                try:
+                    discover.build(write=False)
+                except discover.UnrankedPoolError as exc:
+                    if not should_refuse:
+                        failures.append(f"a {share:.0%} ranked universe was refused: {exc}")
+                    elif str(int(share * 100)) not in str(exc) and "0 of 100" not in str(exc):
+                        failures.append(f"the refusal did not name the count: {exc}")
+                except conftest.NetworkBlocked:
+                    # Expected on the 0.6 leg: an adequately ranked pool is NOT
+                    # refused, so build() proceeds to real work and hits the
+                    # blocked network. That is this claim passing, not failing.
+                    # On the 0.0 leg it would mean the unranked check never ran.
+                    if should_refuse:
+                        failures.append("a 0% ranked universe reached the network, so the "
+                                        "unranked check did not run before the first call")
+                except Exception as exc:  # noqa: BLE001
+                    # No longer a blanket swallow. Before 2026-08-16 this branch
+                    # absorbed anything on the 0.6 leg, including the QuotaRefusal
+                    # that a live meter reading produced, which is how this claim
+                    # managed to pass all week and then fail on someone else's
+                    # spending. An unexpected exception is now a failure on BOTH
+                    # legs and names itself.
+                    failures.append(f"a {share:.0%} ranked universe raised "
+                                    f"{type(exc).__name__}, which this claim does not "
+                                    f"expect: {exc}")
+                else:
+                    if should_refuse:
+                        failures.append(f"a {share:.0%} ranked universe was NOT refused")
+                if config.WATCHLIST_PATH.exists() != watchlist_before:
+                    failures.append("a refused discover wrote a watchlist")
     finally:
         discover.load_metrics = real
         config.UNIVERSE_PATH = original
         shutil.rmtree(sandbox, ignore_errors=True)
     print("  claim 11 a wholly unranked universe is refused and writes nothing, "
           "60 percent proceeds")
+
+
+def claim_twelve(failures: list[str]) -> None:
+    """The quota refusal path, driven by a fed meter rather than a real one.
+
+    This is the other half of the 2026-08-16 fix. Blocking the network stopped
+    claim 11 from failing on a sibling project's spending, but it would also
+    have stopped anything from ever exercising the refusal, and a path that
+    nothing exercises is a path that rots. So the reading is injected at
+    eodhd.read_meter and preflight's own verdict logic runs on it for real:
+    the thresholds, the arithmetic and the message are all under test, and
+    only the network is gone.
+
+    Three readings, because the interesting part is the boundary rather than
+    the extremes. The floor is refuse_below_remaining from CRITERIA.md.
+    """
+    floor = _CRIT.integer("quota", "refuse_below_remaining")
+    limit = conftest.HEALTHY_METER["dailyRateLimit"]
+
+    cases = (
+        ("just below the floor", limit - (floor - 1), True),
+        ("exactly at the floor", limit - floor, False),
+        ("comfortably above", limit - (floor * 10), False),
+    )
+    for label, used, should_refuse in cases:
+        with conftest.meter_reading(apiRequests=used):
+            record = eodhd.preflight("test")
+            if record["refused"] != should_refuse:
+                failures.append(
+                    f"a meter {label} ({limit - used:,} remaining against a "
+                    f"{floor:,} floor) set refused={record['refused']}, "
+                    f"expected {should_refuse}")
+                continue
+            if not should_refuse:
+                continue
+            # And the refusal has to reach the caller, not just the record.
+            try:
+                discover.build(write=False)
+            except eodhd.QuotaRefusal as exc:
+                if str(floor) not in str(exc).replace(",", ""):
+                    failures.append(f"the refusal did not name the floor: {exc}")
+            except Exception as exc:  # noqa: BLE001
+                failures.append(f"a meter {label} raised {type(exc).__name__} "
+                                f"instead of QuotaRefusal: {exc}")
+            else:
+                failures.append(f"a meter {label} did not refuse discover.build")
+
+    print(f"  claim 12 preflight refuses below {floor:,} remaining and proceeds at or "
+          f"above it, on a fed meter with the network blocked")
 
 
 def main() -> int:
@@ -519,6 +595,7 @@ def main() -> int:
     claim_nine(failures)
     claim_ten(failures)
     claim_eleven(failures)
+    claim_twelve(failures)
 
     if failures:
         for failure in failures:

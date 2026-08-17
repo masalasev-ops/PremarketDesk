@@ -27,6 +27,7 @@ Run directly with `python src\\test_entrypoints.py`, or as part of
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import json
 import sys
@@ -37,6 +38,7 @@ from core import config
 from core import criteria
 from core import ettime
 from ops import job_status
+from tests import conftest
 
 _CRIT = criteria.load()
 
@@ -258,14 +260,97 @@ def _write_watchlist() -> None:
         "subscribed_count": len(SYMBOLS),
         "max_subscribed_candidates": 50,
         "gaps_to_fill": [],
+        # pool_prior_close, pool_source and pool_tier are the keys
+        # scan.pool_candidates actually reads. The older tier/pool_sources/
+        # prior_close spellings are kept beside them because nothing else
+        # reads either set and removing them would be an unrelated change,
+        # but they are NOT what makes a candidate rankable: without
+        # pool_prior_close every name reaches the scan with no prior close and
+        # a thinned run, which cannot spend a call to fetch one, drops the lot.
         "symbols": [
-            {"symbol": s, "subscribed": True, "tier": "earnings_before_open",
+            {"symbol": s, "subscribed": True,
+             "pool_tier": 1, "pool_source": ["earnings_before_open"],
+             "pool_prior_close": 100.0 + (hash(s) % 50),
+             "avg_dollar_volume_20d": 5e8,
+             "tier": "earnings_before_open",
              "pool_sources": ["earnings_before_open"], "prior_close": 100.0,
              "rank_value": 0.3}
             for s in SYMBOLS
         ],
     }
     config.WATCHLIST_PATH.write_text(json.dumps(payload), encoding="utf-8")
+
+
+@contextlib.contextmanager
+def _clock_pinned_to_scan_time():
+    """Run a block as if it were the scan's configured run time today.
+
+    Shifted rather than stopped, for the reason run_tests._freeze_clock gives:
+    a now() that never advances deadlocks anything waiting on a clock. Only
+    the three ettime readers are replaced, and they are restored afterwards,
+    so this cannot leak into a later claim.
+    """
+    import time as _time
+
+    base = ettime.at_hm(TODAY, _CRIT.clock("scan", "run_time"))
+    origin = _time.monotonic()
+    saved = (ettime.now_et, ettime.today_et, ettime.today_str)
+
+    def now_et() -> dt.datetime:
+        return base + dt.timedelta(seconds=_time.monotonic() - origin)
+
+    ettime.now_et = now_et
+    ettime.today_et = lambda: now_et().date()
+    ettime.today_str = lambda: now_et().date().isoformat()
+    try:
+        yield base
+    finally:
+        ettime.now_et, ettime.today_et, ettime.today_str = saved
+
+
+def _write_collector_bars(day: dt.date | None = None) -> Path:
+    """A premarket bar file, so candidates survive the coverage screen.
+
+    Without one the scan correctly drops every candidate for having no
+    collector evidence, and a claim about what a packet says per candidate has
+    nothing to say. The first version of the degrade claim hit exactly that and
+    reported an empty packet as a defect.
+
+    Shaped like the real collector's output because that is what read_bars
+    parses: one JSON object per minute per symbol, with the fields the scan
+    reads for price, window and volume.
+    """
+    from collect import collect_premarket
+
+    session = day or TODAY
+    path = collect_premarket.bar_path(session.isoformat())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Anchored so the LAST bar is the current minute, not the premarket clock.
+    # CRITERIA [price age] max_price_age_seconds drops a price older than its
+    # limit, correctly, and a fixture written at a fixed 07:20 is stale by
+    # hours whenever the suite runs outside the morning. That dropped every
+    # candidate and made this claim untestable in the evening while passing
+    # at 08:45, which is the day-dependence the frozen clock sweep exists to
+    # find.
+    now = ettime.now_et().replace(second=0, microsecond=0)
+    start = now - dt.timedelta(minutes=85)
+    lines = []
+    for symbol in SYMBOLS:
+        base = 100.0 + (hash(symbol) % 50)
+        for minute in range(0, 86):
+            when = start + dt.timedelta(minutes=minute)
+            price = base * 1.05
+            lines.append(json.dumps({
+                "symbol": symbol,
+                "minute_epoch": ettime.epoch_s(when),
+                "o": price, "h": price, "l": price, "c": price,
+                "v": 5_000.0, "pv": price * 5_000.0, "trades": 20,
+                "dark_pool_volume": 0.0, "market_status": "extended-hours",
+                "src": "ws", "vwap": price,
+                "minute_et": ettime.stamp(when),
+            }, separators=(",", ":")))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 def _write_report() -> Path:
@@ -688,6 +773,7 @@ def claim_scan(failures: list[str]) -> None:
               f"endpoints {','.join(outcome.session.endpoints())}")
 
     claim_packet_names_its_build(failures)
+    claim_scan_degrades_on_a_thin_meter(failures)
 
 
 def claim_packet_names_its_build(failures: list[str]) -> None:
@@ -732,6 +818,146 @@ def claim_packet_names_its_build(failures: list[str]) -> None:
             failures.append(f"{path.name} build block has no {key}: {build}")
     print(f"  {'packet':<12} names its build: commit "
           f"{str(build.get('commit'))[:12]} dirty={build.get('dirty')}")
+
+
+def claim_scan_degrades_on_a_thin_meter(failures: list[str]) -> None:
+    """Three points around the degrade threshold, asserted on the OUTPUT.
+
+    Claim 12 in test_pool covers the refuse floor, where the job does not run
+    at all and the exit code is the whole story. The degrade threshold is the
+    higher risk of the two and needs a different kind of assertion, because
+    the job DOES run: it produces a packet, and the question is whether that
+    packet tells the truth about being thin.
+
+    That matters because thin mode is where the false reason defects lived. A
+    packet whose catalyst reads "none" when the news feed was never called is
+    not a thin packet, it is a wrong one, and it is wrong in the direction
+    that looks fine. Checking the exit code cannot see any of that, so nothing
+    here checks the exit code.
+
+    Three assertions on a degraded run, all on what it wrote:
+      a packet exists at all, rather than the run refusing;
+      gaps_to_fill names the meter reading, so the thinness is attributable;
+      catalyst is UNKNOWN rather than none, on every candidate.
+    """
+    from core import criteria, eodhd
+
+    crit = criteria.load()
+    threshold = crit.integer("quota", "degrade_below_remaining")
+    floor = crit.integer("quota", "refuse_below_remaining")
+    limit = conftest.HEALTHY_METER["dailyRateLimit"]
+
+    cases = (
+        ("just below the threshold", limit - (threshold - 1), True),
+        ("exactly at the threshold", limit - threshold, False),
+        ("comfortably above", limit - (threshold * 10), False),
+    )
+
+    for label, used, should_degrade in cases:
+        remaining = limit - used
+        if remaining < floor:
+            failures.append(f"the {label} case sits below the refuse floor, so it "
+                            "tests refusal rather than degradation")
+            continue
+
+        with conftest.meter_reading(apiRequests=used):
+            record = eodhd.preflight("test")
+            if record["degraded"] != should_degrade:
+                failures.append(
+                    f"a meter {label} ({remaining:,} remaining against a "
+                    f"{threshold:,} threshold) set degraded={record['degraded']}, "
+                    f"expected {should_degrade}")
+                continue
+            if record["refused"]:
+                failures.append(f"a meter {label} refused, which is the wrong path")
+                continue
+            if not should_degrade:
+                continue
+
+            _write_universe()
+            _write_watchlist()
+            # Pinned to the scan's own run time. The pipeline this claim is
+            # about only assembles candidates under morning conditions: prices
+            # older than CRITERIA [price age] are dropped, and the collector
+            # coverage window is the premarket. Run at 21:00 every candidate
+            # is correctly discarded and the packet is empty, so the claim
+            # would pass at 08:45 and fail all evening while testing nothing
+            # either way.
+            with _clock_pinned_to_scan_time():
+                _write_collector_bars()
+                outcome = _drive("scan", "morning.scan", [])
+            if outcome.error:
+                failures.append(f"a degraded scan raised out of main: {outcome.error}")
+                continue
+
+            # ---- the packet exists, which is the first claim
+            #
+            # Whichever packet the DEGRADED run wrote, which is not always
+            # packet.json. A quota thinned rerun of a day that already has a
+            # full width packet stands down and writes packet_degraded.json
+            # beside it rather than overwriting better evidence with worse.
+            # That is correct behaviour and the first version of this claim
+            # walked straight past it, reading the fuller packet and reporting
+            # three defects that were really one wrong filename.
+            day = ettime.today_str()
+            run_directory = config.run_dir(day)
+            side = run_directory / "packet_degraded.json"
+            packet_path = side if side.is_file() else run_directory / "packet.json"
+            if not packet_path.is_file():
+                # The vintage gate can legitimately refuse canned fixtures, and
+                # that is a different outcome from a degraded run failing to
+                # produce anything. Say which, rather than reporting a defect
+                # that is not there.
+                if outcome.code == 1:
+                    print(f"  {'degrade':<12} {label}: scan exited 1 before writing a "
+                          "packet, which the vintage gate does on canned data. The "
+                          "preflight verdict was still asserted.")
+                    continue
+                failures.append(f"a degraded scan wrote no packet and exited "
+                                f"{outcome.code}")
+                continue
+
+            payload = json.loads(packet_path.read_text(encoding="utf-8"))
+
+            # ---- gaps_to_fill names the reading, which is the second
+            gaps = " ".join(str(g) for g in (payload.get("gaps_to_fill") or []))
+            if str(record["remaining"]) not in gaps.replace(",", ""):
+                failures.append(
+                    f"a degraded packet does not name the {record['remaining']:,} "
+                    f"remaining reading in gaps_to_fill: {gaps[:200]}")
+            if not (payload.get("quota_preflight") or {}).get("degraded"):
+                failures.append("a degraded packet does not record degraded=true in "
+                                "quota_preflight")
+
+            # ---- catalyst is unknown, not none, which is the third and the
+            # one the false reason defects would have slipped past
+            candidates = payload.get("candidates") or []
+            if not candidates:
+                failures.append("a degraded packet carried no candidates, so the "
+                                "catalyst claim could not be tested")
+            for candidate in candidates:
+                if candidate.get("catalyst_found") is not None:
+                    failures.append(
+                        f"{candidate['symbol']} records catalyst_found="
+                        f"{candidate['catalyst_found']!r} on a degraded run, expected "
+                        "null: the feed was never called")
+                if candidate.get("catalyst_class") == "none":
+                    failures.append(
+                        f"{candidate['symbol']} records catalyst_class 'none' on a "
+                        "degraded run. That says the window was checked and empty. "
+                        "It was never checked.")
+                why = str(candidate.get("catalyst_why") or "")
+                if "unknown" not in why.lower():
+                    failures.append(
+                        f"{candidate['symbol']} catalyst_why does not say unknown: "
+                        f"{why[:120]}")
+
+            print(f"  {'degrade':<12} {label}: {remaining:,} remaining, "
+                  f"{packet_path.name} written, {len(candidates)} candidate(s) with "
+                  "catalyst unknown, reading named in gaps_to_fill")
+
+    print(f"  claim degrade  threshold {threshold:,} exercised from fed readings on "
+          "both sides, asserted on packet output rather than exit code")
 
 
 def claim_analyst(failures: list[str]) -> None:

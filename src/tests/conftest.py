@@ -212,7 +212,8 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
             saved_modules.append((module, attribute, getattr(module, attribute, None)))
             setattr(module, attribute, build(config))
 
-        yield sandbox
+        with block_network():
+            yield sandbox
     finally:
         for name, value in saved_config.items():
             setattr(config, name, value)
@@ -220,3 +221,139 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
             if value is not None:
                 setattr(module, attribute, value)
         shutil.rmtree(sandbox, ignore_errors=True)
+
+
+# ------------------------------------------------------- the network boundary
+
+class NetworkBlocked(RuntimeError):
+    """Raised when a test reaches for the network without stubbing it."""
+
+
+# Set by run_tests --live. Nothing else may write it. Live claims check
+# live_allowed() and skip themselves when it is false, so the default suite is
+# hermetic and a live claim has to be asked for.
+ALLOW_LIVE = False
+
+
+def live_allowed() -> bool:
+    return ALLOW_LIVE
+
+
+# What the stub meter reports: a healthy shared key, well above both the
+# degrade threshold and the refuse floor in CRITERIA.md [quota]. Fixed, so a
+# claim's outcome never moves with someone else's spending.
+HEALTHY_METER = {
+    "apiRequests": 1_000,
+    "dailyRateLimit": 100_000,
+    "name": "stub",
+    "email": "stub@example.invalid",
+}
+
+
+class _BlockedSession:
+    """Every HTTP verb raises, naming what tried and how to stub it.
+
+    Installed as the session every EodhdClient builds, so a test that never
+    stubs the network fails loudly and immediately instead of reaching the
+    vendor. A test that DOES stub, by assigning client._session, replaces this
+    and is unaffected: three suites already do exactly that.
+    """
+
+    def _refuse(self, verb: str, url: str, **_kwargs: Any) -> Any:
+        raise NetworkBlocked(
+            f"a test tried to {verb} {url}. The suite runs with the network "
+            "blocked, because a claim whose outcome depends on a shared "
+            "external counter is not a test. Stub it by assigning "
+            "client._session, or rebind eodhd.read_meter for a meter reading. "
+            "If the claim genuinely needs the network, name it claim_live_... "
+            "or ..._live and gate it on conftest.live_allowed()."
+        )
+
+    def get(self, url: str, **kwargs: Any) -> Any:
+        return self._refuse("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> Any:
+        return self._refuse("POST", url, **kwargs)
+
+    def request(self, method: str, url: str, **kwargs: Any) -> Any:
+        return self._refuse(method.upper(), url, **kwargs)
+
+
+def meter(**overrides: Any) -> Any:
+    """A meter reading for a claim that needs a specific one.
+
+        with conftest.meter_reading(apiRequests=99_900):
+            ...
+
+    Returns an ApiResult the way eodhd.read_meter does, so preflight's own
+    verdict logic runs on it rather than being stubbed away.
+    """
+    from core import eodhd
+
+    payload = dict(HEALTHY_METER)
+    payload.update(overrides)
+    return eodhd.ApiResult(payload, None)
+
+
+@contextlib.contextmanager
+def meter_reading(**overrides: Any) -> Iterator[None]:
+    """Feed preflight a specific meter for the duration, then restore."""
+    from core import eodhd
+
+    saved = eodhd.read_meter
+    eodhd.read_meter = lambda: meter(**overrides)
+    try:
+        yield
+    finally:
+        eodhd.read_meter = saved
+
+
+@contextlib.contextmanager
+def block_network() -> Iterator[None]:
+    """No HTTP leaves the suite, and the quota meter reads healthy and fixed.
+
+    This is the fix for the 2026-08-16 failure, placed at the boundary rather
+    than in the claim that happened to trip over it. test_pool claim 11 called
+    discover.build(), which preflights the live shared key; a sibling project
+    pushed that key below the refuse floor and the claim started failing with
+    nothing in this repository changed. Any claim reaching the network has the
+    same defect whether or not it has shown it yet, so the network is removed
+    for all of them at once.
+
+    Skipped entirely under --live, where the point is to reach the vendor.
+    """
+    if ALLOW_LIVE:
+        yield
+        return
+
+    from core import eodhd
+
+    saved_build = eodhd.build_session
+    saved_meter = eodhd.read_meter
+    saved_client = eodhd._default_client
+
+    eodhd.build_session = lambda: _BlockedSession()
+    eodhd.read_meter = lambda: meter()
+    # Any client built before the block holds a real session, so the cached
+    # one is dropped and rebuilt behind the block on next use.
+    eodhd._default_client = None
+
+    saved_probe = None
+    try:
+        import probe_alpaca
+
+        saved_probe = probe_alpaca.build_session
+        probe_alpaca.build_session = lambda: _BlockedSession()
+    except ImportError:
+        pass
+
+    try:
+        yield
+    finally:
+        eodhd.build_session = saved_build
+        eodhd.read_meter = saved_meter
+        eodhd._default_client = saved_client
+        if saved_probe is not None:
+            import probe_alpaca
+
+            probe_alpaca.build_session = saved_probe

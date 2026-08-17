@@ -29,6 +29,7 @@ import json
 import sys
 import time
 import traceback
+from typing import Any
 
 from tests import conftest
 
@@ -138,6 +139,30 @@ def _restamp_universe() -> None:
           "so the frozen day is the only variable")
 
 
+def _live_claims(module: Any) -> list[str]:
+    """Claims in a module marked live by name, which is the whole marking.
+
+    A claim that must reach the vendor is named `claim_live_...` or `..._live`,
+    so the marking is visible in the source, in this listing and in the failure
+    output, rather than living in a decorator or a registry someone has to know
+    to consult. The claim itself is responsible for standing down when
+    conftest.live_allowed() is false; this only finds and reports them, so a
+    live claim cannot sit in the suite unnoticed.
+
+    Matched on those two exact shapes rather than on the substring 'live',
+    which caught `claim_deliver` on the first run of this function. A marking
+    convention that silently captures an unrelated claim is worse than none:
+    it would have reported a hermetic claim as skipped and nobody would have
+    run it again.
+    """
+    return sorted(
+        f"{module.__name__}.{name}"
+        for name in dir(module)
+        if (name.startswith("claim_live_") or name.endswith("_live"))
+        and callable(getattr(module, name))
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the suite under the sandbox.")
     parser.add_argument("--freeze", metavar="YYYY-MM-DD",
@@ -152,9 +177,22 @@ def main(argv: list[str] | None = None) -> int:
                              "version of the old enumerated check watched.")
     parser.add_argument("--only", action="append", default=[],
                         help="Run only these modules, repeatable.")
+    parser.add_argument("--live", action="store_true",
+                        help="Allow the network and run claims marked live. OFF by "
+                             "default: the suite is hermetic, and a claim that "
+                             "reaches the vendor decides its result on someone "
+                             "else's account state rather than on this code.")
     args = parser.parse_args(argv)
 
     modules = args.only or list(SUITE)
+    conftest.ALLOW_LIVE = bool(args.live)
+    if args.live:
+        print("run_tests: --live, the network is NOT blocked and live claims will "
+              "run. Results now depend on the shared account and the vendor.")
+    else:
+        print("run_tests: the network is blocked and the quota meter reads a fixed "
+              f"{conftest.HEALTHY_METER['dailyRateLimit'] - conftest.HEALTHY_METER['apiRequests']:,} "
+              "remaining. Live claims are skipped; pass --live to run them.")
     if args.freeze:
         print(f"run_tests: clock frozen to {_freeze_clock(args.freeze)}")
     before = conftest.snapshot_tree()
@@ -172,9 +210,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"run_tests: sandbox at {sandbox}")
         if args.freeze:
             _restamp_universe()
+        skipped_live: list[str] = []
         for name in modules:
             module = importlib.import_module(name)
             importlib.reload(module)
+            skipped_live.extend(_live_claims(module))
             try:
                 code = module.main()
             except Exception:
@@ -206,6 +246,13 @@ def main(argv: list[str] | None = None) -> int:
     if failures:
         print(f"run_tests: FAILED, {len(failures)} suite(s) failed: {', '.join(failures)}")
         return 1
+
+    if skipped_live:
+        word = "ran" if conftest.ALLOW_LIVE else "SKIPPED, pass --live to run"
+        print(f"run_tests: {len(skipped_live)} live claim(s) {word}: "
+              f"{', '.join(skipped_live)}")
+    else:
+        print("run_tests: no claim is marked live, so the whole suite is hermetic")
 
     print("run_tests: PASS, every suite green and not one path changed anywhere "
           "under the working tree")

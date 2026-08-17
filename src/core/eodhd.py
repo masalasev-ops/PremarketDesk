@@ -708,6 +708,28 @@ def client() -> EodhdClient:
     return _default_client
 
 
+def read_meter() -> ApiResult:
+    """The single network call preflight makes, and the seam tests replace.
+
+    Pulled out as its own function so the meter READING can be substituted
+    without stubbing the verdict logic that reads it. Everything interesting
+    in preflight below (the degrade and refuse thresholds, the stale meter day
+    check, the unreadable payload check) then stays under test instead of
+    being mocked away with the network.
+
+    tests/conftest.py rebinds this to a fixed healthy meter for the whole
+    suite, because a claim whose outcome depends on a shared external counter
+    is not a test: test_pool claim 11 passed all week and failed on
+    2026-08-16 when a sibling project pushed the shared key below the refuse
+    floor, with nothing in this repository having changed.
+
+    Rebind the module attribute, not this function's body:
+
+        eodhd.read_meter = lambda: eodhd.ApiResult({...}, None)
+    """
+    return client().user_status()
+
+
 def preflight(job: str) -> dict[str, Any]:
     """Read the shared account meter before a job spends anything.
 
@@ -738,7 +760,9 @@ def preflight(job: str) -> dict[str, Any]:
         "refused": False,
         "error": None,
     }
-    data, error = client().user_status()
+    # Resolved through the module globals on every call, so a test rebinding
+    # eodhd.read_meter is honoured here without this function knowing.
+    data, error = read_meter()
     if error:
         record["error"] = error
         print(f"{job}: quota preflight could not read the meter ({error}). "
