@@ -80,8 +80,11 @@ The redesign line is the cost of one bulk call at which the day's bulk calls
 would dominate the shared account and force a design change. Nothing in the
 pipeline calls the bulk live endpoint any more, so the day's bulk calls are all
 end of day: two at 07:15 for discover's prior session movers source, and two at
-22:15 for the nightly pool recall, at a measured 98 counted calls each, about
-392 a day against a shared 100,000. The weekly universe rebuild buys
+22:15 for the nightly pool recall, at a measured 100 credits each
+[corrected 2026-08-17: was "98 counted calls each, about 392 a day". The
+ledger counts calls and the meter bills credits, and the meter says a flat
+100, reconciled exactly on two universe rebuilds], about 400 a day against a
+shared 100,000. The weekly universe rebuild buys
 lookback_sessions more of the same call in one Sunday run.
 measure_bulk_cost.py still judges its verdict against this number using the
 bulk live endpoint, because that is the call whose price would force the
@@ -102,6 +105,46 @@ refuse_below_remaining        = 500        # refuse to run outright below this
 bulk_redesign_line            = 1000       # one bulk live call at or above this forces a redesign
 consecutive_429_trip          = 5          # this many 429s in a row opens the circuit for the run
 retry_budget_per_run          = 10         # total retries one run may spend across all calls
+quota_headroom_multiple       = 1.5        # SEED, not measured. A work sized
+                                           # gate requires this multiple of what
+                                           # the step will actually spend before
+                                           # it starts. The margin is for the
+                                           # other project on the key, which was
+                                           # measured taking 15,910 credits in
+                                           # thirty minutes on 2026-08-16, not
+                                           # for error in the price table, which
+                                           # reconciles exactly. Revisit when the
+                                           # sampler has a few weeks of the
+                                           # sibling's shape.
+
+## Quota costs
+
+What the shared counter charges, as against what the client side ledger counts.
+These are different numbers and the gap is not small. The 2026-08-17 universe
+rebuild reported 172 http calls and moved the meter 4,945, because
+us-quote-delayed is billed per symbol while it is issued twenty at a time, and
+one bulk day is a flat hundred. Any gate sized off eodhd.call_count() is
+therefore sized off the wrong quantity, and for the universe rebuild it would
+be set twenty eight times too low.
+
+MEASURED, not seeded, and the arithmetic closes exactly on two independent
+runs. On the 00:06:53 rebuild, 2 symbol lists + 1 eod + 20 bulk days + 2,942
+staged names priced by this table gives 2 + 1 + 2,000 + 2,942 = 4,945, which is
+the delta between the entry and exit readings in logs/meter-2026-08-17.log. The
+20:30:01 run of the evening before staged 2,941 and read 4,944 at its exit. The
+two runs also pin the user endpoint at zero: there is no slack in either sum for
+the meter reads themselves.
+
+The left side is the endpoint name as the call ledger reports it, except
+us-quote-delayed-per-symbol, which is named for its unit because that unit is
+the whole point. A call that is not priced here cannot be costed, and
+eodhd.credit_cost raises rather than treating it as free.
+
+cost = eod-bulk-last-day : 100
+cost = us-quote-delayed-per-symbol : 1
+cost = eod : 1
+cost = exchange-symbol-list : 1
+cost = user : 0
 
 ## Price age
 
@@ -179,6 +222,30 @@ min_count_fraction_of_previous = 0.5       # SEED, not measured. A rebuild that
                                            # weekly change and far above a
                                            # truncated file. Revisit once a few
                                            # real rebuilds have been observed.
+max_unswept_fraction          = 0.02       # SEED, not measured. Names the market
+                                           # cap sweep got NO answer for, as a share
+                                           # of those it examined. Above this the
+                                           # build refuses to overwrite the previous
+                                           # universe, because a truncated file that
+                                           # looks fresh is worse than a stale one:
+                                           # the monitor relaunches on age, so a bad
+                                           # new file is never retried while a missing
+                                           # one is. This is a different question from
+                                           # the count fraction above. That one asks
+                                           # whether the file is the right SIZE, this
+                                           # asks whether its names were dropped on
+                                           # evidence or on silence. A quota starved
+                                           # sweep amputates the illiquid tail,
+                                           # because staged is sorted by dollar volume
+                                           # descending, and the count fraction cannot
+                                           # see that until half the file is gone.
+                                           # Names the vendor answered a batch WITHOUT
+                                           # are excluded: that is its coverage, not
+                                           # this run's failure, and it is structural
+                                           # at 26 of 2,942 on 2026-08-17. So the
+                                           # baseline here is zero and 0.02 of 2,942
+                                           # is 58 names, which clears two lost
+                                           # batches of twenty and trips on the third.
 
 ## Discovery
 
@@ -267,7 +334,8 @@ as not-fetched and a source that succeeds with nothing is recorded as
 fetched-and-empty, the same distinction catalyst_why already draws, so a pool
 missing its earnings names is never mistaken for a morning with no earnings.
 
-Cost: two bulk end of day calls at a measured 98 counted calls each, plus one
+Cost: two bulk end of day calls at a measured 100 credits each
+[corrected 2026-08-17: was 98 counted calls each], plus one
 calendar call and up to five news calls, against the one bulk live call at 100
 that this replaces. Roughly 100 counted calls a morning more than before, far
 below the bulk_redesign_line in the Quota section.
@@ -625,7 +693,9 @@ it stops. A step the scheduler runs that is missing from this list is never
 reported as overdue, which is the one failure this list can have, so
 test_entrypoints.py checks the two lists against each other.
 
-universe                      = 5          # Sunday 20:00, five sessions old by Friday
+universe                      = 5          # Sunday 21:00, five sessions old by Friday
+                                           # [corrected 2026-08-17: was 20:00, which
+                                           # the schedule left on 2026-08-16]
 gap_stats                     = 5          # rides the universe schedule
 discover                      = 1
 baseline                      = 1

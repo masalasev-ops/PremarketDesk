@@ -836,6 +836,96 @@ def describe_preflight(record: dict[str, Any]) -> str:
             f"(quota day {record['quota_day']})")
 
 
+def cost_table() -> dict[str, int]:
+    """What the shared counter charges per call, from CRITERIA.md [quota costs].
+
+    The call ledger and the bill are not the same number. LEDGER.calls counts
+    HTTP requests. The vendor charges one credit for most requests, a flat
+    hundred for a bulk day, and one per SYMBOL for delayed quotes, which are
+    issued twenty at a time. The 2026-08-17 universe rebuild reported 172 http
+    calls and moved the meter 4,945, so a gate sized off call_count() would
+    have been set twenty eight times too low for the largest job in this
+    project.
+    """
+    table: dict[str, int] = {}
+    for name, raw in _CRIT.pair_map("quota_costs", "cost").items():
+        try:
+            table[name] = int(str(raw).strip())
+        except ValueError as exc:
+            raise criteria.CriteriaError(
+                f"CRITERIA.md [quota costs] cost = {name} : {raw!r} is not a whole "
+                "number of credits"
+            ) from exc
+    return table
+
+
+def credit_cost(**counts: int) -> int:
+    """Credits for a planned set of calls, priced from the measured table.
+
+    Keyword names are the ledger's endpoint names with hyphens written as
+    underscores, so eod_bulk_last_day prices eod-bulk-last-day. An endpoint
+    with no price raises rather than costing zero: an unpriced call silently
+    costing nothing is exactly how a gate ends up sized for a job it does not
+    actually cover.
+    """
+    table = cost_table()
+    total = 0
+    for name, count in counts.items():
+        key = name.replace("_", "-")
+        if key not in table:
+            raise criteria.CriteriaError(
+                f"CRITERIA.md [quota costs] carries no price for {key!r}, so "
+                f"{int(count):,} of them cannot be costed"
+            )
+        total += table[key] * int(count)
+    return total
+
+
+def require_quota(job: str, need: int, what: str) -> dict[str, Any]:
+    """Preflight sized to the work about to be done, not to a flat floor.
+
+    refuse_below_remaining is one number for the whole project and it is 500.
+    That is the right size for a scan that spends a few hundred and useless
+    for the Sunday rebuild that spends 4,945: the floor would clear at 501
+    remaining and the job would then stop a tenth of the way through. This
+    asks the question the floor cannot, which is whether the account can pay
+    for THIS step at the measured prices, with the margin in
+    CRITERIA.md [quota] quota_headroom_multiple.
+
+    It refuses ONLY when the meter was actually read. preflight leaves
+    remaining as None on three paths and the third is the one that matters
+    here: a reading dated before the current quota day, which is what the
+    vendor serves for the half hour after a reset it rolls late. Treating an
+    unknown meter as a zero would turn that benign late roll into a refused
+    weekly rebuild, and would act on a number nobody read, which is the
+    substitution this project forbids everywhere else.
+    """
+    record = preflight(job)
+    headroom = _CRIT.number("quota", "quota_headroom_multiple")
+    required = int(need * headroom)
+    record["work_credits"] = int(need)
+    record["work_required"] = required
+    remaining = record.get("remaining")
+    if remaining is None:
+        print(f"{job}: {what} costs about {need:,} credits at the measured prices, "
+              "and the meter is unknown, so nothing is refused on it. An unknown "
+              "meter is not a zero meter.")
+        return record
+    if remaining < required:
+        raise QuotaRefusal(
+            f"{what} costs about {need:,} credits at the prices in CRITERIA.md "
+            f"[quota costs], and this step will not start without {required:,} of "
+            f"them ({headroom:g}x, CRITERIA.md [quota] quota_headroom_multiple). "
+            f"The shared key has {remaining:,} of {record['daily_limit']:,} left, "
+            "so it cannot pay for the run. Starting anyway would spend what is "
+            "there and stop partway, and a job that stops partway here writes a "
+            "plausible file rather than an obviously broken one."
+        )
+    print(f"{job}: {what} costs about {need:,} credits, needs {required:,} with "
+          f"headroom, and {remaining:,} remain")
+    return record
+
+
 def _smoke() -> int:
     """Checkpoint 3 done condition.
 
