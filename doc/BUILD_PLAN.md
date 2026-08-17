@@ -1,8 +1,10 @@
 # PremarketDesk build plan and session handoff
 
-Last updated: 2026-08-14, after the first live morning and the five commits
-that followed it. All sixteen checkpoints are built, verified, and committed,
-and the eight Task Scheduler jobs are registered. The system is armed but
+Last updated: 2026-08-17, when the notable movers section was specified in full
+under "What remains" as Layer 4. The build history below was written on
+2026-08-14, after the first live morning and the five commits that followed
+it. All sixteen checkpoints are built, verified, and committed, and the eight
+Task Scheduler jobs are registered. The system is armed but
 gated: it runs every weekday morning, produces a report, and refuses to email
 until a human reviews one real morning and deletes data/UNVERIFIED.
 
@@ -384,6 +386,228 @@ recreates it deliberately.
    email nothing.
 3. Longer term, as CRITERIA.md's header says: once picks holds a few hundred
    filled outcome rows, revisit the seed thresholds because the data said so.
+4. The notable movers section: SPECIFIED BELOW, NOT BUILT. Everything it
+   rests on is built, tested and committed. The section itself is not. Its
+   specification is the "Layer 4" section immediately below, written out in
+   full on 2026-08-17 so that no part of the design lives only in a
+   conversation.
+
+## Layer 4: the notable movers section, specified
+
+Ordered by the owner on 2026-08-16 and settled over the two days after. This
+is the whole design. Where a point was decided while writing this down rather
+than by the owner, it says so, so it can be overruled cheaply.
+
+### Already built, do not rebuild
+
+- CRITERIA.md [Notable]: list_size 5, min_abs_gap_pct 1,
+  min_sessions_for_move_sigma 20, min_return_stdev_pct 0.1, and the prose
+  above them stating what the section is and is not.
+- data/universe-closes-<date>.json, written by discover at 07:15. sessions
+  names the three session dates as c1, c2, c3; closes holds
+  {SYMBOL: {c1, c2, c3}}; universe_examined, names_with_at_least_one_close
+  and third_session_available carry the denominators. c1 is the prior session
+  close, c2 the one before it, c3 the third back. The third session costs one
+  extra bulk call, a flat 100 credits, and is bought rather than read from
+  gap_stats so that all three closes carry ONE vintage. A name missing from a
+  session is null there and is never backfilled from a neighbouring session.
+- gap_stats.return_stdev_20d: the standard deviation of daily close to close
+  returns in percent over the trailing 20 sessions, null below
+  min_sessions_for_move_sigma returns. Computed from a close only filtered
+  list rather than from the bar list the other columns use, because that one
+  drops bars missing an open.
+- vintage check (e) and _LEG_NEWEST_SESSION_BACK: per row validation of
+  notable_movers. leg and as_of_session are REQUIRED fields, and a row
+  missing either fails rather than being skipped.
+- analyst._REQUIRED_TABLES: the vacuum detector requires the day and swing
+  watchlist tables BY NAME. A notable movers table contributes claims to
+  validate but can never satisfy that requirement.
+- conftest.watchlist_headers and watchlist_table: fixtures build their tables
+  from REPORT_TEMPLATE.md, so a template header change breaks them loudly.
+
+### Still to build
+
+The scan fields and the section assembly in src/morning/scan.py, the section
+in doc/REPORT_TEMPLATE.md, rule 10 in doc/prompt_analyst.md, the claims, and
+the CHANGELOG and DECISIONS entries.
+
+### 4.1 Scope fence
+
+Additive to the report only. It does not touch picks, scoring, eligibility,
+conviction, CRITERIA's day_setup or swing_setup, pool_recall, or any recall
+measurement. NOTHING HERE MAY WRITE A ROW TO PICKS, because picks is the
+record of what the trading screen claimed and mixing briefing names into it
+would destroy the measurement. If a step seems to need a picks column, stop
+and report rather than adding one.
+
+pool_recall.json is read. pool_recall.py is not imported, not called and not
+modified.
+
+### 4.2 Per candidate fields in scan
+
+For every candidate, stored in the packet beside gap_pct:
+
+- move_sigma: gap_pct divided by return_stdev_20d. A quiet megacap moving 2
+  percent and a thin small cap moving 6 percent land at comparable numbers,
+  which is the whole point.
+- gap_2session: the move from c2 to the current premarket price.
+- gap_3session: the move from c3 to the current premarket price.
+
+Add nothing to CRITERIA's setup blocks. These are report fields, not screen
+conditions, and neither evaluate_eligibility nor score_candidate reads them.
+
+move_sigma is null with a recorded reason when return_stdev_20d is null or
+below min_return_stdev_pct. Never a substituted number, never a silent drop.
+
+### 4.3 The four legs
+
+Every row carries leg and as_of_session, and the section's rows may mix legs
+by design. The leg names the WINDOW. as_of_session names the NEWEST datum in
+the row, which is the one that can go stale, and it is what vintage
+validates. The lookback lives in the leg label alone. See the docstring on
+_LEG_NEWEST_SESSION_BACK for why the labelling is anchored that way.
+
+  leg            the move                        source           as_of
+  premarket      collector price against c1      bars_by_symbol   today
+                                                 + universe-closes
+  prior_session  the prior session's open        the prior day's  prior
+                 against the close before it     pool_recall.json
+  two_session    c1 against c2                   universe-closes  prior
+  three_session  c1 against c3                   universe-closes  prior
+
+The premarket leg covers only the names the collector heard, at most
+subscribe_cap of the universe, and it reads bars_by_symbol rather than the
+candidate list: every subscribed name is eligible, not only the twelve that
+survived the screen.
+
+The prior_session leg reads runs/<prior session>/pool_recall.json, its held
+and missed lists together, each row carrying symbol, gap_at_open_pct, open,
+prior_close and volume. That file holds only names above the discovery
+gap_pct floor of 3 percent, so this leg is a partial view of the universe by
+construction and the section reports how many names it examined rather than
+implying it saw all of them. When the file is absent, because the nightly has
+not run or the prior day was a holiday, the leg is absent with its reason
+recorded rather than silently empty.
+
+The two and three session legs use c1 as the endpoint for EVERY name,
+including the candidates whose premarket price is known. A list that mixed a
+premarket inclusive move for twelve names with a close only move for the
+other 2,733 is not a ranking. The candidate gap_2session and gap_3session
+fields in 4.2 are measured to the premarket price and are NOT inputs to this
+ranking.
+
+No leg carries today's regular session move, because the report is written
+before the open.
+
+### 4.4 The three lists
+
+Three lists, list_size (5) names each, drawn from THE WHOLE UNIVERSE and not
+from the twelve candidates:
+
+1. By move_sigma, descending.
+2. By market cap, among names whose absolute move clears min_abs_gap_pct.
+3. By absolute two session move, descending.
+
+Lists 1 and 2 rank on the name's NEWEST AVAILABLE SINGLE SESSION move: the
+premarket leg where the collector heard the name, otherwise the
+prior_session leg. Decided here rather than by the owner, and cheap to
+overrule: move_sigma divides by a ONE DAY return standard deviation, so a
+multi session numerator over that denominator is dimensionally wrong. The two
+and three session legs therefore carry no move_sigma, and the row records
+that as not applicable to the leg rather than as a null with a reason,
+because it is not a missing measurement.
+
+Market cap comes from universe.json. A name with no market cap on file is not
+a pass and not a fail: it was never examined against the floor, it is counted
+separately, and it cannot appear in list 2.
+
+Deduplicated across the three lists. One row per name carrying every reason
+that selected it, on the pool_source precedent in discover.py, rather than
+the same name appearing three times. The row states which list or lists
+produced it.
+
+A name already on the day or swing watchlist appears here anyway, and the row
+says so inline. It is not suppressed. Two sections selecting the same name on
+different grounds is information; hiding it is not.
+
+### 4.5 Row fields
+
+ticker, leg, as_of_session, the move on that leg, move_sigma or not
+applicable to the leg, market cap, the catalyst headline where one was
+fetched, and the also on watchlist mark. price_time where the leg has one,
+which is the premarket leg alone, and vintage holds that one to the premarket
+window as well as to the session.
+
+### 4.6 Catalysts
+
+No news is fetched for any name outside the existing candidate set. Doing so
+would multiply the call count over a set an order of magnitude larger, and
+this section is a briefing rather than a screen.
+
+A name with no news fetched is marked NOT CHECKED, never "no catalyst", per
+the existing rule. The two are different facts and the report says which one
+it is holding.
+
+### 4.7 The template section
+
+One section in doc/REPORT_TEMPLATE.md headed "Notable movers", placed after
+the swing watchlist and before market trends. Its fixed text, which the model
+reproduces exactly rather than composing:
+
+- These names were selected for the size and unusualness of their move,
+  rather than for tradeability.
+- They have not been screened against the day or swing criteria.
+- No conviction applies to any of them.
+- Every row states which leg produced it and the session it is as of.
+- No leg can carry today's regular session move, because this report is
+  written before the open.
+
+The table carries a Ticker column, so containment applies to this section
+exactly as it does to the watchlists: every ticker in it must exist in the
+packet. It cannot satisfy the vacuum detector, which requires the two
+watchlist tables by name.
+
+### 4.8 The prompt rule
+
+doc/prompt_analyst.md gains rule 10, after the existing nine: the model may
+DESCRIBE these names, and may not assign them a conviction, may not move them
+onto a watchlist, and may not imply a setup.
+
+### 4.9 Degrade and skip
+
+The section records what it could not do rather than emitting a bare empty
+list. A missing universe-closes file, a missing prior pool_recall.json, an
+absent third session, a quota degraded run: each is a named reason in the
+packet, and the section says which leg it lost. Zero names examined is a
+different outcome from zero names selected, and the section reports both
+numbers, per the denominator rule.
+
+### 4.10 Done when
+
+- A run produces the section from universe wide data rather than from the
+  candidates.
+- A name moving under the 3 percent discovery gap floor appears in it when
+  its move_sigma is high.
+- No picks row exists for any name that appears only here.
+- pool_recall is untouched: git shows no diff against pool_recall.py, and a
+  rebuild of a past session's pool_recall.json is byte identical to the copy
+  taken before the change.
+- A packet with a prior_session row mis-stamped as premarket fails
+  vintage.enforce, and a row missing its leg fails rather than being ignored.
+  Already proven by claim_notable_legs in src/tests/test_vintage.py.
+- The new claims are wired into run_tests.SUITE. run_tests does not discover
+  claims: it imports a hardcoded SUITE and calls each module's main(), so an
+  unwired claim is dead code.
+
+### Known and accepted, outside this layer
+
+A row whose leg says three_session while its move is arithmetically a one
+session move is caught by neither the freshness labelling nor any other check
+here. Vintage checks that the newest datum is the session claimed, not that
+the move spans the window its label names. This is recorded on
+_LEG_NEWEST_SESSION_BACK and is deliberately not being fixed now: closing it
+would need the section to publish its endpoints so the arithmetic can be
+rechecked, which is a change to the section rather than to the gate.
 
 ## Reinstated review items, with outcomes
 
