@@ -216,7 +216,7 @@ Other documents:
   vendor's own API counter (connections, subscribes, and reconnects
   included; `src/research/measure_socket_cost.py` reproduces the measurement). REST
   usage is a few hundred counted calls a day. Discovery spends two bulk end
-  of day calls at a measured 98 counted calls each, plus one earnings
+  of day calls at a measured 100 credits each, plus one earnings
   calendar call and up to five news calls; the baseline warm spends one
   intraday call per stale name; the 08:45 scan spends a few dozen across
   quotes, history and news; the nightly spends one intraday call per pick

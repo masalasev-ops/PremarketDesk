@@ -189,7 +189,7 @@ at the root and is gitignored along with .env.
   per symbol. Verdict against the 1,000 line: NOT crossed. That measurement
   was of the bulk live call, which no scheduled job makes any more. The
   day's bulk calls are now end of day: two at 07:15 for discover's prior
-  session movers, and two at 22:15 for the pool recall, at a measured 98
+  session movers, and two at 22:15 for the pool recall, at a measured 100
   counted calls each, so about 392 a day on the shared 100,000.
 - Quota preflight, same night: discover.py and scan.py read /api/user on
   entry (eodhd.preflight) and act on the shared meter, never the local

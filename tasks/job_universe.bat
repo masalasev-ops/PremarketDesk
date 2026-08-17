@@ -1,5 +1,5 @@
 @echo off
-rem PremarketDesk Sunday 20:00 job: rebuild the weekly discovery universe.
+rem PremarketDesk Sunday 21:00 job: rebuild the weekly discovery universe.
 rem Every later script refuses to run when this is more than the CRITERIA.md
 rem max_age_days stale, so this is the job that keeps the week alive.
 setlocal

@@ -1076,3 +1076,139 @@ made no other call is the instrument seeing itself.
 
 That does not fix the exposure. It measures it, which is the precondition for
 deciding whether the token is worth its price, and it works today.
+
+## 2026-08-17: the bill is not the call count, so the gate is sized in credits and the funnel names its doors
+
+**The measurement that forced this.** The 2026-08-16 Sunday rebuild started
+with 329 credits on the shared meter and finished successfully, and the call
+report said it made 172 http calls. Reading those two numbers together says the
+job cleared with room to spare. It did not. The meter moved 4,945.
+
+The prices reconcile exactly on two independent runs and are now recorded in
+CRITERIA.md [quota costs] as MEASURED: us-quote-delayed bills one credit per
+SYMBOL while being issued twenty at a time, eod-bulk-last-day is a flat hundred
+per call, eod and exchange-symbol-list are one each, and user is free. On the
+00:06:53 rebuild, 2 + 1 + 20x100 + 2,942 staged names gives 4,945, which is the
+delta between the entry and exit readings in logs/meter-2026-08-17.log. The
+20:30:01 run staged 2,941 and read 4,944 at its exit. There is no slack in
+either sum for the meter reads themselves, which is what pins user at zero.
+
+So the 2026-08-16 run did not clear with room to spare. It needed 4,945 and
+held 329, seven percent of the bill, and it survived only because the vendor's
+counter rolled within the first seconds of it. The bulk sweep alone would have
+exhausted 329 on its fourth of twenty calls.
+
+**Decision: quota gates are sized in credits against the work about to be done,
+not against a flat floor.** refuse_below_remaining is 500 and stays 500, which
+is right for a scan spending a few hundred. It is useless for the Sunday
+rebuild: a meter reading 501 clears that floor and then strands the job a tenth
+of the way in, having spent everything that was there. eodhd.require_quota
+prices the step from the table and refuses below it times the headroom in
+[quota] quota_headroom_multiple.
+
+**Two gates, at the two points where nothing has to be estimated.** After
+_session_dates returns, exactly three credits are spent and len(session_dates)
+is exact, so the two thousand credit bulk sweep is priced rather than guessed;
+refusing there costs three credits instead of two thousand. Before the market
+cap sweep, len(staged) is final, so the largest block is priced exactly and the
+meter read to check it is free. The second gate is the one that had to exist.
+The first is cheap insurance and its sweep estimate comes from the previous
+build's cleared_price_and_liquidity, which is a real number rather than a seed.
+
+**An unknown meter still refuses nothing, and this is load bearing.** preflight
+leaves remaining as None on three paths, and the third is a reading dated to
+another quota day, which is exactly what the vendor serves for the half hour
+after a reset it rolls thirty minutes late. Treating that as a zero would turn
+a benign late roll into a skipped weekly rebuild, and would act on a number
+nobody read. require_quota therefore refuses only when remaining is not None,
+never recomputing it from api_requests, which the stale branch does populate.
+
+**gap_stats gets the same gate rather than universe carrying its budget.** It
+is the second step of the same .bat and cost a measured 2,753 credits against
+the same 500 floor. Coupling the two would refuse a rebuild on Sundays when
+only gap_stats was unaffordable, so each prices itself. gap_stats can price
+itself exactly, one eod per universe name, before its first call.
+
+**Refusing is the cheaper failure, which is why it is the choice.** A refused
+Sunday leaves last week's file, and the monitor relaunches the job at
+universe_rerun_after_days, so the recovery path already exists. That argument
+holds ONLY while a refusal leaves the old file in place, which is why the
+write time gate below exists: it is the same reasoning applied to the failure
+the quota gates cannot see. Continuing: discover only
+starts refusing on the fourth morning after a miss. Proceeding on a short meter
+is the outcome with no recovery. staged is sorted by dollar volume descending,
+so a sweep that runs out partway does not thin the file evenly, it amputates
+the illiquid tail, and the result stays inside expected_count_range and above
+min_count_fraction_of_previous until roughly half the names are gone. A missing
+report is recoverable. A plausible one built on a truncated universe is not.
+
+**Decision: the market cap funnel records every door, by name.** The note this
+replaces said "46 names were dropped because no market cap came back" against
+2,942 examined and 2,754 admitted. That arithmetic does not close: 142 names
+failed the market cap floor with nothing recording that they had been
+considered. Naming the 46 alone would have made the record worse, because a
+reader would take the named list as the explanation for the whole 2,942 to
+2,754 drop, and it explains a quarter of it.
+
+Five doors now, and they are not the same kind of fact.
+below_market_cap_floor is a decision made on evidence. The other three are
+absences that differ in what is absent: the vendor answered and carried no
+market cap, the vendor answered a batch without mentioning the name, or nothing
+came back for the batch at all. Only the first is a fact about the market.
+
+**What separating them immediately revealed.** The 46 were never one thing.
+They are 20 and 26, and neither group is missing data. The 20 are alternate
+share classes and warrants the vendor prices under the primary class: BRK-A,
+BRK-B, HEI-A, LEN-B, MOG-A, GEF-B, BH-A, UHAL-B, BF-B. The 26 are preferreds
+and warrants it does not quote at all: ALB-PA, ARES-P-B, BA-P-A, HPE-P-C,
+KKR-P-D, NEE-P-T, PCG-P-X, JOBY-WS, and ZVZZT, which is NASDAQ's test symbol.
+So the market cap gap was silently doing the filtering that
+allowed_security_type was supposed to do, and that was invisible while all 46
+shared one sentence. Whether the type filter should catch them upstream is a
+separate question and is left open here.
+
+**A silent hole closed on the way.** The old guard was `if error and not data`.
+eodhd.quote_delayed returns ({}, None) when a chunk comes back 200 with a body
+it does not recognise: no error, no rows. The guard was False, the loop ran
+over an empty dict, and twenty names fell into the vendor gap counter with
+nothing written anywhere. The test is now on the data rather than the error, so
+a batch that answered nothing is recorded as unanswered whether or not it said
+why. It did not fire on either run observed, which is why it went unnoticed.
+
+**check_admissible acts on the distinction, at max_unswept_fraction = 0.02, and
+the build asks it BEFORE overwriting anything.** Recording the difference
+without acting on it would leave the same silent corruption in place with
+better documentation. But where it is enforced matters more than the number.
+check_admissible has always been called downstream, by discover, on a file
+already on disk. That ordering is fine for a question about age and useless for
+a question about completeness: os.replace is destructive, so by the time
+discover can refuse the file, the good one it would have fallen back to is
+gone. Worse, the monitor relaunches the rebuild on AGE, so a truncated file
+with a fresh timestamp is never retried while a missing one is, and the
+recovery argument two paragraphs above would not have applied to the very
+failure this gate was added to catch. build() therefore asks the question of
+its own payload and raises PartialBuildError rather than writing.
+
+The numerator is the names nothing came back for at all. Names the vendor
+answered a batch without mentioning are excluded, because that is its coverage
+rather than this run's failure, and it is structural: 26 of 2,942, all
+preferreds and warrants. Folding them in would spend a third of the ceiling on
+a constant and leave real losses 1.6 batches of room. Excluded, the baseline is
+zero, 0.02 of 2,942 is 58 names, and the gate clears two lost batches of twenty
+and trips on the third. Payloads written before the funnel existed carry no
+field and are skipped rather than failed.
+
+**Errors of fact corrected in place today.** CRITERIA.md recorded
+eod-bulk-last-day at "98 counted calls each" in two places. At 98 the rebuild
+reconciles to 4,905 and leaves 40 credits unexplained; at 100 it closes
+exactly. The 98 was read off the client side call ledger, which counts calls
+and is not the bill. Both sites now carry the marker. The [job status steps]
+comment still said Sunday 20:00 after the schedule moved to 21:00 on
+2026-08-16, and is corrected the same way.
+
+**What this does not close.** Whether eod-bulk-last-day costs 100 for every
+caller or only for this one is untested; the price is measured from universe's
+usage alone. The vendor's HTTP status on exhaustion is still unobserved, so the
+refusal path is argued rather than demonstrated end to end. And the 21:00 slot
+has never fired, so its clearance of the late roll is inferred from the
+schedule rather than seen.

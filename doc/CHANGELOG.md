@@ -15,6 +15,154 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-17: the quota gate is sized in credits, and the market cap funnel names every door
+
+### The call count was never the bill
+
+The 2026-08-16 Sunday rebuild entered with 329 credits on the shared meter and
+reported 172 http calls. Those two numbers together read as a job that cleared
+comfortably. The meter moved 4,945.
+
+CRITERIA.md gains a [quota costs] section, MEASURED rather than seeded, because
+the arithmetic closes exactly on two independent runs:
+
+| endpoint | unit | credits |
+| --- | --- | ---: |
+| eod-bulk-last-day | per call | 100 |
+| us-quote-delayed | per SYMBOL, issued twenty at a time | 1 |
+| eod | per call | 1 |
+| exchange-symbol-list | per call | 1 |
+| user | per call | 0 |
+
+On the 00:06:53 rebuild: 2 + 1 + 20x100 + 2,942 staged names = 4,945, the delta
+between entry and exit in logs/meter-2026-08-17.log. The 20:30:01 run staged
+2,941 and read 4,944 at its exit. Neither sum has room for the meter reads, so
+user is free. A third run later added two more meter reads for the new gates
+and still moved exactly 4,945.
+
+So the 2026-08-16 run did not clear comfortably. It needed 4,945 and held 329.
+It survived because the counter rolled within its first seconds; the bulk sweep
+alone would have exhausted 329 on its fourth of twenty calls.
+
+### Gates sized to the work, at the two points where nothing is estimated
+
+eodhd.require_quota prices a step from the table and refuses below that times
+[quota] quota_headroom_multiple. universe.py gets two:
+
+- after _session_dates, where three credits are spent and len(session_dates) is
+  exact, so the 2,000 credit bulk sweep is priced rather than guessed. Refusing
+  there costs three credits instead of two thousand.
+- before the market cap sweep, where len(staged) is final. This is the gate
+  that had to exist, and the meter read for it is free.
+
+gap_stats gets the same treatment rather than universe carrying its budget,
+because coupling them would refuse a rebuild on Sundays when only gap_stats was
+unaffordable. It prices itself exactly: one eod per universe name, a measured
+2,753 credits against the same 500 floor it used to check.
+
+An unknown meter still refuses nothing. preflight leaves remaining as None on
+three paths and the third is a reading dated to another quota day, which is
+what the vendor serves for the half hour after a reset it rolls late. Refusing
+there would convert a benign late roll into a skipped weekly rebuild, so
+require_quota acts only when remaining is not None and never recomputes it from
+api_requests, which the stale branch does populate.
+
+Refusing is the cheaper failure. A refused Sunday leaves last week's file and
+the monitor relaunches the job at universe_rerun_after_days; discover only
+starts refusing on the fourth morning after a miss. Proceeding on a short meter
+has no recovery: staged is sorted by dollar volume descending, so a starved
+sweep amputates the illiquid tail rather than thinning evenly, and the result
+stays inside expected_count_range and above min_count_fraction_of_previous
+until roughly half the names are gone.
+
+### Five doors, named, because one door counted is worse than none
+
+The note this replaces read "46 names were dropped because no market cap came
+back" against 2,942 examined and 2,754 admitted. That does not close: 142 names
+failed the market cap floor with nothing recording they had been considered.
+Naming the 46 alone would have made it worse, because the named list reads as
+the explanation for the whole 2,942 to 2,754 drop and explains a quarter of it.
+
+    2,942 examined
+    2,754 admitted
+      142 below the >= 500M floor
+       20 answered with no market cap in the row
+       26 absent from a batch that answered
+        0 in a batch that answered nothing
+
+market_cap_funnel carries the counts and the names in universe.json, and the
+job log names the three doors that are evidence gaps. The floor names stay in
+the payload only: that door is a decision made on evidence, and 142 tickers on
+one line would bury the three that are not.
+
+Separating them answered a question nobody had asked. The 46 were never one
+thing, and neither group is missing data. The 20 are alternate share classes
+and warrants priced under the primary class: BRK-A, BRK-B, HEI-A, LEN-B, MOG-A,
+GEF-B, BH-A, UHAL-B, BF-B. The 26 are preferreds and warrants the vendor does
+not quote at all: ALB-PA, ARES-P-B, BA-P-A, HPE-P-C, KKR-P-D, NEE-P-T, PCG-P-X,
+JOBY-WS, and ZVZZT, which is NASDAQ's test symbol. The market cap gap was
+quietly doing the filtering allowed_security_type was supposed to do.
+
+A silent hole closed on the way. The old guard was `if error and not data`, and
+eodhd.quote_delayed returns ({}, None) when a chunk comes back 200 with a body
+it does not recognise: no error, no rows. The guard was False, the loop ran over
+an empty dict, and twenty names fell into the vendor gap counter with nothing
+written anywhere. The test is now on the data, so a batch that answered nothing
+is recorded as unanswered whether or not it said why.
+
+check_admissible acts on the distinction at [universe] max_unswept_fraction =
+0.02, and build() now asks it BEFORE overwriting anything, raising
+PartialBuildError instead of writing. That ordering is the whole point:
+os.replace is destructive, and the monitor relaunches the rebuild on AGE, so a
+truncated file with a fresh timestamp is never retried while a missing one is.
+Enforcing only downstream would have made a lost batch cost the whole week.
+
+The numerator counts only names nothing came back for. Names the vendor
+answered a batch without mentioning are its coverage, not this run's failure,
+and are structural at 26 of 2,942, so counting them would spend a third of the
+ceiling on a constant. Excluded, the baseline is zero and 0.02 of 2,942 is 58
+names: two lost batches of twenty clear, the third trips. Files written before
+the funnel existed are skipped rather than failed.
+
+### Corrections of fact
+
+CRITERIA.md recorded eod-bulk-last-day at "98 counted calls each" in two places.
+At 98 the rebuild reconciles to 4,905 and leaves 40 credits unexplained; at 100
+it closes exactly. The 98 came off the client side call ledger, which counts
+calls and is not the bill. Both sites carry the marker. The [job status steps]
+comment still said Sunday 20:00 after the schedule moved to 21:00, and is
+corrected the same way.
+
+### Claims
+
+test_pool gains claim 13 and claim 14. Claim 13 drives require_quota at three
+points around the computed requirement from fed meters, with the requirement
+priced from the same table the code reads so retuning a knob cannot leave it
+asserting a dead number, and then drives both unknown meter paths to prove
+neither refuses. Claim 14 drives the funnel from a stub covering all four batch
+outcomes including the 200-with-no-rows shape that cannot be provoked from a
+live run, asserts every examined name leaves by exactly one door, and asserts a
+batch that answered nothing is not recorded as a vendor gap.
+
+Claim 15 covers the wiring, which the first two do not: claim 13 would keep
+passing if every call to require_quota were deleted from both modules, which is
+the difference between testing a function and testing a change. It asserts both
+universe gates and the gap_stats gate are called, that build checks its own
+payload before writing, and it drives each exception to prove the handler order.
+That last part cannot be asserted from an exit code, because every path returns
+1: QuotaRefusal and PartialBuildError both subclass RuntimeError, and
+universe.main has caught bare RuntimeError since long before either existed, so
+a handler added below it is dead code whose only symptom is a refusal reported
+as "build failed" with no reason on the job status line.
+
+The entrypoint claim for universe now removes universe.json before driving the
+rebuild. The sandbox carries a restamped copy of the real one, roughly 2,750
+names, and the stub serves a thousand, so the new write time check correctly
+refused it: comparing a stub against production counts tests the fixture rather
+than the entrypoint. With no previous file there is nothing to compare, which
+is also the only place the suite drives the branch of the first quota gate that
+cannot size the market cap sweep yet.
+
 ## 2026-08-16, seventh: the meter is sampled on a clock, and the degrade threshold is claimed on its output
 
 ### A sampler, because the job trail cannot answer "when"

@@ -16,7 +16,7 @@ subscription cap is simply too small.
 
 It costs two bulk end of day calls, today's and the prior session's, because
 the gap is measured open against prior close and one call gives only one of
-them. At a measured 98 counted calls each that is the nightly's whole bulk
+them. At a measured 100 credits each that is the nightly's whole bulk
 spend; nothing else in that pass makes one.
 """
 
