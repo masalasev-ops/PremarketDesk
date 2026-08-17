@@ -86,23 +86,39 @@ def _date_of(text: Any) -> dt.date | None:
         return None
 
 
-# How many trading sessions back the row's as_of_session must sit, per leg.
+# How many trading sessions back the row's NEWEST datum sits, per leg.
 #
-# This table is the definition, not a restatement of one. The briefing section
-# is the only part of the packet that carries more than one vintage on purpose,
-# so "is this packet today's" is the wrong question to ask of it and the right
-# question is "is every row the vintage its own label claims". A leg names a
-# distance and this table is that distance: premarket is measured as of today,
-# and every other leg is measured from the close that many sessions back.
+# This is a freshness table, not a lookback table, and the distinction is the
+# whole reason it exists. Vintage catches STALE DATA, so as_of_session has to
+# name the newest number in the row, because that is the one that can go stale.
+# Anchoring it on the baseline would point the gate at the oldest number, which
+# is old by definition and therefore tells it nothing.
+#
+# The decisive case is already on this project's record. discover buys an extra
+# bulk call at a flat hundred credits precisely so all three sessions carry one
+# vintage, because reading the third from gap_stats would be free and wrong,
+# its closes being five sessions old by Friday. Under baseline labelling that
+# bug is invisible: a three_session row stamped three sessions back looks
+# correct whether its closes are current or a week old. Under this one it fails
+# immediately.
+#
+# So every completed session leg maps to 1. A name nobody subscribed to has no
+# live price, so the newest close there is for it is the prior session's,
+# whatever window the leg spans. THE LOOKBACK LIVES IN THE LEG LABEL ALONE.
+#
+# Known gap, recorded rather than papered over: a row whose leg says
+# three_session while its move is arithmetically a one session move is caught
+# by neither this table nor any other check here. Vintage verifies that the
+# data is fresh, not that the move matches the window its label claims.
 #
 # A leg absent from this table is not a leg. It fails rather than passing
 # unchecked, because an unrecognised label is indistinguishable from a typo,
 # and a section whose entire premise is labelling cannot afford either.
-_LEG_SESSIONS_BACK = {
+_LEG_NEWEST_SESSION_BACK = {
     "premarket": 0,
     "prior_session": 1,
-    "two_session": 2,
-    "three_session": 3,
+    "two_session": 1,
+    "three_session": 1,
 }
 
 
@@ -232,9 +248,9 @@ def check(
                               "against. Every row in this section states which "
                               "leg produced it.")
             continue
-        if leg not in _LEG_SESSIONS_BACK:
+        if leg not in _LEG_NEWEST_SESSION_BACK:
             fail("e", symbol, f"declares leg {leg!r}, which is not one of "
-                              f"{', '.join(sorted(_LEG_SESSIONS_BACK))}. An "
+                              f"{', '.join(sorted(_LEG_NEWEST_SESSION_BACK))}. An "
                               "unrecognised leg cannot be dated.")
             continue
         if not stamped:
@@ -246,9 +262,9 @@ def check(
             fail("e", symbol, f"declares leg {leg} with an unreadable "
                               f"as_of_session ({stamped!r})")
             continue
-        expected = sessions_back(today, _LEG_SESSIONS_BACK[leg])
+        expected = sessions_back(today, _LEG_NEWEST_SESSION_BACK[leg])
         if dated != expected:
-            fail("e", symbol, f"declares leg {leg}, which is measured as of "
+            fail("e", symbol, f"declares leg {leg}, whose newest datum is "
                               f"{expected}, but is stamped {dated}. A row stamped "
                               "with one leg's session while labelled another's is "
                               "how a three day old move gets read as an overnight "

@@ -94,8 +94,8 @@ def claim_notable_legs(failures: list[str]) -> None:
         ("a correctly mixed vintage section", [
             {"symbol": "AAA", "leg": "premarket", "as_of_session": back[0]},
             {"symbol": "BBB", "leg": "prior_session", "as_of_session": back[1]},
-            {"symbol": "CCC", "leg": "two_session", "as_of_session": back[2]},
-            {"symbol": "DDD", "leg": "three_session", "as_of_session": back[3]},
+            {"symbol": "CCC", "leg": "two_session", "as_of_session": back[1]},
+            {"symbol": "DDD", "leg": "three_session", "as_of_session": back[1]},
         ], 0),
         ("a prior session row mis-stamped as premarket", [
             {"symbol": "EEE", "leg": "premarket", "as_of_session": back[1]},
@@ -108,8 +108,13 @@ def claim_notable_legs(failures: list[str]) -> None:
         ("a row whose leg is not a leg", [
             {"symbol": "III", "leg": "weekly", "as_of_session": back[1]},
         ], 1),
-        ("a three session row stamped two sessions back", [
-            {"symbol": "JJJ", "leg": "three_session", "as_of_session": back[2]},
+        # Under freshness labelling a completed leg is stamped with the
+        # NEWEST close it has, which for a name with no live price is the
+        # prior session whatever window the leg spans. A three session row
+        # stamped three sessions back is therefore stale, not correct: that is
+        # exactly the gap_stats closes discover spends 100 credits to avoid.
+        ("a three session row stamped three sessions back", [
+            {"symbol": "JJJ", "leg": "three_session", "as_of_session": back[3]},
         ], 1),
     )
     for label, rows, expected in cases:
