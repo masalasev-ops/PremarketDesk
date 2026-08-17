@@ -68,6 +68,76 @@ def _clean_packet() -> dict:
     }
 
 
+
+def claim_notable_legs(failures: list[str]) -> None:
+    """The briefing section is validated per row, against the leg it declares.
+
+    Checks (a) to (d) ask "is this today's", which is right for the candidates
+    and the market snapshot because they carry one vintage. The briefing
+    section carries several on purpose: there is no universe wide premarket
+    price, so names the collector never heard are measured on completed
+    sessions while the fifty it did hear are measured this morning. Asking one
+    vintage question of that section would either fail every honest row or pass
+    every dishonest one.
+
+    So the question changes to "does each row match the session its own leg
+    declares", and the fields that make that answerable are REQUIRED. A row
+    with no leg, or no as_of_session, fails rather than being skipped. Skipping
+    it would let an unlabelled row through a gate whose entire purpose is that
+    the labels are true.
+    """
+    today = ettime.today_et()
+    session = today.isoformat()
+    back = {n: vintage.sessions_back(today, n).isoformat() for n in (0, 1, 2, 3)}
+
+    cases = (
+        ("a correctly mixed vintage section", [
+            {"symbol": "AAA", "leg": "premarket", "as_of_session": back[0]},
+            {"symbol": "BBB", "leg": "prior_session", "as_of_session": back[1]},
+            {"symbol": "CCC", "leg": "two_session", "as_of_session": back[2]},
+            {"symbol": "DDD", "leg": "three_session", "as_of_session": back[3]},
+        ], 0),
+        ("a prior session row mis-stamped as premarket", [
+            {"symbol": "EEE", "leg": "premarket", "as_of_session": back[1]},
+        ], 1),
+        ("a premarket row mis-stamped as a prior session", [
+            {"symbol": "FFF", "leg": "prior_session", "as_of_session": back[0]},
+        ], 1),
+        ("a row with no leg", [{"symbol": "GGG", "as_of_session": back[0]}], 1),
+        ("a row with no as_of_session", [{"symbol": "HHH", "leg": "premarket"}], 1),
+        ("a row whose leg is not a leg", [
+            {"symbol": "III", "leg": "weekly", "as_of_session": back[1]},
+        ], 1),
+        ("a three session row stamped two sessions back", [
+            {"symbol": "JJJ", "leg": "three_session", "as_of_session": back[2]},
+        ], 1),
+    )
+    for label, rows, expected in cases:
+        found = vintage.check([], [], session, rows)
+        if len(found) != expected:
+            failures.append(f"{label} produced {len(found)} violation(s), expected "
+                            f"{expected}: {found}")
+            continue
+        if expected and found[0]["check"] != "e":
+            failures.append(f"{label} was caught by check {found[0]['check']!r}, "
+                            "expected check e")
+
+    # And the gate has to reach the whole packet path, not only check().
+    mixed = {
+        "session_date": session,
+        "candidates": [],
+        "market_snapshot": [],
+        "notable_movers": {"rows": [
+            {"symbol": "KKK", "leg": "prior_session", "as_of_session": back[0]},
+        ]},
+    }
+    if not vintage.check_packet(mixed):
+        failures.append("check_packet did not walk notable_movers, so a mis-stamped "
+                        "briefing row would reach the report unchecked")
+
+    print(f"  claim legs      {len(cases)} leg cases, a mis-stamped row and an "
+          "unlabelled row both fail, and check_packet walks the section")
+
 def main() -> int:
     failures: list[str] = []
 
@@ -135,6 +205,8 @@ def main() -> int:
 
     if original_marker.exists():
         print(f"  the real gate marker is untouched at {original_marker}")
+
+    claim_notable_legs(failures)
 
     if failures:
         for failure in failures:

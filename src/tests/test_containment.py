@@ -19,6 +19,8 @@ import sys
 from morning import analyst
 from core import config
 
+ROOT_RUNS = config.PROJECT_ROOT / "runs"
+
 ACRONYMS = ["ETF", "CEO", "FDA", "SEC", "EPS", "IPO", "GDP", "CPI", "FOMC"]
 
 
@@ -43,6 +45,62 @@ def pick_absent_universe_symbol(packet_text: str) -> str:
             return bare
     raise RuntimeError("universe.json yielded no usable symbol for the test")
 
+
+
+def claim_briefing_table_cannot_stand_in(failures: list[str]) -> None:
+    """A briefing table must not satisfy the requirement that the watchlists exist.
+
+    The vacuum detector used to be `columns_scanned == 0`. That worked while
+    the only tables carrying a Ticker header were the two watchlists, and it
+    stopped working the moment a third was added: any table with a Ticker
+    header raised the count above zero and the guard reported a clean pass.
+
+    This is not hypothetical and this claim is the measurement of it. The real
+    2026-08-14 report omitted BOTH watchlist tables because both screens were
+    empty, while naming twelve candidates in bold prose. Appending a Notable
+    movers table to that exact report flipped structure_failed from True to
+    False, with all 22 prose ticker claims still unvalidated. The guard now
+    requires the two tables BY NAME, so a briefing table contributes its cells
+    as claims to check and cannot stand in for a watchlist that was never
+    written.
+    """
+    real_report = ROOT_RUNS / "2026-08-14" / "report.md"
+    real_packet = ROOT_RUNS / "2026-08-14" / "packet.json"
+    if not real_report.is_file() or not real_packet.is_file():
+        print("  claim briefing  SKIPPED, the 2026-08-14 archive is not on disk")
+        return
+    report_text = real_report.read_text(encoding="utf-8")
+    packet_text = real_packet.read_text(encoding="utf-8")
+    NOTABLE = (
+        "\n## Notable movers\n\n"
+        "| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| OMER | prior_session | 2026-08-13 | +7.10 | 3.2 | 1.2B | not checked |\n"
+    )
+
+    _, _, plain = analyst.check_report(report_text, packet_text)
+    if not plain["structure_failed"]:
+        failures.append("the archived 2026-08-14 report no longer fails on "
+                        "structure, so this claim is measuring nothing")
+        return
+
+    _, _, withtable = analyst.check_report(report_text + NOTABLE, packet_text)
+    if not withtable["structure_failed"]:
+        failures.append(
+            "appending a Notable movers table to the 2026-08-14 report made it "
+            f"PASS the structure gate: {withtable}. A briefing table cannot "
+            "stand in for a watchlist that was never written.")
+    if set(withtable["tables_missing"]) != {"day watchlist", "swing watchlist"}:
+        failures.append(f"the guard did not name both missing watchlists: "
+                        f"{withtable['tables_missing']}")
+    if withtable["columns_scanned"] <= plain["columns_scanned"]:
+        failures.append("the briefing table contributed no scanned column, so it "
+                        "is not being read for claims at all")
+
+    print(f"  claim briefing  the 2026-08-14 report still fails on structure with a "
+          f"briefing table appended, which raised columns scanned "
+          f"{plain['columns_scanned']} to {withtable['columns_scanned']} while both "
+          "watchlists stay named as missing")
 
 def main() -> int:
     packet_text = build_packet_text()
@@ -169,8 +227,15 @@ def main() -> int:
         disclaimer_line = next(
             line for line in annotated.splitlines() if "Nothing here is advice" in line
         )
-        if "omitted its watchlist tables" not in disclaimer_line:
-            failures.append("the disclaimer does not say the tables were omitted")
+        # The wording moved with the guard: it now NAMES the missing tables,
+        # because "no ticker column was scanned" stopped being the test the
+        # moment a third table could carry a Ticker header.
+        if "omitted 2 required table(s)" not in disclaimer_line:
+            failures.append("the disclaimer does not name the omitted tables: "
+                            f"{disclaimer_line}")
+        for wanted in ("day watchlist", "swing watchlist"):
+            if wanted not in disclaimer_line:
+                failures.append(f"the disclaimer does not name the {wanted}")
         print(f"  claim 5 the 2026-08-14 report fails on structure: "
               f"{len(named)} prose ticker claims across {coverage['columns_scanned']} "
               f"ticker columns, all {len(candidates)} candidates among them")
@@ -191,6 +256,18 @@ def main() -> int:
         "The day screen produced nothing today, and the most common failed "
         "condition was the premarket price sitting below the prior day high.\n"
     )
+    # REPORT_TEMPLATE.md requires BOTH watchlist tables even when empty, and
+    # the guard now checks for them by name rather than counting columns.
+    # This fixture carried only the day table, which passed a column count
+    # and correctly fails a named check.
+    empty_table_report += (
+        "\n## Swing watchlist\n\n"
+        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst "
+        "| Score | Conviction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| none | | | | | | | |\n\n"
+        "The swing screen produced nothing today either.\n"
+    )
     invented, _, coverage = analyst.check_report(empty_table_report, packet_text)
     if coverage["columns_scanned"] < 1:
         failures.append(f"the empty but present table scanned no columns: {coverage}")
@@ -201,6 +278,8 @@ def main() -> int:
         failures.append(f"the empty table report invented tickers: {invented}")
     print(f"  claim 6 an empty but present table scans "
           f"{coverage['columns_scanned']} ticker column(s) and passes")
+
+    claim_briefing_table_cannot_stand_in(failures)
 
     if failures:
         for failure in failures:

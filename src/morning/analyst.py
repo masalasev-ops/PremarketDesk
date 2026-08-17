@@ -524,7 +524,39 @@ def _prose_tokens(report_text: str) -> set[str]:
     return {token for token in _TOKEN_RE.findall(prose) if token not in stopwords}
 
 
-def _ticker_claims(report_text: str) -> tuple[set[str], int, set[str]]:
+# The two tables whose PRESENCE the guard requires, keyed by their literal
+# header row from REPORT_TEMPLATE.md. Counting ticker columns was the old test
+# and it stopped working the moment a third table carried a Ticker header: a
+# briefing table with no trading meaning would satisfy a check that exists to
+# prove the two trading tables were written. Replaying the 2026-08-14 report
+# with a Notable movers table appended flipped structure_failed from True to
+# False while both watchlists were still missing and 22 prose ticker claims
+# still went unvalidated.
+#
+# So the requirement names the tables. Any other table with a Ticker header
+# still contributes its cells as claims to validate, which is what keeps the
+# briefing section honest, but it cannot satisfy this.
+_REQUIRED_TABLES = {
+    "day watchlist": (
+        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
+        "Premarket VWAP | Score | Conviction |"
+    ),
+    "swing watchlist": (
+        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
+        "Score | Conviction |"
+    ),
+}
+
+
+def _header_cells(line: str) -> tuple[str, ...]:
+    """A header row reduced to its cells, for comparison against the required set."""
+    return tuple(cell.strip().lower() for cell in line.strip().strip("|").split("|"))
+
+
+_REQUIRED_CELLS = {name: _header_cells(row) for name, row in _REQUIRED_TABLES.items()}
+
+
+def _ticker_claims(report_text: str) -> tuple[set[str], int, set[str], set[str]]:
     """The tokens the report presents AS tickers, the columns scanned, and prose.
 
     A claim is a token in a table column whose header names it a ticker column,
@@ -547,6 +579,7 @@ def _ticker_claims(report_text: str) -> tuple[set[str], int, set[str]]:
     """
     claims: set[str] = set(_DOLLAR_RE.findall(report_text))
     columns_scanned = 0
+    found_tables: set[str] = set()
     separator = re.compile(r"[|\s:\-]+")
     lines = report_text.splitlines()
     ticker_columns: list[int] | None = None
@@ -569,13 +602,18 @@ def _ticker_claims(report_text: str) -> tuple[set[str], int, set[str]]:
                 if "ticker" in cell.lower() or "symbol" in cell.lower()
             ]
             columns_scanned += len(ticker_columns)
+            if ticker_columns:
+                seen = tuple(cell.lower() for cell in cells)
+                for name, wanted in _REQUIRED_CELLS.items():
+                    if seen == wanted:
+                        found_tables.add(name)
             continue
         if not ticker_columns:
             continue
         for position in ticker_columns:
             if position < len(cells):
                 claims.update(_TOKEN_RE.findall(cells[position]))
-    return claims, columns_scanned, _prose_tokens(report_text)
+    return claims, columns_scanned, _prose_tokens(report_text), found_tables
 
 
 def check_report(
@@ -598,7 +636,7 @@ def check_report(
     must say so where the reader will see it.
     """
     known_symbols = _claimable_symbols()
-    table_claims, columns_scanned, prose_tokens = _ticker_claims(report_text)
+    table_claims, columns_scanned, prose_tokens, found_tables = _ticker_claims(report_text)
     prose_claims = (
         sorted(token for token in prose_tokens if token in known_symbols)
         if known_symbols is not None
@@ -611,19 +649,24 @@ def check_report(
     # escaped it: the tables the guard reads were never written. That is a
     # structural failure of the report, reported as a failure rather than as a
     # pass with a footnote.
-    structure_failed = columns_scanned == 0 and bool(prose_claims)
+    missing_tables = sorted(set(_REQUIRED_TABLES) - found_tables)
+    structure_failed = bool(missing_tables)
     coverage: dict[str, Any] = {
         "universe_available": known_symbols is not None,
         "columns_scanned": columns_scanned,
         "tokens_examined": len(claims),
         "claims_checked": len(claims) if known_symbols is not None else 0,
         "prose_claims": prose_claims,
+        "tables_found": sorted(found_tables),
+        "tables_missing": missing_tables,
         "structure_failed": structure_failed,
         "structure_reason": (
-            f"{len(prose_claims)} ticker claim(s) appear in the prose "
-            f"({', '.join(prose_claims)}) but no table carried a Ticker or Symbol "
-            "header, so no ticker column was scanned. REPORT_TEMPLATE.md requires "
-            "both watchlist tables to be written even when empty."
+            f"the report is missing {len(missing_tables)} required table(s) "
+            f"({', '.join(missing_tables)}). REPORT_TEMPLATE.md requires both "
+            "watchlist tables to be written even when empty, with their header "
+            "rows reproduced character for character. Any other table carrying a "
+            "Ticker header contributes claims to validate but cannot stand in for "
+            "them, so a briefing table does not make a missing watchlist pass."
         ) if structure_failed else None,
     }
     if known_symbols is None:
@@ -654,10 +697,10 @@ def _why_unvalidated(coverage: dict[str, Any]) -> str:
     if not coverage.get("universe_available"):
         return "universe.json was unavailable"
     if coverage.get("structure_failed"):
-        claims = coverage.get("prose_claims") or []
-        return ("the report omitted its watchlist tables, so no ticker column "
-                f"existed to check the {len(claims)} ticker(s) it names in prose "
-                f"({', '.join(claims)})")
+        missing = coverage.get("tables_missing") or []
+        return (f"the report omitted {len(missing)} required table(s) "
+                f"({', '.join(missing)}), which REPORT_TEMPLATE.md requires to be "
+                "written even when empty")
     if not coverage.get("columns_scanned") and not coverage.get("tokens_examined"):
         return ("no table carried a recognisable Ticker or Symbol header and "
                 "no $ prefixed claims were found, so nothing was examined")

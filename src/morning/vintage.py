@@ -86,10 +86,39 @@ def _date_of(text: Any) -> dt.date | None:
         return None
 
 
+# How many trading sessions back the row's as_of_session must sit, per leg.
+#
+# This table is the definition, not a restatement of one. The briefing section
+# is the only part of the packet that carries more than one vintage on purpose,
+# so "is this packet today's" is the wrong question to ask of it and the right
+# question is "is every row the vintage its own label claims". A leg names a
+# distance and this table is that distance: premarket is measured as of today,
+# and every other leg is measured from the close that many sessions back.
+#
+# A leg absent from this table is not a leg. It fails rather than passing
+# unchecked, because an unrecognised label is indistinguishable from a typo,
+# and a section whose entire premise is labelling cannot afford either.
+_LEG_SESSIONS_BACK = {
+    "premarket": 0,
+    "prior_session": 1,
+    "two_session": 2,
+    "three_session": 3,
+}
+
+
+def sessions_back(today: dt.date, count: int) -> dt.date:
+    """The trading session `count` sessions before `today`, walking the calendar."""
+    day = today
+    for _ in range(count):
+        day = previous_trading_session(day)
+    return day
+
+
 def check(
     candidates: list[dict[str, Any]],
     snapshot: list[dict[str, Any]],
     session_date: str,
+    notable: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Every vintage violation in this packet. Empty means the data is today's.
 
@@ -179,15 +208,85 @@ def check(
             fail("d", label, f"claims to be current but is dated {dated}, not the "
                              f"session date {session_date}")
 
+    # (e) every notable movers row is the vintage its own label claims.
+    #
+    # Checks (a) to (d) all ask "is this today's". That is right for the
+    # candidates and the market snapshot, which carry one vintage, and it is
+    # wrong for this section by design: it mixes a premarket leg for the names
+    # the collector heard with completed session legs for everyone else,
+    # because there is no universe wide premarket price to be had. So the
+    # question changes. Not "is the packet today's" but "does every row match
+    # the session its leg declares".
+    #
+    # leg and as_of_session are REQUIRED. A row missing either fails and is
+    # never skipped. Skipping it would let an unlabelled row through a gate
+    # whose whole purpose is that the labels are true, and an unlabelled row in
+    # a section built entirely on labelling is the exact failure this check
+    # exists to catch.
+    for row in notable or []:
+        symbol = str(row.get("symbol") or row.get("ticker") or "?")
+        leg = row.get("leg")
+        stamped = row.get("as_of_session")
+        if not leg:
+            fail("e", symbol, "carries no leg, so there is nothing to date it "
+                              "against. Every row in this section states which "
+                              "leg produced it.")
+            continue
+        if leg not in _LEG_SESSIONS_BACK:
+            fail("e", symbol, f"declares leg {leg!r}, which is not one of "
+                              f"{', '.join(sorted(_LEG_SESSIONS_BACK))}. An "
+                              "unrecognised leg cannot be dated.")
+            continue
+        if not stamped:
+            fail("e", symbol, f"declares leg {leg} with no as_of_session, so the "
+                              "row claims a vintage it does not state")
+            continue
+        dated = _date_of(stamped)
+        if dated is None:
+            fail("e", symbol, f"declares leg {leg} with an unreadable "
+                              f"as_of_session ({stamped!r})")
+            continue
+        expected = sessions_back(today, _LEG_SESSIONS_BACK[leg])
+        if dated != expected:
+            fail("e", symbol, f"declares leg {leg}, which is measured as of "
+                              f"{expected}, but is stamped {dated}. A row stamped "
+                              "with one leg's session while labelled another's is "
+                              "how a three day old move gets read as an overnight "
+                              "one.")
+            continue
+        # A row that carries a price timestamp is held to the same session its
+        # leg declares, and the premarket leg additionally to the premarket
+        # window, because that leg is the only one claiming to be intraday.
+        when = _parse_stamp(row.get("price_time"))
+        if row.get("price_time") and when is None:
+            fail("e", symbol, f"carries an unreadable price_time "
+                              f"({row.get('price_time')!r})")
+            continue
+        if when is not None:
+            if when.date() != expected:
+                fail("e", symbol, f"declares leg {leg} as of {expected} but its "
+                                  f"price_time is dated {when.date()}")
+                continue
+            if leg == "premarket":
+                hhmm = ettime.hhmm(when)
+                if not window_start <= hhmm <= window_end:
+                    fail("e", symbol, f"is on the premarket leg with a price_time "
+                                      f"at {hhmm} ET, outside the premarket window "
+                                      f"{window_start} to {window_end}")
+
     return violations
 
 
 def check_packet(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """check() against a whole packet, for replaying one that is already on disk."""
+    notable = payload.get("notable_movers") or {}
     return check(
         payload.get("candidates") or [],
         payload.get("market_snapshot") or [],
         str(payload.get("session_date") or ettime.today_et().isoformat()),
+        # The section stores its rows under "rows"; a bare list is accepted too
+        # so a hand written fixture does not have to know the wrapper's shape.
+        notable if isinstance(notable, list) else (notable.get("rows") or []),
     )
 
 

@@ -357,9 +357,23 @@ def _write_collector_bars(day: dt.date | None = None) -> Path:
 def _write_report() -> Path:
     """A report.md for render, and a packet for verify and analyst."""
     run = config.run_dir(TODAY.isoformat())
+    # Both watchlist tables, with the literal header rows from
+    # REPORT_TEMPLATE.md. The stub used to carry one improvised "| Ticker | Gap |"
+    # table, which satisfied a guard that counted ticker columns and does not
+    # satisfy one that requires these two tables by name. A fixture that would
+    # be rejected in production should not pass here either.
     (run / "report.md").write_text(
         "# Premarket, " + TODAY.isoformat() + "\n\n"
-        "## Watchlist\n\n| Ticker | Gap |\n| --- | --- |\n| AAPL | +3.1% |\n\n"
+        "## Day watchlist\n\n"
+        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
+        "Premarket VWAP | Score | Conviction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |\n\n"
+        "## Swing watchlist\n\n"
+        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
+        "Score | Conviction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| none | | | | | | | |\n\n"
         "Nothing here is advice.\n",
         encoding="utf-8",
     )
@@ -998,9 +1012,26 @@ def claim_analyst(failures: list[str]) -> None:
 
     _write_packet()
     real = analyst.invoke_claude
+    # The stubbed model returns both watchlist tables with the literal header
+    # rows from REPORT_TEMPLATE.md. It used to return one improvised
+    # "| Ticker | Gap |" table, which passed a guard that counted ticker
+    # columns. The guard now requires these two tables BY NAME, because
+    # counting columns stopped working the moment a third table could carry a
+    # Ticker header, so a stub that would be rejected in production must be
+    # rejected here.
     analyst.invoke_claude = lambda packet_text: (
-        "# Premarket\n\n## Watchlist\n\n| Ticker | Gap |\n| --- | --- |\n"
-        "| AAPL | +3.1% |\n\nNothing here is advice.\n",
+        "# Premarket\n\n"
+        "## Day watchlist\n\n"
+        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
+        "Premarket VWAP | Score | Conviction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |\n\n"
+        "## Swing watchlist\n\n"
+        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
+        "Score | Conviction |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
+        "| none | | | | | | | |\n\n"
+        "Nothing here is advice.\n",
         {"total_cost_usd": 0.0, "duration_ms": 1, "num_turns": 1},
         None,
         "ok",
