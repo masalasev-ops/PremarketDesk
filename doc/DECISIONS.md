@@ -1279,3 +1279,82 @@ close during premarket, which a probe run between 07:30 and 09:00 would settle
 for about 20 credits a day. That probe was considered and deferred: the
 briefing section it would inform is built from completed sessions and needs no
 premarket price, so the question is now optional rather than blocking.
+
+## 2026-08-17, second: the briefing reads one file, scales its sigma by the span, and ranks inside one leg
+
+Three rulings by the owner on the notable movers section, before a line of it
+was built. The section is specified in BUILD_PLAN.md Layer 4; this is why each
+of the three went the way it did. The design they amended was mine, written
+down the same day, and each ruling replaced a worse answer.
+
+**The universe legs read data/universe-closes-<date>.json, not
+pool_recall.json.** My version had the universe wide leg reading the previous
+session's true OPEN gap out of the prior day's pool_recall.json, on the
+grounds that the 09:45 pass had already computed it for every name. Three
+things are wrong with that and only the third was visible to me at the time.
+
+It is not universe wide. pool_recall only records names above the discovery
+gap_pct floor of 3 percent, so the leg would have covered the gappers and
+called itself the universe. I had noticed this and disclosed it as a partial
+view, which is the wrong repair: a section that reports a truncated
+denominator and explains the truncation is worse than one that reports the
+whole universe, because the explanation is what nobody reads.
+
+It costs a vintage. The closes file exists precisely so that the section's
+three closes share one vintage, bought with an extra 100 credit bulk call for
+exactly that reason. Reading a fourth number out of a different module's
+output on a different schedule reintroduces the mixing that call was spent to
+avoid.
+
+And close to close is the better measure for a briefing anyway. An open gap
+carries only the discontinuity. Close to close carries the whole session, the
+gap and the drift after it, and the question this section asks is what
+happened to the name, not what the screen could have traded. The open gap
+belongs to pool_recall because recall is measured against what the screen
+could have caught at the open; the briefing is not that.
+
+**Decision: no leg reads pool_recall.json.** The scope fence around the recall
+measurement then holds with nothing to enforce it, because there is no
+connection to sever, and the examined count is the universe rather than the
+gapper count.
+
+**move_sigma scales by the square root of the span.** I had ruled sigma
+inapplicable to the multi session legs, correctly identifying that a two
+session move over a one day standard deviation is dimensionally wrong, and
+then stopped at the diagnosis. The standard repair is to divide an n session
+move by sigma times the square root of n, which is what the section now does:
+1 for premarket and prior_session, the square root of 2 for two_session.
+Every leg carries a sigma, and the four labelled lists can be read as one
+section.
+
+The assumption is stated in the docstring where the scaling is computed,
+because it is not free. Square root of time scaling assumes daily returns are
+INDEPENDENT, and consecutive moves in one name frequently are not: momentum
+and a multi day catalyst both produce runs, and dependent returns accumulate
+faster than the square root allows. So the scaled sigma UNDERSTATES how
+unusual a sustained run is. That is the safe direction here. It cannot inflate
+a name into a briefing, it can only keep one out.
+
+**Every ranked list stays inside one leg.** My version ranked the whole
+section on each name's newest available move, premarket where the collector
+heard it and the completed session otherwise. That is a ranking that cannot
+mean anything. The 50 collector names were selected in advance for gap
+propensity and news, and they are measured on a fresher and wider window than
+the 2,704 names nothing selected. They would take the top of every list
+systematically, and a section that exists so the report says something the
+watchlist does not would have spent itself restating the watchlist.
+
+**Decision: four lists, each ranked within one leg.** move_sigma and market
+cap on the prior session leg universe wide, absolute move on the two session
+leg universe wide, and move_sigma on the premarket leg over the collector
+names alone. Like for like inside each list, and the premarket names get their
+own five slots instead of taking everyone else's.
+
+**What this cost, stated rather than buried.** Under the naming these rulings
+settle, where a leg is named for the number of sessions its move SPANS, the
+three session leg has no source: it needs a fourth close and the file holds
+three. It is not emitted. Restoring it is one more 100 credit bulk call in
+discover, 500 credits a week against a 4,945 credit universe build, and that
+is the owner's call rather than the builder's. The leg name stays in
+_LEG_NEWEST_SESSION_BACK, where it costs nothing and would validate correctly
+if a row ever carried it.

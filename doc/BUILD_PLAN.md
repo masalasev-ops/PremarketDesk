@@ -394,9 +394,10 @@ recreates it deliberately.
 
 ## Layer 4: the notable movers section, specified
 
-Ordered by the owner on 2026-08-16 and settled over the two days after. This
-is the whole design. Where a point was decided while writing this down rather
-than by the owner, it says so, so it can be overruled cheaply.
+Ordered by the owner on 2026-08-16, settled over the two days after, and
+amended on 2026-08-17 by three rulings recorded in DECISIONS.md. This is the
+whole design. Where a point was decided while writing this down rather than by
+the owner, it says so, so it can be overruled cheaply.
 
 ### Already built, do not rebuild
 
@@ -411,6 +412,8 @@ than by the owner, it says so, so it can be overruled cheaply.
   extra bulk call, a flat 100 credits, and is bought rather than read from
   gap_stats so that all three closes carry ONE vintage. A name missing from a
   session is null there and is never backfilled from a neighbouring session.
+  THIS IS THE SECTION'S ONLY PRICE SOURCE for every name the collector did
+  not hear.
 - gap_stats.return_stdev_20d: the standard deviation of daily close to close
   returns in percent over the trailing 20 sessions, null below
   min_sessions_for_move_sigma returns. Computed from a close only filtered
@@ -418,7 +421,9 @@ than by the owner, it says so, so it can be overruled cheaply.
   drops bars missing an open.
 - vintage check (e) and _LEG_NEWEST_SESSION_BACK: per row validation of
   notable_movers. leg and as_of_session are REQUIRED fields, and a row
-  missing either fails rather than being skipped.
+  missing either fails rather than being skipped. All three emitted legs
+  already validate against the table as it stands: premarket stamps today,
+  every universe leg stamps the prior session.
 - analyst._REQUIRED_TABLES: the vacuum detector requires the day and swing
   watchlist tables BY NAME. A notable movers table contributes claims to
   validate but can never satisfy that requirement.
@@ -440,8 +445,12 @@ record of what the trading screen claimed and mixing briefing names into it
 would destroy the measurement. If a step seems to need a picks column, stop
 and report rather than adding one.
 
-pool_recall.json is read. pool_recall.py is not imported, not called and not
-modified.
+The section reads exactly two files it does not own, universe.json for market
+caps and data/universe-closes-<date>.json for prices, plus the collector bars
+scan already holds in memory. It does not read pool_recall.json, does not
+import pool_recall, and shares no code with it. The fence around the recall
+measurement therefore needs nothing to hold it: there is no connection to
+sever and no byte identical rebuild to check.
 
 ### 4.2 Per candidate fields in scan
 
@@ -449,7 +458,8 @@ For every candidate, stored in the packet beside gap_pct:
 
 - move_sigma: gap_pct divided by return_stdev_20d. A quiet megacap moving 2
   percent and a thin small cap moving 6 percent land at comparable numbers,
-  which is the whole point.
+  which is the whole point. The premarket move spans one session, so the
+  square root scaling in 4.3 multiplies the denominator by 1 here.
 - gap_2session: the move from c2 to the current premarket price.
 - gap_3session: the move from c3 to the current premarket price.
 
@@ -459,84 +469,125 @@ conditions, and neither evaluate_eligibility nor score_candidate reads them.
 move_sigma is null with a recorded reason when return_stdev_20d is null or
 below min_return_stdev_pct. Never a substituted number, never a silent drop.
 
-### 4.3 The four legs
+### 4.3 The legs
 
 Every row carries leg and as_of_session, and the section's rows may mix legs
-by design. The leg names the WINDOW. as_of_session names the NEWEST datum in
-the row, which is the one that can go stale, and it is what vintage
-validates. The lookback lives in the leg label alone. See the docstring on
+by design. The leg names the WINDOW: the number of sessions the move SPANS,
+not the age of its baseline. as_of_session names the NEWEST datum in the row,
+which is the one that can go stale, and it is what vintage validates. The
+lookback lives in the leg label alone. See the docstring on
 _LEG_NEWEST_SESSION_BACK for why the labelling is anchored that way.
 
-  leg            the move                        source           as_of
-  premarket      collector price against c1      bars_by_symbol   today
-                                                 + universe-closes
-  prior_session  the prior session's open        the prior day's  prior
-                 against the close before it     pool_recall.json
-  two_session    c1 against c2                   universe-closes  prior
-  three_session  c1 against c3                   universe-closes  prior
+Three legs are emitted, all from data the 07:15 discover already bought:
+
+  leg            the move                  span        as_of    population
+  premarket      c1 to the collector       overnight   today    collector
+                 price                     to 08:45             names
+  prior_session  c2 to c1                  1 session   prior    universe
+  two_session    c3 to c1                  2 sessions  prior    universe
+
+Every universe leg reads data/universe-closes-<date>.json and nothing else.
+One file, one vintage, no cross module read, and the same three closes serve
+both universe legs. The prior session leg is a CLOSE TO CLOSE move rather
+than an open gap: close to close carries the whole session, both the
+discontinuity at the open and the drift after it, where an open gap carries
+only the discontinuity. For a briefing, which asks what happened to a name
+rather than what the screen could have traded, the whole session is the
+better measure.
 
 The premarket leg covers only the names the collector heard, at most
 subscribe_cap of the universe, and it reads bars_by_symbol rather than the
 candidate list: every subscribed name is eligible, not only the twelve that
-survived the screen.
-
-The prior_session leg reads runs/<prior session>/pool_recall.json, its held
-and missed lists together, each row carrying symbol, gap_at_open_pct, open,
-prior_close and volume. That file holds only names above the discovery
-gap_pct floor of 3 percent, so this leg is a partial view of the universe by
-construction and the section reports how many names it examined rather than
-implying it saw all of them. When the file is absent, because the nightly has
-not run or the prior day was a holiday, the leg is absent with its reason
-recorded rather than silently empty.
-
-The two and three session legs use c1 as the endpoint for EVERY name,
-including the candidates whose premarket price is known. A list that mixed a
-premarket inclusive move for twelve names with a close only move for the
-other 2,733 is not a ranking. The candidate gap_2session and gap_3session
-fields in 4.2 are measured to the premarket price and are NOT inputs to this
-ranking.
+survived the screen. Its baseline is c1 from the same file.
 
 No leg carries today's regular session move, because the report is written
 before the open.
 
-### 4.4 The three lists
+THE THREE SESSION LEG HAS NO SOURCE and is not emitted. Under the naming
+above, where a leg is named for the sessions its move spans, a three session
+move universe wide needs a fourth close and the file holds three. Two ways to
+get one, neither taken here because both are the owner's call rather than the
+builder's: discover buys a fourth bulk call, 100 credits a morning and 500 a
+week against a 4,945 credit universe build, exactly the trade it already makes
+for the third close; or the endpoint becomes today's premarket price, which
+only the collector names have, which would put the leg back to covering 50
+names and reintroduce the mixed endpoint 4.4 exists to prevent. The name stays
+in _LEG_NEWEST_SESSION_BACK, where it costs nothing and would validate
+correctly if a row ever carried it.
 
-Three lists, list_size (5) names each, drawn from THE WHOLE UNIVERSE and not
-from the twelve candidates:
+### 4.3.1 move_sigma scales with the square root of the span
 
-1. By move_sigma, descending.
-2. By market cap, among names whose absolute move clears min_abs_gap_pct.
-3. By absolute two session move, descending.
+Every leg carries a move_sigma. The denominator return_stdev_20d is a ONE DAY
+return standard deviation, so an n session move is divided by
+return_stdev_20d times the square root of n: 1 for premarket and
+prior_session, the square root of 2 for two_session. A two session move is
+then directly comparable to a one session move in sigma terms, which is what
+lets the four labelled lists in 4.4 be read as one section even though no
+single list ranks across legs.
 
-Lists 1 and 2 rank on the name's NEWEST AVAILABLE SINGLE SESSION move: the
-premarket leg where the collector heard the name, otherwise the
-prior_session leg. Decided here rather than by the owner, and cheap to
-overrule: move_sigma divides by a ONE DAY return standard deviation, so a
-multi session numerator over that denominator is dimensionally wrong. The two
-and three session legs therefore carry no move_sigma, and the row records
-that as not applicable to the leg rather than as a null with a reason,
-because it is not a missing measurement.
+STATE THIS ASSUMPTION IN THE DOCSTRING where the scaling is computed. Square
+root of time scaling assumes daily returns are INDEPENDENT. Consecutive moves
+in one name frequently are not, because momentum and a multi day catalyst both
+produce runs, and dependent returns accumulate faster than the square root
+allows. The scaled sigma is therefore an UNDERESTIMATE of how unusual a
+sustained run is. That is the safe direction for a briefing: it cannot inflate
+a name into the section, it can only keep one out.
+
+Where the sustained mover is caught, so this is not re-litigated later. A
+large quiet name up 2 percent on each of two consecutive sessions surfaces on
+list 1 for the unusualness of its prior session move, since a quiet name's
+sigma is small and 2 percent over it is large, and on list 3 for the size of
+its two session move. The scaling's work is to stop the two session leg
+overstating that name by the square root of 2, not to move it between lists.
+
+### 4.4 The four lists
+
+Four lists, list_size (5) names each. EVERY LIST RANKS WITHIN ONE LEG. No
+ranked list mixes two legs, because ranking a premarket move against a prior
+session move would compare a fresher window against an older one and would
+put the 50 collector names, already selected for gap propensity and news,
+into the same ordering as the 2,704 names nothing selected. They would
+dominate systematically and the section would end up restating the watchlist
+it exists not to restate.
+
+  1. move_sigma descending, PRIOR SESSION leg, universe wide.
+  2. market cap descending among names whose absolute prior session move
+     clears min_abs_gap_pct, PRIOR SESSION leg, universe wide.
+  3. absolute two session move descending, TWO SESSION leg, universe wide.
+  4. move_sigma descending, PREMARKET leg, the collector names only.
+
+List 3 ranks on the raw move rather than on sigma, as the original brief
+specified. It is the size list for the multi session window, where list 1 is
+the unusualness list for the single session one.
+
+List 4's key is decided here rather than by the owner and is cheap to
+overrule: move_sigma is the section's headline measure and these are its
+freshest moves.
 
 Market cap comes from universe.json. A name with no market cap on file is not
 a pass and not a fail: it was never examined against the floor, it is counted
 separately, and it cannot appear in list 2.
 
-Deduplicated across the three lists. One row per name carrying every reason
-that selected it, on the pool_source precedent in discover.py, rather than
-the same name appearing three times. The row states which list or lists
-produced it.
+Deduplication is WITHIN a leg, never across legs. A name selected by both
+list 1 and list 2 becomes one row carrying both reasons, on the pool_source
+precedent in discover.py. A name selected on two different legs stays TWO
+rows, because they are two measurements of different windows at different
+vintages, and a row can carry only one leg and one as_of_session. The
+template must therefore not imply one row per name.
 
 A name already on the day or swing watchlist appears here anyway, and the row
 says so inline. It is not suppressed. Two sections selecting the same name on
-different grounds is information; hiding it is not.
+different grounds is information; hiding it is not. Expect most list 4 rows
+to carry the mark, since that list draws from the pool the watchlist came
+from, and that is precisely why the premarket leg was given its own list
+instead of being allowed to crowd the others.
 
 ### 4.5 Row fields
 
-ticker, leg, as_of_session, the move on that leg, move_sigma or not
-applicable to the leg, market cap, the catalyst headline where one was
-fetched, and the also on watchlist mark. price_time where the leg has one,
-which is the premarket leg alone, and vintage holds that one to the premarket
-window as well as to the session.
+ticker, leg, as_of_session, the move on that leg, move_sigma, market cap, the
+catalyst headline where one was fetched, and the also on watchlist mark.
+price_time where the leg has one, which is the premarket leg alone, and
+vintage holds that one to the premarket window as well as to the session.
 
 ### 4.6 Catalysts
 
@@ -561,6 +612,9 @@ reproduces exactly rather than composing:
 - Every row states which leg produced it and the session it is as of.
 - No leg can carry today's regular session move, because this report is
   written before the open.
+- A name may appear on more than one row, once per leg, because a row carries
+  one window and one vintage. Added here rather than by the owner, because
+  deduplication within a leg makes it possible.
 
 The table carries a Ticker column, so containment applies to this section
 exactly as it does to the watchlists: every ticker in it must exist in the
@@ -576,22 +630,30 @@ onto a watchlist, and may not imply a setup.
 ### 4.9 Degrade and skip
 
 The section records what it could not do rather than emitting a bare empty
-list. A missing universe-closes file, a missing prior pool_recall.json, an
-absent third session, a quota degraded run: each is a named reason in the
-packet, and the section says which leg it lost. Zero names examined is a
-different outcome from zero names selected, and the section reports both
-numbers, per the denominator rule.
+list. A missing universe-closes file, a missing third close, a collector that
+heard nothing, a quota degraded run: each is a named reason in the packet,
+and the section says which leg it lost.
+
+The denominator is the universe, not the survivors. The section reports
+universe_examined from the closes file as what it examined, alongside, per
+leg, how many names carried both of the closes that leg needs. Zero examined
+is a different outcome from zero selected and the section reports both
+numbers.
 
 ### 4.10 Done when
 
 - A run produces the section from universe wide data rather than from the
-  candidates.
+  candidates, and the examined count equals the universe size rather than any
+  filtered subset of it.
+- No leg reads pool_recall.json and nothing in the section imports
+  pool_recall.
 - A name moving under the 3 percent discovery gap floor appears in it when
   its move_sigma is high.
 - No picks row exists for any name that appears only here.
-- pool_recall is untouched: git shows no diff against pool_recall.py, and a
-  rebuild of a past session's pool_recall.json is byte identical to the copy
-  taken before the change.
+- Every leg carries a move_sigma, and a name up 2 percent on each of two
+  sessions ranks above a name up 2 percent on one.
+- No single ranked list mixes two legs, and a collector name appears on list
+  4 rather than displacing universe names from list 1.
 - A packet with a prior_session row mis-stamped as premarket fails
   vintage.enforce, and a row missing its leg fails rather than being ignored.
   Already proven by claim_notable_legs in src/tests/test_vintage.py.
@@ -601,7 +663,7 @@ numbers, per the denominator rule.
 
 ### Known and accepted, outside this layer
 
-A row whose leg says three_session while its move is arithmetically a one
+A row whose leg says two_session while its move is arithmetically a one
 session move is caught by neither the freshness labelling nor any other check
 here. Vintage checks that the newest datum is the session claimed, not that
 the move spans the window its label names. This is recorded on

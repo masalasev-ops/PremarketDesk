@@ -15,6 +15,46 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-17, second: the notable movers section is specified in the repository
+
+### The design stopped living in a conversation
+
+Every rule the owner set for the section over 2026-08-16 and 2026-08-17 is now
+in BUILD_PLAN.md as Layer 4, written as specification rather than as
+narrative: the scope fence, the per candidate fields, the legs with their
+sources and vintage stamps, the lists and their deduplication, the catalyst
+not checked rule, the fixed template text, the prompt rule, the degrade
+behaviour and the done when conditions. Nothing about the section's design now
+depends on a chat log. The code is still unbuilt.
+
+### Three amendments the same day, and what they changed
+
+- The universe legs read data/universe-closes-<date>.json. The earlier draft
+  read the previous session's open gap out of pool_recall.json, which covers
+  only names above the 3 percent gap floor and carries a second vintage. No
+  leg reads pool_recall now, and the section's examined count is the universe
+  rather than the gapper count.
+- move_sigma divides by return_stdev_20d times the square root of the number
+  of sessions the move spans, so every leg carries a sigma instead of the
+  multi session legs carrying none. The independence assumption behind the
+  scaling is recorded with it.
+- Four lists, each ranked inside one leg, replacing one ranking over each
+  name's newest available move. The premarket leg gets its own list rather
+  than putting the 50 collector names into the same ordering as 2,704
+  unselected ones.
+
+CRITERIA.md [Notable] follows the same three: three legs and four lists rather
+than four legs, the previous session's CLOSE rather than its true open gap,
+and the square root scaling with its assumption. The knobs did not move.
+
+### What the amendments cost
+
+The three session leg is not emitted. Under the naming these rulings settle, a
+leg is named for the sessions its move SPANS, and a three session move
+universe wide needs a fourth close where the file holds three. Restoring it is
+one more bulk call in discover, 100 credits a morning. Recorded in Layer 4 as
+the owner's call, not taken here.
+
 ## 2026-08-17: the quota gate is sized in credits, and the market cap funnel names every door
 
 ### The call count was never the bill

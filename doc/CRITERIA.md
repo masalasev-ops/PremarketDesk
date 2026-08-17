@@ -155,24 +155,30 @@ conviction, and never written to picks. Nothing in this section may be read by
 the trading path: picks is the record of what the screen claimed, and mixing
 briefing names into it would destroy the recall measurement.
 
-Four legs, each measured over a different window, and every row states which
+Three legs, each measured over a different window, and every row states which
 leg produced it and the session it is as of. A section that silently mixes an
-overnight move with a three day old one is worse than no section, so the leg
-label is fixed template text rather than something the model composes.
+overnight move with a two day old one is worse than no section, so the leg
+label is fixed template text rather than something the model composes. Four
+lists are ranked from those three legs, and no ranked list mixes two legs: a
+list that orders a fresher window against an older one is not an ordering.
 
 No leg can carry today's regular session move, because the report is written
 before the open. The premarket leg exists only for names the collector
 subscribed to, which is at most subscribe_cap of the universe, so for every
-other name the most recent evidence is the previous session's true open gap.
+other name the most recent evidence is the previous session's close.
 
-move_sigma is the move divided by the name's own daily volatility, so a quiet
-megacap moving 2 percent and a thin small cap moving 6 percent land at
-comparable numbers. The denominator floors below mirror the RVOL denominator
-floor note: a denominator too small to divide by yields a null with the reason
-recorded, never a substituted number and never a silent drop.
+move_sigma is the move divided by the name's own daily volatility, scaled by
+the square root of the number of sessions the move spans, so a quiet megacap
+moving 2 percent overnight and a thin small cap moving 6 percent over two
+sessions land at comparable numbers. That scaling assumes daily returns are
+independent, which a sustained run in one name is not, so the number
+understates how unusual a run is rather than overstating it. The denominator
+floors below mirror the RVOL denominator floor note: a denominator too small
+to divide by yields a null with the reason recorded, never a substituted
+number and never a silent drop.
 
 list_size                     = 5          # names per leg, before deduplication
-min_abs_gap_pct               = 1          # the floor for the market cap leg only,
+min_abs_gap_pct               = 1          # the floor for the market cap list only,
                                            # so a megacap barely moving does not
                                            # crowd out a real mover
 min_sessions_for_move_sigma   = 20         # sessions of returns the denominator needs
