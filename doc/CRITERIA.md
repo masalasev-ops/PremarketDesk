@@ -976,6 +976,13 @@ On the 303 rescued names among the top candidate_count by gap, over 61 cached
 sessions, the edges below pay two points to 55.45 percent and one point to
 12.21 percent, against an RVOL target of 53.87 and 12.43.
 
+Re-derived 2026-08-17 after float_rotation_study.py's float screen was
+corrected to read all three [Float rotation] floors from this file instead of
+one hardcoded copy. Every number in this section reproduced exactly: the
+corrected screen changes one verdict across the whole float cache, YPF, and YPF
+reaches the top candidate_count by gap on none of the 61 sessions, so it never
+voted on these edges. See DECISIONS.md 2026-08-17 sixth.
+
 **These edges are conditional on [Scan] candidate_count.** The scored
 population is the top N by gap, and rotation rises with gap size, so changing
 candidate_count changes the population these were fitted to and they must be

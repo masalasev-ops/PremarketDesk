@@ -1509,3 +1509,100 @@ count to check against or a band structure that does not reward an unverifiable
 denominator, and both are threshold and design questions for the owner rather
 than guard placement. What changed here is that no name reaches the divisor
 without facing SOME check, and that every null says why.
+
+## 2026-08-17, sixth: the rotation bands are re-derived after the screen fix, and they do not move
+
+**Why this was owed.** The 2026-08-17 review fixed float_rotation_study.py: it
+carried a private copy of one CRITERIA floor with the ratio written into the
+Python as 1.01, was missing the other two floors entirely, and refused nothing
+for the corrupt records the live path will not divide by. CRITERIA
+[Score premarket float rotation] names that script as the way to re-derive the
+bands, and the bands scoring live names every morning were produced by the rule
+that had just been corrected. Fixing the instrument and leaving its output
+standing is not a fix, it is a fix and an unmeasured claim. The edges are read
+off rotation quantiles at the points reproducing RVOL's payout on a specific
+population, and the hole changed WHICH NAMES were in that population, so the
+payout match the edges exist to preserve could no longer be assumed.
+
+**The result first: the edges do not move, and they reproduce exactly rather
+than approximately.**
+
+| | committed in CRITERIA | re-derived after the fix |
+| --- | ---: | ---: |
+| two point edge | 0.0004 | 0.0004 |
+| one point edge | 0.0002 | 0.0002 |
+| unrounded two point quantile | 0.00045075 | 0.00045075 |
+| unrounded one point quantile | 0.00021475 | 0.00021475 |
+| rescued names fitted on | 303 | 303 |
+| pays two points | 55.45% | 55.45% |
+| pays one point | 12.21% | 12.21% |
+| RVOL target | 53.87% / 12.43% | 53.87% / 12.43% |
+
+**How that was established WITHOUT a new fetch, which is the part worth
+keeping.** The obvious method is to re-run the study, and it is the wrong one:
+the study needs Alpaca 1 minute volume for the whole universe across 61
+sessions, which is a live fetch of hundreds of requests, and the bar cache on
+disk holds 172 gapper symbols a day rather than the universe. So the question
+was turned around. Rather than recomputing the output, prove the INPUT is
+unchanged, which is a strictly stronger result and costs nothing.
+
+The screen change is a pure function of data/float_cache.json and the three
+CRITERIA [Float rotation] floors. Both screens, the pre-fix one and the
+corrected one, were run over all 1,870 cached symbols:
+
+| | names |
+| --- | ---: |
+| admitted by the old screen, refused by the new | 1 |
+| admitted by the new screen, refused by the old | 0 |
+
+The single name is YPF, float 51,810 against 392,075,056 shares outstanding,
+0.013 percent, refused by min_float_to_shares_outstanding. That is not a new
+discovery: it is the same name CRITERIA's float floor note already records as
+the only one below the one percent line, which is a useful cross check that
+both screens were implemented as described.
+
+Then the only remaining question is whether YPF is in the population the edges
+are fitted to. It is not, and that is decidable offline because the gap ranking
+reads data/backtest/eod/ rather than Alpaca. Replaying all 61 session pairs
+through the same pool_recall.actual_gappers and addressable_target the study
+uses:
+
+| YPF over the 61 cached sessions | sessions |
+| --- | ---: |
+| raw gapper | 2 |
+| addressable | 2 |
+| in the top [Scan] candidate_count by gap | 0 |
+
+The edges are fitted on the RESCUED subset of the top candidate_count by gap,
+per the 2026-08-16 entry above. YPF contributes zero rows to that population on
+every one of the 61 sessions, so removing it cannot move a quantile of it, and
+the 303 count, both unrounded quantiles and both payout shares are unchanged
+bit for bit. The replay made zero HTTP calls, which the run's own call report
+confirms.
+
+**What DOES move, recorded so it is not discovered later and mistaken for a
+contradiction.** The study's all_addressable block is a wider slice, n 7,752
+rotation rows, and YPF is addressable on 2 sessions, so that block loses at most
+2 rows of 7,752 and its numbers shift in the fourth decimal. Those are not the
+live bands. The all_addressable re-derived edges are 0.0007 and 0.0002, which
+already differ from the committed 0.0004 and 0.0002 precisely because CRITERIA
+is fitted on the scored population rather than the wide one, exactly as the
+2026-08-16 entry decided. Nothing in CRITERIA reads the all_addressable block.
+
+**The earlier claim that was wrong when written, corrected in place.** The
+docstring added to float_rotation_study.py earlier on 2026-08-17 said the counts
+in CRITERIA [Score premarket float rotation] "were measured before that was
+fixed, so a re-run will not reproduce them to the name". That was written before
+anyone checked and it is false: they reproduce exactly, for the reason above.
+The docstring is corrected in place rather than answered by this entry, under
+the wrong-when-written rule, because a reader who found it would conclude the
+committed numbers are stale and would either re-fetch for nothing or distrust
+edges that are sound.
+
+**What would make this owed again.** These edges are conditional on [Scan]
+candidate_count, as CRITERIA already says: change it and the fitted population
+changes and a real re-run is required. A re-run is also required if the float
+cache is re-swept, since a new sweep can change more than one verdict, or if any
+of the three CRITERIA [Float rotation] floors moves. The cheap proof used here
+works only because the population delta was one name and that name was outside
+the fitted set. It is a proof about this change, not a standing exemption.

@@ -15,6 +15,35 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-17, fifth: the rotation bands are re-derived after the screen fix, and do not move
+
+The fourth entry fixed float_rotation_study.py, the script CRITERIA names as
+the way to re-derive the float rotation score bands, and left the bands
+themselves as the previous, broken, run had produced them. That was an
+unmeasured claim sitting under a live scoring rule. It is now measured.
+
+The edges are unchanged: two points above 0.0004, one point at or above 0.0002,
+fitted on 303 rescued names, paying 55.45 percent and 12.21 percent against an
+RVOL target of 53.87 and 12.43. Both unrounded quantiles, 0.00045075 and
+0.00021475, reproduce exactly rather than approximately.
+
+Established without a new Alpaca fetch, by proving the input population is
+unchanged rather than recomputing the output. Over all 1,870 symbols in the
+float cache the corrected screen changes exactly one verdict and adds none: YPF,
+at 0.013 percent of its own shares outstanding, which is the same name CRITERIA's
+float floor note already records as the only one under that line. Replaying all
+61 cached session pairs through the study's own gap ranking, which reads
+data/backtest/eod/ and not the network, puts YPF in the top candidate_count by
+gap on zero of them. The edges are fitted on the rescued subset of that
+population, so a name contributing no rows to it cannot move its quantiles. The
+replay made zero HTTP calls.
+
+One correction in place, under the wrong-when-written rule: the docstring added
+to float_rotation_study.py in the fourth entry claimed a re-run "will not
+reproduce them to the name". It does. The sentence was written before anyone
+checked. DECISIONS.md 2026-08-17 sixth carries both sets of numbers, the method,
+and what would make a real re-run owed again.
+
 ## 2026-08-17, fourth: six review findings closed, and the two the first round of fixes introduced
 
 A full review of everything since the package reorganisation on 2026-08-14,
