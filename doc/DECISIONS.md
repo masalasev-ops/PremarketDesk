@@ -848,3 +848,231 @@ open question from the entry above stands unchanged. Re-deriving against a
 loose target reproduces the looseness in the fallback, which is the correct
 behaviour for a slot that must pay alike, and the wrong behaviour for a score
 that should discriminate. Both bands want revisiting together, as one decision.
+
+## 2026-08-16, third: the VWAP test on gappers is null, and the premarket discovery work STOPS
+
+**The question.** Does trading a gapper against its session VWAP produce
+anything, and if it does, is the edge in the VWAP rule or merely in the gap
+screen? The second half is what the whole project rested on. Every socket,
+recall and ordering question assumes that identifying gappers before the open
+is worth something. Nothing had ever tested that assumption.
+
+**Pre-registered, and the file enforces it.** The rule set and the stop rule
+were written to doc/research/VWAP_GAPPERS.md at 14:10:19 and the results were
+appended at 14:15:06. That ordering is not a claim: `--preregister` refuses to
+overwrite an existing block and the run refuses to start unless the block is
+already there, then refuses to append a second set of results. So the decision
+below cannot have been made after seeing the numbers, and the artifact proves
+it rather than asserting it. 61 sessions, 10,507 gapper name-sessions against
+10,492 decile-matched control name-sessions.
+
+**The rules were unconditioned, not selective.** This is the first thing to
+read and it colours everything after it.
+
+| Rule | Side | Fired on |
+| --- | --- | ---: |
+| `hold` | long | 99.2% of gapper name-sessions |
+| `reclaim` | long | 97.1% |
+| `fade` | short | 99.0% |
+| `reject` | short | 97.0% |
+
+A rule firing on 97 to 99 percent of the population is not a signal, it is a
+description of the population. What follows is therefore a measurement of what
+gappers do intraday, not of what a selective rule extracts from them. About
+half of each pair is also literally the same trade: `hold` and `reclaim`
+entered on the same bar in 5,051 of the 10,199 name-sessions where both fired,
+`fade` and `reject` in 5,262 of 10,187.
+
+**Median net returns, at 10 bps round trip.** Median across 61 sessions of the
+per session median. All four lose money.
+
+| Rule | median net return |
+| --- | ---: |
+| `hold` | -0.48% |
+| `reclaim` | -0.39% |
+| `fade` | -0.49% |
+| `reject` | -0.41% |
+
+**Against buy-the-open, paired on the name-sessions each rule actually fired
+on.** Not against buy-the-open averaged over all gappers, which would have
+compared two different populations.
+
+| Rule | median difference | sessions won of 61 | sign test p |
+| --- | ---: | ---: | ---: |
+| `hold` | -0.258 | 28 | 0.609 |
+| `reclaim` | -0.219 | 24 | 0.124 |
+| `fade` | -0.255 | 26 | 0.306 |
+| `reject` | -0.130 | 26 | 0.306 |
+
+No rule beats simply buying the open and holding to 15:55.
+
+**Against the decile-matched control, and this is a NEGATIVE result rather
+than a null.** Controls are names whose absolute gap that session was under 1
+percent, matched to the gappers by 20 day average dollar volume decile, same
+count per decile, same days.
+
+| Rule | median difference | sessions won of 61 | sign test p |
+| --- | ---: | ---: | ---: |
+| `hold` | -0.192 | 10 | 0.0 |
+| `reclaim` | -0.124 | 3 | 0.0 |
+| `fade` | -0.178 | 5 | 0.0 |
+| `reject` | -0.135 | 6 | 0.0 |
+
+The distinction matters and must not be softened in the retelling. The stop
+rule anticipated the rules being INDISTINGUISHABLE from the control, which
+would have said the gap screen adds nothing. What was measured is worse: on
+every rule the gappers did significantly WORSE than dollar-volume-matched
+non-gappers, winning between 3 and 10 sessions out of 61 at p = 0.0. The gap
+screen does not fail to add value, it selects names on which these rules lose
+more. The mechanism is visible in the dispersion, with gapper buy-the-open IQR
+at 4.63 against the control's 2.39: gappers are about twice as volatile and a
+rule that exits on a VWAP cross is chopped in proportion.
+
+## The independent ground, which would stand even if the returns had been positive
+
+Entry timing fails the practicality gate on its own.
+
+| Rule | median entry, minutes after 09:30 | share entering within 15 minutes |
+| --- | ---: | ---: |
+| `hold` | 1 | 89.9% |
+| `reclaim` | 7 | 69.5% |
+| `fade` | 1 | 89.9% |
+| `reject` | 6 | 69.5% |
+
+Between 69.5 and 89.9 percent of all signals require action inside the first
+fifteen minutes of the session, and two of the four have a median entry at
+minute one. There is no charting platform here and no presence at the open.
+Even had every return above been positive, these are not executable by this
+operator, and that is a second and independent reason to stop rather than a
+footnote to the first.
+
+## What this tested, stated as limits and not as a list of things to try next
+
+These are the boundaries of the claim. They are recorded so that nobody reads
+the decision as broader than the evidence, and equally so that nobody treats
+them as a queue of follow ups. The decision below is to stop, and a limit is
+not a licence.
+
+- Four VWAP-cross rules only, all unconditioned, on two axes of direction and
+  whether the opposite condition had to occur first.
+- No stops and no targets.
+- One entry per name-session, no re-entries.
+- Whole-day hold, exit on the rule's own cross or at 15:55.
+- Entry at the close of the confirming bar. Fills, spread and slippage are not
+  modelled, so the returns are indicative and optimistic.
+- `universe.json` holds current listings, so names delisted since are absent
+  and survivorship flatters the result by an unknown amount in an unknown
+  direction. The result is negative anyway, which makes the conclusion
+  stronger rather than weaker.
+- Borrow availability was checked by flag only, and `shortable` and
+  `easy_to_borrow` were identical across all 2,745 universe names, so the
+  short-side restriction was a weaker test than it appears. Borrow COST was
+  not modelled at all.
+- **No catalyst conditioning. A catalyst-split version was NOT tested.** The
+  gappers here are pooled regardless of why they gapped. If hard catalysts
+  such as earnings, guidance, M&A and FDA behave differently from soft ones
+  such as sympathy moves and analyst actions, pooling them would produce
+  exactly this null by averaging a positive population against a negative one.
+  That possibility is not excluded by anything measured here. It is recorded
+  as a limit of the test, NOT as a reason to keep going.
+
+## The decision, and exactly what it covers
+
+**The premarket discovery work stops.** By the stop rule as written before the
+numbers existed, and on the independent practicality ground above.
+
+Stopping:
+
+- The socket purchase. No second or third socket is bought.
+- The cap, ordering and recall work. No further tuning of which names reach
+  the collector or in what order.
+- The scoring calibration, including the volume slot and its bands.
+- Any migration to Alpaca for LIVE premarket discovery. The historical Alpaca
+  work stands as the evidence it produced, and Alpaca remains in use for
+  research bars.
+
+Continuing:
+
+- Monday 2026-08-17's `probe-alpaca-live` and `probe-live-v1` run as
+  registered and their results are recorded. They are already scheduled, they
+  cost nothing to let run, and the question of what the vendors actually serve
+  live is worth having answered on the record even though nothing will now be
+  built on it. Recording a result is not the same as acting on it.
+- The post-open pass continues. Nothing here measured it and nothing here
+  bears on it.
+
+## Open items this closes, so they are not reopened by accident
+
+Each of these is closed BY THIS DECISION rather than resolved on its own
+terms. The measurements in them stand; what has gone is the reason to act on
+them.
+
+- **The subscription cap table, 42 through 142** (2026-08-14, "the
+  subscription cap is a purchasing decision, OPEN"). The exchange rate it
+  computed is still correct: a typical morning goes from 5 publishable names
+  to 9.5 across three sockets. Closed because publishable names are no longer
+  worth buying. Closed by this decision, not by the arithmetic changing.
+- **The second-socket purchase**, and the load test that entry named as its
+  precondition. The collector is still untested above 38 symbols. That now
+  stays untested, because the cap is not rising.
+- **The float rotation band's dependency on `candidate_count`** (2026-08-16
+  second). That entry recorded that the edges were fitted to the top
+  candidate_count by gap and must be re-derived if that number changes. This
+  is now MOOT rather than resolved: the bands are correct as measured, and
+  nothing will change candidate_count, so the re-derivation will not be
+  needed. If scoring is ever restarted, that dependency is live again exactly
+  as written.
+
+Also left where they are, unresolved and now inert: the day-setup eligibility
+question for names rescued by float rotation, and the looseness of the RVOL
+scoring bands. Both were open questions about scoring, and scoring has stopped.
+
+## 2026-08-16, fourth: the second SOCKET is closed, the second TOKEN is not, and they were never the same purchase
+
+**Correcting a conflation in the entry above.** The VWAP stop closed "the
+socket purchase" and listed the cap table with it. That is right about one
+purchase and wrong about the other, and the two have been spoken of together
+often enough that the distinction needs writing down before the shorthand
+outlives the reasoning.
+
+**The second websocket socket: CLOSED.** It was only ever worth buying to lift
+subscribed recall against the 50 name cap, which bought a typical morning from
+5 publishable names to 9.5. Publishable names are what the VWAP test found no
+value in, so the thing that purchase buys is the thing that turned out not to
+be worth having. Closed, and closed on the decision rather than on the
+arithmetic, which still stands.
+
+**A second API token: OPEN, and worth MORE than it was yesterday, not less.**
+It is a different purchase entirely. It buys quota isolation, not subscription
+capacity, and the case for it strengthened at the moment the rest of the work
+stopped.
+
+The reasoning. The key is shared with sibling projects this repository cannot
+see or throttle. On 2026-08-16 a sibling took it from 96,098 used to 99,671
+across an afternoon, which put the remaining balance below discover's refuse
+floor of 500. Anything scheduled into that window does not degrade, it refuses
+outright. Before the stop that was one failure mode among many in a system
+with several moving parts. After the stop, the post-open pass and the morning
+chain are the ONLY remaining outputs, and both die the same way for a reason
+that has nothing to do with either of them. Narrowing the project did not
+reduce this exposure, it concentrated it: the same accident now takes out
+everything rather than one component of many.
+
+Recorded as OPEN with its reason, and deliberately NOT as a plan. No price has
+been checked, no vendor terms read, and nothing here says buy it. What this
+entry fixes is that the case for a second token must not be quietly retired
+alongside the socket, because a reader skimming for "purchases, closed" would
+take both and would be wrong about one.
+
+**The cheap half, taken now.** Attribution does not need a second token. Every
+job now reads the shared meter at entry and at exit and appends both to
+`logs/meter-<quota day>.log` with the delta since the previous reading, so a
+day of consumption is attributable to a time of day and to a step. A job's own
+spend is its entry-to-exit delta; whatever a sibling spent shows up as the gap
+between one job's exit and the next job's entry. Two calls per job, about
+eighteen a day against a shared 100,000, and the readings themselves are
+visible in the trail rather than hidden, so a delta of two across a step that
+made no other call is the instrument seeing itself.
+
+That does not fix the exposure. It measures it, which is the precondition for
+deciding whether the token is worth its price, and it works today.

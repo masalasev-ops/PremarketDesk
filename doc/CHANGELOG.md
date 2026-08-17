@@ -15,6 +15,210 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-16, seventh: the meter is sampled on a clock, and the degrade threshold is claimed on its output
+
+### A sampler, because the job trail cannot answer "when"
+
+The job trail says which step spent what. It cannot say when, because it only
+has readings where a job happens to run, and this schedule is sparse: nine jobs
+in two short windows with nothing at all between the 22:45 monitor and the
+07:00 catch-up. A sibling draining the shared key overnight is invisible to it,
+and overnight is when 2026-08-16's drain would have had to happen to be as
+complete as it was by the afternoon.
+
+`ops/meter_sampler.py` reads the meter every thirty minutes, all day, every
+day, appending to the same `logs/meter-<quota day>.log`. Every row now carries
+a `source` column: `job` for an entry or exit reading around a scheduled step,
+`sampler` for a clock reading, `reset` for the boundary row below. Forty eight
+calls a day against a shared hundred thousand.
+
+**Exactly one call per sample.** `record_meter` gained an optional pre-fetched
+reading, so the sampler reads once and can write two rows from that one
+observation. Without it the reset row would have re-read the meter, costing a
+second call and, worse, recording numbers that disagreed with the roll it was
+supposed to be documenting. The first version did exactly that and the test
+caught it reporting `used=260` for a roll it had detected at `120`.
+
+**The reset is a labelled row, not a gap.** When a sample sees the counter
+fall, or sees `apiRequestsDate` change, a `source=reset` row is written first
+carrying both sides: `rolled_from_api_requests`, `rolled_from_meter_day`,
+`rolled_from_at` and the corresponding `rolled_to` fields. Two independent
+signals because a roll landing on a day where almost nothing had been spent
+would produce a fall too small to tell from noise.
+
+Registered as `PremarketDesk\meter-sampler`, every day, repeating every 30
+minutes for 24 hours. One shot per firing rather than a long-lived `--loop`
+process, so a crash costs one sample instead of silencing the sampler for the
+rest of the day. It writes no job status record: it is an instrument, not a
+step, and CRITERIA.md [job status steps] must not gain an entry the watchdog
+would then expect and report overdue.
+
+Verified over a simulated day of 49 half-hourly samples across an overnight
+roll: 49 calls for 49 samples, one labelled reset row, and zero negative
+deltas. Real coverage accrues from 21:30 tonight; a full day including the
+overnight window exists tomorrow.
+
+### The degrade threshold, asserted on what the packet says
+
+Claim 12 covers the refuse floor, where the job does not run and the exit code
+is the whole story. The degrade threshold is the higher risk of the two,
+because the job DOES run and produces a packet, and thin mode is where the
+false-reason defects lived. A packet whose catalyst reads "none" when the news
+feed was never called is not thin, it is wrong, and wrong in the direction that
+looks fine.
+
+`claim_scan_degrades_on_a_thin_meter` drives three points around 5,000 from fed
+readings and asserts nothing about the exit code. On the degraded run it
+requires that a packet exists, that `gaps_to_fill` names the actual remaining
+figure, that `quota_preflight.degraded` is true, and that every candidate
+records `catalyst_found` null with a `catalyst_why` saying unknown and a
+`catalyst_class` that is NOT the string "none".
+
+Three things that claim found on the way to passing, each a fixture defect
+rather than a product one:
+
+- A thinned RERUN of a day that already has a full width packet correctly
+  stands down and writes `packet_degraded.json` beside it. The claim was
+  reading `packet.json` and reporting three failures that were one wrong
+  filename.
+- `_write_watchlist` used `tier`, `pool_sources` and `prior_close`.
+  `scan.pool_candidates` reads `pool_tier`, `pool_source` and
+  `pool_prior_close`. Every candidate therefore reached the scan with no prior
+  close, and a thinned run cannot spend a call to fetch one, so the packet was
+  empty. Both spellings are now present.
+- The collector bar fixture and the wall clock. Prices older than
+  CRITERIA [price age] are dropped, correctly, so a fixture written at a fixed
+  07:20 is stale by hours whenever the suite runs outside the morning. The
+  claim now pins the clock to the scan's own run time for the duration, which
+  is the only condition under which the pipeline it is testing assembles
+  candidates at all.
+
+That last one is the day dependence the frozen calendar sweep exists to find,
+caught this time by a new claim rather than by the sweep.
+
+## 2026-08-16, sixth: the quota counter does not roll at 00:00 UTC, and the meter trail caught it on its first real run
+
+The trail added hours earlier ran for the first time in production tonight,
+against the Sunday universe rebuild, and immediately reported a delta of
+**-94,727**. That number is impossible as consumption and it is the finding.
+
+### What the counter actually did
+
+| Reading | ET | Meter says used | Remaining | Counter dates itself |
+| --- | --- | ---: | ---: | --- |
+| universe entry | 20:30:01 | 99,671 | 329 | 2026-08-16 |
+| universe exit | 20:31:49 | 4,944 | 95,056 | 2026-08-17 |
+
+00:00 UTC on 2026-08-17 was 20:00:00 ET. The counter had NOT rolled half an
+hour later and rolled somewhere in the 108 seconds between those two readings,
+so the vendor's reset lags the nominal boundary by 30 to 32 minutes.
+
+**The 20:30 move made earlier today was therefore not enough**, and the
+CHANGELOG sentence claiming it "clears the boundary in both halves of the
+year" is corrected in place below. The universe job spent its first minute
+reading a counter 329 short of exhausted. It has no refuse floor so it
+proceeded and finished clean, producing 2,753 names; a job carrying discover's
+floor of 500 would have stood down on a budget that was in fact seconds from
+being full. Moved again to 21:00, roughly double the one lag observed.
+
+One observation is not a measurement of the lag, only proof that it is not
+zero. The trail now records `apiRequestsDate` on every reading, so the next
+roll is visible rather than inferred.
+
+### The delta guard was wrong, and its own output said so
+
+`record_meter` guarded cross-day comparison on `quota_day()`, the day computed
+from the wall clock. At 20:30:01 ET that already said 2026-08-17 while the
+vendor's counter still said 2026-08-16, so both readings looked same-day and
+the subtraction spanned a reset.
+
+Fixed to guard on `apiRequestsDate`, the counter's own dating, which is the
+only authoritative signal that it rolled. A missing date on either side now
+yields no delta, because an unknown boundary is not a safe subtraction, and a
+reading whose date trails the quota day is flagged `meter_day_is_stale` and
+says so in the log line.
+
+Replayed against tonight's exact sequence: the reset-spanning delta is
+suppressed, the stale reading is labelled, and gap_stats still reports its true
+`+2,753`, which matches its call report of 2,753 `eod` calls exactly.
+
+### What the first real trail also settles
+
+gap_stats consumed 2,753 calls, one per symbol, attributed to a single step
+without inspecting a call report. That is the attribution the trail was built
+for, working on day one. The universe leg cannot be attributed because its two
+readings sit either side of the roll, which is now stated rather than
+silently subtracted.
+
+## 2026-08-16, fifth: the suite no longer touches the network, and every job records the shared meter
+
+### No test may make a live quota call
+
+**The defect.** test_pool claim 11 called `discover.build()`, which preflights
+the shared EODHD key. A sibling project pushed that key below the refuse floor
+of 500 remaining, and the claim began failing with nothing in this repository
+changed. It had been passing all week for the same reason it then failed: it
+was reading someone else's account state.
+
+**Fixed at the boundary, not in the claim.** `eodhd.read_meter()` is now the
+single network call `preflight` makes, and it is the seam. Everything
+interesting in preflight stays under test, since only the READING is
+substituted: the degrade and refuse thresholds, the stale meter day check and
+the unreadable payload check all still run for real.
+
+`conftest.activate()` now wraps the whole suite in `block_network()`, which
+installs a `_BlockedSession` as the session every `EodhdClient` builds and
+pins `read_meter` to a fixed healthy 99,000 remaining. Any un-stubbed call
+raises `NetworkBlocked` naming what tried and how to stub it. Three suites
+already stubbed at `client._session` and are unaffected.
+
+**The sweep, done empirically rather than by inspection.** Twelve claims reach
+`EodhdClient._request`: eight in test_entrypoints, three in test_txn_guard,
+and test_pool claim 11. All twelve were already stubbed, so nothing needed
+marking live, and the suite passed on the first run with the block installed.
+
+**Verified with the network genuinely gone**, not merely stubbed: DNS severed
+at `socket.getaddrinfo` after imports, proven by a real request failing first,
+and the full suite still passes. Claim 11 now passes at every meter reading
+from an empty key to an untouched one, because it pins its own reading; it is
+about how the pool ranks, not about quota.
+
+**New claim 12** drives the refusal path from a fed reading at three points
+around the floor, so blocking the network did not also stop anything from ever
+exercising the refusal.
+
+**Two things the sweep exposed.** Claim 11's second leg swallowed every
+exception as "the network stub missing", which is precisely how it absorbed a
+QuotaRefusal for a week; it now fails on any unexpected exception on both
+legs. And the first version of the live-claim matcher looked for the substring
+`live`, which caught `claim_deliver`. The convention is now `claim_live_...`
+or `..._live`, matched exactly.
+
+`run_tests` gains `--live`, off by default, and reports either the live claims
+it skipped or that the suite is hermetic.
+
+### Every job records the shared meter at both ends
+
+Nothing in this repository could say WHEN the shared key was drained or which
+of its own jobs contributed, because the only reading taken was the preflight
+inside three of the nine jobs. `job_status.run` now calls `record_meter` at
+entry and at exit, appending to `logs/meter-<quota day>.log` with the delta
+since the previous reading.
+
+A job's own spend is its entry-to-exit delta. A sibling's spend is the gap
+between one job's exit and the next job's entry. Deltas are only computed
+within a quota day, because across the 00:00 UTC reset the counter falls and a
+negative delta reported as consumption is worse than none.
+
+Costs two calls per job, about eighteen a day against a shared 100,000, and
+the instrument is visible in its own output rather than hidden. Never raises:
+an unreadable meter is a missing line in an operational log and must not fail
+a job that was otherwise fine.
+
+Verified across a full pass of all sixteen scheduled entrypoints, every one of
+which writes an entry and an exit reading. The first real day's numbers arrive
+with Monday's run.
+
 ## 2026-08-16, fourth: the rotation bands are re-derived on the right population, and the schedule leaves the quota boundary
 
 ### The float rotation bands were fitted to names that never receive them
@@ -97,9 +301,16 @@ race. It is the largest single job in the schedule, buying lookback_sessions
 bulk calls in one run, and losing that race means spending them against a
 counter that has been accumulating since the previous evening.
 
-Moved to 20:30 in both `register_tasks.ps1` and the live task, which clears the
-boundary in both halves of the year. Every other job is a morning or late
-evening step and none sits near either reset time.
+Moved to 20:30 in both `register_tasks.ps1` and the live task. Every other job
+is a morning or late evening step and none sits near either reset time.
+
+[corrected 2026-08-16: this read "which clears the boundary in both halves of
+the year". It does not, and the very next run proved it. The vendor's counter
+does NOT roll at 00:00 UTC. The 20:30 universe run read 99,671 used with 329
+remaining at 20:30:01 and 4,944 at 20:31:49, so the roll landed 30 to 32
+minutes late and the job spent its first minute against a counter that was 329
+short of exhausted. Moved again to 21:00, roughly double the observed lag. See
+the entry above for the correction and for the delta guard it also broke.]
 
 ## 2026-08-16, third: a name with no baseline can be scored, and two probes are set for Monday
 
