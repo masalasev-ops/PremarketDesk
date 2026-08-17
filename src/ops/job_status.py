@@ -105,6 +105,187 @@ def append(record: dict[str, Any]) -> None:
         handle.flush()
 
 
+# --------------------------------------------------------------- meter trail
+
+def meter_log_path(day: str | None = None) -> Path:
+    """One file per quota day, holding every job's reading of the shared key."""
+    from core import eodhd
+
+    return config.LOGS_DIR / f"meter-{day or eodhd.quota_day()}.log"
+
+
+def _last_trail_entry(path: Path) -> dict[str, Any] | None:
+    """The previous job's reading, for the delta. None on the day's first."""
+    try:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines()
+                 if line.strip()]
+    except OSError:
+        return None
+    for line in reversed(lines):
+        try:
+            return json.loads(line)
+        except ValueError:
+            continue
+    return None
+
+
+def record_meter(step: str, when: str, source: str = "job",
+                 reading: Any = None, extra: dict[str, Any] | None = None
+                 ) -> dict[str, Any] | None:
+    """Read the shared meter and append it to the day's trail.
+
+    The shared EODHD key is spent by siblings this project cannot see, and on
+    2026-08-16 one of them took it from 96,098 to 99,671 in an afternoon, which
+    put discover below its refuse floor and would have killed the next morning
+    outright. Nothing in this repository could say WHEN that happened or which
+    of its own jobs contributed, because the only reading anyone took was the
+    preflight inside three of the nine jobs.
+
+    So every job now reads the meter at entry and again at exit, and writes the
+    reading with the delta since the previous entry in the trail. A day of that
+    attributes consumption to a time of day and to a step, which is the cheap
+    half of what a second API token would buy, and it works without buying one.
+
+    Costs one call per reading, so two per job, about eighteen a day against a
+    shared 100,000. That is itself recorded rather than hidden: the reading
+    moves the thing it reads, and a delta of two across a job that made no
+    other call is this function looking at itself.
+
+    Never raises. A meter that cannot be read is a missing line in an
+    operational log, and must not be able to fail a job that was otherwise
+    fine.
+    """
+    from core import eodhd
+
+    try:
+        # A caller that has already read the meter passes the reading in, so
+        # writing two rows about one moment costs one call rather than two and
+        # both rows describe the SAME reading. The sampler needs this: its
+        # reset row and the sample that detected the reset are one observation
+        # and must not disagree about the numbers.
+        data, error = reading if reading is not None else eodhd.read_meter()
+        entry: dict[str, Any] = {
+            "at": ettime.stamp(ettime.now_et()),
+            "quota_day": eodhd.quota_day(),
+            # 'job' for an entry or exit reading taken around a scheduled
+            # step, 'sampler' for a reading taken on the clock by
+            # ops/meter_sampler.py, 'reset' for the boundary row the sampler
+            # writes when the counter rolls. Job readings say WHICH step spent
+            # what; sampler readings say WHEN, including across the overnight
+            # window where the job schedule is silent for nine hours.
+            "source": source,
+            "step": step,
+            "when": when,
+            "job": os.environ.get(JOB_ENV_VAR) or "manual",
+            "api_requests": None,
+            "daily_limit": None,
+            "remaining": None,
+            # The date the METER puts on its own counter, which is not the
+            # same thing as the quota day computed above. See the roll note in
+            # the delta guard below.
+            "meter_day": None,
+            "meter_day_is_stale": None,
+            "delta_since_previous": None,
+            "previous_step": None,
+            "previous_at": None,
+            "error": error,
+        }
+        if not error and isinstance(data, dict):
+            try:
+                used = int(data.get("apiRequests"))
+                limit = int(data.get("dailyRateLimit"))
+            except (TypeError, ValueError):
+                used = limit = -1
+            if used >= 0 and limit > 0:
+                entry.update({"api_requests": used, "daily_limit": limit,
+                              "remaining": max(0, limit - used)})
+            entry["meter_day"] = str(data.get("apiRequestsDate") or "").strip() or None
+            if entry["meter_day"]:
+                entry["meter_day_is_stale"] = entry["meter_day"] != entry["quota_day"]
+
+        if extra:
+            entry.update(extra)
+
+        path = meter_log_path()
+        previous = _last_trail_entry(path)
+        # Only compare two readings the METER itself dates the same way.
+        #
+        # [corrected 2026-08-16: this guarded on quota_day(), the day computed
+        # from the wall clock, and the first real trail immediately produced a
+        # delta of -94,727. The vendor's counter does NOT roll at 00:00 UTC.
+        # On 2026-08-16 the universe job read 99,671 used at 20:30:01 ET and
+        # 4,944 at 20:31:49, so the roll landed 30 to 32 minutes after 00:00
+        # UTC while quota_day() had already advanced. Both readings therefore
+        # looked same-day to the old guard and the subtraction spanned a
+        # reset.]
+        #
+        # apiRequestsDate is the counter's own dating and is the only
+        # authoritative signal that it rolled. A missing date on either side
+        # means no delta, because an unknown boundary is not a safe
+        # subtraction.
+        if (previous and entry["api_requests"] is not None
+                and previous.get("api_requests") is not None
+                and entry.get("meter_day") is not None
+                and previous.get("meter_day") == entry["meter_day"]):
+            entry["delta_since_previous"] = entry["api_requests"] - previous["api_requests"]
+            entry["previous_step"] = f"{previous.get('step')}:{previous.get('when')}"
+            entry["previous_at"] = previous.get("at")
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, separators=(",", ":")) + "\n")
+
+        if entry["remaining"] is None:
+            print(f"{step}: meter unreadable at {when} ({error})")
+        else:
+            delta = entry["delta_since_previous"]
+            if delta is not None:
+                since = (f", {delta:+,} since {entry['previous_step']} at "
+                         f"{str(entry['previous_at'])[11:19]}")
+            elif previous and previous.get("meter_day") is None:
+                # Not a roll. The previous row was written before the trail
+                # recorded apiRequestsDate, so there is nothing to compare its
+                # boundary against, and guessing would be exactly the error
+                # the date was added to prevent.
+                since = (", no delta: the previous reading did not record which day "
+                         "its counter belonged to")
+            elif previous:
+                since = (f", no delta: the counter is dated {entry['meter_day']} and "
+                         f"the previous reading {previous.get('meter_day')}, so it "
+                         "rolled between them")
+            else:
+                since = ", first reading against this counter"
+            stale = ""
+            if entry["meter_day_is_stale"]:
+                stale = (f". NOTE the counter still dates itself {entry['meter_day']} "
+                         f"while the quota day is {entry['quota_day']}, so this is the "
+                         "previous day's spend and has not rolled yet")
+            print(f"{step}: meter at {when} {entry['api_requests']:,} of "
+                  f"{entry['daily_limit']:,} used, {entry['remaining']:,} remaining"
+                  f"{since}{stale}")
+        return entry
+    except Exception as exc:  # noqa: BLE001
+        print(f"{step}: the meter trail could not be written "
+              f"({type(exc).__name__}: {config.scrub_secrets(exc)})")
+        return None
+
+
+def read_trail(day: str | None = None) -> list[dict[str, Any]]:
+    """The day's trail, oldest first. For monitor_jobs and for a human."""
+    path = meter_log_path(day)
+    out: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        return []
+    return out
+
+
 def run(step: str, main: Callable[..., int], argv: list[str] | None = None,
         ok_codes: tuple[int, ...] = (0,)) -> int:
     """Call a module's main and record what happened, whatever happened.
@@ -127,6 +308,7 @@ def run(step: str, main: Callable[..., int], argv: list[str] | None = None,
     _declared_failure = None
 
     started = ettime.now_et()
+    record_meter(step, "entry")
     status = STATUS_ERROR
     exception = None
     code: int | None = None
@@ -149,6 +331,9 @@ def run(step: str, main: Callable[..., int], argv: list[str] | None = None,
         raise
     finally:
         ended = ettime.now_et()
+        # After the step, so the delta between this and the entry reading is
+        # what the step itself actually spent.
+        record_meter(step, "exit")
         try:
             append({
                 "job": os.environ.get(JOB_ENV_VAR) or "manual",

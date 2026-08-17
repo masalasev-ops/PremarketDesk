@@ -25,18 +25,34 @@ $jobs = @(
     # yesterday via the catch-up sweep and completes the volume verification
     # before the new morning's collection is trusted.
     @{ Name = "nightly-catchup"; Bat = "job_nightly.bat";      Days = $weekdays;    Start = "07:00" },
-    # 20:30, NOT 20:00. The EODHD quota counter resets at 00:00 UTC, which is
-    # 20:00 ET in daylight time and 19:00 in standard, so a Sunday 20:00 start
-    # fired at the exact instant of the reset for half the year and which quota
-    # day it billed to was a race. The universe rebuild is the largest single
-    # job in the schedule, buying lookback_sessions bulk calls in one run, so
-    # losing that race means spending it against a counter that has been
-    # accumulating since the previous evening. 20:30 sits clear of the boundary
-    # in both halves of the year.
-    @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "20:30" },
+    # 21:00, and the two earlier values are worth keeping in view because each
+    # was wrong for a different reason.
+    #
+    # 20:00 was the exact instant of the 00:00 UTC reset (20:00 ET in daylight
+    # time, 19:00 in standard), so which quota day the largest job in the
+    # schedule billed to was a coin toss.
+    #
+    # 20:30 assumed the vendor's counter rolls ON the hour. It does not. The
+    # 2026-08-16 run read 99,671 used with 329 remaining at 20:30:01 and 4,944
+    # at 20:31:49, so the roll landed 30 to 32 minutes AFTER 00:00 UTC. The job
+    # spent its first minute reading a counter that was 329 short of exhausted,
+    # and a job carrying discover's refuse floor would have stood down on a
+    # budget that was in fact about to be full.
+    #
+    # 21:00 gives roughly double the one lag actually observed. The lag is a
+    # vendor behaviour nothing here controls, so the meter trail records
+    # apiRequestsDate on every reading and a roll is visible rather than
+    # inferred.
+    @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "21:00" },
     # The watchdog: repeats through the morning window, once after the nightly.
     @{ Name = "monitor";       Bat = "job_monitor.bat";       Days = $weekdays;    Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
-    @{ Name = "monitor-night"; Bat = "job_monitor.bat";       Days = $weekdays;    Start = "22:45" }
+    @{ Name = "monitor-night"; Bat = "job_monitor.bat";       Days = $weekdays;    Start = "22:45" },
+    # Every day including weekends, every thirty minutes, all twenty four
+    # hours. Not a step: an instrument. The job trail says which step spent
+    # what and cannot say when, because nothing runs between 22:45 and 07:00
+    # and that overnight silence is exactly where a sibling draining the
+    # shared key would hide. One call per firing, 48 a day.
+    @{ Name = "meter-sampler"; Bat = "job_meter_sampler.bat"; Days = @("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"); Start = "00:00"; RepeatMin = 30; RepeatHours = 24 }
 )
 
 # One time cleanup: the first registrations used flat root level names.
