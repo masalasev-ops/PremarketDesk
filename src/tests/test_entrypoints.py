@@ -28,6 +28,7 @@ Run directly with `python src\\test_entrypoints.py`, or as part of
 from __future__ import annotations
 
 import contextlib
+import io
 import datetime as dt
 import json
 import sys
@@ -682,9 +683,34 @@ def claim_calendar(failures: list[str]) -> None:
 
 
 def claim_universe(failures: list[str]) -> None:
-    outcome = _drive("universe", "selection.universe", [])
+    """The rebuild, driven with no previous file on disk.
+
+    The sandbox carries a restamped copy of the real universe, roughly 2,750
+    names, while this claim's stubbed vendor serves a few. build() now asks
+    check_admissible about its own payload before overwriting anything, so a
+    previous count of 2,750 correctly refuses a rebuild that admits a
+    thousand: that is a rebuild cut short, which is exactly what the gate is
+    for. Comparing a stub against real production counts tests the fixture
+    rather than the entrypoint.
+
+    Removing it first is also the honest shape for this claim. With no
+    previous file there is nothing to compare against, which is the first
+    build case, and it is the only place the suite drives the branch of the
+    first quota gate that cannot size the market cap sweep yet.
+    """
+    config.UNIVERSE_PATH.unlink(missing_ok=True)
+    # Outcome carries the record and the session, not the printed lines, and
+    # the branch under test is only visible in what the gate said. Captured
+    # and replayed rather than swallowed, so the run still reads normally.
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        outcome = _drive("universe", "selection.universe", [])
+    sys.stdout.write(printed.getvalue())
     _check(outcome, failures,
            expect_endpoints=["exchange-symbol-list", "eod-bulk-last-day"])
+    if "bulk sweep alone" not in printed.getvalue():
+        failures.append("with no previous universe on disk the first quota gate "
+                        "should say it can only size the bulk sweep, and it did not")
 
 
 def claim_gap_stats(failures: list[str]) -> None:

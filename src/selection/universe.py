@@ -10,12 +10,23 @@ before or the morning pass can never see it. Screening the population at the
 trading threshold is how you build a universe that structurally cannot contain
 the trades you are looking for.
 
-Call cost, roughly:
-    2    exchange symbol lists, NYSE and NASDAQ
-    1    SPY end of day history, which supplies the real session dates
-    20   bulk end of day, one per session
-    ~100 delayed quotes in batches, only for names that already cleared price,
-         liquidity and history, purely to attach market cap
+Cost, in http calls and in what the shared counter actually charges for them.
+The two columns are different and the difference is the whole reason this file
+carries a quota gate. Prices are in CRITERIA.md [quota costs], measured.
+
+    calls  credits  what
+        2        2  exchange symbol lists, NYSE and NASDAQ
+        1        1  SPY end of day history, which supplies the session dates
+       20    2,000  bulk end of day, one per session, a flat 100 each
+      148    2,942  delayed quotes in batches of twenty, billed PER SYMBOL, only
+                    for names that already cleared price, liquidity and history,
+                    purely to attach market cap
+      ---    -----
+      171    4,945  measured on the 2026-08-17 rebuild
+
+So the largest job in this project reports 172 http calls and takes five
+percent of a shared daily hundred thousand. Sizing anything off the call count
+gets it wrong by a factor of twenty eight.
 
 Everything later in the day refuses to run against a stale universe. That gate
 lives here in require_fresh_universe so there is one definition of stale.
@@ -28,7 +39,7 @@ import datetime as dt
 import json
 import os
 import sys
-from typing import Any
+from typing import Any, NamedTuple
 
 from core import config
 from core import criteria
@@ -41,6 +52,25 @@ _CRIT = criteria.load()
 
 class StaleUniverseError(RuntimeError):
     """Raised when universe.json is missing or too old to trade against."""
+
+
+class PartialBuildError(RuntimeError):
+    """Raised when a completed build is not whole enough to replace the old one.
+
+    The quota gates stop a run that cannot AFFORD the sweep. This is the other
+    case: a run that could afford it, started it, and then lost batches part
+    way through. The gates cannot see that, because they read the meter once
+    before the sweep begins.
+
+    It matters because os.replace is destructive. Without this the truncated
+    file lands on top of last Sunday's good one, main returns 0 on a count
+    that is still inside its expected range, the job records ok, and the
+    monitor sees a fresh generated_at and reports the universe healthy while
+    discover refuses on it every morning until the next Sunday. The monitor's
+    relaunch is keyed to the file being OLD, so a fresh bad file never triggers
+    it. Refusing to write is what keeps the recovery path that the quota
+    refusal already has.
+    """
 
 
 def _norm_code(raw: str) -> str:
@@ -202,29 +232,190 @@ def _collect_bars(
     return series
 
 
+class CapSweep(NamedTuple):
+    """What the market cap sweep learned, and what it failed to learn.
+
+    caps        code -> market cap, for every name the vendor priced.
+    answered    codes that appeared in some response, priced or not.
+    unanswered  codes whose whole batch came back with nothing at all.
+
+    A code in none of the three is one whose batch was answered while it was
+    itself absent from the body. Those three outcomes are different facts and
+    the payload records them separately, because until it did, all of them
+    arrived at the same sentence: "dropped because no market cap came back".
+    """
+
+    caps: dict[str, float]
+    answered: set[str]
+    unanswered: set[str]
+
+
 def _attach_market_caps(
     api: eodhd.EodhdClient,
     codes: list[str],
     notes: list[str],
-) -> dict[str, float]:
-    """Market cap from us-quote-delayed, the same field the morning scan reads."""
+) -> CapSweep:
+    """Market cap from us-quote-delayed, the same field the morning scan reads.
+
+    The old guard here was `if error and not data`, which had a hole big
+    enough to lose twenty names at a time without a word anywhere. When a
+    chunk comes back 200 with a body eodhd.quote_delayed does not recognise,
+    it returns ({}, None): no error to record, and no rows to record against.
+    The guard was False, the loop over an empty dict did nothing, and the
+    twenty names fell through to the same counter as a genuine vendor gap.
+
+    So the test is now on the data rather than on the error. A batch that
+    answered nothing is recorded as unanswered whether or not it said why, and
+    the names in it are never described as names the vendor had no cap for.
+    """
     caps: dict[str, float] = {}
+    answered: set[str] = set()
+    unanswered: set[str] = set()
     batch = _CRIT.integer("api", "quote_batch_size")
     total = len(codes)
     for start in range(0, total, batch):
-        chunk = [f"{c}.US" for c in codes[start:start + batch]]
-        data, error = api.quote_delayed(chunk)
-        if error and not data:
-            notes.append(f"market cap batch {start // batch} failed: {error}")
+        window = codes[start:start + batch]
+        data, error = api.quote_delayed([f"{c}.US" for c in window])
+        if not data:
+            unanswered.update(window)
+            notes.append(
+                f"market cap batch {start // batch}, covering {len(window)} names, "
+                f"was not answered: {error or 'the response carried no rows'}"
+            )
             continue
-        for symbol, quote in (data or {}).items():
+        for symbol, quote in data.items():
+            code = _norm_code(symbol)
+            answered.add(code)
             cap = _as_float(quote.get("marketCap"))
             if cap is not None:
-                caps[_norm_code(symbol)] = cap
+                caps[code] = cap
         done = min(start + batch, total)
         if done % (batch * 25) == 0 or done == total:
             print(f"universe: market cap {done}/{total}")
-    return caps
+    return CapSweep(caps=caps, answered=answered, unanswered=unanswered)
+
+
+_FUNNEL_DOORS = (
+    "admitted",
+    "below_market_cap_floor",
+    "no_market_cap_in_row",
+    "absent_from_answered_batch",
+    "in_an_unanswered_batch",
+)
+
+
+def market_cap_funnel(
+    staged: list[dict[str, Any]],
+    sweep: CapSweep,
+    market_cap_rule: Any,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Sort every examined name through exactly one door, and name the doors.
+
+    This used to be four lines inside build() that counted one door and
+    ignored the rest. On the 2026-08-17 rebuild it reported "46 names were
+    dropped because no market cap came back" out of 2,942 examined and 2,754
+    admitted, which left 142 names failing the market cap floor with nothing
+    anywhere recording that they had even been considered. Naming the 46 while
+    the 142 stayed invisible would have made that record worse, not better,
+    because a reader would reasonably take the named list as the explanation
+    for the whole 2,942 to 2,754 drop. It explains a quarter of it.
+
+    The doors are not the same KIND of fact, which is the point of separating
+    them. below_market_cap_floor is a decision this project made on evidence it
+    has. The other three are absences, and they differ in what is absent: the
+    vendor answered and carried no market cap, the vendor answered a batch
+    without mentioning the name, or nothing ever came back for the batch at
+    all. Only the first of those is a fact about the market.
+
+    Lifted out of build() so a claim can drive it without a network, which is
+    the only way to exercise the batch that answers nothing.
+    """
+    admitted: list[dict[str, Any]] = []
+    doors: dict[str, list[str]] = {
+        "below_market_cap_floor": [],
+        "no_market_cap_in_row": [],
+        "absent_from_answered_batch": [],
+        "in_an_unanswered_batch": [],
+    }
+    for row in staged:
+        code = row["code"]
+        cap = sweep.caps.get(code)
+        if cap is None:
+            if code in sweep.unanswered:
+                doors["in_an_unanswered_batch"].append(code)
+            elif code in sweep.answered:
+                doors["no_market_cap_in_row"].append(code)
+            else:
+                doors["absent_from_answered_batch"].append(code)
+            continue
+        if not market_cap_rule.test(cap):
+            doors["below_market_cap_floor"].append(code)
+            continue
+        row["market_cap"] = round(cap, 2)
+        admitted.append(row)
+
+    funnel: dict[str, Any] = {"examined": len(staged), "admitted": len(admitted)}
+    funnel.update({door: len(names) for door, names in doors.items()})
+    funnel["names"] = {door: sorted(names) for door, names in doors.items()}
+    # The funnel has to close. If it ever does not, that is a defect in this
+    # accounting rather than in the data, and it should say so rather than
+    # quietly under report.
+    funnel["unaccounted"] = funnel["examined"] - sum(funnel[d] for d in _FUNNEL_DOORS)
+    return admitted, funnel
+
+
+def funnel_notes(funnel: dict[str, Any], market_cap_rule: Any) -> list[str]:
+    """The funnel as lines for the job log, naming names for the absences."""
+    notes = []
+    if funnel.get("unaccounted"):
+        notes.append(
+            f"the market cap funnel does not close: {funnel['unaccounted']} of "
+            f"{funnel['examined']} names left by no recorded door, which is a "
+            "defect in this accounting rather than in the data")
+    notes.append(
+        f"market cap funnel: {funnel['examined']:,} examined, "
+        f"{funnel['admitted']:,} admitted, "
+        f"{funnel['below_market_cap_floor']:,} below the "
+        f"{market_cap_rule.describe()} floor, "
+        f"{funnel['no_market_cap_in_row']:,} answered with no market cap in the row, "
+        f"{funnel['absent_from_answered_batch']:,} absent from a batch that answered, "
+        f"{funnel['in_an_unanswered_batch']:,} in a batch that answered nothing")
+    # The floor names are in the payload but not named here: that door is a
+    # decision made on evidence, and 142 tickers on one line would bury the
+    # three doors that are evidence gaps.
+    for door, label in (
+        ("no_market_cap_in_row", "answered with no market cap in the row"),
+        ("absent_from_answered_batch", "absent from a batch that answered"),
+        ("in_an_unanswered_batch", "in a batch that answered nothing"),
+    ):
+        names = funnel["names"].get(door) or []
+        if names:
+            notes.append(f"{len(names)} {label}: {', '.join(names)}")
+    return notes
+
+
+def _prior_staged_count() -> int | None:
+    """How many names the previous build put through the market cap sweep.
+
+    The sweep is the per name half of the bill and its size is not knowable
+    until the bulk sweep has already been paid for, so the only honest input
+    to a gate that runs BEFORE the bulk sweep is what last week actually
+    swept. Falls back to the previous admitted count, which is a true lower
+    bound because admitted is a subset of staged, and then to None.
+
+    None means unknown, and unknown is not zero: the caller gates on the bulk
+    sweep alone and says so, rather than inventing a number for the half it
+    cannot see.
+    """
+    try:
+        existing = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    for key in ("cleared_price_and_liquidity", "count"):
+        value = existing.get(key)
+        if isinstance(value, (int, float)) and value > 0:
+            return int(value)
+    return None
 
 
 def build(write: bool = True) -> dict[str, Any]:
@@ -252,6 +443,23 @@ def build(write: bool = True) -> dict[str, Any]:
     print(f"universe: {len(session_dates)} sessions, "
           f"{session_dates[0] if session_dates else 'n/a'} to "
           f"{session_dates[-1] if session_dates else 'n/a'}")
+
+    # The first of two quota gates. Exactly three credits are spent at this
+    # point and len(session_dates) is now exact, so the two thousand credit
+    # bulk sweep about to start is priced rather than guessed. Refusing here
+    # costs three credits. Refusing one line later would cost two thousand.
+    prior_staged = _prior_staged_count()
+    bulk_credits = eodhd.credit_cost(eod_bulk_last_day=len(session_dates))
+    if prior_staged is None:
+        need = bulk_credits
+        what = (f"the {len(session_dates)} session bulk sweep alone (no previous "
+                "build is on disk, so the market cap sweep after it cannot be "
+                "sized yet)")
+    else:
+        need = bulk_credits + eodhd.credit_cost(us_quote_delayed_per_symbol=prior_staged)
+        what = (f"the {len(session_dates)} session bulk sweep and a market cap sweep "
+                f"of about {prior_staged:,} names (sized from the previous build)")
+    eodhd.require_quota("universe", need, what)
 
     series = _collect_bars(api, session_dates, set(exchange_of), notes)
     print(f"universe: {len(series)} symbols had at least one session")
@@ -281,22 +489,27 @@ def build(write: bool = True) -> dict[str, Any]:
     staged.sort(key=lambda row: row["avg_dollar_volume_20d"], reverse=True)
     print(f"universe: {len(staged)} cleared price, liquidity and history")
 
-    # Stage two, the only part that spends calls per name.
-    caps = _attach_market_caps(api, [row["code"] for row in staged], notes)
+    # Stage two, the only part that spends calls per name, and the second
+    # quota gate. This is the gate that has to exist: len(staged) is final
+    # here, so the sweep is priced exactly with nothing estimated, and the
+    # meter read costs nothing because user is zero in CRITERIA.md
+    # [quota costs].
+    #
+    # It matters more than the first gate because of the sort above. staged is
+    # ordered by dollar volume descending, so a sweep that runs out of quota
+    # partway through does not thin the file evenly. It amputates the illiquid
+    # tail, and the file it leaves still clears the count range and the
+    # previous count fraction until roughly half the names are gone. Better to
+    # spend nothing and keep last week's universe than to write a plausible
+    # one that is quietly missing its tail.
+    eodhd.require_quota(
+        "universe",
+        eodhd.credit_cost(us_quote_delayed_per_symbol=len(staged)),
+        f"the market cap sweep of {len(staged):,} names")
 
-    admitted: list[dict[str, Any]] = []
-    missing_cap = 0
-    for row in staged:
-        cap = caps.get(row["code"])
-        if cap is None:
-            missing_cap += 1
-            continue
-        if not market_cap_rule.test(cap):
-            continue
-        row["market_cap"] = round(cap, 2)
-        admitted.append(row)
-    if missing_cap:
-        notes.append(f"{missing_cap} names were dropped because no market cap came back")
+    sweep = _attach_market_caps(api, [row["code"] for row in staged], notes)
+    admitted, funnel = market_cap_funnel(staged, sweep, market_cap_rule)
+    notes.extend(funnel_notes(funnel, market_cap_rule))
 
     admitted.sort(key=lambda row: row["symbol"])
 
@@ -324,6 +537,11 @@ def build(write: bool = True) -> dict[str, Any]:
         "previous_count": _previous_count(),
         "listed_common_stocks": len(exchange_of),
         "cleared_price_and_liquidity": len(staged),
+        # Why each examined name is or is not in this file, by name and not
+        # only by count. check_admissible reads it to answer "is this whole",
+        # which the count alone cannot: a sweep starved of quota and a vendor
+        # with no market cap for a name produce the same shortfall.
+        "market_cap_funnel": funnel,
         "notes": notes,
         "api_calls": eodhd.call_count(),
         "symbols": admitted,
@@ -340,6 +558,20 @@ def build(write: bool = True) -> dict[str, Any]:
         print(f"WARNING  {warning}")
 
     if write:
+        # Ask the "is it whole" question BEFORE replacing the old file, not
+        # after. check_admissible has always existed and has only ever been
+        # called downstream, by discover, on a file already on disk. That
+        # ordering is fine for a question about age and useless for a question
+        # about completeness: by the time discover can refuse the file, the
+        # good one it would have fallen back to has been overwritten.
+        verdict = check_admissible(payload)
+        if verdict:
+            raise PartialBuildError(
+                f"{verdict} Refusing to overwrite the previous universe with this "
+                "one. The file already on disk is last week's and every later "
+                "script knows how to refuse it once it is too old, which is a "
+                "recoverable state. A fresh file that discover rejects is not: "
+                "the monitor relaunches on age and this one would look new.")
         write_atomically(payload)
         print(f"universe: wrote {config.UNIVERSE_PATH} with {len(admitted)} names")
 
@@ -370,6 +602,41 @@ def check_admissible(payload: dict[str, Any]) -> str | None:
     previous = payload.get("previous_count")
     if not isinstance(count, (int, float)):
         return "universe.json carries no count"
+
+    # The size question and the evidence question are different, and the size
+    # question cannot answer this one. A sweep that ran out of quota partway
+    # drops names in dollar volume order, so the file stays within its
+    # expected range and above the previous count fraction while its illiquid
+    # tail is gone. What separates that from a real week is not how many names
+    # are missing but WHY: a name the vendor priced below the floor was
+    # decided, a name nothing ever got an answer for was only unasked.
+    #
+    # Older files carry no funnel and are skipped rather than failed. There is
+    # nothing to compare, and treating an absent field as a failure would
+    # refuse a universe that predates the field for no reason.
+    funnel = payload.get("market_cap_funnel")
+    if isinstance(funnel, dict):
+        examined = funnel.get("examined")
+        # ONLY the batches that answered nothing. absent_from_answered_batch
+        # is deliberately excluded: that batch was answered and the vendor
+        # simply did not carry the name, which is a fact about its coverage
+        # rather than about this run. It is also structural and constant, 26
+        # preferreds and warrants on 2026-08-17, so folding it in would spend
+        # a third of the ceiling on a baseline that never varies and would
+        # leave real losses only 1.6 batches of room.
+        unswept = funnel.get("in_an_unanswered_batch") or 0
+        limit = _CRIT.number("universe", "max_unswept_fraction")
+        if isinstance(examined, (int, float)) and examined > 0 and unswept:
+            share = unswept / examined
+            if share > limit:
+                return (f"universe.json never got an answer for {int(unswept)} of "
+                        f"{int(examined)} names it examined ({share:.1%}), above the "
+                        f"{limit:.1%} ceiling in {config.CRITERIA_PATH.name} "
+                        "[universe] max_unswept_fraction. Those names were not "
+                        "rejected, nothing came back for them at all, and because "
+                        "the sweep runs in dollar volume order the ones it loses "
+                        "are the illiquid tail rather than a random sample.")
+
     if not isinstance(previous, (int, float)) or previous <= 0:
         return None  # nothing to compare against, which is not a failure
     floor = previous * fraction
@@ -392,14 +659,17 @@ def write_atomically(payload: dict[str, Any]) -> None:
     temporary file is a sibling because rename is only atomic within a
     filesystem.
 
-    This matters more than it looks. The Sunday 20:00 job has never fired, its
-    roughly 4,700 calls bill to the same quota day as Monday morning, and the
-    key is shared with another project that had already taken half of it on
-    2026-08-14. A refused or interrupted run is a real possibility, and a
-    plain write_text leaves a truncated file behind when it happens. A stale
+    This matters more than it looks, and the first real firing showed why.
+    The Sunday job bills a measured 4,945 credits to the same quota day as
+    Monday morning, and the key is shared with another project that was
+    measured taking 15,910 credits in thirty minutes on 2026-08-16. On
+    2026-08-16 this job started with 329 credits against a bill of 4,945 and
+    survived only because the vendor's counter rolled within its first
+    seconds. A refused or interrupted run is not a hypothetical, and a plain
+    write_text leaves a truncated file behind when it happens. A stale
     universe from last Sunday is a usable input and every later script knows
     how to refuse one that is too old. A half written one is not usable, and
-    until now nothing could tell the two apart.
+    until this nothing could tell the two apart.
     """
     target = config.UNIVERSE_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -442,6 +712,25 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         payload = build()
+    except eodhd.QuotaRefusal as exc:
+        # Ahead of the RuntimeError handler below, and it has to be: QuotaRefusal
+        # subclasses RuntimeError, so without this a refusal is reported as
+        # "build failed" with no reason recorded on the job status line. This
+        # is discover's wording and discover's record, because it is the same
+        # event: the shared key cannot pay, so nothing was attempted.
+        print(f"REFUSING TO RUN: {exc}")
+        job_status.failed(f"{type(exc).__name__}: {exc}")
+        eodhd.print_call_report()
+        return 1
+    except PartialBuildError as exc:
+        # Also ahead of the bare RuntimeError handler, and for the same reason.
+        # This one spent the quota and produced a file; it simply refused to
+        # let that file replace a better one. The record has to say so, because
+        # the visible symptom otherwise is a universe that did not change.
+        print(f"REFUSING TO WRITE: {exc}")
+        job_status.failed(f"{type(exc).__name__}: {exc}")
+        eodhd.print_call_report()
+        return 1
     except RuntimeError as exc:
         print(f"universe: build failed, {exc}")
         eodhd.print_call_report()

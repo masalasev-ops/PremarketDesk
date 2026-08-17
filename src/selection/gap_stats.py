@@ -147,6 +147,19 @@ def build(as_of_dates: list[dt.date], write: bool = True) -> dict[str, Any]:
     universe_payload = universe.load_universe(require_fresh=False)
     symbols = universe.universe_symbols(universe_payload)
 
+    # One eod call per universe name, and eod is one credit, so this step can
+    # price itself exactly before it spends anything. It is the second half of
+    # the Sunday job and it cost a measured 2,753 credits on 2026-08-17, so the
+    # flat 500 refuse floor it used to check would have cleared at 501 and then
+    # stopped this run a fifth of the way in. A run that stops partway leaves
+    # gap_propensity computed for the names it reached and last week's figures
+    # for the rest, mixed in one table under one as_of, which is worse than not
+    # running: discover ranks on that column and cannot see the seam.
+    eodhd.require_quota(
+        "gap_stats",
+        eodhd.credit_cost(eod=len(symbols)),
+        f"one end of day history for each of {len(symbols):,} universe names")
+
     newest = max(as_of_dates)
     oldest = min(as_of_dates)
     # Calendar days generous enough to cover the lookback before the OLDEST
@@ -248,11 +261,17 @@ def main(argv: list[str] | None = None) -> int:
     else:
         dates = [ettime.today_et() - dt.timedelta(days=1)]
 
-    quota = eodhd.preflight("gap_stats")
-    if quota["refused"]:
-        print(f"gap_stats: refusing, {eodhd.describe_preflight(quota)}")
+    # The flat floor check that used to sit here is gone. build() now reads the
+    # meter once against what this run will actually spend, which is a number
+    # it can compute exactly, so a second read against a floor that is five
+    # times too small would only cost a call and disagree.
+    try:
+        result = build(dates)
+    except eodhd.QuotaRefusal as exc:
+        print(f"REFUSING TO RUN: {exc}")
+        job_status.failed(f"{type(exc).__name__}: {exc}")
+        eodhd.print_call_report()
         return 1
-    result = build(dates)
     job_status.produced("symbols measured", result["written"])
     # build() has always returned the names it could not fetch and main has
     # always thrown that list away, so a run where every symbol failed exited

@@ -22,6 +22,8 @@ Claims, one per clause of the pool rework:
 
 from __future__ import annotations
 
+import contextlib
+import io
 import datetime as dt
 import inspect
 import json
@@ -30,6 +32,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from core import config
 from core import criteria
@@ -583,6 +586,322 @@ def claim_twelve(failures: list[str]) -> None:
           f"above it, on a fed meter with the network blocked")
 
 
+def claim_thirteen(failures: list[str]) -> None:
+    """A quota gate sized to the work, not to the flat 500 floor.
+
+    Claim 12 covers the global floor. This covers the thing the floor cannot
+    do. The Sunday rebuild spends a measured 4,945 credits and the floor is
+    500, so a meter reading 501 clears the floor and then strands the job a
+    tenth of the way through, having spent everything there was. The gate under
+    test asks a different question: can the account pay for THIS step at the
+    prices in CRITERIA.md [quota costs].
+
+    Two halves, and the second is the one that carries the risk.
+
+    The first is the arithmetic: refuse below the requirement, proceed at it.
+    The requirement is computed here from the same cost table the code reads,
+    so retuning lookback_sessions or a price cannot leave this claim asserting
+    a number nobody uses any more.
+
+    The second is that an UNKNOWN meter must not refuse. preflight leaves
+    remaining as None on three paths, and the one that matters is a reading
+    dated to another quota day, which is exactly what the vendor serves in the
+    half hour after a reset it rolls thirty minutes late. Refusing there would
+    convert a benign late roll into a skipped weekly rebuild, and would act on
+    a number nobody read. Both unknown paths are driven here.
+    """
+    crit = criteria.load()
+    headroom = crit.number("quota", "quota_headroom_multiple")
+    limit = conftest.HEALTHY_METER["dailyRateLimit"]
+
+    # Priced from the table rather than hardcoded, so this tracks CRITERIA.
+    need = eodhd.credit_cost(
+        exchange_symbol_list=2,
+        eod=1,
+        eod_bulk_last_day=crit.integer("universe", "lookback_sessions"),
+        us_quote_delayed_per_symbol=2_942,
+    )
+    required = int(need * headroom)
+    if need <= crit.integer("quota", "refuse_below_remaining"):
+        failures.append(f"the modelled universe cost of {need:,} credits is below the "
+                        "refuse floor, so this claim proves nothing the floor does not")
+        return
+
+    cases = (
+        ("one credit short of the requirement", limit - (required - 1), True),
+        ("exactly at the requirement", limit - required, False),
+        ("comfortably above", limit - required - 50_000, False),
+    )
+    for label, used, should_refuse in cases:
+        remaining = limit - used
+        with conftest.meter_reading(apiRequests=used):
+            try:
+                eodhd.require_quota("test", need, "the modelled rebuild")
+            except eodhd.QuotaRefusal as exc:
+                if not should_refuse:
+                    failures.append(f"a meter {label} ({remaining:,} remaining against "
+                                    f"a {required:,} requirement) refused: {exc}")
+                    continue
+                message = str(exc).replace(",", "")
+                for token in (str(need), str(required), "quota_headroom_multiple"):
+                    if token not in message:
+                        failures.append(f"the refusal does not name {token!r}: {exc}")
+            else:
+                if should_refuse:
+                    failures.append(
+                        f"a meter {label} ({remaining:,} remaining against a "
+                        f"{required:,} requirement) did not refuse")
+
+    # The load bearing half. Neither unknown meter may refuse, and the reason
+    # they are unknown differs: one is dated to another day, one is unreadable.
+    unknowns = (
+        ("a reading dated to another quota day, which is the late roll",
+         {"apiRequests": limit - 1, "apiRequestsDate": "2000-01-01"}),
+        ("a reading whose fields cannot be parsed",
+         {"apiRequests": None}),
+    )
+    for label, overrides in unknowns:
+        with conftest.meter_reading(**overrides):
+            record = eodhd.preflight("test")
+            if record["remaining"] is not None:
+                failures.append(f"{label} left remaining as {record['remaining']!r}, "
+                                "expected None, so this case is not testing what it "
+                                "says it is")
+                continue
+            try:
+                eodhd.require_quota("test", need, "the modelled rebuild")
+            except eodhd.QuotaRefusal as exc:
+                failures.append(
+                    f"{label} refused the rebuild: {exc}. An unknown meter is not a "
+                    "zero meter, and refusing here would skip a weekly rebuild on a "
+                    "budget that was in fact full.")
+
+    print(f"  claim 13 a {need:,} credit step refuses below {required:,} remaining "
+          f"({headroom:g}x) and proceeds at it, and neither unknown meter refuses")
+
+
+def claim_fourteen(failures: list[str]) -> None:
+    """Every examined name leaves by exactly one door, and the doors are named.
+
+    The 2026-08-17 rebuild reported "46 names were dropped because no market
+    cap came back" against 2,942 examined and 2,754 admitted. The arithmetic
+    does not close: 142 names failed the market cap floor with nothing anywhere
+    recording that they had been considered at all. And the one door that WAS
+    counted conflated three different facts, one about the vendor's data and
+    two about what this run managed to ask.
+
+    The batch that answers nothing is the case that needs a claim rather than a
+    reading of the code. eodhd.quote_delayed returns ({}, None) when a chunk
+    comes back 200 with a body it does not recognise: no error and no rows. The
+    old guard was `if error and not data`, which is False for that shape, so
+    the loop ran over an empty dict and twenty names fell through to the vendor
+    gap counter with nothing written anywhere. It cannot be reached from a live
+    run on demand, so it is driven here from a stub.
+    """
+    crit = criteria.load()
+    rule = crit.rule("universe", "market_cap")
+
+    class _Stub:
+        """Four batch outcomes, one per row of the truth table."""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def quote_delayed(self, symbols: list[str]) -> Any:
+            self.calls += 1
+            codes = [s.split(".")[0] for s in symbols]
+            if self.calls == 1:                       # priced, above and below floor
+                return eodhd.ApiResult(
+                    {f"{c}.US": {"marketCap": 100_000_000 if c == "SMALL"
+                                 else 900_000_000} for c in codes}, None)
+            if self.calls == 2:                       # answered, one row has no cap,
+                return eodhd.ApiResult(               # the rest are simply not in it
+                    {"NOCAP.US": {"marketCap": None}}, None)
+            if self.calls == 3:                       # the silent hole: 200, no rows,
+                return eodhd.ApiResult({}, None)      # and no error to record either
+            return eodhd.ApiResult(None, "stubbed transport failure")
+
+        def __getattr__(self, name: str) -> Any:
+            raise AssertionError(f"the market cap sweep called {name}, which this "
+                                 "stub does not serve")
+
+    # Four FULL batches handed over in one call, so _attach_market_caps does
+    # its own batching and its own accumulation. Feeding it one group at a time
+    # and merging the results here would leave the accumulation untested and
+    # assert the claim's own bookkeeping instead.
+    batch = crit.integer("api", "quote_batch_size")
+    groups = [
+        ["BIG", "SMALL"] + [f"F{i:02d}" for i in range(batch - 2)],
+        ["NOCAP", "ABSENT"] + [f"G{i:02d}" for i in range(batch - 2)],
+        ["SILENT"] + [f"H{i:02d}" for i in range(batch - 1)],
+        ["BROKEN"] + [f"J{i:02d}" for i in range(batch - 1)],
+    ]
+    if any(len(group) != batch for group in groups) or batch < 2:
+        failures.append(f"quote_batch_size is {batch}, which this fixture cannot "
+                        "divide into whole batches")
+        return
+    flat = [code for group in groups for code in group]
+
+    stub = _Stub()
+    notes: list[str] = []
+    sweep = universe._attach_market_caps(stub, flat, notes)
+    if stub.calls != len(groups):
+        failures.append(f"the sweep made {stub.calls} calls for {len(flat)} names at "
+                        f"a batch size of {batch}, expected {len(groups)}")
+
+    staged = [{"code": code, "symbol": f"{code}.US"} for code in flat]
+    admitted, funnel = universe.market_cap_funnel(staged, sweep, rule)
+
+    expected = {
+        "admitted": ["BIG"] + [f"F{i:02d}" for i in range(batch - 2)],
+        "below_market_cap_floor": ["SMALL"],
+        "no_market_cap_in_row": ["NOCAP"],
+        "absent_from_answered_batch": sorted(["ABSENT"]
+                                             + [f"G{i:02d}" for i in range(batch - 2)]),
+        "in_an_unanswered_batch": sorted(groups[2] + groups[3]),
+    }
+    if sorted(row["code"] for row in admitted) != sorted(expected["admitted"]):
+        failures.append(f"admitted {sorted(r['code'] for r in admitted)}, expected "
+                        f"{sorted(expected['admitted'])}")
+    for door, names in expected.items():
+        if door == "admitted":
+            continue
+        got = funnel["names"].get(door)
+        if got != names:
+            failures.append(f"the {door} door holds {got}, expected {names}")
+    if funnel["unaccounted"]:
+        failures.append(f"the funnel does not close: {funnel['unaccounted']} names "
+                        "left by no recorded door")
+    if funnel["examined"] != len(flat):
+        failures.append(f"the funnel examined {funnel['examined']}, expected {len(flat)}")
+
+    # SILENT is the whole point: 200 with no rows and no error. Revert the
+    # guard to `if error and not data` and its batch is treated as answered,
+    # so SILENT falls through to absent_from_answered_batch, which reads as
+    # "the vendor did not mention it" when in fact nothing came back at all.
+    # That is the door it must NOT be in, and it is a different door from the
+    # one a careless reading expects.
+    if "SILENT" in (funnel["names"].get("absent_from_answered_batch") or []):
+        failures.append("a batch that answered 200 with no rows and no error was "
+                        "recorded as a name the vendor merely did not mention, "
+                        "which is the old guard's behaviour and the exact "
+                        "conflation this door exists to end")
+
+    # The names have to reach the log, not only the payload.
+    lines = " ".join(universe.funnel_notes(funnel, rule))
+    for code in ("NOCAP", "ABSENT", "BROKEN", "SILENT"):
+        if code not in lines:
+            failures.append(f"{code} is in the funnel but not named in its notes")
+    if "SMALL" in lines:
+        failures.append("the floor door names its names in the notes, which buries "
+                        "the three doors that are evidence gaps")
+
+    # And the unswept share has to be acted on, not merely recorded. The
+    # numerator is in_an_unanswered_batch ALONE: a batch that answered without
+    # mentioning a name is vendor coverage, and on 2026-08-17 that door held a
+    # structural 26 of 2,942. Counting it here would spend a third of the
+    # ceiling on a constant, so both doors are driven and only one may refuse.
+    ceiling = crit.number("universe", "max_unswept_fraction")
+    over = int(1_000 * ceiling) + 5
+    under = max(0, int(1_000 * ceiling) - 5)
+    for label, door, count, should_refuse in (
+        ("nothing came back for them, over the ceiling", "in_an_unanswered_batch",
+         over, True),
+        ("nothing came back for them, under the ceiling", "in_an_unanswered_batch",
+         under, False),
+        ("the vendor answered without them, far over the ceiling",
+         "absent_from_answered_batch", over * 4, False),
+        ("the ordinary case", "in_an_unanswered_batch", 0, False),
+    ):
+        verdict = universe.check_admissible({
+            "count": 2_000, "previous_count": 2_000,
+            "market_cap_funnel": {"examined": 1_000, door: count},
+        })
+        if should_refuse and not verdict:
+            failures.append(f"{count} of 1,000 in {door} ({label}) was admitted, "
+                            f"above the {ceiling:.1%} ceiling")
+        if not should_refuse and verdict:
+            failures.append(f"{count} of 1,000 in {door} ({label}) was refused, "
+                            f"which it should not be: {verdict}")
+
+    # A file written before the funnel existed must not be refused for lacking it.
+    if universe.check_admissible({"count": 2_000, "previous_count": 2_000}):
+        failures.append("a payload with no funnel was refused, but there is nothing "
+                        "to compare and a universe predating the field is not partial")
+
+    print(f"  claim 14 all {len(flat)} examined names leave by one of "
+          f"{len(expected)} named doors, the funnel closes, and a batch that "
+          "answered nothing is not recorded as a vendor gap")
+
+
+def claim_fifteen(failures: list[str]) -> None:
+    """The gates are wired in, and their failures reach the right handler.
+
+    Claim 13 proves require_quota's arithmetic. It would keep passing if every
+    call to it were deleted from universe.py and gap_stats.py, which is the
+    difference between testing a function and testing a change. This claim
+    covers the wiring and the two handlers, both of which are load bearing for
+    a reason that is invisible at the call site.
+
+    QuotaRefusal and PartialBuildError both subclass RuntimeError, and
+    universe.main has caught bare RuntimeError since long before either
+    existed. A handler added BELOW that one is dead code, and the symptom is
+    not a crash: it is a refusal reported as "build failed" with no reason on
+    the job status line, which is exactly the silent failure this project
+    added job_status to end. Ordering cannot be asserted from the exit code,
+    because every path returns 1, so this drives them and reads what was said.
+    """
+    from selection import gap_stats
+
+    # Wiring. Source inspection because the alternative is a live build, and
+    # claim 1 already establishes this idiom in this suite.
+    universe_gates = inspect.getsource(universe.build).count("eodhd.require_quota")
+    if universe_gates != 2:
+        failures.append(f"universe.build calls require_quota {universe_gates} times, "
+                        "expected 2: one after the session dates where the bulk "
+                        "sweep is exactly known, one before the market cap sweep")
+    gap_gates = inspect.getsource(gap_stats.build).count("eodhd.require_quota")
+    if gap_gates != 1:
+        failures.append(f"gap_stats.build calls require_quota {gap_gates} times, "
+                        "expected 1")
+    if "check_admissible(payload)" not in inspect.getsource(universe.build):
+        failures.append("universe.build does not check its own payload before "
+                        "writing, so a truncated build still replaces a good file")
+
+    # Handlers, driven rather than read. Each exception is raised from a
+    # stubbed build and the printed line has to be the specific one.
+    for exception, wanted in (
+        (eodhd.QuotaRefusal("stub, the key cannot pay"), "REFUSING TO RUN:"),
+        (universe.PartialBuildError("stub, the sweep lost batches"), "REFUSING TO WRITE:"),
+    ):
+        saved = universe.build
+
+        def _raise(*_args: Any, **_kwargs: Any) -> None:
+            raise exception
+
+        buffer = io.StringIO()
+        try:
+            universe.build = _raise
+            with contextlib.redirect_stdout(buffer):
+                code = universe.main([])
+        finally:
+            universe.build = saved
+        printed = buffer.getvalue()
+        name = type(exception).__name__
+        if code != 1:
+            failures.append(f"universe.main returned {code} on {name}, expected 1")
+        if wanted not in printed:
+            failures.append(
+                f"universe.main did not print {wanted!r} on {name}. It printed: "
+                f"{printed.strip()[:160]!r}. A handler placed after the bare "
+                "RuntimeError catch is unreachable, and the give away is the "
+                "generic wording rather than an exception.")
+
+    print("  claim 15 both universe gates and the gap_stats gate are called, the "
+          "build checks itself before overwriting, and each refusal reaches its "
+          "own handler ahead of the bare RuntimeError catch")
+
+
 def main() -> int:
     failures: list[str] = []
     claim_one(failures)
@@ -596,6 +915,9 @@ def main() -> int:
     claim_ten(failures)
     claim_eleven(failures)
     claim_twelve(failures)
+    claim_thirteen(failures)
+    claim_fourteen(failures)
+    claim_fifteen(failures)
 
     if failures:
         for failure in failures:
