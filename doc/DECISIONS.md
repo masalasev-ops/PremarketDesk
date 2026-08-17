@@ -658,7 +658,11 @@ to irrelevant and makes the rotation design of 2026-08-15 unnecessary.
 **NOT ADOPTED, and why not yet.** Every number above is from completed
 sessions. Whether Alpaca's free tier serves that sweep LIVE at 08:30 on a
 weekday is untested, and the whole design rests on it. probe-live-v1 is
-extended on 2026-08-17 to measure it against the live morning. Adopting Alpaca
+extended on 2026-08-17 to measure it against the live morning.
+[ANSWERED 2026-08-17: it does not. 23 sweeps from 07:30 to 09:15 on a live
+trading morning returned zero bars. See the entry dated 2026-08-17 on the
+free tier. Alpaca is closed as a candidate live source; this paragraph
+stands as the reasoning that was correct when it was written.] Adopting Alpaca
 would also break the standing rule that EODHD is the only data source, which is
 a decision for the operator and not one this entry makes.
 
@@ -1212,3 +1216,66 @@ usage alone. The vendor's HTTP status on exhaustion is still unobserved, so the
 refusal path is argued rather than demonstrated end to end. And the 21:00 slot
 has never fired, so its clearance of the late roll is inferred from the
 schedule rather than seen.
+
+## 2026-08-17: Alpaca's free tier does not serve live premarket, measured across a whole morning
+
+**The open question this closes.** The entry above, on reconstructing premarket
+from Alpaca, ends NOT ADOPTED with one reason: every number in it came from
+completed sessions, and whether the free tier serves that sweep LIVE on a
+weekday morning was untested while the whole design rested on it. It is tested
+now.
+
+**The measurement. 23 sweeps, 07:30 to 09:15 ET on Monday 2026-08-17, every
+one empty.** Zero active names, zero bars, no newest bar timestamp, on every
+sweep, across a live trading morning on which this project's own collector
+folded 33,489 trades from 50 symbols into 3,102 minute bars. The probe records
+its own denominator, which is what makes the emptiness informative rather than
+vacuous: sweeps taken outside a premarket window prove nothing, and these were
+taken across the middle of one. The table is
+data/probe-alpaca-live-table-2026-08-17.md and the raw readings are beside it.
+
+**It does not stand alone.** Two other measurements from the same morning point
+the same way, and each closes a different candidate.
+
+The per symbol real time endpoint was swept 125 times and not one reading was
+dated to that day. It serves the last completed session, exactly as the bulk
+form does, which had already been recorded.
+
+The delayed quote's extended hours fields were stale at the moment they were
+needed. At 08:45, KEEL.US carried ethTime dated the previous Friday at 16:29
+while data/premarket/2026-08-17.jsonl already held 50 of its minute bars from
+07:19 that morning. The same fields read correctly at 10:12, so they do update,
+just not in time to be read at 08:45. A field that is right two hours after the
+report is written is not a source for the report.
+
+**Decision: Alpaca is closed as a candidate LIVE discovery source.** Not
+deferred, not pending a better tier, closed on measurement. It remains what it
+already was, a historical reconstruction source for completed sessions, and the
+NOT ADOPTED entry above stands unchanged as the reasoning that was correct when
+it was written.
+
+**This corroborates the 2026-08-16 stop, it is not an input to it.** The order
+matters and is worth stating so the record cannot later be read backwards. The
+VWAP test stopped the premarket discovery work on 2026-08-16 on its own
+evidence: four rules losing, none beating buy the open, and gappers doing
+significantly worse than decile matched controls at p = 0.0, winning 3 to 10
+sessions of 61. This probe ran the following morning and answers a different
+question, which is whether a cheaper data path existed that would have changed
+the economics. It did not. Had this probe come back positive the stop would
+still stand, because the stop was about whether the names are worth having and
+not about what they cost to find.
+
+**Correction to a claim made earlier the same day.** A two credit probe at
+09:57 confirmed that us-quote-delayed carries lastTradePrice and lastTradeTime,
+and I described that as a live price. Precisely: it is live during REGULAR
+HOURS, where it read 09:56:12 against a 09:57 fetch. Its behaviour during
+premarket is UNTESTED and cannot be inferred from that reading, because the one
+extended hours field this project does record was demonstrably stale at 08:45
+on the same morning. Any design that assumes a universe wide premarket price
+from that endpoint is assuming the untested half.
+
+**What this does not close.** Whether lastTradePrice moves ahead of the prior
+close during premarket, which a probe run between 07:30 and 09:00 would settle
+for about 20 credits a day. That probe was considered and deferred: the
+briefing section it would inform is built from completed sessions and needs no
+premarket price, so the question is now optional rather than blocking.
