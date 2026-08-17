@@ -313,9 +313,96 @@ def prior_session_movers(
         for symbol, row in prior_by.items()
         if symbol in universe_symbols and _as_float(row.get("close")) is not None
     }
+
+    # The whole universe's recent closes, written to a sidecar rather than into
+    # watchlist.json, which carries only the subscribed names. The report's
+    # notable movers section is universe wide and has no other source: the
+    # collector hears at most the subscription cap, so for every other name the
+    # most recent evidence is a completed session. Both maps above are already
+    # bought and were previously discarded, so two of the three sessions cost
+    # nothing. Sidecar rather than watchlist because 2,754 names of closes in
+    # the watchlist would be read by the collector and the scan, neither of
+    # which wants them, and this file is briefing data with no trading path.
+    write_universe_closes(api, universe_symbols, prior_by, before_by, prior, before, today)
+
     return _source(FETCHED if names else FETCHED_EMPTY, names,
                    prior_session=prior.isoformat(), earlier_session=before.isoformat(),
                    closes=closes)
+
+
+def write_universe_closes(
+    api: eodhd.EodhdClient,
+    universe_symbols: set[str],
+    prior_by: dict[str, dict[str, Any]],
+    before_by: dict[str, dict[str, Any]],
+    prior: dt.date,
+    before: dt.date,
+    today: dt.date,
+) -> dict[str, Any] | None:
+    """Three completed session closes per universe name, for the briefing only.
+
+    Sessions minus one and minus two are already in hand. The third costs one
+    more bulk end of day call, a flat hundred credits in CRITERIA
+    [quota costs], and it is bought rather than read from gap_stats so that all
+    three closes carry the SAME vintage. gap_stats is rebuilt on Sundays, so by
+    Friday its closes are five sessions old, and a three session move measured
+    from a five session old close is the silent vintage mixing this project has
+    been bitten by before.
+
+    Every close carries its own session date. A name missing from any of the
+    three maps is written with a null for that leg and is never backfilled from
+    a neighbouring session, because a move measured across a gap of unknown
+    width is not a three session move.
+
+    Returns the payload, or None when the third call failed, in which case the
+    two session legs still write and the three session leg is absent rather
+    than wrong.
+    """
+    third = vintage.previous_trading_session(before)
+    third_rows, error = api.eod_bulk_last_day("US", day=third)
+    third_by: dict[str, dict[str, Any]] = {}
+    if error:
+        print(f"discover: the third session bulk call failed ({error}), so the "
+              "briefing's three session leg is absent this morning. The one and "
+              "two session legs are unaffected.")
+    else:
+        for row in third_rows or []:
+            code = str(row.get("code") or "").strip().upper()
+            if code:
+                third_by[code if "." in code else f"{code}.US"] = row
+
+    def close_of(source: dict[str, dict[str, Any]], symbol: str) -> float | None:
+        row = source.get(symbol)
+        return _as_float(row.get("close")) if row else None
+
+    rows: dict[str, Any] = {}
+    for symbol in sorted(universe_symbols):
+        c1 = close_of(prior_by, symbol)
+        c2 = close_of(before_by, symbol)
+        c3 = close_of(third_by, symbol) if third_by else None
+        if c1 is None and c2 is None and c3 is None:
+            continue
+        rows[symbol] = {"c1": c1, "c2": c2, "c3": c3}
+
+    payload = {
+        "generated_at": ettime.stamp(ettime.now_et()),
+        "session_date": today.isoformat(),
+        "sessions": {
+            "c1": prior.isoformat(),
+            "c2": before.isoformat(),
+            "c3": third.isoformat() if third_by else None,
+        },
+        "universe_examined": len(universe_symbols),
+        "names_with_at_least_one_close": len(rows),
+        "third_session_available": bool(third_by),
+        "closes": rows,
+    }
+    path = config.DATA_DIR / f"universe-closes-{today.isoformat()}.json"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    print(f"discover: wrote {len(rows)} universe closes over "
+          f"{3 if third_by else 2} completed sessions to {path.name}, for the "
+          "report's notable movers section only")
+    return payload
 
 
 # ------------------------------------------------- source 4, recent runners

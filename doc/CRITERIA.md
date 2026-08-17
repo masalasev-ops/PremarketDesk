@@ -146,6 +146,43 @@ cost = eod : 1
 cost = exchange-symbol-list : 1
 cost = user : 0
 
+## Notable
+
+The briefing section of the report, and nothing else. These names are chosen
+for the size and unusualness of their move, not for tradeability. They are
+never screened against day_setup or swing_setup, never scored, never given a
+conviction, and never written to picks. Nothing in this section may be read by
+the trading path: picks is the record of what the screen claimed, and mixing
+briefing names into it would destroy the recall measurement.
+
+Four legs, each measured over a different window, and every row states which
+leg produced it and the session it is as of. A section that silently mixes an
+overnight move with a three day old one is worse than no section, so the leg
+label is fixed template text rather than something the model composes.
+
+No leg can carry today's regular session move, because the report is written
+before the open. The premarket leg exists only for names the collector
+subscribed to, which is at most subscribe_cap of the universe, so for every
+other name the most recent evidence is the previous session's true open gap.
+
+move_sigma is the move divided by the name's own daily volatility, so a quiet
+megacap moving 2 percent and a thin small cap moving 6 percent land at
+comparable numbers. The denominator floors below mirror the RVOL denominator
+floor note: a denominator too small to divide by yields a null with the reason
+recorded, never a substituted number and never a silent drop.
+
+list_size                     = 5          # names per leg, before deduplication
+min_abs_gap_pct               = 1          # the floor for the market cap leg only,
+                                           # so a megacap barely moving does not
+                                           # crowd out a real mover
+min_sessions_for_move_sigma   = 20         # sessions of returns the denominator needs
+min_return_stdev_pct          = 0.1        # SEED, not measured. Below this the daily
+                                           # return stdev is too small to divide by
+                                           # and move_sigma is null with the reason.
+                                           # A name that has barely moved in twenty
+                                           # sessions would otherwise report an
+                                           # enormous sigma on any move at all.
+
 ## Price age
 
 How old the last collector print behind a published price may be, measured
