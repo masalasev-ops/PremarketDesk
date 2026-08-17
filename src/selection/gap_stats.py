@@ -48,6 +48,12 @@ _CRIT = criteria.load()
 LOOKBACK_SESSIONS = _CRIT.integer("gap_stats", "lookback_sessions")
 MIN_SESSIONS = _CRIT.integer("gap_stats", "min_sessions")
 ATR_SESSIONS = _CRIT.integer("gap_stats", "atr_sessions")
+# The report's move_sigma denominator has its own floor, in CRITERIA
+# [Notable], because it answers a different question from gap propensity:
+# 20 sessions is enough to measure how much a name moves, and gap_stats
+# min_sessions is deliberately higher because a propensity RATE needs more
+# observations than a spread does.
+MIN_SESSIONS_FOR_SIGMA = _CRIT.integer("notable", "min_sessions_for_move_sigma")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS gap_stats (
@@ -63,8 +69,21 @@ CREATE TABLE IF NOT EXISTS gap_stats (
 """
 
 
+# Columns added after the table first shipped. _SCHEMA is CREATE TABLE IF NOT
+# EXISTS, so it is a no op against a database that already holds rows and would
+# leave a live table unwidened until the first upsert died partway through a
+# 2,700 call Sunday job. ensure_columns is the migration path picks already
+# uses.
+_LATER_COLUMNS = (
+    ("return_stdev_20d", "REAL"),
+)
+
+
 def init(connection) -> None:
     connection.executescript(_SCHEMA)
+    added = store.ensure_columns(connection, "gap_stats", _LATER_COLUMNS)
+    if added:
+        print(f"gap_stats: widened the table with {', '.join(added)}")
 
 
 def _as_float(value: Any) -> float | None:
@@ -103,6 +122,35 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
     rows.sort()
     rows = rows[-(LOOKBACK_SESSIONS + 1):]
 
+    # The volatility denominator for the report's move_sigma, built from its
+    # OWN filtered list rather than from rows above. rows drops any bar missing
+    # an open, which is right for a gap that needs one and silently wrong here:
+    # walking it for close to close returns would treat two sessions either
+    # side of a dropped bar as adjacent and quietly widen one return into two.
+    # Closes are all this needs, so closes are all it filters on.
+    closes: list[tuple[Any, float]] = []
+    for bar in bars or []:
+        try:
+            day = ettime.parse_date(str(bar.get("date")))
+        except (TypeError, ValueError):
+            continue
+        if day > as_of:
+            continue
+        close = _as_float(bar.get("close"))
+        if close is not None and close > 0:
+            closes.append((day, close))
+    closes.sort()
+    closes = closes[-(LOOKBACK_SESSIONS + 1):]
+    returns = [
+        (closes[i][1] - closes[i - 1][1]) / closes[i - 1][1] * 100.0
+        for i in range(1, len(closes))
+    ]
+    # Null, not zero, below the floor. A name with one session of history has
+    # no measurable volatility, and dividing a move by a fabricated one would
+    # report a sigma nobody measured.
+    return_stdev = (round(statistics.stdev(returns), 6)
+                    if len(returns) >= MIN_SESSIONS_FOR_SIGMA else None)
+
     gaps: list[float] = []
     true_ranges: list[float] = []
     for index in range(1, len(rows)):
@@ -129,6 +177,7 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
             "gap_propensity": None,
             "median_abs_gap_pct": None,
             "atr_pct_20d": atr_pct,
+            "return_stdev_20d": return_stdev,
             "sessions_used": sessions_used,
         }
 
@@ -137,6 +186,7 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
         "gap_propensity": round(len(beyond) / sessions_used, 6),
         "median_abs_gap_pct": round(statistics.median(beyond), 6) if beyond else 0.0,
         "atr_pct_20d": atr_pct,
+        "return_stdev_20d": return_stdev,
         "sessions_used": sessions_used,
     }
 
