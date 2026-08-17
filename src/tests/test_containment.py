@@ -17,6 +17,7 @@ import json
 import sys
 
 from morning import analyst
+from tests import conftest
 from core import config
 
 ROOT_RUNS = config.PROJECT_ROOT / "runs"
@@ -101,6 +102,84 @@ def claim_briefing_table_cannot_stand_in(failures: list[str]) -> None:
           f"briefing table appended, which raised columns scanned "
           f"{plain['columns_scanned']} to {withtable['columns_scanned']} while both "
           "watchlists stay named as missing")
+
+
+def claim_headers_cannot_diverge(failures: list[str]) -> None:
+    """The template, the fallback report and the containment guard agree.
+
+    That header string exists in four places and every one of them has a
+    different reason to be edited: REPORT_TEMPLATE.md tells the model what to
+    write, fallback_report writes it when the model never runs, _REQUIRED_TABLES
+    is what the guard looks for, and the fixtures stand in for all three. On
+    2026-08-17 the fixtures had already drifted from the other three and nothing
+    failed, because the guard counted ticker columns rather than matching them.
+
+    So the agreement is asserted rather than assumed. Any one of the four can be
+    edited; editing one WITHOUT the others turns this red.
+    """
+    from tests import conftest
+
+    template = conftest.watchlist_headers()
+
+    # (1) the guard looks for exactly what the template pins.
+    guard = dict(analyst._REQUIRED_TABLES)
+    for kind, header in template.items():
+        if kind not in guard:
+            failures.append(f"the guard has no required table named {kind!r}")
+            continue
+        if guard[kind] != header:
+            failures.append(
+                f"the {kind} header in REPORT_TEMPLATE.md and in "
+                f"analyst._REQUIRED_TABLES have diverged.\n"
+                f"      template: {header}\n"
+                f"      guard:    {guard[kind]}")
+    for kind in sorted(set(guard) - set(template)):
+        failures.append(f"the guard requires a table {kind!r} the template does "
+                        "not define, so the report can never satisfy it")
+
+    # (2) the fallback emits exactly what the guard requires. It runs when the
+    # model does not, and a fallback that fails containment is a fallback that
+    # cannot ship.
+    fallback = analyst.fallback_report(
+        json.loads(build_packet_text()),
+        "the narrative pass was stubbed out by this claim")
+    for kind, header in template.items():
+        if header not in fallback:
+            failures.append(
+                f"fallback_report does not emit the {kind} header the template "
+                f"pins, so a fallback report would fail the structure gate.\n"
+                f"      wanted: {header}")
+
+    # (3) and the fallback therefore passes the guard end to end, which is the
+    # property all of the above exists to produce.
+    _, _, coverage = analyst.check_report(fallback, build_packet_text())
+    if coverage["structure_failed"]:
+        failures.append(f"the fallback report fails its own structure gate: "
+                        f"missing {coverage['tables_missing']}")
+
+    # (4) and no test module carries either header as a literal, which is what
+    # keeps the agreement above from being re-broken the next time a fixture
+    # needs a table. Deliberately minimal probe tables like "| Ticker | Gap % |"
+    # are untouched: they exist to be a DIFFERENT shape, and pinning them to
+    # the template would stop them probing what they probe.
+    from pathlib import Path
+
+    tests_dir = Path(__file__).resolve().parent
+    for module in sorted(tests_dir.glob("*.py")):
+        if module.name == "conftest.py":
+            continue  # it is the extractor, so it names the prefix it looks for
+        body = module.read_text(encoding="utf-8")
+        for kind, header in template.items():
+            if header in body:
+                failures.append(
+                    f"{module.name} carries the {kind} header as a literal. Build "
+                    "it with conftest.watchlist_table so a template change breaks "
+                    "the fixture instead of silently decoupling it.")
+
+    print(f"  claim headers   {len(template)} watchlist header(s) agree across "
+          "REPORT_TEMPLATE.md, analyst._REQUIRED_TABLES and fallback_report, the "
+          "fallback passes the structure gate, and no test module carries either "
+          "as a literal")
 
 def main() -> int:
     packet_text = build_packet_text()
@@ -245,28 +324,19 @@ def main() -> int:
     # Claim 6: an empty table that is still written keeps the guard switched
     # on. The header is present, one 'none' row sits under it, and nothing in
     # the prose names a ticker.
+    # Both tables, built from REPORT_TEMPLATE.md rather than from header
+    # literals. REPORT_TEMPLATE.md requires both even when empty, and the
+    # guard matches them by name, so a fixture carrying its own header
+    # string is a fixture that can silently stop testing production.
     empty_table_report = (
         "# PremarketDesk test\n\n"
         "Nothing here is advice, the screen thresholds are unvalidated seed values.\n\n"
-        "## Day watchlist\n\n"
-        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP "
-        "| Score | Conviction |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| none | | | | | | | |\n\n"
-        "The day screen produced nothing today, and the most common failed "
-        "condition was the premarket price sitting below the prior day high.\n"
-    )
-    # REPORT_TEMPLATE.md requires BOTH watchlist tables even when empty, and
-    # the guard now checks for them by name rather than counting columns.
-    # This fixture carried only the day table, which passed a column count
-    # and correctly fails a named check.
-    empty_table_report += (
-        "\n## Swing watchlist\n\n"
-        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst "
-        "| Score | Conviction |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| none | | | | | | | |\n\n"
-        "The swing screen produced nothing today either.\n"
+        + conftest.watchlist_table("day watchlist")
+        + "\nThe day screen produced nothing today, and the most common "
+          "failed condition was the premarket price sitting below the "
+          "prior day high.\n\n"
+        + conftest.watchlist_table("swing watchlist")
+        + "\nThe swing screen produced nothing today either.\n"
     )
     invented, _, coverage = analyst.check_report(empty_table_report, packet_text)
     if coverage["columns_scanned"] < 1:
@@ -280,6 +350,8 @@ def main() -> int:
           f"{coverage['columns_scanned']} ticker column(s) and passes")
 
     claim_briefing_table_cannot_stand_in(failures)
+
+    claim_headers_cannot_diverge(failures)
 
     if failures:
         for failure in failures:

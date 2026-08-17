@@ -357,3 +357,62 @@ def block_network() -> Iterator[None]:
             import probe_alpaca
 
             probe_alpaca.build_session = saved_probe
+
+
+# ------------------------------------------------- the watchlist table skeleton
+
+def watchlist_headers() -> dict[str, str]:
+    """The two watchlist header rows, read from REPORT_TEMPLATE.md at test time.
+
+    Three fixtures drifted on 2026-08-17 because they carried hand written
+    header literals while the containment guard matches on what the template
+    pins. They passed a guard that counted ticker columns and failed the moment
+    it started requiring those two tables BY NAME, which is the right failure
+    arriving late: the fixtures had been decoupled from what production emits
+    for as long as they had existed, and nothing said so.
+
+    Reading the template at test time is what closes that. A header change in
+    the template now breaks every fixture built on it, loudly, in the same run
+    that changed it.
+    """
+    from core import config
+
+    text = config.REPORT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    wanted = {"## Day watchlist": "day watchlist",
+              "## Swing watchlist": "swing watchlist"}
+    found: dict[str, str] = {}
+    section: str | None = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            section = wanted.get(stripped)
+            continue
+        # The first Ticker row after the heading is the header the template
+        # pins. It repeats later inside the empty table example, which is the
+        # same string, so first wins and the two cannot disagree.
+        if section and section not in found and stripped.startswith("| Ticker"):
+            found[section] = stripped
+    missing = sorted(set(wanted.values()) - set(found))
+    if missing:
+        raise AssertionError(
+            f"REPORT_TEMPLATE.md carries no header row for {missing}. Either the "
+            "section was renamed or its table lost its Ticker column, and every "
+            "fixture that builds a watchlist table depends on finding it."
+        )
+    return found
+
+
+def watchlist_table(kind: str, rows: list[str] | None = None) -> str:
+    """A whole watchlist section, header and separator and body, from the template.
+
+    kind is "day watchlist" or "swing watchlist". rows are body lines already
+    formatted as markdown; the default is the template's own empty table row,
+    because REPORT_TEMPLATE.md requires the table to be written even when the
+    screen produced nothing.
+    """
+    header = watchlist_headers()[kind]
+    columns = len([cell for cell in header.strip().strip("|").split("|")])
+    separator = "| " + " | ".join(["---"] * columns) + " |"
+    body = rows if rows else ["| none |" + " |" * (columns - 1)]
+    heading = "## " + kind[:1].upper() + kind[1:]
+    return "\n".join([f"{heading}", "", header, separator, *body, ""])

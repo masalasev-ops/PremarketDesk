@@ -362,19 +362,17 @@ def _write_report() -> Path:
     # table, which satisfied a guard that counted ticker columns and does not
     # satisfy one that requires these two tables by name. A fixture that would
     # be rejected in production should not pass here either.
+    # Tables built from REPORT_TEMPLATE.md, not from header literals:
+    # the containment guard matches these two by name, so a fixture
+    # with its own header stops testing production the moment the
+    # template moves.
     (run / "report.md").write_text(
         "# Premarket, " + TODAY.isoformat() + "\n\n"
-        "## Day watchlist\n\n"
-        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
-        "Premarket VWAP | Score | Conviction |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |\n\n"
-        "## Swing watchlist\n\n"
-        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
-        "Score | Conviction |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| none | | | | | | | |\n\n"
-        "Nothing here is advice.\n",
+        + conftest.watchlist_table("day watchlist",
+                                   ["| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |"])
+        + "\n"
+        + conftest.watchlist_table("swing watchlist")
+        + "\nNothing here is advice.\n",
         encoding="utf-8",
     )
     return run
@@ -1019,19 +1017,14 @@ def claim_analyst(failures: list[str]) -> None:
     # counting columns stopped working the moment a third table could carry a
     # Ticker header, so a stub that would be rejected in production must be
     # rejected here.
+    # Same skeleton as the report fixture, from the template.
     analyst.invoke_claude = lambda packet_text: (
         "# Premarket\n\n"
-        "## Day watchlist\n\n"
-        "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
-        "Premarket VWAP | Score | Conviction |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |\n\n"
-        "## Swing watchlist\n\n"
-        "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
-        "Score | Conviction |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |\n"
-        "| none | | | | | | | |\n\n"
-        "Nothing here is advice.\n",
+        + conftest.watchlist_table("day watchlist",
+                                   ["| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |"])
+        + "\n"
+        + conftest.watchlist_table("swing watchlist")
+        + "\nNothing here is advice.\n",
         {"total_cost_usd": 0.0, "duration_ms": 1, "num_turns": 1},
         None,
         "ok",
