@@ -358,19 +358,40 @@ def write_universe_closes(
     Always returns the payload. A failed third call costs the two session leg
     and nothing else, and that is recorded in third_session_available rather
     than signalled by a return value nobody checks.
+
+    A calendar that cannot NAME the third session reaches the same outcome by a
+    different route, and it has to be answered before the call rather than
+    after it. previous_trading_session returns None when market_today cannot
+    answer, and eod-bulk-last-day only sends a date parameter when the day is
+    truthy, so handing that None straight to the vendor buys the LATEST
+    completed session and files it as c3. That is c1 again under another name:
+    every two session move in the briefing would measure a close against
+    itself, print as zero, and be indistinguishable from a genuinely flat name.
+    The line that dates the sessions below would then call .isoformat() on the
+    None and raise AttributeError, which discover.main does not catch, so the
+    07:15 pass would die before writing watchlist.json and the collector would
+    start the morning with nothing to subscribe to. So the call is skipped
+    entirely and the leg is simply absent, which is what the paragraph above
+    already promises for a third call that fails.
     """
     third = vintage.previous_trading_session(before)
-    third_rows, error = api.eod_bulk_last_day("US", day=third)
     third_by: dict[str, dict[str, Any]] = {}
-    if error:
-        print(f"discover: the third session bulk call failed ({error}), so the "
-              "briefing's two session leg is absent this morning. The prior "
-              "session leg is unaffected.")
+    if third is None:
+        print("discover: the exchange calendar could not name the third session, "
+              "so the briefing's two session leg is absent this morning. The prior "
+              "session leg is unaffected, and the bulk call that would have bought "
+              "the wrong session was not made.")
     else:
-        for row in third_rows or []:
-            code = str(row.get("code") or "").strip().upper()
-            if code:
-                third_by[code if "." in code else f"{code}.US"] = row
+        third_rows, error = api.eod_bulk_last_day("US", day=third)
+        if error:
+            print(f"discover: the third session bulk call failed ({error}), so the "
+                  "briefing's two session leg is absent this morning. The prior "
+                  "session leg is unaffected.")
+        else:
+            for row in third_rows or []:
+                code = str(row.get("code") or "").strip().upper()
+                if code:
+                    third_by[code if "." in code else f"{code}.US"] = row
 
     def close_of(source: dict[str, dict[str, Any]], symbol: str) -> float | None:
         row = source.get(symbol)
@@ -391,7 +412,14 @@ def write_universe_closes(
         "sessions": {
             "c1": prior.isoformat(),
             "c2": before.isoformat(),
-            "c3": third.isoformat() if third_by else None,
+            # Both halves, not the populated map alone. third_by can only fill
+            # under a named session today, so "third is not None" is redundant
+            # here right now, and it is precisely the half that keeps this line
+            # from raising AttributeError again if a later edit fills that map
+            # by some other route. A date that cannot be written is a null,
+            # never an exception thrown out of a function whose stated contract
+            # is that it always returns the payload.
+            "c3": third.isoformat() if (third is not None and third_by) else None,
         },
         "universe_examined": len(universe_symbols),
         "names_with_at_least_one_close": len(rows),

@@ -65,12 +65,43 @@ def addressable_symbols() -> set[str]:
 
 
 def load_cache() -> dict[str, Any]:
+    """The cache file, with both of its symbol maps guaranteed to be present.
+
+    "symbols" is what came back. "unanswered" is what did not, keyed the same
+    way and carrying the reason, so a reader who opens the file can tell a name
+    the vendor answered without a float from a name nothing ever came back for.
+    A file written before that second map existed carries only the first, so it
+    is filled in here rather than at every use site.
+    """
+    cache: dict[str, Any] = {"fetched_at": None, "symbols": {}, "unanswered": {}}
+    payload: Any = None
     if CACHE_PATH.exists():
         try:
-            return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+            payload = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
         except ValueError:
             print("float_cache: existing cache is not readable, starting over")
-    return {"fetched_at": None, "symbols": {}}
+    if isinstance(payload, dict):
+        cache.update(payload)
+    elif payload is not None:
+        print("float_cache: existing cache is not a JSON object, starting over")
+    # Both maps are read as dicts everywhere below, so a file missing one, or
+    # carrying something else under the key, is repaired here rather than
+    # guarded against at each use. Starting over loses nothing that a rerun
+    # cannot re-fetch, and the run says so rather than failing at the first
+    # `.get` on whatever was in the file.
+    for key in ("symbols", "unanswered"):
+        if not isinstance(cache.get(key), dict):
+            # Said out loud rather than repaired in silence. Discarding this map
+            # sends the sweep below to re-fetch every name in it, and this
+            # module exists because 1,870 names is 1,870 credits and that is not
+            # something to spend twice. A run that prints "1,870 to fetch" over
+            # a cache that was on disk a moment ago has to say why.
+            if cache.get(key) is not None:
+                print(f"float_cache: the cache's {key} map is a "
+                      f"{type(cache[key]).__name__} rather than an object, so it "
+                      "is being discarded and every name in it will be fetched again")
+            cache[key] = {}
+    return cache
 
 
 def build(limit: int | None = None) -> dict[str, Any]:
@@ -104,28 +135,170 @@ def build(limit: int | None = None) -> dict[str, Any]:
 
     batch = _CRIT.integer("api", "quote_batch_size")
     fetched = missing = 0
+    # The names asked for that came back with nothing, kept as a map from name
+    # to reason rather than as a count for the same reason CapSweep in
+    # selection/universe keeps one: the absences below are different facts and
+    # only one of them is about the market. A symbol the vendor answered without
+    # a sharesFloat is a hole in its float coverage. A symbol nothing came back
+    # for was never really asked, and the useful things to know about it are its
+    # name, because that is what the next run has to go back for, and which of
+    # the two silences it met, because they fail differently.
+    unanswered: dict[str, dict[str, str]] = {}
+    # The two silences counted apart, under the names selection/universe gives
+    # its own doors, because a batch that never answered is a network or vendor
+    # outage to re-run and a name dropped out of a body that did answer is the
+    # endpoint quietly serving less than it was asked for.
+    in_an_unanswered_batch = absent_from_answered_batch = 0
+    asked_on = eodhd.quota_day()
     for start in range(0, len(todo), batch):
         chunk = todo[start:start + batch]
         data, error = api.quote_delayed(chunk)
-        if error and not data:
-            print(f"float_cache: batch at {start} failed: {error}")
-            continue
-        for symbol, quote in (data or {}).items():
-            key = symbol.upper()
-            row = {field: quote.get(field) for field in _KEEP}
-            cache["symbols"][key] = row
-            if row.get("sharesFloat"):
-                fetched += 1
-            else:
-                missing += 1
+        # The test is on the DATA, not on the error, and that is the whole point
+        # of this guard. It used to read `if error and not data`, which is the
+        # same hole universe._attach_market_caps closed: when a chunk comes back
+        # 200 with a body eodhd.quote_delayed does not recognise, it returns
+        # ({}, None), so there is no error to record and no rows to record
+        # against. The old guard was False, the loop below ran over an empty
+        # dict and did nothing, and a whole batch of names left the run counted
+        # as neither fetched nor missing, vanishing without a word anywhere and
+        # indistinguishable from a vendor that simply carries no float for them.
+        # Testing the data is the correct test because it asks the question that
+        # actually matters here, did this batch answer, rather than the question
+        # of whether it troubled itself to say why it did not.
+        if not data:
+            silence = error or "the response carried no rows"
+            for name in chunk:
+                unanswered[name] = {
+                    "reason": f"the batch covering it was not answered: {silence}",
+                    "asked_on": asked_on,
+                }
+                in_an_unanswered_batch += 1
+            print(f"float_cache: batch {start // batch}, covering {len(chunk)} names, "
+                  f"was not answered: {silence}")
+        else:
+            answered: set[str] = set()
+            for symbol, quote in data.items():
+                key = symbol.upper()
+                cache["symbols"][key] = {field: quote.get(field) for field in _KEEP}
+                # A name that has just answered is no longer a name nothing came
+                # back for, so the note goes in the same statement that writes
+                # the row. That is what keeps the persisted list below from
+                # going stale: the file can never carry a name in both maps.
+                cache["unanswered"].pop(key, None)
+                answered.add(key)
+            # The third door, and it is the one the guard above leaves open. A
+            # batch can answer AND leave names out of its body: eodhd.quote_delayed
+            # chunks internally and returns what it merged when one inner chunk
+            # fails, so `data` is truthy while some of the twenty are simply not
+            # in it. selection/universe records exactly this as
+            # absent_from_answered_batch and names the day the endpoint
+            # demonstrably did it, 26 names on the 2026-08-17 rebuild, so it is
+            # not a hypothetical door. Without it those names are counted as
+            # neither fetched nor missing nor unanswered, never reach
+            # cache["symbols"], and are therefore re-requested at a credit each
+            # on every future run with nothing anywhere saying why.
+            #
+            # The counting runs over the CHUNK rather than over the rows that
+            # came back, which is what makes the parts sum to the whole below. A
+            # row for a symbol nobody asked for is still kept, it just cannot be
+            # one of the answers to a question this run asked.
+            absent: list[str] = []
+            for name in chunk:
+                if name not in answered:
+                    absent.append(name)
+                    absent_from_answered_batch += 1
+                    unanswered[name] = {
+                        "reason": "its batch answered without mentioning it"
+                                  + (f": {error}" if error else ""),
+                        "asked_on": asked_on,
+                    }
+                elif cache["symbols"][name].get("sharesFloat"):
+                    fetched += 1
+                else:
+                    missing += 1
+            if absent:
+                print(f"float_cache: batch {start // batch} answered "
+                      f"{len(chunk) - len(absent)} of {len(chunk)} names, "
+                      f"{len(absent)} absent from a body that did answer: "
+                      f"{error or 'the response simply did not carry them'}")
+        # Outside both branches on purpose. While this sat under the answered
+        # path alone, a sweep whose LAST batch went unanswered never printed its
+        # completion line, so the final thing on stdout was whatever earlier
+        # multiple of the progress cadence came before it and a reader watching
+        # the sweep saw it stop short of its own total with no word about the
+        # rest. The batch notes above name a batch index rather than a running
+        # total, so they do not compose into that picture on their own.
         done = min(start + batch, len(todo))
         if done % (batch * 20) == 0 or done == len(todo):
             print(f"float_cache: {done:,}/{len(todo):,}")
 
-    cache["fetched_at"] = eodhd.quota_day()
+    # Merged rather than replaced. A --limit run asks for part of the list, and
+    # a name it never got to still carries a true note from the run that did ask
+    # for it. The only entry that can go stale is one whose name has since
+    # answered, and that one is dropped up in the loop, where the answer arrives.
+    cache["unanswered"].update(unanswered)
+
+    # The stamp only advances when this run actually put a row in the file. It
+    # used to be set unconditionally, so a sweep where every batch went
+    # unanswered left a file claiming it was fetched today while carrying
+    # nothing new at all, which is the same shape of lie PartialBuildError
+    # exists to prevent in selection/universe: a starved run leaving a record
+    # that reads as a healthy one. The file is still written, because the
+    # unanswered map IS what a starved run learned and it is worth keeping, but
+    # fetched_at keeps naming the day the symbols in it actually came from.
+    if fetched or missing:
+        cache["fetched_at"] = asked_on
+    else:
+        print("float_cache: no row came back this run, so fetched_at stays at "
+              f"{cache.get('fetched_at') or 'never'} rather than claiming today")
     CACHE_PATH.write_text(json.dumps(cache, indent=1, sort_keys=True), encoding="utf-8")
     print(f"float_cache: wrote {CACHE_PATH} with {len(cache['symbols']):,} symbols, "
-          f"{fetched:,} carrying a float this run, {missing:,} without one")
+          f"{fetched:,} carrying a float this run, {missing:,} answered without one, "
+          f"{absent_from_answered_batch:,} absent from a batch that answered, "
+          f"{in_an_unanswered_batch:,} in a batch that answered nothing")
+    # The summary has to reconcile against what was asked for, the same way the
+    # market cap funnel in selection/universe has to close. Every name in todo
+    # left this sweep by exactly one of the four doors above, so if the four do
+    # not sum to len(todo) then a name went somewhere this accounting does not
+    # describe, which is a defect here rather than in the data and should say so
+    # rather than quietly under report.
+    accounted = fetched + missing + absent_from_answered_batch + in_an_unanswered_batch
+    if accounted != len(todo):
+        print(f"float_cache: the sweep does not reconcile: {len(todo):,} names were "
+              f"asked for and {accounted:,} left by a recorded door, leaving "
+              f"{len(todo) - accounted:,} unaccounted for, which is a defect in this "
+              "accounting rather than in the data")
+    if unanswered:
+        # Named rather than counted, and reported on its own line, so a starved
+        # sweep reads differently from a vendor with poor float coverage. Folded
+        # together they arrive as one low float count with no way to tell the
+        # two apart, and they call for opposite responses: the starved sweep is
+        # re-run, the thin coverage is a fact about the data that the scoring
+        # bands have to be set around.
+        #
+        # Written into the file as well as printed, which reverses the decision
+        # that stood here, and the reason it was wrong is worth stating rather
+        # than quietly repairing. That comment argued the cache is keyed by
+        # symbol and a name absent from it is exactly the state the next run
+        # acts on, since todo is want minus have. True of the re-ask question,
+        # false of the read question: research/float_rotation_study opens this
+        # file, and a name absent from it read there as a name answered without
+        # a float, folding a starved cache into the vendor's float coverage in
+        # the one module that sets the scoring bands. Stdout at build time is
+        # not somewhere a later reader can consult. The staleness the old
+        # comment feared is real and is handled where the answer arrives.
+        #
+        # Only the head of the list is printed. A fully starved sweep is roughly
+        # 1,870 tickers, and one comma separated line of them as the last thing
+        # before the process exits tells a reader less than the count does. The
+        # file carries all of them.
+        listed = _CRIT.integer("api", "max_symbols_named_per_line")
+        names = sorted(unanswered)
+        line = "float_cache: never answered for, still uncached: " + ", ".join(names[:listed])
+        if len(names) > listed:
+            line += (f", and {len(names) - listed:,} more, all of them under "
+                     f"'unanswered' in {CACHE_PATH.name}")
+        print(line)
     return cache
 
 

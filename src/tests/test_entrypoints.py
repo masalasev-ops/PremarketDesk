@@ -725,6 +725,201 @@ def claim_universe(failures: list[str]) -> None:
                         "should say it can only size the bulk sweep, and it did not")
 
 
+def claim_universe_force(failures: list[str]) -> None:
+    """The gate refuses by default, and --force writes while recording the verdict.
+
+    Both halves are one claim because either alone is a defect. A gate with no
+    escape hatch is the trap this fixed: the refusal is measured against
+    previous_count, which _previous_count reads from the very file the refusal
+    preserves, so a shrink that is REAL, the owner tightening a CRITERIA.md
+    floor being the case BUILD_PLAN anticipates, is measured against the same
+    frozen baseline every Sunday and refuses forever. Once max_age_days has
+    passed, load_universe raises on the file nothing is allowed to replace and
+    discover, scan and gap_stats refuse every morning after that. An escape
+    hatch with no record is the opposite defect: a file that shrank past the
+    floor and looks exactly like one that passed.
+
+    So: the previous count is fabricated large enough that this rebuild lands
+    below whatever the floor currently says, which is why the fraction is read
+    rather than assumed. The refusal must leave the old file untouched and
+    must name the flag, because a hatch nobody is told about is barely a
+    hatch. The forced run must write, must carry the verdict text itself, and
+    must be admitted downstream only for THAT verdict: a payload the override
+    does not name is still refused, which is what makes it an override of one
+    decision rather than a switch that turns the gate off.
+
+    Which verdict the hatch reaches is the rest of the claim, and it is one
+    verdict: the count fraction, the only one measured against the file the
+    refusal preserves and therefore the only one that can refuse forever. A
+    file carrying an override for the unswept ceiling is still refused here,
+    and a --force run whose market cap sweep answered nothing is still refused
+    at build time. Both are asserted below, because a hatch that widened to the
+    lost batch case would be a hatch past the exact failure the gate was built
+    for, and the refusal's own wording promises it is not.
+    """
+    from selection import universe
+
+    fraction = _CRIT.number("universe", "min_count_fraction_of_previous")
+    # Comfortably past the floor rather than a hair over it, so the claim is
+    # about the gate and not about rounding.
+    previous_count = int(len(BULK_SYMBOLS) / fraction) + 100
+    config.UNIVERSE_PATH.write_text(json.dumps({
+        "generated_at": ettime.stamp(ettime.now_et()),
+        "count": previous_count,
+        "cleared_price_and_liquidity": previous_count,
+        "symbols": [{"symbol": f"OLD{n:05d}.US"} for n in range(previous_count)],
+    }), encoding="utf-8")
+    untouched = config.UNIVERSE_PATH.read_bytes()
+
+    # The branch under test is only visible in what the gate said, and Outcome
+    # carries the record rather than the printed lines. Captured and replayed
+    # the way claim_universe does it, so the run still reads normally.
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        refused = _drive("universe", "selection.universe", [])
+    sys.stdout.write(printed.getvalue())
+
+    if refused.error:
+        failures.append(f"universe raised out of main on a refusal: {refused.error}")
+        return
+    if refused.code != 1:
+        failures.append(f"a rebuild below the count floor exited {refused.code}, "
+                        "expected 1")
+    if refused.status != job_status.STATUS_ERROR:
+        failures.append(f"a refused rebuild recorded {refused.status!r}, so the "
+                        "visible symptom would be a universe that did not change "
+                        "with nothing saying why")
+    if config.UNIVERSE_PATH.read_bytes() != untouched:
+        failures.append("the refusal replaced the previous universe anyway, which "
+                        "is the destructive overwrite the gate exists to prevent")
+    if "--force" not in printed.getvalue():
+        failures.append("the refusal never mentions --force, so an operator "
+                        "holding a legitimately smaller universe is told to stop "
+                        "and not told how to proceed")
+
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        forced = _drive("universe", "selection.universe", ["--force"])
+    sys.stdout.write(printed.getvalue())
+
+    if forced.error:
+        failures.append(f"universe raised out of main under --force: {forced.error}")
+        return
+    _check(forced, failures)
+    if config.UNIVERSE_PATH.read_bytes() == untouched:
+        failures.append("--force did not write the universe, so the gate still has "
+                        "no way past it")
+        return
+
+    written = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
+    override = written.get("admissibility_override") or {}
+    verdict = override.get("verdict") if isinstance(override, dict) else None
+    if not verdict:
+        failures.append("a forced universe carries no admissibility_override, so "
+                        "nothing downstream or later can tell it from a build that "
+                        f"passed cleanly: {sorted(written)}")
+        return
+    if str(previous_count) not in verdict:
+        failures.append("the recorded override does not carry the gate's own "
+                        f"verdict text, which named {previous_count}: {verdict!r}")
+    if not any("--force" in str(value) for value in override.values()):
+        failures.append("the override records what the gate said but not that a "
+                        f"human overrode it: {override!r}")
+    if "WARNING" not in printed.getvalue():
+        failures.append("a forced write was not announced as a warning, so it "
+                        "reads like an ordinary Sunday in the log")
+
+    # Admitted downstream for the verdict a human accepted, and only that one.
+    if universe.check_admissible(written) is not None:
+        failures.append("the forced universe is still refused by check_admissible, "
+                        "so discover would reject it every morning until the next "
+                        "rebuild and --force would have bought nothing")
+
+    # An override answers the verdict it names and leaves every other one
+    # standing. That used to be asserted by mutating the count by one, which is
+    # the one mutation that cannot detect the hole: the count floor is the LAST
+    # check and the only one still reachable once a count override matches, so
+    # the mutation moved the text of the check that was never at risk and passed
+    # against the broken implementation as happily as against a sound one.
+    #
+    # The hole is a file whose override names a verdict from an EARLIER check.
+    # Builds before the override was scoped could write one: --force recorded
+    # whatever verdict came back first, and if that was the unswept ceiling then
+    # check_admissible matched it, returned from inside that branch, and never
+    # reached the count floor at all. The floor was off, in discover, every
+    # morning until the next Sunday, on precisely the file that most needed it.
+    # So the payload here carries an unswept override AND a count below the
+    # floor, and the whole claim is that it is still refused.
+    ceiling = _CRIT.number("universe", "max_unswept_fraction")
+    starved = dict(written)
+    starved.pop("admissibility_override", None)
+    examined = int(written["count"])
+    starved["market_cap_funnel"] = {
+        "examined": examined,
+        "in_an_unanswered_batch": int(examined * (ceiling + 0.05)) + 1,
+    }
+    unswept_verdict = universe.check_admissible(starved)
+    if not unswept_verdict:
+        failures.append("a funnel far above the max_unswept_fraction ceiling was "
+                        "admitted, so this claim never built the payload it "
+                        f"needs: {starved['market_cap_funnel']}")
+    else:
+        starved["admissibility_override"] = {"verdict": unswept_verdict}
+        if universe.check_admissible(starved) is None:
+            failures.append(
+                "a universe carrying an unswept-batch override was admitted "
+                f"whole, with {starved['count']} names against "
+                f"{starved['previous_count']}. The override answered a verdict "
+                "nobody applied it to and the count floor below it never ran, so "
+                "discover would take that file every morning until the next "
+                "rebuild")
+
+    # The other half of the same design, at build time rather than read time:
+    # --force reaches one verdict, and the refusal has said which since the day
+    # it was written, that names in a batch which answered nothing are the case
+    # the gate exists for. Driven with a vendor that answers no market cap batch
+    # at all, which is what a quota starved sweep looks like from inside build().
+    forced_bytes = config.UNIVERSE_PATH.read_bytes()
+    starved_routes = [
+        (needle, (lambda path, params: {"data": {}})
+         if needle == "us-quote-delayed" else route)
+        for needle, route in ROUTES
+    ]
+    printed = io.StringIO()
+    with contextlib.redirect_stdout(printed):
+        starved_run = _drive("universe", "selection.universe", ["--force"],
+                             routes=starved_routes)
+    sys.stdout.write(printed.getvalue())
+
+    if starved_run.error:
+        failures.append(f"universe raised out of main on a starved sweep: "
+                        f"{starved_run.error}")
+    else:
+        if starved_run.code != 1 or starved_run.status != job_status.STATUS_ERROR:
+            failures.append(
+                f"a --force run whose market cap sweep answered nothing exited "
+                f"{starved_run.code} and recorded {starved_run.status!r}, "
+                "expected 1 and an error. --force is the answer to a shrink the "
+                "gate cannot judge, not a way past a sweep that lost its batches")
+        if config.UNIVERSE_PATH.read_bytes() != forced_bytes:
+            failures.append(
+                "--force wrote a universe whose market cap sweep answered "
+                "nothing over the previous one. The sweep runs in dollar volume "
+                "order, so that file is not a smaller universe, it is one with "
+                "its illiquid tail amputated, and it is exactly what this gate "
+                "exists to keep out of discover")
+        if "--force does not apply" not in printed.getvalue():
+            failures.append(
+                "the refusal of a --force run never says that --force does not "
+                "reach this verdict, so the operator reads it as a flag that "
+                "failed rather than as one that does not apply here, and the "
+                "next thing they reach for is deleting universe.json")
+
+    print(f"  {'force':<12} the gate refused {written['count']} names against "
+          f"{previous_count} and left the old file alone; --force wrote it and "
+          "recorded the verdict, and did not reach the unswept verdict")
+
+
 def claim_gap_stats(failures: list[str]) -> None:
     _write_universe()
     outcome = _drive("gap_stats", "selection.gap_stats", [])
@@ -751,6 +946,17 @@ def claim_collector(failures: list[str]) -> None:
     that reaches the outside world. The replay feeds real shaped trade frames
     for two of the three subscribed symbols, which is also what proves the
     coverage report distinguishes a silent symbol from an absent one.
+
+    The replay opens with one non fatal status frame as well, and the second
+    half of this claim is that the frame reaches the stats file. run_websocket
+    collects those frames for the reason stated where status_frames is
+    declared: a morning that saw six odd frames and still worked is a
+    different morning from a clean one, and the run stats are where that
+    difference has to survive. It did not survive. The count and the frames
+    were both computed, both printed, and then left out of the record appended
+    to <day>-stats.jsonl, so the difference lived only in a log line that rolls.
+    The printed line was never the problem, which is why this asserts the file
+    the morning leaves behind and not the collector's output.
     """
     from collect import collect_premarket
 
@@ -766,18 +972,62 @@ def claim_collector(failures: list[str]) -> None:
         failures.append("the collector recorded zero minutes written from a "
                         "replay that fed it trades")
 
+    stats_file = collect_premarket.stats_path()
+    lines = ([line for line in stats_file.read_text(encoding="utf-8").splitlines()
+              if line.strip()] if stats_file.is_file() else [])
+    if not lines:
+        failures.append(f"the collector appended no run stats record to "
+                        f"{stats_file.name}, so nothing about this run outlives "
+                        "the log")
+        return
+    # The last line is this run's: the file is append only and the sandbox may
+    # carry a real morning's earlier records in the copied data directory.
+    record = json.loads(lines[-1])
+    if not record.get("status_frames"):
+        failures.append(
+            "the collector saw a non fatal status frame and its stats record "
+            f"says status_frames={record.get('status_frames')!r}. A morning that "
+            "saw odd frames and still worked is then indistinguishable from a "
+            "clean one the moment the log rolls.")
+    seen = record.get("status_frames_seen") or []
+    wanted = REPLAY_STATUS_FRAME["status_code"]
+    if not any(isinstance(frame, dict) and frame.get("status_code") == wanted
+               for frame in seen):
+        failures.append(
+            f"the stats record does not carry the status {wanted} frame itself "
+            f"in status_frames_seen: {seen!r}. The count says how many, only "
+            "the frames say what the server actually objected to.")
+    print(f"  {'collector':<12} {record.get('status_frames')} status frame(s) "
+          f"reached {stats_file.name}, first {seen[0] if seen else None}")
+
+
+# The non fatal frame the replay opens with. A 500 and not a 422 on purpose:
+# 422 is the refusal that must end the run, claimed above, and this is the
+# other kind, the odd frame a morning survives and must still be able to name
+# afterwards.
+REPLAY_STATUS_FRAME = {"status_code": 500, "message": "Server error"}
+
 
 class _ReplaySocket:
-    """A socket that yields canned trades for all but the last symbol."""
+    """A socket that yields one status frame, then canned trades for all but
+    the last symbol."""
 
     def __init__(self, symbols: list[str]) -> None:
         self.symbols = symbols
         self.sent = 0
         # Deliberately silent, to exercise the coverage report.
         self.silent = symbols[-1] if symbols else None
+        # Ahead of the trades, so the run both sees it and carries on. Real
+        # mornings get these mid stream; first is simply where a replay can
+        # guarantee it arrives before the socket is exhausted.
+        self.status_sent = False
 
     def recv(self) -> str | None:
         import websocket
+
+        if not self.status_sent:
+            self.status_sent = True
+            return json.dumps(REPLAY_STATUS_FRAME)
 
         speaking = [s for s in self.symbols if s != self.silent]
         if self.sent >= len(speaking) * 3:
@@ -1321,6 +1571,7 @@ def main(argv: list[str] | None = None) -> int:
     claim_operator_tools_spare_artifacts(failures)
     claim_calendar(failures)
     claim_universe(failures)
+    claim_universe_force(failures)
     claim_gap_stats(failures)
     claim_discover(failures)
     claim_baseline(failures)

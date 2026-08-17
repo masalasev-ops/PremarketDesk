@@ -4,7 +4,8 @@ Run directly: `python src\\test_repricing.py`, exit 0 on pass. Makes no network
 calls. The evidence is the artifacts the failing morning left behind:
 runs/2026-08-14/packet.json and the collector snapshot beside it.
 
-Four claims, one per clause of the fix:
+Eight claims, numbered after the clause each was written for rather than
+counted off, which is why the list reaches ten and carries no 2 and no 5:
   1. Repricing from the collector reproduces this morning's real gaps in place
      of yesterday's session moves.
   3. A candidate the collector never subscribed to is dropped, not priced.
@@ -12,6 +13,15 @@ Four claims, one per clause of the fix:
      unavailable RVOL component and a null total, through the existing
      score_partial machinery rather than a second path.
   6. The packet can name the build that wrote it.
+  7. A subscribed symbol that stayed silent and one that was never subscribed
+     are told apart, from the collector's own subscription list.
+  8. A price inside today's premarket window can still be too old to publish,
+     which the vintage gate alone does not catch.
+  9. A name with no baseline is scored by float rotation and the breakdown
+     says which measure scored it.
+  10. A sharesOutstanding that is not a share count never passes as a cross
+     check: a zero or an absent one falls to the absolute share floor, a
+     negative one is refused outright, each with a reason and a gap.
 """
 
 from __future__ import annotations
@@ -464,6 +474,160 @@ def claim_nine(failures: list[str]) -> None:
           f"{both['volume_measure_used']}; both guards refused; neither stays null")
 
 
+def claim_ten(failures: list[str]) -> None:
+    """A sharesOutstanding that is not a share count is not a cross check.
+
+    Claim 9 proves the two ratio guards refuse the floats they were written
+    for, and both of those arrive alongside a believable sharesOutstanding.
+    This claim is about the quote where the cross check is itself the broken
+    field, and the three ways it can break are three findings rather than one.
+
+    A sharesOutstanding of exactly 0.0 is falsy and is also not None. Until
+    2026-08-17 the two ratio guards tested it for truthiness and the absolute
+    share floor tested it against None, so the same zero slipped past all
+    three. The one quote deserving the most suspicion was the only one facing
+    no guard at all, and rotation is premarket volume over the float, so the
+    fabricated tiny float it waved through did not shade the number, it
+    multiplied it: the name arrived in the top rotation band on a denominator
+    nothing had checked. A zero now meets the absolute floor, which is the
+    standing fallback for a missing cross check, so a tiny float beside one is
+    refused and an ordinary float beside one still computes. Both directions
+    are asserted, because a guard that refuses everything is not a fix.
+
+    A negative sharesOutstanding is a different finding and gets a different
+    answer: refused outright, whatever the float beside it looks like, because
+    a negative share count is not a cross check the vendor left out, it is a
+    record reporting something no company can have. That refusal is old
+    behaviour restored rather than new behaviour invented. The max ratio guard
+    used to catch negatives by arithmetic accident, since a positive float
+    always exceeds a negative product, and the 2026-08-17 rewrite of that
+    condition dropped the accident along with the truthiness test it was
+    rewriting: a 20,000,000 share float beside a sharesOutstanding of
+    -25,000,000 then published a rotation of 0.0125, and carried the
+    impossible share count into the packet beside it, where that same quote
+    had always been refused. It is pinned here so it cannot be lost twice.
+
+    Every refusal is checked for its gap as well as its reason, because a null
+    nobody is told about is a name that leaves the morning without a human
+    seeing why. What the basis publishes for shares_outstanding is asserted
+    too: an unusable one is recorded as null with its state in the source line
+    beside it, never as a bare 0.0, which a downstream reader would take for a
+    company with no shares rather than for a field that was never usable.
+
+    The floor is read from CRITERIA.md rather than written here, so this claim
+    keeps testing the guard and not a number that has since moved.
+    """
+    floor = _CRIT.number("float_rotation", "min_shares_float")
+    # A float two orders of magnitude under the floor, which is the shape of
+    # the vendor artifact the floor exists for: 51,810 shares was the smallest
+    # real float measured on 2026-08-16, and this sits well below that.
+    fabricated = floor / 100
+    ordinary_float = 20_000_000.0
+    pm_volume = 250_000.0
+    expected = round(pm_volume / ordinary_float, 8)
+
+    def newcomer(**quote_fields) -> dict:
+        quote = {"sharesFloat": ordinary_float, "sharesOutstanding": 25_000_000.0,
+                 "marketCap": 3e9}
+        quote.update(quote_fields)
+        return {
+            "symbol": "ZEROCO.US", "collector_covered": True, "pm_volume": pm_volume,
+            "quote": quote,
+            "pm_rvol": None,
+            "pm_rvol_reason": "no cached baseline for this ticker and cutoff",
+            "gap_pct": 9.4, "price": 12.0, "prior_high": 11.0, "pm_vwap": 11.5,
+            "catalyst_class": "earnings", "catalyst_why": "test fixture",
+        }
+
+    # The defect itself, its absent neighbour, and the corrupt record that is
+    # refused on sight. Each reason is checked for the phrase that tells a
+    # reader which case it was, because a reason that does not distinguish them
+    # sends whoever reads the packet to the wrong conversation with the vendor,
+    # and each gap for the phrase that says the same thing in gaps_to_fill.
+    #
+    # The negative case carries the ordinary float on purpose. A tiny one would
+    # pass whether the negative guard fired or the floor did, and it is exactly
+    # the healthy looking float beside an impossible share count that the
+    # 2026-08-17 rewrite started publishing.
+    refusals = (
+        ("zero", newcomer(sharesFloat=fabricated, sharesOutstanding=0.0),
+         "zero", "share floor with shares outstanding reported as zero"),
+        ("absent", newcomer(sharesFloat=fabricated, sharesOutstanding=None),
+         "no sharesOutstanding", "share floor with no shares outstanding"),
+        ("negative", newcomer(sharesOutstanding=-25_000_000.0),
+         "negative", "negative shares outstanding"),
+    )
+    for label, subject, phrase, gap_phrase in refusals:
+        packet = scan.Packet()
+        scan.attach_float_rotation([subject], packet)
+        if subject["pm_float_rotation"] is not None:
+            failures.append(
+                f"sharesOutstanding {label}: the float was divided by anyway and "
+                f"produced a rotation of {subject['pm_float_rotation']:,.4f}"
+            )
+        reason = subject["pm_float_rotation_reason"] or ""
+        if not reason:
+            failures.append(f"sharesOutstanding {label}: refused to divide but "
+                            "recorded no reason, so the null is unexplained")
+        elif phrase not in reason:
+            failures.append(f"sharesOutstanding {label}: the reason does not say "
+                            f"which case it was, it reads {reason!r}")
+        if not any(gap_phrase in note for note in packet.gaps):
+            failures.append(f"sharesOutstanding {label}: the name was nulled without "
+                            f"a gap naming the case, gaps were {packet.gaps}")
+        if subject["pm_float_rotation_basis"] is not None:
+            failures.append(f"sharesOutstanding {label}: a basis was published for "
+                            "a rotation that was never computed")
+
+    # The working path, unchanged: the healthy newcomer still divides, and its
+    # basis still carries the real share count it was checked against.
+    healthy = newcomer()
+    scan.attach_float_rotation([healthy], scan.Packet())
+    if healthy["pm_float_rotation"] != expected:
+        failures.append(f"the healthy name now computes "
+                        f"{healthy['pm_float_rotation']}, expected {expected}")
+    if healthy["pm_float_rotation_reason"] is not None:
+        failures.append(f"the healthy name carries a refusal reason: "
+                        f"{healthy['pm_float_rotation_reason']}")
+    healthy_basis = healthy["pm_float_rotation_basis"] or {}
+    if healthy_basis.get("shares_outstanding") != 25_000_000.0:
+        failures.append("the healthy name's basis does not publish the "
+                        "sharesOutstanding it was checked against, it carries "
+                        f"{healthy_basis.get('shares_outstanding')!r}")
+
+    # And a zero outstanding beside an ordinary float still computes, because
+    # the floor stands in for the missing cross check rather than adding a
+    # reason to refuse. Without this the fix would quietly null every name
+    # whose vendor record happens to omit a usable outstanding.
+    #
+    # What its basis says about that zero is asserted here rather than left to
+    # inspection, because it is a deliberate choice and not a side effect: the
+    # count field is null, which is what this project records for evidence it
+    # does not have, and the source line names the state so a reader can still
+    # tell an absent sharesOutstanding from a zero one.
+    ordinary = newcomer(sharesOutstanding=0.0)
+    scan.attach_float_rotation([ordinary], scan.Packet())
+    if ordinary["pm_float_rotation"] != expected:
+        failures.append(f"a {ordinary_float:,.0f} share float with a zero "
+                        f"outstanding was refused, computing "
+                        f"{ordinary['pm_float_rotation']} instead of {expected}")
+    ordinary_basis = ordinary["pm_float_rotation_basis"] or {}
+    if ordinary_basis.get("shares_outstanding") is not None:
+        failures.append("a zero sharesOutstanding was published in the basis as "
+                        f"{ordinary_basis.get('shares_outstanding')!r}, which reads "
+                        "as a share count rather than as a field that was unusable")
+    if "zero" not in (ordinary_basis.get("shares_outstanding_source") or ""):
+        failures.append("the basis does not say why shares_outstanding is null, so "
+                        "a reader cannot tell the zero from an absent field: "
+                        f"{ordinary_basis.get('shares_outstanding_source')!r}")
+
+    print(f"  claim 10 a zero and an absent sharesOutstanding meet the "
+          f"{floor:,.0f} share floor with a {fabricated:,.0f} share float and a "
+          f"negative one is refused outright, each naming its case and raising "
+          f"its gap; a zero beside a {ordinary_float:,.0f} share float still "
+          f"rotates {ordinary['pm_float_rotation']:.6f} on a null share count")
+
+
 def main() -> int:
     if not PACKET_PATH.is_file() or not SNAPSHOT_PATH.is_file():
         print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
@@ -478,6 +642,7 @@ def main() -> int:
     claim_seven(failures)
     claim_eight(failures)
     claim_nine(failures)
+    claim_ten(failures)
 
     if failures:
         for failure in failures:
@@ -485,8 +650,9 @@ def main() -> int:
         return 1
     print("PASS  repricing from the collector, dropping the uncovered, flooring the "
           "RVOL denominator, naming the build, telling a silent subscription "
-          "from an absent one and scoring a name with no baseline all hold on the "
-          "2026-08-14 packet")
+          "from an absent one, dropping a price too old to publish, scoring a name "
+          "with no baseline and refusing a sharesOutstanding that is not a share "
+          "count all hold on the 2026-08-14 packet")
     return 0
 
 

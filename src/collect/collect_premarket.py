@@ -111,12 +111,35 @@ def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
 
     One JSON line is appended per run, so a restarted morning sums honestly
     instead of the last run overwriting the first.
+
+    This is the only reader of that sidecar in the project, and it is the
+    second of three hops, not the last one. scan.py does not consume what this
+    returns wholesale: it names the keys it wants one at a time into
+    collector_snapshot, so a field has to be BOTH aggregated here AND named
+    there before it can reach the packet or the report, however faithfully the
+    collector wrote it down. status_frames was stopped at the first of those
+    two doors and is now through both, which is what makes the argument at its
+    declaration in run_websocket actually land. Anything added to the loop
+    below needs the matching line in scan.py or it stops here.
+
+    status_frames_seen is deliberately not aggregated. It is the frames
+    themselves, capped at ten per run, and there is nothing to add up: two runs
+    that each saw a different frame have two facts, not one number. A caller
+    that needs them reads the last line of the sidecar the way
+    measure_socket_cost.py already does.
     """
     path = stats_path(day)
     if not path.exists():
         return None
-    totals = {"runs": 0, "connections": 0, "reconnects": 0,
-              "resubscriptions": 0, "messages": 0}
+    # status_frames starts at None rather than 0, and the two are different
+    # answers. A --poll run has no socket and records null, and a record
+    # appended before the field existed carries nothing at all; folding either
+    # into a running integer would report "no odd frames this morning" for a
+    # morning nobody counted, which is the one thing this aggregate exists to
+    # stop being invisible. It stays None until some run carries a number.
+    totals: dict[str, Any] = {"runs": 0, "connections": 0, "reconnects": 0,
+                              "resubscriptions": 0, "messages": 0,
+                              "status_frames": None}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -128,6 +151,9 @@ def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
         totals["runs"] += 1
         for key in ("connections", "reconnects", "resubscriptions", "messages"):
             totals[key] += int(row.get(key) or 0)
+        frames = row.get("status_frames")
+        if isinstance(frames, (int, float)):
+            totals["status_frames"] = (totals["status_frames"] or 0) + int(frames)
     return totals if totals["runs"] else None
 
 
@@ -915,6 +941,13 @@ def main(argv: list[str] | None = None) -> int:
             "reconnects": stats.get("reconnects"),
             "resubscriptions": stats.get("resubscriptions"),
             "messages": stats.get("messages"),
+            # Both null on a --poll run, which has no socket and therefore no
+            # status frames to have seen: the mode field beside them is what
+            # says why, and null is not zero. Why they are kept at all rather
+            # than only printed is argued where status_frames is declared, in
+            # run_websocket.
+            "status_frames": stats.get("status_frames"),
+            "status_frames_seen": stats.get("status_frames_seen"),
             "trades_folded": builder.trades_seen,
             "minutes_written": builder.rows_written,
             "chaos_reconnects_requested": args.chaos_reconnects,

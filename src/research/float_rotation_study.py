@@ -16,7 +16,7 @@ on which measure filled it, and a name would score higher for the mere fact of
 having no baseline. The bands are therefore chosen to award the same share of
 the population the same points, and that share is recorded.
 
-Three details the numbers depend on:
+Four details the numbers depend on:
 
 The window is not the whole premarket. The live numerator is the collector's
 volume from CRITERIA [collector] start_time to the scan's run_time, so both
@@ -33,6 +33,19 @@ Volume comes from Alpaca, the only source that serves the whole universe for a
 past session. The collector only ever saw the 42 names it had slots for, so its
 own history cannot describe the population the bands apply to. Float comes from
 data/float_cache.json. Neither is a live dependency.
+
+The float denominator is screened here exactly as morning/scan screens it, by
+the same CRITERIA [Float rotation] floors read from the same file. Until
+2026-08-17 this script carried a private copy of one of those checks, the
+impossible float against shares outstanding, with the ratio written into the
+Python as 1.01, the other two floors missing entirely, and no refusal at all for
+the corrupt records the live path will not divide by. That is worse than it
+sounds for a script whose whole output is a set of band edges: the bands were
+being fitted to a population the live path does not score, so a name the scan
+refuses to divide by was still voting on where the edges fall. The counts
+recorded in CRITERIA [Score premarket float rotation] were measured before that
+was fixed, so a re-run will not reproduce them to the name. The population it
+measures now is the one the scan actually scores, which is the point.
 
 Run:
 
@@ -66,6 +79,16 @@ _CANDIDATE_EDGES = (
     0.0002, 0.0005, 0.001, 0.002, 0.003, 0.005,
     0.0075, 0.01, 0.015, 0.02, 0.03, 0.05,
 )
+
+
+def _as_float(value: Any) -> float | None:
+    if value is None or value == "" or value == "NA":
+        return None
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out else None
 
 
 def _utc(day: str, section: str, key: str) -> str:
@@ -139,8 +162,21 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     lookback = _CRIT.integer("baseline", "lookback_sessions")
     min_sessions = _CRIT.integer("baseline", "min_sessions_for_rvol")
     volume_floor = _CRIT.number("baseline", "min_baseline_premarket_volume")
+    # The same three floors morning/scan.attach_float_rotation divides by, read
+    # from CRITERIA rather than restated here, so this script cannot drift away
+    # from the rule it is calibrating.
+    min_float = _CRIT.number("float_rotation", "min_shares_float")
+    min_ratio = _CRIT.number("float_rotation", "min_float_to_shares_outstanding")
+    max_ratio = _CRIT.number("float_rotation", "max_float_to_shares_outstanding")
 
-    floats = float_cache.load_cache()["symbols"]
+    cache = float_cache.load_cache()
+    floats = cache["symbols"]
+    # The other half of the cache file, and the reason it is written there at
+    # all: the names the sweep asked for and never got an answer about, with the
+    # reason each one carries. Absence from "symbols" is not self explaining,
+    # and this is what separates a sweep that was starved from a cache that
+    # simply predates the name.
+    never_answered = cache["unanswered"]
     days = sorted(p.stem for p in EOD_DIR.glob("*.json"))
     pairs = list(zip(days, days[1:]))
     if sessions:
@@ -175,7 +211,45 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     scored_by_rvol = scored_by_rotation = scored_by_either = scored_by_neither = 0
     rescued = 0
     rescue_examples: list[dict[str, Any]] = []
-    no_float = no_volume = 0
+    no_volume = 0
+    # The reasons a name has no rotation, counted apart because they are
+    # different facts and only one of them is about the market. They used to
+    # share one no_float counter, which folded a cache that was never answered
+    # for into the vendor's float coverage: a starved cache is re-fetched, thin
+    # coverage is a property of the data the bands have to be set around, and a
+    # float the CRITERIA floors refuse is a name the live path will not score
+    # either. Reading one number for all of them, in the module that sets the
+    # bands, destroyed exactly the distinction float_cache goes to trouble to
+    # record. The first two split absence again by what the cache says about it.
+    # A name the sweep asked about and got nothing back for is a starved sweep
+    # to re-run. A name the file says nothing about at all is either newer than
+    # the last sweep or older than the sweep's habit of recording its silences,
+    # and either way the answer is the same: run float_cache before reading much
+    # into a thin rotation population.
+    cache_asked_and_got_nothing = 0
+    cache_absent_no_reason = 0
+    cache_row_carried_no_float = 0
+    # The refusals split by which CRITERIA floor caught the float, so the float
+    # floor note in CRITERIA [Float rotation] can be re-derived from this output
+    # instead of from a one-off measurement nobody can repeat.
+    #
+    # TWO NUMBERS PER DOOR, AND THEY ANSWER DIFFERENT QUESTIONS. The counters
+    # below count OCCURRENCES: this loop runs once per (session, symbol) pair,
+    # so a name refused on every session it was addressable is counted once per
+    # session. The sets count NAMES. The CRITERIA note counts names, "exactly
+    # one name sat below one percent of its own shares outstanding (YPF at 0.013
+    # percent)", and a cached float row is constant across sessions, so reading
+    # the occurrence counter as a name count reports that one name as however
+    # many sessions it appeared in, dozens over the 61 this study normally runs.
+    # Both are reported so neither has to be inferred from the other.
+    rejected_negative_outstanding = 0
+    rejected_float_above_outstanding = 0
+    rejected_float_tiny_vs_outstanding = 0
+    rejected_float_below_absolute_floor = 0
+    names_negative_outstanding: set[str] = set()
+    names_float_above_outstanding: set[str] = set()
+    names_float_tiny_vs_outstanding: set[str] = set()
+    names_float_below_absolute_floor: set[str] = set()
     per_session: list[dict[str, Any]] = []
 
     print(f"measuring {len(pairs)} sessions. numerator window "
@@ -225,16 +299,62 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
                 if median > 0 and median >= volume_floor:
                     rvol = volume / median
 
-            # --- float rotation
-            row = floats.get(symbol) or {}
-            share_float = row.get("sharesFloat")
-            outstanding = row.get("sharesOutstanding")
+            # --- float rotation, screened by the same floors the live path uses
+            #
+            # `floats.get(symbol) or {}` used to stand here, and it flattened
+            # the two absences this accounting exists to tell apart: a symbol
+            # the float cache never got an answer for arrived as an empty row
+            # and was counted as a symbol the vendor answered without a float,
+            # in the one module that sets the scoring bands. The row is left as
+            # None so the first branch below can ask which one it was.
+            row = floats.get(symbol)
+            share_float = _as_float((row or {}).get("sharesFloat"))
+            outstanding = _as_float((row or {}).get("sharesOutstanding"))
             rotation = None
-            if share_float and share_float > 0 and not (
-                    outstanding and share_float > outstanding * 1.01):
-                rotation = volume / float(share_float)
-            elif not share_float:
-                no_float += 1
+            # sharesOutstanding is a cross check only when it is a real share
+            # count, so it is tested present AND strictly positive rather than
+            # merely truthy. The `if outstanding and ...` that stood here, and
+            # that morning/scan was corrected away from on 2026-08-17, skips the
+            # ratio check on a reported zero because 0.0 is falsy, and a
+            # fabricated float of a few thousand shares then divides premarket
+            # volume into a very large rotation and votes on where the top band
+            # edge falls, off a denominator nothing ever looked at. A zero falls
+            # to the absolute floor here, which is where scan.py sends it and
+            # where a float with no usable cross check belongs.
+            #
+            # A negative outstanding is refused outright instead of being sent
+            # to that floor, which is what scan.py settled on the same day and
+            # for a reason this script has to respect: a quote reporting a share
+            # count no company can have has told us nothing trustworthy about
+            # the name, the sharesFloat sitting beside it included. A name the
+            # live path refuses must not be in the population the bands are
+            # fitted on, or the bands are fitted partly on names that will never
+            # be scored by them.
+            #
+            # A float that is itself zero or negative is not a share count
+            # either, and falls in with the rows carrying none.
+            outstanding_usable = outstanding is not None and outstanding > 0
+            if row is None:
+                if symbol in never_answered:
+                    cache_asked_and_got_nothing += 1
+                else:
+                    cache_absent_no_reason += 1
+            elif share_float is None or share_float <= 0:
+                cache_row_carried_no_float += 1
+            elif outstanding is not None and outstanding < 0:
+                rejected_negative_outstanding += 1
+                names_negative_outstanding.add(symbol)
+            elif outstanding_usable and share_float > outstanding * max_ratio:
+                rejected_float_above_outstanding += 1
+                names_float_above_outstanding.add(symbol)
+            elif outstanding_usable and share_float < outstanding * min_ratio:
+                rejected_float_tiny_vs_outstanding += 1
+                names_float_tiny_vs_outstanding.add(symbol)
+            elif not outstanding_usable and share_float < min_float:
+                rejected_float_below_absolute_floor += 1
+                names_float_below_absolute_floor.add(symbol)
+            else:
+                rotation = volume / share_float
 
             if rvol is not None:
                 rvol_all.append(rvol)
@@ -444,8 +564,29 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
             "scored_by_either": scored_by_either,
             "scored_by_neither": scored_by_neither,
             "rescued_by_rotation_alone": rescued,
-            "no_float_in_cache": no_float,
+            # Seven doors where there used to be one. no_float_in_cache is gone
+            # rather than kept alongside them, because a reader who found both
+            # would have to guess which absences the old key still counted.
+            "float_cache_asked_and_got_nothing": cache_asked_and_got_nothing,
+            "absent_from_float_cache_no_reason_recorded": cache_absent_no_reason,
+            "cache_row_carried_no_float": cache_row_carried_no_float,
+            "negative_shares_outstanding": rejected_negative_outstanding,
+            "float_above_shares_outstanding": rejected_float_above_outstanding,
+            "float_tiny_against_shares_outstanding": rejected_float_tiny_vs_outstanding,
+            "float_below_absolute_floor": rejected_float_below_absolute_floor,
             "no_alpaca_volume": no_volume,
+        },
+        # The same four doors counted by NAME rather than by occurrence. This is
+        # the shape the CRITERIA [Float rotation] float floor note is written in,
+        # so it is the one to read when re-deriving that note.
+        "distinct_names_refused": {
+            "negative_shares_outstanding": len(names_negative_outstanding),
+            "float_above_shares_outstanding": len(names_float_above_outstanding),
+            "float_tiny_against_shares_outstanding": len(names_float_tiny_vs_outstanding),
+            "float_below_absolute_floor": len(names_float_below_absolute_floor),
+            "float_tiny_against_shares_outstanding_names":
+                sorted(names_float_tiny_vs_outstanding),
+            "float_below_absolute_floor_names": sorted(names_float_below_absolute_floor),
         },
         "rvol_band_payout": {"all_addressable": rvol_points_share(rvol_all),
                              "top_by_gap": rvol_points_share(rvol_top)},
@@ -490,6 +631,36 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         print(f"      RVOL target         : {block['rvol_target']}")
         print(f"      re-derived on rescued: {block['rederived_on_rescued']} "
               f"paying {block['rederived_edges_pay_on_rescued']}")
+
+    # Spelled out rather than left to the coverage line, because these are the
+    # numbers that say whether a thin rotation population is the vendor's fault
+    # or the cache sweep's, and those call for opposite responses: re-run
+    # float_cache, or accept the coverage and set the bands around it.
+    print("\n  WHY A NAME HAS NO ROTATION")
+    print(f"    the cache sweep asked and got nothing back : {cache_asked_and_got_nothing}")
+    print(f"    absent, and the cache records no reason    : {cache_absent_no_reason}")
+    print(f"    the cached row carried no sharesFloat      : {cache_row_carried_no_float}")
+    print(f"    shares outstanding reported negative       : "
+          f"{rejected_negative_outstanding}")
+    print(f"    float above shares outstanding             : "
+          f"{rejected_float_above_outstanding}")
+    print(f"    float under {min_ratio * 100:g} percent of outstanding       : "
+          f"{rejected_float_tiny_vs_outstanding}")
+    print(f"    float under the {min_float:,.0f} share floor, unchecked : "
+          f"{rejected_float_below_absolute_floor}")
+    print(f"    no Alpaca volume for the window            : {no_volume}")
+    # Occurrences above, names here. The CRITERIA note counts names, so this is
+    # the block to read when re-deriving it; see the comment on the counters.
+    print("    the four floors again, counted by NAME not by session:")
+    print(f"      shares outstanding negative              : "
+          f"{len(names_negative_outstanding)}")
+    print(f"      float above shares outstanding           : "
+          f"{len(names_float_above_outstanding)}")
+    print(f"      float under {min_ratio * 100:g} percent of outstanding     : "
+          f"{len(names_float_tiny_vs_outstanding)} "
+          f"{sorted(names_float_tiny_vs_outstanding)}")
+    print(f"      float under the {min_float:,.0f} share floor      : "
+          f"{len(names_float_below_absolute_floor)}")
 
     print(f"\n  coverage: {json.dumps(result['coverage'], indent=None)}")
     print(f"\n  what the live RVOL bands pay, all addressable: "

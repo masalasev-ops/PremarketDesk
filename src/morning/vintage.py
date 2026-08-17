@@ -124,11 +124,39 @@ _LEG_NEWEST_SESSION_BACK = {
 }
 
 
-def sessions_back(today: dt.date, count: int) -> dt.date:
-    """The trading session `count` sessions before `today`, walking the calendar."""
+def sessions_back(today: dt.date, count: int) -> dt.date | None:
+    """The trading session `count` sessions before `today`, walking the calendar.
+
+    A count of zero is today, and it is today with the calendar dark, because
+    the loop never runs and so nothing is ever asked. That is the load-bearing
+    case here rather than a degenerate one: premarket is the only leg mapped to
+    zero sessions back, so check (e) goes on dating every premarket row under a
+    calendar fault and stands down only where it genuinely wanted an answer it
+    could not get. A reader who takes "a calendar fault gives None" as the whole
+    contract concludes that one fault silences the whole of (e), which is wrong
+    and would make the stand down look far broader than it is.
+
+    Once the loop does run, the first refusal ends it: None comes back, and the
+    caller has to read that as unknown rather than as a violation. That is
+    previous_trading_session's own contract carried one step further out: a
+    check that cannot run must not fail a run it did not examine, and a helper
+    that quietly turned "I do not know" into a date the caller then compared
+    against would defeat it from underneath.
+
+    The early return is not only there to make the annotation honest. The loop
+    used to reassign `day` without looking at it, so a None came back and went
+    straight into the next iteration, where subtracting a timedelta from it
+    raises TypeError. No leg in the table above asks for more than one session,
+    so check() cannot reach that today; a caller asking for two can, and the
+    suite already does. A latent crash inside the one function whose job is to
+    answer "unknown" safely is not worth keeping on the argument that nothing
+    currently walks far enough to hit it.
+    """
     day = today
     for _ in range(count):
         day = previous_trading_session(day)
+        if day is None:
+            return None
     return day
 
 
@@ -264,8 +292,35 @@ def check(
             fail("e", symbol, f"declares leg {leg} with an unreadable "
                               f"as_of_session ({stamped!r})")
             continue
+        # The calendar can decline to answer, and when it does this check
+        # stands down from the session comparison and from nothing else.
+        # previous_trading_session states the rule the whole module runs on:
+        # None means the calendar could not answer, which the caller treats as
+        # unknown rather than as a violation, because a check that cannot run
+        # must not fail a run it did not examine. (d) is the precedent to read,
+        # not (c): (d) guards the one comparison that needs a session date and
+        # nothing else, so its own required field failure, a snapshot row with
+        # no readable as_of, still fires with the calendar dark. (c) wraps its
+        # ENTIRE loop in that guard instead, which means a dark calendar also
+        # silences its "carries a prior_close with no readable
+        # prior_session_date" failure. That is broader than anything wanted
+        # here, and (e) is deliberately narrower than (c) for exactly that
+        # reason. Without any stand down at all, one calendar fault flagged
+        # every row on a completed session leg at once, which in a section
+        # where most names have no live price is nearly the whole section, and
+        # refused the packet over it. That is the loudest possible way to be
+        # wrong about data the gate never looked at.
+        #
+        # The boundary is exact, and standing down is not the same as skipping
+        # the row. All four failures above still fire with the calendar dark: a
+        # row with no leg, an unrecognised leg, a missing as_of_session and an
+        # unreadable one are malformed whatever the calendar says, and letting
+        # them through would be the unlabelled row walking into a section whose
+        # entire premise is that the labels are true. Only the two comparisons
+        # that need a session date go quiet. The premarket window test further
+        # down reads the clock, not the calendar, so it keeps running.
         expected = sessions_back(today, _LEG_NEWEST_SESSION_BACK[leg])
-        if dated != expected:
+        if expected is not None and dated != expected:
             fail("e", symbol, f"declares leg {leg}, whose newest datum is "
                               f"{expected}, but is stamped {dated}. A row stamped "
                               "with one leg's session while labelled another's is "
@@ -281,7 +336,10 @@ def check(
                               f"({row.get('price_time')!r})")
             continue
         if when is not None:
-            if when.date() != expected:
+            # Same stand down, same reason: this comparison is the session one
+            # wearing a different field name, so it cannot outlive the answer
+            # it depends on. The window test below it can, and must.
+            if expected is not None and when.date() != expected:
                 fail("e", symbol, f"declares leg {leg} as of {expected} but its "
                                   f"price_time is dated {when.date()}")
                 continue
@@ -314,6 +372,7 @@ def describe(violations: list[dict[str, Any]]) -> str:
         "b": "prior_high below prior_close, so they are not one session",
         "c": "prior close is not the prior trading session",
         "d": "market snapshot is not from today",
+        "e": "notable movers row is not the vintage its own leg claims",
     }
     lines: list[str] = []
     for check_id in sorted({v["check"] for v in violations}):

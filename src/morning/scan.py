@@ -821,8 +821,21 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
     trustworthiness problem of its own. A float reported far below shares
     outstanding is a vendor artifact rather than a genuinely tiny free float,
     and a float above shares outstanding is impossible. Both are rejected with
-    the reason recorded rather than divided by. See CRITERIA.md
-    [Float rotation] for the floors and what they were measured against.
+    the reason recorded rather than divided by. That pair of checks needs a
+    usable sharesOutstanding to check against, and the three ways a quote can
+    fail to carry one are not one case. A missing sharesOutstanding and a zero
+    one are both a share count the vendor never supplied, so the float faces
+    the absolute share floor in place of the ratios. A negative one is a share
+    count that cannot exist, so the quote is corrupt rather than incomplete and
+    the float in it is refused outright. Every route that reaches the
+    denominator question ends in a recorded reason AND a gap, so no float gets
+    past every test and no such name is nulled in silence. The two routes above
+    that question, a name the collector never covered and a name it covered
+    without volume, follow attach_premarket_rvol exactly: the volume one gaps,
+    and the coverage one does not, because collector_coverage already reports
+    the uncovered names as a set and gapping each of them again would say the
+    same thing twice. See CRITERIA.md [Float rotation] for the floors and what
+    they were measured against.
     """
     numerator_window = _CRIT.clock_text("collector", "start_time")
     true_open = _CRIT.clock_text("baseline", "session_start")
@@ -850,6 +863,8 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             candidate["pm_float_rotation_reason"] = (
                 "the collector recorded no premarket volume for this name"
             )
+            packet.gap(f"{candidate['symbol']} float rotation is null: "
+                       "no collector premarket volume")
             continue
         if share_float is None or share_float <= 0:
             candidate["pm_float_rotation_reason"] = (
@@ -858,7 +873,56 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             packet.gap(f"{candidate['symbol']} float rotation is null: no sharesFloat "
                        "in the delayed quote")
             continue
-        if outstanding and share_float > outstanding * max_ratio:
+        # A negative sharesOutstanding is refused right here, before any of the
+        # checks below get a look at it, because it is not a cross check that
+        # happens to be missing, it is a quote that has reported something no
+        # company can have. A record that carries a negative share count has
+        # told us nothing trustworthy about this name, and that includes the
+        # sharesFloat sitting beside it, so there is no honest number to
+        # publish from it.
+        #
+        # Refusing is also what the code did before 2026-08-17, though by
+        # accident rather than on purpose, and the accident is worth writing
+        # down so nobody removes the guard a second time. The max ratio check
+        # below then read "if outstanding and share_float > outstanding *
+        # max_ratio". For a negative outstanding that product is negative, so
+        # every positive float exceeded it and the quote was refused as "float
+        # above shares outstanding". When that condition was rewritten to test
+        # for a real share count, the accident went with it: a sharesFloat of
+        # 20,000,000 beside a sharesOutstanding of -25,000,000 started
+        # publishing a rotation of 0.0125, with the impossible -25,000,000
+        # carried into packet.json beside it as though it were a fact. This
+        # line puts the refusal back deliberately, and names the actual defect
+        # rather than the arithmetic one the old truthiness test reported.
+        if outstanding is not None and outstanding < 0:
+            candidate["pm_float_rotation_reason"] = (
+                f"sharesOutstanding is reported as {outstanding:,.0f}, a negative "
+                "share count, so the quote is corrupt rather than merely missing a "
+                "cross check and the sharesFloat in it is not divided by"
+            )
+            packet.gap(f"{candidate['symbol']} float rotation is null: negative "
+                       "shares outstanding")
+            continue
+        # sharesOutstanding is a cross check only when it is a real share count,
+        # so it is tested here the way the sharesFloat guard further above
+        # already tests its own field: present AND strictly positive, rather
+        # than merely truthy or merely not None. That guard set the standard and
+        # these had not been held to it. Until 2026-08-17 the two ratio checks
+        # below read "if outstanding and ...", which a sharesOutstanding of
+        # exactly 0.0 skips because 0.0 is falsy, and the absolute floor read
+        # "if outstanding is None", which the same 0.0 also skips because it is
+        # not None. A quote carrying a zero outstanding therefore fell through
+        # all three, and that is the worst case to leave unguarded rather than a
+        # harmless one: rotation is premarket volume over the float, so an
+        # unchecked fabricated float of a few thousand shares does not produce a
+        # slightly wrong number, it produces a very large one, and the name
+        # lands in the top rotation band on a denominator nothing ever looked
+        # at. A zero now falls to the absolute floor, which is where a float
+        # with no usable cross check has always belonged. Negatives never reach
+        # this line, having been refused above.
+        outstanding_usable = outstanding is not None and outstanding > 0
+
+        if outstanding_usable and share_float > outstanding * max_ratio:
             candidate["pm_float_rotation_reason"] = (
                 f"sharesFloat {share_float:,.0f} exceeds sharesOutstanding "
                 f"{outstanding:,.0f}, which is impossible, so the vendor figure is "
@@ -867,7 +931,7 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             packet.gap(f"{candidate['symbol']} float rotation is null: float above "
                        "shares outstanding")
             continue
-        if outstanding and share_float < outstanding * min_ratio:
+        if outstanding_usable and share_float < outstanding * min_ratio:
             candidate["pm_float_rotation_reason"] = (
                 f"sharesFloat {share_float:,.0f} is {share_float / outstanding * 100:.3f} "
                 f"percent of sharesOutstanding {outstanding:,.0f}, below the "
@@ -877,12 +941,63 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             packet.gap(f"{candidate['symbol']} float rotation is null: float implausibly "
                        "small against shares outstanding")
             continue
-        if outstanding is None and share_float < min_float:
+        if not outstanding_usable and share_float < min_float:
+            # Which kind of unusable it was is written into both the reason and
+            # the gap, because a human reads both and the two cases are
+            # different conversations to have with the vendor. A missing
+            # sharesOutstanding is a field they did not populate for this name;
+            # a zero is a field they populated with a number that cannot be a
+            # share count, which says the record itself is suspect and not only
+            # the float in it.
+            if outstanding is None:
+                no_cross_check = "there is no sharesOutstanding to check it against"
+                unusable_state = "no shares outstanding"
+            else:
+                no_cross_check = (
+                    "sharesOutstanding is reported as zero, which is not a share "
+                    "count and cannot check it"
+                )
+                unusable_state = "shares outstanding reported as zero"
             candidate["pm_float_rotation_reason"] = (
                 f"sharesFloat {share_float:,.0f} is below the {min_float:,.0f} share "
-                "floor and there is no sharesOutstanding to check it against"
+                f"floor and {no_cross_check}"
             )
+            # Until 2026-08-17 this was the one refusal in the function that
+            # recorded its reason and raised no gap, so the name was nulled
+            # where only a reader of packet.json would ever find it. That was
+            # survivable while the branch caught nothing but an unpopulated
+            # field, which is the vendor's silence rather than a defect. It is
+            # not survivable now that a zero outstanding lands here too: a
+            # populated field holding an impossible value is exactly the kind
+            # of thing gaps_to_fill exists to put in front of a human each
+            # morning, and it cannot do that for a gap nobody raised.
+            packet.gap(f"{candidate['symbol']} float rotation is null: sharesFloat "
+                       f"below the {min_float:,.0f} share floor with "
+                       f"{unusable_state}")
             continue
+
+        # Only a real share count is published as one. A quote that carried no
+        # sharesOutstanding, or carried a zero, reaches this line having been
+        # cleared by the absolute floor rather than by the ratio checks, and
+        # writing its absence or its 0.0 into the packet as a bare number would
+        # read downstream as "this company has zero shares" rather than as
+        # "there was nothing here to check against". Null is what this project
+        # records for absent evidence, so null is what goes in the count field,
+        # and the source line beside it carries which of the states it was and
+        # what stood in for the cross check.
+        if outstanding_usable:
+            outstanding_source = "sharesOutstanding from the delayed quote"
+        elif outstanding is None:
+            outstanding_source = (
+                "the delayed quote carried no sharesOutstanding, so the "
+                f"{min_float:,.0f} share floor stood in for the ratio checks"
+            )
+        else:
+            outstanding_source = (
+                "the delayed quote reported sharesOutstanding as zero, which is not "
+                f"a share count, so the {min_float:,.0f} share floor stood in for "
+                "the ratio checks"
+            )
 
         candidate["pm_float_rotation"] = round(pm_volume / share_float, 8)
         candidate["pm_float_rotation_basis"] = {
@@ -890,7 +1005,8 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             "numerator_source": f"collector, from {numerator_window} ET",
             "denominator": share_float,
             "denominator_source": "sharesFloat from the delayed quote",
-            "shares_outstanding": outstanding,
+            "shares_outstanding": outstanding if outstanding_usable else None,
+            "shares_outstanding_source": outstanding_source,
             # True for the same reason RVOL's is: the collector starts after
             # the premarket does, so the numerator is short of the full window.
             "is_lower_bound": numerator_window > true_open,
@@ -1578,6 +1694,14 @@ def build_packet() -> dict[str, Any]:
             "reconnects": (run_stats or {}).get("reconnects"),
             "resubscriptions": (run_stats or {}).get("resubscriptions"),
             "messages": (run_stats or {}).get("messages"),
+            # The last hop of the path the collector's declaration comment
+            # argues for. Non fatal status frames are kept by the run loop,
+            # persisted per run, and summed by read_run_stats, and without this
+            # line all three stop short of the packet and the fact that a
+            # morning saw odd frames reaches no reader. Null rather than zero
+            # when no run carried a count, because a morning nobody counted is
+            # not a morning that saw none.
+            "status_frames": (run_stats or {}).get("status_frames"),
         },
         # Did every name the socket was asked for actually produce anything.
         # Separate from collector_snapshot above, which describes the file;

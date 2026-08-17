@@ -1410,3 +1410,102 @@ not make the third close unnecessary. The per candidate gap_3session field
 also stays, because it is emitted: it is measured to today's premarket price
 over the twelve candidates and is a report field beside gap_pct, not a section
 leg. Nothing here is defined and unemitted after this change.
+
+## 2026-08-17, fourth: the universe escape hatch reaches ONE verdict, and the reason is which number it is measured against
+
+The pre-write admissibility gate refuses to overwrite a good universe with a
+partial one. Moving that check before the write was right and is not in
+question here. What was missing is that the gate had no way out: the count
+fraction verdict measures this build against previous_count, which is read from
+the very file the refusal prevents replacing, so a legitimate shrink refuses
+again every Sunday against the same frozen baseline, and past max_age_days
+every morning job refuses too. A --force flag now exists.
+
+**The decision that could have gone another way is its SCOPE.** The obvious
+implementation is "--force writes anyway", and that is what the first fix did.
+It is wrong, and the code was already saying so. check_admissible can return
+three verdicts, and they are not the same kind of thing:
+
+| verdict | measured against | clears by itself? |
+|---|---|---|
+| count fraction | previous_count, from the file on disk | NO, the baseline is frozen |
+| unswept fraction | this build's own market cap funnel | YES, rerun when the vendor answers |
+| no count | a malformed payload | not a shrink at all |
+
+Only the first can refuse forever, because only the first is measured against
+something the refusal itself prevents changing. The other two are measured
+against this run, so a rerun settles them and no human has to decide anything.
+An escape hatch for those buys nothing and costs the gate.
+
+**And the refusal message had already committed to this.** Its own wording
+said names in a batch that answered nothing "are the case this gate exists for
+and must never be forced past", while `if verdict and not force` cheerfully
+forced past exactly that. The code contradicted its own message, which is the
+tell that the scope was never thought through rather than deliberately wide.
+Forcing the unswept verdict writes the quota starved, illiquid tail amputated
+universe the gate was built for: the sweep runs in dollar volume order, so a
+run that lost batches has not thinned the universe evenly, and the result still
+lands inside its expected count range while the names it is missing are the
+ones a gap screen is looking for.
+
+**Scoping it also closed a blocking defect for free, and that is the part
+worth keeping.** The override matches on the verdict TEXT rather than on a
+boolean, deliberately: tighten the floor afterwards and the sentence changes,
+the override stops applying, and the gate speaks again, which a flag could
+never do. But the first implementation applied that match at all three return
+sites, each written "return answer(...)", so a matched override returned None
+immediately and every check BELOW it never ran. An override recorded for the
+unswept verdict admitted a file whose count was far under the floor, in
+discover, every morning until the next rebuild. Narrowing the override to the
+count fraction verdict, which is the LAST check in the function, means there is
+no check below it left to skip. The design is now safe by construction rather
+than correct by inspection, and that is why the scoping decision is recorded
+here rather than treated as a tidy-up.
+
+**Cost accepted.** An operator whose Sunday rebuild is refused on the unswept
+verdict has no override and must rerun, possibly waiting on the shared quota.
+That is the intended answer: the thing they would be forcing is the thing the
+gate exists to stop.
+
+## 2026-08-17, fifth: an absent, a zero and a negative sharesOutstanding are three facts, not one
+
+Float rotation divides premarket volume by sharesFloat, and the vendor figure
+needs a cross check, because a float far below shares outstanding is an
+artifact and a float above it is impossible. Both checks need a usable
+sharesOutstanding. The guards asked for one in two different ways, "if
+outstanding" and "if outstanding is None", and between them they covered falsy
+and None while covering zero NEITHER time, so a sharesOutstanding of exactly
+0.0 skipped both ratio checks AND the absolute floor and a fabricated float
+became the divisor unchecked.
+
+**Decision: three states, three answers, each named in the recorded reason.**
+An ABSENT sharesOutstanding and a ZERO one are both a share count the vendor
+never supplied, so the float faces the absolute share floor in place of the
+ratios. A NEGATIVE one is a share count that cannot exist, so the quote is
+corrupt rather than incomplete and the float in it is refused outright. The
+reason string says which case fired, because a human reads it and "the vendor
+sent nothing" and "the vendor sent zero" call for different follow ups.
+
+**The negative case is here because the first fix broke it, and the reasoning
+is worth preserving.** The review that found the zero hole asserted negatives
+were unguarded too. They were not: "if outstanding and share_float > outstanding
+* max_ratio" is truthy for a negative outstanding, and every positive float
+exceeds a negative product, so negatives were already refused, with a gap
+raised, by accident. The fix replaced the falsy test with an explicit "present
+and positive" test, which is correct in intent, and in doing so it stopped
+refusing negatives and began publishing a rotation for them with an impossible
+share count recorded beside it. A guard that was holding for a reason nobody
+had written down was removed by a change aimed at a different hole. That is the
+argument for making all three states explicit rather than leaning on which
+comparisons happen to be true for which signs.
+
+**Known and accepted, recorded so it is not mistaken for an oversight.** The
+absolute share floor is weak protection at this scale. A fabricated float at or
+above min_shares_float with a few hundred shares of premarket volume still
+lands in the top rotation band, which starts three orders of magnitude below
+where such a name computes. The floor keeps out only the most obviously bogus
+denominators. Closing that properly needs either a second independent share
+count to check against or a band structure that does not reward an unverifiable
+denominator, and both are threshold and design questions for the owner rather
+than guard placement. What changed here is that no name reaches the divisor
+without facing SOME check, and that every null says why.

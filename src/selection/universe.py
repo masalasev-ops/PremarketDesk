@@ -139,6 +139,15 @@ def require_fresh_universe() -> dict[str, Any]:
         f"universe: {payload.get('count', 0)} names, generated {payload.get('generated_at')} "
         f"({age:.1f} days ago)"
     )
+    # A file written past the admissibility gate says so on every step that
+    # reads it, not only in the Sunday log nobody opens again. check_admissible
+    # honours the override the human recorded, which is what lets the morning
+    # run at all, and a step that then used the file without ever mentioning
+    # the override would leave it looking exactly like a build that passed.
+    override = payload.get("admissibility_override")
+    if isinstance(override, dict) and override.get("verdict"):
+        print(f"WARNING  universe: this file was written past the admissibility "
+              f"gate by a human. The gate said: {override['verdict']}")
     return payload
 
 
@@ -418,7 +427,18 @@ def _prior_staged_count() -> int | None:
     return None
 
 
-def build(write: bool = True) -> dict[str, Any]:
+def build(write: bool = True, force: bool = False) -> dict[str, Any]:
+    """Rebuild the universe. force overrides one verdict of the pre-write gate.
+
+    force is not a way of turning the gate off, and nothing scheduled passes
+    it. It is the human answer to the one question the gate cannot answer for
+    itself, which the gate block below states in full: whether a shrink is a
+    build that lost batches or a floor the owner deliberately tightened. It
+    reaches that verdict and no other. A run whose market cap sweep lost
+    batches says so in its own funnel, and it is refused whether or not --force
+    was passed, because a rerun clears that one without anyone having to decide
+    anything.
+    """
     config.ensure_dirs()
     api = eodhd.client()
     notes: list[str] = []
@@ -564,14 +584,92 @@ def build(write: bool = True) -> dict[str, Any]:
         # ordering is fine for a question about age and useless for a question
         # about completeness: by the time discover can refuse the file, the
         # good one it would have fallen back to has been overwritten.
-        verdict = check_admissible(payload)
-        if verdict:
+        refusal = _check_admissible(payload)
+        if refusal is not None and refusal.kind != FORCEABLE_VERDICT:
+            # Two of the three verdicts have no human answer, and --force stops
+            # here for both. The refusal below has said so in words since the
+            # day it was written, that names in a batch which answered nothing
+            # "are the case this gate exists for and must never be forced
+            # past", and until the override was scoped to the count fraction
+            # verdict nothing enforced that sentence: a single
+            # "if verdict and not force" wrote past the very verdict it warns
+            # about.
+            if refusal.kind == VERDICT_UNSWEPT_FRACTION:
+                not_forceable = (
+                    "--force does not apply to this verdict, and no flag does. "
+                    "Unlike the count floor it is measured entirely from THIS "
+                    "build's own funnel and never against the file on disk, so "
+                    "it is not the frozen baseline trap --force exists for: "
+                    "rerun when the vendor is answering, or when the shared "
+                    "quota can pay for the whole market cap sweep, and it "
+                    "clears with nobody having to decide anything. Writing past "
+                    "it would put on disk the exact file this gate exists to "
+                    "keep out of discover. The sweep runs in dollar volume "
+                    "order, so one that lost batches has not thinned the "
+                    "universe evenly, it has amputated the illiquid tail, and "
+                    "the result still lands inside its expected count range "
+                    "while the names it is missing are the ones a gap screen is "
+                    "looking for.")
+            else:
+                not_forceable = (
+                    "--force does not apply to this verdict. A payload carrying "
+                    "no count is malformed rather than small, so there is no "
+                    "judgement here for a human to have made and nothing a flag "
+                    "could authorise. Something upstream of this line is broken "
+                    "and forcing the write would only move the failure into "
+                    "tomorrow morning.")
             raise PartialBuildError(
-                f"{verdict} Refusing to overwrite the previous universe with this "
-                "one. The file already on disk is last week's and every later "
-                "script knows how to refuse it once it is too old, which is a "
-                "recoverable state. A fresh file that discover rejects is not: "
-                "the monitor relaunches on age and this one would look new.")
+                f"{refusal.verdict} Refusing to overwrite the previous universe "
+                f"with this one. {not_forceable}")
+        if refusal is not None and not force:
+            raise PartialBuildError(
+                f"{refusal.verdict} Refusing to overwrite the previous universe "
+                "with this one. The file already on disk is last week's and "
+                "every later script knows how to refuse it once it is too old, "
+                "which is a recoverable state. A fresh file that discover "
+                "rejects is not: the monitor relaunches on age and this one "
+                "would look new. If the shrink is REAL, rerun with --force. The "
+                "usual reason for a real one is a floor tightened in "
+                f"{config.CRITERIA_PATH.name}, which this gate cannot tell from "
+                "a sweep that lost batches, because both arrive as a smaller "
+                "count. Read the market cap funnel in the notes above first: "
+                "names dropped by the floor were decided on evidence and are a "
+                "real shrink, names in a batch that answered nothing are the "
+                "case this gate exists for and are refused above this line, "
+                "where no flag reaches them.")
+        if refusal is not None:
+            # Forced, and only the count fraction verdict can be here: the two
+            # that carry no human answer raised above. The gate is not weakened
+            # here, it is overridden by a human, and the file has to say so for
+            # as long as it is the file on disk.
+            #
+            # The escape hatch is not optional for THIS verdict, because the
+            # refusal measures this build against previous_count, which
+            # _previous_count() reads from the very file the refusal keeps in
+            # place. A genuine shrink below the floor is therefore measured
+            # against the same frozen baseline every Sunday and refuses forever,
+            # and once max_age_days has passed load_universe raises on that
+            # unreplaceable file and the whole morning chain refuses with it. A
+            # gate that can only be escaped by deleting the thing it is
+            # defending is not a gate, it is a trap.
+            #
+            # The verdict text is carried verbatim rather than a boolean, for
+            # two readers. A human opening the file later sees exactly what was
+            # overridden instead of a flag they have to go and reconstruct, and
+            # _check_admissible reads it back to tell the one verdict a human
+            # accepted from any other verdict this file might later produce.
+            payload["admissibility_override"] = {
+                "verdict": refusal.verdict,
+                "overridden_by": (
+                    "a human, who passed --force to universe.py. The gate refused "
+                    "this file and it was written anyway, so it is a build that "
+                    "was overridden and never a build that passed."
+                ),
+            }
+            print(f"WARNING  {refusal.verdict}")
+            print("WARNING  --force was given, so this universe was written over "
+                  "that refusal. The file records the verdict it was written "
+                  "against, and every step that loads it says so.")
         write_atomically(payload)
         print(f"universe: wrote {config.UNIVERSE_PATH} with {len(admitted)} names")
 
@@ -588,7 +686,32 @@ def _previous_count() -> int | None:
     return int(count) if isinstance(count, (int, float)) else None
 
 
-def check_admissible(payload: dict[str, Any]) -> str | None:
+class Admissibility(NamedTuple):
+    """A refusal to use a universe file, and which check produced it.
+
+    The kind is here so build() can tell the one verdict a human is allowed to
+    override from the two that are not, without matching on the verdict text.
+    That text names counts, a percentage and a criteria file, and it is written
+    to be read by a person at 21:30 on a Sunday, so any substring test over it
+    would break the first time the sentence is reworded, which is exactly the
+    moment nobody is looking at this gate.
+    """
+
+    kind: str
+    verdict: str
+
+
+# The three refusals, named. FORCEABLE_VERDICT is one kind rather than a set
+# because the argument for allowing an override is specific to the count
+# fraction check and does not carry to the other two; _check_admissible makes
+# that argument in full.
+VERDICT_NO_COUNT = "no_count"
+VERDICT_UNSWEPT_FRACTION = "unswept_fraction"
+VERDICT_COUNT_FRACTION = "count_fraction"
+FORCEABLE_VERDICT = VERDICT_COUNT_FRACTION
+
+
+def _check_admissible(payload: dict[str, Any]) -> Admissibility | None:
     """Why this universe must not be used, or None when it is fine.
 
     Two questions, and they fail differently. Age is answered by
@@ -596,12 +719,44 @@ def check_admissible(payload: dict[str, Any]) -> str | None:
     complete. A rebuild that admits far fewer names than the one before it is
     a partial run, not a market that halved overnight, and the count on its
     own cannot tell those apart. previous_count is what makes it decidable.
+
+    One verdict, and exactly one, can be overridden: the count fraction one at
+    the bottom, which a human already read and accepted by rebuilding with
+    --force, and which build() records into admissibility_override before
+    writing. It is the only one that needs an escape hatch, because it is the
+    only one measured against the file the refusal keeps in place:
+    _previous_count() reads previous_count out of exactly the universe.json a
+    refusal refuses to replace, so a shrink that is REAL is measured against
+    that same frozen baseline every Sunday and refuses forever. The other two
+    have no such trap. The unswept fraction is computed entirely from this
+    build's own funnel, so a rerun against a vendor that answers clears it with
+    nobody deciding anything, and a payload carrying no count is malformed
+    rather than small. Neither is forceable, here or in build().
+
+    Scoping the override to the LAST check is also what makes it structurally
+    unable to hide anything, rather than merely happening not to today. An
+    override can only ever return None from the final branch of this function,
+    so there is no check left below it to skip. That was not true when the
+    override applied at all three sites: build() records the FIRST verdict its
+    payload produced, so a run that tripped the unswept ceiling and was forced
+    wrote that sentence into the file, and this function then matched it, and
+    returned None on it, before ever reaching the count floor. The floor was
+    silently off for that file in discover every morning until the next
+    rebuild, on the one kind of file it most needed to be on for.
+
+    The match is on the verdict TEXT, not on a flag, and that is the whole
+    difference between an override and a switch. The text names the counts and
+    the floor it was measured against, so it covers the sentence the human
+    actually saw and nothing else: tighten the floor afterwards and the
+    sentence changes, the override stops applying and the gate speaks again. A
+    boolean would have silenced every future verdict too.
     """
     fraction = _CRIT.number("universe", "min_count_fraction_of_previous")
     count = payload.get("count")
     previous = payload.get("previous_count")
+
     if not isinstance(count, (int, float)):
-        return "universe.json carries no count"
+        return Admissibility(VERDICT_NO_COUNT, "universe.json carries no count")
 
     # The size question and the evidence question are different, and the size
     # question cannot answer this one. A sweep that ran out of quota partway
@@ -629,26 +784,53 @@ def check_admissible(payload: dict[str, Any]) -> str | None:
         if isinstance(examined, (int, float)) and examined > 0 and unswept:
             share = unswept / examined
             if share > limit:
-                return (f"universe.json never got an answer for {int(unswept)} of "
-                        f"{int(examined)} names it examined ({share:.1%}), above the "
-                        f"{limit:.1%} ceiling in {config.CRITERIA_PATH.name} "
-                        "[universe] max_unswept_fraction. Those names were not "
-                        "rejected, nothing came back for them at all, and because "
-                        "the sweep runs in dollar volume order the ones it loses "
-                        "are the illiquid tail rather than a random sample.")
+                # Returned unconditionally, with no consultation of the
+                # override. A file that lost batches is not made whole by a
+                # human having read a sentence about it, and this is the one
+                # verdict a rerun fixes on its own.
+                return Admissibility(VERDICT_UNSWEPT_FRACTION, (
+                    f"universe.json never got an answer for {int(unswept)} of "
+                    f"{int(examined)} names it examined ({share:.1%}), above the "
+                    f"{limit:.1%} ceiling in {config.CRITERIA_PATH.name} "
+                    "[universe] max_unswept_fraction. Those names were not "
+                    "rejected, nothing came back for them at all, and because "
+                    "the sweep runs in dollar volume order the ones it loses "
+                    "are the illiquid tail rather than a random sample."))
 
     if not isinstance(previous, (int, float)) or previous <= 0:
         return None  # nothing to compare against, which is not a failure
     floor = previous * fraction
     if count < floor:
-        return (f"universe.json holds {int(count)} names against {int(previous)} in "
-                f"the run before it, below the {fraction:g} floor of {floor:.0f} "
-                f"in {config.CRITERIA_PATH.name} [universe] "
-                "min_count_fraction_of_previous. That reads as a rebuild that was "
-                "cut short rather than as a market that shrank, and a pool built "
-                "from a partial universe is indistinguishable from a real one "
-                "downstream.")
+        verdict = (
+            f"universe.json holds {int(count)} names against {int(previous)} in "
+            f"the run before it, below the {fraction:g} floor of {floor:.0f} "
+            f"in {config.CRITERIA_PATH.name} [universe] "
+            "min_count_fraction_of_previous. That reads as a rebuild that was "
+            "cut short rather than as a market that shrank, and a pool built "
+            "from a partial universe is indistinguishable from a real one "
+            "downstream.")
+        override = payload.get("admissibility_override")
+        accepted = override.get("verdict") if isinstance(override, dict) else None
+        if accepted == verdict:
+            # The human read this exact sentence and accepted it. Anything else
+            # recorded there answers a different question and leaves this one
+            # standing, which is why a file carrying an older build's unswept
+            # verdict is still refused here rather than waved through.
+            return None
+        return Admissibility(VERDICT_COUNT_FRACTION, verdict)
     return None
+
+
+def check_admissible(payload: dict[str, Any]) -> str | None:
+    """The verdict text from _check_admissible, or None when the file is fine.
+
+    The public shape, and the one discover reads: a sentence to refuse with, or
+    nothing at all. build() calls _check_admissible directly instead, because
+    it is the only caller that has to know WHICH verdict it got in order to
+    decide whether --force is allowed to answer it.
+    """
+    refusal = _check_admissible(payload)
+    return refusal.verdict if refusal else None
 
 
 def write_atomically(payload: dict[str, Any]) -> None:
@@ -697,7 +879,36 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Do not rebuild. Report whether the existing universe.json is fresh.",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Write the universe when the admissibility gate refuses it ON THE "
+             "COUNT FRACTION VERDICT ALONE, which is the only verdict measured "
+             "against the previous file and so the only one that can refuse "
+             "forever against a frozen baseline. For a shrink that is real, a "
+             "tightened CRITERIA.md floor being the usual reason. This flag is "
+             "INERT against the other verdicts: a sweep that lost batches, or a "
+             "payload carrying no count, refuses with or without it, because a "
+             "rerun clears those by itself. The file records the verdict it was "
+             "written against, so a forced universe can always be told from one "
+             "that passed.",
+    )
     args = parser.parse_args(argv)
+
+    if args.check and args.force:
+        # Rejected rather than ignored. --force is only ever read by build(),
+        # and the --check branch below returns before build() is called, so the
+        # combination used to do exactly nothing while looking like it did
+        # something. The operator reaching for it is reaching for it at 21:30 on
+        # a Sunday with a refusal on the screen, and the reading they would take
+        # from a --check that still refuses is "I forced it and it refused
+        # anyway", when in fact nothing was ever offered a chance to be forced.
+        print("universe: --check and --force cannot be combined. --check only "
+              "reads the universe.json already on disk and never writes one, so "
+              "there is no admissibility gate here for --force to answer. Rerun "
+              "without --check to rebuild, and --force will then apply to the "
+              "gate that runs before the write.")
+        return 1
 
     if args.check:
         try:
@@ -711,7 +922,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        payload = build()
+        payload = build(force=args.force)
     except eodhd.QuotaRefusal as exc:
         # Ahead of the RuntimeError handler below, and it has to be: QuotaRefusal
         # subclasses RuntimeError, so without this a refusal is reported as

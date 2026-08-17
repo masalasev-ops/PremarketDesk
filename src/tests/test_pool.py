@@ -902,6 +902,178 @@ def claim_fifteen(failures: list[str]) -> None:
           "own handler ahead of the bare RuntimeError catch")
 
 
+def claim_sixteen(failures: list[str]) -> None:
+    """A calendar that cannot name the third session costs one leg, not the morning.
+
+    write_universe_closes takes its first two session maps as arguments and
+    buys only the third, and it asked the calendar for that session's date
+    without ever checking the answer. previous_trading_session returns None
+    when market_today cannot answer, which is not hypothetical: the calendar
+    guard's own suite already drives an exploding is_trading_day, because a
+    cached exchange-details.json that is missing, unparseable or refused by the
+    vendor is the ordinary way this fails.
+
+    Both consequences of passing that None on are silent until they are not.
+    eod-bulk-last-day sends no date parameter for a falsy day, so the vendor
+    answers with the LATEST completed session, which is c1: every two session
+    move in the briefing becomes a close measured against itself and prints as
+    a genuine flat. Then the payload's own session dates call .isoformat() on
+    the None and raise AttributeError, which discover.main catches on none of
+    its four branches, so the 07:15 pass dies before watchlist.json exists and
+    the collector has nothing to subscribe to at 07:20. One unanswerable
+    calendar, and the whole morning is gone.
+
+    So this drives the real mechanism rather than stubbing the return: the
+    calendar itself is made to fail and every bulk call is recorded, because
+    the load bearing assertion is about a call that must NOT happen.
+
+    The second load bearing assertion is that a payload still comes back.
+    write_universe_closes documents that it ALWAYS returns one, and the wrong
+    way to skip the third call is to print a warning and return None: no bulk
+    call is made and nothing raises, so a claim that only watched for those two
+    things would pass while the morning quietly lost the prior session leg and
+    the sidecar as well as the leg the calendar actually cost it.
+    """
+    from ops import market_today
+
+    class _Bulk:
+        """Records every bulk call. The claim is about one that must not occur."""
+
+        def __init__(self) -> None:
+            self.days: list[Any] = []
+
+        def eod_bulk_last_day(self, exchange="US", day=None, symbols=None,
+                              extended=False):
+            self.days.append(day)
+            # The shape the vendor serves for a dateless request: the latest
+            # completed session, which is c1 wearing c3's label.
+            return eodhd.ApiResult([{"code": "AAA", "close": 11.0}], None)
+
+        def __getattr__(self, name: str) -> Any:
+            raise AssertionError(f"write_universe_closes called {name}, which this "
+                                 "stub does not serve")
+
+    today = dt.date(2026, 8, 17)
+    prior, before = dt.date(2026, 8, 14), dt.date(2026, 8, 13)
+    prior_by = {"AAA.US": {"code": "AAA", "close": 11.0, "date": "2026-08-14"}}
+    before_by = {"AAA.US": {"code": "AAA", "close": 10.0, "date": "2026-08-13"}}
+
+    def unanswerable(date):
+        raise RuntimeError("simulated exchange calendar fault")
+
+    real_calendar = market_today.is_trading_day
+    original_data = config.DATA_DIR
+    sandbox = Path(tempfile.mkdtemp(prefix="premarketdesk-closes-"))
+    config.DATA_DIR = sandbox
+    market_today.is_trading_day = unanswerable
+    api = _Bulk()
+    payload = None
+    buffer = io.StringIO()
+    try:
+        from morning import vintage
+
+        # This probe sits above the handler below rather than inside it. That
+        # handler attributes every escape to write_universe_closes and then
+        # recites discover.main's four catches as the consequence, so a fixture
+        # that broke here would be reported as a production failure in a call
+        # that had not been made yet. claim 9 puts its equivalent probe under
+        # no handler at all for the same reason. It stays inside the outer
+        # try/finally regardless: the exploding calendar is installed globally
+        # by this point, and every later claim would inherit it.
+        if vintage.previous_trading_session(before) is not None:
+            failures.append("the fixture cannot demonstrate the defect: the calendar "
+                            "still names a session before 2026-08-13, so the None "
+                            "path this claim exists for is never taken")
+        try:
+            with contextlib.redirect_stdout(buffer):
+                payload = discover.write_universe_closes(
+                    api, {"AAA.US"}, prior_by, before_by, prior, before, today)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"write_universe_closes raised {type(exc).__name__}: {exc}. "
+                            "discover.main catches StaleUniverseError, QuotaRefusal, "
+                            "UnrankedPoolError and RuntimeError and nothing else, so "
+                            "anything raised here kills the 07:15 pass before "
+                            "watchlist.json is written.")
+        else:
+            # Not raising is only half of what was promised, and a claim that
+            # stopped there would pass against the one wrong fix this finding
+            # forbade: print the warning and return None. Every assertion after
+            # this one is nested under a payload, so a None return would skip
+            # the lot and the claim would announce success having proved only
+            # that the third call was not made.
+            if payload is None:
+                failures.append(
+                    "write_universe_closes returned None instead of a payload. Its "
+                    "docstring promises it ALWAYS returns one, and that a third call "
+                    "it cannot make costs the two session leg and nothing else. "
+                    "Returning early on a session the calendar cannot name breaks "
+                    "that: it also drops the prior session leg, which was complete "
+                    "before the calendar was ever asked, and the sidecar the report "
+                    "reads. No caller tests this return value, so the loss arrives "
+                    "as a briefing with no notable movers rather than as an error.")
+
+        if api.days:
+            failures.append(f"the third bulk call was made with day={api.days!r} despite "
+                            "the calendar naming no session. A dateless call is answered "
+                            "with the latest completed session, so c3 would be c1 and "
+                            "every two session move would print as flat.")
+        if payload is not None:
+            if payload.get("third_session_available") is not False:
+                failures.append("third_session_available is "
+                                f"{payload.get('third_session_available')!r}, expected "
+                                "False, which is the field that tells the briefing the "
+                                "two session leg is absent rather than zero")
+            if (payload.get("sessions") or {}).get("c3") is not None:
+                failures.append(f"sessions.c3 is {(payload['sessions']).get('c3')!r}, "
+                                "expected null: no session was named, so there is no "
+                                "date to stamp the leg with")
+            row = (payload.get("closes") or {}).get("AAA.US") or {}
+            if row.get("c3") is not None:
+                failures.append(f"AAA.US carries c3 {row['c3']!r}, expected null. A "
+                                "missing close is never substituted from a neighbouring "
+                                "session.")
+            # The prior session leg is the half that must survive untouched,
+            # since both its maps were already in hand before the calendar was
+            # asked.
+            if (row.get("c1"), row.get("c2")) != (11.0, 10.0):
+                failures.append(f"the prior session leg came through as {row!r}, "
+                                "expected c1 11.0 and c2 10.0 from the two maps "
+                                "already held")
+
+            written = sandbox / f"universe-closes-{today.isoformat()}.json"
+            if not written.is_file():
+                failures.append("no universe closes sidecar was written, so the "
+                                "briefing loses the prior session leg as well as the "
+                                "two session one")
+            else:
+                on_disk = json.loads(written.read_text(encoding="utf-8"))
+                if (on_disk["sessions"]["c3"] is not None
+                        or on_disk["third_session_available"]):
+                    failures.append("the file on disk disagrees with the returned "
+                                    "payload about the third session, and the report "
+                                    "reads the file")
+
+            printed = buffer.getvalue()
+            if "calendar" not in printed or "two session leg is absent" not in printed:
+                failures.append("the run said nothing about the missing third session. "
+                                f"It printed: {printed.strip()[:160]!r}. A leg that "
+                                "vanishes silently is the failure mode this project "
+                                "records reasons to avoid.")
+    finally:
+        market_today.is_trading_day = real_calendar
+        config.DATA_DIR = original_data
+        # The cleanup belongs beside the two restores, following claim 10. The
+        # assertions above index the payload and the file on disk unguarded, so
+        # a later change to the payload schema raises KeyError there, and a
+        # rmtree left outside this block would abandon the directory in the
+        # system temp on every run until someone went looking for it.
+        shutil.rmtree(sandbox, ignore_errors=True)
+
+    print("  claim 16 an unanswerable calendar skips the third bulk call, returns a "
+          "payload with c3 null and third_session_available False, and leaves the "
+          "prior session leg whole")
+
+
 def main() -> int:
     failures: list[str] = []
     claim_one(failures)
@@ -918,6 +1090,7 @@ def main() -> int:
     claim_thirteen(failures)
     claim_fourteen(failures)
     claim_fifteen(failures)
+    claim_sixteen(failures)
 
     if failures:
         for failure in failures:

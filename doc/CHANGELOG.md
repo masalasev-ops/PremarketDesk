@@ -15,6 +15,109 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-17, fourth: six review findings closed, and the two the first round of fixes introduced
+
+A full review of everything since the package reorganisation on 2026-08-14,
+about 10,300 inserted lines across 49 files, found six defects. All six are
+closed. The fixes were then reviewed adversarially, which found one blocking
+defect and one regression IN THE FIXES THEMSELVES, and those are closed too.
+That second round is recorded here at the same weight as the first, because a
+fix that introduces a defect is the failure mode this project's whole review
+habit exists to catch, and hiding it inside a green suite would waste the
+evidence.
+
+### The six findings
+
+- **discover crashed the whole morning when the calendar could not answer.**
+  write_universe_closes called vintage.previous_trading_session without the
+  None guard the two calls ten lines above it both use. On None,
+  eod_bulk_last_day sends no date parameter and the vendor returns the LATEST
+  session, so the wrong close was bought as c3 at a flat 100 credits, and then
+  third.isoformat() raised AttributeError. discover.main catches
+  StaleUniverseError, QuotaRefusal, UnrankedPoolError and RuntimeError, and
+  AttributeError is none of them, so the 07:15 job died before writing
+  watchlist.json and the collector woke to no fresh watchlist. The third call
+  is now skipped when the calendar cannot name the session, which also saves
+  the credits, and the existing machinery records the consequence: c3 null,
+  third_session_available False, prior session leg untouched. Proof:
+  test_pool.claim_sixteen.
+- **The new pre-write admissibility gate could refuse forever.**
+  previous_count is read from the very file the refusal prevents replacing, so
+  a legitimate shrink below min_count_fraction_of_previous refused again every
+  Sunday against the same frozen baseline, and past max_age_days every morning
+  job then refuses too. There is now a --force flag. See DECISIONS.md for why
+  it reaches exactly one of the three verdicts.
+- **A sharesOutstanding of exactly 0 bypassed every float sanity check.** 0.0
+  is falsy but not None, so both ratio guards ("if outstanding and ...") and
+  the absolute floor ("if outstanding is None and ...") were all skipped, and a
+  bogus tiny float became the divisor unchecked. The three states are now
+  distinguished: absent and zero both fall to the absolute share floor, and
+  negative is refused outright. Proof: test_repricing claim 10.
+- **Vintage check (e) failed every row when the calendar could not answer.**
+  Checks (c) and (d) stand down on an unanswerable calendar, honouring this
+  module's own rule that a check which cannot run must not fail a run it did
+  not examine. Check (e) did not. It now stands down from the SESSION
+  COMPARISON ONLY: a row with no leg, an unrecognised leg, no as_of_session or
+  an unreadable one still fails, because a section built entirely on labelling
+  cannot skip its labels. sessions_back is annotated dt.date | None and
+  returns None rather than iterating on one. Proof: test_vintage claim 4.
+- **float_cache carried the guard hole universe.py had just removed.**
+  "if error and not data" misses a 200 with an unrecognised body, which
+  quote_delayed returns as ({}, None), so a whole batch fell through counted as
+  nothing. Both of universe.py's other two doors are now mirrored as well: a
+  batch that answered nothing, and names absent from a batch that answered.
+  The unanswered names are PERSISTED into the cache file, not merely printed.
+- **The collector's status frames reached no reader.** They were collected and
+  returned but dropped from the record appended to the stats sidecar. They now
+  survive all three hops: persisted per run, summed by read_run_stats, and
+  named in scan's collector_snapshot, which is what puts them in the packet.
+
+### What the adversarial review found in the fixes
+
+- **BLOCKING: the --force override silenced checks it was never shown to.**
+  The override matched on verdict text through a helper used at all three
+  return sites, and each was written "return answer(...)", so a matched
+  override returned None immediately and every check BELOW it never ran. A
+  payload whose unswept verdict was overridden was then admitted with its count
+  far below the floor, in discover, every morning until the next rebuild.
+  Closed structurally rather than by patching three sites: the override now
+  applies only to the count fraction verdict, which is the LAST check, so there
+  is nothing below it left to skip.
+- **REGRESSION: the float fix loosened a guard that had been holding.** The
+  brief that drove it asserted a negative sharesOutstanding was unguarded
+  before the change. That was wrong. "if outstanding and share_float >
+  outstanding * max_ratio" is truthy for a negative outstanding and every
+  positive float exceeds a negative product, so negatives were already refused
+  with a gap raised. The first fix skipped both ratio checks for negatives and
+  began PUBLISHING a rotation for them, with an impossible share count beside
+  it in the packet. Negatives refuse outright again, and an unusable
+  sharesOutstanding is recorded as null in pm_float_rotation_basis rather than
+  as a bare 0.0 that reads as a share count of zero.
+
+### Smaller corrections in the same pass
+
+Six comments and docstrings were asserting more than their code did, which in
+this project is a defect rather than a nit: read_run_stats claimed scan
+consumed what it returned (scan names keys one at a time, so a field needs both
+hops); the --force help text described a scope the flag no longer had;
+attach_float_rotation claimed every route ends in a gap while two did not, and
+the pm_volume route now raises one to match attach_premarket_rvol exactly;
+test_vintage counted four checks when there are five; float_cache claimed the
+run announces a discarded map when it did so silently; and
+float_rotation_study claimed the CRITERIA float floor note could be re-derived
+from counters that count per session occurrence rather than per name, so it now
+reports both. vintage.describe() gained its missing "e" entry, so a notable
+movers refusal renders as a sentence rather than as "(e) e: 1 row(s)".
+float_rotation_study also carried the same falsy-outstanding bug and a
+hardcoded 1.01 where max_float_to_shares_outstanding belonged, which mattered
+because CRITERIA points at that script to re-derive the score bands, so the
+bands were being fitted with a different rule than the one that scores against
+them. One new knob: api.max_symbols_named_per_line, because a fully starved
+float sweep printed 1,870 tickers on one line.
+
+Suite green at 9 modules and 16 scheduled entrypoints, hermetic, no path
+changed under the working tree.
+
 ## 2026-08-17, third: the three session leg is dropped rather than left defined and never emitted
 
 ### One key removed, one reason recorded

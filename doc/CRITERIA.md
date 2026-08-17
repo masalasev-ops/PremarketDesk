@@ -53,6 +53,14 @@ timeout_s                     = 30         # per request, normal endpoints
 bulk_timeout_s                = 180        # the bulk feed returns every US ticker
 quote_batch_size              = 20         # symbols per us-quote-delayed call
 news_limit                    = 50
+max_symbols_named_per_line    = 40         # a sweep that loses part of its list names
+                                           # the symbols it lost, which is the whole
+                                           # value of the line on a bad network day and
+                                           # is worthless past a point: a fully starved
+                                           # float cache sweep is 1,870 tickers on one
+                                           # line. Past this it names the first few and
+                                           # counts the rest, which the file it wrote
+                                           # carries in full.
 
 ## Quota
 
