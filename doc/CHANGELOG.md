@@ -15,6 +15,40 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-17, third: the three session leg is dropped rather than left defined and never emitted
+
+### One key removed, one reason recorded
+
+three_session is gone from _LEG_NEWEST_SESSION_BACK in src/morning/vintage.py
+and from BUILD_PLAN Layer 4. It had no source: a three session move universe
+wide needs a fourth close, and data/universe-closes-<date>.json holds three.
+The table now holds exactly the three legs the section emits, and DECISIONS.md
+carries what restoring it would cost (one more 100 credit bulk call every
+morning) and what it would buy (little the two session leg does not already
+carry, answering a weekly trend question rather than a this morning one).
+
+src/tests/test_vintage.py follows: the correctly mixed vintage case drops its
+three_session row, and the stale case becomes a two session row stamped with
+its baseline three sessions back, which is the same gap_stats trap the extra
+bulk call exists to avoid.
+
+### Two errors of fact in write_universe_closes, corrected in place
+
+Both were introduced when the section was first specified and both survived
+the naming change earlier today.
+
+- The docstring described the third close as feeding a "three session leg" and
+  the failure path as leaving "the two session legs" intact. Under the settled
+  naming c3 is the TWO session leg's baseline, so a failed third call costs the
+  two session leg and leaves the prior session leg untouched. The print on that
+  path said the same thing and is corrected with it.
+- The signature was `-> dict[str, Any] | None` and the docstring said it
+  returns None when the third call fails. It does not and never did: the
+  function always returns the payload, and the failed call is recorded in
+  third_session_available. The annotation is now `-> dict[str, Any]`. A
+  documented return value that no code path produces is the same shape as an
+  enum key nothing emits, which is what this entry is about.
+
 ## 2026-08-17, second: the notable movers section is specified in the repository
 
 ### The design stopped living in a conversation

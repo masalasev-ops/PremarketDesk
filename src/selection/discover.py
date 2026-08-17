@@ -338,33 +338,34 @@ def write_universe_closes(
     prior: dt.date,
     before: dt.date,
     today: dt.date,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     """Three completed session closes per universe name, for the briefing only.
 
-    Sessions minus one and minus two are already in hand. The third costs one
-    more bulk end of day call, a flat hundred credits in CRITERIA
-    [quota costs], and it is bought rather than read from gap_stats so that all
-    three closes carry the SAME vintage. gap_stats is rebuilt on Sundays, so by
-    Friday its closes are five sessions old, and a three session move measured
-    from a five session old close is the silent vintage mixing this project has
-    been bitten by before.
+    The briefing measures two legs from these: prior_session is c2 to c1, and
+    two_session is c3 to c1. Sessions minus one and minus two are already in
+    hand. The third costs one more bulk end of day call, a flat hundred credits
+    in CRITERIA [quota costs], and it is bought rather than read from gap_stats
+    so that all three closes carry the SAME vintage. gap_stats is rebuilt on
+    Sundays, so by Friday its closes are five sessions old, and a two session
+    move measured from a five session old baseline is the silent vintage mixing
+    this project has been bitten by before.
 
     Every close carries its own session date. A name missing from any of the
-    three maps is written with a null for that leg and is never backfilled from
-    a neighbouring session, because a move measured across a gap of unknown
-    width is not a three session move.
+    three maps is written with a null for that close and is never backfilled
+    from a neighbouring session, because a move measured across a gap of
+    unknown width is not the move its label claims.
 
-    Returns the payload, or None when the third call failed, in which case the
-    two session legs still write and the three session leg is absent rather
-    than wrong.
+    Always returns the payload. A failed third call costs the two session leg
+    and nothing else, and that is recorded in third_session_available rather
+    than signalled by a return value nobody checks.
     """
     third = vintage.previous_trading_session(before)
     third_rows, error = api.eod_bulk_last_day("US", day=third)
     third_by: dict[str, dict[str, Any]] = {}
     if error:
         print(f"discover: the third session bulk call failed ({error}), so the "
-              "briefing's three session leg is absent this morning. The one and "
-              "two session legs are unaffected.")
+              "briefing's two session leg is absent this morning. The prior "
+              "session leg is unaffected.")
     else:
         for row in third_rows or []:
             code = str(row.get("code") or "").strip().upper()

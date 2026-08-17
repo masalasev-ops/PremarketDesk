@@ -421,9 +421,9 @@ the owner, it says so, so it can be overruled cheaply.
   drops bars missing an open.
 - vintage check (e) and _LEG_NEWEST_SESSION_BACK: per row validation of
   notable_movers. leg and as_of_session are REQUIRED fields, and a row
-  missing either fails rather than being skipped. All three emitted legs
-  already validate against the table as it stands: premarket stamps today,
-  every universe leg stamps the prior session.
+  missing either fails rather than being skipped. The table holds EXACTLY the
+  three legs the section emits and nothing else: premarket stamps today, both
+  universe legs stamp the prior session. Anything else is not a leg and fails.
 - analyst._REQUIRED_TABLES: the vacuum detector requires the day and swing
   watchlist tables BY NAME. A notable movers table contributes claims to
   validate but can never satisfy that requirement.
@@ -503,17 +503,12 @@ survived the screen. Its baseline is c1 from the same file.
 No leg carries today's regular session move, because the report is written
 before the open.
 
-THE THREE SESSION LEG HAS NO SOURCE and is not emitted. Under the naming
-above, where a leg is named for the sessions its move spans, a three session
-move universe wide needs a fourth close and the file holds three. Two ways to
-get one, neither taken here because both are the owner's call rather than the
-builder's: discover buys a fourth bulk call, 100 credits a morning and 500 a
-week against a 4,945 credit universe build, exactly the trade it already makes
-for the third close; or the endpoint becomes today's premarket price, which
-only the collector names have, which would put the leg back to covering 50
-names and reintroduce the mixed endpoint 4.4 exists to prevent. The name stays
-in _LEG_NEWEST_SESSION_BACK, where it costs nothing and would validate
-correctly if a row ever carried it.
+THERE IS NO THREE SESSION LEG. It was dropped on 2026-08-17 rather than left
+defined and never emitted, and DECISIONS.md carries the cost and the
+reasoning. Three legs are specified here, three legs are in
+_LEG_NEWEST_SESSION_BACK, and three legs are emitted. If a future reader wants
+that window back, the decision entry says what it costs and what it buys, and
+re-adding a key to the table is one line.
 
 ### 4.3.1 move_sigma scales with the square root of the span
 

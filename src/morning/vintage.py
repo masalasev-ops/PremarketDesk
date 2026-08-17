@@ -95,30 +95,32 @@ def _date_of(text: Any) -> dt.date | None:
 # is old by definition and therefore tells it nothing.
 #
 # The decisive case is already on this project's record. discover buys an extra
-# bulk call at a flat hundred credits precisely so all three sessions carry one
-# vintage, because reading the third from gap_stats would be free and wrong,
+# bulk call at a flat hundred credits precisely so all three closes carry one
+# vintage, because reading the oldest from gap_stats would be free and wrong,
 # its closes being five sessions old by Friday. Under baseline labelling that
-# bug is invisible: a three_session row stamped three sessions back looks
-# correct whether its closes are current or a week old. Under this one it fails
-# immediately.
+# bug is invisible: a two_session row stamped three sessions back, which is
+# where its baseline sits, looks correct whether that close is current or a
+# week old. Under this one it fails immediately.
 #
 # So every completed session leg maps to 1. A name nobody subscribed to has no
 # live price, so the newest close there is for it is the prior session's,
 # whatever window the leg spans. THE LOOKBACK LIVES IN THE LEG LABEL ALONE.
 #
 # Known gap, recorded rather than papered over: a row whose leg says
-# three_session while its move is arithmetically a one session move is caught
-# by neither this table nor any other check here. Vintage verifies that the
-# data is fresh, not that the move matches the window its label claims.
+# two_session while its move is arithmetically a one session move is caught by
+# neither this table nor any other check here. Vintage verifies that the data
+# is fresh, not that the move matches the window its label claims.
 #
-# A leg absent from this table is not a leg. It fails rather than passing
-# unchecked, because an unrecognised label is indistinguishable from a typo,
-# and a section whose entire premise is labelling cannot afford either.
+# EVERY LEG HERE IS ONE THE SECTION EMITS. three_session was defined and never
+# emitted, and on 2026-08-17 it was removed rather than left sitting here
+# looking reachable; the cost and the reasoning are in DECISIONS.md. A leg
+# absent from this table is not a leg. It fails rather than passing unchecked,
+# because an unrecognised label is indistinguishable from a typo, and a section
+# whose entire premise is labelling cannot afford either.
 _LEG_NEWEST_SESSION_BACK = {
     "premarket": 0,
     "prior_session": 1,
     "two_session": 1,
-    "three_session": 1,
 }
 
 

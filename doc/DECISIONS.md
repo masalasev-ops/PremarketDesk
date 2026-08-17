@@ -1358,3 +1358,55 @@ discover, 500 credits a week against a 4,945 credit universe build, and that
 is the owner's call rather than the builder's. The leg name stays in
 _LEG_NEWEST_SESSION_BACK, where it costs nothing and would validate correctly
 if a row ever carried it.
+
+## 2026-08-17, third: the three session leg is DROPPED, not left defined and unemitted
+
+The notable movers section was specified with four legs and shipped with
+three. The fourth, three_session, had no source: under the naming settled
+earlier the same day a leg is named for the sessions its move SPANS, and a
+three session move universe wide needs a fourth close where
+data/universe-closes-<date>.json holds three. I left the key in
+_LEG_NEWEST_SESSION_BACK anyway, with a note that it cost nothing and would
+validate correctly if a row ever carried it. The owner removed it.
+
+**The cost of restoring it, so the number is on the record and not
+recomputed.** One more bulk end of day call in discover, a flat 100 credits in
+CRITERIA [quota costs], every weekday morning. About 500 credits a week
+against a shared 100,000 a day key that a sibling project already drains
+unpredictably, and against the 4,945 credits the Sunday universe build spends.
+Small, and not zero.
+
+**What it would buy, which is less than it looks.** The two session leg
+already carries most of it. A three session window and a two session window
+over the same name are highly correlated, because the second contains the
+first, so the marginal name that a three session leg surfaces and a two
+session leg misses is rare. And the question a three session move answers is
+what this name has been doing this WEEK, which is a trend question. This
+report is written at 08:45 to answer what is worth watching in the next few
+hours. A leg whose window outruns the report's own horizon is a different
+product.
+
+**Decision: three_session is removed from the table, not deprecated in it.**
+The reasoning matters more than the deletion. This project has been bitten
+repeatedly by the same shape: something is defined, looks reachable, and never
+runs. The bulk feed that served the last completed session while the gate
+compared it against its own high. The live v1 cumulative volume that was
+available and unsound. The Alpaca free tier that answered every request and
+returned no bars. In each case the thing existed, and its existing was read as
+its working. An enum key that no code path emits is that shape in miniature: a
+future reader finds it, assumes a producer somewhere, and either writes a row
+that no list can populate or spends an afternoon looking for the writer.
+
+A recorded decision is strictly more useful to that reader than a silent enum
+entry. The entry says a leg exists. This entry says what it would cost, what
+it would buy, why the answer was no, and that re-adding one key to
+_LEG_NEWEST_SESSION_BACK plus one bulk call in discover is the whole job if
+the answer changes.
+
+**What this does not touch.** The extra 100 credit bulk call discover already
+makes for c3 STAYS. c3 is the two session leg's baseline, so that call is
+still doing the work it was bought for; dropping the leg named "three" does
+not make the third close unnecessary. The per candidate gap_3session field
+also stays, because it is emitted: it is measured to today's premarket price
+over the twelve candidates and is a report field beside gap_pct, not a section
+leg. Nothing here is defined and unemitted after this change.
