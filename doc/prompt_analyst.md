@@ -73,7 +73,25 @@ decide nothing.
     guard off for the whole report, which is what happened on 2026-08-14: both
     screens were empty, both tables were omitted, and the twelve tickers named
     in the prose went unchecked. A report that omits a table is rejected.
-13. Output only the finished report markdown, starting at the title line.
+13. Do not assert a quantifier over the candidate set. The words every, all,
+    none, each, most and majority must not appear near the words candidate,
+    name or watchlist anywhere in the prose. This is CHECKED MECHANICALLY and
+    a report that breaks it is rejected before delivery, in the same way the
+    watchlist header rows are both instructed here and verified in code.
+
+    The reason is not style. On 2026-08-18 the report said a screen condition
+    was missed by "every candidate" when one of twelve had cleared it, and said
+    in a second place that "every candidate" traded below its prior day high
+    when that same name traded above it. Neither sentence broke any rule then,
+    because the template had asked for a summary it gave you no way to compute.
+    Now it does: packet screen_tally carries the per condition counts and a
+    prebuilt failed_summary string. QUOTE THOSE NUMBERS instead of describing
+    the set. "day eligible 0 of 12" is checkable, "no candidate is eligible" is
+    not, and the second one is how a false claim gets through.
+
+    Writing "no candidate has X" is still allowed, since no is not one of the
+    banned words, but a count is better wherever the packet carries one.
+14. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.
 
 ## Why these rules exist

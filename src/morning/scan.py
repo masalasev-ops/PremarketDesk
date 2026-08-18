@@ -1266,6 +1266,11 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
 
     Missing data never passes a condition. A null market cap is not a small
     market cap, it is an unknown one, and unknown does not clear a floor.
+
+    Every failure is recorded twice: the sentence a human reads, and the
+    CONDITION KEY screen_tally counts. Counting the sentences instead would
+    work until the first time one is reworded, and the report's only
+    explanation of an empty morning would silently start counting nothing.
     """
     quote = candidate.get("quote") or {}
     price = candidate.get("price")
@@ -1278,51 +1283,56 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
     prior_high = candidate.get("prior_high")
     sma200 = quote.get("twoHundredDayAveragePrice")
 
-    day_failed: list[str] = []
+    day: list[tuple[str, str]] = []
     if gap is None:
-        day_failed.append(
-            f"the gap was never computed: {candidate.get('gap_reason') or 'reason unrecorded'}"
-        )
+        day.append(("gap_pct",
+                    f"the gap was never computed: "
+                    f"{candidate.get('gap_reason') or 'reason unrecorded'}"))
     elif not _CRIT.rule("day_setup", "gap_pct").test(gap):
-        day_failed.append(f"gap_pct {gap:.2f} fails {_CRIT.rule('day_setup', 'gap_pct').describe()}")
+        day.append(("gap_pct",
+                    f"gap_pct {gap:.2f} fails {_CRIT.rule('day_setup', 'gap_pct').describe()}"))
     if not _CRIT.rule("day_setup", "price").test(price):
-        day_failed.append(f"price {price} fails {_CRIT.rule('day_setup', 'price').describe()}")
+        day.append(("price",
+                    f"price {price} fails {_CRIT.rule('day_setup', 'price').describe()}"))
     if not _CRIT.rule("day_setup", "market_cap").test(market_cap):
-        day_failed.append(
-            f"market_cap {market_cap} fails {_CRIT.rule('day_setup', 'market_cap').describe()}"
-        )
+        day.append(("market_cap",
+                    f"market_cap {market_cap} fails "
+                    f"{_CRIT.rule('day_setup', 'market_cap').describe()}"))
     if not _CRIT.rule("day_setup", "premarket_rvol").test(candidate.get("pm_rvol")):
-        day_failed.append(
-            f"premarket_rvol {candidate.get('pm_rvol')} fails "
-            f"{_CRIT.rule('day_setup', 'premarket_rvol').describe()}"
-        )
+        day.append(("premarket_rvol",
+                    f"premarket_rvol {candidate.get('pm_rvol')} fails "
+                    f"{_CRIT.rule('day_setup', 'premarket_rvol').describe()}"))
     if _CRIT.flag("day_setup", "require_above_prior_high"):
         if prior_high is None or price is None or price <= prior_high:
-            day_failed.append(f"price {price} is not above the prior day high {prior_high}")
+            day.append(("require_above_prior_high",
+                        f"price {price} is not above the prior day high {prior_high}"))
 
-    swing_failed: list[str] = []
+    swing: list[tuple[str, str]] = []
     if gap is None:
-        swing_failed.append(
-            f"the gap was never computed: {candidate.get('gap_reason') or 'reason unrecorded'}"
-        )
+        swing.append(("gap_pct",
+                      f"the gap was never computed: "
+                      f"{candidate.get('gap_reason') or 'reason unrecorded'}"))
     elif not _CRIT.rule("swing_setup", "gap_pct").test(gap):
-        swing_failed.append(
-            f"gap_pct {gap:.2f} fails {_CRIT.rule('swing_setup', 'gap_pct').describe()}"
-        )
+        swing.append(("gap_pct",
+                      f"gap_pct {gap:.2f} fails "
+                      f"{_CRIT.rule('swing_setup', 'gap_pct').describe()}"))
     if not _CRIT.rule("swing_setup", "price").test(price):
-        swing_failed.append(f"price {price} fails {_CRIT.rule('swing_setup', 'price').describe()}")
+        swing.append(("price",
+                      f"price {price} fails {_CRIT.rule('swing_setup', 'price').describe()}"))
     if not _CRIT.rule("swing_setup", "market_cap").test(market_cap):
-        swing_failed.append(
-            f"market_cap {market_cap} fails {_CRIT.rule('swing_setup', 'market_cap').describe()}"
-        )
+        swing.append(("market_cap",
+                      f"market_cap {market_cap} fails "
+                      f"{_CRIT.rule('swing_setup', 'market_cap').describe()}"))
     if _CRIT.flag("swing_setup", "require_open_above_prior_high"):
         if prior_high is None or price is None or price <= prior_high:
-            swing_failed.append(
-                f"premarket price {price} is not above the prior day high {prior_high}"
-            )
+            swing.append(("require_open_above_prior_high",
+                          f"premarket price {price} is not above the prior day "
+                          f"high {prior_high}"))
     if _CRIT.flag("swing_setup", "require_open_above_200sma"):
         if sma200 is None or price is None or price <= sma200:
-            swing_failed.append(f"premarket price {price} is not above the 200 day average {sma200}")
+            swing.append(("require_open_above_200sma",
+                          f"premarket price {price} is not above the 200 day "
+                          f"average {sma200}"))
     if _CRIT.flag("swing_setup", "require_catalyst"):
         # Three states, not two. None means the news feed was never fetched
         # (failed call or quota skip), and an unchecked feed must not produce
@@ -1331,14 +1341,63 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
         # differs, and the reason is what the report shows the reader.
         found = candidate.get("catalyst_found")
         if found is None:
-            swing_failed.append("the news feed was never checked, so catalyst is unknown")
+            swing.append(("require_catalyst",
+                          "the news feed was never checked, so catalyst is unknown"))
         elif not found:
-            swing_failed.append("no catalyst was found")
+            swing.append(("require_catalyst", "no catalyst was found"))
 
-    candidate["day_eligible"] = not day_failed
-    candidate["day_failed"] = day_failed
-    candidate["swing_eligible"] = not swing_failed
-    candidate["swing_failed"] = swing_failed
+    candidate["day_eligible"] = not day
+    candidate["day_failed"] = [why for _key, why in day]
+    candidate["day_failed_conditions"] = [key for key, _why in day]
+    candidate["swing_eligible"] = not swing
+    candidate["swing_failed"] = [why for _key, why in swing]
+    candidate["swing_failed_conditions"] = [key for key, _why in swing]
+
+
+def screen_tally(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Per condition counts of what cleared and what failed, for both screens.
+
+    This exists because the report used to ask the MODEL for it. REPORT_TEMPLATE
+    told the analyst to write "the most common failed condition" under an empty
+    watchlist, the packet carried no such number, and so the one sentence a
+    reader gets on a morning that published nothing was a statistic computed in
+    prose from twelve per candidate lists. On 2026-08-18 it came out wrong in
+    the strongest available form: the report said price above the prior day high
+    was missed by "every candidate", when AS.US cleared it at 34.71 against
+    33.4194 and failed on its null RVOL alone. Eleven of twelve failed that
+    condition and ten of twelve failed the RVOL one, so the mode was right and
+    the universal was false.
+
+    A count is not a judgement and there is exactly one correct answer, which
+    makes it the packet's job. See doc/research/TEMPLATE_DERIVATIONS.md for the
+    full audit of what else the template asks the model to derive.
+
+    cleared is counted as examined minus failed rather than by re-testing, so
+    the two can never disagree with the eligibility decision they describe.
+    """
+    examined = len(candidates)
+    out: dict[str, Any] = {"candidates_examined": examined}
+    for screen, key in (("day", "day_failed_conditions"),
+                        ("swing", "swing_failed_conditions")):
+        counts: dict[str, int] = {}
+        for candidate in candidates:
+            for condition in candidate.get(key) or []:
+                counts[condition] = counts.get(condition, 0) + 1
+        eligible = sum(1 for c in candidates if c.get(f"{screen}_eligible"))
+        # Ordered by how many failed, descending, so the template can quote the
+        # list in that order without sorting anything itself.
+        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        out[screen] = {
+            "eligible": eligible,
+            "failed_by_condition": {
+                name: {"failed": n, "cleared": examined - n} for name, n in ranked
+            },
+            # The sentence the template quotes, built here so the model neither
+            # counts nor ranks. Empty when nothing failed, which is not the same
+            # as a screen nobody ran.
+            "failed_summary": ", ".join(f"{name} {n} of {examined}" for name, n in ranked),
+        }
+    return out
 
 
 def score_candidate(candidate: dict[str, Any]) -> None:
@@ -1742,6 +1801,9 @@ def build_packet() -> dict[str, Any]:
             },
             "score_buckets": [b.describe() for b in _CRIT.bands("score_buckets")],
         },
+        # What cleared and what failed, per screen condition. The report quotes
+        # this rather than counting; see screen_tally for why.
+        "screen_tally": screen_tally(candidates),
         "gaps_to_fill": packet.gaps,
         "api_calls": eodhd.call_count(),
     }

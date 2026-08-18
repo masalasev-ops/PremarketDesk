@@ -475,6 +475,61 @@ def _universe_bare_symbols() -> set[str] | None:
     }
 
 
+# Words that assert something about the whole candidate set, and the words that
+# say the assertion is ABOUT that set. A quantifier near a candidate word is a
+# claim no reader can check against the report in front of them.
+#
+# This is a GUARD, not a prompt rule, and the difference is the whole point.
+# This project has twice learned that an instruction is not a guard. The
+# watchlist headers were pinned in the template AND checked mechanically,
+# because a rule saying "reproduce this row" is obeyed until the morning it is
+# not. On 2026-08-18 the report asserted a condition was missed by "every
+# candidate" when one of twelve cleared it, and no rule in prompt_analyst.md
+# was violated: the template had ASKED for a superlative it gave the model no
+# way to compute. Rule 2 already forbids deciding membership; this stops the
+# model describing the set it was forbidden to decide.
+#
+# A model that needs one of these words now has packet screen_tally to quote
+# instead, which carries the counts and a prebuilt summary sentence.
+_QUANTIFIERS = ("every", "all", "none", "each", "most", "majority")
+_SET_WORDS = ("candidate", "candidates", "name", "names", "watchlist", "watchlists")
+# Words either side, not characters. Six is wide enough to catch "every one of
+# the candidates" and narrow enough that two unrelated sentences do not collide.
+_QUANTIFIER_WINDOW_WORDS = 6
+
+
+def quantifier_violations(report: str) -> list[dict[str, Any]]:
+    """Every place the prose asserts a quantifier over the candidate set.
+
+    Markdown table rows are skipped entirely. The empty watchlist table's own
+    `| none | | | | | | | |` row sits three lines under a heading carrying the
+    word watchlist, so scanning tables would fail every empty morning, which is
+    exactly the morning this guard is most needed on.
+    """
+    out: list[dict[str, Any]] = []
+    for number, line in enumerate(report.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("|") or stripped.startswith("#"):
+            continue
+        words = re.findall(r"[A-Za-z_]+", stripped)
+        lowered = [w.lower() for w in words]
+        for index, word in enumerate(lowered):
+            if word not in _QUANTIFIERS:
+                continue
+            low = max(0, index - _QUANTIFIER_WINDOW_WORDS)
+            high = min(len(lowered), index + _QUANTIFIER_WINDOW_WORDS + 1)
+            near = [w for w in lowered[low:index] + lowered[index + 1:high]
+                    if w in _SET_WORDS]
+            if near:
+                out.append({
+                    "line": number,
+                    "quantifier": word,
+                    "set_word": near[0],
+                    "text": stripped,
+                })
+    return out
+
+
 def _claimable_symbols() -> set[str] | None:
     """The symbols a ticker claim is validated against, or None when unknowable.
 
@@ -829,6 +884,18 @@ def write_report(packet_path: Path) -> int:
               + coverage["structure_reason"])
         print("analyst: the report was written for inspection but must not be delivered.")
         return 2
+    quantifiers = quantifier_violations(report_text)
+    if quantifiers:
+        print("analyst: FAILED the quantifier guard. The report asserts a "
+              "quantifier over the candidate set, which no reader can check "
+              "against the report in front of them:")
+        for hit in quantifiers:
+            print(f"  line {hit['line']}: {hit['quantifier']!r} near "
+                  f"{hit['set_word']!r}: {hit['text'][:160]}")
+        print("analyst: packet screen_tally carries the counts to quote instead. "
+              "See prompt_analyst.md rule 13.")
+        print("analyst: the report was written for inspection but must not be delivered.")
+        return 2
     if coverage["claims_checked"]:
         print(f"analyst: containment check passed: {coverage['claims_checked']} "
               f"ticker claims validated across {coverage['columns_scanned']} "
@@ -874,6 +941,12 @@ def main(argv: list[str] | None = None) -> int:
         if coverage["structure_failed"]:
             print("analyst: FAILED the containment check on structure. "
                   + coverage["structure_reason"])
+            return 2
+        quantifiers = quantifier_violations(report_path.read_text(encoding="utf-8"))
+        if quantifiers:
+            for hit in quantifiers:
+                print(f"analyst: quantifier guard, line {hit['line']}: "
+                      f"{hit['quantifier']!r} near {hit['set_word']!r}: {hit['text'][:160]}")
             return 2
         if coverage["claims_checked"] == 0:
             print("analyst: containment examined nothing "

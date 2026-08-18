@@ -74,8 +74,18 @@ row, exactly like this:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | none | | | | | | | |
 
-then one sentence below it saying the day screen produced nothing today and
-the most common failed condition. The table is never omitted. An omitted table
+then one sentence below it, and that sentence QUOTES the packet rather than
+working anything out. Write exactly:
+
+The day screen produced nothing today. Failed conditions: {packet
+screen_tally.day.failed_summary}.
+
+screen_tally.day.failed_summary is already ordered with the most failed
+condition first and already reads "condition N of M". Do not count, do not rank,
+and do not describe the set with every, all or most: on 2026-08-18 this
+instruction asked for "the most common failed condition", the packet carried no
+such number, and the report said a condition was missed by "every candidate"
+when one of twelve had cleared it. The table is never omitted. An omitted table
 takes the header with it, and the header is what the containment guard uses to
 find ticker claims, so a morning with no eligible names would silently switch
 that guard off. On 2026-08-14 exactly that happened: both tables were dropped,
@@ -101,8 +111,12 @@ row, exactly like this:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | none | | | | | | | |
 
-then one sentence below it saying so and the most common failed condition. As
-with the day table, it is never omitted.}
+then one sentence below it, quoting the packet the same way the day table does:
+
+The swing screen produced nothing today. Failed conditions: {packet
+screen_tally.swing.failed_summary}.
+
+As with the day table, it is never omitted.}
 
 ## Market trends
 
@@ -149,5 +163,11 @@ with its recorded reason: those names cleared selection and were dropped
 before pricing because the collector had no bars for them, so they carry no
 premarket price and appear nowhere else in the report. Only when there is no
 false catalyst, no unknown catalyst, no partial window and no dropped symbol,
-write the one sentence saying every candidate carries a found catalyst and
-full evidence, which is rare and worth saying.}
+write one sentence saying this section is empty, giving the count from the
+packet rather than a quantifier: "Nothing to skip: {N} of {N} candidates carry a
+found catalyst and a full premarket window", taking N from
+screen_tally.candidates_examined. That state is rare and worth saying, and it
+must be said with a number. This instruction previously asked for the words
+"every candidate carries a found catalyst and full evidence", which is the one
+claim in this template a reader cannot check against the report in front of
+them, and which the quantifier guard in analyst.py now rejects.}

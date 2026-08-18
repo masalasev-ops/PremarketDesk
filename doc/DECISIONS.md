@@ -1027,9 +1027,29 @@ them.
   needed. If scoring is ever restarted, that dependency is live again exactly
   as written.
 
+  **[corrected 2026-08-18: this is DORMANT, not moot, and the sentence "if
+  scoring is ever restarted" is false. Scoring was never stopped. This
+  decision stopped the scoring CALIBRATION work; the morning chain runs every
+  weekday and scores every candidate, as the next entry says when it calls the
+  post-open pass and the morning chain the only remaining outputs.
+  candidate_count is a live CRITERIA knob read by a job that runs daily, so
+  the dependency is one edit away from mattering rather than retired. What
+  this decision actually supports is that nobody is currently WORKING on the
+  bands, which is a fact about the roadmap and not about the knob.]**
+
 Also left where they are, unresolved and now inert: the day-setup eligibility
 question for names rescued by float rotation, and the looseness of the RVOL
 scoring bands. Both were open questions about scoring, and scoring has stopped.
+
+**[corrected 2026-08-18: neither is inert and the reason given is wrong for
+both. Scoring has not stopped; the scoring CALIBRATION work stopped, and the
+morning chain scores every weekday. The eligibility half is answered at length
+in the 2026-08-18 entry, with AS.US as the counterexample. The RVOL band half
+is corrected here for the same reason: those bands set what a published score
+means every morning, and 2026-08-17 seventh has since recorded that the
+numerator feeding the alternative measure is miscalibrated against the source
+its bands were fitted on. A question that decides what today's report says
+cannot be inert.]**
 
 ## 2026-08-16, fourth: the second SOCKET is closed, the second TOKEN is not, and they were never the same purchase
 
@@ -1771,9 +1791,15 @@ rather than slipped into a diagnosis pass.
 **[corrected 2026-08-18: the 2026-08-16 third entry closed by listing the
 day-setup eligibility question for names rescued by float rotation as
 "unresolved and now inert", on the grounds that "scoring has stopped". That was
-wrong when it was written and is corrected here rather than superseded. The same
-decision's own "Continuing" list keeps the daily report running, and what it
-stopped was the scoring CALIBRATION work, not the publication of scores. A
+wrong when it was written and is corrected here rather than superseded. What it
+stopped was the scoring CALIBRATION work, not the publication of scores: the
+2026-08-16 fourth entry, written the same day, calls the post-open pass and THE
+MORNING CHAIN "the ONLY remaining outputs" after the stop. [corrected
+2026-08-18, later the same day: this paragraph first cited the stop's own
+"Continuing" list as the thing that keeps the daily report running. That list
+names the two probes and the post-open pass, not the morning chain. The morning
+chain is named in the next entry, cited above. The conclusion is unchanged and
+the citation was wrong.] A
 question about which names reach a watchlist that is published every weekday
 morning cannot be inert while that publication continues.]**
 
@@ -1813,3 +1839,55 @@ belongs in [Day setup] is a threshold question, and thresholds live in CRITERIA.
 and are the owner's. Nothing in this entry changes a screen. What has changed is
 that the question now has a dated, concrete instance behind it instead of being
 theoretical, and it is no longer described as inert.
+
+## 2026-08-18, third: everything parked on the stop decision, re-checked against its actual scope
+
+**Why.** The 2026-08-16 third entry's own text was wrong about what it stopped,
+saying "scoring has stopped" when the morning chain scores every weekday and
+what stopped was the scoring CALIBRATION work. That entry has been cited to
+close or defer several things, so each citation was checked against what the
+decision actually says rather than against the sentence that summarised it.
+This is the record of that check, so it is not repeated.
+
+**The decision's actual scope, quoted.** Stopping: the socket purchase; the cap,
+ordering and recall work; the scoring calibration including the volume slot and
+its bands; any migration to Alpaca for LIVE premarket discovery. Continuing: the
+two probes already scheduled, and the post-open pass. The 2026-08-16 fourth
+entry adds the morning chain, calling it and the post-open pass "the ONLY
+remaining outputs".
+
+| Item parked on the stop | Scope supports it? | Outcome |
+| --- | --- | --- |
+| The subscription cap table, 42 through 142 | YES, "the cap, ordering and recall work" | stands |
+| The second socket purchase and its load test precondition | YES, "the socket purchase" | stands |
+| Alpaca as a live discovery source | YES, named explicitly | stands, and 2026-08-17 corroborates it independently |
+| The float rotation bands' dependency on candidate_count, called MOOT | PARTLY | corrected in place: dormant, not moot |
+| The day-setup eligibility question, called inert | NO | corrected 2026-08-18, with a counterexample |
+| The looseness of the RVOL scoring bands, called inert | NO | corrected in place |
+
+**The two that failed, and the single mistake behind both.** Each rested on
+reading "the scoring calibration work stops" as "scoring stops". The first is a
+statement about what nobody is working on. The second would be a statement about
+what the system does, and it is false: the morning chain computes a score and a
+conviction for every candidate every weekday and publishes them. So a question
+that decides what a published score MEANS is live whatever the roadmap says, and
+only a question about what to TUNE NEXT is genuinely parked.
+
+candidate_count is the clearest case. The entry closed its dependency on the
+grounds that "nothing will change candidate_count", which the stop does not
+guarantee and cannot: it is a CRITERIA knob read every morning by a job that
+runs on a schedule. Stopping work on the bands does not freeze the input they
+were fitted to. The dependency is one edit away from mattering.
+
+**What this does NOT change.** The three items that survive the check are
+untouched, and the stop itself stands entirely. The VWAP measurement that
+produced it is unaffected by any of this: four rules losing money, gappers doing
+worse than decile matched controls at p = 0.0, pre-registered before the numbers
+existed. Nothing here reopens that.
+
+**The rule this suggests, recorded rather than applied.** An entry that closes
+other items should say which of them it closes by SCOPE and which by
+CONSEQUENCE. All six above were listed the same way, and the two that were wrong
+were wrong because a consequence was asserted ("scoring has stopped") that the
+scope did not deliver. That is a convention for future entries, not a change to
+any existing one.

@@ -15,6 +15,76 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-18, third: the template stops asking the model to count, and a guard enforces it
+
+### The audit, first
+
+doc/research/TEMPLATE_DERIVATIONS.md lists every instruction in
+REPORT_TEMPLATE.md and prompt_analyst.md that asks the model to count, rank,
+compare, pick a most, filter the candidate set, or characterise it as a whole.
+Seventeen in the template and five in the prompt. The verdict is per instruction
+rather than blanket: four are judgements with no correct value and stay as prose,
+three were applied now, and ten are listed as PROPOSED for the owner, because
+moving a filter into the packet changes what the report says on a morning when
+the filter is empty and that is a judgement about the report rather than a fix.
+
+### The tally
+
+scan.screen_tally counts, per screen condition, how many candidates failed and
+how many cleared, and builds the sentence the template quotes. evaluate_eligibility
+now records a condition KEY beside each failure sentence, because a tally counted
+from prose breaks the first time a message is reworded. The failure sentences
+themselves are byte identical, checked against the 2026-08-18 packet.
+
+On that packet it reads: day require_above_prior_high 11 of 12, premarket_rvol 10
+of 12. Those are the numbers the report got wrong.
+
+### The guard, because a rule is not a guard
+
+analyst.quantifier_violations rejects every, all, none, each, most and majority
+within six words of candidate, name or watchlist, in prose, skipping table rows
+so an empty watchlist's own none row does not fail every empty morning. A hit
+fails the run at exit 2 beside the containment check.
+
+This project has twice learned that an instruction is not a guard: the watchlist
+headers are pinned in the template AND verified in code. The same pattern applies
+here, and it earned itself immediately. Pointed at the reports already on disk it
+found that 2026-08-18 carried TWO false universals rather than one. The second,
+in Technical signals, said every candidate traded below its premarket VWAP and
+its prior day high, when AS.US traded above both. Nobody had read that line. It
+also found the same class in the 2026-08-14 report, unnoticed at the time.
+
+Template changes: the day and swing empty-screen sentences now quote
+screen_tally.failed_summary, and the Skips and traps section no longer orders the
+model to write "every candidate carries a found catalyst and full evidence",
+which was the one instruction in the template that demanded an unverifiable
+universal and which the guard would have rejected. prompt_analyst.md gains rule
+13 naming the banned words and pointing at the tally.
+
+Proof: test_containment claim 7, both directions. A report asserting "every
+candidate" fails, the tally sentence passes, and an empty watchlist table does
+not trip on its own none row.
+
+### Everything parked on the stop decision, re-checked
+
+The 2026-08-16 third entry said "scoring has stopped" and closed six items on
+that basis. Scoring never stopped; the scoring CALIBRATION work did, and the
+morning chain scores every weekday. Each of the six was checked against what that
+decision actually says. Three stand: the subscription cap table, the second
+socket purchase, and Alpaca as a live discovery source. Three did not, and are
+corrected in place: the candidate_count dependency is dormant rather than moot,
+since candidate_count is a live CRITERIA knob read daily and stopping work on the
+bands does not freeze the input they were fitted to; the day-setup eligibility
+question was already corrected; and the looseness of the RVOL scoring bands is
+corrected here for the same reason. Recorded in DECISIONS 2026-08-18 third so the
+check is not repeated.
+
+One citation of my own corrected with them: yesterday's entry said the stop's
+"Continuing" list keeps the daily report running. That list names the two probes
+and the post-open pass. It is the NEXT entry that names the morning chain, calling
+it and the post-open pass the only remaining outputs. The conclusion was right
+and the citation was wrong.
+
 ## 2026-08-18, second: two findings from the first empty morning that had a live candidate in it
 
 Both are written up in DECISIONS.md 2026-08-18. Neither is fixed here and no

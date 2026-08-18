@@ -181,6 +181,48 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
           "fallback passes the structure gate, and no test module carries either "
           "as a literal")
 
+def claim_quantifiers_over_the_set_are_rejected(failures: list[str]) -> None:
+    """A quantifier about the candidate set fails, and the tally sentence passes.
+
+    The guard exists because a prompt rule was not enough twice before. On
+    2026-08-18 the report asserted "every candidate" missed a condition one of
+    twelve had cleared, and separately that "every candidate" traded below its
+    prior day high while that same name traded above both it and its VWAP.
+    Neither sentence broke a rule at the time: the template had asked for a
+    summary it gave the model no way to compute.
+
+    Both directions are proven here. A report that quotes screen_tally must
+    PASS, or the fix would have traded a false claim for a failing run.
+    """
+    banned = ("The day screen produced nothing today. "
+              "Every candidate missed the prior day high.\n")
+    hits = analyst.quantifier_violations(banned)
+    if not hits:
+        failures.append("a report asserting 'every candidate' passed the quantifier guard")
+    elif hits[0]["quantifier"] != "every" or hits[0]["set_word"] != "candidate":
+        failures.append(f"the guard caught the wrong thing: {hits[0]}")
+
+    # The sentence the template now instructs, built from screen_tally.
+    quoted = ("The day screen produced nothing today. Failed conditions: "
+              "require_above_prior_high 11 of 12, premarket_rvol 10 of 12.\n")
+    if analyst.quantifier_violations(quoted):
+        failures.append("the tally sentence the template now requires trips its "
+                        f"own guard: {analyst.quantifier_violations(quoted)}")
+
+    # The empty watchlist table's own none row sits under a heading carrying the
+    # word watchlist. Scanning table rows would fail every empty morning, which
+    # is the morning this guard matters most on.
+    table = ("## Day watchlist\n\n"
+             "| Ticker | Gap % |\n| --- | --- |\n| none | |\n\n"
+             "The day screen produced nothing today. Failed conditions: "
+             "premarket_rvol 10 of 12.\n")
+    if analyst.quantifier_violations(table):
+        failures.append("the empty watchlist table tripped the guard on its own "
+                        f"none row: {analyst.quantifier_violations(table)}")
+    print("  claim 7 a quantifier over the candidate set is rejected, the "
+          "screen_tally sentence passes, and an empty table's none row is not prose")
+
+
 def main() -> int:
     packet_text = build_packet_text()
     absent = pick_absent_universe_symbol(packet_text)
@@ -353,13 +395,16 @@ def main() -> int:
 
     claim_headers_cannot_diverge(failures)
 
+    claim_quantifiers_over_the_set_are_rejected(failures)
+
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")
         return 1
     print(f"PASS  acronyms in prose pass, {absent} absent from the packet fails "
           "both as a table cell and as a $ mention, an omitted table is a "
-          "structure failure, and an empty but present one is not")
+          "structure failure, an empty but present one is not, and a "
+          "quantifier asserted over the candidate set is rejected")
     return 0
 
 
