@@ -1,0 +1,725 @@
+{
+  "_provenance": {
+    "what": "research/float_rotation_study.py output, the re-run confirming the edges survived the float screen fix.",
+    "produced_by_commit": "f63c414",
+    "produced_by_commit_subject": "Re-derive the rotation bands after the screen fix, and record that they held",
+    "produced_at": "2026-08-17 evening ET, 463 Alpaca requests, 567 seconds, zero EODHD calls",
+    "behaviourally_identical_to_commit": "405c9ac, which made the screen fix. f63c414 changed only this script's docstring.",
+    "cannot_be_regenerated": true,
+    "why_it_cannot_be_regenerated": [
+      "The script survives, but its input does not. This run read",
+      "data/universe.json as generated at 2026-08-17T00:50 holding 2,754 names,",
+      "and the Sunday rebuild overwrites that file weekly. A later run of the",
+      "same script reads a different universe, so the addressable population",
+      "differs and the counts and payout percentages move with it. That is not",
+      "hypothetical: it is precisely the effect this pair of files was preserved",
+      "to document."
+    ],
+    "cited_by": "doc/DECISIONS.md, 2026-08-17 sixth, as the 2026-08-17 column",
+    "notes": [
+      "This key was added when the file was preserved. Everything below it is the",
+      "script's output verbatim, unedited.",
+      "This file is EVIDENCE, not data. Nothing reads it and nothing should. It is",
+      "committed under doc/ rather than data/ because data/ is gitignored and stays",
+      "that way: this is one artifact kept for one DECISIONS entry, not a change of",
+      "policy about study outputs."
+    ]
+  },
+  "alpaca_requests": 463,
+  "candidate_count": 12,
+  "coverage": {
+    "absent_from_float_cache_no_reason_recorded": 53,
+    "cache_row_carried_no_float": 529,
+    "float_above_shares_outstanding": 0,
+    "float_below_absolute_floor": 0,
+    "float_cache_asked_and_got_nothing": 0,
+    "float_tiny_against_shares_outstanding": 2,
+    "negative_shares_outstanding": 0,
+    "no_alpaca_volume": 1072,
+    "rescued_by_rotation_alone": 2464,
+    "scored_by_either": 8179,
+    "scored_by_neither": 139,
+    "scored_by_rotation": 7734,
+    "scored_by_rvol": 5715
+  },
+  "distinct_names_refused": {
+    "float_above_shares_outstanding": 0,
+    "float_below_absolute_floor": 0,
+    "float_below_absolute_floor_names": [],
+    "float_tiny_against_shares_outstanding": 1,
+    "float_tiny_against_shares_outstanding_names": [
+      "YPF.US"
+    ],
+    "negative_shares_outstanding": 0
+  },
+  "float_rotation": {
+    "all_addressable": {
+      "max": 0.23816734784693028,
+      "mean": 0.0008111923744498872,
+      "min": 3.4246925001224335e-08,
+      "n": 7734,
+      "p10": 6.724161253304481e-06,
+      "p25": 2.4508046296405894e-05,
+      "p50": 0.00010025884490683394,
+      "p75": 0.00041025929875279453,
+      "p90": 0.001247270017828693,
+      "p95": 0.002500597825564967,
+      "p99": 0.010844455602075533
+    },
+    "top_by_gap": {
+      "max": 0.23816734784693028,
+      "mean": 0.004714110881503651,
+      "min": 8.457156538179981e-07,
+      "n": 663,
+      "p10": 3.4361829863160624e-05,
+      "p25": 0.00014236965509814413,
+      "p50": 0.0006171873294340662,
+      "p75": 0.0024331920963208457,
+      "p90": 0.008160450469705987,
+      "p95": 0.015077224029399015,
+      "p99": 0.08324474011476478
+    }
+  },
+  "mapping_transfer": {
+    "all_addressable": {
+      "current_edge_percentile_in_overlap": {
+        "one_point": 0.6,
+        "two_points": 0.7279
+      },
+      "current_edge_percentile_in_rescued": {
+        "one_point": 0.6993,
+        "two_points": 0.7833
+      },
+      "current_edges": {
+        "one_point": 0.0002,
+        "two_points": 0.0004
+      },
+      "current_edges_pay_on_overlap": {
+        "one_point": 0.1279,
+        "two_points": 0.2721,
+        "zero": 0.6
+      },
+      "current_edges_pay_on_rescued": {
+        "one_point": 0.084,
+        "two_points": 0.2167,
+        "zero": 0.6993
+      },
+      "median_ratio_rescued_over_overlap": 0.4527,
+      "overlap": {
+        "max": 0.10002838154767292,
+        "mean": 0.0006808289192981128,
+        "min": 3.913568154604007e-08,
+        "n": 5270,
+        "p10": 9.474074961268561e-06,
+        "p25": 3.4554011388685386e-05,
+        "p50": 0.00012289624613119794,
+        "p75": 0.00045092030690036206,
+        "p90": 0.0012613106836152172,
+        "p95": 0.0023930413399409997,
+        "p99": 0.009014319531752208
+      },
+      "overlap_n": 5270,
+      "paired_n": 5270,
+      "rederived_edges_pay_on_rescued": {
+        "one_point": 0.1433,
+        "two_points": 0.1575,
+        "zero": 0.6993
+      },
+      "rederived_exact_on_rescued": {
+        "one_point": 0.00025863,
+        "two_points": 0.00071794
+      },
+      "rederived_on_rescued": {
+        "one_point": 0.0002,
+        "two_points": 0.0007
+      },
+      "rescued": {
+        "max": 0.23816734784693028,
+        "mean": 0.001090013563025314,
+        "min": 3.4246925001224335e-08,
+        "n": 2464,
+        "p10": 4.3248987643915605e-06,
+        "p25": 1.3654895343892087e-05,
+        "p50": 5.553075480471078e-05,
+        "p75": 0.0002928704674806264,
+        "p90": 0.0012261147709100465,
+        "p95": 0.002650099132268583,
+        "p99": 0.012195050023223752
+      },
+      "rescued_n": 2464,
+      "rvol_target": {
+        "one_point": 0.1114,
+        "two_points": 0.1537
+      }
+    },
+    "top_12_by_gap": {
+      "current_edge_percentile_in_overlap": {
+        "one_point": 0.2645,
+        "two_points": 0.3912
+      },
+      "current_edge_percentile_in_rescued": {
+        "one_point": 0.3233,
+        "two_points": 0.44
+      },
+      "current_edges": {
+        "one_point": 0.0002,
+        "two_points": 0.0004
+      },
+      "current_edges_pay_on_overlap": {
+        "one_point": 0.1267,
+        "two_points": 0.6088,
+        "zero": 0.2645
+      },
+      "current_edges_pay_on_rescued": {
+        "one_point": 0.1167,
+        "two_points": 0.56,
+        "zero": 0.3233
+      },
+      "median_ratio_rescued_over_overlap": 0.6638,
+      "overlap": {
+        "max": 0.10002838154767292,
+        "mean": 0.003552453149148805,
+        "min": 1.5982450664858418e-06,
+        "n": 363,
+        "p10": 5.9200883988018306e-05,
+        "p25": 0.00018678142867911942,
+        "p50": 0.0008155524897480333,
+        "p75": 0.0028212099818093203,
+        "p90": 0.008023000656945467,
+        "p95": 0.014656767915249579,
+        "p99": 0.04022393669793567
+      },
+      "overlap_n": 363,
+      "paired_n": 363,
+      "rederived_edges_pay_on_rescued": {
+        "one_point": 0.1167,
+        "two_points": 0.56,
+        "zero": 0.3233
+      },
+      "rederived_exact_on_rescued": {
+        "one_point": 0.00021511,
+        "two_points": 0.00045409
+      },
+      "rederived_on_rescued": {
+        "one_point": 0.0002,
+        "two_points": 0.0004
+      },
+      "rescued": {
+        "max": 0.23816734784693028,
+        "mean": 0.006119716737653016,
+        "min": 8.457156538179981e-07,
+        "n": 300,
+        "p10": 1.772595150959106e-05,
+        "p25": 0.00010032752409037523,
+        "p50": 0.0005400418202468044,
+        "p75": 0.0020251041390977696,
+        "p90": 0.008160450469705987,
+        "p95": 0.018129506525987677,
+        "p99": 0.1717461094987269
+      },
+      "rescued_n": 300,
+      "rvol_target": {
+        "one_point": 0.124,
+        "two_points": 0.5372
+      }
+    }
+  },
+  "matched_bands": {
+    "paired_n_all_addressable": 5270,
+    "paired_n_top_by_gap": 363,
+    "selection_rule_for_top_by_gap": "names in the top 12 by absolute gap at open per session, which is CRITERIA [scan] candidate_count, intersected with the names carrying BOTH measures. The all_addressable count is the same intersection without the top-by-gap restriction and is what reconciles against the coverage table."
+  },
+  "measured_at": "2026-08-17",
+  "per_session": [
+    {
+      "addressable": 76,
+      "date": "2026-05-18",
+      "rescued_by_rotation": 66
+    },
+    {
+      "addressable": 106,
+      "date": "2026-05-19",
+      "rescued_by_rotation": 91
+    },
+    {
+      "addressable": 86,
+      "date": "2026-05-20",
+      "rescued_by_rotation": 72
+    },
+    {
+      "addressable": 76,
+      "date": "2026-05-21",
+      "rescued_by_rotation": 65
+    },
+    {
+      "addressable": 75,
+      "date": "2026-05-22",
+      "rescued_by_rotation": 68
+    },
+    {
+      "addressable": 184,
+      "date": "2026-05-26",
+      "rescued_by_rotation": 155
+    },
+    {
+      "addressable": 111,
+      "date": "2026-05-27",
+      "rescued_by_rotation": 97
+    },
+    {
+      "addressable": 73,
+      "date": "2026-05-28",
+      "rescued_by_rotation": 68
+    },
+    {
+      "addressable": 74,
+      "date": "2026-05-29",
+      "rescued_by_rotation": 67
+    },
+    {
+      "addressable": 170,
+      "date": "2026-06-01",
+      "rescued_by_rotation": 145
+    },
+    {
+      "addressable": 161,
+      "date": "2026-06-02",
+      "rescued_by_rotation": 26
+    },
+    {
+      "addressable": 80,
+      "date": "2026-06-03",
+      "rescued_by_rotation": 18
+    },
+    {
+      "addressable": 203,
+      "date": "2026-06-04",
+      "rescued_by_rotation": 31
+    },
+    {
+      "addressable": 195,
+      "date": "2026-06-05",
+      "rescued_by_rotation": 14
+    },
+    {
+      "addressable": 196,
+      "date": "2026-06-08",
+      "rescued_by_rotation": 22
+    },
+    {
+      "addressable": 94,
+      "date": "2026-06-09",
+      "rescued_by_rotation": 18
+    },
+    {
+      "addressable": 87,
+      "date": "2026-06-10",
+      "rescued_by_rotation": 15
+    },
+    {
+      "addressable": 82,
+      "date": "2026-06-11",
+      "rescued_by_rotation": 16
+    },
+    {
+      "addressable": 47,
+      "date": "2026-06-12",
+      "rescued_by_rotation": 9
+    },
+    {
+      "addressable": 469,
+      "date": "2026-06-15",
+      "rescued_by_rotation": 76
+    },
+    {
+      "addressable": 37,
+      "date": "2026-06-16",
+      "rescued_by_rotation": 11
+    },
+    {
+      "addressable": 76,
+      "date": "2026-06-17",
+      "rescued_by_rotation": 9
+    },
+    {
+      "addressable": 208,
+      "date": "2026-06-18",
+      "rescued_by_rotation": 22
+    },
+    {
+      "addressable": 103,
+      "date": "2026-06-22",
+      "rescued_by_rotation": 16
+    },
+    {
+      "addressable": 389,
+      "date": "2026-06-23",
+      "rescued_by_rotation": 57
+    },
+    {
+      "addressable": 98,
+      "date": "2026-06-24",
+      "rescued_by_rotation": 15
+    },
+    {
+      "addressable": 168,
+      "date": "2026-06-25",
+      "rescued_by_rotation": 25
+    },
+    {
+      "addressable": 139,
+      "date": "2026-06-26",
+      "rescued_by_rotation": 12
+    },
+    {
+      "addressable": 80,
+      "date": "2026-06-29",
+      "rescued_by_rotation": 9
+    },
+    {
+      "addressable": 69,
+      "date": "2026-06-30",
+      "rescued_by_rotation": 12
+    },
+    {
+      "addressable": 160,
+      "date": "2026-07-01",
+      "rescued_by_rotation": 20
+    },
+    {
+      "addressable": 88,
+      "date": "2026-07-02",
+      "rescued_by_rotation": 6
+    },
+    {
+      "addressable": 81,
+      "date": "2026-07-06",
+      "rescued_by_rotation": 10
+    },
+    {
+      "addressable": 169,
+      "date": "2026-07-07",
+      "rescued_by_rotation": 16
+    },
+    {
+      "addressable": 107,
+      "date": "2026-07-08",
+      "rescued_by_rotation": 13
+    },
+    {
+      "addressable": 216,
+      "date": "2026-07-09",
+      "rescued_by_rotation": 30
+    },
+    {
+      "addressable": 55,
+      "date": "2026-07-10",
+      "rescued_by_rotation": 9
+    },
+    {
+      "addressable": 107,
+      "date": "2026-07-13",
+      "rescued_by_rotation": 13
+    },
+    {
+      "addressable": 317,
+      "date": "2026-07-14",
+      "rescued_by_rotation": 64
+    },
+    {
+      "addressable": 61,
+      "date": "2026-07-15",
+      "rescued_by_rotation": 15
+    },
+    {
+      "addressable": 147,
+      "date": "2026-07-16",
+      "rescued_by_rotation": 23
+    },
+    {
+      "addressable": 265,
+      "date": "2026-07-17",
+      "rescued_by_rotation": 28
+    },
+    {
+      "addressable": 60,
+      "date": "2026-07-20",
+      "rescued_by_rotation": 12
+    },
+    {
+      "addressable": 231,
+      "date": "2026-07-21",
+      "rescued_by_rotation": 42
+    },
+    {
+      "addressable": 116,
+      "date": "2026-07-22",
+      "rescued_by_rotation": 22
+    },
+    {
+      "addressable": 171,
+      "date": "2026-07-23",
+      "rescued_by_rotation": 54
+    },
+    {
+      "addressable": 63,
+      "date": "2026-07-24",
+      "rescued_by_rotation": 19
+    },
+    {
+      "addressable": 145,
+      "date": "2026-07-27",
+      "rescued_by_rotation": 22
+    },
+    {
+      "addressable": 245,
+      "date": "2026-07-28",
+      "rescued_by_rotation": 55
+    },
+    {
+      "addressable": 161,
+      "date": "2026-07-29",
+      "rescued_by_rotation": 44
+    },
+    {
+      "addressable": 451,
+      "date": "2026-07-30",
+      "rescued_by_rotation": 127
+    },
+    {
+      "addressable": 242,
+      "date": "2026-07-31",
+      "rescued_by_rotation": 53
+    },
+    {
+      "addressable": 188,
+      "date": "2026-08-03",
+      "rescued_by_rotation": 39
+    },
+    {
+      "addressable": 304,
+      "date": "2026-08-04",
+      "rescued_by_rotation": 74
+    },
+    {
+      "addressable": 192,
+      "date": "2026-08-05",
+      "rescued_by_rotation": 64
+    },
+    {
+      "addressable": 320,
+      "date": "2026-08-06",
+      "rescued_by_rotation": 94
+    },
+    {
+      "addressable": 260,
+      "date": "2026-08-07",
+      "rescued_by_rotation": 47
+    },
+    {
+      "addressable": 67,
+      "date": "2026-08-10",
+      "rescued_by_rotation": 20
+    },
+    {
+      "addressable": 100,
+      "date": "2026-08-11",
+      "rescued_by_rotation": 27
+    },
+    {
+      "addressable": 209,
+      "date": "2026-08-12",
+      "rescued_by_rotation": 40
+    },
+    {
+      "addressable": 80,
+      "date": "2026-08-13",
+      "rescued_by_rotation": 35
+    }
+  ],
+  "rescue_examples": [
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.000125,
+      "gap_at_open_pct": 8.3479,
+      "premarket_volume": 9968.0,
+      "shares_float": 80027360.0,
+      "symbol": "SMTC.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.000427,
+      "gap_at_open_pct": 10.9845,
+      "premarket_volume": 8206.0,
+      "shares_float": 19214403.0,
+      "symbol": "BIO.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 1.3e-05,
+      "gap_at_open_pct": 8.5118,
+      "premarket_volume": 555.0,
+      "shares_float": 42472671.0,
+      "symbol": "BRC.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.001092,
+      "gap_at_open_pct": 11.1939,
+      "premarket_volume": 844467.0,
+      "shares_float": 773234924.0,
+      "symbol": "D.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.00031,
+      "gap_at_open_pct": -11.7895,
+      "premarket_volume": 30140.0,
+      "shares_float": 97315648.0,
+      "symbol": "REGN.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.001196,
+      "gap_at_open_pct": 12.1986,
+      "premarket_volume": 159267.0,
+      "shares_float": 133173973.0,
+      "symbol": "CMPS.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.012913,
+      "gap_at_open_pct": 27.4444,
+      "premarket_volume": 622665.0,
+      "shares_float": 48219381.0,
+      "symbol": "RAMP.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.000111,
+      "gap_at_open_pct": -9.1842,
+      "premarket_volume": 57748.0,
+      "shares_float": 520867878.0,
+      "symbol": "LI.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.009485,
+      "gap_at_open_pct": 9.4595,
+      "premarket_volume": 2042861.0,
+      "shares_float": 215378339.0,
+      "symbol": "RDW.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.021044,
+      "gap_at_open_pct": 18.1658,
+      "premarket_volume": 4699689.0,
+      "shares_float": 223325408.0,
+      "symbol": "TE.US"
+    },
+    {
+      "baseline_sessions_available": 0,
+      "date": "2026-05-18",
+      "float_rotation": 0.005178,
+      "gap_at_open_pct": 11.348,
+      "premarket_volume": 134800.0,
+      "shares_float": 26031545.0,
+      "symbol": "SHAZ.US"
+    },
+    {
+      "baseline_sessions_available": 1,
+      "date": "2026-05-19",
+      "float_rotation": 0.001323,
+      "gap_at_open_pct": 29.8575,
+      "premarket_volume": 29805.0,
+      "shares_float": 22534904.0,
+      "symbol": "AGYS.US"
+    }
+  ],
+  "rotation_share_above_edge": {
+    "all_addressable": {
+      "0.0002": 0.3684,
+      "0.0005": 0.221,
+      "0.001": 0.124,
+      "0.002": 0.0622,
+      "0.003": 0.0407,
+      "0.005": 0.0226,
+      "0.0075": 0.015,
+      "0.01": 0.0107,
+      "0.015": 0.0067,
+      "0.02": 0.0049,
+      "0.03": 0.0027,
+      "0.05": 0.0016
+    },
+    "top_by_gap": {
+      "0.0002": 0.7089,
+      "0.0005": 0.5475,
+      "0.001": 0.4329,
+      "0.002": 0.2941,
+      "0.003": 0.2081,
+      "0.005": 0.1523,
+      "0.0075": 0.1101,
+      "0.01": 0.0845,
+      "0.015": 0.0528,
+      "0.02": 0.0392,
+      "0.03": 0.0241,
+      "0.05": 0.0181
+    }
+  },
+  "rvol_band_payout": {
+    "all_addressable": {
+      "one_point": 0.1134,
+      "two_points": 0.1561,
+      "zero": 0.7305
+    },
+    "top_by_gap": {
+      "one_point": 0.1172,
+      "two_points": 0.5365,
+      "zero": 0.3464
+    }
+  },
+  "rvol_reconstructed": {
+    "all_addressable": {
+      "max": 5516.987546280714,
+      "mean": 6.628275358665577,
+      "min": 0.0033539939359789636,
+      "n": 5715,
+      "p10": 0.17469791818314165,
+      "p25": 0.32716023895849194,
+      "p50": 0.6797568957456755,
+      "p75": 1.6415701415701416,
+      "p90": 5.133909441508356,
+      "p95": 13.592768791627021,
+      "p99": 84.77
+    },
+    "top_by_gap": {
+      "max": 5516.987546280714,
+      "mean": 51.96885919452681,
+      "min": 0.035555555555555556,
+      "n": 384,
+      "p10": 0.37432050000602124,
+      "p25": 0.9158915761187054,
+      "p50": 3.591532583416394,
+      "p75": 16.941138821452217,
+      "p90": 66.85063957863055,
+      "p95": 124.56080434088733,
+      "p99": 723.174178762414
+    }
+  },
+  "sessions": 61,
+  "windows": {
+    "numerator": "07:20 to 08:45 ET",
+    "rvol_denominator": "04:00 to 08:45 ET, median of 20 prior sessions"
+  }
+}

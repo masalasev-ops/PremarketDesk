@@ -1535,6 +1535,21 @@ a proof about the screen fix and presented as though it described a re-run.]**
 **The result first: the edges do not move.** Confirmed twice over, by proof and
 then by an actual re-run of the script on 2026-08-17.
 
+**Both sides of this table are committed evidence, because neither run can be
+produced again.** The columns below are read from:
+
+- 2026-08-16: doc/research/float_rotation_study-2026-08-16-prefix.json
+- 2026-08-17: doc/research/float_rotation_study-2026-08-17-postfix.json
+
+Each carries a `_provenance` header naming the commit that produced it and why
+it is unrepeatable, above the script's verbatim output. The first is
+unrepeatable because the script is gone: its float screen was replaced in
+405c9ac. The second is unrepeatable because its INPUT is gone, since it read
+data/universe.json as generated at 2026-08-17T00:50 and the Sunday rebuild
+overwrites that file weekly. They live under doc/ rather than data/ because
+data/ is gitignored and stays that way. This is one comparison preserved for one
+entry, not a change of policy about study outputs.
+
 | | 2026-08-16, in CRITERIA | 2026-08-17 re-run |
 | --- | ---: | ---: |
 | **two point edge** | **0.0004** | **0.0004** |
