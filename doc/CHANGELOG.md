@@ -15,6 +15,52 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-18, second: two findings from the first empty morning that had a live candidate in it
+
+Both are written up in DECISIONS.md 2026-08-18. Neither is fixed here and no
+screen, threshold or collector behaviour was changed.
+
+### The report's one explanatory sentence was false
+
+An empty day watchlist was explained as "the most common failed condition was
+price not above the prior day high, which every candidate missed". AS.US did not
+miss it: 34.71 against a prior day high of 33.4194, with a single day failure,
+the null RVOL. From the packet the tally is price 11 of 12 and RVOL 10 of 12, so
+the mode is right and the universal is false.
+
+The cause is structural rather than a wording slip. REPORT_TEMPLATE.md asks for
+"the most common failed condition", the packet carries no such tally, and nothing
+aggregates day_failed or swing_failed, so the model is asked to compute a
+statistic in prose from twelve per candidate lists. Containment checks tickers
+and vintage checks dates; neither checks a claim about the screen's own output.
+On an empty morning that sentence is the whole report, and it named the wrong
+cause.
+
+The fix is named in DECISIONS and deliberately not built in this pass: compute
+the tally in scan.py into the packet, and have the template quote it rather than
+derive it, on the precedent of the watchlist headers that were made literal for
+exactly this reason.
+
+### The float rotation eligibility question is not inert, and it was the watchlist
+
+2026-08-16 third listed the day-setup eligibility question for names rescued by
+float rotation as "unresolved and now inert" because "scoring has stopped". That
+is corrected in place: the same decision's Continuing list keeps the daily report
+running, and what stopped was the scoring calibration work, not the publication
+of scores.
+
+2026-08-18 supplies the counterexample. AS.US, earnings before the open, up 6.57
+percent, above its prior day high, scored 8.0 green on
+volume_measure_used = premarket_float_rotation, and its whole day_failed list is
+the null premarket RVOL. The baseline median is 383.5 shares, under the 1,000
+share floor, against 37,169 shares actually traded premarket, about 97 times it.
+It was the only one of twelve candidates to clear the prior high test, the other
+eleven having gapped down into a long only screen, so this single open question
+was the difference between an empty published day list and a one name one.
+
+Whether a float rotation floor belongs in [Day setup] is a threshold question and
+stays with the owner. What changed is that it now has a dated instance behind it.
+
 ## 2026-08-18: the collector volume check is sound and the collector is not
 
 The definitive collector volume verification, runs/<date>/verify_intraday.json,

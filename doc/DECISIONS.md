@@ -1722,3 +1722,94 @@ docstring names Alpaca as its volume source, scan.attach_float_rotation names th
 collector as its numerator source and marks the value a lower bound, and
 CRITERIA [Float rotation] describes the numerator as the collector's. None of the
 three says the other two disagree. That is why this entry exists.
+
+## 2026-08-18: the report's screen summary is computed by the model, and it was wrong the first morning it mattered
+
+**What happened.** The 2026-08-18 report explained an empty day watchlist with
+"the most common failed condition was price not above the prior day high, which
+every candidate missed". Every candidate did not miss it. AS.US priced at 34.71
+against a prior day high of 33.4194 and cleared that condition; its day_failed
+list carries exactly one line, the null premarket RVOL. Counted from the packet,
+11 of 12 candidates failed the price condition and 10 of 12 failed the RVOL one.
+The mode is right and the universal is false.
+
+**Why the model was in a position to get it wrong.** REPORT_TEMPLATE.md asks for
+"one sentence below it saying the day screen produced nothing today and the most
+common failed condition". That is a COMPUTED STATISTIC, and the packet does not
+carry it. Nothing aggregates day_failed or swing_failed. The model is handed
+twelve per candidate lists and asked to report their mode, so it is doing
+arithmetic by eye in prose, which is the one thing this project has consistently
+refused to let it do everywhere else: membership, eligibility, scores and
+conviction are all computed in Python before the model runs.
+
+**Why nothing caught it.** The containment checker validates that every ticker
+named in the report exists in the packet. vintage validates that the data is the
+session it claims. Neither looks at a numeric or logical claim about the screen's
+own output, and there is no third guard that does. So the sentence went out
+unchecked.
+
+**Why it matters more than a normal wording slip.** On an empty morning that
+sentence IS the report. It is the entire explanation of why nothing was
+published, and it pointed at the wrong cause. A reader would conclude that no
+name came close, when in fact one name cleared the published gate, scored 8.0
+green on an earnings catalyst, and was stopped by a baseline too thin to divide
+by. Those two mornings look identical in the report and are completely different
+mornings.
+
+**Decision: recorded OPEN with the fix named, not built in this pass.** The fix
+is deterministic and small: scan.py counts the failed conditions across
+candidates and writes the tally into the packet, and REPORT_TEMPLATE.md tells the
+model to QUOTE that tally rather than derive it. That follows the precedent
+already set for the watchlist table headers, which were made literal in the
+template with a prompt rule pinning them character for character precisely so a
+guard would stop depending on the model's word choice. This is the same move
+applied to the same class of problem, and it is left for the owner to schedule
+rather than slipped into a diagnosis pass.
+
+## 2026-08-18: the float rotation eligibility question is NOT inert, and this morning is the counterexample
+
+**[corrected 2026-08-18: the 2026-08-16 third entry closed by listing the
+day-setup eligibility question for names rescued by float rotation as
+"unresolved and now inert", on the grounds that "scoring has stopped". That was
+wrong when it was written and is corrected here rather than superseded. The same
+decision's own "Continuing" list keeps the daily report running, and what it
+stopped was the scoring CALIBRATION work, not the publication of scores. A
+question about which names reach a watchlist that is published every weekday
+morning cannot be inert while that publication continues.]**
+
+**The question, as it already stood.** The 2026-08-16 first entry recorded it
+deliberately: [Day setup] premarket_rvol still requires a real RVOL, Rule.test(None)
+is false, so a name rescued by float rotation is SCORED but is still not
+day_eligible. Scoring was the clause being fixed; eligibility was left OPEN.
+
+**The counterexample, 2026-08-18.** AS.US, Amer Sports, reporting earnings before
+the open, gapped up 6.57 percent to 34.71 against a prior day high of 33.4194.
+It cleared the prior high condition, the gap floor, the price floor and the
+market cap floor. It scored 8.0, conviction green, with
+volume_measure_used = premarket_float_rotation. Its entire day_failed list is:
+
+    ["premarket_rvol None fails > 1.5"]
+
+and pm_rvol is null because its baseline median premarket volume is 383.5 shares,
+under the 1,000 share floor, so the denominator was refused as too thin. The name
+traded 37,169 premarket shares, roughly 97 times that median.
+
+**Why this instance is the one that settles the priority.** It was the ONLY one
+of the twelve candidates that cleared the prior high test; the other eleven
+gapped down and cannot pass a long only screen. So on 2026-08-18 the open
+eligibility question was not a marginal case at the edge of the watchlist, it
+WAS the watchlist. The published day list is empty rather than holding one green
+earnings name, and the difference is entirely this unresolved question.
+
+**Compounding, recorded so the two are not treated separately.** AS.US's float
+rotation came out at 0.000264, which earns one point against the 0.0002 edge and
+misses two against 0.0004. DECISIONS 2026-08-17 seventh records that the
+numerator feeding that number is collector volume, systematically smaller than
+the Alpaca volume the bands were fitted on. So the measure that rescued this name
+for scoring also under-rewarded it, for a reason already on the record.
+
+**Still not resolved here, and deliberately.** Whether a float rotation floor
+belongs in [Day setup] is a threshold question, and thresholds live in CRITERIA.md
+and are the owner's. Nothing in this entry changes a screen. What has changed is
+that the question now has a dated, concrete instance behind it instead of being
+theoretical, and it is no longer described as inert.

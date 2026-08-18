@@ -398,6 +398,18 @@ recreates it deliberately.
    email nothing.
 3. Longer term, as CRITERIA.md's header says: once picks holds a few hundred
    filled outcome rows, revisit the seed thresholds because the data said so.
+
+2b. Two findings from 2026-08-18, both in DECISIONS.md that date, neither built.
+   The report's "most common failed condition" sentence is computed by the model
+   from twelve per candidate lists because the packet carries no tally, and on
+   2026-08-18 it was false in the strongest form, claiming every candidate missed
+   a condition one candidate cleared. The fix is to compute the tally in scan.py
+   and have the template quote it. Separately, the day-setup eligibility question
+   for names rescued by float rotation is NOT inert as 2026-08-16 third claimed,
+   and 2026-08-18 is the counterexample: AS.US scored 8.0 green, cleared the
+   prior high, and was the only one of twelve to do so, and its whole day_failed
+   list was the null RVOL. That one is a threshold question and stays with the
+   owner.
 4. The notable movers section: SPECIFIED BELOW, NOT BUILT. Everything it
    rests on is built, tested and committed. The section itself is not. Its
    specification is the "Layer 4" section immediately below, written out in
