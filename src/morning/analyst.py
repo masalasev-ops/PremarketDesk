@@ -492,10 +492,83 @@ def _universe_bare_symbols() -> set[str] | None:
 # A model that needs one of these words now has packet screen_tally to quote
 # instead, which carries the counts and a prebuilt summary sentence.
 _QUANTIFIERS = ("every", "all", "none", "each", "most", "majority")
+# `no` is the same assertion as `none` and was missed by the first version of
+# this list. "no candidate cleared the price test" and "none cleared it" are one
+# claim in two spellings, and the model can no more check the first than the
+# second. It is FORWARD ONLY, unlike the others: `no` is a determiner, so it
+# governs the noun after it, and "there is no premarket high for AS, and the
+# candidate is dropped" is not a claim about the set. The others are matched in
+# both directions because "the candidates all cleared" and "all the candidates
+# cleared" are the same sentence.
+_FORWARD_ONLY_QUANTIFIERS = ("no",)
 _SET_WORDS = ("candidate", "candidates", "name", "names", "watchlist", "watchlists")
 # Words either side, not characters. Six is wide enough to catch "every one of
 # the candidates" and narrow enough that two unrelated sentences do not collide.
 _QUANTIFIER_WINDOW_WORDS = 6
+
+
+def flag_log_path() -> Path:
+    """The running record of every quantifier flag this guard has ever raised."""
+    return config.DATA_DIR / "quantifier-flags.jsonl"
+
+
+def record_quantifier_flags(
+    hits: list[dict[str, Any]], session: str, report_name: str
+) -> list[int]:
+    """Append each flag to the running log and return the ids assigned.
+
+    The rate is MEASURED, not asserted, and that is the whole reason this file
+    exists. When the guard was built its false positive rate was eyeballed at
+    one in six from a single afternoon's reports, which is a defensible number
+    today and a dangerous one in three months. This project's own history is
+    guards whose failures got rationalised away: a claim swallowed exceptions
+    for a week, a calendar status was ignored, pool_recall wrote nothing nightly
+    while DECISIONS cited its evidence as if it had. A blunt guard sitting on
+    the morning path, where a hit blocks the report, is a candidate for exactly
+    that the first morning somebody is in a hurry.
+
+    So every hit is written down with room for a disposition, nobody has to
+    remember which ones were nonsense, and the word list gets tuned on a month
+    of dispositions rather than on an impression. ops/quantifier_flags.py reads
+    this file, marks dispositions and prints the measured rate.
+
+    Appended, never rewritten, and a failure to write is never allowed to take
+    the run with it: losing a line of telemetry must not turn into a lost
+    morning report.
+    """
+    path = flag_log_path()
+    try:
+        existing = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    except (OSError, ValueError):
+        existing = 0
+    ids: list[int] = []
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            for offset, hit in enumerate(hits, start=1):
+                flag_id = existing + offset
+                ids.append(flag_id)
+                handle.write(json.dumps({
+                    "id": flag_id,
+                    "recorded_at": ettime.stamp(ettime.now_et()),
+                    "session": session,
+                    "report": report_name,
+                    "line": hit["line"],
+                    "quantifier": hit["quantifier"],
+                    "set_word": hit["set_word"],
+                    "sentence": hit["text"],
+                    # Filled in later by a human through ops/quantifier_flags.py.
+                    # Null means nobody has judged it yet, which is different
+                    # from judged and found harmless.
+                    "disposition": None,
+                    "disposition_note": None,
+                    "disposition_at": None,
+                }, separators=(",", ":")) + "\n")
+            handle.flush()
+    except OSError as exc:
+        print(f"analyst: WARNING could not append to {path.name}: {exc}")
+        return []
+    return ids
 
 
 def quantifier_violations(report: str) -> list[dict[str, Any]]:
@@ -514,9 +587,10 @@ def quantifier_violations(report: str) -> list[dict[str, Any]]:
         words = re.findall(r"[A-Za-z_]+", stripped)
         lowered = [w.lower() for w in words]
         for index, word in enumerate(lowered):
-            if word not in _QUANTIFIERS:
+            forward_only = word in _FORWARD_ONLY_QUANTIFIERS
+            if word not in _QUANTIFIERS and not forward_only:
                 continue
-            low = max(0, index - _QUANTIFIER_WINDOW_WORDS)
+            low = index if forward_only else max(0, index - _QUANTIFIER_WINDOW_WORDS)
             high = min(len(lowered), index + _QUANTIFIER_WINDOW_WORDS + 1)
             near = [w for w in lowered[low:index] + lowered[index + 1:high]
                     if w in _SET_WORDS]
@@ -886,14 +960,24 @@ def write_report(packet_path: Path) -> int:
         return 2
     quantifiers = quantifier_violations(report_text)
     if quantifiers:
+        ids = record_quantifier_flags(quantifiers, session_date, report_path.name)
         print("analyst: FAILED the quantifier guard. The report asserts a "
               "quantifier over the candidate set, which no reader can check "
               "against the report in front of them:")
-        for hit in quantifiers:
-            print(f"  line {hit['line']}: {hit['quantifier']!r} near "
-                  f"{hit['set_word']!r}: {hit['text'][:160]}")
+        for hit, flag_id in zip(quantifiers, ids or [None] * len(quantifiers)):
+            # The matched term and the whole sentence, not just a line number.
+            # A flag nobody can judge without opening the report is a flag that
+            # gets waved through at 08:46.
+            print(f"  flag {flag_id} line {hit['line']}: matched "
+                  f"{hit['quantifier']!r} near {hit['set_word']!r}")
+            print(f"      {hit['text']}")
         print("analyst: packet screen_tally carries the counts to quote instead. "
               "See prompt_analyst.md rule 13.")
+        if ids:
+            print(f"analyst: logged to {flag_log_path().name}. If one of these is "
+                  "wrong, record it so the word list is tuned on data: "
+                  f"python -m ops.quantifier_flags --mark {ids[0]} false-positive "
+                  '--note "why"')
         print("analyst: the report was written for inspection but must not be delivered.")
         return 2
     if coverage["claims_checked"]:
@@ -944,9 +1028,15 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         quantifiers = quantifier_violations(report_path.read_text(encoding="utf-8"))
         if quantifiers:
+            # --check is the operator path over a report already on disk, so it
+            # reports without appending: replaying an old morning must not add
+            # flags to the running rate that were already counted when it ran.
             for hit in quantifiers:
-                print(f"analyst: quantifier guard, line {hit['line']}: "
-                      f"{hit['quantifier']!r} near {hit['set_word']!r}: {hit['text'][:160]}")
+                print(f"analyst: quantifier guard, line {hit['line']}: matched "
+                      f"{hit['quantifier']!r} near {hit['set_word']!r}")
+                print(f"    {hit['text']}")
+            print("analyst: not logged, --check replays a report rather than "
+                  "producing one. See ops/quantifier_flags.py for the running rate.")
             return 2
         if coverage["claims_checked"] == 0:
             print("analyst: containment examined nothing "

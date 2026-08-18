@@ -40,10 +40,28 @@ invent it.}
 
 ## Summary
 
-{Three to six sentences. The market tone from the snapshot, how many
-candidates cleared the floors, how many are day eligible and swing eligible,
-the strongest conviction names by bucket, and anything in gaps_to_fill that
-materially weakens this morning's evidence.}
+{Three to six sentences. The market tone from the snapshot, then the counts,
+then the strongest conviction names by bucket, then anything in gaps_to_fill
+that materially weakens this morning's evidence.
+
+THE COUNTS ARE QUOTED, NEVER COUNTED. Every number in this sentence is already
+in the packet, so write it as:
+
+Of {candidate_provenance.ranking.subscribed_considered} names the collector
+heard, {candidate_provenance.ranking.cleared_floors} cleared the price and gap
+floors and {candidate_provenance.ranking.kept} were kept as candidates. Day
+eligible {screen_tally.day.eligible} of {screen_tally.candidates_examined},
+swing eligible {screen_tally.swing.eligible} of
+{screen_tally.candidates_examined}.
+
+THIS SENTENCE IS WRITTEN THE SAME WAY ON A MORNING WHEN NOTHING IS ELIGIBLE.
+The numbers are then zeros, and that is the whole of the difference. Do not
+switch to prose like "no candidate is eligible" or "none cleared", which say
+less than "0 of 12" and are the phrasings the quantifier guard rejects. An
+empty morning is not a different kind of morning needing different words, it is
+the same measurement with a zero in it, and prose written only for empty
+mornings gets read less carefully, which is how "every candidate missed" was
+published on 2026-08-18.}
 
 ## Premarket gappers
 

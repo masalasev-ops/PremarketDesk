@@ -219,8 +219,66 @@ def claim_quantifiers_over_the_set_are_rejected(failures: list[str]) -> None:
     if analyst.quantifier_violations(table):
         failures.append("the empty watchlist table tripped the guard on its own "
                         f"none row: {analyst.quantifier_violations(table)}")
-    print("  claim 7 a quantifier over the candidate set is rejected, the "
-          "screen_tally sentence passes, and an empty table's none row is not prose")
+    # `no` says exactly what `none` says. Both spellings of the same claim have
+    # to fail, or the ban is a spelling rule rather than a guard.
+    for phrasing in ("No candidate cleared the price test.\n",
+                     "None of the candidates cleared the price test.\n"):
+        if not analyst.quantifier_violations(phrasing):
+            failures.append(f"a report asserting {phrasing.strip()!r} passed the guard")
+    # `no` is a determiner and governs what follows it. A backwards match would
+    # fail this sentence, which asserts nothing about the set.
+    determiner = "There is no premarket high for AS, so the candidate is dropped.\n"
+    if analyst.quantifier_violations(determiner):
+        failures.append("a determiner `no` before an unrelated noun tripped the guard: "
+                        f"{analyst.quantifier_violations(determiner)}")
+    print("  claim 7 a quantifier over the candidate set is rejected in both the "
+          "none and no spellings, the screen_tally sentence passes, and neither an "
+          "empty table's none row nor a determiner no is prose about the set")
+
+
+def claim_flags_are_logged_for_measurement(failures: list[str]) -> None:
+    """Every flag lands in the running log, pending, and the rate is counted.
+
+    The guard's false positive rate was eyeballed at one in six on the day it
+    shipped. An eyeballed rate decays into folklore, and this project has
+    watched guards get rationalised away one failure at a time. So the flags
+    accumulate with room for a verdict and the rate is counted from them.
+
+    What is proven here is that a raised flag is RECORDED rather than only
+    printed, that it starts with no verdict, and that the rate refuses to
+    report itself until something has been judged. A rate that returned zero
+    over an unjudged sample would be worse than no rate at all.
+    """
+    from ops import quantifier_flags
+
+    before = len(quantifier_flags.load_flags())
+    hits = analyst.quantifier_violations(
+        "Every candidate missed the prior day high.\n")
+    ids = analyst.record_quantifier_flags(hits, "2026-08-18", "report.md")
+    if not ids:
+        failures.append("a raised flag was not written to the running log")
+        return
+    flags = quantifier_flags.load_flags()
+    if len(flags) != before + len(hits):
+        failures.append(f"expected {before + len(hits)} flags on file, found {len(flags)}")
+    latest = flags[-1]
+    if latest.get("disposition") is not None:
+        failures.append(f"a new flag arrived already judged: {latest}")
+    for field in ("sentence", "quantifier", "set_word", "session", "line"):
+        if not latest.get(field) and latest.get(field) != 0:
+            failures.append(f"the logged flag carries no {field}: {latest}")
+
+    measured = quantifier_flags.rate(flags)
+    if measured["false_positive_rate"] is not None:
+        failures.append("the rate reported a number with nothing judged: "
+                        f"{measured}")
+    quantifier_flags.mark(latest["id"], "false-positive", "test disposition")
+    measured = quantifier_flags.rate(quantifier_flags.load_flags())
+    if measured["judged"] < 1 or measured["false_positive_rate"] is None:
+        failures.append(f"marking a flag did not move the measured rate: {measured}")
+    print(f"  claim 8 a flag is logged pending, the rate refuses to report over "
+          f"nothing judged, and a verdict moves it to "
+          f"{measured['false_positive_rate']:.0%} of {measured['judged']}")
 
 
 def main() -> int:
@@ -396,6 +454,8 @@ def main() -> int:
     claim_headers_cannot_diverge(failures)
 
     claim_quantifiers_over_the_set_are_rejected(failures)
+
+    claim_flags_are_logged_for_measurement(failures)
 
     if failures:
         for failure in failures:

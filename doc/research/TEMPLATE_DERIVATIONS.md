@@ -65,7 +65,38 @@ Not a derivation, and worth naming as the pattern the rest should follow:
 | P4 | rule 4 | classify catalyst_found false against null | classify per candidate | KEEP. Direct field reads with the three states spelled out. | unchanged |
 | P5 | rule 10 | display rounding | compute per number | KEEP. Rounding for display, with the rule stated precisely and gap_pct's unit trap called out. | unchanged |
 
-## What was applied in this pass, and what waits
+## Second pass, 2026-08-18: the Summary counts are resolved
+
+T4 and T5 are done, ahead of the filters and the comparisons, and the reason is
+that the quantifier guard does not reach them. The guard catches every, all,
+none and no. It does not catch "three candidates cleared the price test", which
+is wrong in exactly the same way and which the Summary was still asking the
+model to work out. A count is the shape of claim the guard is blind to, so the
+counts were the ones worth removing first.
+
+Both were already in the packet and neither needed new code:
+candidate_provenance.ranking carries subscribed_considered, cleared_floors and
+kept, and screen_tally carries candidates_examined and the per screen eligible
+count. The template now quotes all five.
+
+**The decision underneath it, which is about the report rather than the bug.**
+The Summary sentence is written the SAME WAY on a morning when nothing is
+eligible, with zeros in it, rather than switching to prose. That is a choice and
+it could have gone the other way: an empty morning reads a little stiffly as "day
+eligible 0 of 12". It goes this way because prose written only for the empty case
+is prose that runs on the fraction of mornings nobody scrutinises, and it is
+exactly where both false universals were published. "0 of 12" also says strictly
+more than "none are eligible": it carries the denominator, so a reader can tell a
+screen that rejected twelve names from a morning that found none to screen. Those
+two are different failures and the old wording could not distinguish them.
+
+Queued behind them, unchanged: T2, T3, T6, T12, T15, T16, P1 and P2. T6 is the
+other Summary item, the strongest conviction names by bucket, and it is a rank
+rather than a count; it is left because ranking on a computed score is a smaller
+risk than counting, and because the same pass should not both resolve and
+redesign the section.
+
+## What was applied in the first pass, and what waits
 
 APPLIED: T9, T10 and T17, plus the mechanical quantifier guard that T17 forced.
 T9 and T10 were the instruction that failed; T17 had to move because the guard
@@ -110,3 +141,17 @@ word. Both are cheap for the model to avoid now that prompt_analyst.md rule 13
 names the words and points at screen_tally for the numbers to quote instead.
 The guard is deliberately blunt: the cost of a false positive is a rerun, and
 the cost of a false negative is a published claim that is not true.
+
+## The flag rate is measured, not asserted
+
+The one in six false positive rate quoted in the table above is an impression
+from a single afternoon, and it is labelled as one. From 2026-08-18 the guard
+appends every flag it raises to data/quantifier-flags.jsonl with room for a
+verdict, and ops/quantifier_flags.py prints the rate counted from those verdicts.
+It refuses to print a rate at all until something has been judged, and says so,
+because a rate computed over an unjudged sample is worse than no rate.
+
+Review after a month and tune the word list in analyst.py on that file. The
+words most likely to move are `each`, which produced the one clear false
+positive, and `no`, which was added on 2026-08-18 and is the most common English
+word on the list.

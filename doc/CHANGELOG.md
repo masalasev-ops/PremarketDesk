@@ -15,6 +15,70 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-18, fourth: the guard's flags are logged, `no` joins the ban, and the Summary counts stop being derived
+
+### The rate is measured now, not asserted
+
+The guard shipped yesterday with a false positive rate eyeballed at one in six
+from a single afternoon's reports. That is defensible for a day and folklore
+within a month, and this project has watched guards decay exactly that way: a
+claim swallowed exceptions for a week, a calendar status was ignored, and
+pool_recall wrote nothing nightly while DECISIONS cited its evidence as though
+it had. A blunt guard on the morning path, where a hit blocks the report, is the
+obvious next candidate the first time somebody is in a hurry at 08:46.
+
+So every flag now appends to data/quantifier-flags.jsonl carrying the sentence,
+the matched word, the session and a null disposition, and ops/quantifier_flags.py
+lists them, records a verdict and prints the rate counted from those verdicts. It
+REFUSES to print a rate until something has been judged, and says why, because a
+rate over an unjudged sample reads as zero and is worse than no rate. Below
+twenty judged it says so on every run.
+
+Dismissal is cheap on purpose. The failure now prints the whole offending
+sentence and the matched term beside a flag id, and names the exact command to
+record a verdict against it. A flag nobody can judge without opening the report
+is a flag that gets waved through.
+
+The log write can never take the run with it: an OSError there prints a warning
+and the guard carries on. Losing a line of telemetry must not become a lost
+morning report. The --check path reports without logging, since replaying an old
+report must not add flags to a rate that already counted them.
+
+### `no` joins the ban, and `none` stays
+
+"no candidate cleared the price test" is the same assertion as "none cleared it"
+and is equally uncheckable, so the first version of the list was a spelling rule
+rather than a guard. `no` is matched FORWARD ONLY, unlike the rest: it is a
+determiner and governs the noun after it, so "there is no premarket high for AS,
+so the candidate is dropped" asserts nothing about the set and still passes.
+
+### The Summary counts, resolved ahead of the rest
+
+The guard catches every, all, none and no. It does not catch "three candidates
+cleared the price test", which is wrong the same way and which the Summary still
+invited. A count is the shape the guard is blind to, so the counts went first.
+
+Both numbers were already in the packet: candidate_provenance.ranking has
+subscribed_considered, cleared_floors and kept, and screen_tally has
+candidates_examined and the eligible count per screen. The template quotes all
+five and no code was needed.
+
+The decision underneath it is about the report rather than the defect. The
+Summary sentence is now written the SAME WAY on a morning when nothing is
+eligible, with zeros in it, instead of switching to prose. Prose written only
+for the empty case runs on the fraction of mornings nobody reads closely, which
+is precisely where both false universals were published. "0 of 12" also says
+more than "none are eligible", because it carries the denominator: a screen that
+rejected twelve names and a morning that found none to screen are different
+failures, and the old wording could not tell them apart.
+
+Queued behind them: T2, T3, T6, T12, T15, T16, P1, P2, in
+doc/research/TEMPLATE_DERIVATIONS.md.
+
+Proof: test_containment claim 7 now covers both the none and no spellings and
+the determiner case, and claim 8 covers logging, the pending disposition, and
+the rate refusing to report over an unjudged sample.
+
 ## 2026-08-18, third: the template stops asking the model to count, and a guard enforces it
 
 ### The audit, first
