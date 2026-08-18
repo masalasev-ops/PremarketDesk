@@ -210,6 +210,58 @@ def launch_bat(bat_name: str, dry_run: bool) -> None:
     print(f"monitor: launched {bat.name} detached, it writes its own dated log")
 
 
+# ----------------------------------------------------- the flag backlog
+
+def flag_backlog(now: dt.datetime) -> dict[str, Any]:
+    """The quantifier guard flags nobody has judged, and the oldest one's age.
+
+    Not a job check. This asks whether a MEASUREMENT is still being taken,
+    which is a different question, and one this project has already got wrong
+    in exactly this shape: pool_recall raised every night for a week while
+    writing nothing, and DECISIONS cited its evidence as accumulating the
+    whole time. The quantifier flag log has the same failure available to it.
+    Dispositions are recorded by hand, so a log that fills while nobody judges
+    means the false positive rate never prints, and in a month the word list
+    gets tuned on the same intuition it was written with.
+
+    Nothing here can fail the watchdog's other work. An unreadable or
+    undateable log is reported as its own problem rather than raised, because
+    a missing measurement must not cost the checks that watch the jobs.
+    """
+    from ops import quantifier_flags
+
+    try:
+        flags = quantifier_flags.load_flags()
+    except (OSError, ValueError) as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+    pending = [f for f in flags
+               if f.get("disposition") not in quantifier_flags.VERDICTS]
+    oldest_days = None
+    oldest_session = None
+    undated = 0
+    for flag in pending:
+        try:
+            raised = dt.datetime.fromisoformat(str(flag.get("recorded_at")))
+            # Clamped at zero because --at can wind the clock back to simulate
+            # an earlier hour, and a flag raised later today must read as new
+            # rather than as a negative age nobody can interpret.
+            age = max(0.0, (now - raised).total_seconds() / 86400.0)
+        except (TypeError, ValueError):
+            undated += 1
+            continue
+        if oldest_days is None or age > oldest_days:
+            oldest_days = age
+            oldest_session = flag.get("session")
+    return {
+        "raised": len(flags),
+        "pending": len(pending),
+        "oldest_days": oldest_days,
+        "oldest_session": oldest_session,
+        "undated": undated,
+    }
+
+
 # ------------------------------------------------------------- the checks
 
 def _minutes(clock: tuple[int, int]) -> int:
@@ -400,6 +452,43 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             maybe_rerun("nightly", ("fired but did not finish" if fired
                                     else "the scheduled task never fired today")
                         + "; fully idempotent")
+
+    # ---- unjudged quantifier guard flags
+    #
+    # Named on every pass, whether or not there are any. A count that only
+    # appears when it is bad is a count nobody learns to read, and this one is
+    # here to be seen on the mornings somebody is already reading the watchdog
+    # rather than on the morning they finally go looking for it.
+    backlog = flag_backlog(now)
+    backlog_after = _CRIT.integer("monitor", "flag_backlog_after_days")
+    if backlog.get("error"):
+        problems += 1
+        report("flags", "UNREADABLE",
+               f"the quantifier flag log could not be read ({backlog['error']}), "
+               "so the guard's false positive rate is not being measured")
+    elif not backlog["pending"]:
+        report("flags", "OK",
+               f"{backlog['raised']} quantifier flag(s) raised, 0 unjudged")
+    elif backlog["oldest_days"] is None:
+        problems += 1
+        report("flags", "UNDATED",
+               f"{backlog['pending']} unjudged quantifier flag(s) carry no "
+               "readable timestamp, so their age cannot be checked: "
+               "python -m ops.quantifier_flags --pending")
+    elif backlog["oldest_days"] >= backlog_after:
+        problems += 1
+        report("flags", "BACKLOG",
+               f"{backlog['pending']} unjudged of {backlog['raised']} raised, "
+               f"the oldest from {backlog['oldest_session']} and "
+               f"{backlog['oldest_days']:.0f} days old. The false positive rate "
+               "stays an impression until these are judged: "
+               "python -m ops.quantifier_flags --pending")
+    else:
+        report("flags", "PENDING",
+               f"{backlog['pending']} unjudged of {backlog['raised']} raised, "
+               f"the oldest {backlog['oldest_days']:.0f} day(s) old, inside the "
+               f"{backlog_after} day judging window: "
+               "python -m ops.quantifier_flags --pending")
 
     print(f"monitor: {problems} problem(s), {actions} action(s) taken")
     job_status.produced("jobs checked", len(JOBS))

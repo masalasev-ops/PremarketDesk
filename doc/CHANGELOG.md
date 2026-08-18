@@ -15,6 +15,95 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-18, fifth: a quantifier flag can no longer cost the morning its report
+
+### The guard was charging the wrong price
+
+The quantifier guard shipped yesterday returning exit 2 on a hit. The morning
+chain stops on the first non-zero code, so render, deliver and archive never
+ran. One sentence, and the morning got nothing at all, from a guard whose own
+false positive rate is still a sample of six with nothing judged. That price is
+what gets a guard commented out at 08:46, and this project's whole argument for
+mechanical guards is that they survive the mornings nobody has time for.
+
+A flag now buys a regeneration first. The rejected sentences are appended to the
+piped document, the model writes the report again knowing exactly what to avoid,
+and only if that second answer flags too does the morning drop to the plain
+table fallback, with the reason and the offending sentence stamped into the
+disclaimer line beside the flag id. Exit zero either way. The worst a false
+positive can now do is remove the narrative from one morning, which is the trade
+the guard's asymmetry argument already assumed it was making.
+
+One regeneration and not more, from CRITERIA analyst.quantifier_regenerations. A
+second failure against a correction that names the sentence is evidence about the
+report or about the guard, not bad luck, and every attempt costs another
+timeout_s off a clock that ends when the market opens.
+
+Containment moved ahead of the quantifier check in the same restructure, and the
+order matters twice. An invented ticker is fabricated evidence, still exits 2 and
+still gets no regeneration and no fallback, because a second roll of the dice is
+not the answer to a report that made something up. And asking that question first
+is what makes the withheld disclaimer safe to quote from: a sentence stamped into
+it has already been proven to name no ticker the packet does not carry.
+
+### The fallback itself was failing the guard
+
+Found while building the above, and it was live. The deterministic fallback
+wrote "No candidate is day eligible this morning", "Every candidate carries a
+found catalyst and full evidence" and a Summary reading "Day eligible: none",
+and the guard ran over whatever text reached the disk, fallback included. So an
+analyst timeout on a morning where either screen was empty produced a fallback
+report that tripped the guard and exited 2. The path built to guarantee a report
+on a bad morning was guaranteeing the opposite, and it had been that way since
+the guard shipped.
+
+Its prose is now written in counts, the same way the template's is: "0 of 12"
+carries the denominator that "none are eligible" throws away, and a reader should
+not have to learn two dialects depending on which pass wrote the morning. The
+guard is separately no longer run over this function's output at all, since the
+withheld disclaimer quotes the offending sentence on purpose and evidence has to
+be quotable. Both, not either: the exemption now covers only the quoted evidence,
+and a test asserts the fallback's own prose would pass the guard anyway.
+
+### prompt_analyst.md rule 13 was telling the model to break the guard
+
+Rule 13 ended with "Writing 'no candidate has X' is still allowed, since no is
+not one of the banned words". `no` joined the ban in the fourth entry above and
+the rule was not updated with it, so for one commit the prompt instructed the
+model to write a sentence the guard would reject. Corrected, and the rule now
+also says what a hit costs, since the model is the one being asked to avoid it.
+
+### The watchdog counts the flags nobody has judged
+
+Dispositions are recorded by hand, which is the same shape as the failure that
+had pool_recall raising every night for a week while writing nothing and
+DECISIONS citing its evidence as accumulating. A flag log that fills while
+nobody judges means the rate never prints and the word list gets tuned in a
+month on the intuition it was written with.
+
+monitor_jobs now names the unjudged count on every pass, beside the jobs. A flag
+raised this morning has not been ignored, so it is named without counting as a
+problem; past CRITERIA monitor.flag_backlog_after_days the oldest one has
+survived a week of mornings and joins the problem count with the command that
+lists them. The rate tool also splits flags by outcome now, which answers the
+other question tuning needs: not how often the guard is wrong, but what being
+wrong costs. A word that regenerates away is a nuisance, a word that reaches the
+fallback is a bill.
+
+A morning the regeneration rescued is deliberately NOT recorded as a failed
+analyst step. The report went out; calling the step failed would fire STEP FAILED
+on a good morning, and a watchdog line that fires on good mornings is one nobody
+reads by the end of the month. It is recorded in the flag log with its outcome,
+in analyst_usage.json, and in the watchdog's unjudged count, which are three
+places to find it and none to trip over.
+
+Two claims added to test_containment: a model that will not stop asserting a
+quantifier produces the plain table with its sentence and flag id in the
+disclaimer and exit zero, and the watchdog names the unjudged count and calls a
+week of silence a backlog. The one-parameter stub in test_entrypoints was
+updated with them, having been the thing that would have TypeErrored on the
+first morning the guard fired.
+
 ## 2026-08-18, fourth: the guard's flags are logged, `no` joins the ban, and the Summary counts stop being derived
 
 ### The rate is measured now, not asserted

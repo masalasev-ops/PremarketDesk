@@ -1891,3 +1891,72 @@ CONSEQUENCE. All six above were listed the same way, and the two that were wrong
 were wrong because a consequence was asserted ("scoring has stopped") that the
 scope did not deliver. That is a convention for future entries, not a change to
 any existing one.
+
+
+## 2026-08-18, fifth: what a rejected narrative costs, and who notices
+
+**The decision.** A quantifier flag costs one regeneration, then the narrative,
+and never the report. It used to cost the whole morning, and that was set
+without ever being chosen: the guard returned exit 2 because every other
+containment failure does, and the morning chain stops on the first non-zero
+code, so the price was inherited from a check that guards against a different
+kind of failure.
+
+**Why the two are not alike.** An invented ticker is fabricated evidence. A
+reader acting on it is acting on something that does not exist, and no partial
+version of that report is safe to send, so exit 2 with nothing delivered is
+right and stays. A quantifier over the candidate set is an UNCHECKABLE claim,
+which is a smaller thing: the numbers around it are still true, the tables are
+still correct, and the only unsafe part is one sentence. Withholding the
+narrative removes that sentence and keeps everything else. Withholding the
+report removes everything and keeps nothing, to protect a reader from a sentence
+they were never going to see.
+
+**Why one regeneration and not three.** The rejected sentences go back with the
+request, so the second attempt is told what to avoid rather than asked to differ
+by luck. An attempt that fails after being told is evidence about the report or
+about the guard, and a third would be spending the morning's remaining clock on
+the hope that a deterministic failure is stochastic. timeout_s is 293 seconds
+and the chain starts at 08:45.
+
+**Why the guard does not read the fallback.** Two reasons, and the first is the
+one that decided it. The withheld disclaimer quotes the sentence that caused the
+withholding, because a reader told the narrative was withheld and not told what
+for has been handed a mystery instead of a report, and the person best placed to
+say the guard was wrong is the one reading the morning it fired. That quote
+necessarily carries the banned pattern. A guard reading it would reject the
+fallback and leave the morning with nothing, which is the exact failure this
+path exists to prevent. The second reason is that the fallback's claims are
+computed in Python from the packet and are true by construction, which is
+precisely what the guard exists to establish about the model's.
+
+The fallback's own prose was rewritten into counts anyway, so the exemption
+covers only the quoted evidence and never the report's ordinary sentences. That
+also fixed a live defect: until today the fallback's own wording tripped the
+guard, so an analyst timeout on a morning with an empty screen produced no
+report at all. Both halves are kept because either alone would have left the
+morning depending on the other.
+
+**Why the watchdog counts the unjudged flags.** The flag log exists so the
+guard's false positive rate is counted rather than recalled, and it fills only
+if somebody records verdicts by hand. This project has already run the
+experiment where a diagnostic raises on schedule and nobody reads what it wrote:
+pool_recall did it nightly for a week while DECISIONS cited its evidence as
+accumulating. The backlog is therefore surfaced where the jobs are, on the
+mornings somebody is already reading, rather than waiting to be asked for. A
+flag raised today is named and not called a problem; one that has survived
+flag_backlog_after_days of mornings is a backlog and joins the problem count.
+
+**What is deliberately not recorded as a failure.** A morning the regeneration
+rescued. The report went out and the narrative is the model's, so job_status
+stays ok. Marking it failed would fire the watchdog's STEP FAILED line on a good
+morning, and a line that fires on good mornings stops being read, which is the
+same decay this whole apparatus is built against. The event is in the flag log
+with an outcome of regenerated, in analyst_usage.json, and in the unjudged
+count.
+
+**What this does not settle.** Whether the word list is right. That still waits
+on judged dispositions, and the outcome split added here is the second input to
+it: a word that regenerates away costs a retry, a word that reaches the fallback
+costs the narrative, and the two should not be tuned as though they were the
+same. `each` and `no` remain the two most likely to move.

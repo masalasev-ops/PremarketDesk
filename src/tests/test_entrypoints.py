@@ -1268,7 +1268,10 @@ def claim_analyst(failures: list[str]) -> None:
     # Ticker header, so a stub that would be rejected in production must be
     # rejected here.
     # Same skeleton as the report fixture, from the template.
-    analyst.invoke_claude = lambda packet_text: (
+    # Two parameters, because a flagged narrative is regenerated with the
+    # rejected sentences appended to the piped document. A one parameter
+    # stub would pass here and TypeError on the morning the guard fires.
+    analyst.invoke_claude = lambda packet_text, correction=None: (
         "# Premarket\n\n"
         + conftest.watchlist_table("day watchlist",
                                    ["| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |"])

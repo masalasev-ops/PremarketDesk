@@ -74,7 +74,7 @@ decide nothing.
     screens were empty, both tables were omitted, and the twelve tickers named
     in the prose went unchecked. A report that omits a table is rejected.
 13. Do not assert a quantifier over the candidate set. The words every, all,
-    none, each, most and majority must not appear near the words candidate,
+    none, no, each, most and majority must not appear near the words candidate,
     name or watchlist anywhere in the prose. This is CHECKED MECHANICALLY and
     a report that breaks it is rejected before delivery, in the same way the
     watchlist header rows are both instructed here and verified in code.
@@ -89,8 +89,17 @@ decide nothing.
     the set. "day eligible 0 of 12" is checkable, "no candidate is eligible" is
     not, and the second one is how a false claim gets through.
 
-    Writing "no candidate has X" is still allowed, since no is not one of the
-    banned words, but a count is better wherever the packet carries one.
+    `no` is banned too, in front of those words: "no candidate cleared the
+    price test" is the same assertion as "none cleared it" and you can check
+    neither. It is banned FORWARDS only, so "there is no premarket high for AS,
+    so the candidate is dropped" is fine, because that says nothing about the
+    set.
+
+    What a hit costs, so you know what is at stake. The report is thrown away
+    and you are asked for it again with the offending sentence quoted back at
+    you. If the second answer breaks the rule too, the morning gets a plain
+    table with no narrative at all and your rejected sentence printed in its
+    disclaimer. There is no third attempt.
 14. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.
 

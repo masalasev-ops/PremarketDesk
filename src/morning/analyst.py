@@ -81,17 +81,28 @@ def _scrubbed_env() -> dict[str, str]:
     return env
 
 
-def _compose_stdin(packet_text: str) -> str:
+_RULE = "----------------------------------------------------------------"
+
+
+def _compose_stdin(packet_text: str, correction: str | None = None) -> str:
     prompt = config.ANALYST_PROMPT_PATH.read_text(encoding="utf-8")
     template = config.REPORT_TEMPLATE_PATH.read_text(encoding="utf-8")
-    return (
+    document = (
         f"{prompt}\n\n"
-        "----------------------------------------------------------------\n\n"
+        f"{_RULE}\n\n"
         f"{template}\n\n"
-        "----------------------------------------------------------------\n\n"
+        f"{_RULE}\n\n"
         "Here is this morning's packet.json, your only source:\n\n"
         f"{packet_text}\n"
     )
+    if correction:
+        # Last, so it is the final thing read before the answer is written.
+        # A regeneration that repeats the rejected sentence has cost the
+        # morning its narrative for nothing, and a blind retry is a coin
+        # flip: naming the sentence is what makes the second attempt worth
+        # spending.
+        document += f"\n{_RULE}\n\n{correction}\n"
+    return document
 
 
 def _trim_to_report(text: str) -> str:
@@ -114,11 +125,17 @@ def _trim_to_report(text: str) -> str:
     return text + "\n"
 
 
-def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | None, str]:
+def invoke_claude(
+    packet_text: str, correction: str | None = None
+) -> tuple[str | None, dict[str, Any], str | None, str]:
     """Run the CLI. Returns (report_text, usage_record, error, failure_kind).
 
     failure_kind is "ok" on success, "timeout" when the last attempt ran out
     of clock, "failed" for every other way the CLI can disappoint.
+
+    correction, when given, is appended to the piped document. It carries the
+    reason a previous answer was thrown away, so a regeneration is told what
+    to avoid rather than asked to differ by luck.
     """
     model = _CRIT.text("analyst", "model")
     timeout_s = _CRIT.integer("analyst", "timeout_s")
@@ -139,7 +156,7 @@ def invoke_claude(packet_text: str) -> tuple[str | None, dict[str, Any], str | N
         ]
     except FileNotFoundError as exc:
         return None, {}, str(exc), "failed"
-    stdin_doc = _compose_stdin(packet_text)
+    stdin_doc = _compose_stdin(packet_text, correction)
 
     last_error = None
     last_kind = "failed"
@@ -241,13 +258,40 @@ def _conviction(candidate: dict[str, Any]) -> str:
     return str(candidate.get("conviction"))
 
 
-def fallback_report(packet: dict[str, Any], reason: str) -> str:
-    """The report the morning gets when the model cannot be reached.
+# The two ways the narrative can fail to reach the page, worded as the
+# disclaimer says them. They are different failures and the reader has to be
+# able to tell them apart: unavailable means the CLI never answered, withheld
+# means it answered twice and Python refused what it said. Calling the second
+# one unavailable would be the fallback lying about its own provenance, which
+# is the single thing this report exists not to do.
+CAUSE_UNAVAILABLE = "the narrative pass was unavailable"
+CAUSE_WITHHELD = "the narrative pass was withheld"
+
+_FALLBACK_TITLES = {
+    CAUSE_UNAVAILABLE: "# PremarketDesk: numbers only, narrative unavailable",
+    CAUSE_WITHHELD: "# PremarketDesk: numbers only, narrative withheld",
+}
+
+
+def fallback_report(
+    packet: dict[str, Any], reason: str, cause: str = CAUSE_UNAVAILABLE
+) -> str:
+    """The report the morning gets when the model's answer cannot be used.
 
     Every number straight from the packet, no narrative, the same section
     skeleton as the template so downstream rendering and reading habits hold.
     The disclaimer line carries the failure reason, because a report that
     silently degraded would be a report that lied about its own provenance.
+
+    Its prose is written in counts rather than quantifiers, for the same
+    reason the template is: "0 of 12" carries the denominator that "none are
+    eligible" throws away, and a reader should not have to learn two dialects
+    depending on which pass wrote the morning. That the quantifier guard
+    would also pass this text is a consequence rather than the point. The
+    guard is never run over this function's output, because a fallback the
+    guard rejected would leave the morning with nothing at all, and because
+    the withheld disclaimer quotes the offending sentence as evidence and
+    evidence must be quotable.
     """
     candidates = packet.get("candidates", [])
     no_rvol = [_bare(c["symbol"]) for c in candidates if c.get("pm_rvol") is None]
@@ -266,14 +310,14 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
 
     lines: list[str] = []
     add = lines.append
-    add("# PremarketDesk: numbers only, narrative unavailable")
+    add(_FALLBACK_TITLES.get(cause, _FALLBACK_TITLES[CAUSE_UNAVAILABLE]))
     add("")
     add(f"{packet.get('session_date')}, packet generated {packet.get('generated_at')}, "
         "generated by PremarketDesk.")
     add("")
     disclaimer = (
         "Nothing here is advice, the screen thresholds are unvalidated seed values, "
-        f"the narrative pass was unavailable ({reason}), so this is the deterministic "
+        f"{cause} ({reason}), so this is the deterministic "
         "fallback built straight from packet.json"
     )
     if no_rvol:
@@ -303,9 +347,13 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     add("")
     add("## Summary")
     add("")
-    add(f"{len(candidates)} candidates. Day eligible: "
-        f"{', '.join(_bare(c['symbol']) for c in day) or 'none'}. Swing eligible: "
-        f"{', '.join(_bare(c['symbol']) for c in swing) or 'none'}. "
+
+    def _named(rows: list[dict[str, Any]]) -> str:
+        return (": " + ", ".join(_bare(c["symbol"]) for c in rows)) if rows else ""
+
+    add(f"{len(candidates)} candidates examined. Day eligible {len(day)} of "
+        f"{len(candidates)}{_named(day)}. Swing eligible {len(swing)} of "
+        f"{len(candidates)}{_named(swing)}. "
         f"{len(packet.get('gaps_to_fill', []))} gaps recorded in the packet.")
     add("")
     add("## Premarket gappers")
@@ -340,7 +388,8 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
         add("| none | | | | | | | |")
     add("")
     if not day:
-        add("No candidate is day eligible this morning.")
+        add(f"The day screen produced nothing this morning: 0 of {len(candidates)} "
+            "candidates are day eligible.")
         add("")
     add("## Swing watchlist")
     add("")
@@ -356,7 +405,8 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
         add("| none | | | | | | | |")
     add("")
     if not swing:
-        add("No candidate is swing eligible this morning.")
+        add(f"The swing screen produced nothing this morning: 0 of {len(candidates)} "
+            "candidates are swing eligible.")
         add("")
     add("## Market trends")
     add("")
@@ -422,7 +472,8 @@ def fallback_report(packet: dict[str, Any], reason: str) -> str:
     if partial:
         add(f"Premarket path partial or absent, treat any level as partial: {', '.join(partial)}.")
     if not no_catalyst and not unknown_catalyst and not partial:
-        add("Every candidate carries a found catalyst and full evidence.")
+        add(f"Catalyst found and premarket evidence complete for "
+            f"{len(candidates)} of {len(candidates)} candidates.")
     add("")
     add("Trap judgment (a gap up on bad news) needs the narrative pass and is "
         "not attempted here.")
@@ -512,8 +563,18 @@ def flag_log_path() -> Path:
     return config.DATA_DIR / "quantifier-flags.jsonl"
 
 
+# What became of the report the flag was raised against. A flag that a
+# regeneration fixed cost the morning nothing; a flag that survived the
+# regeneration cost it its narrative. Both are raises of the guard and both
+# belong in the false positive denominator, but they are not the same event,
+# and the difference is the number that says whether this guard is expensive.
+OUTCOME_REGENERATED = "regenerated"
+OUTCOME_FELL_BACK = "fell_back"
+
+
 def record_quantifier_flags(
-    hits: list[dict[str, Any]], session: str, report_name: str
+    hits: list[dict[str, Any]], session: str, report_name: str,
+    attempt: int = 1, outcome: str = OUTCOME_FELL_BACK,
 ) -> list[int]:
     """Append each flag to the running log and return the ids assigned.
 
@@ -557,6 +618,8 @@ def record_quantifier_flags(
                     "quantifier": hit["quantifier"],
                     "set_word": hit["set_word"],
                     "sentence": hit["text"],
+                    "attempt": attempt,
+                    "outcome": outcome,
                     # Filled in later by a human through ops/quantifier_flags.py.
                     # Null means nobody has judged it yet, which is different
                     # from judged and found harmless.
@@ -602,6 +665,85 @@ def quantifier_violations(report: str) -> list[dict[str, Any]]:
                     "text": stripped,
                 })
     return out
+
+
+def _print_quantifier_flags(
+    hits: list[dict[str, Any]], ids: list[int], attempt: int, attempts: int
+) -> None:
+    """Say what was matched and where, in a form somebody can judge at 08:46.
+
+    The matched term and the whole sentence, not a line number. A flag nobody
+    can dismiss without opening the report is a flag that gets waved through,
+    and a guard that gets waved through has stopped being a guard.
+    """
+    print(f"analyst: the quantifier guard rejected narrative attempt {attempt} "
+          f"of {attempts}. The report asserts a quantifier over the candidate "
+          "set, which no reader can check against the report in front of them:")
+    for hit, flag_id in zip(hits, ids or [None] * len(hits)):
+        print(f"  flag {flag_id} line {hit['line']}: matched "
+              f"{hit['quantifier']!r} near {hit['set_word']!r}")
+        print(f"      {hit['text']}")
+    print("analyst: packet screen_tally carries the counts to quote instead. "
+          "See prompt_analyst.md rule 13.")
+    if ids:
+        print(f"analyst: logged to {flag_log_path().name}. If one of these is "
+              "wrong, record it so the word list is tuned on data: "
+              f"python -m ops.quantifier_flags --mark {ids[0]} false-positive "
+              '--note "why"')
+
+
+def quantifier_correction(hits: list[dict[str, Any]]) -> str:
+    """The note appended to the packet when a flagged report is regenerated."""
+    lines = [
+        "STOP. Your previous answer to this exact request was REJECTED before "
+        "anybody read it, and you are writing it again from the beginning.",
+        "",
+        "Rule 13 forbids asserting a quantifier over the candidate set. You "
+        "cannot check such a claim and neither can the reader, which is why it "
+        "is refused mechanically rather than argued about. These sentences "
+        "broke it:",
+        "",
+    ]
+    for hit in hits:
+        lines.append(f"  matched {hit['quantifier']!r} near {hit['set_word']!r}: "
+                     f"{hit['text']}")
+    lines += [
+        "",
+        "Write the whole report again. Everything else about it is unchanged. "
+        "Where you need to say something about the candidate set as a whole, "
+        "quote the counts already computed in packet screen_tally, in the form "
+        '"0 of 12", rather than reaching for a word like every, all, none, no, '
+        "each, most or majority. This is the last attempt: if the next answer "
+        "is rejected too, the morning gets a plain table with no narrative at "
+        "all.",
+    ]
+    return "\n".join(lines)
+
+
+# Long enough to read as a sentence, short enough that the disclaimer line
+# stays a line. The full text is on the flag record, which the id points at.
+_QUOTE_LIMIT = 240
+
+
+def quantifier_reason(hits: list[dict[str, Any]], ids: list[int]) -> str:
+    """Why the narrative was withheld, in the words the disclaimer will carry.
+
+    The sentence itself, not a count of sentences. A reader who is told the
+    narrative was withheld and not told what for has been handed a mystery
+    instead of a report, and the person best placed to say the guard was
+    wrong is the one reading the morning it fired.
+    """
+    first = hits[0]
+    sentence = first["text"]
+    if len(sentence) > _QUOTE_LIMIT:
+        sentence = sentence[:_QUOTE_LIMIT].rstrip() + "..."
+    where = f"logged as flag {ids[0]}" if ids else "not logged, the flag file could not be written"
+    plural = "" if len(hits) == 1 else f", {len(hits)} in total"
+    return (
+        f"the model asserted a quantifier over the candidate set on both "
+        f"attempts, matching {first['quantifier']!r} near {first['set_word']!r}{plural} "
+        f'in "{sentence}" ({where}, judge it with python -m ops.quantifier_flags)'
+    )
 
 
 def _claimable_symbols() -> set[str] | None:
@@ -884,35 +1026,131 @@ def write_report(packet_path: Path) -> int:
     packet = json.loads(packet_text)
     session_date = packet.get("session_date") or ettime.today_et().isoformat()
     run_directory = config.run_dir(session_date)
+    report_path = run_directory / "report.md"
 
-    report_text, usage, error, kind = invoke_claude(packet_text)
-    if error or report_text is None or not report_text.strip():
-        reason = error or "the model returned an empty report"
-        if not error:
-            kind = "failed"
-        print(f"analyst: narrative unavailable ({kind}): {reason}")
+    # One narrative attempt, plus however many regenerations CRITERIA allows.
+    #
+    # The quantifier guard used to cost the whole morning. A flag returned 2,
+    # the chain stops on the first non-zero exit code, and render, deliver and
+    # archive never ran: no report at all, over one sentence. That is the
+    # wrong price for a guard whose own false positive rate is still being
+    # measured, and it is the price a person in a hurry pays by switching the
+    # guard off. So a flag now costs a regeneration first and the narrative
+    # second, and never the report. The worst a false positive can do is hand
+    # the morning the plain table, which is exactly the trade the guard's
+    # asymmetry argument already assumed it was making.
+    attempts = _CRIT.integer("analyst", "quantifier_regenerations") + 1
+    report_text: str | None = None
+    usage: dict[str, Any] = {}
+    reason: str | None = None
+    kind = "failed"
+    cause = CAUSE_UNAVAILABLE
+    correction: str | None = None
+    flags_raised: list[dict[str, Any]] = []
+
+    for attempt in range(1, attempts + 1):
+        text, usage, error, kind = invoke_claude(packet_text, correction)
+        if error or text is None or not text.strip():
+            reason = error or "the model returned an empty report"
+            if not error:
+                kind = "failed"
+            break
+
+        # Containment first, and the order is deliberate. An invented ticker
+        # is fabricated evidence, the one failure this system exists to
+        # prevent, and it neither regenerates nor degrades: the report is
+        # written for inspection and the chain stops. Asking that question
+        # before the quantifier one is also what makes the withheld
+        # disclaimer safe to quote from, because a sentence stamped into it
+        # has already been proven to name no ticker the packet does not carry.
+        invented, _missing, coverage = check_report(text, packet_text)
+        if invented or coverage["structure_failed"]:
+            report_text = text
+            break
+
+        hits = quantifier_violations(text)
+        if not hits:
+            report_text = text
+            break
+
+        final = attempt == attempts
+        ids = record_quantifier_flags(
+            hits, session_date, report_path.name, attempt,
+            OUTCOME_FELL_BACK if final else OUTCOME_REGENERATED,
+        )
+        _print_quantifier_flags(hits, ids, attempt, attempts)
+        flags_raised.extend(
+            {**hit, "id": flag_id, "attempt": attempt}
+            for hit, flag_id in zip(hits, ids or [None] * len(hits))
+        )
+        if not final:
+            print(f"analyst: regenerating, {attempts - attempt} attempt(s) left. "
+                  "The rejected sentences go back to the model with the report "
+                  "request, so the second answer is told what to avoid.")
+            correction = quantifier_correction(hits)
+            continue
+        kind = "quantifier"
+        cause = CAUSE_WITHHELD
+        reason = quantifier_reason(hits, ids)
+
+    if report_text is None:
+        print(f"analyst: {cause} ({kind}): {reason}")
         print("analyst: falling back to the deterministic numbers only report")
-        report_text = fallback_report(packet, reason)
-        usage = {"status": kind, "error_message": reason, "fallback": True}
+        # Never run back through quantifier_violations. This text is Python
+        # written, its claims are true by construction, and its disclaimer
+        # quotes the rejected sentence on purpose. A guard that rejected the
+        # fallback would leave the morning with nothing, which is the exact
+        # failure this path exists to prevent.
+        report_text = fallback_report(packet, reason or "unrecorded", cause)
+        usage = {
+            "status": kind,
+            "error_message": reason,
+            "fallback": True,
+            # The rejected attempt still cost tokens and still has a session
+            # id worth keeping. A degraded morning is the one you most want
+            # the transcript of.
+            "last_attempt_usage": usage or None,
+            "quantifier_flags": flags_raised or None,
+        }
     else:
         usage["status"] = "ok"
         usage["fallback"] = False
+        if flags_raised:
+            # The regeneration worked. Worth recording next to the report it
+            # rescued: this is the number that says whether the guard is cheap.
+            usage["quantifier_flags"] = flags_raised
+            usage["quantifier_regenerated"] = True
 
     # Overdue scheduled steps, named before the report is written rather than
     # after, so the deterministic fallback report carries the line too.
     report_text = annotate_job_health(report_text, packet)
 
-    report_path = run_directory / "report.md"
     report_path.write_text(report_text, encoding="utf-8")
     job_status.produced("report characters", len(report_text))
     if usage.get("fallback"):
         # The deterministic fallback is a real report and a real zero exit, and
         # the morning still gets numbers. It is not the model narrating, and a
         # run of fallback mornings is a thing to notice rather than discover.
-        job_status.failed(f"narrative unavailable, fell back to numbers only: "
+        job_status.failed(f"{cause}, fell back to numbers only: "
                           f"{usage.get('error_message')}")
+    elif usage.get("quantifier_regenerated"):
+        # Deliberately NOT job_status.failed. The morning got its narrative,
+        # so calling the step failed would be crying wolf on a good report,
+        # and a STEP FAILED that fires on good mornings is one nobody reads by
+        # the end of the month. The event is already recorded three places
+        # that cost nothing to ignore and nothing to find: the flag log with
+        # its outcome, analyst_usage.json, and the watchdog's unjudged count.
+        print("analyst: the quantifier guard rejected the first attempt and the "
+              "regeneration passed. The narrative was delivered and the flag "
+              "stands, logged as regenerated; judge it with "
+              "python -m ops.quantifier_flags --pending")
     print(f"analyst: wrote {report_path} ({len(report_text)} chars, status {usage['status']})")
 
+    # Checked again, on purpose. The loop above asked the containment question
+    # of the raw model text to decide whether to retry; this asks it of the
+    # file that is actually on disk, job health line and all, because the
+    # recorded coverage has to describe what was written rather than what was
+    # considered.
     invented, missing, coverage = check_report(report_text, packet_text)
     if coverage["claims_checked"] == 0 or coverage["structure_failed"]:
         # A pass that examined nothing is not a pass, and the reader must be
@@ -958,28 +1196,12 @@ def write_report(packet_path: Path) -> int:
               + coverage["structure_reason"])
         print("analyst: the report was written for inspection but must not be delivered.")
         return 2
-    quantifiers = quantifier_violations(report_text)
-    if quantifiers:
-        ids = record_quantifier_flags(quantifiers, session_date, report_path.name)
-        print("analyst: FAILED the quantifier guard. The report asserts a "
-              "quantifier over the candidate set, which no reader can check "
-              "against the report in front of them:")
-        for hit, flag_id in zip(quantifiers, ids or [None] * len(quantifiers)):
-            # The matched term and the whole sentence, not just a line number.
-            # A flag nobody can judge without opening the report is a flag that
-            # gets waved through at 08:46.
-            print(f"  flag {flag_id} line {hit['line']}: matched "
-                  f"{hit['quantifier']!r} near {hit['set_word']!r}")
-            print(f"      {hit['text']}")
-        print("analyst: packet screen_tally carries the counts to quote instead. "
-              "See prompt_analyst.md rule 13.")
-        if ids:
-            print(f"analyst: logged to {flag_log_path().name}. If one of these is "
-                  "wrong, record it so the word list is tuned on data: "
-                  f"python -m ops.quantifier_flags --mark {ids[0]} false-positive "
-                  '--note "why"')
-        print("analyst: the report was written for inspection but must not be delivered.")
-        return 2
+    # There is no quantifier check here. It moved into the narration loop
+    # above, where a flag can still be answered with a regeneration and then
+    # with the plain table. Running it again on the way out would put the old
+    # failure back: the text on disk at this point is either model prose the
+    # guard already cleared, or the fallback, whose disclaimer quotes the
+    # rejected sentence and would fail a guard reading it as a claim.
     if coverage["claims_checked"]:
         print(f"analyst: containment check passed: {coverage['claims_checked']} "
               f"ticker claims validated across {coverage['columns_scanned']} "

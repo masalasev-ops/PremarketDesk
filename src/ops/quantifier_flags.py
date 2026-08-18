@@ -31,7 +31,9 @@ from typing import Any
 from core import config, ettime
 from morning import analyst
 
-_VERDICTS = ("true-positive", "false-positive")
+# Public: monitor_jobs.py reads the same two words to tell a judged flag
+# from a pending one. A second copy of this tuple over there would drift.
+VERDICTS = ("true-positive", "false-positive")
 
 
 def load_flags() -> list[dict[str, Any]]:
@@ -54,13 +56,25 @@ def load_flags() -> list[dict[str, Any]]:
 
 
 def rate(flags: list[dict[str, Any]]) -> dict[str, Any]:
-    """The measured false positive rate, and how much of the sample is judged.
+    """The measured false positive rate, what it cost, and how much is judged.
 
     judged is the denominator that matters. A rate over three judged flags is
     not a rate, and printing it beside the count is what stops it being quoted
     as though it were.
+
+    by_outcome is the second measurement and answers a different question: not
+    how often the guard is wrong, but how much being wrong costs. A flag the
+    regeneration cleared cost the morning nothing. A flag that survived the
+    regeneration cost it its narrative. Tuning the word list needs both, since
+    a noisy word that regenerates away is a nuisance and a noisy word that
+    reaches the fallback is a bill. Flags written before 2026-08-18 carry no
+    outcome and count as unrecorded rather than as either.
     """
-    judged = [f for f in flags if f.get("disposition") in _VERDICTS]
+    judged = [f for f in flags if f.get("disposition") in VERDICTS]
+    by_outcome: dict[str, int] = {}
+    for flag in flags:
+        key = str(flag.get("outcome") or "unrecorded")
+        by_outcome[key] = by_outcome.get(key, 0) + 1
     false = [f for f in judged if f["disposition"] == "false-positive"]
     by_word: dict[str, dict[str, int]] = {}
     for flag in judged:
@@ -76,6 +90,7 @@ def rate(flags: list[dict[str, Any]]) -> dict[str, Any]:
         "false_positives": len(false),
         "false_positive_rate": (len(false) / len(judged)) if judged else None,
         "by_quantifier": by_word,
+        "by_outcome": by_outcome,
     }
 
 
@@ -102,15 +117,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Judge and measure quantifier guard flags.")
     parser.add_argument("--mark", type=int, metavar="ID", default=None,
                         help="Record a verdict against one flag id.")
-    parser.add_argument("verdict", nargs="?", choices=_VERDICTS, default=None)
+    parser.add_argument("verdict", nargs="?", choices=VERDICTS, default=None)
     parser.add_argument("--note", default=None, help="Why, in a few words.")
     parser.add_argument("--pending", action="store_true",
-                        help="List only the flags nobody has judged yet.")
+                        help="List only the flags nobody has judged yet. The "
+                             "watchdog counts these and calls a week of them a "
+                             "backlog, so this is the list it is pointing at.")
     args = parser.parse_args(argv)
 
     if args.mark is not None:
         if not args.verdict:
-            print(f"quantifier_flags: --mark needs a verdict, one of {', '.join(_VERDICTS)}")
+            print(f"quantifier_flags: --mark needs a verdict, one of {', '.join(VERDICTS)}")
             return 1
         return mark(args.mark, args.verdict, args.note)
 
@@ -119,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"quantifier_flags: no flags recorded yet in {analyst.flag_log_path()}")
         return 0
 
-    shown = [f for f in flags if f.get("disposition") not in _VERDICTS] if args.pending else flags
+    shown = [f for f in flags if f.get("disposition") not in VERDICTS] if args.pending else flags
     for flag in shown:
         verdict = flag.get("disposition") or "PENDING"
         print(f"  {flag.get('id'):>4}  {flag.get('session')}  line {flag.get('line')}  "
@@ -132,6 +149,11 @@ def main(argv: list[str] | None = None) -> int:
     print("")
     print(f"  raised {summary['raised']}, judged {summary['judged']}, "
           f"pending {summary['pending']}")
+    outcomes = summary["by_outcome"]
+    print(f"  cost: {outcomes.get('regenerated', 0)} cleared by a regeneration, "
+          f"{outcomes.get('fell_back', 0)} took the morning's narrative with them"
+          + (f", {outcomes['unrecorded']} raised before outcomes were recorded"
+             if outcomes.get("unrecorded") else ""))
     if summary["false_positive_rate"] is None:
         print("  false positive rate: NOT MEASURABLE, nothing judged yet. "
               "The rate is not an estimate until this says otherwise.")

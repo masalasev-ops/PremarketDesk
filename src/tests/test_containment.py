@@ -281,6 +281,199 @@ def claim_flags_are_logged_for_measurement(failures: list[str]) -> None:
           f"{measured['false_positive_rate']:.0%} of {measured['judged']}")
 
 
+def claim_a_flag_cannot_cost_the_report(failures: list[str]) -> None:
+    """A flag that survives the regeneration costs the narrative, not the report.
+
+    The guard used to return exit 2 on any flag. The morning chain stops on the
+    first non-zero code, so render, deliver and archive never ran and the
+    morning got nothing at all, over one sentence, from a guard whose own false
+    positive rate is still a sample of six. A guard that can cost the whole
+    morning is a guard somebody switches off the first time it is wrong.
+
+    Proven here on a model that will not stop saying it: the flag is raised
+    twice, the second time after being told exactly what to avoid, and what
+    lands on disk is the plain table with the offending sentence stamped into
+    its disclaimer. Exit zero, because the morning has a report.
+    """
+    import io
+    from contextlib import redirect_stdout
+    from ops import quantifier_flags
+
+    packet = {
+        "session_date": "2026-01-05",
+        "generated_at": "2026-01-05T08:45:00-05:00",
+        "candidates": [{
+            "symbol": "ARX.US", "conviction": "green", "day_eligible": True,
+            "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02, "price": 19.0,
+            "prior_close": 13.3, "pm_high": 19.51, "pm_vwap": 19.1,
+            "catalyst_found": True, "catalyst_class": "earnings",
+            "collector_covered": True, "quote": {"name": "Aeries"},
+        }],
+        "market_snapshot": [{"label": "spy", "symbol": "SPY.US"}],
+        "job_health": {"overdue": [], "line": None},
+    }
+    run_directory = config.run_dir(packet["session_date"])
+    run_directory.mkdir(parents=True, exist_ok=True)
+    packet_path = run_directory / "packet.json"
+    packet_path.write_text(json.dumps(packet), encoding="utf-8")
+
+    sentence = "Every candidate missed the prior day high."
+    stubborn = (
+        "# PremarketDesk test\n\n"
+        "Nothing here is advice, the screen thresholds are unvalidated seed values.\n\n"
+        f"{sentence}\n\n"
+        + conftest.watchlist_table(
+            "day watchlist",
+            ["| ARX | 43.02 | 19.00 | 2.0 | 19.51 | 19.10 | 7.0 | green |"])
+        + "\n"
+        + conftest.watchlist_table("swing watchlist")
+    )
+
+    corrections: list[str | None] = []
+    real_invoke = analyst.invoke_claude
+
+    def stubborn_model(packet_text, correction=None):
+        corrections.append(correction)
+        return stubborn, {"output_tokens": 1, "total_cost_usd": 0.01}, None, "ok"
+
+    before = len(quantifier_flags.load_flags())
+    analyst.invoke_claude = stubborn_model
+    try:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            code = analyst.write_report(packet_path)
+    finally:
+        analyst.invoke_claude = real_invoke
+
+    report_path = run_directory / "report.md"
+    if code != 0:
+        failures.append(f"a persistent quantifier flag exited {code}; the chain "
+                        "stops on any non-zero code, so that is a lost morning")
+    if not report_path.is_file():
+        failures.append("a persistent quantifier flag produced no report at all")
+        return
+    report_text = report_path.read_text(encoding="utf-8")
+    if "narrative withheld" not in report_text:
+        failures.append("the degraded report does not say the narrative was "
+                        f"withheld: {report_text.splitlines()[0]!r}")
+    if "unavailable" in report_text.splitlines()[0]:
+        failures.append("a withheld narrative is reported as an unavailable one, "
+                        "which is the report lying about its own provenance")
+    disclaimer = next((line for line in report_text.splitlines()
+                       if "Nothing here is advice" in line), "")
+    if sentence not in disclaimer:
+        failures.append(f"the disclaimer does not quote the flagged sentence: {disclaimer}")
+    if "flag " not in disclaimer:
+        failures.append(f"the disclaimer does not name the flag id: {disclaimer}")
+    for kind, header in conftest.watchlist_headers().items():
+        if header not in report_text:
+            failures.append(f"the degraded report omits the {kind} table")
+
+    # The regeneration has to be told what it did wrong. A blind retry against
+    # a deterministic failure is a coin flip with no coin.
+    if len(corrections) != 2:
+        failures.append(f"expected one regeneration, the model was called "
+                        f"{len(corrections)} time(s)")
+    elif corrections[0] is not None:
+        failures.append("the first attempt carried a correction it could not have earned")
+    elif not corrections[1] or sentence not in corrections[1]:
+        failures.append("the regeneration was not told which sentence was rejected: "
+                        f"{corrections[1]!r}")
+
+    flags = quantifier_flags.load_flags()
+    fresh = flags[before:]
+    if len(fresh) != 2:
+        failures.append(f"expected both raises logged, found {len(fresh)}")
+    else:
+        outcomes = [f.get("outcome") for f in fresh]
+        if outcomes != [analyst.OUTCOME_REGENERATED, analyst.OUTCOME_FELL_BACK]:
+            failures.append(f"the flag outcomes do not distinguish the regeneration "
+                            f"from the fallback: {outcomes}")
+
+    usage = json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))
+    if usage.get("status") != "quantifier" or not usage.get("fallback"):
+        failures.append(f"the usage record does not say why the morning degraded: {usage}")
+    print("  claim 9 a flag the regeneration could not fix costs the narrative and "
+          "not the report: exit 0, plain table on disk, the sentence and its flag "
+          "id in the disclaimer")
+
+
+def claim_the_watchdog_names_the_unjudged(failures: list[str]) -> None:
+    """A backlog of unjudged flags is visible without opening the log.
+
+    Dispositions are recorded by hand, and this project has already watched a
+    diagnostic raise nightly and write nothing for a week while DECISIONS cited
+    its evidence as accumulating. A flag log that fills while nobody judges is
+    the same failure wearing a different hat: the rate never prints, and in a
+    month the word list gets tuned on the intuition it was written with.
+
+    So the watchdog counts them on every pass. A flag raised this morning has
+    not been ignored and is named without being called a problem; one that has
+    survived flag_backlog_after_days of mornings is a backlog and joins the
+    problem count.
+    """
+    import datetime as dt
+    import io
+    from contextlib import redirect_stdout
+    from core import criteria, ettime
+    from ops import monitor_jobs, quantifier_flags
+
+    now = ettime.now_et()
+    real_query = monitor_jobs.query_task
+    monitor_jobs.query_task = lambda task_name: {
+        "exists": True, "status": "Ready", "last_run": None, "last_result": "0",
+    }
+
+    def watchdog_output() -> str:
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            monitor_jobs.check_all(now.replace(hour=0, minute=30), dry_run=True)
+        return buffer.getvalue()
+
+    try:
+        pending_now = watchdog_output()
+        # A flag old enough that nobody can call it fresh. Written straight to
+        # the log because the thing under test is what a WEEK of silence looks
+        # like, and no test can wait one.
+        stale_days = criteria.load().integer("monitor", "flag_backlog_after_days") + 2
+        path = analyst.flag_log_path()
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps({
+                "id": 90001,
+                "recorded_at": ettime.stamp(now - dt.timedelta(days=stale_days)),
+                "session": "2026-01-01", "report": "report.md", "line": 5,
+                "quantifier": "every", "set_word": "candidate",
+                "sentence": "Every candidate missed the prior day high.",
+                "attempt": 1, "outcome": analyst.OUTCOME_FELL_BACK,
+                "disposition": None, "disposition_note": None, "disposition_at": None,
+            }, separators=(",", ":")) + "\n")
+        backlog_now = watchdog_output()
+    finally:
+        monitor_jobs.query_task = real_query
+
+    flag_lines = [line for line in pending_now.splitlines() if " flags " in line]
+    if not flag_lines:
+        failures.append("the watchdog says nothing about the quantifier flag log")
+    elif "unjudged" not in flag_lines[0]:
+        failures.append(f"the watchdog does not name the unjudged count: {flag_lines[0]}")
+
+    backlog_lines = [line for line in backlog_now.splitlines() if " flags " in line]
+    if not backlog_lines:
+        failures.append("the watchdog lost its flag line once there was a backlog")
+    elif "BACKLOG" not in backlog_lines[0]:
+        failures.append("a flag older than the backlog window is not called a "
+                        f"backlog: {backlog_lines[0]}")
+
+    measured = monitor_jobs.flag_backlog(now)
+    if measured.get("oldest_days") is None or measured["oldest_days"] < stale_days - 1:
+        failures.append(f"the backlog age is not measured from the log: {measured}")
+    if not measured.get("pending"):
+        failures.append(f"the unjudged count is not counted: {measured}")
+    else:
+        print(f"  claim 10 the watchdog names {measured['pending']} unjudged flag(s) "
+              f"and calls the {measured['oldest_days']:.0f} day old one a backlog")
+
+
 def main() -> int:
     packet_text = build_packet_text()
     absent = pick_absent_universe_symbol(packet_text)
@@ -456,6 +649,10 @@ def main() -> int:
     claim_quantifiers_over_the_set_are_rejected(failures)
 
     claim_flags_are_logged_for_measurement(failures)
+
+    claim_a_flag_cannot_cost_the_report(failures)
+
+    claim_the_watchdog_names_the_unjudged(failures)
 
     if failures:
         for failure in failures:

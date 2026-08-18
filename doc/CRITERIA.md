@@ -657,6 +657,7 @@ model                         = opus       # owner's standing choice, re-asserte
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
 timeout_s                     = 293        # 3x the slowest of five measured opus medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds
 max_attempts                  = 2          # total tries, including the first
+quantifier_regenerations      = 1          # flagged narratives thrown away and asked for again before the plain table takes over
 prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI, A, I
 
 ### The prose stopword note
@@ -681,6 +682,27 @@ prose alone will not be caught. The alternative is a guard that cries wolf
 every morning, and a guard that always fires is a guard nobody reads. Claims
 in the watchlist tables are unaffected, and those tables are now mandatory
 even when empty.
+
+### The quantifier regeneration note
+
+The quantifier guard rejects a report that asserts a quantifier over the
+candidate set. Until 2026-08-18 that rejection cost the whole morning: the
+guard returned exit 2, the chain stops on the first non-zero code, and render,
+deliver and archive never ran. No report at all, over one sentence, from a
+guard whose own false positive rate is still being measured.
+
+That is the wrong price, and the wrong price is what gets a guard switched off.
+So a flag now buys a regeneration first. The rejected sentences are appended to
+the piped document, the model writes the report again knowing what to avoid,
+and only if the second answer flags too does the morning drop to the plain
+table fallback, with the reason and the offending sentence stamped into the
+disclaimer line. One regeneration rather than several: a second roll of the
+dice that also fails is evidence about the report or the guard, not bad luck,
+and each attempt costs another timeout_s of the morning's clock.
+
+The worst a false positive can now do is remove the narrative from one
+morning. That is exactly the trade the guard's own asymmetry argument assumed
+it was making.
 
 Note on the invocation: the narrative pass is one text generation, not an
 agent loop. The CLI runs with --tools "" so there is nothing to loop on, a
@@ -783,6 +805,23 @@ rerun_chain_until             = 09:30      # after the open a premarket report i
 collector_stale_after_s       = 180        # no bar file write for this long inside the window means dead
 universe_rerun_after_days     = 8          # a fresh weekly build is 7 days old at most
 max_reruns_per_job_per_day    = 1
+flag_backlog_after_days       = 7          # an unjudged quantifier flag older than this is a backlog rather than a fresh flag
+
+### The flag backlog note
+
+The watchdog also counts the quantifier guard flags nobody has judged yet.
+It is not checking a job; it is checking that a measurement is still being
+taken. The flag log exists so the guard's false positive rate is a counted
+number rather than an impression, and a log that fills while nobody records
+a verdict is a rate that never prints and a word list tuned on the same
+intuition it was written with. This project has watched that happen once
+already: pool_recall raised nightly and wrote nothing for a week while
+DECISIONS cited its evidence as accumulating.
+
+A flag raised this morning has not been ignored, so pending flags are named
+and not counted as a problem. Past flag_backlog_after_days the oldest one
+has survived a week of mornings, which is a backlog, and it joins the
+problem count so it shows up on a morning somebody is already reading.
 
 ## Archive
 
