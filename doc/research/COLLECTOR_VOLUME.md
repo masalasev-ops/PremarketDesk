@@ -1,0 +1,244 @@
+# Collector volume, diagnosed
+
+Written 2026-08-18. Findings only. No collector code was changed in this pass.
+
+The nightly writes runs/<date>/verify_intraday.json, the check BUILD_PLAN.md
+names as definitive for collector volume: collector bars against EODHD 1m
+intraday, identical minutes only. Its first live reading, 2026-08-14, was 0 of
+37 symbols within one percent at a median ABSOLUTE difference of 70.95 percent,
+and nobody had looked at it. This is that look.
+
+The check reports an absolute median, which discards the most informative bit.
+Everything below is SIGNED, positive meaning the collector recorded more volume
+than the vendor over the same minutes.
+
+## Headline
+
+| session | compared | signed median | abs median | negative | positive | within 1% |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2026-08-14 | 37 | -33.77% | 70.95% | 23 | 14 | 0 |
+| 2026-08-17 | 29 | -88.49% | 88.49% | 29 | 0 | 0 |
+
+| session | collector total | intraday total | ratio |
+| --- | ---: | ---: | ---: |
+| 2026-08-14 | 24,899,631 | 6,508,433 | 3.8257 |
+| 2026-08-17 | 682,965 | 6,870,865 | 0.0994 |
+
+The two sessions do not tell the same story, which is itself the finding.
+2026-08-17 is uniformly negative, 29 of 29, tightly clustered. 2026-08-14 is
+mixed, 23 negative and 14 positive, and its aggregate is 3.83 times the vendor's
+because a handful of enormous positives outweigh the many negatives. A signed
+median of -33.77 percent beside a total ratio of 3.83 is the signature of a
+distribution driven by outliers, and the absolute median the check prints hides
+both facts.
+
+## Is the check measuring the same minutes
+
+Asked first, because a window mismatch reported as a volume defect is a bug this
+repository already carries once, in pm_rvol's 07:20 numerator over its 04:00
+denominator.
+
+The check intersects the two sides on minute keys and sums only the intersection,
+so a pure window mismatch should surface as few common minutes rather than as a
+volume gap. The risk is subtler: if the two sides key the same minute differently,
+say one stamping the bar start and the other the bar end, the intersection would
+still be large while pairing each collector minute against the WRONG vendor
+minute. The shift columns test exactly that.
+
+### 2026-08-14
+
+| symbol | collector mins | window | intraday mins | window | common | collector only | intraday only | common if +1min | if -1min |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| ANGX.US | 11 | 07:36 to 09:20 | 16 | 07:46 to 09:20 | 3 | 8 | 13 | 0 | 3 |
+| AOSL.US | 12 | 07:31 to 09:22 | 20 | 07:31 to 09:22 | 5 | 7 | 15 | 3 | 3 |
+| ARX.US | 59 | 07:20 to 09:22 | 66 | 07:20 to 09:23 | 41 | 18 | 25 | 32 | 32 |
+
+### 2026-08-17
+
+| symbol | collector mins | window | intraday mins | window | common | collector only | intraday only | common if +1min | if -1min |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| AAOI.US | 113 | 07:19 to 09:24 | 127 | 07:19 to 09:25 | 113 | 0 | 14 | 113 | 112 |
+| AEHR.US | 41 | 07:17 to 09:20 | 114 | 07:17 to 09:21 | 41 | 0 | 73 | 36 | 38 |
+| AMAT.US | 108 | 07:19 to 09:24 | 127 | 07:19 to 09:25 | 108 | 0 | 19 | 108 | 107 |
+
+**The keys align and the check is sound.** On 2026-08-17 every collector minute
+is present on the vendor side, collector only is 0 for all three, and shifting
+the collector keys by a minute in either direction makes the overlap WORSE
+(113 to 113 and 112, 108 to 108 and 107). There is no off by one. The vendor
+simply covers more minutes than the collector heard, which is the collector
+missing minutes rather than the two sides describing different windows.
+
+2026-08-14 overlaps far less well, and in the informative direction: the
+collector holds minutes the vendor does NOT (8, 7 and 18 of them), which no
+window offset explains.
+
+## Per symbol, signed, sorted
+
+### 2026-08-14, signed median -33.77%
+
+| symbol | mins | collector | intraday | signed % |
+| --- | ---: | ---: | ---: | ---: |
+| CBRS.US | 116 | 86,817 | 2,012,273 | -95.69% |
+| BIRK.US | 94 | 82,097 | 919,330 | -91.07% |
+| AVAH.US | 10 | 686 | 3,872 | -82.28% |
+| CLBT.US | 63 | 28,020 | 144,310 | -80.58% |
+| ARX.US | 41 | 59,865 | 292,116 | -79.51% |
+| CRMD.US | 4 | 726 | 2,524 | -71.24% |
+| FRMI.US | 73 | 56,158 | 193,340 | -70.95% |
+| SNDK.US | 125 | 272,303 | 878,879 | -69.02% |
+| WDAY.US | 48 | 7,561 | 22,111 | -65.80% |
+| BLSH.US | 10 | 1,224 | 3,335 | -63.30% |
+| OMER.US | 18 | 2,276 | 5,956 | -61.79% |
+| RPD.US | 8 | 1,409 | 3,433 | -58.96% |
+| ANGX.US | 3 | 814 | 1,949 | -58.23% |
+| WIX.US | 16 | 1,166 | 2,347 | -50.32% |
+| XE.US | 53 | 10,048 | 19,511 | -48.50% |
+| SECZ.US | 43 | 26,562 | 51,221 | -48.14% |
+| MH.US | 5 | 476 | 866 | -45.03% |
+| QMCO.US | 63 | 14,941 | 26,476 | -43.57% |
+| HUBS.US | 18 | 1,418 | 2,141 | -33.77% |
+| TPR.US | 84 | 30,531 | 45,655 | -33.13% |
+| GTM.US | 2 | 573 | 802 | -28.55% |
+| LFTO.US | 12 | 1,628 | 2,019 | -19.37% |
+| NABL.US | 2 | 1,329 | 1,396 | -4.80% |
+| TBBB.US | 4 | 1,713 | 1,271 | +34.78% |
+| DKL.US | 4 | 673 | 480 | +40.21% |
+| VIXY.US | 41 | 57,171 | 28,114 | +103.35% |
+| BGSI.US | 1 | 142 | 60 | +136.67% |
+| REZI.US | 34 | 30,969 | 11,134 | +178.15% |
+| SPY.US | 125 | 1,550,327 | 327,159 | +373.88% |
+| AOSL.US | 5 | 4,574 | 954 | +379.45% |
+| BSP.US | 36 | 47,037 | 5,253 | +795.43% |
+| IWM.US | 114 | 1,098,500 | 121,519 | +803.97% |
+| QQQ.US | 125 | 5,907,879 | 481,346 | +1127.37% |
+| TLT.US | 118 | 10,688,231 | 780,284 | +1269.79% |
+| USO.US | 124 | 3,882,971 | 105,650 | +3575.32% |
+| DIA.US | 92 | 875,442 | 9,217 | +9398.12% |
+| UUP.US | 2 | 65,374 | 130 | +50187.69% |
+
+### 2026-08-17, signed median -88.49%
+
+| symbol | mins | collector | intraday | signed % |
+| --- | ---: | ---: | ---: | ---: |
+| UUP.US | 2 | 660 | 24,877 | -97.35% |
+| IWM.US | 70 | 14,979 | 214,389 | -93.01% |
+| QQQ.US | 116 | 32,568 | 439,907 | -92.60% |
+| INTC.US | 126 | 131,797 | 1,716,683 | -92.32% |
+| SPY.US | 106 | 32,532 | 412,429 | -92.11% |
+| USO.US | 78 | 29,556 | 338,502 | -91.27% |
+| HTHT.US | 20 | 5,081 | 57,440 | -91.15% |
+| SAP.US | 12 | 360 | 4,049 | -91.11% |
+| AVGO.US | 114 | 16,116 | 175,722 | -90.83% |
+| ASML.US | 65 | 884 | 9,577 | -90.77% |
+| AMD.US | 122 | 54,335 | 538,565 | -89.91% |
+| BABA.US | 93 | 33,241 | 319,003 | -89.58% |
+| TLT.US | 105 | 76,766 | 711,930 | -89.22% |
+| MU.US | 126 | 109,052 | 948,574 | -88.50% |
+| TSM.US | 101 | 10,785 | 93,698 | -88.49% |
+| HUBS.US | 17 | 619 | 5,195 | -88.08% |
+| AEHR.US | 41 | 2,351 | 19,617 | -88.02% |
+| AMAT.US | 108 | 12,611 | 98,841 | -87.24% |
+| WDC.US | 106 | 13,611 | 102,726 | -86.75% |
+| WDAY.US | 28 | 923 | 6,718 | -86.26% |
+| LITE.US | 106 | 8,939 | 63,359 | -85.89% |
+| AAOI.US | 113 | 35,073 | 246,930 | -85.80% |
+| AXTI.US | 107 | 36,446 | 227,277 | -83.96% |
+| STX.US | 93 | 5,304 | 31,806 | -83.32% |
+| VIXY.US | 14 | 1,941 | 9,990 | -80.57% |
+| AVAV.US | 25 | 816 | 4,127 | -80.23% |
+| DIA.US | 46 | 14,566 | 46,745 | -68.84% |
+| TEAM.US | 12 | 876 | 1,841 | -52.42% |
+| MKSI.US | 7 | 177 | 348 | -49.14% |
+
+## The decisive comparison: which side is stable
+
+Eight ETFs were collected on both sessions, so they can be read across the two.
+The vendor's numbers for the same symbol two sessions apart sit in the same
+order of magnitude. The collector's do not.
+
+| symbol | intraday 08-14 | intraday 08-17 | vendor swing | collector 08-14 | collector 08-17 | collector swing |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| TLT.US | 780,284 | 711,930 | 1.1x | 10,688,231 | 76,766 | 139x |
+| QQQ.US | 481,346 | 439,907 | 1.1x | 5,907,879 | 32,568 | 181x |
+| SPY.US | 327,159 | 412,429 | 1.3x | 1,550,327 | 32,532 | 48x |
+| IWM.US | 121,519 | 214,389 | 1.8x | 1,098,500 | 14,979 | 73x |
+| USO.US | 105,650 | 338,502 | 3.2x | 3,882,971 | 29,556 | 131x |
+| VIXY.US | 28,114 | 9,990 | 2.8x | 57,171 | 1,941 | 29x |
+| DIA.US | 9,217 | 46,745 | 5.1x | 875,442 | 14,566 | 60x |
+| UUP.US | 130 | 24,877 | 191x | 65,374 | 660 | 99x |
+
+Premarket ETF volume varies session to session, so a swing of 1.1x to 5x on the
+vendor side is ordinary. A swing of 48x to 181x on the collector side, for the
+same symbols over the same two mornings, is not. The reference is the steady
+side and the measurement is the moving one.
+
+## Causes ruled out
+
+- **Window mismatch.** The check sums only the minute keys both sides carry, and
+  the shift test shows the keys are correctly paired rather than offset. Ruled
+  out above.
+- **Late trade dropping.** The collector discards trades arriving after
+  late_trade_grace_s. It dropped 0 shares, 0.00 percent of volume, on 2026-08-14
+  and 3,934 shares, 0.30 percent, on 2026-08-17. Three tenths of one percent
+  cannot produce an 88 percent shortfall.
+- **Poll fallback.** Both sessions ran mode "ws" with 1 connection, 0 reconnects
+  and 1 resubscription, and every bar in both files carries src "ws". Neither
+  session fell back to Live v1 polling, so the known unsound cumulative volume
+  path is not involved.
+- **A thin tape.** 2026-08-17's collector folded 33,489 trades against
+  2026-08-14's 191,194, for MORE symbols, 50 against 38. The vendor's totals for
+  the two mornings are comparable. A 5.7x difference in trades folded on a tape
+  the vendor says was similar is a property of the collector, not the market.
+
+## Verdict
+
+**The check is sound. The collector is at fault.**
+
+The check compares identical, correctly keyed minutes, and its reference is
+stable across sessions in a way the collector is not. Nothing in its
+construction accounts for a gap of this size or for the gap changing sign
+between two mornings.
+
+What the collector does is not one defect with one direction. On 2026-08-17,
+the clean morning, it under-recorded uniformly: every one of 29 symbols
+negative, median -88.49 percent, meaning it captured roughly an eighth of the
+volume the vendor reports over the very same minutes. On 2026-08-14 it
+over-recorded the ETFs by up to 50,188 percent while under-recording most
+common stocks, ending 3.83 times the vendor in aggregate.
+
+So the collector is not merely low, it is NOT REPRODUCIBLE session to session.
+That is the more serious finding, because a consistent fraction could be
+calibrated around and an unstable one cannot.
+
+## What this puts in doubt
+
+Collector premarket volume is the numerator of BOTH volume measures, pm_rvol
+and pm_float_rotation, and pm_volume is the basis both record. Every RVOL and
+every float rotation published so far rests on it. The float rotation bands are
+separately miscalibrated for a related reason recorded in DECISIONS.md
+2026-08-17 seventh: they were fitted on Alpaca volume and are applied to
+collector volume.
+
+The delivery gate data/UNVERIFIED is still in place, and BUILD_PLAN's go live
+step asks for the morning gate table to be reviewed before it is deleted. That
+table shows RVOLs computed on this numerator. This finding is a reason to leave
+the gate exactly where it is.
+
+## Caveats on these readings
+
+- 2026-08-17's reading covers 29 of 50 collected symbols. The other 21 had no
+  EODHD intraday bars at the time this was run, roughly 02:00 ET on 2026-08-18,
+  because intraday publishes a few hours behind. The check should be re-run once
+  that day is fully published, and the numbers here revised if it moves.
+- 2026-08-14 is the morning that carried the known vintage defect, where the
+  bulk feed served the previous session. It is reported here in full because it
+  is on the record, not because it is trusted. The verdict rests on 2026-08-17.
+- Two sessions is two sessions. The uniform negative result on the clean morning
+  is the strongest single piece of evidence here, and it is one morning.
+
+## Not done here, deliberately
+
+No collector code was changed. The obvious next question is WHY the websocket
+tape disagrees with the vendor's own published bars by this much, which means
+looking at what the trade messages carry and whether every subscribed symbol
+streams for the whole window. That is a separate pass.

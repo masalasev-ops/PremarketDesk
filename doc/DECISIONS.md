@@ -1669,3 +1669,56 @@ cache is re-swept, since a new sweep can change more than one verdict, or if any
 of the three CRITERIA [Float rotation] floors moves. The cheap proof used here
 works only because the population delta was one name and that name was outside
 the fitted set. It is a proof about this change, not a standing exemption.
+
+## 2026-08-17, seventh: the rotation bands are fitted on one volume source and applied to another
+
+**The mismatch, stated plainly.** The float rotation score bands in CRITERIA
+[Score premarket float rotation] were derived by research/float_rotation_study.py,
+whose numerator is ALPACA premarket volume, read from the SIP feed for completed
+sessions. The live path that those bands score is
+morning/scan.attach_float_rotation, whose numerator is COLLECTOR premarket
+volume, folded from the EODHD websocket tape. Two different sources measuring
+the same quantity, one setting the edges and the other being measured against
+them. The study's own docstring is careful that the two use the same WINDOW,
+07:20 to 08:45, and says nothing about them being different SOURCES, which is
+how this went unnoticed while the windows were being matched.
+
+**The direction, which is what makes it actionable.** The scoring numerator is
+smaller than the fitted one, so live rotation values land below the distribution
+the edges were read off, and the bands therefore admit FEWER names than intended.
+The fallback under-pays the population it exists for, which is the same failure
+recorded on 2026-08-16 second and corrected there by re-fitting on the rescued
+population. That entry fixed which POPULATION the edges were read from. This one
+is about which SOURCE the numerator comes from, and it is still open.
+
+**How big, and why that is not answered here.** Measured on 2026-08-17 against
+EODHD's own 1m bars over identical minutes, collector volume ran at a median of
+-88.49 percent, about an eighth of the vendor's figure. If that were the whole
+story the gap would be roughly an order of magnitude and the correction
+mechanical. It is not the whole story. The same check on 2026-08-14 came back
+mixed, with the collector 3.83 times the vendor in aggregate and individual ETFs
+up to 50,188 percent high, and the collector's own numbers for one symbol swing
+by up to 181x between the two mornings while the vendor's move by 1.1x. The
+collector is not merely low, it is not reproducible session to session. The full
+diagnosis is doc/research/COLLECTOR_VOLUME.md.
+
+**Decision: record the miscalibration, do NOT re-fit yet.** A re-fit needs a
+stable ratio between the two sources and there is no evidence one exists. Fitting
+the bands to a numerator that moves by two orders of magnitude between sessions
+would bake one morning's accident into a threshold and would be harder to detect
+afterwards than the mismatch it replaced. The order is: settle what the collector
+is actually doing, then decide whether the honest fix is to re-fit the bands on
+collector volume, to correct the collector, or to stop scoring on a number two
+sources cannot agree about.
+
+**What this does not change.** The edges themselves stay where they are. Nothing
+here says 0.0004 and 0.0002 are the wrong numbers for the distribution they were
+read off, and the 2026-08-17 sixth entry establishes that the float screen fix
+did not move them. The claim is narrower and worse: the distribution they were
+read off is not the distribution they are applied to.
+
+**Where this is visible to a reader who does not open this file.** The study's
+docstring names Alpaca as its volume source, scan.attach_float_rotation names the
+collector as its numerator source and marks the value a lower bound, and
+CRITERIA [Float rotation] describes the numerator as the collector's. None of the
+three says the other two disagree. That is why this entry exists.

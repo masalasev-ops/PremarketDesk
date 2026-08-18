@@ -378,6 +378,18 @@ recreates it deliberately.
    not a premarket window. Check runs/(first live date)/verify_intraday.json
    after that evening's 22:15 run. Healthy means most symbols within one
    percent on identical minutes.
+
+   ANSWERED 2026-08-18, AND IT IS NOT HEALTHY. The reading landed for
+   2026-08-14 and was 0 of 37 symbols within one percent. Diagnosed in
+   doc/research/COLLECTOR_VOLUME.md: the check is sound, the collector is at
+   fault, and it is not a constant shortfall. Signed, 2026-08-17 reads -88.49
+   percent across all 29 comparable symbols while 2026-08-14 comes back mixed
+   and 3.83 times the vendor in aggregate, and the collector's figure for one
+   ETF swings up to 181x between the two mornings where the vendor's moves
+   1.1x. This is now the top open item: collector volume is the numerator of
+   both pm_rvol and pm_float_rotation, so it sits under every volume score
+   published so far, and it is a reason to leave data/UNVERIFIED in place
+   rather than something to tidy after go live.
 2. First real morning (tomorrow is scheduled): everything fires from Task
    Scheduler. Review the gate table in logs/morning-chain-YYYY-MM-DD.log.
    When ethVolume, baseline medians, RVOLs, premarket highs and bar counts

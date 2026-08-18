@@ -15,6 +15,49 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-18: the collector volume check is sound and the collector is not
+
+The definitive collector volume verification, runs/<date>/verify_intraday.json,
+had run once on 2026-08-14 and reported 0 of 37 symbols within one percent at a
+median absolute difference of 70.95 percent. Nobody had read it. BUILD_PLAN
+still described the debt as pending rather than as landed and failing.
+
+Diagnosed in doc/research/COLLECTOR_VOLUME.md, findings only, no collector code
+touched.
+
+The check prints an ABSOLUTE median, which throws away the bit that nearly
+diagnoses the problem on its own. Signed, 2026-08-17 reads -88.49 percent with
+all 29 comparable symbols negative, and 2026-08-14 reads -33.77 percent with 23
+negative against 14 positive and an aggregate 3.83 times the vendor.
+
+The check itself was verified before anything was concluded from it. It sums
+only the minute keys both sides carry, and shifting the collector's keys a
+minute either way makes the overlap worse rather than better, so the minutes are
+correctly paired and there is no off by one of the kind pm_rvol already carries.
+On 2026-08-17 every collector minute exists on the vendor side.
+
+The decisive evidence is stability. Across the two mornings the vendor's figure
+for the same ETF moves by 1.1x to 5x, which is an ordinary premarket, while the
+collector's moves by 48x to 181x. TLT reads 780,284 then 711,930 on the vendor
+side and 10,688,231 then 76,766 on the collector's. Late trade dropping is ruled
+out at 0.00 and 0.30 percent of volume, both sessions ran the websocket rather
+than the poll fallback, and every bar carries src "ws".
+
+Verdict: the check is sound, the collector is at fault, and the failure is worse
+than a constant shortfall. The collector is not reproducible session to session,
+so no fixed correction factor can absorb it.
+
+This puts every published pm_rvol and pm_float_rotation in doubt, both being
+computed on collector volume, and it is a reason to leave data/UNVERIFIED where
+it is rather than a detail to fix after go live.
+
+Recorded alongside it, DECISIONS 2026-08-17 seventh: the rotation bands are
+fitted on Alpaca volume and applied to collector volume. The scoring numerator
+is the smaller one, so the bands admit fewer names than intended. Not re-fitted,
+because the size of the gap depends on the collector question above and fitting
+to a numerator that swings 181x between sessions would bake an accident into a
+threshold.
+
 ## 2026-08-17, fifth: the rotation bands are re-derived after the screen fix, and do not move
 
 The fourth entry fixed float_rotation_study.py, the script CRITERIA names as
