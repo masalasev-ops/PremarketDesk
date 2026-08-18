@@ -22,27 +22,43 @@ the way to re-derive the float rotation score bands, and left the bands
 themselves as the previous, broken, run had produced them. That was an
 unmeasured claim sitting under a live scoring rule. It is now measured.
 
-The edges are unchanged: two points above 0.0004, one point at or above 0.0002,
-fitted on 303 rescued names, paying 55.45 percent and 12.21 percent against an
-RVOL target of 53.87 and 12.43. Both unrounded quantiles, 0.00045075 and
-0.00021475, reproduce exactly rather than approximately.
+The edges are unchanged: two points above 0.0004, one point at or above 0.0002.
+Confirmed twice, first by proving the screen fix cannot move them and then by
+re-running the study, which cost 463 Alpaca requests, 567 seconds and zero
+EODHD calls.
 
-Established without a new Alpaca fetch, by proving the input population is
-unchanged rather than recomputing the output. Over all 1,870 symbols in the
-float cache the corrected screen changes exactly one verdict and adds none: YPF,
-at 0.013 percent of its own shares outstanding, which is the same name CRITERIA's
-float floor note already records as the only one under that line. Replaying all
-61 cached session pairs through the study's own gap ranking, which reads
+The screen fix provably cannot move them. Over all 1,870 symbols in the float
+cache the corrected screen changes exactly one verdict and adds none: YPF, at
+0.013 percent of its own shares outstanding, the same name CRITERIA's float
+floor note already records as the only one under that line. Replaying all 61
+cached session pairs through the study's own gap ranking, which reads
 data/backtest/eod/ and not the network, puts YPF in the top candidate_count by
-gap on zero of them. The edges are fitted on the rescued subset of that
-population, so a name contributing no rows to it cannot move its quantiles. The
-replay made zero HTTP calls.
+gap on zero of them, and the edges are fitted on the rescued subset of that
+population.
 
-One correction in place, under the wrong-when-written rule: the docstring added
-to float_rotation_study.py in the fourth entry claimed a re-run "will not
-reproduce them to the name". It does. The sentence was written before anyone
-checked. DECISIONS.md 2026-08-17 sixth carries both sets of numbers, the method,
-and what would make a real re-run owed again.
+The percentages AROUND the edges did move, and not because of this fix: the
+re-run measured 300 rescued names paying 56.00 and 11.67 percent against a
+target of 53.72 and 12.40, where 2026-08-16 measured 303 paying 55.45 and 12.21.
+data/universe.json was rebuilt at 2026-08-17T00:50, between the two runs, and
+the addressable population differs on 29 of the 61 sessions before the float
+screen is reached at all. Both unrounded quantiles moved in the fourth
+significant figure, 0.00045075 to 0.00045409 and 0.00021475 to 0.00021511, and
+both still round to the same edge.
+
+Two corrections in place under the wrong-when-written rule. The docstring added
+in the fourth entry claimed a re-run "will not reproduce them to the name"; the
+edges do. And the first version of this entry said the counts and payout shares
+reproduced exactly, which was a claim about the screen fix in isolation
+presented as though it described a re-run. The DECISIONS entry carries the
+replaced table and why it was wrong.
+
+One method claim retired with them: this work first argued a re-run was
+impractical for needing Alpaca volume across 61 sessions. ALPACA_PROBE.md had
+already measured the free tier sweeping 2,745 names at 1Min in 4 requests and
+1.04 seconds, and the entry closing Alpaca as a LIVE discovery source says
+plainly that it remains a historical reconstruction source for completed
+sessions. The two are different questions and only the live one is closed. It
+should simply have been run.
 
 ## 2026-08-17, fourth: six review findings closed, and the two the first round of fixes introduced
 

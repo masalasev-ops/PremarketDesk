@@ -976,12 +976,21 @@ On the 303 rescued names among the top candidate_count by gap, over 61 cached
 sessions, the edges below pay two points to 55.45 percent and one point to
 12.21 percent, against an RVOL target of 53.87 and 12.43.
 
-Re-derived 2026-08-17 after float_rotation_study.py's float screen was
+Re-derived 2026-08-17 by re-running that script after its float screen was
 corrected to read all three [Float rotation] floors from this file instead of
-one hardcoded copy. Every number in this section reproduced exactly: the
-corrected screen changes one verdict across the whole float cache, YPF, and YPF
-reaches the top candidate_count by gap on none of the 61 sessions, so it never
-voted on these edges. See DECISIONS.md 2026-08-17 sixth.
+one hardcoded copy. THE EDGES ARE UNCHANGED, 0.0004 and 0.0002 both times, and
+the screen fix provably cannot move them: it changes one verdict across the
+whole float cache, YPF, and YPF reaches the top candidate_count by gap on none
+of the 61 sessions, so it never voted on these edges.
+
+The percentages in the paragraph above are the 2026-08-16 measurement and are
+kept as written. The 2026-08-17 re-run measured 300 rescued names paying 56.00
+and 11.67 percent against a target of 53.72 and 12.40. The difference is not the
+screen fix: data/universe.json was rebuilt between the two runs and the
+addressable population differs on 29 of the 61 sessions before the float screen
+is reached. Expect a re-run to reproduce the EDGES, which is what this section
+sets, and not the surrounding percentages, which describe the population of the
+day they were measured. See DECISIONS.md 2026-08-17 sixth.
 
 **These edges are conditional on [Scan] candidate_count.** The scored
 population is the top N by gap, and rotation rises with gap size, so changing

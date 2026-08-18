@@ -1524,27 +1524,75 @@ off rotation quantiles at the points reproducing RVOL's payout on a specific
 population, and the hole changed WHICH NAMES were in that population, so the
 payout match the edges exist to preserve could no longer be assumed.
 
-**The result first: the edges do not move, and they reproduce exactly rather
-than approximately.**
+**[corrected 2026-08-17: was "the edges do not move, and they reproduce
+exactly rather than approximately", with a table asserting the counts and
+payout shares reproduced too. The EDGES do reproduce, and that is the claim
+this entry exists to make. The surrounding percentages do NOT, because
+data/universe.json was rebuilt between the two runs. The original table is
+replaced rather than kept because it was wrong when written: it was built from
+a proof about the screen fix and presented as though it described a re-run.]**
 
-| | committed in CRITERIA | re-derived after the fix |
+**The result first: the edges do not move.** Confirmed twice over, by proof and
+then by an actual re-run of the script on 2026-08-17.
+
+| | 2026-08-16, in CRITERIA | 2026-08-17 re-run |
 | --- | ---: | ---: |
-| two point edge | 0.0004 | 0.0004 |
-| one point edge | 0.0002 | 0.0002 |
-| unrounded two point quantile | 0.00045075 | 0.00045075 |
-| unrounded one point quantile | 0.00021475 | 0.00021475 |
-| rescued names fitted on | 303 | 303 |
-| pays two points | 55.45% | 55.45% |
-| pays one point | 12.21% | 12.21% |
-| RVOL target | 53.87% / 12.43% | 53.87% / 12.43% |
+| **two point edge** | **0.0004** | **0.0004** |
+| **one point edge** | **0.0002** | **0.0002** |
+| unrounded two point quantile | 0.00045075 | 0.00045409 |
+| unrounded one point quantile | 0.00021475 | 0.00021511 |
+| rescued names fitted on | 303 | 300 |
+| overlap names | 362 | 363 |
+| pays two points | 55.45% | 56.00% |
+| pays one point | 12.21% | 11.67% |
+| RVOL target | 53.87% / 12.43% | 53.72% / 12.40% |
 
-**How that was established WITHOUT a new fetch, which is the part worth
-keeping.** The obvious method is to re-run the study, and it is the wrong one:
-the study needs Alpaca 1 minute volume for the whole universe across 61
-sessions, which is a live fetch of hundreds of requests, and the bar cache on
-disk holds 172 gapper symbols a day rather than the universe. So the question
-was turned around. Rather than recomputing the output, prove the INPUT is
-unchanged, which is a strictly stronger result and costs nothing.
+**The edges survive because the rounding absorbs the drift.** Both quantiles
+moved in the fourth significant figure and both still round to the same one
+significant figure edge. That is not luck, it is what reading an edge off a
+quantile at this precision is for, but it is worth stating that the margin is
+real rather than infinite: the two point quantile would have to reach 0.00050
+to move the edge, and it sits at 0.00045.
+
+**None of the drift is the screen fix, and that part IS exact.** The screen
+change is a pure function of data/float_cache.json and the three CRITERIA
+[Float rotation] floors. Running both screens over all 1,870 cached symbols:
+
+| | names |
+| --- | ---: |
+| admitted by the old screen, refused by the new | 1 |
+| admitted by the new screen, refused by the old | 0 |
+
+The single name is YPF, float 51,810 against 392,075,056 shares outstanding,
+0.013 percent, refused by min_float_to_shares_outstanding. It is the same name
+CRITERIA's float floor note already records as the only one under that line,
+which cross checks both implementations. Replaying all 61 session pairs through
+the study's own gap ranking, which reads data/backtest/eod/ and not the network,
+puts YPF in the top [Scan] candidate_count by gap on ZERO of them. The edges are
+fitted on the rescued subset of that population, so a name contributing no rows
+to it cannot move a quantile of it. Under one fixed universe the two screens
+give bit identical top-N numbers.
+
+**What the drift IS.** data/universe.json was rebuilt at 2026-08-17T00:50, after
+the 2026-08-16 study run. The addressable population is computed from the
+universe and the EOD cache BEFORE the float screen is consulted, and it differs
+on 29 of the 61 sessions, 9,384 rows against 9,390. That is the universe
+rebuild, not the fix, and it is measurable precisely because addressable sits
+upstream of everything this entry changed. Revised Alpaca history may contribute
+on top of it and is not separated here; it does not need to be, because neither
+cause is the screen fix and the edges hold under both.
+
+**On the method, and a claim to retire.** An earlier draft of this entry argued
+a re-run was impractical, on the grounds that it needs Alpaca volume for the
+whole universe over 61 sessions. That was wrong and the project's own probe
+already said so. ALPACA_PROBE.md measured the free tier serving a complete
+2,745 name 1Min universe sweep in 4 requests and 1.04 seconds, and the
+2026-08-17 entry closing Alpaca as a LIVE source is explicit that it "remains
+what it already was, a historical reconstruction source for completed sessions".
+The re-run cost 463 requests, 567 seconds and ZERO EODHD calls. It should simply
+have been run, and was. The population identity proof is kept above because it
+is strictly stronger for the question it answers, attributing the drift, which
+a re-run alone cannot do.
 
 The screen change is a pure function of data/float_cache.json and the three
 CRITERIA [Float rotation] floors. Both screens, the pre-fix one and the

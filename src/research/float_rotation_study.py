@@ -46,15 +46,19 @@ refuses to divide by was still voting on where the edges fall. The population
 it measures now is the one the scan actually scores, which is the point.
 
 The bands were then re-derived against that corrected screen, on 2026-08-17,
-and they did NOT move. Across the whole 1,870 name float cache the corrected
-screen changes exactly one verdict, YPF, and YPF is in the top
+by an actual re-run of this script, and THE EDGES DID NOT MOVE: 0.0004 and
+0.0002 both times. The screen fix cannot move them, and that is provable rather
+than merely observed. Across the whole 1,870 name float cache the corrected
+screen changes exactly one verdict, YPF, and YPF reaches the top
 [Scan] candidate_count by gap on none of the 61 cached sessions, which is the
-only population these edges are fitted to. So the edges, the rescued count and
-the payout shares in CRITERIA [Score premarket float rotation] reproduce
-exactly rather than approximately. An earlier version of this paragraph said a
-re-run would not reproduce them to the name; that was written before anyone
-checked, and it was wrong. DECISIONS.md 2026-08-17 carries both sets of
-numbers and how it was established without a new fetch.
+only population these edges are fitted to.
+
+The counts and payout shares around the edges DO differ from the ones recorded
+on 2026-08-16, and not because of this fix. data/universe.json was rebuilt
+between the two runs, so the addressable population differs on 29 of the 61
+sessions before the float screen is consulted at all. Anything re-run here will
+therefore reproduce the EDGES and not the surrounding percentages. See
+DECISIONS.md 2026-08-17 sixth for both sets and the attribution.
 
 Run:
 
