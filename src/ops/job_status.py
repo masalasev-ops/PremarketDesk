@@ -493,6 +493,102 @@ def overdue(now: dt.date | None = None,
     return out
 
 
+def failures_today(now: dt.date | None = None,
+                   rows: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Steps that recorded a non ok outcome today, in the order they happened.
+
+    Separate from overdue() because it answers a different question, and the
+    morning of 2026-08-19 is why it exists. overdue() measures staleness of
+    last_success in whole trading sessions against a per step window, every one
+    of which is one session or more. A step that failed at 08:16 and succeeded
+    at 08:37 is therefore current by every measure it has, and so is a step
+    that failed this morning having succeeded yesterday. That morning the
+    collector died on a refused subscription and lost fifty minutes of window,
+    and the packet's job_health block read {"line": null, "overdue": []}. The
+    report said nothing about it, and its readers got the symptom, twelve names
+    with premarket windows that started late, with no route to the cause.
+
+    A failure is worth one line on the morning it happens even when a rerun
+    fixed it, because the rerun is the thing a reader would otherwise have to
+    guess at. A later success does not remove it: it is reported alongside.
+    """
+    today = now or ettime.today_et()
+    all_rows = rows if rows is not None else records()
+    out: list[dict[str, Any]] = []
+    for row in all_rows:
+        if _date_of(row.get("started_at")) != today:
+            continue
+        if row.get("status") in (None, STATUS_OK):
+            continue
+        out.append({
+            "step": row.get("step"),
+            "status": row.get("status"),
+            "started_at": row.get("started_at"),
+            "exit_code": row.get("exit_code"),
+            "exception": row.get("exception"),
+            # Whether anything picked the step back up afterwards. Read from
+            # the same list rather than assumed, because "it failed and a rerun
+            # fixed it" and "it failed and nothing ran since" are the two
+            # readings and they call for different mornings.
+            "recovered": any(
+                other.get("step") == row.get("step")
+                and other.get("status") == STATUS_OK
+                and str(other.get("started_at") or "") > str(row.get("started_at") or "")
+                for other in all_rows
+            ),
+        })
+    return out
+
+
+def _failure_kind(row: dict[str, Any]) -> str:
+    """What went wrong, as the coarse label the grouping keys on."""
+    if row.get("exception"):
+        return str(row["exception"]).split(":")[0]
+    if row.get("exit_code") not in (None, 0):
+        return f"exit {row['exit_code']}"
+    return str(row.get("status") or "failed")
+
+
+def group_failures(failed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Today's failures collapsed to one entry per step and kind of failure.
+
+    A step that retried three times inside one minute is one problem, and
+    naming it three times reads as three. The overdue side of this line already
+    caps how many steps it names for the same reason; this is the same argument
+    applied to the same sentence, one layer down.
+
+    Recovery is OR-ed across the group deliberately. Three failures of which
+    the last was followed by a success is a step that came back, and reporting
+    it as not having run again would be wrong about the state the reader cares
+    about.
+    """
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in failed:
+        key = (str(row.get("step")), _failure_kind(row))
+        found = groups.get(key)
+        if found is None:
+            groups[key] = {**row, "kind": key[1], "count": 1}
+            continue
+        found["count"] += 1
+        found["recovered"] = found.get("recovered") or row.get("recovered")
+    return list(groups.values())
+
+
+def describe_failure(row: dict[str, Any]) -> str:
+    """One of today's failure groups as a phrase."""
+    when = str(row.get("started_at") or "")[11:16]
+    count = int(row.get("count") or 1)
+    kind = row.get("kind") or _failure_kind(row)
+    if count > 1:
+        text = f"{row['step']} failed {count} times from {when} ET"
+    else:
+        text = f"{row['step']} failed at {when} ET"
+    if kind:
+        text += f" ({kind})"
+    text += ", and a later run succeeded" if row.get("recovered") else ", and has not run again since"
+    return text
+
+
 def describe(row: dict[str, Any]) -> str:
     """One step's overdue state as a phrase."""
     if row["last_success"] is None:
@@ -528,10 +624,20 @@ def report_line(now: dt.date | None = None,
                 f"{RECORD_PATH.name}.")
 
     late = overdue(now, all_rows)
-    if not late:
+    failed = group_failures(failures_today(now, all_rows))
+    if not late and not failed:
         return None
-
     limit = _CRIT.integer("job_status", "max_steps_named_in_report")
+    if not late:
+        if len(failed) > limit:
+            worst = "; ".join(describe_failure(row) for row in failed[:limit])
+            return (f"Scheduled jobs: {len(failed)} steps failed today and were "
+                    f"rerun or left failed, which usually means the machine or "
+                    f"the schedule stumbled rather than any one step. "
+                    f"First {limit}: {worst}.")
+        return ("Scheduled jobs: " + "; ".join(describe_failure(row) for row in failed)
+                + ".")
+
     if len(late) > limit:
         # Past a certain number the list stops being a list of problems and
         # becomes one problem. Naming sixteen steps reads as noise; saying the
@@ -541,7 +647,11 @@ def report_line(now: dt.date | None = None,
                 f"have not succeeded inside their window, which usually means the "
                 f"machine or the schedule stopped rather than any one step. "
                 f"Worst: {worst}.")
-    return "Scheduled jobs overdue: " + "; ".join(describe(row) for row in late) + "."
+    line = "Scheduled jobs overdue: " + "; ".join(describe(row) for row in late) + "."
+    if failed:
+        line += " Also today: " + "; ".join(
+            describe_failure(row) for row in failed[:limit]) + "."
+    return line
 
 
 # ---------------------------------------------------------------------- main

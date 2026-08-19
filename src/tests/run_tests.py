@@ -44,6 +44,7 @@ SUITE = (
     "tests.test_txn_guard",
     "tests.test_entrypoints",
     "tests.test_sandbox",
+    "tests.test_evidence_gaps",
 )
 
 

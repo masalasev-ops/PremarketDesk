@@ -798,6 +798,39 @@ def attach_premarket_rvol(
                 "is_lower_bound": numerator_window > denominator_window,
             }
 
+    _gap_for_lower_bound_rvol(candidates, packet, numerator_window,
+                              denominator_window)
+
+
+def _gap_for_lower_bound_rvol(
+    candidates: list[dict[str, Any]], packet: Packet,
+    numerator_window: str, denominator_window: str,
+) -> None:
+    """Say in gaps_to_fill which RVOLs can only understate.
+
+    The asymmetry is recorded per candidate in pm_rvol_basis and was reaching
+    no reader. A lower bound is not a low reading, and a report describing RVOL
+    across the set without the distinction describes a data gap as a quiet
+    tape. gaps_to_fill is where it goes because that is the one list the
+    template requires the disclaimer to surface: on 2026-08-19 the disclaimer
+    named only the two null RVOLs, which told the reader the other ten were
+    complete when every one of them was a lower bound.
+
+    Silent when nothing is bounded, because a gaps list that always carries a
+    sentence is a gaps list nobody reads.
+    """
+    bounded = [c["symbol"] for c in candidates
+               if (c.get("pm_rvol_basis") or {}).get("is_lower_bound")]
+    if not bounded:
+        return
+    packet.gap(
+        "premarket RVOL understates for these candidates and must be called a "
+        "lower bound wherever it is discussed: the numerator covers the "
+        f"collector window from {numerator_window} ET while the denominator is "
+        f"a baseline accumulated from {denominator_window} ET: "
+        + ", ".join(bounded)
+    )
+
 
 def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> None:
     """Collector premarket volume divided by shares float.

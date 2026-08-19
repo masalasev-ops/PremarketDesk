@@ -15,6 +15,101 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, fifth: five ways a known gap reached the reader as nothing at all
+
+Twenty agents read runs/2026-08-19/report.md against its own packet, each
+finding handed to an independent skeptic told to refute it. Five sections came
+back clean: the disclaimer against all eight of its template conditions, the
+twelve gapper blocks with their twenty eight headlines and every numeric token
+traced, the watchlist cells and headers, the nine market rows and fifteen
+earnings rows, and the trap section. Nothing was invented and every number
+traced to a field.
+
+What survived is one shape five times over. Something the code already knew was
+partial, missing or broken reached the reader as nothing at all.
+
+### The report said an RVOL scored zero when it was never computable
+
+"Across the set the premarket RVOL component scored zero, since observed
+premarket volume sat far under the 20 session baseline." Wrong three ways.
+
+EL and YMM carry no premarket_rvol component at all. Their volume slot holds
+premarket_float_rotation, substituted because pm_rvol is null, so a ratio that
+was never computed is narrated as one that was computed and came out low. The
+stated cause is then backwards for exactly those two: EL traded 2,231 shares
+against a baseline median of 989 and YMM 1,617 against 670.5, both more than
+double the baseline, and the packet's own recorded reason is the 1,000 share
+floor on the DENOMINATOR. And for the other ten, pm_rvol_basis.is_lower_bound
+is true on every one, which the report never says.
+
+That last part was ours, not the model's. is_lower_bound has been computed,
+stored per candidate and surfaced nowhere. The disclaimer named only the two
+nulls, which told the reader the other ten had complete volume evidence. It now
+reaches gaps_to_fill, which is the one list the template requires the disclaimer
+to carry, and on today's packet it names all ten.
+
+The template gained the three rules the sentence broke: a component that is
+absent is not a component that scored zero, the reason a number is missing comes
+from pm_rvol_reason and is never supplied, and a lower bound is said wherever the
+ratio is discussed.
+
+### The funnel's top was misdescribed
+
+"Of 36 names the collector heard" is not what 36 counts. subscribed_considered
+is what reached the ranking, after the no coverage and stale price drops. The
+collector produced bars for 40 of the 42 subscribed names. The same sentence
+then went on to name OPRA, FLNG, VELO and AVAH as dropped for a stale price, and
+all four have bars in today's snapshot, so it named four symbols the collector
+did hear that its own count excludes. The template said `heard`; it says
+`ranked` now, with the difference written down.
+
+### A sentence the template asked for that the template itself falsified
+
+"WB and MH ... carry no premarket price and appear nowhere else in this report."
+They appear twice in the disclaimer and again in the Summary, both required by
+this same template. The clause is gone and its return is a test failure.
+
+### job_health was silent on a morning the collector died
+
+overdue() measures staleness of last_success in whole trading sessions, and
+every window is one session or more. A step that failed at 08:16 and was rerun
+at 08:37 is therefore current by every measure the packet had, and so is a step
+that failed this morning having succeeded yesterday. The packet read
+{"line": null, "overdue": []} on the morning the collector was refused and lost
+fifty minutes of window, and the report's readers got the symptom, twelve names
+with late premarket windows, with no route to the cause.
+
+failures_today() is a separate reading for a separate question: steps that
+recorded a non ok outcome today, whether or not a rerun fixed it, because the
+rerun is the thing a reader would otherwise have to guess at. Repeats of one
+step collapse to one phrase with a count, and the list is capped at the same
+CRITERIA number the overdue side uses, because a line nobody reads is the
+failure the whole mechanism exists to prevent. Today's morning would have
+carried: "Scheduled jobs: collector failed at 08:16 ET (SubscriptionRefused),
+and a later run succeeded." A clean morning still says nothing.
+
+### collector_snapshot reported a silent morning over 54,407 trades
+
+A refused run wrote {"subscription_refused": true} as its ENTIRE record, so its
+connection and message counts died with it, and read_run_stats then summed the
+missing keys as zeros. The packet said messages 0, connections 0, runs 1 for a
+morning that had already folded 14,680 trades before the refusal and 39,727
+messages after it.
+
+Both halves are fixed. The counters now travel with the exception, so the
+refusal is a fact ABOUT the run rather than a replacement for it. And every
+counter in read_run_stats starts at None and stays None until some run carries a
+number, which is the reasoning the status_frames comment had already spelled out
+next door and which turned out to apply to all of them. Today's packet would now
+read runs 2, connections 1, messages 39,727.
+
+### The claims
+
+src/tests/test_evidence_gaps.py, six claims and one new suite entry. Each was
+checked by reintroducing the defect and watching the suite go red, including the
+template drift guard, which had to have its own prohibitions reworded first
+because they quoted the strings they ban.
+
 ## 2026-08-19, fourth: the subscription cap is innocent, and the sessions that looked right were wrong the other way
 
 ### The probe ran and answered

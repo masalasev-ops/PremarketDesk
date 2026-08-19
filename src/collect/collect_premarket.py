@@ -139,8 +139,15 @@ def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
     # into a running integer would report "no odd frames this morning" for a
     # morning nobody counted, which is the one thing this aggregate exists to
     # stop being invisible. It stays None until some run carries a number.
-    totals: dict[str, Any] = {"runs": 0, "connections": 0, "reconnects": 0,
-                              "resubscriptions": 0, "messages": 0,
+    # Every counter starts at None for the reason spelled out above for
+    # status_frames, which turned out to apply to all of them. A run that
+    # recorded no count at all, because it was refused before it wrote one or
+    # because it predates the field, must not fold into a zero: summing it that
+    # way reports "this morning saw no messages" for a morning nobody counted,
+    # and that is exactly what the packet said on 2026-08-19. None until some
+    # run carries a number, then the sum of the runs that carried one.
+    totals: dict[str, Any] = {"runs": 0, "connections": None, "reconnects": None,
+                              "resubscriptions": None, "messages": None,
                               "status_frames": None}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
@@ -152,7 +159,13 @@ def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
             continue
         totals["runs"] += 1
         for key in ("connections", "reconnects", "resubscriptions", "messages"):
-            totals[key] += int(row.get(key) or 0)
+            if row.get(key) is None:
+                continue
+            try:
+                value = int(row[key])
+            except (TypeError, ValueError):
+                continue
+            totals[key] = value if totals[key] is None else totals[key] + value
         frames = row.get("status_frames")
         if isinstance(frames, (int, float)):
             totals["status_frames"] = (totals["status_frames"] or 0) + int(frames)
@@ -586,7 +599,7 @@ def run_websocket(
                         f"trades {builder.trades_seen}  minutes written {builder.rows_written}  "
                         f"open bars {len(builder.open_bars)}"
                     )
-        except SubscriptionRefused:
+        except SubscriptionRefused as exc:
             # Almost always this run's own slots, still held by the connection
             # that dropped a second ago. Waiting gets them back; dying does
             # not. Four waits cost four minutes of a two hour window, and the
@@ -595,6 +608,21 @@ def run_websocket(
             # raises exactly as it used to.
             refusals += 1
             if ettime.now_et() >= stop_at or refusals > MAX_SUBSCRIPTION_RETRIES:
+                # The counters travel with the exception. Without this the
+                # caller has nothing to write but the refusal marker, so the
+                # run's connections and messages never reach read_run_stats and
+                # the packet reports a morning that heard nothing. On
+                # 2026-08-19 collector_snapshot read messages 0, connections 0
+                # over a morning that had already folded 14,680 trades.
+                exc.run_stats = {
+                    "connections": connections,
+                    "reconnects": reconnects,
+                    "subscription_refusals": refusals,
+                    "resubscriptions": connections,
+                    "messages": messages,
+                    "status_frames": len(status_frames),
+                    "status_frames_seen": status_frames[:10],
+                }
                 raise
             print(f"collector: the subscription was refused, attempt {refusals} "
                   f"of {MAX_SUBSCRIPTION_RETRIES}. Waiting "
@@ -997,7 +1025,11 @@ def main(argv: list[str] | None = None) -> int:
         # this run collected nothing and the morning must not be told otherwise.
         print("")
         print(f"collector: FATAL {exc}")
-        stats = {"subscription_refused": True}
+        # The refusal is a fact ABOUT the run, not a replacement for it.
+        # Whatever the socket had already done before the server refused a
+        # reconnect is still true and still has to reach the packet.
+        stats = dict(getattr(exc, "run_stats", None) or {})
+        stats["subscription_refused"] = True
         refused = str(exc)
         job_status.failed(f"SubscriptionRefused: {config.scrub_secrets(exc)}")
     except KeyboardInterrupt:

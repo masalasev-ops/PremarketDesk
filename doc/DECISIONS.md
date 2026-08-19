@@ -2229,3 +2229,51 @@ the first option. Fewer names buys nothing, on the measurement.
 explains a collector that is short and cannot explain one that is long, so the
 leading hypothesis for the fifty symbol sessions does not cover the thirty eight
 symbol ones, and a single explanation for both has not been found.
+
+
+## 2026-08-19, fifth: the containment guard cannot see this class, and that is why it needs claims
+
+**The decision.** The five defects found by reading the report against its
+packet are fixed at their sources rather than by widening the containment
+check, and each is pinned by a claim in the suite rather than by the template
+alone.
+
+**Why containment could not have caught any of them.** It checks that every
+ticker and number in the report exists in the packet, and all five reports
+passed it: 42 claims checked, nothing invented, both tables present. Every
+figure in the RVOL sentence was quoted correctly. What was wrong was the
+DESCRIPTION around the figures, and a checker built to catch fabricated values
+is structurally blind to a true value with a false account of what it measures.
+That is not a gap to close in the checker. A general purpose reader of English
+claims against JSON is the analyst, which is the thing being checked.
+
+**Why three of the five are fixed in the template and two in Python.** The
+split is whether the packet already carried the truth. It did for the funnel
+count, the nowhere-else clause and the absent-component sentence, so the model
+was narrating past evidence it had and the instructions are what changes. It
+did not for is_lower_bound, job_health or the refused run's counters: those
+were Python telling the packet something false or nothing at all, and no
+instruction to the model could have recovered them.
+
+**Why the drift guard is a literal string check.** It scans the template for
+the two sentences the packet contradicts. That is crude, and it fired on the
+template's own prohibitions, which quoted the strings they were banning. The
+prohibitions were reworded rather than the check loosened, because a check with
+an exception is a check that grows exceptions, and the one thing this guard has
+to do is fail when somebody writes the sentence again.
+
+**Why a recovered failure is still reported.** A step that failed at 08:16 and
+succeeded at 08:37 is a working morning by every measure the packet had, which
+is exactly why it was invisible. The reader is not being told the morning is
+broken; they are being told what happened to it, and a rerun that fixed it is
+the part they would otherwise have to infer from twelve late premarket windows.
+The cost of the wrong choice here is asymmetric: a line too many is read and
+dismissed in a second, and a line missing is a morning that quietly lies about
+the machine.
+
+**What is still not covered.** The report scan for banned words is still per
+line rather than per paragraph, deliberately, and still deferred to its own
+commit after the first week of warn mode counts. Nothing in this pass touched
+it. And no check exists for the general class these five belong to, which is a
+correct number with a wrong account of itself. Every one of them was found by
+reading, and the next one will be too.
