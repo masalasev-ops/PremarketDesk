@@ -55,6 +55,8 @@ AUTH_WAIT_S = _CRIT.number("collector", "auth_wait_s")
 LATE_TRADE_GRACE_S = _CRIT.number("collector", "late_trade_grace_s")
 VERIFY_WARMUP_MINUTES = _CRIT.number("collector", "verify_warmup_minutes")
 VERIFY_WINDOW_MINUTES = _CRIT.number("collector", "verify_window_minutes")
+SUBSCRIPTION_RETRY_WAIT_S = _CRIT.number("collector", "subscription_retry_wait_s")
+MAX_SUBSCRIPTION_RETRIES = _CRIT.integer("collector", "max_subscription_retries")
 
 
 def bar_path(day: str | None = None) -> Path:
@@ -533,6 +535,7 @@ def run_websocket(
     backoff = BACKOFF_START_S
     connections = 0
     reconnects = 0
+    refusals = 0
     messages = 0
     last_status = 0.0
     # Non fatal status frames, kept rather than only printed. A morning that
@@ -583,6 +586,21 @@ def run_websocket(
                         f"trades {builder.trades_seen}  minutes written {builder.rows_written}  "
                         f"open bars {len(builder.open_bars)}"
                     )
+        except SubscriptionRefused:
+            # Almost always this run's own slots, still held by the connection
+            # that dropped a second ago. Waiting gets them back; dying does
+            # not. Four waits cost four minutes of a two hour window, and the
+            # alternative already cost a whole morning once. If the slots
+            # really do belong to somebody else, the retries run out and this
+            # raises exactly as it used to.
+            refusals += 1
+            if ettime.now_et() >= stop_at or refusals > MAX_SUBSCRIPTION_RETRIES:
+                raise
+            print(f"collector: the subscription was refused, attempt {refusals} "
+                  f"of {MAX_SUBSCRIPTION_RETRIES}. Waiting "
+                  f"{SUBSCRIPTION_RETRY_WAIT_S:.0f}s for the slots to be "
+                  "released. See CRITERIA.md, the symbols limit note.")
+            time.sleep(SUBSCRIPTION_RETRY_WAIT_S)
         except (ConnectionError, websocket.WebSocketException, OSError) as exc:
             if ettime.now_et() >= stop_at:
                 break
@@ -606,6 +624,7 @@ def run_websocket(
     return {
         "connections": connections,
         "reconnects": reconnects,
+        "subscription_refusals": refusals,
         "resubscriptions": connections,
         "messages": messages,
         "status_frames": len(status_frames),
@@ -614,19 +633,31 @@ def run_websocket(
 
 
 class SubscriptionRefused(RuntimeError):
-    """The server refused the subscription, so this run is listening to nothing.
+    """The server refused the subscription, so this connection hears nothing.
 
     Deliberately NOT a ConnectionError, OSError or WebSocketException. Those
-    three are what the reconnect loop catches and retries, and retrying is
-    exactly the wrong response here: the 50 symbol pool is account wide, so a
-    refusal means another process is holding the slots and reconnecting will be
-    refused again every time until the window is gone.
+    three are retried immediately with a short backoff, and this one must not
+    be: an immediate retry is what causes it.
 
-    Raising out of the loop ends the run with the reason recorded, which is the
-    whole point. Until 2026-08-15 this frame was printed and swallowed: the
-    collector then ran to its stop time, folded zero trades, wrote an empty bar
-    file and exited zero, and the first sign of trouble was a morning report
-    with no premarket data in it.
+    [corrected 2026-08-19: this docstring previously said "retrying is exactly
+    the wrong response here: the 50 symbol pool is account wide, so a refusal
+    means another process is holding the slots and reconnecting will be refused
+    again every time until the window is gone", and the run ended on the first
+    refusal. That was written from the vendor's documentation of the cap rather
+    than from a refusal, because none had been seen. On 2026-08-19 the
+    collector streamed 50 symbols from 08:16, the remote host closed the
+    connection at 08:34, the reconnect went out about a second later and was
+    refused: the account was still holding the dropped connection's 50 symbols.
+    The other process was this one, a second in its own past. It exited and
+    lost the last 50 minutes of the window. A hand restart at 08:37:13
+    subscribed without complaint. Refusals are now retried on a wait, and the
+    old text is kept because the reasoning was untested rather than careless.]
+
+    Raising out of the loop ends the run with the reason recorded, which is
+    still what happens once the retries are spent. Until 2026-08-15 this frame
+    was printed and swallowed: the collector then ran to its stop time, folded
+    zero trades, wrote an empty bar file and exited zero, and the first sign of
+    trouble was a morning report with no premarket data in it.
     """
 
 
@@ -651,12 +682,17 @@ def _handle_message(
             if status_log is not None:
                 status_log.append(message)
             if code in _FATAL_STATUS_CODES:
+                # States the refusal and nothing about the run. Whether
+                # anything was collected is the caller's fact, not this
+                # function's, and the old wording asserted "Nothing was
+                # collected" from inside a message handler that cannot know:
+                # on 2026-08-19 it said so over 14,680 folded trades.
                 raise SubscriptionRefused(
-                    f"the server refused the subscription: {message}. The 50 symbol "
-                    "pool is account wide and shared across every connection on this "
-                    "token, so another process holding slots refuses this one. "
-                    "Nothing was collected. Check for a second collector, a probe or "
-                    "a hand run socket still open, then rerun."
+                    f"the server refused the subscription: {message}. The 50 "
+                    "symbol pool is account wide and shared across every "
+                    "connection on this token, including this collector's own "
+                    "just dropped one, which the server can still be holding "
+                    "seconds later."
                 )
             print(f"collector: server said {message}")
         return
@@ -1039,8 +1075,23 @@ def main(argv: list[str] | None = None) -> int:
 
     eodhd.print_call_report()
     if refused:
-        print("collector: exiting 1, this run was never subscribed and collected "
-              "nothing. The morning chain must not treat the bar file as a window.")
+        # Says what this run actually did. The old wording was fixed text
+        # asserting the run "was never subscribed and collected nothing", which
+        # is true of a refusal on the FIRST connection and false of a refusal
+        # on a reconnect. On 2026-08-19 it printed that sentence over 486
+        # written minutes and 14,680 folded trades, which is the collector
+        # lying about its own output in the one log a human reads after a
+        # failure.
+        if builder.rows_written or builder.trades_seen:
+            print(f"collector: exiting 1. This run folded {builder.trades_seen:,} "
+                  f"trade(s) into {builder.rows_written:,} minute(s) and was then "
+                  "refused, so the bar file is a PARTIAL window ending where the "
+                  "refusal began. It is real as far as it goes and the morning "
+                  "chain must not read it as the whole window.")
+        else:
+            print("collector: exiting 1, this run was never subscribed and "
+                  "collected nothing. The morning chain must not treat the bar "
+                  "file as a window.")
         return 1
     return 0
 

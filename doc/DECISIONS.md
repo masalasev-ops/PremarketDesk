@@ -2138,3 +2138,50 @@ the run's first second read as early. The suite's replayed socket refused all
 thirty and wrote no minutes. A guard against a defect that costs 0.27 percent
 of volume would have discarded the first second of every morning. It floors to
 the minute now, which is the granularity bars have anyway.
+
+
+## 2026-08-19, third: a guard that costs more than what it guards against
+
+**The decision.** A refused subscription is retried on a wait rather than
+ending the run. The reasoning that made it fatal was not overtaken by events,
+it was wrong when it was written, and it is corrected in place.
+
+**What made it wrong.** It reasoned from the vendor's documentation of the cap
+to the conclusion that a refusal must mean another process holds the slots, and
+therefore that retrying is futile. Both steps were sound and the conclusion was
+false, because the other process it could not imagine was the collector itself.
+The cap is account wide and a closed connection keeps its symbols for a while,
+so a reconnect one second after a drop competes with its own corpse. Nothing
+had ever seen a refusal, so nothing had ever tested the reasoning.
+
+**Why the retry is bounded rather than patient.** Four waits of a minute
+against a window of two hours. If the slots are ours they come back inside
+about that, measured at 105 seconds this morning. If they are not, the run
+fails four minutes later than it used to and nothing else is different. The old
+behaviour spent fifty minutes of window to save four.
+
+**Why the collector was restarted by hand.** The window had 48 minutes left,
+the watchdog's rerun budget for the day was unused, and a restart is what the
+watchdog would have done on its next pass. It also tested the diagnosis: the
+restart subscribing cleanly is what proves the slots were the collector's own
+rather than a competitor's. A failed restart would have been equally
+informative and cost nothing.
+
+**Why the probe's guard moved from an hour to a window.** It was written to run
+before the morning and 07:10 was the only free slot, so the hour and the
+constraint agreed by accident. When the power took the 06:20 run, the accident
+came apart: the hour refused a whole day in which the socket was free from
+09:25. The constraint is that the probe must not hold slots the collector
+wants, and the collector's configured window is where that is written down.
+
+**Why the probe settles between arms.** Its two arms are two subscriptions on
+one account, so arm B asking for 50 while arm A's 8 are still held is the same
+collision that killed the collector this morning, and it would have produced a
+refused arm measuring zero. A zero from a refusal reads exactly like a zero
+from starvation, which is the answer the probe exists to find, so it has to be
+impossible rather than unlikely. Refused arms are marked and excluded.
+
+**What today did not settle.** Whether 50 subscriptions starve the feed. Today
+is a third session at 50 and SPY still gets about 11 trades a minute against
+171 at 38, so the correlation holds at three sessions to one. It is still a
+correlation, and the probe still has to run.

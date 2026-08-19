@@ -472,8 +472,40 @@ reconnect_backoff_max_s       = 60
 poll_interval_s               = 60         # only used by the --poll fallback
 auth_wait_s                   = 10         # see the handshake note below
 late_trade_grace_s            = 45         # see the late trade note below
+subscription_retry_wait_s     = 60         # measured 2026-08-19: a dropped connection's 50 slots were still held 1s later and free within 105s
+max_subscription_retries      = 4          # four waits is four minutes, against a window that is two hours long
 verify_warmup_minutes         = 25         # see the verification note below
 verify_window_minutes         = 15
+
+### The symbols limit note
+
+The socket cap is 50 concurrent symbols and it is ACCOUNT WIDE, not per
+connection. A subscribe frame that would take the account past 50 is answered
+with {"status_code":422,"message":"Symbols limit reached"} and no data.
+
+Until 2026-08-19 that was treated as fatal, on the reasoning that a refusal
+means another process holds the slots and retrying would be refused every time
+until the window was gone. That reasoning was wrong, and the morning of
+2026-08-19 is the counterexample. The collector had been streaming happily on
+50 symbols since 08:16. At 08:34 the remote host closed the connection, the
+reconnect went out about a second later, and the server refused it: the
+account was still holding the dropped connection's 50 symbols. The process
+competing for the slots was the collector itself, one second in its own past.
+It exited, and the last 50 minutes of the window were lost. A hand restart at
+08:37:13 subscribed without complaint, so the slots had been released
+somewhere inside 105 seconds.
+
+So a refusal is now retried, max_subscription_retries times, waiting
+subscription_retry_wait_s between attempts. The asymmetry is the argument. If
+the slots are ours, waiting gets them back and the morning continues. If they
+genuinely belong to another process, four waits cost four minutes of a two
+hour window and then the run fails exactly as it used to. The old behaviour
+paid the whole window to avoid a four minute delay.
+
+The original reasoning is kept above rather than deleted because it was not
+silly, it was untested: nothing had ever observed a refusal, so the note was
+written from the vendor's documentation of the cap rather than from a
+refusal's behaviour.
 
 ### The handshake note
 

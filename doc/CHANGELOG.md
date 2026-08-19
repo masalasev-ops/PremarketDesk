@@ -15,6 +15,95 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, third: the collector refused its own slots and died, and the window fix proved itself live
+
+### What the morning did
+
+The power was off at 06:20, so the socket cap probe never ran and neither did
+discover at 07:15 or the collector at 07:20. The machine came back and the
+watchdog restarted the chain: discover at 08:21, the collector at 08:16, the
+nightly catchup at 08:21.
+
+The collector then streamed 50 symbols happily from 08:16, folding 14,680
+trades into 486 minutes. At 08:34 the remote host closed the connection. The
+reconnect went out about a second later and the server refused it with
+{"status_code":422,"message":"Symbols limit reached"}. The collector treated
+that as fatal, exited 1, and the last 50 minutes of the window were lost.
+
+The slots it was refused were its own. A hand restart at 08:37:13 subscribed
+without complaint, so the account had released the dropped connection's 50
+symbols somewhere inside 105 seconds. The process competing for the pool was
+the collector, one second in its own past.
+
+### The window fix worked, on its first morning
+
+Yesterday's guard against replayed trades refused eight this morning, and two of
+them were dated 2026-08-18: UUP at 15:53:13 and SFL at 15:59:56, the previous
+afternoon. Without it those would have been folded into today's premarket
+volume and today's premarket window would have looked as though it opened at
+07:00 on a morning nothing was listening before 08:16.
+
+That is the first live confirmation that the vendor replays a stale last trade
+per symbol on subscribe, rather than an inference from archived files.
+
+### A refusal is retried now, not fatal
+
+The reasoning that made it fatal is corrected in place in both CRITERIA.md and
+the exception's own docstring, because it was wrong when written rather than
+overtaken: it said a refusal means another process holds the slots and
+retrying would be refused every time until the window is gone, and it was
+written from the vendor's documentation of the cap because no refusal had ever
+been seen.
+
+Refusals are retried max_subscription_retries times on a
+subscription_retry_wait_s wait. The asymmetry is the argument. If the slots are
+ours, waiting gets them back and the morning continues. If they are genuinely
+somebody else's, four waits cost four minutes of a two hour window and the run
+then fails exactly as it used to. The old behaviour paid the whole window to
+avoid a four minute delay.
+
+Two smaller corrections came with it. The exception text no longer asserts
+"Nothing was collected", which it cannot know from inside a message handler and
+which was false this morning over 14,680 folded trades. And the exit line now
+reports what the run actually folded and calls the bar file a PARTIAL window,
+rather than printing fixed text saying the run was never subscribed.
+
+### The subscription probe, rescheduled and repaired
+
+The 06:20 run was lost to the power. Two things changed before rescheduling it.
+
+Its guard was a fixed hour, refusing anything after 07:10, which was the only
+free slot when it was meant to run before the morning. That hour then refused
+every remaining moment of a day in which the socket was free from 09:25 onward.
+The constraint is the collector's window, not a time of day, and the guard asks
+CRITERIA for it now and refuses any run that would overlap.
+
+And the probe had the defect this morning revealed. It closes arm A and opens
+arm B, and an arm B asking for 50 while arm A's 8 were still held by the
+account would have been refused and would have measured a zero that means
+nothing. It settles 90 seconds between arms now, and an arm that is refused is
+marked and kept out of the rate table rather than averaged into it.
+
+Rescheduled for 09:35 with StartWhenAvailable set, so the next outage delays it
+rather than losing it.
+
+### A third session at fifty subscriptions
+
+Today is the third morning at 50 and it does not overturn the correlation. Over
+the same eighteen clock minutes, 08:17 to 08:34:
+
+| symbol | 08-17 | 08-18 | 08-19 |
+| --- | ---: | ---: | ---: |
+| SPY trades | 193 | 126 | 203 |
+| QQQ trades | 230 | 207 | 267 |
+| all symbols | 4,807 | 5,094 | 14,258 |
+
+Today is 3.5x busier in aggregate, and that is AVGO and MU carrying news:
+AVGO alone went from 116 and 134 trades to 3,983. The index ETFs did not move.
+SPY sits at 203, 193 and 126 trades in eighteen minutes across the three, which
+is about 11 a minute, against 171 a minute on 2026-08-14 at 38 subscriptions.
+The collapse is present today too.
+
 ## 2026-08-19, second: the collector folds a previous session's trade, and the volume gap is narrowed to the subscription size
 
 ### A replayed trade is not this morning's tape

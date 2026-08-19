@@ -10,11 +10,14 @@ rem 1m bars by roughly a factor of ten and that the check is sound. It does not
 rem say why. The only structural difference between the sessions that look right
 rem and the ones that do not is 38 subscriptions against 50, and 50 is the cap.
 rem
-rem It MUST finish before 07:20, when the collector subscribes. The 50 symbol
+rem It must not overlap the collector's 07:20 to 09:25 window. The 50 symbol
 rem pool is account wide, so a probe still holding slots would starve the very
-rem morning it is meant to explain. The probe refuses to start after 07:10 for
-rem that reason, and this task is triggered at 06:20 for a run of about 25
-rem minutes.
+rem morning it is meant to explain, and the probe refuses any run that would
+rem overlap. It also settles 90 seconds between its own arms, because a closed
+rem connection keeps its symbols for a while: on 2026-08-19 the collector
+rem reconnected one second after a drop and was refused, and a restart 105
+rem seconds later was not. Four cycles at two minutes plus the settles is about
+rem 28 minutes.
 rem
 rem It spends NO EODHD quota. Measured 2026-08-13: websocket connections,
 rem subscribe frames and reconnects moved the account counter by exactly zero.
@@ -46,7 +49,7 @@ if %ERRORLEVEL% equ 3 (
 )
 
 echo ===== probe started %DATE% %TIME% ===== >> "%LOG%"
-%PY% -m research.probe_socket_cap --cycles 6 --seconds 120 >> "%LOG%" 2>&1
+%PY% -m research.probe_socket_cap --cycles 4 --seconds 120 --settle 90 >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== probe finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

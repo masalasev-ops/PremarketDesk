@@ -32,9 +32,13 @@ subscription size with the clock. Each arm is a fresh connection, and the first
 message per symbol is discarded because the server replays a stale last trade
 on subscribe.
 
-Run it between 04:00 and 07:10 ET, before the collector wakes. It MUST NOT
-overlap the 07:20 collector: the fifty symbol pool is account wide, so a probe
-holding slots would starve the morning it is trying to explain.
+Run it outside the collector's window, which is 07:20 to 09:25 ET. Before it
+or after it are both fine and the tool refuses anything that would overlap: the
+fifty symbol pool is account wide, so a probe holding slots would starve the
+morning it is trying to explain. After 09:25 the tape is denser than premarket,
+which makes the ratio easier to measure and is a different tape from the one
+the defect appears in, so a positive result there is worth confirming in a
+premarket run before acting on it.
 
     python -m research.probe_socket_cap --cycles 6 --seconds 120
 
@@ -45,6 +49,7 @@ subscribe frames and reconnects moved the account counter by exactly zero.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import ssl
 import sys
@@ -122,6 +127,7 @@ def run_arm(symbols: list[str], watch: set[str], seconds: float) -> dict[str, An
             "symbols": ",".join(collector._bare(s) for s in symbols),
         }))
         socket.settimeout(1.0)
+        refused = False
 
         # The clock starts AFTER the subscribe frame goes out, and anything
         # stamped before it is the replay rather than the tape.
@@ -144,6 +150,12 @@ def run_arm(symbols: list[str], watch: set[str], seconds: float) -> dict[str, An
             if "s" not in message or "p" not in message:
                 if message.get("status_code") != 200:
                     status.append(message)
+                    # A refused arm measures zero for a reason that has nothing
+                    # to do with the question, and reporting that zero as a
+                    # rate would be the probe answering its own question wrong.
+                    if message.get("status_code") in collector._FATAL_STATUS_CODES:
+                        refused = True
+                        break
                 continue
             total += 1
             symbol = collector._full(str(message["s"]))
@@ -168,6 +180,7 @@ def run_arm(symbols: list[str], watch: set[str], seconds: float) -> dict[str, An
     return {
         "subscribed": len(symbols),
         "seconds": seconds,
+        "refused": refused,
         "messages_total": total,
         "counts": counts,
         "volume": volume,
@@ -183,6 +196,17 @@ def main(argv: list[str] | None = None) -> int:
                         help="A/B pairs to run. Six at two minutes is about 25 minutes.")
     parser.add_argument("--seconds", type=float, default=120.0,
                         help="Seconds to listen in each arm.")
+    parser.add_argument("--settle", type=float, default=90.0,
+                        help="Seconds to wait between arms while the account "
+                             "releases the previous arm's slots. Not optional "
+                             "padding: the cap is account wide and a closed "
+                             "connection keeps its symbols for a while. On "
+                             "2026-08-19 the collector reconnected one second "
+                             "after a drop and was refused, and a hand restart "
+                             "105 seconds later was not. An arm B that asked "
+                             "for 50 while arm A's 8 were still held would be "
+                             "refused and would measure a zero that means "
+                             "nothing.")
     parser.add_argument("--watch", default=None,
                         help="Comma separated watch set. Defaults to the CRITERIA "
                              "context symbols, which trade every premarket.")
@@ -198,24 +222,44 @@ def main(argv: list[str] | None = None) -> int:
               f"the capped arm will not reach {cap}. The comparison is still valid "
               "but the B arm is not at the cap, so say so when reporting it.")
 
+    # The constraint is the COLLECTOR'S WINDOW, not a fixed hour. Written as
+    # 07:10 first, which was the only free slot when this was meant to run
+    # before the morning; the power was off at 06:20 on 2026-08-19 and the run
+    # was lost, and the fixed hour then refused every remaining moment of a day
+    # in which the socket was free from 09:25 onward. The rule is that the
+    # probe must not hold slots while the collector wants them, and the
+    # collector's own configured window says exactly when that is.
     now = ettime.now_et()
-    if now.hour >= 7 and now.minute >= 10:
-        print("probe: REFUSING to run. It is past 07:10 ET and the collector "
-              "subscribes at 07:20. The fifty symbol pool is account wide, so a "
-              "probe holding slots would starve the morning it is meant to "
-              "explain. Run it between 04:00 and 07:10.")
+    opens = ettime.at_hm(now.date(), _CRIT.clock("collector", "start_time"))
+    closes = ettime.at_hm(now.date(), _CRIT.clock("collector", "stop_time"))
+    finishes = now + dt.timedelta(
+        seconds=args.cycles * (args.seconds + args.settle) * 2 + 60)
+    if opens <= now <= closes or opens <= finishes <= closes:
+        print(f"probe: REFUSING to run. The collector's window is "
+              f"{_CRIT.clock_text('collector', 'start_time')} to "
+              f"{_CRIT.clock_text('collector', 'stop_time')} ET and this run would "
+              f"end at {ettime.hhmm(finishes)}. The fifty symbol pool is account "
+              "wide, so a probe holding slots would starve the morning it is "
+              "meant to explain.")
         return 1
 
     small = watch
     capped = watch + fillers
     print(f"probe: watch set {len(watch)}, arm A subscribes {len(small)}, "
           f"arm B subscribes {len(capped)} (cap {cap})")
-    print(f"probe: {args.cycles} alternating cycles of {args.seconds:g}s per arm, "
-          f"about {args.cycles * args.seconds * 2 / 60:.0f} minutes")
+    print(f"probe: {args.cycles} alternating cycles of {args.seconds:g}s per arm "
+          f"with {args.settle:g}s to settle between them, about "
+          f"{args.cycles * (args.seconds + args.settle) * 2 / 60:.0f} minutes")
 
     runs: list[dict[str, Any]] = []
+    first = True
     for cycle in range(1, args.cycles + 1):
         for label, symbols in (("A", small), ("B", capped)):
+            if not first and args.settle > 0:
+                print(f"probe: settling {args.settle:g}s so the account releases "
+                      "the previous arm's slots")
+                time.sleep(args.settle)
+            first = False
             started = ettime.stamp(ettime.now_et())
             try:
                 result = run_arm(symbols, set(watch), args.seconds)
@@ -230,7 +274,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"probe: cycle {cycle} arm {label}  subscribed "
                   f"{result['subscribed']:>2}  {result['messages_total']:>6} msgs "
                   f"({rate:>6.1f}/s)  watch set {watched:>6}  "
-                  f"replayed {sum(result['replayed'].values()):>3}")
+                  f"replayed {sum(result['replayed'].values()):>3}"
+                  + ("  REFUSED" if result.get("refused") else ""))
+            if result.get("refused"):
+                print("    the subscription was refused, so this arm measured "
+                      "nothing about delivery. Raise --settle and run again.")
             if result["status"]:
                 print(f"    status frames: {result['status'][:3]}")
 
@@ -244,8 +292,8 @@ def main(argv: list[str] | None = None) -> int:
           f"{'A shares/s':>12} {'B shares/s':>12}")
     verdict_ratios: list[float] = []
     for symbol in watch:
-        a = [r for r in runs if r["arm"] == "A"]
-        b = [r for r in runs if r["arm"] == "B"]
+        a = [r for r in runs if r["arm"] == "A" and not r.get("refused")]
+        b = [r for r in runs if r["arm"] == "B" and not r.get("refused")]
         a_secs = sum(r["seconds"] for r in a) or 1.0
         b_secs = sum(r["seconds"] for r in b) or 1.0
         a_rate = sum(r["counts"][symbol] for r in a) / a_secs
