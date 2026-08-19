@@ -242,3 +242,114 @@ No collector code was changed. The obvious next question is WHY the websocket
 tape disagrees with the vendor's own published bars by this much, which means
 looking at what the trade messages carry and whether every subscribed symbol
 streams for the whole window. That is a separate pass.
+
+---
+
+# The separate pass, 2026-08-19
+
+The question left open above was why. This is what the archived bar files
+answer on their own, before any live measurement.
+
+## What the collector is not doing wrong
+
+Four candidate mechanisms are dead on the existing data.
+
+**It is not misreading the size field.** Mean trade size per bar is ordinary in
+every session that matters. SPY's median bar averages 65 shares on 2026-08-14,
+36 on 2026-08-17 and 26 on 2026-08-18; QQQ 70, 22 and 30. Those are premarket
+odd lots, which is what premarket is made of. A collector reading the wrong
+field would show implausible sizes, and it does not.
+
+**It is not losing messages inside itself.** The run stats record messages
+equal to trades folded in every session: 191,194 and 191,194 on 2026-08-14,
+33,489 and 33,489 on 2026-08-17. Every frame that arrived was parsed and folded.
+Whatever is missing never arrived.
+
+**It is not a socket that died and recovered.** One connection, zero
+reconnects, one resubscription, zero status frames on both clean sessions.
+
+**It is not throughput collapsing under load.** Plotted by ten minute block,
+the trade rate on 2026-08-17 and 2026-08-18 is flat across the whole window,
+between roughly 2,000 and 3,300 trades per block from 07:20 to 09:25. There is
+no step down, no gap and no recovery. A client falling behind its socket does
+not look like this.
+
+## What the collector IS doing wrong, found and fixed here
+
+The subscription replays a last trade per symbol when it lands, and that trade
+carries its ORIGINAL timestamp. The collector folded those into bars.
+
+On 2026-08-18 that put three bars dated 2026-08-17 into the 2026-08-18
+premarket file, one of them stamped 15:59 the previous afternoon. Another
+forty-five were stamped between 07:00 and 07:19 on a morning the collector
+connected at 07:20:02. Every single one carried exactly one trade, which is the
+signature: one replayed message per symbol. 2026-08-17 carries forty-seven of
+them, 2026-08-14 none, because that run's window opened at the same minute it
+connected.
+
+The volume is trivial, 1,467 shares on 2026-08-17 and 4,376 on 2026-08-18,
+which is 0.11 and 0.27 percent. That is NOT what makes it a defect.
+pm_window_starts_late is derived from the first bar present, so a replayed
+07:00 print makes a window the collector reached at 07:20 look covered from
+07:00, and the flag that exists to warn a reader about exactly that says
+nothing. It is a vintage defect in miniature: a previous session's trade
+counted as this morning's.
+
+The collector now refuses any trade stamped outside the window the run is
+collecting, counts them, names five of them in the log and records the count in
+the run stats. Proven by replaying the real 2026-08-18 file through the fixed
+builder, which refuses 48 trades including the two dated to the previous
+session, and by a builder given no window refusing nothing.
+
+It does not close the volume gap and is not claimed to.
+
+## What the volume gap is narrowed to
+
+One structural difference separates the sessions that look right from the ones
+that do not, and it is the size of the subscription.
+
+| session | subscribed | messages | SPY trades | SPY per minute | SPY shares |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-08-13 (open market) | 38 | n/a | 37,792 | 727 | 2,082,908 |
+| 2026-08-14 | 38 | 191,194 | 21,428 | 171 | 1,550,327 |
+| 2026-08-17 | 50 | 33,489 | 618 | 5.8 | 32,532 |
+| 2026-08-18 | 50 | 36,530 | 573 | 5.3 | 29,410 |
+
+Fifty is the documented cap. The subscription files confirm both later mornings
+requested exactly 50 unique symbols with nothing dropped to fit. The same
+symbols, over comparable mornings, fell from 171 trades a minute to 5.8, a
+factor of about thirty, while EODHD's own bars for those mornings put SPY at
+327,159 and 412,429 shares, a factor of 1.3.
+
+The collector's own source already carried the suspicion, written the day
+before the first fifty symbol morning: "Monday is the first morning at fifty
+subscriptions and the throughput has only ever been measured at thirty eight,
+so this is the run that has to be able to say which names the socket actually
+served."
+
+Two sessions each side is a correlation, not a cause, and it is not enough to
+change the collector on. src/research/probe_socket_cap.py turns it into a
+measurement: one watch set of the eight context ETFs present in both arms, arm
+A subscribing to those eight alone, arm B subscribing to fifty, the arms
+alternating so the rising premarket rate cannot be mistaken for the effect, and
+the first message per symbol discarded because of the replay documented above.
+It refuses to start after 07:10, because the fifty symbol pool is account wide
+and a probe holding slots would starve the morning it is meant to explain.
+
+Registered as a one time task for 06:20 on 2026-08-19. It spends no quota.
+
+## What the answer decides
+
+If arm B's per symbol rate is near arm A's, the cap is innocent and the gap has
+another cause, and the next place to look is whether EODHD's trades feed is a
+venue subset while its intraday bars are consolidated, which would make the
+shortfall a permanent property to calibrate against rather than a bug to fix.
+
+If arm B's rate is far below arm A's, the cap is the cause and the fix is a
+choice between subscribing to fewer names and splitting the list across
+connections. That choice has a cost either way: fewer names means a smaller
+watchlist, and more connections may or may not be within what the account
+allows, which the same probe can answer by trying it.
+
+Either way the answer is a measurement rather than an inference, and until it
+lands the delivery gate data/UNVERIFIED stays where it is.

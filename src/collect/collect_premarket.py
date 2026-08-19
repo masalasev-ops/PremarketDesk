@@ -214,9 +214,13 @@ def select_symbols(watchlist: dict[str, Any]) -> tuple[list[str], list[dict[str,
 class BarBuilder:
     """Folds trades into one minute bars and appends completed ones exactly once."""
 
-    def __init__(self, path: Path, source: str) -> None:
+    def __init__(self, path: Path, source: str,
+                 window: tuple[float, float] | None = None) -> None:
         self.path = path
         self.source = source
+        # The epoch seconds this run is collecting between, or None to accept
+        # any timestamp. See add_trade for what it refuses and why.
+        self.window = window
         self.open_bars: dict[tuple[str, int], dict[str, Any]] = {}
         self.written: set[tuple[str, int]] = set()
         self.rows_written = 0
@@ -225,6 +229,9 @@ class BarBuilder:
         self.late_trades = 0
         self.late_volume = 0.0
         self.total_volume = 0.0
+        self.out_of_window_trades = 0
+        self.out_of_window_volume = 0.0
+        self.out_of_window_examples: list[dict[str, Any]] = []
         self._load_existing()
 
     def _load_existing(self) -> None:
@@ -249,6 +256,35 @@ class BarBuilder:
     def add_trade(self, symbol: str, price: float, volume: float, epoch_s: float,
                   dark_pool: bool, market_status: str | None) -> None:
         self.trades_seen += 1
+
+        # A trade stamped outside the window this run is collecting is not
+        # this morning's tape, and folding it in is a vintage defect: the bar
+        # file says a minute was covered when nothing was listening in it.
+        #
+        # It is not hypothetical. The server replays a last trade per symbol
+        # when the subscription lands, and that trade carries its ORIGINAL
+        # timestamp. On 2026-08-18 that put three bars dated 2026-08-17, one of
+        # them 15:59 the previous afternoon, into the 2026-08-18 premarket file,
+        # and eleven more on 2026-08-17 stamped minutes before the collector had
+        # connected. Every one carried exactly one trade, which is the
+        # signature: one replayed message per symbol.
+        #
+        # The damage is not the volume, which was trivial. It is that
+        # pm_window_starts_late is derived from the first bar present, so a
+        # replayed 07:00 print makes a window the collector reached at 07:20
+        # look like it was covered from 07:00, and the flag that exists to warn
+        # a reader about exactly that says nothing.
+        if self.window is not None and not (self.window[0] <= epoch_s <= self.window[1]):
+            self.out_of_window_trades += 1
+            self.out_of_window_volume += volume
+            if len(self.out_of_window_examples) < 20:
+                self.out_of_window_examples.append({
+                    "symbol": symbol,
+                    "at": ettime.stamp(ettime.from_epoch_s(int(epoch_s))),
+                    "v": volume,
+                })
+            return
+
         self.total_volume += volume
         key = (symbol, minute_floor(epoch_s))
 
@@ -872,7 +908,33 @@ def main(argv: list[str] | None = None) -> int:
             print("collector: the stop time has already passed today, nothing to do")
             return 0
 
-    builder = BarBuilder(bar_path(), source="poll" if args.poll else "ws")
+    # The window this run will accept trades for. It opens at the configured
+    # collector start, or at the moment this process started if that is
+    # earlier, so an ad hoc evening run is not refusing its own tape. It stays
+    # open late_trade_grace_s past the stop, which is how long the builder
+    # already waits for a print to arrive out of order.
+    #
+    # Deliberately NOT the moment this process started on a rerun. The 08:55
+    # watchdog restart on 2026-08-18 resumed a file already holding 07:20
+    # onward, and a window that opened at 08:55 would have refused every late
+    # print belonging to the minutes it was resuming.
+    #
+    # Floored to its own minute, and that is not tidiness. Trade timestamps
+    # arrive as whole milliseconds of a whole second, so a trade printed in the
+    # same second the process started carries an epoch up to a second BELOW the
+    # window's opening instant and would be refused for being early. The suite's
+    # replayed socket caught exactly that: thirty trades stamped 0.89 seconds
+    # before an open computed to the microsecond, and a collector that wrote no
+    # minutes at all. Bars are minute granular anyway, so the minute the
+    # collector started in is part of the window by construction.
+    window_open = float(minute_floor(min(
+        ettime.at_hm(now.date(), _CRIT.clock("collector", "start_time")), now
+    ).timestamp()))
+    builder = BarBuilder(
+        bar_path(),
+        source="poll" if args.poll else "ws",
+        window=(window_open, stop_at.timestamp() + LATE_TRADE_GRACE_S),
+    )
 
     # Written before the socket opens, so the 08:45 packet can name a symbol
     # that was subscribed and stayed silent. Monday is the first morning at
@@ -925,6 +987,14 @@ def main(argv: list[str] | None = None) -> int:
     print(f"collector: trades folded        {builder.trades_seen}")
     print(f"collector: late trades dropped  {builder.late_trades} "
           f"({builder.late_volume:,.0f} shares, {late_share:.2f}% of volume)")
+    if builder.out_of_window_trades:
+        print(f"collector: out of window        {builder.out_of_window_trades} "
+              f"({builder.out_of_window_volume:,.0f} shares) refused, stamped "
+              "outside this run's collection window. The subscription replays a "
+              "last trade per symbol carrying its original timestamp, so some of "
+              "these belong to a previous session.")
+        for row in builder.out_of_window_examples[:5]:
+            print(f"    {row['at'][:19]}  {row['symbol']:<10} {row['v']:,.0f} shares")
     print(f"collector: connection stats     {stats}")
     print(f"collector: REST calls during    {calls_during} (this process, client side; "
           "what the vendor meters for the socket is measured by measure_socket_cost.py)")
@@ -950,6 +1020,13 @@ def main(argv: list[str] | None = None) -> int:
             "status_frames_seen": stats.get("status_frames_seen"),
             "trades_folded": builder.trades_seen,
             "minutes_written": builder.rows_written,
+            # Refused for carrying a timestamp outside this run's window. The
+            # count is the measurement of how much the subscription replay
+            # contributes, and it is the number to watch if the vendor ever
+            # changes that behaviour.
+            "out_of_window_trades": builder.out_of_window_trades,
+            "out_of_window_volume": builder.out_of_window_volume,
+            "out_of_window_examples": builder.out_of_window_examples[:5],
             "chaos_reconnects_requested": args.chaos_reconnects,
         }
         with stats_path().open("a", encoding="utf-8") as handle:

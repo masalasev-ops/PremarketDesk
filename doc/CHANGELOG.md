@@ -15,6 +15,67 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, second: the collector folds a previous session's trade, and the volume gap is narrowed to the subscription size
+
+### A replayed trade is not this morning's tape
+
+The EODHD subscription replays a last trade per symbol when it lands, carrying
+its ORIGINAL timestamp, and the collector folded those into bars. On 2026-08-18
+that put three bars dated 2026-08-17 into the 2026-08-18 premarket file, one
+stamped 15:59 the previous afternoon. Forty-five more were stamped between
+07:00 and 07:19 on a morning the collector connected at 07:20:02. Every one
+carried exactly one trade, which is the signature.
+
+The volume is 0.11 and 0.27 percent of the two sessions and that is not the
+point. pm_window_starts_late is derived from the first bar present, so a
+replayed 07:00 print makes a window the collector reached at 07:20 look covered
+from 07:00, and the flag that exists to warn a reader about exactly that says
+nothing. It is a vintage defect in miniature.
+
+The collector now refuses any trade stamped outside the window the run is
+collecting, counts them, names five in the log and records the count in the run
+stats sidecar. The window opens at the configured start or at the process start
+if that is earlier, so an ad hoc evening run does not refuse its own tape, and
+a builder given no window refuses nothing at all. Proven against the real
+2026-08-18 file rather than a fixture: 48 refused, two of them dated to the
+previous session.
+
+The window's open edge is floored to its minute, and the suite is why. Trade
+timestamps arrive as whole seconds, so a trade printed in the same second the
+process started carries an epoch up to a second below an open computed to the
+microsecond. The replayed socket in test_entrypoints caught it immediately:
+thirty trades refused as early, and a collector that wrote no minutes at all.
+A fix that discards the first second of every morning would have been a worse
+defect than the one it was fixing.
+
+### The volume gap is not any of four things, and is narrowed to one
+
+Four mechanisms are dead on the archived data. Mean trade size per bar is
+ordinary in every session, so the size field is read correctly. Messages equal
+trades folded in every session, so nothing is lost inside the collector. One
+connection, zero reconnects and zero status frames on both clean mornings. And
+the trade rate plotted by ten minute block is flat across the whole window on
+both, with no step down and no recovery, which is not what a client falling
+behind its socket looks like.
+
+What separates the sessions that look right from the ones that do not is the
+size of the subscription. Thirty-eight symbols on 2026-08-13 and 2026-08-14,
+fifty on 2026-08-17 and 2026-08-18, fifty being the documented cap. SPY fell
+from 171 trades a minute to 5.8 across that change while EODHD's own bars for
+the same mornings moved by a factor of 1.3.
+
+Two sessions each side is a correlation. src/research/probe_socket_cap.py makes
+it a measurement: the eight context ETFs as a watch set present in both arms,
+arm A subscribing to eight and arm B to fifty, alternating so the rising
+premarket rate cannot be mistaken for the effect, and the replayed first message
+per symbol discarded. It refuses to start after 07:10 because the fifty symbol
+pool is account wide and a probe holding slots would starve the morning it is
+meant to explain. Registered as a one time task for 06:20 on 2026-08-19, and it
+spends no quota.
+
+No collector behaviour was changed on the strength of the correlation. The
+delivery gate stays where it is until the probe answers.
+
 ## 2026-08-19: the report scan's assumption is measured, and the sampler is exempted by behaviour
 
 ### Does the report scan have the hole the instruction scan had? Measured: no, today

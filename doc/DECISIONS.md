@@ -2090,3 +2090,51 @@ the rewrite passes through, and covering that means letting an empty file stand
 in for its own contents. That is a wider hole than the sampler's and it is the
 owner's to open or refuse. Recorded so the next intermittent is compared
 against it rather than investigated from scratch.
+
+
+## 2026-08-19, second: fix what the data proves, measure what it only suggests
+
+**The decision.** Two findings from the same investigation are treated
+differently on purpose. The replayed out of window trade is fixed, because the
+archived files prove it happens and prove what it costs. The subscription size
+is NOT acted on, because the archive only correlates it, and a collector changed
+on a correlation is how a measurement problem becomes two.
+
+**What the archive proves.** The subscription replays a last trade per symbol
+with its original timestamp. Forty-eight such trades on 2026-08-18, two of them
+from the previous session, every one carrying exactly one trade. The damage is
+not the 0.27 percent of volume, it is that pm_window_starts_late reads the first
+bar present, so a replayed 07:00 print silences the flag that exists to say the
+collector only reached 07:20. That is a vintage defect and this project has a
+standing rule about those.
+
+**What the archive only suggests.** Every other mechanism for the tenfold
+volume gap is dead: sizes are ordinary, messages equal trades folded, no
+reconnects, and the rate is flat across the window rather than collapsing. What
+is left is that 38 subscriptions produced 171 SPY trades a minute and 50
+produced 5.8, with the vendor's own bars moving 1.3x across the same two
+mornings. Fifty is the cap. That is two sessions each side and a plausible
+mechanism, which is exactly the evidence that feels like enough and is not.
+
+**Why the probe alternates its arms.** Premarket trade rates climb through the
+morning. Two consecutive blocks, small then capped, would confound the
+subscription size with the clock and produce a number that looked decisive and
+meant nothing. Alternating costs nothing and removes the confound.
+
+**Why the probe refuses to run after 07:10.** The fifty symbol pool is account
+wide. A probe still holding slots at 07:20 would starve the collector, and the
+morning it corrupted would be the morning it was measuring. The refusal is in
+the tool rather than in the operator's memory.
+
+**Why the window guard is opt in.** A builder constructed without a window
+refuses nothing. The ad hoc evening runs, measure_socket_cost.py among them,
+collect outside any configured premarket window, and a guard that applied
+itself by default would silently empty their output. The scheduled collector
+passes its window explicitly; anything else gets the old behaviour.
+
+**The one that nearly shipped.** The window's open edge was computed to the
+microsecond while trade timestamps arrive as whole seconds, so every trade in
+the run's first second read as early. The suite's replayed socket refused all
+thirty and wrote no minutes. A guard against a defect that costs 0.27 percent
+of volume would have discarded the first second of every morning. It floors to
+the minute now, which is the granularity bars have anyway.

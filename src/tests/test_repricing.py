@@ -628,6 +628,75 @@ def claim_ten(failures: list[str]) -> None:
           f"rotates {ordinary['pm_float_rotation']:.6f} on a null share count")
 
 
+def claim_eleven(failures: list[str]) -> None:
+    """A trade stamped outside the run's window is refused, not folded.
+
+    The subscription replays a last trade per symbol when it lands, and that
+    trade carries its ORIGINAL timestamp. On 2026-08-18 that put three bars
+    dated 2026-08-17 into the 2026-08-18 premarket file, one of them 15:59 the
+    previous afternoon, and eleven more on 2026-08-17 stamped minutes before
+    the collector had connected. Every one carried exactly one trade, which is
+    the signature: one replayed message per symbol.
+
+    The volume is trivial, 0.1 and 0.3 percent of the two sessions, and that is
+    not what makes it a defect. pm_window_starts_late is derived from the first
+    bar present, so a replayed 07:00 print makes a window the collector reached
+    at 07:20 look covered from 07:00, and the flag that exists to warn a reader
+    about exactly that says nothing.
+
+    Proven against the real 2026-08-18 file rather than a fixture, because a
+    fixture would only prove the comparison, not that the vendor does this.
+    """
+    import tempfile
+    from collect.collect_premarket import BarBuilder
+
+    day = "2026-08-18"
+    source = config.PREMARKET_DIR / f"{day}.jsonl"
+    if not source.is_file():
+        print(f"  claim 11 SKIPPED, {source.name} is not on this machine")
+        return
+
+    open_at = ettime.at_hm(ettime.parse_date(day),
+                           _CRIT.clock("collector", "start_time")).timestamp()
+    close_at = ettime.at_hm(ettime.parse_date(day),
+                            _CRIT.clock("collector", "stop_time")).timestamp()
+    grace = _CRIT.number("collector", "late_trade_grace_s")
+
+    with tempfile.TemporaryDirectory(prefix="pmd-window-") as tmp:
+        guarded = BarBuilder(Path(tmp) / "guarded.jsonl", "ws",
+                             window=(open_at, close_at + grace))
+        unguarded = BarBuilder(Path(tmp) / "unguarded.jsonl", "ws")
+        for line in source.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            for builder in (guarded, unguarded):
+                builder.add_trade(row["symbol"], row["c"], row.get("v") or 0,
+                                  float(row["minute_epoch"]), False, None)
+
+    if unguarded.out_of_window_trades:
+        failures.append("a builder given no window refused something, so the "
+                        "guard is not opt in and an ad hoc run could lose its tape")
+    if not guarded.out_of_window_trades:
+        failures.append(f"the {day} file is expected to carry replayed trades "
+                        "outside the collection window and the guard found none")
+        return
+    stale = [row for row in guarded.out_of_window_examples
+             if not row["at"].startswith(day)]
+    if not stale:
+        failures.append("no refused trade came from a previous session, which is "
+                        f"the case that matters: {guarded.out_of_window_examples[:3]}")
+    share = guarded.out_of_window_volume / max(1.0, unguarded.total_volume) * 100.0
+    if share > 5.0:
+        failures.append(f"the window guard refused {share:.1f}% of the session's "
+                        "volume, which is far more than a replay and needs looking at "
+                        "before it is trusted")
+    print(f"  claim 11 the window guard refuses {guarded.out_of_window_trades} "
+          f"replayed trade(s) on {day} ({guarded.out_of_window_volume:,.0f} shares, "
+          f"{share:.2f}% of the session), {len(stale)} of them dated to an earlier "
+          "session, and refuses nothing when no window is given")
+
+
 def main() -> int:
     if not PACKET_PATH.is_file() or not SNAPSHOT_PATH.is_file():
         print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
@@ -643,6 +712,7 @@ def main() -> int:
     claim_eight(failures)
     claim_nine(failures)
     claim_ten(failures)
+    claim_eleven(failures)
 
     if failures:
         for failure in failures:
