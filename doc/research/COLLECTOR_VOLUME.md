@@ -353,3 +353,119 @@ allows, which the same probe can answer by trying it.
 
 Either way the answer is a measurement rather than an inference, and until it
 lands the delivery gate data/UNVERIFIED stays where it is.
+
+
+# The answer, 2026-08-19 09:35 to 10:01
+
+## The cap is innocent
+
+The probe ran its full eight arms, none refused, and the two subscription sizes
+deliver the same rate per symbol.
+
+| symbol | A msg/s at 8 subs | B msg/s at 50 subs | B/A |
+| --- | ---: | ---: | ---: |
+| SPY.US | 1.21 | 1.13 | 0.94 |
+| QQQ.US | 4.88 | 5.96 | 1.22 |
+| IWM.US | 0.86 | 0.64 | 0.74 |
+| DIA.US | 0.46 | 0.34 | 0.74 |
+| TLT.US | 0.46 | 0.34 | 0.74 |
+| USO.US | 0.07 | 0.09 | 1.28 |
+| UUP.US | 0.01 | 0.00 | 0.67 |
+| VIXY.US | 0.17 | 0.15 | 0.87 |
+
+Median B/A is 0.87 across the eight. Arm B's forty two filler symbols came from
+today's real subscription list rather than from a quiet universe slice, so the
+load on the socket was the load the collector puts on it, and arm B pushed 66.5
+messages a second against the collector's 4.7 on a fifty symbol morning. A
+subscription at the cap, carrying the morning's own noisy names, at fourteen
+times the collector's message rate, did not lose a symbol.
+
+By the test this document pre registered, that is the first branch: the cap is
+innocent and the gap has another cause.
+
+## What the same afternoon did to the other branch
+
+Running the collector's own intraday check across every published session, which
+had never been done for more than two of them at once:
+
+| session | subscribed | symbols within one percent | median absolute difference |
+| --- | ---: | ---: | ---: |
+| 2026-08-13 | 38 | 0 of 38 | 69.77% |
+| 2026-08-14 | 37 | 0 of 37 | 70.95% |
+| 2026-08-17 | 50 | 1 of 50 | 88.43% |
+| 2026-08-18 | 50 | 0 of 50 | 90.05% |
+
+The shortfall is in every session, including both sessions this document called
+the ones that look right. They look right only for SPY, and only by accident of
+which direction they are wrong in: on 2026-08-14 the collector reported 373.88%
+MORE SPY volume than EODHD's own bars for the same minutes, not less.
+
+That was already visible in the decisive comparison table above and was read as
+evidence about which side is stable. It is more than that. A collector that
+reports thirteen times the vendor's TLT and ninety five times its DIA on one
+morning, and a tenth of both on the next, is not a starved collector. It is a
+collector that is wrong in both directions, and the subscription count was the
+only difference anybody had noticed between the two kinds of wrong.
+
+## Mechanisms this pass rules out
+
+- **Progressive throttling inside a session.** Trades per hour of the ET
+  window, from the bars: 2026-08-14 at 37 subscriptions ran 38,059 then 102,353
+  then 50,782; 2026-08-17 at 50 ran 8,758 then 18,030 then 6,604; 2026-08-18 at
+  50 ran 11,804 then 15,510 then 9,122. The fifty symbol sessions are down by
+  roughly the same factor in the FIRST hour as in the last, and the shape of the
+  three curves is the same. Nothing decays, so nothing is being throttled as the
+  hold lengthens. Whatever separates the sessions is present from the first
+  minute of the window.
+- **Dark pool volume counted on one side only.** The bar schema carries a
+  dark_pool_volume field. It is 0.0 in every bar of both sessions checked, whole
+  file totals, so consolidated prints arriving unattributed cannot be closing or
+  opening any part of the gap. It also means a recorded column has never once
+  been populated, which is worth knowing separately from this question.
+
+## What the probe could not control for
+
+Two differences between the probe and a morning survive, and the probe was run
+under both of them because the power outage moved it.
+
+- **The tape.** The probe ran 09:35 to 10:01, after the open. The defect appears
+  from 07:20 to 09:25, premarket. Delivery could differ by session type.
+- **The hold.** Arms are 120 seconds. The collector holds one subscription for
+  about two hours. The hourly counts above argue against decay, but they measure
+  the collector's own sessions rather than a controlled pair.
+
+The probe's own docstring anticipated the first of these and asked for a
+premarket confirmation of a POSITIVE result. This is a negative result that
+contradicts the session evidence, which is the case that needs the premarket run
+more, not less. Re running the identical script premarket changes exactly one
+variable and is the next measurement.
+
+## The one clean reading nobody has taken
+
+Every socket against bars comparison so far has the collector in the path, on a
+morning nobody controlled. The probe window is the first case where a known
+subscription size, a known symbol list and a known clock window can be compared
+against EODHD's own bars for the same minutes with no collector involved.
+
+It could not be taken today. EODHD's 1m intraday bars for 2026-08-19 return zero
+rows at 10:05, while the same clock window on 2026-08-18 and 2026-08-17 returns
+27 rows each, so the vendor has not published the current session yet. The
+comparison is a fetch of eight symbols tomorrow against
+data/socket-cap-probe-2026-08-19.json, which already holds per symbol share
+counts per arm.
+
+Until that lands, note the order of magnitude it is likely to show. The probe's
+arm A carried SPY at about 3,888 shares a minute and arm B at about 4,984, while
+EODHD's bars put SPY at 225,752 shares in the 09:35 minute of the previous
+session. If tomorrow's fetch confirms that shape, the socket is delivering a
+small percentage of the consolidated tape at BOTH subscription sizes, which is
+the venue subset possibility this document pre registered as the next place to
+look, and it would make the shortfall a property to calibrate against rather
+than a bug to fix. The over reporting on 2026-08-14 would still need its own
+explanation, because a venue subset cannot deliver more than the whole.
+
+## What is no longer blocked, and what still is
+
+The rotation bands stay blocked. The delivery gate data/UNVERIFIED stays where it
+is. What has changed is that the fix under consideration is no longer
+"subscribe to fewer names": the probe says that would buy nothing.

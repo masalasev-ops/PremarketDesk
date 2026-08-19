@@ -2185,3 +2185,47 @@ impossible rather than unlikely. Refused arms are marked and excluded.
 is a third session at 50 and SPY still gets about 11 trades a minute against
 171 at 38, so the correlation holds at three sessions to one. It is still a
 correlation, and the probe still has to run.
+
+
+## 2026-08-19, fourth: a probe that answers its question and unmakes its premise
+
+**The decision.** The subscription cap is ruled out as the cause of the volume
+gap on the strength of a measurement, and the search moves to whether the trades
+websocket carries a venue subset while the intraday bars are consolidated. The
+correlation with subscription count is withdrawn rather than weakened.
+
+**Why the correlation is withdrawn rather than weakened.** It rested on two
+sessions each side and on SPY being right at thirty eight subscriptions. SPY was
+not right at thirty eight. It was 373.88% over the vendor's own bars, and TLT
+was thirteen times over and DIA ninety five times over on the same morning. A
+reading that is an order of magnitude high on one session and an order of
+magnitude low on another is not a reading with a cause to find in the
+subscription count. Both of those sessions failed the same check that failed the
+fifty symbol ones, at 69.77% and 70.95% median absolute difference, and nobody
+had run the check across all four sessions at once until today.
+
+**Why the probe's negative is trusted this far and no further.** It is trusted
+because the mechanism it tested is a throughput mechanism and it was tested
+harder than the collector tests it: fifty symbols drawn from the morning's own
+list, at fourteen times the collector's message rate, on the densest tape of the
+day. A starvation effect should be easier to provoke there, not harder. It is
+not trusted past that because the arms are two minutes and the tape is not the
+premarket tape, and the collector's own hourly counts, while they show no decay,
+are not a controlled pair.
+
+**Why the premarket re run is the next measurement rather than a longer hold.**
+The hourly trade counts already argue against a hold length effect: the fifty
+symbol mornings are down by about the same factor in their first hour as their
+last, so a slow squeeze is not what a two minute arm would be missing. Tape type
+has no such evidence against it. Re running the identical script premarket
+changes one variable; lengthening the arms at the same time would change two,
+and the cheaper discriminator goes first.
+
+**What the answer no longer decides.** The choice this document was holding open
+between subscribing to fewer names and splitting across connections is closed on
+the first option. Fewer names buys nothing, on the measurement.
+
+**What is still not known.** Why 2026-08-14 over reported. A venue subset
+explains a collector that is short and cannot explain one that is long, so the
+leading hypothesis for the fifty symbol sessions does not cover the thirty eight
+symbol ones, and a single explanation for both has not been found.

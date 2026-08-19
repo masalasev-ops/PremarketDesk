@@ -15,6 +15,69 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, fourth: the subscription cap is innocent, and the sessions that looked right were wrong the other way
+
+### The probe ran and answered
+
+Rescheduled to 09:35 after the power took the 06:20 slot, eight arms, none
+refused, 26 minutes, no quota. Median B/A message rate across the eight watched
+ETFs is 0.87 at fifty subscriptions against eight. Arm B's filler came from
+today's real subscription list and pushed 66.5 messages a second, fourteen times
+what the collector sees on a fifty symbol morning, and lost nothing.
+
+The fifty symbol cap does not starve delivery. The fix that was under
+consideration, subscribing to fewer names, would have bought nothing and cost
+the watchlist.
+
+### The correlation it was testing has fallen apart
+
+The collector's own intraday check had only ever been run on two sessions at a
+time. Run across all four published sessions this afternoon, the median absolute
+volume difference against EODHD's bars is 69.77% and 70.95% at thirty seven and
+thirty eight subscriptions, and 88.43% and 90.05% at fifty. The shortfall is in
+every session including the two this project called good.
+
+They were called good on the strength of SPY, and SPY on 2026-08-14 was not
+short at all. It was 373.88% OVER EODHD's own bars for the same minutes. The
+collector reported thirteen times the vendor's TLT and ninety five times its DIA
+that morning, and a tenth of both three days later. That is a measurement wrong
+in both directions, and the subscription count was the only difference anyone had
+noticed between the two kinds of wrong.
+
+### Two mechanisms ruled out with it
+
+Trades per hour of the window, read from the bars, show no decay inside any
+session and the same curve shape across all three: the fifty symbol mornings are
+down by about the same factor in their first hour as in their last. Nothing is
+being throttled as the hold lengthens, so a two minute arm is not obviously too
+short to see the effect.
+
+The dark_pool_volume field is 0.0 in every bar of both sessions checked, whole
+file totals. Consolidated prints arriving unattributed are not hiding in it. The
+field has also therefore never been populated in any bar the project has ever
+written, which is a separate thing to look at.
+
+### What could not be measured today
+
+EODHD has not published 1m intraday bars for 2026-08-19: the probe's own window
+returns zero rows at 10:05, where the same clock window on the two previous
+sessions returns 27 rows each. That fetch is the first socket against bars
+reading with a known subscription size, a known symbol list and no collector in
+the path, and it is a tomorrow job against the per symbol share counts already
+written to data/socket-cap-probe-2026-08-19.json.
+
+### The probe is re armed, and the reason is in its own docstring
+
+The docstring says a result after 09:25 is on a different tape from the one the
+defect appears in and that a positive result there is worth confirming
+premarket. This is a negative result that contradicts the session evidence,
+which needs the premarket run more rather than less. The identical script,
+premarket, changes exactly one variable.
+
+Re arming it needs a hand, because the scheduler change was refused:
+
+    schtasks /Change /TN "\PremarketDesk\probe-socket-cap" /SD 08/20/2026 /ST 06:20
+
 ## 2026-08-19, third: the collector refused its own slots and died, and the window fix proved itself live
 
 ### What the morning did
