@@ -15,6 +15,158 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19: the report scan's assumption is measured, and the sampler is exempted by behaviour
+
+### Does the report scan have the hole the instruction scan had? Measured: no, today
+
+Yesterday the instruction scan moved to paragraphs because a banned word split
+across a line break read past it, and the report scan was left on lines on the
+grounds that model output wraps nowhere. That was an assumption about a format
+nobody controls, made in the same commit as the discovery of the identical bug
+in a file that is controlled. It is measured now, over the three archived
+reports.
+
+A sentence continues across a line break if a prose line ends in a letter, a
+comma or a semicolon and another prose line follows it immediately. By that
+test:
+
+| Session | Prose lines | Adjacent pairs | Split sentences | Median width | Max width |
+| --- | --- | --- | --- | --- | --- |
+| 2026-08-14 | 29 | 5 | 0 | 284 | 860 |
+| 2026-08-17 | 22 | 5 | 0 | 207 | 792 |
+| 2026-08-18 | 36 | 11 | 0 | 295 | 933 |
+
+Zero split sentences across 21 adjacent prose pairs. The model is not wrapping
+at any width: the median prose line is between 207 and 295 characters and the
+longest is 933. Running the paragraph scan over the same three reports finds
+exactly the hits the line scan finds, twelve, eight and ten, so the hole exists
+in principle and has not fired.
+
+Two adjacent pairs in 2026-08-17 did survive a looser first test, and they are
+worth naming because they are the near miss. The model writes a candidate's
+name as a bold line of its own and the block's first sentence on the next line,
+so `**HTHT, H World Group**` sits directly above the sentence about it. Those
+are two units of prose on consecutive lines, which is the structure a wrap
+would need. They are not a split sentence, and no banned pair spans either
+join, but they show the format is "sentences are never split" rather than "one
+paragraph per line", and it is the first of those the line scan actually
+depends on.
+
+So the answer is no, on measured evidence, from a sample of three reports and
+21 adjacent pairs. That is a small sample and nothing enforces the format. The
+scan is unchanged in this commit deliberately, for the same reason it was left
+alone yesterday: changing a live guard's behaviour in the same week its
+enforcement setting changed would make the first week of warn-mode counts
+uninterpretable. Revisit after that week, with this measurement as the baseline
+to compare against.
+
+### The sampler is exempted by its behaviour, not by its directory
+
+The forensic sweep on 2026-08-18 turned up a live intermittent isolation
+failure: the real logs/ sits inside the tree the suite photographs, and the
+scheduled meter sampler appends to it from outside the suite at :00 and :30
+every hour, so a run straddling one of those instants failed on a path the
+suite never touched.
+
+logs/ is NOT exempt, and the reason is not tidiness. A test writing there would
+pollute the meter trail, and data/quantifier-flags.jsonl is the telemetry the
+analyst guard's word list is about to be tuned on. Blinding the check to that
+neighbourhood would blind it to the one contamination that would corrupt the
+measurement, at exactly the moment the measurement starts.
+
+What is exempt is the sampler's behaviour, and only when three conditions hold
+together. The path is one of the two files the sampler writes, by name:
+logs/meter-<quota day>.log and logs/meter-sampler.log. The change is a pure
+append, with every byte that was there before still there, proven by a sha256
+of the previous contents rather than by a size comparison. And the appended
+bytes parse as what that file holds, which is JSON rows carrying at, quota_day,
+source and step for the trail, and the sampler's own line grammar for the
+stdout log. A truncation fails, a same length rewrite fails, an mtime touch
+that adds no bytes fails, a new file under logs/ that is not a dated sampler
+trail fails, and any other path under logs/ fails.
+
+UTC midnight is handled explicitly rather than left to fail once a month. At
+00:00 UTC the sampler starts a new meter-<quota day>.log instead of appending
+to yesterday's, so that night's run sees a CREATED path. It goes through the
+same three conditions with a zero length previous file, rather than through a
+separate rule that could disagree with this one.
+
+src/tests/test_sandbox.py is new and is in SUITE. Six claims: a tick appending
+to both files passes; the midnight creation passes while a new job log under
+logs/ does not; truncation, a same length rewrite and a rewritten prefix are
+all refused; five appends the sampler would not have written are refused; a
+test writing a job log, a new file under logs/ or the quantifier flag log is
+still caught; and the exemption is anchored to the real logs directory rather
+than travelling with the filename, which matters because conftest redirects
+config.LOGS_DIR into the sandbox and an exemption reading it at check time
+would silently exempt nothing.
+
+Two intermittents were found by writing those claims, and both were in the new
+code rather than in the thing it was checking.
+
+The snapshot took the file size from stat and the digest from a later read.
+The sampler appends between those two, so the recorded pair could describe a
+file that never existed, with a digest covering more bytes than the size
+claimed. The append check would then compare the wrong prefix and report an
+ordinary tick as a rewrite. That is the intermittent this exemption exists to
+remove, reintroduced one layer underneath it. Both now come from one read.
+
+And one claim asserted an mtime-only touch by rewriting identical bytes and
+trusting the clock to tick. It passed alone and failed inside the full suite,
+where the mtime landed on the same value and the snapshot saw no change at all
+rather than a change the exemption refused. It sets the mtime explicitly now.
+
+### Proven on the real machine, not only in a temporary directory
+
+The claims run against a fabricated logs directory, so they prove the predicate
+and not the situation. The situation was proven separately by running the whole
+suite back to back for seventeen minutes across a real sampler tick: 194 runs,
+of which run 155 was in flight from 01:00:00 to 01:00:05 with the sampler
+firing at 01:00:01, and it passed. Eight runs started within twenty seconds of
+the tick and all eight passed.
+
+Two of the 194 failed and neither was the sampler. One was this CHANGELOG being
+edited while the loop ran, which is the check doing its job on the person
+writing about it. The other named the path that could not be named yesterday.
+
+### The path from 2026-08-18, identified
+
+`.git/FETCH_HEAD`, 106 bytes, holding the current HEAD sha and the branch it
+was fetched from. Run 105 of 194 failed on it at 00:55:51, reported as
+"modified, mtime only, size unchanged at 106 bytes".
+
+Watched directly afterwards, the behaviour is a truncate and rewrite of
+byte-identical content. At 01:05:54 the file was 0 bytes with the sha256 of an
+empty file; one second later it was 106 bytes again with the sha256 it had
+before, `d518a521...`. Something outside this repository fetches on a timer:
+the two observed touches were 00:55:51 and 01:05:54, ten minutes and three
+seconds apart. A suite run takes about five seconds, which puts the collision
+rate near one percent, and one percent is the rate at which a failure gets
+rerun rather than investigated.
+
+This is not the lost name recovered, and it should not be recorded as though it
+were. It is an independent identification, and it fits every fact yesterday's
+entry established: a modification rather than a creation, so the path count was
+unchanged at 1644 on both sides; exactly one path; and not reproducible in four
+consecutive reruns, which at one percent is unremarkable.
+
+It also explains the one thing yesterday's forensics could not. The mtime sweep
+found nothing changed inside the failing run's window, and that was read as
+evidence that nothing had. A file rewritten every ten minutes carries only its
+most recent mtime, and the sweep ran hours later, so a touch at 16:40:45 had
+been overwritten dozens of times before anybody looked. The sweep could not
+have found it. That is a limit of the method rather than a fact about the tree,
+and the same sweep would fail the same way on any file with a short rewrite
+cycle.
+
+It is recorded and NOT fixed here. The obvious exemption, that a path whose
+content digest is unchanged is not a change, does not cover the whole
+behaviour: there is a real window during the rewrite when the file is zero
+bytes, and a snapshot landing there sees a size change with content that
+genuinely differs. Covering that means allowing an empty file to stand in for
+its own contents, which is a wider hole than the sampler one and belongs to the
+owner rather than to this commit.
+
 ## 2026-08-18, sixth: the guard goes to warn, its documents stop provoking it, and one lost path is written down
 
 ### Warn until the template stops asking
@@ -121,7 +273,14 @@ inside that window except files written by hand, and .git/index was untouched
 between 16:30 and the commit at 16:43:37. That rules out the cause this same
 check was corrected for on 2026-08-14, where config.build_identifier() ran `git
 status` and the index refresh it triggered failed the run; `--no-optional-locks`
-is still doing its job. One candidate cannot be excluded: src/ops/monitor_jobs.py
+is still doing its job. [corrected 2026-08-19: the sweep finding
+nothing was read here as evidence that nothing changed, and it is not. An mtime
+sweep run hours later can only see each file's MOST RECENT write, so it is
+blind to any file with a rewrite cycle shorter than the delay before looking.
+`.git/FETCH_HEAD` is rewritten about every ten minutes and was caught failing a
+run on 2026-08-19; it could not have shown up in this sweep whether it was
+responsible or not. The statement about .git/index stands, since that file is
+written only on commit.] One candidate cannot be excluded: src/ops/monitor_jobs.py
 itself, whose mtime was overwritten at 16:42:03 by the reproduction attempt,
 which destroyed the only evidence that would have distinguished it.
 
@@ -135,6 +294,9 @@ suite run straddling one of those instants fails the tree check on a path the
 suite never touched, and a run straddling UTC midnight fails on a created path.
 The sampler fired at 16:30:03 and 17:00:01 on 2026-08-18, so it is not what
 happened at 16:40:45, but it will happen.
+
+[answered 2026-08-19: a second external toucher was found and is the likelier
+candidate for this run. See the 2026-08-19 entry above.]
 
 ## 2026-08-18, fifth: a quantifier flag can no longer cost the morning its report
 

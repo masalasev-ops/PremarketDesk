@@ -43,6 +43,7 @@ SUITE = (
     "tests.test_backtest",
     "tests.test_txn_guard",
     "tests.test_entrypoints",
+    "tests.test_sandbox",
 )
 
 
@@ -236,7 +237,8 @@ def main(argv: list[str] | None = None) -> int:
     if changes:
         print(f"run_tests: FAILED, the suite changed {len(changes)} path(s) under the "
               f"working tree. Only {', '.join(sorted(conftest.ALLOWED_DIR_NAMES))} "
-              "may change:")
+              "may change, plus a pure append by the scheduled meter sampler to "
+              "its own two log files:")
         for line in changes[:20]:
             print(f"    {line}")
         if len(changes) > 20:

@@ -2027,3 +2027,66 @@ instructions should exist. "name the candidates whose pm_rvol is null" asks for
 precisely the list "name every candidate whose pm_rvol is null" asked for, and
 the empty case still invites a sentence about the whole set, which is why warn
 mode is needed and why resolving them is the first condition on the switch.
+
+
+## 2026-08-19: exempt what a process does, not where it writes
+
+**The decision.** The suite's tree check exempts the meter sampler's behaviour
+and not the directory it writes to. Three conditions together: the path is one
+of the two files the sampler writes by name, the change is a pure append with
+every previous byte unchanged, and the appended bytes parse as what that file
+holds.
+
+**Why not exempt logs/.** It is one line of code and it would have worked. It
+would also have stopped the check watching the neighbourhood where the meter
+trail and the quantifier flag log live, and the flag log is about to become the
+evidence the guard's word list is tuned on. An isolation check that stops
+watching the file a measurement depends on, in the week that measurement
+starts, has been turned off in the only place it currently matters. The cost of
+the narrower fix is about a hundred lines and a test module; the cost of the
+wider one is a class of contamination nobody would see.
+
+**Why a digest rather than a size.** Because a same length rewrite is the case
+that matters. This check's own docstring already carries a correction about
+mistaking an internally caused change for an external toucher, and size alone
+cannot tell a file that grew by a tick from a file that was rewritten to the
+same length. The digest is taken for two paths only, because hashing the whole
+tree twice a run would cost more than the check is worth.
+
+**Why the midnight case goes through the same three conditions.** A new dated
+trail at 00:00 UTC is a creation rather than an append, and the obvious fix is
+a second rule that allows a created file matching the trail pattern. Two rules
+about the same thing can disagree, and the second one would be exercised once a
+month by a person running the suite late, which is the worst possible test
+schedule. It is the same predicate with a zero length previous file, so there
+is nothing to disagree with.
+
+**What the claims are for, given the exemption is small.** An exemption nobody
+tests is a hole nobody sees. Each claim removes exactly one of the three
+conditions and asserts the change is refused, so the exemption cannot quietly
+become a filename convention or a directory allowance through a later edit that
+looks harmless. Writing them found two intermittents in the new code, both of
+which would have presented as the original symptom and been blamed on the
+sampler.
+
+**The report scan, recorded and not changed.** Whether the report scan has the
+line-wrap hole the instruction scan had is now measured rather than assumed:
+zero split sentences across 21 adjacent prose pairs in three reports, with the
+model writing prose lines of 207 to 933 characters and wrapping at no width.
+The paragraph scan finds exactly the hits the line scan finds on all three. The
+hole is real in principle and has not fired. It stays unchanged until the first
+week of warn-mode counts is in, because changing a guard's scan in the same
+week its enforcement setting changed would make those counts uninterpretable,
+and the counts are the reason the setting changed.
+
+
+**The second toucher, recorded and not fixed.** `.git/FETCH_HEAD` is rewritten
+by a timer outside this repository about every ten minutes, as a truncate
+followed by a write of byte-identical content, and it failed one of 194
+consecutive suite runs. It is the likely identity of the path that could not be
+named on 2026-08-18. It is not exempted here, because the obvious exemption,
+that unchanged content is not a change, does not cover the zero length window
+the rewrite passes through, and covering that means letting an empty file stand
+in for its own contents. That is a wider hole than the sampler's and it is the
+owner's to open or refuse. Recorded so the next intermittent is compared
+against it rather than investigated from scratch.

@@ -39,6 +39,9 @@ its import of this file will do the right thing.
 from __future__ import annotations
 
 import contextlib
+import hashlib
+import json
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -70,6 +73,10 @@ _DERIVED = (
 REAL_RUNS = config.RUNS_DIR
 REAL_DATA = config.DATA_DIR
 REAL_SITE = config.SITE_DIR
+# Captured before redirection like the others, and used by the sampler
+# exemption below, which has to know where the REAL logs directory is while
+# config.LOGS_DIR is pointing at a sandbox copy.
+REAL_LOGS = config.LOGS_DIR
 
 # The working tree, which is what the check guards.
 TREE_ROOT = config.PROJECT_ROOT
@@ -82,6 +89,129 @@ TREE_ROOT = config.PROJECT_ROOT
 ALLOWED_DIR_NAMES = frozenset({"__pycache__", ".pytest_cache"})
 
 
+# --------------------------------------------- the one behaviour exemption
+#
+# logs/ is inside the tree this check photographs, and the scheduled meter
+# sampler appends to it from outside the suite every half hour on the hour and
+# the half hour. A suite run straddling one of those instants therefore failed
+# on a path the suite never touched, which is an intermittent isolation failure
+# that cannot be chased and gets rationalised away.
+#
+# The fix is NOT to exempt logs/. Tests writing there would pollute the meter
+# trail and the quantifier flag log, and the flag log is the telemetry the
+# guard's word list is about to be tuned on, so blinding the check to logs/
+# would blind it to the one contamination that would corrupt the measurement.
+#
+# What is exempt is the sampler's BEHAVIOUR, and only when all three of these
+# hold together:
+#
+#   1. the path is one of the two files the sampler writes, by name;
+#   2. the change is a pure append, with every byte that was there before
+#      still there and unchanged; and
+#   3. the appended bytes parse as what that file holds.
+#
+# A truncation fails. A same length rewrite fails. A new file that is not a
+# dated sampler log fails. Any other path under logs/ fails. An append of
+# anything the sampler would not have written fails.
+_SAMPLER_TRAIL_RE = re.compile(r"^meter-[0-9]{4}-[0-9]{2}-[0-9]{2}[.]log$")
+_SAMPLER_STDOUT_NAME = "meter-sampler.log"
+# The sampler's stdout, as its own code emits it: its own "sampler: " lines,
+# the EODHD call report header, and that report's indented rows. Anything
+# starting at column zero that is neither of the first two is not the sampler
+# talking.
+_SAMPLER_STDOUT_LINE_RE = re.compile(r"^(?:[ \t]|sampler: |EODHD call report$)")
+# The keys every row of the meter trail carries. See ops/job_status.record_meter.
+_SAMPLER_TRAIL_KEYS = frozenset({"at", "quota_day", "source", "step"})
+
+
+def _digest(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _sampler_kind(path: Path, logs_root: Path) -> str | None:
+    """trail, stdout, or None for everything else including the rest of logs/."""
+    if path.parent != logs_root:
+        return None
+    if _SAMPLER_TRAIL_RE.match(path.name):
+        return "trail"
+    if path.name == _SAMPLER_STDOUT_NAME:
+        return "stdout"
+    return None
+
+
+def _parses_as_sampler_rows(kind: str, chunk: bytes) -> bool:
+    """Is this appended chunk what the sampler writes into that file.
+
+    A single trailing INCOMPLETE line is tolerated, because the snapshot can
+    catch a flush in progress and failing on that would trade one intermittent
+    failure for another. Everything before it has to be whole and valid, and
+    at least one whole valid line is required, so a chunk that is nothing but
+    an unterminated fragment is refused.
+    """
+    try:
+        text = chunk.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if not text:
+        return False  # an mtime touch with no bytes added is not an append
+    # splitlines, not split on newline, because these files are written on
+    # Windows through a shell redirect and every line ends CRLF. Splitting on
+    # the newline alone leaves a carriage return on the end of each line, and
+    # an anchored pattern then fails to match a line that is perfectly valid.
+    lines = text.splitlines()
+    if lines and not text.endswith(("\n", "\r")):
+        lines = lines[:-1]  # the tolerated partial line
+    complete = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        if kind == "trail":
+            try:
+                row = json.loads(line)
+            except ValueError:
+                return False
+            if not isinstance(row, dict) or not _SAMPLER_TRAIL_KEYS <= set(row):
+                return False
+        elif not _SAMPLER_STDOUT_LINE_RE.match(line):
+            return False
+        complete += 1
+    return complete > 0
+
+
+def sampler_append_allowed(path: Path, before: tuple[Any, ...] | None,
+                           after: tuple[Any, ...] | None,
+                           logs_root: Path | None = None) -> bool:
+    """All three conditions, together. Anything else is a real change.
+
+    before is None for a file that did not exist, which is the UTC midnight
+    case: at 00:00 UTC the sampler starts a new meter-<quota day>.log rather
+    than appending to yesterday's, so that night's run sees a CREATED path.
+    It is handled here rather than left to fail once a month, and it is
+    handled by the same three conditions with a zero length previous file,
+    not by a separate rule that could disagree with this one.
+    """
+    root = logs_root if logs_root is not None else REAL_LOGS
+    kind = _sampler_kind(path, root)
+    if kind is None:
+        return False
+    if after is None or after[:1] != ("file",):
+        return False  # deleted, or replaced by a directory
+    if before is not None and before[:1] != ("file",):
+        return False
+    was_size = before[2] if before is not None else 0
+    was_digest = (before[3] if before is not None and len(before) > 3
+                  else _digest(b""))
+    try:
+        now = path.read_bytes()
+    except OSError:
+        return False
+    if len(now) < was_size:
+        return False  # truncated
+    if _digest(now[:was_size]) != was_digest:
+        return False  # rewritten under the same name, size unchanged or not
+    return _parses_as_sampler_rows(kind, now[was_size:])
+
+
 def _allowed(path: Path) -> bool:
     try:
         relative = path.relative_to(TREE_ROOT)
@@ -90,7 +220,8 @@ def _allowed(path: Path) -> bool:
     return any(part in ALLOWED_DIR_NAMES for part in relative.parts)
 
 
-def snapshot_tree(root: Path | None = None) -> dict[str, tuple[Any, ...]]:
+def snapshot_tree(root: Path | None = None,
+                  logs_root: Path | None = None) -> dict[str, tuple[Any, ...]]:
     """Every file and directory under the working tree, excluding the allowlist.
 
     Files carry mtime and size. Directories carry only a marker, not their
@@ -101,6 +232,7 @@ def snapshot_tree(root: Path | None = None) -> dict[str, tuple[Any, ...]]:
     it.
     """
     base = root or TREE_ROOT
+    logs = logs_root if logs_root is not None else REAL_LOGS
     out: dict[str, tuple[Any, ...]] = {}
     if not base.exists():
         return out
@@ -122,7 +254,29 @@ def snapshot_tree(root: Path | None = None) -> dict[str, tuple[Any, ...]]:
                 stat = path.stat()
             except OSError:
                 continue
-            out[str(path)] = ("file", stat.st_mtime, stat.st_size)
+            if _sampler_kind(path, logs) is None:
+                out[str(path)] = ("file", stat.st_mtime, stat.st_size)
+                continue
+            # The two sampler files carry a fourth element, a digest of their
+            # whole contents. It is what makes "every byte that was there
+            # before is still there" checkable rather than assumed, and it is
+            # taken only for these two paths because hashing the tree would
+            # cost more than the check is worth.
+            #
+            # The SIZE recorded here is the length of the bytes that were
+            # hashed, not stat's. The sampler is appending to these files
+            # while this loop runs, and a size from stat with a digest from a
+            # later read describes a file that never existed: the digest would
+            # then cover more bytes than the size claims, the append check
+            # would compare the wrong prefix, and a perfectly ordinary tick
+            # would be reported as a rewrite. That is the intermittent this
+            # whole exemption exists to remove, reintroduced one layer down.
+            try:
+                payload = path.read_bytes()
+                out[str(path)] = ("file", stat.st_mtime, len(payload),
+                                  _digest(payload))
+            except OSError:
+                out[str(path)] = ("file", stat.st_mtime, stat.st_size)
     return out
 
 
@@ -130,7 +284,8 @@ def snapshot_tree(root: Path | None = None) -> dict[str, tuple[Any, ...]]:
 snapshot = snapshot_tree
 
 
-def differences(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
+def differences(before: dict[str, Any], after: dict[str, Any],
+                logs_root: Path | None = None) -> list[str]:
     """What changed between two snapshots, as readable lines.
 
     A modification says whether the size moved as well as the mtime, because
@@ -151,6 +306,8 @@ def differences(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
     """
     out: list[str] = []
     for path in sorted(set(after) - set(before)):
+        if sampler_append_allowed(Path(path), None, after[path], logs_root):
+            continue  # 00:00 UTC, the sampler started the next day's trail
         out.append(f"created  {path}")
     for path in sorted(set(before) - set(after)):
         out.append(f"deleted  {path}")
@@ -158,6 +315,8 @@ def differences(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
         was, now = before[path], after[path]
         if was == now:
             continue
+        if sampler_append_allowed(Path(path), was, now, logs_root):
+            continue  # the scheduled sampler ticked mid run, appending only
         if was[:1] == ("file",) and now[:1] == ("file",) and was[2] == now[2]:
             out.append(f"modified {path}  mtime only, size unchanged at {now[2]} "
                        "bytes (an external toucher looks like this; so does a "
