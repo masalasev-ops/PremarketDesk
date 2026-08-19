@@ -15,6 +15,83 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, seventh: the replay is measured and is not the mechanism, and 2026-08-13 leaves the tables
+
+### The replay, quantified before the probe rather than after
+
+| session | first bar | subscribed | bars before | their share of session volume |
+| --- | --- | --- | ---: | ---: |
+| 2026-08-14 | 07:20:00 | 07:20:00 (intended, not observed) | 0 of 2,155 | 0.00% |
+| 2026-08-17 | 06:26:00 | 07:20:01 | 67 of 3,102 | 0.47% |
+| 2026-08-18 | 2026-08-17T15:59:00 | 07:20:02 | 71 of 3,231 | 0.92% |
+
+Most of that is not stale. Splitting out the bars falling in the subscribe
+minute itself leaves 1,467 genuinely early shares on 2026-08-17 and 4,376 on
+2026-08-18, which is 0.11% and 0.27% of those sessions.
+
+Re running the volume comparison with every pre subscription bar excluded:
+
+| session | median abs diff all | excluded | aggregate socket/vendor all | excluded |
+| --- | ---: | ---: | ---: | ---: |
+| 2026-08-14 | 70.95% | 70.95% | 3.826 | 3.826 |
+| 2026-08-17 | 88.43% | 88.36% | 0.103 | 0.103 |
+| 2026-08-18 | 90.05% | 89.71% | 0.094 | 0.094 |
+
+**Replay is not the over counting mechanism.** 2026-08-14 does not move at all,
+and it cannot: that session has no job_status record and no subscriptions file,
+so its subscription time is the configured 07:20 and its first bar is stamped
+07:20, which means replay inside that minute is invisible at bar granularity.
+The row records what the audit could see, not what was there. On the two
+sessions where replay IS measurable it is worth half a point of median absolute
+difference. A mechanism carrying a tenth of a percent of a session cannot
+produce a 3.8x over count.
+
+The over count therefore has no candidate mechanism left. No collector change
+explains it either: the only commit touching collect_premarket.py before
+2026-08-17's run is the package move, and the one that changed logic landed at
+16:03 that afternoon, after the window closed, touching status frames only.
+
+### Replay is now recorded rather than reconstructed
+
+The audit had to rebuild the replay from a subscription time held in a different
+file, and for one of three sessions that file does not exist. The collector no
+longer discards an out of window trade: it aggregates it into a row tagged
+`replay: true` with its reason and writes it to the same bar file.
+read_bars_file, which every consumer goes through, filters those rows out of the
+bars it returns and counts them into replay_rows, replay_volume and
+replay_first_et instead. The evidence is in the file and cannot reach a total.
+
+The packet keeps the two apart. collector_window_observed reports first_bar_et
+from real bars only with contains_replay beside it; each candidate carries
+pm_window_intended_start next to pm_window_start with pm_window_start_source
+saying which is which; and pm_rvol_basis numerator_source names the window the
+numerator covers with the scheduled one in brackets, instead of quoting the
+schedule as though it were an observation. On 2026-08-19 every one of those
+fields said 07:20 for a collector that started at 08:16.
+
+Null on any of it means a file written before the tag existed, which is not
+zero. The sessions in the tables above folded their replay into ordinary bars
+and it is not recoverable from the file alone.
+
+### 2026-08-13 is out of every comparison
+
+It is not a premarket session. Its bars run 13:32 to 20:00, regular and after
+hours trade; its three sidecar records are evening runs finishing 20:15, 20:35
+and 20:56; and its 1,574 recorded messages cannot have produced its 270,086
+trades, so whichever run wrote most of its bars recorded no stats at all.
+
+It was carried as a second session at thirty eight subscriptions that looked
+right, in the volume gap table and in the intraday check table written earlier
+today, and its 69.77% was quoted in this changelog and in DECISIONS as one of
+two good sessions. Both rows are removed, both quotes are corrected in place,
+and the two tables that still name it are the run history and the tape window,
+where it is labelled NOT A PREMARKET SESSION because those tables are the
+evidence for its removal. Removed rather than annotated in the comparisons,
+because a row in a comparison table gets counted whatever the note beside it
+says.
+
+There was only ever one session that looked right.
+
 ## 2026-08-19, sixth: the run history closes the restart question, and the probe is repointed at off exchange volume
 
 ### Reading the collector's own history first, because it cost nothing
@@ -194,11 +271,17 @@ the watchlist.
 
 The collector's own intraday check had only ever been run on two sessions at a
 time. Run across all four published sessions this afternoon, the median absolute
-volume difference against EODHD's bars is 69.77% and 70.95% at thirty seven and
-thirty eight subscriptions, and 88.43% and 90.05% at fifty. The shortfall is in
-every session including the two this project called good.
+volume difference against EODHD's bars is 70.95% at thirty seven subscriptions
+and 88.43% and 90.05% at fifty. The shortfall is in every published premarket
+session including the one this project called good.
 
-They were called good on the strength of SPY, and SPY on 2026-08-14 was not
+[corrected 2026-08-19: this paragraph read "69.77% and 70.95% at thirty seven
+and thirty eight subscriptions" and "the two this project called good". The
+69.77% was 2026-08-13, which is not a premarket session: its bars run 13:32 to
+20:00 and its sidecar records are evening runs. It has been removed from every
+comparison table, and there was only ever one session that looked good.]
+
+It was called good on the strength of SPY, and SPY on 2026-08-14 was not
 short at all. It was 373.88% OVER EODHD's own bars for the same minutes. The
 collector reported thirteen times the vendor's TLT and ninety five times its DIA
 that morning, and a tenth of both three days later. That is a measurement wrong

@@ -310,10 +310,19 @@ that do not, and it is the size of the subscription.
 
 | session | subscribed | messages | SPY trades | SPY per minute | SPY shares |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 2026-08-13 (open market) | 38 | n/a | 37,792 | 727 | 2,082,908 |
 | 2026-08-14 | 38 | 191,194 | 21,428 | 171 | 1,550,327 |
 | 2026-08-17 | 50 | 33,489 | 618 | 5.8 | 32,532 |
 | 2026-08-18 | 50 | 36,530 | 573 | 5.3 | 29,410 |
+
+[corrected 2026-08-19: this table carried a fourth row, "2026-08-13 (open
+market) | 38 | n/a | 37,792 | 727 | 2,082,908", read as a second session at
+thirty eight subscriptions that looked right. It is not a premarket session at
+all. Its bars run 13:32 to 20:00, regular and after hours trade; its three
+sidecar records are evening runs finishing 20:15, 20:35 and 20:56; and its
+1,574 recorded messages cannot have produced its 270,086 trades, so whichever
+run wrote most of its bars recorded no stats at all, which is why the messages
+column read n/a. It is removed rather than annotated because a row in a
+comparison table gets counted whatever the note beside it says.]
 
 Fifty is the documented cap. The subscription files confirm both later mornings
 requested exactly 50 unique symbols with nothing dropped to fit. The same
@@ -390,14 +399,19 @@ had never been done for more than two of them at once:
 
 | session | subscribed | symbols within one percent | median absolute difference |
 | --- | ---: | ---: | ---: |
-| 2026-08-13 | 38 | 0 of 38 | 69.77% |
 | 2026-08-14 | 37 | 0 of 37 | 70.95% |
 | 2026-08-17 | 50 | 1 of 50 | 88.43% |
 | 2026-08-18 | 50 | 0 of 50 | 90.05% |
 
-The shortfall is in every session, including both sessions this document called
-the ones that look right. They look right only for SPY, and only by accident of
-which direction they are wrong in: on 2026-08-14 the collector reported 373.88%
+[corrected 2026-08-19: written the same afternoon with a 2026-08-13 row reading
+"38 | 0 of 38 | 69.77%", and with the sentence below saying BOTH sessions this
+document called good. 2026-08-13 is not a premarket session and is removed; the
+sentence is about 2026-08-14 alone.]
+
+The shortfall is in every published premarket session, including the one this
+document called the session that looks right. It looks right only for SPY, and
+only by accident of which direction it is wrong in: on 2026-08-14 the collector
+reported 373.88%
 MORE SPY volume than EODHD's own bars for the same minutes, not less.
 
 That was already visible in the decisive comparison table above and was read as
@@ -497,7 +511,7 @@ was refused, so nothing is missing from what it recorded here.
 
 | session | runs | non zero exits | refusals | window each run covered |
 | --- | ---: | ---: | ---: | --- |
-| 2026-08-13 | 3 (sidecar) | not recorded | none recorded | evening runs finishing 20:15, 20:35, 20:56 |
+| 2026-08-13 NOT A PREMARKET SESSION | 3 (sidecar) | not recorded | none recorded | evening runs finishing 20:15, 20:35, 20:56 |
 | 2026-08-14 | 1 (sidecar) | not recorded | none recorded | one connection, finished 09:25:00 |
 | 2026-08-17 | 1 | 0 | 0 | 07:20:01 to 09:25:00, 7,498s, one connection, no reconnect |
 | 2026-08-18 | 2 | 1 | 1 | 07:20:02 to 08:50:51 REFUSED, then 08:55:09 to 09:25:00 |
@@ -508,7 +522,7 @@ record:
 
 | session | bars | symbols | first bar | last bar | trades | shares |
 | --- | ---: | ---: | --- | --- | ---: | ---: |
-| 2026-08-13 | 1,810 | 38 | 13:32 | 20:00 | 270,086 | 52,063,236 |
+| 2026-08-13 NOT A PREMARKET SESSION | 1,810 | 38 | 13:32 | 20:00 | 270,086 | 52,063,236 |
 | 2026-08-14 | 2,155 | 38 | 07:20 | 09:24 | 191,194 | 26,333,845 |
 | 2026-08-17 | 3,102 | 50 | 06:26 | 09:24 | 33,393 | 1,310,492 |
 | 2026-08-18 | 3,231 | 50 | 15:59 | 09:25 | 36,444 | 1,592,611 |
@@ -605,9 +619,113 @@ spent.
   That is a bug, dark_pool_volume empty everywhere is its fingerprint, and it is
   fixable.
 - A socket share near the vendor's: there was never anything to find and every
-  reading above needs re examining, starting with 2026-08-13.
+  reading above needs re examining.
 
 One guard on all of it. A probe result written before this census carries no
 census key, and a report that read that absence as "the feed sent nothing" would
 be this document's own recurring mistake made by the tool built to catch it. The
 absence prints as NOT MEASURED.
+
+
+# The replay, measured, 2026-08-19
+
+Every reading above was computed over bars that include whatever the
+subscription replayed. This measures how much that was, and re runs the
+comparison without it, so an over count and an under count can be told apart
+rather than averaged into one ratio.
+
+## How much arrived before the collector subscribed
+
+| session | first bar | subscribed at | source of that time | bars before it | their share of session volume |
+| --- | --- | --- | --- | ---: | ---: |
+| 2026-08-14 | 07:20:00 | 07:20:00 | CRITERIA intended start, NOT an observation | 0 of 2,155 | 0.00% |
+| 2026-08-17 | 06:26:00 | 07:20:01 | job_status, first run | 67 of 3,102 (2.16%) | 6,123 of 1,310,492 (0.47%) |
+| 2026-08-18 | 2026-08-17T15:59:00 | 07:20:02 | job_status, first run | 71 of 3,231 (2.20%) | 14,701 of 1,592,611 (0.92%) |
+
+The 2026-08-14 zero is a limit of the measurement, not a finding. That session
+has no job_status record and no subscriptions file, so the only subscription
+time available is the configured 07:20, and its first bar is stamped exactly
+07:20. Replay landing inside that minute is invisible at bar granularity. The
+row says the audit found nothing there, not that nothing was there.
+
+Most of what the other two sessions carry is not an hour old either. Splitting
+the pre subscription bars by whether they fall in the subscribe minute itself:
+
+| session | same minute as subscribe | genuinely earlier | oldest |
+| --- | ---: | ---: | --- |
+| 2026-08-17 | 20 bars, 4,656 shares | 47 bars, 1,467 shares | 06:26:00 |
+| 2026-08-18 | 23 bars, 10,325 shares | 48 bars, 4,376 shares | 2026-08-17T15:59:00 |
+
+So the genuinely stale replay is 1,467 shares on 2026-08-17 and 4,376 on
+2026-08-18: 0.11% and 0.27% of those sessions.
+
+## The comparison, both ways
+
+One intraday fetch per symbol, two comparisons out of it, over the minutes both
+sides carry.
+
+| session | median abs diff, all bars | replay excluded | aggregate socket/vendor, all bars | replay excluded |
+| --- | ---: | ---: | ---: | ---: |
+| 2026-08-14 | 70.95% | 70.95% | 3.826 | 3.826 |
+| 2026-08-17 | 88.43% | 88.36% | 0.103 | 0.103 |
+| 2026-08-18 | 90.05% | 89.71% | 0.094 | 0.094 |
+
+Per symbol, on the three ETFs present in all three sessions:
+
+| symbol | 08-14 all | 08-14 excl | 08-17 all | 08-17 excl | 08-18 all | 08-18 excl |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| SPY.US | 373.88% | 373.88% | -92.11% | -92.11% | -94.52% | -94.48% |
+| QQQ.US | 1127.37% | 1127.37% | -92.60% | -92.56% | -93.13% | -93.04% |
+| TLT.US | 1269.79% | 1269.79% | -89.22% | -89.24% | -89.24% | -89.37% |
+
+## The verdict, and it is not the two mechanism one
+
+**Replay is not the over counting mechanism.** Excluding every pre subscription
+bar moves 2026-08-14's aggregate from 3.826 to 3.826, which is to say by
+nothing, because that session has nothing to exclude at this granularity. On the
+two sessions where replay is measurable it is worth about half a point of median
+absolute difference and about a thousandth of the aggregate ratio. A mechanism
+carrying 0.11% of a session's volume cannot produce a 3.8x over count.
+
+So the two mechanism reading the audit was set up to test does not survive its
+own measurement. What remains is:
+
+- One session over reporting by 3.8x aggregate, up to 12.7x on TLT, unexplained.
+- Two sessions under reporting by about 10x, consistently, which is what the off
+  exchange question is for.
+- Replay, real, measurable, and too small to be either of them.
+
+**No collector change explains the swing either.** The only commit touching
+collect_premarket.py between the two sessions that landed before 2026-08-17's
+run is the package move, which created the file at its existing content. The one
+that changed logic landed at 16:03 on 2026-08-17, after that morning's window
+closed, and touched status frames only. Nothing in the volume path moved.
+
+The probe therefore still owns the under count, and the over count now has no
+candidate mechanism at all.
+
+## What is recorded from here on
+
+The audit above had to reconstruct the replay from a subscription time held in a
+different file, and for one of the three sessions that file does not exist. That
+is fixed rather than left as a technique.
+
+The collector no longer discards an out of window trade. It aggregates it into a
+row tagged `replay: true` with the reason beside it and writes it to the same
+bar file, and read_bars_file, which every consumer goes through, filters those
+rows out of the bars it returns and counts them into `replay_rows`,
+`replay_volume` and `replay_first_et` instead. So the evidence is in the file
+and can never reach a volume total.
+
+The packet carries the two apart and never collapses them.
+`collector_window_observed` reports `first_bar_et` from real bars only, and
+`contains_replay`, `replay_rows`, `replay_volume` and `replay_first_et` beside
+it. Each candidate carries `pm_window_intended_start` next to `pm_window_start`,
+with `pm_window_start_source` saying which is which, and `pm_rvol_basis`
+numerator_source now names the window the numerator actually covers with the
+scheduled one in brackets rather than quoting the schedule as though it were an
+observation.
+
+Null on all of it means a file written before the tag existed, which is not
+zero: the sessions in the tables above folded their replay into ordinary bars,
+and it is not recoverable from the file alone.

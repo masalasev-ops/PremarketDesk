@@ -147,7 +147,8 @@ def collector_coverage(
 
 
 def observed_collector_window(
-    bars_by_symbol: dict[str, list[dict[str, Any]]], now: dt.datetime
+    bars_by_symbol: dict[str, list[dict[str, Any]]], now: dt.datetime,
+    collector_stats: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The window the collector actually covered, against the one it was given.
 
@@ -171,6 +172,21 @@ def observed_collector_window(
     scheduled_start = _CRIT.clock_text("collector", "start_time")
     scheduled_stop = _CRIT.clock_text("collector", "stop_time")
 
+    # Replay is reported BESIDE the window, never inside it. The observed
+    # window is the tape this morning; the replay span is what the file also
+    # contains and what a previous version of this collector would have folded
+    # into that window. Collapsing them is the defect: on 2026-08-18 the oldest
+    # row in the premarket file was stamped 15:59 the previous afternoon, and a
+    # single first_bar_et would have reported the collector as having covered
+    # from then.
+    stats = collector_stats or {}
+    replay = {
+        "replay_rows": stats.get("replay_rows"),
+        "replay_volume": stats.get("replay_volume"),
+        "replay_first_et": stats.get("replay_first_et"),
+        "contains_replay": bool(stats.get("replay_rows")),
+    }
+
     if not minutes:
         return {
             "scheduled_start_et": scheduled_start,
@@ -179,11 +195,13 @@ def observed_collector_window(
             "last_bar_et": None,
             "minutes_since_last_bar": None,
             "reason": "the collector file holds no bars at all",
+            **replay,
         }
 
     first = ettime.from_epoch_s(min(minutes))
     last = ettime.from_epoch_s(max(minutes))
     return {
+        **replay,
         "scheduled_start_et": scheduled_start,
         "scheduled_stop_et": scheduled_stop,
         "first_bar_et": ettime.stamp(first),
@@ -563,6 +581,17 @@ def attach_premarket_path(
         candidate["pm_reason"] = None
 
         window_start_hhmm = candidate["pm_window_start"][11:16]
+        # The intended start is recorded BESIDE the observed one rather than
+        # standing in for it. pm_window_start has always been derived from the
+        # bars, but nothing beside it said what it was being judged against, so
+        # a reader could not see the two disagree without knowing CRITERIA by
+        # heart. On 2026-08-19 the collector was an hour late and every field
+        # describing the window still quoted 07:20.
+        candidate["pm_window_intended_start"] = collector_start
+        candidate["pm_window_start_source"] = (
+            "the first minute this candidate actually has a bar for, not the "
+            "configured collector start"
+        )
         candidate["pm_window_starts_late"] = window_start_hhmm > collector_start
 
 
@@ -789,7 +818,14 @@ def attach_premarket_rvol(
             candidate["pm_rvol"] = round(pm_volume / row["median_volume"], 4)
             candidate["pm_rvol_basis"] = {
                 "numerator": pm_volume,
-                "numerator_source": f"collector, from {numerator_window} ET",
+                # The window this numerator COVERS, which is the candidate's
+                # own first bar, not the hour the collector was scheduled for.
+                # Quoting the schedule here asserted a 07:20 numerator on a
+                # morning whose windows began at 08:14 and later.
+                "numerator_source": (
+                    f"collector, from {candidate.get('pm_window_start') or 'an unrecorded start'}"
+                    f" (scheduled {numerator_window} ET)"
+                ),
                 "denominator": row["median_volume"],
                 "denominator_source": (
                     f"baseline median, accumulated from {denominator_window} ET "
@@ -1794,6 +1830,13 @@ def build_packet() -> dict[str, Any]:
             # when no run carried a count, because a morning nobody counted is
             # not a morning that saw none.
             "status_frames": (run_stats or {}).get("status_frames"),
+            # Rows the file holds and the window deliberately excludes. Null on
+            # a file written before the tag existed, which is not the same as
+            # zero: those sessions folded their replay into ordinary bars and
+            # it cannot be recovered from the file.
+            "replay_rows": collector_stats.get("replay_rows"),
+            "replay_volume": collector_stats.get("replay_volume"),
+            "replay_first_et": collector_stats.get("replay_first_et"),
         },
         # Did every name the socket was asked for actually produce anything.
         # Separate from collector_snapshot above, which describes the file;
@@ -1802,7 +1845,8 @@ def build_packet() -> dict[str, Any]:
         "collector_coverage": collector_coverage(bars_by_symbol, session_date),
         # What the tape actually covered this morning, against what the
         # collector was scheduled for.
-        "collector_window_observed": observed_collector_window(bars_by_symbol, now),
+        "collector_window_observed": observed_collector_window(
+            bars_by_symbol, now, collector_stats),
         # The morning never fetches the exchange calendar. If it is stale, the
         # packet says so and the run proceeds on the cached copy rather than
         # blocking the 08:45 window on a fetch and its retries.

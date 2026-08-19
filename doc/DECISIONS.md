@@ -2201,8 +2201,15 @@ was thirteen times over and DIA ninety five times over on the same morning. A
 reading that is an order of magnitude high on one session and an order of
 magnitude low on another is not a reading with a cause to find in the
 subscription count. Both of those sessions failed the same check that failed the
-fifty symbol ones, at 69.77% and 70.95% median absolute difference, and nobody
-had run the check across all four sessions at once until today.
+fifty symbol ones, at 70.95% median absolute difference, and nobody had run the
+check across every session at once until today.
+
+[corrected 2026-08-19: this read "Both of those sessions failed the same check
+... at 69.77% and 70.95%" and "all four sessions". The 69.77% belonged to
+2026-08-13, which is not a premarket session and has since been removed from
+every comparison, so the plural was wrong when written. The argument does not
+depend on it: 2026-08-14 alone is the session that looked right, and it failed
+the same check at 70.95%.]
 
 **Why the probe's negative is trusted this far and no further.** It is trusted
 because the mechanism it tested is a throughput mechanism and it was tested
@@ -2318,3 +2325,51 @@ is left to a reader who can see the codes.
 **What has not been decided.** Whether dark_pool_volume is a parser bug or a
 column for something the feed never sends. That is the measurement, and it is one
 premarket run away.
+
+
+## 2026-08-19, seventh: a hypothesis measured and refused, and a row deleted rather than footnoted
+
+**The decision.** Replay is recorded as its own tagged row in the bar file
+rather than discarded, the observed window and the intended one are carried as
+separate packet fields, and 2026-08-13 is deleted from every comparison rather
+than annotated in place.
+
+**Why the two mechanism verdict is not stated.** The audit was set up to test
+whether replay owns the over counting while the off exchange question owns the
+under counting. It does not. Excluding every pre subscription bar moves
+2026-08-14 by nothing and the other two sessions by about half a point. Stating
+a two mechanism verdict anyway would have been fitting the frame to the data,
+and the frame was worth testing precisely because it was checkable.
+
+**Why the 2026-08-14 zero is reported as a limit rather than a result.** That
+session predates both the job_status collector record and the subscriptions
+file, so the only subscription time available is the configured one, and its
+first bar falls in exactly that minute. The audit cannot see replay there. A
+zero in that cell means the measurement was blind, and writing it as a finding
+would be the same error as reading a missing counter as a count of none, which
+this project made twice today already.
+
+**Why replay is written to the bar file rather than to a sidecar of its own.**
+The rows belong with the minutes they were mistaken for, and a separate file is
+one more thing to remember to read. The protection is the tag plus a single
+filter in read_bars_file, which every consumer already goes through, so a new
+consumer gets the filtering by default and has to ask for replay by name. A
+sidecar would invert that: safe by default only for readers who know it exists.
+
+**Why the intended start is kept rather than replaced.** pm_window_start was
+always derived from the bars. What was missing was anything beside it saying
+what it was being judged against, so a reader could not see the two disagree
+without knowing CRITERIA by heart, and the fields that DID quote the schedule,
+the RVOL basis and the provenance membership line, asserted it as though it were
+an observation. Both are needed and neither may stand in for the other.
+
+**Why 2026-08-13 is deleted and not footnoted.** A row in a comparison table
+gets counted whatever the note beside it says. It survives in the run history
+and tape window tables, labelled, because those are the evidence for the
+deletion and neither is a comparison.
+
+**What is now unexplained.** The 2026-08-14 over count. It is 3.8x in aggregate
+and 12.7x on TLT against the vendor's own bars, replay does not account for it,
+no collector code change landed between that session and the next, and the
+subscription cap was measured innocent. It has no candidate mechanism, and it
+should not be quietly dropped for that reason.

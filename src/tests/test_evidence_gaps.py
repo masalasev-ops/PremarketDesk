@@ -209,6 +209,66 @@ def claim_a_lower_bound_reaches_gaps_to_fill(failures: list[str]) -> None:
 
 # ---------------------------------------------------------------------- 6
 
+def claim_replay_is_tagged_and_never_totalled(tmp: Path, failures: list[str]) -> None:
+    """A replayed print is in the file and out of every total.
+
+    Before this, an out of window trade was counted in a log line and dropped.
+    That stopped the vintage defect and left no way to ask afterwards how much
+    replay a session carried: the 2026-08-19 audit had to reconstruct it from a
+    subscription time held in another file, and for 2026-08-14 that file does
+    not exist.
+    """
+    path = tmp / "bars.jsonl"
+    now = 1787000000.0
+    builder = collect_premarket.BarBuilder(path, source="ws", window=(now, now + 3600))
+    builder.add_trade("SPY.US", 100.0, 500, now + 10, False, "extended-hours")
+    builder.add_trade("SPY.US", 99.0, 300, now - 86400, False, "extended-hours")
+    builder.add_trade("QQQ.US", 50.0, 200, now - 60, False, "extended-hours")
+    builder.flush(now + 7200, force=True)
+
+    if builder.rows_written != 1:
+        failures.append("rows_written counts this morning's minutes only, got "
+                        f"{builder.rows_written} rather than 1")
+    if builder.replay_rows_written != 2:
+        failures.append(f"two replayed minutes must be written, got "
+                        f"{builder.replay_rows_written}")
+
+    written = [json.loads(line) for line in
+               path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    tagged = [r for r in written if r.get("replay")]
+    if len(tagged) != 2:
+        failures.append(f"the file must carry both replayed rows tagged, got {len(tagged)}")
+    if any("replay_reason" not in r for r in tagged):
+        failures.append("a tagged row must say why it is tagged")
+
+    bars, stats = collect_premarket.read_bars_file(path)
+    if sorted(bars) != ["SPY.US"]:
+        failures.append(f"replay must not reach the bars, got symbols {sorted(bars)}")
+    if len(bars.get("SPY.US", [])) != 1:
+        failures.append("the replayed SPY minute must not join its real one")
+    if stats.get("replay_rows") != 2 or stats.get("replay_volume") != 500.0:
+        failures.append("the replay must be counted in stats, got "
+                        f"{stats.get('replay_rows')!r} rows, "
+                        f"{stats.get('replay_volume')!r} shares")
+    if stats.get("bars_total") != 1:
+        failures.append(f"bars_total must exclude replay, got {stats.get('bars_total')}")
+
+    # An ordinary file carries no tag, and that must read as no replay rather
+    # than as unknown replay in the count.
+    plain = tmp / "plain.jsonl"
+    quiet = collect_premarket.BarBuilder(plain, source="ws", window=(now, now + 3600))
+    quiet.add_trade("SPY.US", 100.0, 500, now + 10, False, "extended-hours")
+    quiet.flush(now + 7200, force=True)
+    _, plain_stats = collect_premarket.read_bars_file(plain)
+    if plain_stats.get("replay_rows") != 0:
+        failures.append("a file with no replay must count zero, got "
+                        f"{plain_stats.get('replay_rows')!r}")
+    print("  claim replay   a replayed print is written tagged, filtered from the "
+          "bars, and counted apart")
+
+
+# ---------------------------------------------------------------------- 7
+
 def claim_the_template_does_not_ask_for_the_false_sentences(failures: list[str]) -> None:
     """Two sentences the template asked for that the packet contradicted."""
     text = TEMPLATE.read_text(encoding="utf-8")
@@ -243,6 +303,7 @@ def main() -> int:
         tmp = Path(raw)
         claim_a_refused_run_still_reports_what_it_heard(tmp, failures)
         claim_uncounted_is_not_zero(tmp, failures)
+        claim_replay_is_tagged_and_never_totalled(tmp, failures)
     claim_a_failure_today_reaches_the_report(failures)
     claim_the_failure_line_stays_readable(failures)
     claim_a_lower_bound_reaches_gaps_to_fill(failures)
@@ -252,8 +313,8 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL  {failure}")
         return 1
-    print("PASS  a refused run, an uncounted run, a step that failed this morning "
-          "and an understating ratio all reach the reader")
+    print("PASS  a refused run, an uncounted run, a replayed print, a step that "
+          "failed this morning and an understating ratio all reach the reader")
     return 0
 
 

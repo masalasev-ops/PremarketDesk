@@ -247,6 +247,15 @@ class BarBuilder:
         self.out_of_window_trades = 0
         self.out_of_window_volume = 0.0
         self.out_of_window_examples: list[dict[str, Any]] = []
+        # Replayed minutes, kept apart from open_bars so they can never be
+        # folded into a total, and written to the same file tagged so they can
+        # never be lost either. Counting them in a log line was enough to stop
+        # the vintage defect and not enough to measure it afterwards: on
+        # 2026-08-19 the only way to ask how much replay 2026-08-17 carried was
+        # to reconstruct it from a subscription time recorded in a different
+        # file, and for 2026-08-14 that file does not exist.
+        self.replay_bars: dict[tuple[str, int], dict[str, Any]] = {}
+        self.replay_rows_written = 0
         self._load_existing()
 
     def _load_existing(self) -> None:
@@ -298,6 +307,12 @@ class BarBuilder:
                     "at": ettime.stamp(ettime.from_epoch_s(int(epoch_s))),
                     "v": volume,
                 })
+            # Recorded rather than discarded. It is tagged replay, kept out of
+            # every total by read_bars_file, and in the file so a later reader
+            # can measure what arrived without needing the trade itself. The
+            # tag is the whole of the protection: a consumer that wants these
+            # has to ask for them by name.
+            self._add_replay(symbol, price, volume, epoch_s, market_status)
             return
 
         self.total_volume += volume
@@ -339,6 +354,43 @@ class BarBuilder:
         if market_status:
             bar["market_status"] = market_status
 
+    def _add_replay(self, symbol: str, price: float, volume: float,
+                    epoch_s: float, market_status: str | None) -> None:
+        """One tagged row per replayed symbol minute, aggregated like a bar."""
+        key = (symbol, minute_floor(epoch_s))
+        bar = self.replay_bars.get(key)
+        if bar is None:
+            bar = {
+                "symbol": symbol,
+                "minute_epoch": key[1],
+                "o": price, "h": price, "l": price, "c": price,
+                "v": 0.0, "pv": 0.0, "trades": 0,
+                "dark_pool_volume": 0.0,
+                "market_status": market_status,
+                "src": self.source,
+                # The tag every reader keys on. Present and true only on these
+                # rows, absent on every ordinary bar, so a file written before
+                # this existed reads as carrying no replay rows rather than as
+                # carrying unknown ones. That is a claim about the FILE, not
+                # about the session: sessions before the window guard folded
+                # their replay into ordinary bars and it is not recoverable
+                # from the file alone.
+                "replay": True,
+                "replay_reason": (
+                    "stamped outside this run's collection window, which the "
+                    "subscription's replayed last trade per symbol does"
+                ),
+            }
+            self.replay_bars[key] = bar
+        bar["h"] = max(bar["h"], price)
+        bar["l"] = min(bar["l"], price)
+        bar["c"] = price
+        bar["v"] += volume
+        bar["pv"] += price * volume
+        bar["trades"] += 1
+        if market_status:
+            bar["market_status"] = market_status
+
     def add_synthetic(self, symbol: str, price: float, volume: float, epoch_s: float) -> None:
         """Used only by the polling fallback, where there are no individual trades."""
         self.add_trade(symbol, price, volume, epoch_s, False, "poll")
@@ -351,15 +403,26 @@ class BarBuilder:
         print. Waiting late_trade_grace_s catches nearly all of them at the cost
         of putting each row on disk that much later.
         """
+        # Replay rows settle immediately. Their minute finished before this
+        # run began, so there is nothing to wait for, and holding them to the
+        # grace period would risk losing them to a run that dies early.
+        replay_ready = sorted(self.replay_bars, key=lambda k: (k[1], k[0]))
         ready = [
             key for key in self.open_bars
             if force or key[1] + BAR_SECONDS + LATE_TRADE_GRACE_S <= now_epoch
         ]
-        if not ready:
+        if not ready and not replay_ready:
             return 0
         ready.sort(key=lambda k: (k[1], k[0]))
 
         lines: list[str] = []
+        for key in replay_ready:
+            bar = self.replay_bars.pop(key)
+            bar["vwap"] = round(bar["pv"] / bar["v"], 6) if bar["v"] else None
+            bar["minute_et"] = ettime.stamp(ettime.from_epoch_s(bar["minute_epoch"]))
+            lines.append(json.dumps(bar, separators=(",", ":")))
+            self.replay_rows_written += 1
+        real = 0
         for key in ready:
             bar = self.open_bars.pop(key)
             if key in self.written:
@@ -369,6 +432,7 @@ class BarBuilder:
             bar["minute_et"] = ettime.stamp(ettime.from_epoch_s(bar["minute_epoch"]))
             lines.append(json.dumps(bar, separators=(",", ":")))
             self.written.add(key)
+            real += 1
 
         if lines:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -380,7 +444,11 @@ class BarBuilder:
                 for line in lines:
                     handle.write(line + "\n")
                     handle.flush()
-            self.rows_written += len(lines)
+            # rows_written counts MINUTES OF THIS MORNING'S TAPE and nothing
+            # else. Folding the replay rows into it would make the collector's
+            # own exit line report a wider window than it covered, which is the
+            # defect the tag exists to prevent, one layer up.
+            self.rows_written += real
         return len(lines)
 
 
@@ -401,6 +469,13 @@ def read_bars_file(path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any
         "last_bar_et": None,
         "partial_line_discarded": False,
         "bad_lines_skipped": 0,
+        # Replay rows are counted here and returned nowhere else. Every
+        # consumer of this function reads a premarket window and none of them
+        # wants a print from the previous afternoon in it, so the filter sits
+        # here rather than at four call sites where the fifth would forget.
+        "replay_rows": 0,
+        "replay_volume": 0.0,
+        "replay_first_et": None,
     }
     if not path.exists():
         return out, stats
@@ -422,8 +497,16 @@ def read_bars_file(path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any
             stats["bad_lines_skipped"] += 1
             continue
         symbol = str(row.get("symbol") or "")
-        if symbol:
-            out.setdefault(symbol, []).append(row)
+        if not symbol:
+            continue
+        if row.get("replay"):
+            stats["replay_rows"] += 1
+            stats["replay_volume"] += float(row.get("v") or 0.0)
+            at = row.get("minute_et")
+            if at and (stats["replay_first_et"] is None or at < stats["replay_first_et"]):
+                stats["replay_first_et"] = at
+            continue
+        out.setdefault(symbol, []).append(row)
     for rows in out.values():
         rows.sort(key=lambda r: r.get("minute_epoch", 0))
         stats["bars_total"] += len(rows)
