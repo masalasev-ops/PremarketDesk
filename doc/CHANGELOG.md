@@ -15,6 +15,127 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-18, sixth: the guard goes to warn, its documents stop provoking it, and one lost path is written down
+
+### Warn until the template stops asking
+
+The fifth entry made a flag cost the narrative instead of the morning. It did
+not ask how often a flag would fire. Running the guard over the three archived
+reports answers that: 2026-08-14 flags twelve times, 2026-08-17 eight, and
+2026-08-18 ten, with `no` accounting for eighteen of the thirty. Enforcing
+today would mean the plain table on most mornings, which is a guard working
+correctly and producing the wrong outcome daily.
+
+So CRITERIA gains analyst.quantifier_guard, reading `warn`. Every flag is
+logged with outcome `warned`, printed with its sentence, and named on the
+report's disclaimer line. Nothing is regenerated and nothing falls back. The
+week of telemetry the flag log was built for still accumulates, and it
+accumulates under the template that provokes the flags, which is the more
+informative half: a log filling now says which words and which instructions are
+responsible, where one filling after the provocation is removed would only say
+the remainder is quiet.
+
+Three things have to be true before it reads `enforcing`, and they are written
+into CRITERIA beside the knob rather than left in a commit message. T2, T3,
+T15, T16, P1 and P2 resolved, so the instructions stop asking for a claim about
+the set the model cannot compute. A real morning running clean, not a fixture.
+And dispositions recorded against the flags already logged, because the word
+list was going to be tuned on them and flipping first would mean tuning on a
+sample that stopped growing.
+
+An unrecognised value fails closed to enforcing and says so. A typo must not be
+a silent way to switch the guard off.
+
+The disclaimer note is a judgment call worth naming. Warn mode publishes a
+claim the guard calls uncheckable, so the report says on its disclaimer line
+that it carries one, how many, and which flag ids. That is the same rule the
+fallback follows: a report that degraded quietly would be a report lying about
+its own provenance, and a published flagged sentence is a quieter degradation
+than the plain table, not a smaller one. It also puts the flag in front of the
+one person who can judge it, on the morning it fired, which is the whole
+difficulty with a log nobody opens.
+
+### The guard and the instructions can no longer drift
+
+Three times in three commits the instructions asked for exactly what the guard
+forbids. The template asked for "the most common failed condition", a
+superlative it gave the model no way to compute, and got a false universal
+back. The fallback wrote the banned words in its own prose, so an analyst
+timeout on an empty screen produced a report the guard rejected and therefore
+no report. And rule 13 still said `no` was allowed one commit after `no` was
+banned. That is the class the watchlist headers had, and it was closed there by
+a claim asserting all four sources agree rather than by anyone being careful.
+
+Claim 11 is the equivalent. REPORT_TEMPLATE.md, prompt_analyst.md and the
+fallback's emitted prose are the three places report wording is written, and
+all three are now checked against analyst.banned_words() and
+analyst.set_words() rather than against a copy. The claim carries no word list
+of its own, deliberately, since a fixture with its own copy would be a fourth
+place to drift. Rule 13 now names the two lists on their own lines and the
+claim asserts they equal the tuples exactly, so the prompt the model reads and
+the guard the code enforces are the same list by construction.
+
+Both instruction files were reworded to pass it. Two kinds of change, and they
+are not the same kind. Instructions that ASKED for a banned word were reworded
+with their meaning intact: "name every candidate whose pm_rvol is null" became
+"name the candidates whose pm_rvol is null", which requests the identical list.
+Whether the template should be asking for that list at all is T2 and T3 and is
+still queued and still unanswered. Prose that QUOTES a banned phrasing as a
+specimen keeps saying it, inside backticks, because a document that teaches "do
+not write this" has to be able to write it. Backticks are how a document
+already marks text it is exhibiting rather than uttering, so the exemption is
+mechanical rather than a judgment call. A specimen has to fit on one line.
+
+The instruction scan is stricter than the report scan in one way, and on
+purpose. It reads a paragraph at a time rather than a line at a time, because
+these files are hand wrapped at about seventy-eight columns and a banned word
+routinely ends one line while its set word begins the next: "including mornings
+when no / candidate is eligible" was in prompt_analyst.md and a line-at-a-time
+scan read straight past it. Model output wraps nowhere, so the report scan is
+left alone rather than changed under a live guard. Numbered rules are their own
+units, or the last words of rule 5 would land within six words of the first
+words of rule 6 and invent a pair neither sentence makes.
+
+Proven by injection rather than by assertion. A banned word added to
+REPORT_TEMPLATE.md, to prompt_analyst.md, and to fallback_report's own prose
+each turned the suite red, and the sources restored green.
+
+### The path the tree check named on 2026-08-18, and could not be made to name again
+
+Recorded because an intermittent isolation breach that is only remembered is
+one nobody can chase. The honest version first: the path's NAME was lost. The
+run's output was piped through a grep that did not match the line carrying it,
+so it never reached the transcript. It is not recoverable.
+
+What is known. The run was the full suite immediately after the flag backlog
+clamp was patched into monitor_jobs.py, at roughly 16:40:45 ET, bounded by that
+file being written at about 16:40:35 and the next suite run finishing before
+16:42:03. It reported exactly one changed path and the path count read 1644
+both before and after, so it was a modification rather than a creation or a
+deletion. It did not reproduce on the four runs that followed, one of which
+rewrote src/ops/monitor_jobs.py first specifically to recreate the condition of
+a source file having just been touched.
+
+A forensic mtime sweep of the whole tree afterwards found nothing modified
+inside that window except files written by hand, and .git/index was untouched
+between 16:30 and the commit at 16:43:37. That rules out the cause this same
+check was corrected for on 2026-08-14, where config.build_identifier() ran `git
+status` and the index refresh it triggered failed the run; `--no-optional-locks`
+is still doing its job. One candidate cannot be excluded: src/ops/monitor_jobs.py
+itself, whose mtime was overwritten at 16:42:03 by the reproduction attempt,
+which destroyed the only evidence that would have distinguished it.
+
+The sweep did turn up a live intermittent breach of the same shape, which is
+worth having even though it is not this one. The real logs/ directory sits
+inside the tree the check photographs, and the scheduled tasks append to it
+from outside the suite: the meter sampler fires at :00 and :30 every hour and
+writes logs/meter-<quota day>.log and logs/meter-sampler.log, and at UTC
+midnight it creates a new dated file rather than appending to the old one. A
+suite run straddling one of those instants fails the tree check on a path the
+suite never touched, and a run straddling UTC midnight fails on a created path.
+The sampler fired at 16:30:03 and 17:00:01 on 2026-08-18, so it is not what
+happened at 16:40:45, but it will happen.
+
 ## 2026-08-18, fifth: a quantifier flag can no longer cost the morning its report
 
 ### The guard was charging the wrong price

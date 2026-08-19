@@ -570,6 +570,31 @@ def flag_log_path() -> Path:
 # and the difference is the number that says whether this guard is expensive.
 OUTCOME_REGENERATED = "regenerated"
 OUTCOME_FELL_BACK = "fell_back"
+# Warn mode: the flag was raised and the narrative went out anyway. Kept
+# distinct from the other two because it is the only outcome where the reader
+# received the sentence, and a rate that mixed it in would answer neither
+# question. See CRITERIA analyst.quantifier_guard.
+OUTCOME_WARNED = "warned"
+
+GUARD_WARN = "warn"
+GUARD_ENFORCING = "enforcing"
+
+
+def guard_mode() -> str:
+    """warn or enforcing, from CRITERIA, with an unknown value failing closed.
+
+    A typo in this knob must not be a silent way to switch the guard off, so
+    anything unrecognised is treated as enforcing and says so. Failing open on
+    a misspelling is how a guard quietly stops existing.
+    """
+    mode = _CRIT.text("analyst", "quantifier_guard").strip().lower()
+    if mode not in (GUARD_WARN, GUARD_ENFORCING):
+        print(f"analyst: WARNING CRITERIA analyst.quantifier_guard reads {mode!r}, "
+              f"which is neither {GUARD_WARN!r} nor {GUARD_ENFORCING!r}. Treating it "
+              "as enforcing, because an unreadable setting must not be a way to "
+              "turn the guard off by accident.")
+        return GUARD_ENFORCING
+    return mode
 
 
 def record_quantifier_flags(
@@ -647,28 +672,122 @@ def quantifier_violations(report: str) -> list[dict[str, Any]]:
         stripped = line.strip()
         if stripped.startswith("|") or stripped.startswith("#"):
             continue
-        words = re.findall(r"[A-Za-z_]+", stripped)
-        lowered = [w.lower() for w in words]
-        for index, word in enumerate(lowered):
-            forward_only = word in _FORWARD_ONLY_QUANTIFIERS
-            if word not in _QUANTIFIERS and not forward_only:
-                continue
-            low = index if forward_only else max(0, index - _QUANTIFIER_WINDOW_WORDS)
-            high = min(len(lowered), index + _QUANTIFIER_WINDOW_WORDS + 1)
-            near = [w for w in lowered[low:index] + lowered[index + 1:high]
-                    if w in _SET_WORDS]
-            if near:
-                out.append({
-                    "line": number,
-                    "quantifier": word,
-                    "set_word": near[0],
-                    "text": stripped,
-                })
+        out.extend(_scan_prose(number, stripped))
+    return out
+
+
+def _scan_prose(number: int, stripped: str) -> list[dict[str, Any]]:
+    """One chunk of prose, matched against the word list. THE matcher.
+
+    Every caller comes through here, so the window rule and the direction rule
+    have one implementation. What differs between callers is what they hand in
+    as a chunk, not how the chunk is judged.
+    """
+    out: list[dict[str, Any]] = []
+    lowered = [w.lower() for w in re.findall(r"[A-Za-z_]+", stripped)]
+    for index, word in enumerate(lowered):
+        forward_only = word in _FORWARD_ONLY_QUANTIFIERS
+        if word not in _QUANTIFIERS and not forward_only:
+            continue
+        low = index if forward_only else max(0, index - _QUANTIFIER_WINDOW_WORDS)
+        high = min(len(lowered), index + _QUANTIFIER_WINDOW_WORDS + 1)
+        near = [w for w in lowered[low:index] + lowered[index + 1:high]
+                if w in _SET_WORDS]
+        if near:
+            out.append({
+                "line": number,
+                "quantifier": word,
+                "set_word": near[0],
+                "text": stripped,
+            })
+    return out
+
+
+def banned_words() -> tuple[str, ...]:
+    """Every word the guard refuses near a set word, in one place.
+
+    THE definition. REPORT_TEMPLATE.md, prompt_analyst.md and the fallback
+    report are all checked against this tuple rather than against a copy of
+    it, because three times in three commits the instructions asked for what
+    the guard forbids: the template asked for a superlative it could not
+    compute, the fallback's own prose used the words, and rule 13 still
+    permitted `no` a commit after `no` was banned. A word list with four
+    copies has four chances to drift and no way to notice.
+    """
+    return tuple(sorted(_QUANTIFIERS + _FORWARD_ONLY_QUANTIFIERS))
+
+
+def set_words() -> tuple[str, ...]:
+    """The words that say a quantifier is about the candidate set."""
+    return tuple(sorted(_SET_WORDS))
+
+
+# A banned phrasing inside backticks is a SPECIMEN, not a sentence. The
+# instruction files have to be able to say "do not write `every candidate
+# missed`", and a scanner that failed them for it would force the clearest
+# teaching out of the documents that most need it. Backticks are how a
+# document already marks text it is exhibiting rather than uttering, so that
+# is the convention, and it is mechanical rather than a judgment call.
+#
+# Single line only, deliberately: a span that swallowed newlines could exempt
+# half a document by way of one stray backtick.
+_CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
+
+# A numbered rule or a bullet starts a fresh unit. See instruction_violations.
+_LIST_ITEM_RE = re.compile(r"^(?:\d+\.|[-*+])\s")
+
+
+def instruction_violations(text: str) -> list[dict[str, Any]]:
+    """The guard, run over an instruction file instead of over a report.
+
+    Same word list, same window, same matcher. Two differences, both because
+    an instruction file is not a report.
+
+    Quoted specimens are removed first, replaced with spaces rather than
+    deleted so the reported line number still points at the line somebody has
+    to edit.
+
+    And the unit is a PARAGRAPH, not a line, which makes this check stricter
+    than the one the reports get. These files are hand wrapped at about
+    seventy-eight columns, so a banned word routinely ends one line while its
+    set word begins the next: "including mornings when no / candidate is
+    eligible" is one sentence and two lines, and a line-at-a-time scan reads
+    straight past it. Model output wraps nowhere, so the report scan does not
+    need this and is left alone rather than changed under a live guard.
+    """
+    stripped = _CODE_SPAN_RE.sub(lambda m: " " * len(m.group(0)), text)
+    out: list[dict[str, Any]] = []
+    start: int | None = None
+    buffer: list[str] = []
+
+    def flush() -> None:
+        if start is not None and buffer:
+            out.extend(_scan_prose(start, " ".join(buffer)))
+
+    for number, line in enumerate(stripped.splitlines(), start=1):
+        bare = line.strip()
+        if not bare or bare.startswith("|") or bare.startswith("#"):
+            flush()
+            start, buffer = None, []
+            continue
+        if _LIST_ITEM_RE.match(bare):
+            # A numbered rule is its own unit. prompt_analyst.md runs its rules
+            # together with no blank line between them, so joining the block
+            # whole would put the last words of rule 5 within six words of the
+            # first words of rule 6 and invent a pair neither sentence makes.
+            flush()
+            start, buffer = number, [bare]
+            continue
+        if start is None:
+            start = number
+        buffer.append(bare)
+    flush()
     return out
 
 
 def _print_quantifier_flags(
-    hits: list[dict[str, Any]], ids: list[int], attempt: int, attempts: int
+    hits: list[dict[str, Any]], ids: list[int], attempt: int, attempts: int,
+    enforcing: bool = True,
 ) -> None:
     """Say what was matched and where, in a form somebody can judge at 08:46.
 
@@ -676,9 +795,15 @@ def _print_quantifier_flags(
     can dismiss without opening the report is a flag that gets waved through,
     and a guard that gets waved through has stopped being a guard.
     """
-    print(f"analyst: the quantifier guard rejected narrative attempt {attempt} "
-          f"of {attempts}. The report asserts a quantifier over the candidate "
-          "set, which no reader can check against the report in front of them:")
+    if not enforcing:
+        print(f"analyst: the quantifier guard flagged {len(hits)} sentence(s). "
+              "It is in WARN mode, so the narrative is being delivered as "
+              "written and these are recorded for the rate rather than acted "
+              "on. See CRITERIA analyst.quantifier_guard:")
+    else:
+        print(f"analyst: the quantifier guard rejected narrative attempt {attempt} "
+              f"of {attempts}. The report asserts a quantifier over the candidate "
+              "set, which no reader can check against the report in front of them:")
     for hit, flag_id in zip(hits, ids or [None] * len(hits)):
         print(f"  flag {flag_id} line {hit['line']}: matched "
               f"{hit['quantifier']!r} near {hit['set_word']!r}")
@@ -1003,6 +1128,33 @@ def _append_to_disclaimer(report_text: str, note: str) -> str:
     return report_text.rstrip("\n") + f"\n\n{note[0].upper() + note[1:]}.\n"
 
 
+def annotate_warned_quantifiers(
+    report_text: str, hits: list[dict[str, Any]], ids: list[int]
+) -> str:
+    """Say on the disclaimer line that a flagged sentence was published anyway.
+
+    Warn mode delivers the narrative intact, which is the point of it, and
+    that means a claim the guard calls uncheckable reaches the reader. Saying
+    so is the same rule the fallback follows: a report that degraded quietly
+    would be a report lying about its own provenance, and this is a quieter
+    degradation than the fallback, not a smaller one.
+
+    It also puts the flags in front of the one person who can judge them, on
+    the morning they fired, which is the whole difficulty with a log nobody
+    opens.
+    """
+    if not hits:
+        return report_text
+    named = ", ".join(str(i) for i in ids) if ids else "unlogged"
+    return _append_to_disclaimer(
+        report_text,
+        f"{len(hits)} sentence(s) below make a claim about the whole candidate "
+        f"set that the quantifier guard cannot check (flag {named}); the guard "
+        "is in warn mode, so they were published rather than rewritten, and "
+        "the packet screen_tally counts are what to read instead"
+    )
+
+
 def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
     """Name any scheduled step that has not succeeded inside its window.
 
@@ -1039,7 +1191,17 @@ def write_report(packet_path: Path) -> int:
     # second, and never the report. The worst a false positive can do is hand
     # the morning the plain table, which is exactly the trade the guard's
     # asymmetry argument already assumed it was making.
-    attempts = _CRIT.integer("analyst", "quantifier_regenerations") + 1
+    #
+    # Until the template stops ASKING for the banned words the guard is in
+    # warn mode, where every flag is logged and printed and nothing is acted
+    # on. All three archived reports flag under the current template, so
+    # enforcing today would mean the plain table most mornings, and a flag log
+    # filling under the template that provokes it is better evidence than one
+    # filling after the provocation is gone. CRITERIA names what has to be
+    # true before the switch flips.
+    enforcing = guard_mode() == GUARD_ENFORCING
+    attempts = (_CRIT.integer("analyst", "quantifier_regenerations") + 1
+                if enforcing else 1)
     report_text: str | None = None
     usage: dict[str, Any] = {}
     reason: str | None = None
@@ -1047,6 +1209,8 @@ def write_report(packet_path: Path) -> int:
     cause = CAUSE_UNAVAILABLE
     correction: str | None = None
     flags_raised: list[dict[str, Any]] = []
+    warned: list[dict[str, Any]] = []
+    warned_ids: list[int] = []
 
     for attempt in range(1, attempts + 1):
         text, usage, error, kind = invoke_claude(packet_text, correction)
@@ -1070,6 +1234,19 @@ def write_report(packet_path: Path) -> int:
 
         hits = quantifier_violations(text)
         if not hits:
+            report_text = text
+            break
+
+        if not enforcing:
+            warned_ids = record_quantifier_flags(
+                hits, session_date, report_path.name, attempt, OUTCOME_WARNED)
+            _print_quantifier_flags(hits, warned_ids, attempt, attempts,
+                                    enforcing=False)
+            warned = hits
+            flags_raised.extend(
+                {**hit, "id": flag_id, "attempt": attempt}
+                for hit, flag_id in zip(hits, warned_ids or [None] * len(hits))
+            )
             report_text = text
             break
 
@@ -1115,11 +1292,16 @@ def write_report(packet_path: Path) -> int:
     else:
         usage["status"] = "ok"
         usage["fallback"] = False
-        if flags_raised:
+        if warned:
+            usage["quantifier_flags"] = flags_raised
+            usage["quantifier_warned"] = True
+            report_text = annotate_warned_quantifiers(report_text, warned, warned_ids)
+        elif flags_raised:
             # The regeneration worked. Worth recording next to the report it
             # rescued: this is the number that says whether the guard is cheap.
             usage["quantifier_flags"] = flags_raised
             usage["quantifier_regenerated"] = True
+    usage["quantifier_guard"] = GUARD_ENFORCING if enforcing else GUARD_WARN
 
     # Overdue scheduled steps, named before the report is written rather than
     # after, so the deterministic fallback report carries the line too.
@@ -1133,6 +1315,14 @@ def write_report(packet_path: Path) -> int:
         # run of fallback mornings is a thing to notice rather than discover.
         job_status.failed(f"{cause}, fell back to numbers only: "
                           f"{usage.get('error_message')}")
+    elif usage.get("quantifier_warned"):
+        # Warn mode. Not a failed step either: nothing was withheld and the
+        # report is exactly what the model wrote. The flags are on the
+        # disclaimer line, in the log with outcome warned, and in the
+        # watchdog's unjudged count.
+        print(f"analyst: {len(warned)} quantifier flag(s) recorded in warn mode "
+              "and published. Judge them so the switch can flip: "
+              "python -m ops.quantifier_flags --pending")
     elif usage.get("quantifier_regenerated"):
         # Deliberately NOT job_status.failed. The morning got its narrative,
         # so calling the step failed would be crying wolf on a good report,

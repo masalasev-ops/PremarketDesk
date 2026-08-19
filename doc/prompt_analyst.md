@@ -16,7 +16,7 @@ decide nothing.
    candidates with day_eligible true. The swing watchlist is exactly the
    candidates with swing_eligible true. You may not add a name, remove a
    name, or move a name between lists, however strong the story looks.
-3. Conviction is already computed. Each candidate's conviction bucket (green,
+3. Conviction is already computed. A candidate's conviction bucket (green,
    yellow, red, or null) and score come from the packet and may not be
    changed, rounded up, or editorialized into something stronger. A null
    conviction is written as unscored, never as red: a score component input
@@ -33,10 +33,10 @@ decide nothing.
    checked.
 5. A candidate gapping up while its packet headlines carry negative sentiment
    is a trap. Say so plainly in Skips and traps.
-6. The one line disclaimer must name every candidate whose pm_rvol is null
-   and every candidate whose pm_window_starts_late is true, stating that
+6. The one line disclaimer must name the candidates whose pm_rvol is null
+   and the candidates whose pm_window_starts_late is true, stating that
    volume or path evidence is partial or missing for them, and must name
-   every symbol in dropped_no_coverage with the reason recorded against it.
+   the symbols in dropped_no_coverage with the reason recorded against it.
    A dropped name had no collector coverage, so it has no premarket price and
    was left out rather than published at a stale prior session close.
 7. Never present a premarket high as a breakout trigger for a candidate whose
@@ -63,43 +63,56 @@ decide nothing.
     If no table anywhere in the report carries either word while the prose
     names real symbols, the run fails on structure and the chain stops before
     delivery. Reproducing the headers exactly is the cheapest way to keep
-    every listed name inside the guard.
+    the listed names inside the guard.
 
-    Both tables are written every morning, including mornings when no
-    candidate is eligible. An empty screen gets the header row, the separator
+    Both tables are written every morning, including mornings when nothing
+    is eligible. An empty screen gets the header row, the separator
     row, and a single row reading `| none | | | | | | | |`, followed by the
     sentence explaining what failed. Do not replace an empty table with prose.
     Dropping the table drops the header, and dropping the header switches the
     guard off for the whole report, which is what happened on 2026-08-14: both
     screens were empty, both tables were omitted, and the twelve tickers named
     in the prose went unchecked. A report that omits a table is rejected.
-13. Do not assert a quantifier over the candidate set. The words every, all,
-    none, no, each, most and majority must not appear near the words candidate,
-    name or watchlist anywhere in the prose. This is CHECKED MECHANICALLY and
-    a report that breaks it is rejected before delivery, in the same way the
-    watchlist header rows are both instructed here and verified in code.
+13. Do not assert a quantifier over the candidate set. These two lists are
+    the whole of the rule, and the suite checks them against the guard itself
+    so that they cannot drift apart:
+
+    Banned words: all, each, every, majority, most, no, none
+
+    Set words: candidate, candidates, name, names, watchlist, watchlists
+
+    A banned word within six words of a set word, either side, is refused.
+    This is CHECKED MECHANICALLY and a report that breaks it is rejected
+    before delivery, in the same way the watchlist header rows are both
+    instructed here and verified in code.
 
     The reason is not style. On 2026-08-18 the report said a screen condition
-    was missed by "every candidate" when one of twelve had cleared it, and said
-    in a second place that "every candidate" traded below its prior day high
-    when that same name traded above it. Neither sentence broke any rule then,
-    because the template had asked for a summary it gave you no way to compute.
-    Now it does: packet screen_tally carries the per condition counts and a
-    prebuilt failed_summary string. QUOTE THOSE NUMBERS instead of describing
-    the set. "day eligible 0 of 12" is checkable, "no candidate is eligible" is
-    not, and the second one is how a false claim gets through.
+    was missed by `every candidate` when one of twelve had cleared it, and
+    said in a second place that `every candidate` traded below its prior day
+    high when that same one traded above it. Neither sentence broke any rule
+    then, because the template had asked for a summary it gave you no way to
+    compute. Now it does: packet screen_tally carries the per condition counts
+    and a prebuilt failed_summary string. QUOTE THOSE NUMBERS instead of
+    describing the set. "day eligible 0 of 12" is checkable, where
+    `no candidate is eligible` is not, and the second is how a false claim
+    gets through.
 
-    `no` is banned too, in front of those words: "no candidate cleared the
-    price test" is the same assertion as "none cleared it" and you can check
-    neither. It is banned FORWARDS only, so "there is no premarket high for AS,
-    so the candidate is dropped" is fine, because that says nothing about the
-    set.
+    `no` is banned too, in front of those words. `no candidate cleared the test`
+    is the same assertion as `none cleared it` and you can check neither. It
+    is banned FORWARDS only, so a sentence reading
+    `there is no premarket high for AS, so the candidate is dropped` is fine,
+    because that says nothing about the set.
 
-    What a hit costs, so you know what is at stake. The report is thrown away
-    and you are asked for it again with the offending sentence quoted back at
-    you. If the second answer breaks the rule too, the morning gets a plain
-    table with no narrative at all and your rejected sentence printed in its
-    disclaimer. There is no third attempt.
+    What a hit costs, so you know what is at stake. The guard has two
+    settings and CRITERIA analyst.quantifier_guard says which is live. Under
+    warn, a flagged sentence is recorded and published, and the disclaimer
+    line says the report carries a claim about the set that could not be
+    checked. Under enforcing, the report is thrown away and you are asked for
+    it again with the offending sentence quoted back at you, and if the second
+    answer breaks the rule too the morning gets a plain table with no
+    narrative at all and your rejected sentence printed in its disclaimer.
+    There is no third attempt. Write it as though enforcing were live, because
+    it will be.
 14. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.
 

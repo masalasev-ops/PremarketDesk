@@ -658,6 +658,7 @@ effort                        = medium     # compared against low on the 2026-08
 timeout_s                     = 293        # 3x the slowest of five measured opus medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds
 max_attempts                  = 2          # total tries, including the first
 quantifier_regenerations      = 1          # flagged narratives thrown away and asked for again before the plain table takes over
+quantifier_guard              = warn       # warn: log and print flags, deliver the narrative anyway. enforcing: regenerate, then fall back. See the note below for what has to be true before this flips.
 prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI, A, I
 
 ### The prose stopword note
@@ -682,6 +683,44 @@ prose alone will not be caught. The alternative is a guard that cries wolf
 every morning, and a guard that always fires is a guard nobody reads. Claims
 in the watchlist tables are unaffected, and those tables are now mandatory
 even when empty.
+
+### The warn mode note, and what has to be true before it flips
+
+quantifier_guard is `warn` and was set that way on 2026-08-18, the day the
+regeneration and fallback were built. The reason is measured rather than
+feared. Running the guard over the three archived reports flags every one of
+them: 2026-08-14 twelve times, 2026-08-17 eight times, 2026-08-18 ten times,
+with `no` accounting for eighteen of the thirty. Enforcing today would mean the
+plain table on most mornings, which is a working guard producing the wrong
+outcome daily.
+
+The cause is that the instructions still ASK for the sentences the guard
+refuses. REPORT_TEMPLATE.md tells the model to name the candidates whose
+pm_rvol is null and whose premarket window starts late, and on a morning with
+none to name it writes a sentence about the whole set because that is the only
+honest answer to the question it was asked. Those requests are the queued
+derivations T2, T3, T15 and T16 and their prompt duplicates P1 and P2.
+
+In warn mode every flag is written to data/quantifier-flags.jsonl with outcome
+`warned`, printed with its sentence, and named on the report's disclaimer line
+so the reader can judge it on the morning it fired. Nothing is regenerated and
+nothing falls back. This is deliberately the more informative half of the
+telemetry: a flag log filling under the template that provokes the flags says
+which words and which instructions are responsible, where one filling after the
+provocation is gone would only say the remainder is quiet.
+
+Three things have to be true before this reads `enforcing`:
+
+  1. T2, T3, T15, T16, P1 and P2 are resolved, so the instructions no longer
+     ask for a claim about the set that the model cannot compute.
+  2. A morning runs clean, meaning a real report with zero flags rather than a
+     fixture with zero flags.
+  3. The flags already logged have dispositions, since the word list was going
+     to be tuned on them and flipping the switch first would mean tuning it on
+     a sample that stopped growing.
+
+An unrecognised value here is treated as enforcing and says so, because a typo
+must not be a silent way to switch the guard off.
 
 ### The quantifier regeneration note
 

@@ -282,7 +282,7 @@ def claim_flags_are_logged_for_measurement(failures: list[str]) -> None:
 
 
 def claim_a_flag_cannot_cost_the_report(failures: list[str]) -> None:
-    """A flag that survives the regeneration costs the narrative, not the report.
+    """Under either guard setting, a flagged morning still gets a report.
 
     The guard used to return exit 2 on any flag. The morning chain stops on the
     first non-zero code, so render, deliver and archive never ran and the
@@ -290,32 +290,16 @@ def claim_a_flag_cannot_cost_the_report(failures: list[str]) -> None:
     positive rate is still a sample of six. A guard that can cost the whole
     morning is a guard somebody switches off the first time it is wrong.
 
-    Proven here on a model that will not stop saying it: the flag is raised
-    twice, the second time after being told exactly what to avoid, and what
-    lands on disk is the plain table with the offending sentence stamped into
-    its disclaimer. Exit zero, because the morning has a report.
+    Both settings are proven, against a model that will not stop saying it.
+    Under warn, which is live, the narrative goes out untouched and the flag is
+    recorded and named on the disclaimer. Under enforcing, the report is thrown
+    away, regenerated with the sentence quoted back, and on a second failure the
+    morning gets the plain table with that sentence in its disclaimer. Exit zero
+    in both, because in both the morning has a report.
     """
     import io
     from contextlib import redirect_stdout
     from ops import quantifier_flags
-
-    packet = {
-        "session_date": "2026-01-05",
-        "generated_at": "2026-01-05T08:45:00-05:00",
-        "candidates": [{
-            "symbol": "ARX.US", "conviction": "green", "day_eligible": True,
-            "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02, "price": 19.0,
-            "prior_close": 13.3, "pm_high": 19.51, "pm_vwap": 19.1,
-            "catalyst_found": True, "catalyst_class": "earnings",
-            "collector_covered": True, "quote": {"name": "Aeries"},
-        }],
-        "market_snapshot": [{"label": "spy", "symbol": "SPY.US"}],
-        "job_health": {"overdue": [], "line": None},
-    }
-    run_directory = config.run_dir(packet["session_date"])
-    run_directory.mkdir(parents=True, exist_ok=True)
-    packet_path = run_directory / "packet.json"
-    packet_path.write_text(json.dumps(packet), encoding="utf-8")
 
     sentence = "Every candidate missed the prior day high."
     stubborn = (
@@ -329,73 +313,124 @@ def claim_a_flag_cannot_cost_the_report(failures: list[str]) -> None:
         + conftest.watchlist_table("swing watchlist")
     )
 
-    corrections: list[str | None] = []
-    real_invoke = analyst.invoke_claude
+    def run(session: str, mode: str):
+        """Drive write_report against the stubborn model under one guard mode."""
+        packet = {
+            "session_date": session,
+            "generated_at": session + "T08:45:00-05:00",
+            "candidates": [{
+                "symbol": "ARX.US", "conviction": "green", "day_eligible": True,
+                "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02, "price": 19.0,
+                "prior_close": 13.3, "pm_high": 19.51, "pm_vwap": 19.1,
+                "catalyst_found": True, "catalyst_class": "earnings",
+                "collector_covered": True, "quote": {"name": "Aeries"},
+            }],
+            "market_snapshot": [{"label": "spy", "symbol": "SPY.US"}],
+            "job_health": {"overdue": [], "line": None},
+        }
+        run_directory = config.run_dir(session)
+        run_directory.mkdir(parents=True, exist_ok=True)
+        packet_path = run_directory / "packet.json"
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
 
-    def stubborn_model(packet_text, correction=None):
-        corrections.append(correction)
-        return stubborn, {"output_tokens": 1, "total_cost_usd": 0.01}, None, "ok"
+        corrections: list = []
 
-    before = len(quantifier_flags.load_flags())
-    analyst.invoke_claude = stubborn_model
-    try:
-        buffer = io.StringIO()
-        with redirect_stdout(buffer):
-            code = analyst.write_report(packet_path)
-    finally:
-        analyst.invoke_claude = real_invoke
+        def stubborn_model(packet_text, correction=None):
+            corrections.append(correction)
+            return stubborn, {"output_tokens": 1, "total_cost_usd": 0.01}, None, "ok"
 
-    report_path = run_directory / "report.md"
-    if code != 0:
-        failures.append(f"a persistent quantifier flag exited {code}; the chain "
-                        "stops on any non-zero code, so that is a lost morning")
-    if not report_path.is_file():
+        before = len(quantifier_flags.load_flags())
+        real_invoke, real_mode = analyst.invoke_claude, analyst.guard_mode
+        analyst.invoke_claude = stubborn_model
+        analyst.guard_mode = lambda: mode
+        try:
+            with redirect_stdout(io.StringIO()):
+                code = analyst.write_report(packet_path)
+        finally:
+            analyst.invoke_claude, analyst.guard_mode = real_invoke, real_mode
+        report_path = run_directory / "report.md"
+        return {
+            "code": code,
+            "text": report_path.read_text(encoding="utf-8") if report_path.is_file() else None,
+            "usage": json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8")),
+            "corrections": corrections,
+            "flags": quantifier_flags.load_flags()[before:],
+        }
+
+    def disclaimer_of(text: str) -> str:
+        return next((line for line in text.splitlines()
+                     if "Nothing here is advice" in line), "")
+
+    # ---- warn, which is what runs tomorrow morning
+    warn = run("2026-01-05", analyst.GUARD_WARN)
+    if warn["code"] != 0:
+        failures.append(f"warn mode exited {warn['code']}, which stops the chain")
+    if warn["text"] is None:
+        failures.append("warn mode produced no report")
+        return
+    if sentence not in warn["text"]:
+        failures.append("warn mode did not deliver the narrative it flagged")
+    if warn["usage"].get("fallback") or warn["usage"].get("status") != "ok":
+        failures.append(f"warn mode degraded the morning: {warn['usage'].get('status')}")
+    if len(warn["corrections"]) != 1:
+        failures.append(f"warn mode regenerated, calling the model "
+                        f"{len(warn['corrections'])} times")
+    if len(warn["flags"]) != 1:
+        failures.append(f"warn mode logged {len(warn['flags'])} flag(s), expected 1")
+    elif warn["flags"][0].get("outcome") != analyst.OUTCOME_WARNED:
+        failures.append("a published flag is not marked as such: "
+                        f"{warn['flags'][0].get('outcome')}")
+    if "warn mode" not in disclaimer_of(warn["text"]):
+        failures.append("warn mode published a flagged claim without saying so on "
+                        f"the disclaimer: {disclaimer_of(warn['text'])}")
+
+    # ---- enforcing, which is where this ends up
+    strict = run("2026-01-06", analyst.GUARD_ENFORCING)
+    if strict["code"] != 0:
+        failures.append(f"a persistent quantifier flag exited {strict['code']}; the "
+                        "chain stops on any non-zero code, so that is a lost morning")
+    if strict["text"] is None:
         failures.append("a persistent quantifier flag produced no report at all")
         return
-    report_text = report_path.read_text(encoding="utf-8")
-    if "narrative withheld" not in report_text:
+    if "narrative withheld" not in strict["text"]:
         failures.append("the degraded report does not say the narrative was "
-                        f"withheld: {report_text.splitlines()[0]!r}")
-    if "unavailable" in report_text.splitlines()[0]:
+                        f"withheld: {strict['text'].splitlines()[0]!r}")
+    if "unavailable" in strict["text"].splitlines()[0]:
         failures.append("a withheld narrative is reported as an unavailable one, "
                         "which is the report lying about its own provenance")
-    disclaimer = next((line for line in report_text.splitlines()
-                       if "Nothing here is advice" in line), "")
+    disclaimer = disclaimer_of(strict["text"])
     if sentence not in disclaimer:
         failures.append(f"the disclaimer does not quote the flagged sentence: {disclaimer}")
     if "flag " not in disclaimer:
         failures.append(f"the disclaimer does not name the flag id: {disclaimer}")
     for kind, header in conftest.watchlist_headers().items():
-        if header not in report_text:
+        if header not in strict["text"]:
             failures.append(f"the degraded report omits the {kind} table")
 
     # The regeneration has to be told what it did wrong. A blind retry against
     # a deterministic failure is a coin flip with no coin.
-    if len(corrections) != 2:
+    if len(strict["corrections"]) != 2:
         failures.append(f"expected one regeneration, the model was called "
-                        f"{len(corrections)} time(s)")
-    elif corrections[0] is not None:
+                        f"{len(strict['corrections'])} time(s)")
+    elif strict["corrections"][0] is not None:
         failures.append("the first attempt carried a correction it could not have earned")
-    elif not corrections[1] or sentence not in corrections[1]:
+    elif not strict["corrections"][1] or sentence not in strict["corrections"][1]:
         failures.append("the regeneration was not told which sentence was rejected: "
-                        f"{corrections[1]!r}")
+                        f"{strict['corrections'][1]!r}")
 
-    flags = quantifier_flags.load_flags()
-    fresh = flags[before:]
-    if len(fresh) != 2:
-        failures.append(f"expected both raises logged, found {len(fresh)}")
+    if len(strict["flags"]) != 2:
+        failures.append(f"expected both raises logged, found {len(strict['flags'])}")
     else:
-        outcomes = [f.get("outcome") for f in fresh]
+        outcomes = [f.get("outcome") for f in strict["flags"]]
         if outcomes != [analyst.OUTCOME_REGENERATED, analyst.OUTCOME_FELL_BACK]:
             failures.append(f"the flag outcomes do not distinguish the regeneration "
                             f"from the fallback: {outcomes}")
-
-    usage = json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))
-    if usage.get("status") != "quantifier" or not usage.get("fallback"):
-        failures.append(f"the usage record does not say why the morning degraded: {usage}")
-    print("  claim 9 a flag the regeneration could not fix costs the narrative and "
-          "not the report: exit 0, plain table on disk, the sentence and its flag "
-          "id in the disclaimer")
+    if strict["usage"].get("status") != "quantifier" or not strict["usage"].get("fallback"):
+        failures.append("the usage record does not say why the morning degraded: "
+                        f"{strict['usage']}")
+    print("  claim 9 warn publishes the flagged narrative and names the flag on the "
+          "disclaimer; enforcing regenerates once and then hands the morning the "
+          "plain table with that sentence in it. Exit 0 both ways")
 
 
 def claim_the_watchdog_names_the_unjudged(failures: list[str]) -> None:
@@ -472,6 +507,167 @@ def claim_the_watchdog_names_the_unjudged(failures: list[str]) -> None:
     else:
         print(f"  claim 10 the watchdog names {measured['pending']} unjudged flag(s) "
               f"and calls the {measured['oldest_days']:.0f} day old one a backlog")
+
+
+def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
+        failures: list[str]) -> None:
+    """One word list, and all three sources of report prose checked against it.
+
+    Three times in three commits the instructions asked for exactly what the
+    guard refuses. The template asked for "the most common failed condition",
+    a superlative it gave the model no way to compute, and got a false
+    universal back. The deterministic fallback wrote the banned words in its
+    own prose, so an analyst timeout on an empty screen produced a report that
+    failed the guard and therefore no report at all. And rule 13 still said
+    `no` was allowed one commit after `no` was banned.
+
+    That is the same class the watchlist headers had, and it was closed there
+    by a claim asserting all four sources agree rather than by being careful.
+    This is the equivalent. REPORT_TEMPLATE.md, prompt_analyst.md and the
+    fallback's emitted prose are the three places report wording is written,
+    and all three are checked against the tuples in analyst.py rather than
+    against a copy. The claim carries no word list of its own, on purpose: a
+    fixture with its own copy is a fourth place to drift.
+
+    A banned phrasing inside backticks is a specimen and passes, because a
+    document that teaches "do not write this" has to be able to write it.
+    """
+    banned = analyst.banned_words()
+    sets = analyst.set_words()
+    if not banned or not sets:
+        failures.append("the guard defines no word list to check against")
+        return
+
+    # 1. The prompt's enumeration IS the Python tuple, not a copy of it. This
+    #    is what lets rule 13 name the words in the open without the scan
+    #    having to make an exception for the line that defines the rule.
+    prompt_text = config.ANALYST_PROMPT_PATH.read_text(encoding="utf-8")
+    declared: dict[str, tuple[str, ...]] = {}
+    for line in prompt_text.splitlines():
+        stripped = line.strip()
+        for label in ("Banned words:", "Set words:"):
+            if stripped.startswith(label):
+                declared[label] = tuple(
+                    word.strip().lower()
+                    for word in stripped[len(label):].split(",")
+                    if word.strip()
+                )
+    if declared.get("Banned words:") != banned:
+        failures.append(
+            "prompt_analyst.md rule 13 lists banned words "
+            f"{declared.get('Banned words:')} but the guard bans {banned}. The "
+            "prompt is what the model reads and the tuple is what the guard "
+            "enforces; they cannot differ.")
+    if declared.get("Set words:") != sets:
+        failures.append(
+            f"prompt_analyst.md rule 13 lists set words {declared.get('Set words:')} "
+            f"but the guard uses {sets}")
+
+    # 2. Neither instruction file asks for what the guard forbids.
+    for label, path in (("REPORT_TEMPLATE.md", config.REPORT_TEMPLATE_PATH),
+                        ("prompt_analyst.md", config.ANALYST_PROMPT_PATH)):
+        hits = analyst.instruction_violations(path.read_text(encoding="utf-8"))
+        for hit in hits:
+            failures.append(
+                f"{label} line {hit['line']} asks for what the guard forbids: "
+                f"{hit['quantifier']!r} near {hit['set_word']!r} in "
+                f"{hit['text'][:160]!r}. Reword the instruction, or if it is "
+                "quoting the phrasing as a specimen put it in backticks on a "
+                "single line.")
+
+    # 3. The third source of the same prose. The fallback is Python written,
+    #    so nothing forces its wording to agree with the template's, and it
+    #    already drifted once into wording that failed the guard it lives
+    #    beside. Several packet shapes, because its prose is conditional and
+    #    the empty morning is the one that broke.
+    shapes = {
+        "empty": {"session_date": "2026-01-02", "candidates": []},
+        "one eligible": {
+            "session_date": "2026-01-02",
+            "candidates": [{"symbol": "ARX.US", "day_eligible": True,
+                            "swing_eligible": True, "score": 7.0,
+                            "conviction": "green", "catalyst_found": True,
+                            "catalyst_class": "earnings",
+                            "collector_covered": True, "quote": {}}],
+        },
+        "none eligible": {
+            "session_date": "2026-01-02",
+            "candidates": [{"symbol": "ARX.US", "day_eligible": False,
+                            "swing_eligible": False, "score": 7.0,
+                            "conviction": "green", "catalyst_found": True,
+                            "catalyst_class": "earnings",
+                            "collector_covered": True, "quote": {}}],
+        },
+        "degraded": {
+            "session_date": "2026-01-02",
+            "candidates": [{"symbol": "ARX.US", "day_eligible": False,
+                            "swing_eligible": False, "score": None,
+                            "conviction": None, "catalyst_found": None,
+                            "pm_rvol": None, "pm_window_starts_late": True,
+                            "collector_covered": False, "quote": {}}],
+            "quota_preflight": {"degraded": True, "remaining": 900,
+                                "daily_limit": 100000, "quota_day": "2026-01-02"},
+            "economic": {"skipped": "the calendar call failed"},
+            "earnings": {"skipped": "the calendar call failed"},
+        },
+    }
+    for label, packet in shapes.items():
+        prose = analyst.fallback_report(packet, "the model timed out")
+        for hit in analyst.quantifier_violations(prose):
+            failures.append(
+                f"the fallback's own prose on a {label} packet trips the guard "
+                f"it lives beside: {hit['quantifier']!r} near {hit['set_word']!r} "
+                f"in {hit['text'][:120]!r}. An analyst timeout on that morning "
+                "would produce a report the guard rejects, which is no report.")
+
+    # 4. The one exemption, asserted rather than assumed. The withheld
+    #    disclaimer QUOTES the sentence that caused the withholding, so it
+    #    carries the banned pattern on purpose. That has to be true only of
+    #    the disclaimer line, or the exemption is covering something else.
+    quoted = "Every candidate missed the prior day high."
+    withheld = analyst.fallback_report(
+        shapes["one eligible"],
+        analyst.quantifier_reason(analyst.quantifier_violations(quoted), [1]),
+        analyst.CAUSE_WITHHELD,
+    )
+    lines = withheld.splitlines()
+    disclaimer_line = next(
+        (number for number, line in enumerate(lines, start=1)
+         if "Nothing here is advice" in line), None)
+    stray = [hit for hit in analyst.quantifier_violations(withheld)
+             if hit["line"] != disclaimer_line]
+    if stray:
+        failures.append(f"the withheld fallback carries banned prose away from "
+                        f"the disclaimer it quotes evidence on: {stray}")
+    if not any(hit["line"] == disclaimer_line
+               for hit in analyst.quantifier_violations(withheld)):
+        failures.append("the withheld disclaimer no longer quotes the flagged "
+                        "sentence, so a reader is told the narrative was held "
+                        "back and not told what for")
+
+    # 5. And the check itself is real: injecting a banned word into any of the
+    #    three has to be caught. A green check that would stay green is worth
+    #    nothing, and this is the cheapest way to know it would not.
+    probes = {
+        "an instruction file": lambda: analyst.instruction_violations(
+            "Name every candidate whose score is null.\n"),
+        "a backticked specimen uncovered": lambda: analyst.instruction_violations(
+            "Do not write every candidate missed the high.\n"),
+        "a wrapped instruction": lambda: analyst.instruction_violations(
+            "The disclaimer must name every\ncandidate whose pm_rvol is null.\n"),
+    }
+    for label, probe in probes.items():
+        if not probe():
+            failures.append(f"the drift check does not catch a banned word in {label}")
+    # And the specimen convention still works, or the files could not teach.
+    if analyst.instruction_violations("Do not write `every candidate missed`.\n"):
+        failures.append("a backticked specimen is refused, so the instruction "
+                        "files cannot quote the phrasing they forbid")
+
+    print(f"  claim 11 one word list of {len(banned)} banned and {len(sets)} set "
+          "words, read by prompt_analyst.md, REPORT_TEMPLATE.md and the fallback "
+          "prose across 4 packet shapes, with the withheld disclaimer the only "
+          "exemption and a wrapped instruction still caught")
 
 
 def main() -> int:
@@ -653,6 +849,8 @@ def main() -> int:
     claim_a_flag_cannot_cost_the_report(failures)
 
     claim_the_watchdog_names_the_unjudged(failures)
+
+    claim_the_instructions_cannot_ask_for_what_the_guard_forbids(failures)
 
     if failures:
         for failure in failures:

@@ -1960,3 +1960,70 @@ on judged dispositions, and the outcome split added here is the second input to
 it: a word that regenerates away costs a retry, a word that reaches the fallback
 costs the narrative, and the two should not be tuned as though they were the
 same. `each` and `no` remain the two most likely to move.
+
+
+## 2026-08-18, sixth: a guard that fires every morning is a guard nobody keeps
+
+**The decision.** The quantifier guard runs in warn mode, logging and printing
+and publishing, until the instructions stop asking for the sentences it
+refuses. CRITERIA carries the switch and the three conditions for flipping it.
+
+**Why this is not a retreat.** The fifth entry today argued that a flag should
+cost the narrative rather than the morning, and made it so. It never asked how
+often a flag would fire, and the answer, measured rather than guessed, is every
+morning: all three archived reports flag, thirty times between them. A guard
+that removes the narrative from every morning is not a guard being strict, it
+is a guard that has been mispriced twice, and the second mispricing is the one
+that gets it deleted. Warn mode is the price the evidence supports until the
+provocation is gone.
+
+**Why warn is the better half of the telemetry, not just the cheaper one.**
+The flag log exists so the word list is tuned on data. A log filling under the
+current template records which words fire, on which instructions, and how
+often. A log filling after T2, T3, T15 and T16 are resolved would record only
+that the remainder is quiet, which answers a question nobody asked. Running the
+guard loudly while the documents still provoke it is the more informative
+experiment, and it happens to be the one that keeps the narrative.
+
+**Why the disclaimer says so.** Warn mode publishes a claim the guard calls
+uncheckable. Saying that on the disclaimer line follows the rule the fallback
+already follows, that a report which degraded quietly is a report lying about
+its own provenance. A published flagged sentence is a quieter degradation than
+the plain table, not a smaller one. It also puts the flag in front of the
+person best placed to judge it on the morning it fired, which is the standing
+difficulty with a log that has to be opened deliberately.
+
+**Why the word list gets one definition rather than four.** Three times in
+three commits the instructions asked for what the guard forbids, and each time
+the guard was right, the instruction was wrong, and nothing said so until a
+report was already written. The watchlist headers had this exact failure and it
+was closed by a claim asserting every source agrees, not by anyone resolving to
+be careful. So the tuples in analyst.py are the definition and rule 13's
+enumeration, the template's wording and the fallback's prose are all checked
+against them. The claim carries no copy of the list, because a fixture with its
+own copy is a fourth place to drift, which is how three of the four watchlist
+header fixtures came to be wrong for as long as they existed.
+
+**Why backticks are the exemption and nothing else is.** These documents have
+to teach a phrasing by exhibiting it. An exemption by line number would rot,
+one by keyword would be argued about, and one by judgment would not be
+mechanical. Backticks already mean "this is text I am showing you, not text I
+am saying", they are visible to a reader and to a scanner alike, and a specimen
+that will not fit on one line is a specimen that wants shortening.
+
+**Why the instruction scan reads paragraphs where the report scan reads lines.**
+Not a difference of principle. The instruction files are hand wrapped, so a
+banned word and its set word land on different lines routinely and a
+line-at-a-time scan reads past the pair; prompt_analyst.md had exactly that in
+its own text. Model output wraps nowhere, so the report scan does not need it,
+and changing a live guard's behaviour in the same commit that changes its
+enforcement setting would have made tomorrow's flag count uninterpretable. That
+asymmetry is recorded rather than defended: if a model ever hand wraps its
+prose, the report scan needs the same treatment.
+
+**What was not decided.** T2, T3, T15, T16, P1 and P2. The rewording removed
+the banned words from those instructions without answering whether the
+instructions should exist. "name the candidates whose pm_rvol is null" asks for
+precisely the list "name every candidate whose pm_rvol is null" asked for, and
+the empty case still invites a sentence about the whole set, which is why warn
+mode is needed and why resolving them is the first condition on the switch.

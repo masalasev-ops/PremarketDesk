@@ -150,10 +150,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"  raised {summary['raised']}, judged {summary['judged']}, "
           f"pending {summary['pending']}")
     outcomes = summary["by_outcome"]
-    print(f"  cost: {outcomes.get('regenerated', 0)} cleared by a regeneration, "
+    print(f"  cost: {outcomes.get('warned', 0)} published under warn mode, "
+          f"{outcomes.get('regenerated', 0)} cleared by a regeneration, "
           f"{outcomes.get('fell_back', 0)} took the morning's narrative with them"
           + (f", {outcomes['unrecorded']} raised before outcomes were recorded"
              if outcomes.get("unrecorded") else ""))
+    if outcomes.get("warned") and not outcomes.get("fell_back"):
+        print("  Every flag so far was published rather than acted on, which is "
+              "what warn mode means. See CRITERIA analyst.quantifier_guard for "
+              "the three things that have to be true before it enforces.")
     if summary["false_positive_rate"] is None:
         print("  false positive rate: NOT MEASURABLE, nothing judged yet. "
               "The rate is not an estimate until this says otherwise.")
