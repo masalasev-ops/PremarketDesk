@@ -15,6 +15,72 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, sixth: the run history closes the restart question, and the probe is repointed at off exchange volume
+
+### Reading the collector's own history first, because it cost nothing
+
+Two records, and they cover different sessions. job-status.jsonl was born at
+12:24 on 2026-08-14, hours after that morning's window closed, and the collector
+step was not wrapped in it until 2026-08-15, so there is no job_status record for
+the collector on either 2026-08-13 or 2026-08-14 and there cannot be one. The
+collector's own stats sidecar does cover them, and neither of those mornings was
+refused, so nothing is missing from what it recorded.
+
+| session | runs | non zero exits | refusals | window covered |
+| --- | ---: | ---: | ---: | --- |
+| 2026-08-14 | 1 (sidecar) | not recorded | none | one connection, finished 09:25:00 |
+| 2026-08-17 | 1 | 0 | 0 | 07:20:01 to 09:25:00, one connection, no reconnect |
+| 2026-08-18 | 2 | 1 | 1 | 07:20:02 to 08:50:51 REFUSED, then 08:55:09 to 09:25:00 |
+| 2026-08-19 | 2 | 1 | 1 | 08:16:51 to 08:35:28 REFUSED, then 08:37:14 to 09:25:00 |
+
+Neither morning the volume comparison rests on was interrupted. 2026-08-17 is a
+single unbroken run and carries the 88.43% shortfall; 2026-08-14 is a single
+unbroken run and carries the reading that looked right. And a refusal does not
+move the number: 2026-08-18 was refused and restarted and sits at 90.05% against
+2026-08-17's uninterrupted 88.43%, a point and a half apart.
+
+The restart question is closed, independently of the probe, and it agrees with
+the probe.
+
+### Two things the history exposed
+
+2026-08-13 is not a premarket session. Its bars run 13:32 to 20:00, regular and
+after hours trade, and its three sidecar records are evening runs. Its 1,574
+recorded messages also cannot have produced its 270,086 trades, so whatever run
+wrote most of its bars recorded no stats at all. It has been sitting in the
+comparison tables as though it were a morning.
+
+And the vendor's replay is in every session before the guard landed: 2026-08-17's
+first bar is stamped 06:26, an hour before the collector subscribed, and
+2026-08-18's is stamped 15:59 of the previous afternoon.
+
+### The probe now asks the off exchange question first
+
+The collector reads s, p, v, t, dp and ms off a trade message and nothing else.
+It reads no condition code of any kind, its only off exchange signal is the dp
+boolean, and dp has never once been true in any bar the project has written.
+
+The probe reports three numbers per symbol now: total messages, messages the
+collector's own rule would call an off exchange print, and the vendor's figure
+for the same minutes. Plus a census of every key the feed sends, split into the
+six the collector reads and everything it ignores, and every code-like value
+with a count, so a code the parser has never heard of appears as itself rather
+than as a missing number.
+
+The third number is vendor SHARES, not trade count. EODHD's 1m bar is timestamp,
+gmtoffset, datetime, open, high, low, close and volume: it publishes no trade
+count, so there is nothing to compare a message count against, and the tool says
+so in its own output rather than substituting quietly.
+
+It is a separate command, `--compare FILE`, because the vendor does not publish a
+session until it is over and the probe runs premarket. That pass costs one
+intraday call per watched symbol and is the only quota this tool has ever spent;
+the bat file's claim that it spends none is corrected to match.
+
+A probe result written before the census carries no census key, and reporting
+that absence as "the feed sent no codes" would be this project's own recurring
+mistake made by the tool built to catch it. It prints as NOT MEASURED.
+
 ## 2026-08-19, fifth: five ways a known gap reached the reader as nothing at all
 
 Twenty agents read runs/2026-08-19/report.md against its own packet, each

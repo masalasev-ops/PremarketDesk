@@ -469,3 +469,145 @@ explanation, because a venue subset cannot deliver more than the whole.
 The rotation bands stay blocked. The delivery gate data/UNVERIFIED stays where it
 is. What has changed is that the fix under consideration is no longer
 "subscribe to fewer names": the probe says that would buy nothing.
+
+
+# The run history behind every reading above, 2026-08-19
+
+Everything above compares volumes without ever asking how many collector runs
+produced them. A morning that was refused and restarted covers its window in two
+pieces with a gap between, and that alone could account for a shortfall. Two
+independent records answer it, and they disagree about which sessions they can
+speak for.
+
+## What each source can and cannot say
+
+data/job-status.jsonl was born 2026-08-14 at 12:24, hours after that morning's
+window closed, and its first record of any kind is the calendar guard. The
+collector step was not wrapped in it until 2026-08-15. **There is therefore no
+job_status record for the collector on 2026-08-13 or 2026-08-14, and there
+cannot be one.** The question this section was asked to answer assumed both
+mornings were covered; only 2026-08-17 is.
+
+data/premarket/{day}-stats.jsonl is the collector's own sidecar, one line per
+run, and it does cover both. It is untouched by the two defects fixed on
+2026-08-19: a refused run wrote only its marker, and neither of these mornings
+was refused, so nothing is missing from what it recorded here.
+
+## The history
+
+| session | runs | non zero exits | refusals | window each run covered |
+| --- | ---: | ---: | ---: | --- |
+| 2026-08-13 | 3 (sidecar) | not recorded | none recorded | evening runs finishing 20:15, 20:35, 20:56 |
+| 2026-08-14 | 1 (sidecar) | not recorded | none recorded | one connection, finished 09:25:00 |
+| 2026-08-17 | 1 | 0 | 0 | 07:20:01 to 09:25:00, 7,498s, one connection, no reconnect |
+| 2026-08-18 | 2 | 1 | 1 | 07:20:02 to 08:50:51 REFUSED, then 08:55:09 to 09:25:00 |
+| 2026-08-19 | 2 | 1 | 1 | 08:16:51 to 08:35:28 REFUSED, then 08:37:14 to 09:25:00 |
+
+And what the tape itself covered, read from the bars rather than from either
+record:
+
+| session | bars | symbols | first bar | last bar | trades | shares |
+| --- | ---: | ---: | --- | --- | ---: | ---: |
+| 2026-08-13 | 1,810 | 38 | 13:32 | 20:00 | 270,086 | 52,063,236 |
+| 2026-08-14 | 2,155 | 38 | 07:20 | 09:24 | 191,194 | 26,333,845 |
+| 2026-08-17 | 3,102 | 50 | 06:26 | 09:24 | 33,393 | 1,310,492 |
+| 2026-08-18 | 3,231 | 50 | 15:59 | 09:25 | 36,444 | 1,592,611 |
+| 2026-08-19 | 1,995 | 73 | 07:21 | 09:24 | 54,349 | 2,319,288 |
+
+## What the history settles
+
+**Neither morning the comparison rests on was interrupted.** 2026-08-17 is a
+single run, exit zero, one connection, no reconnect, covering 07:20:01 to
+09:25:00 without a gap, and it carries the 88.43% shortfall. 2026-08-14 is a
+single run on its own sidecar, one connection, zero reconnects, and it carries
+the reading that looked right. A refusal or a restart cannot account for the
+difference between them because neither of them had one.
+
+**A refusal does not move the shortfall.** 2026-08-18 was refused at 08:50:51
+and restarted, and its median absolute difference is 90.05% against 88.43% for
+the uninterrupted 2026-08-17. Two mornings at fifty subscriptions, one clean and
+one broken in exactly the way that was supposed to explain the gap, differ by
+about a point and a half.
+
+So by the test this section was set: both were single clean runs, the
+subscription hypothesis is dead, and the probe carries the whole question. That
+agrees with what the probe measured independently, which is worth having as two
+findings rather than one.
+
+## Two things the history exposes that nothing above accounted for
+
+**2026-08-13 is not a premarket session.** Its bars run 13:32 to 20:00, which is
+regular and after hours trade, and its three sidecar records are evening runs.
+It appears in the table above the way the other mornings do and it is not
+comparable to them. Its 1,574 recorded messages also cannot have produced its
+270,086 trades, so the run that wrote most of its bars recorded no stats at all.
+Any conclusion resting on 2026-08-13 should be re read.
+
+**The replay predates the window guard on 2026-08-17 too.** Its first bar is
+stamped 06:26, an hour before the collector subscribed, and 2026-08-18's is
+stamped 15:59 of the previous afternoon. Both are the vendor's replayed last
+trade per symbol, and both are inside the volumes every reading above is
+computed from. The guard that refuses them landed on 2026-08-18 and proved
+itself on 2026-08-19; every session before that carries them.
+
+The 73 symbols on 2026-08-19 are not an error. Discover reran at 08:21 after the
+outage and the second collector run used the new list, so the day's file is the
+union of two watchlists.
+
+# The next measurement is the off exchange question
+
+The probe answered the cap question and the run history closes the restart
+question, which leaves one hypothesis this document pre registered and never
+tested: that EODHD's trades websocket carries a venue subset while its intraday
+bars are consolidated. If it does, the shortfall is a property to calibrate
+against. If instead the feed delivers off exchange prints and the collector
+discards them, it is a bug, and dark_pool_volume being 0.0 in every bar the
+project has ever written is the symptom.
+
+Those two are distinguishable and the probe now measures them first.
+
+## What the collector recognises today
+
+Read from _handle_message: it takes s, p, v, t, dp and ms off a trade message
+and nothing else. **It reads no condition code of any kind.** Its only off
+exchange signal is the dp boolean, and dp has never once been true: the
+dark_pool_volume column it feeds is 0.0 in every bar of every session file.
+
+That is one fact with two possible causes, and they call for opposite responses.
+
+## What the probe now reports
+
+Per watched symbol, three numbers rather than two: total messages, messages the
+collector's own rule would call an off exchange print, and the vendor's figure
+for the same minutes. Plus a census of every key the feed sent on a trade
+message, split into the six the collector reads and everything it ignores, and
+every code-like value with a count.
+
+The third number is the vendor's SHARES, not its trade count. EODHD's 1m
+intraday bar is timestamp, gmtoffset, datetime, open, high, low, close and
+volume, checked 2026-08-19: it publishes no trade count, so there is nothing to
+compare a message count against. The substitution is named in the tool's own
+output rather than made quietly.
+
+It is also a separate command. The vendor does not publish a session until it is
+over, and the probe runs premarket, so its own window is unreadable at the moment
+it finishes. `--compare FILE` does the fetch the following session and costs one
+intraday call per watched symbol, which is the only quota this tool has ever
+spent.
+
+## How the answer reads
+
+- No flagged print, no ignored code-like key, and a socket share far below the
+  vendor: the trades stream omits off exchange volume. Structural, and no change
+  to the collector reaches it. The shortfall becomes a calibration.
+- A flagged print, or a code the parser ignores, together with a socket share
+  far below the vendor: the feed delivers the volume and the parser drops it.
+  That is a bug, dark_pool_volume empty everywhere is its fingerprint, and it is
+  fixable.
+- A socket share near the vendor's: there was never anything to find and every
+  reading above needs re examining, starting with 2026-08-13.
+
+One guard on all of it. A probe result written before this census carries no
+census key, and a report that read that absence as "the feed sent nothing" would
+be this document's own recurring mistake made by the tool built to catch it. The
+absence prints as NOT MEASURED.

@@ -2277,3 +2277,44 @@ commit after the first week of warn mode counts. Nothing in this pass touched
 it. And no check exists for the general class these five belong to, which is a
 correct number with a wrong account of itself. Every one of them was found by
 reading, and the next one will be too.
+
+
+## 2026-08-19, sixth: read the history before spending another morning
+
+**The decision.** The collector's run history is read before the probe runs
+again, and the probe's first measurement becomes the off exchange question
+rather than a repeat of the cap question.
+
+**Why the history came first.** It costs nothing and it changes what the probe
+is for. Had either morning been refused or restarted, the volume disagreement
+would have had a mundane explanation already in hand and tomorrow's probe would
+have been confirming rather than discovering. Both were single unbroken runs, so
+the probe carries the whole question, and that is worth knowing before spending a
+premarket window on it rather than after.
+
+**Why the answer is trusted despite half the records not existing.** job_status
+cannot speak for 2026-08-14: it was born that afternoon. The collector's own
+sidecar can, it is a different file written by different code, and the two
+defects fixed earlier today cannot have touched it here because neither morning
+was refused. Where the two sources overlap, on 2026-08-17, they agree. Saying
+"no record exists" is the honest answer to half the question and the sidecar is
+the honest answer to the other half; neither is a guess.
+
+**Why the vendor comparison is a separate command.** The probe runs premarket
+and the vendor does not publish a session until it is over, so a fetch from
+inside the probe would return zero rows every time and quietly print a shortfall
+of one hundred percent. The same thing already happened by hand at 10:05 today.
+A command that must be run the following session is a worse workflow and a
+correct measurement.
+
+**Why the census records values rather than judging them.** The obvious
+alternative was a list of off exchange condition codes and a count of messages
+matching it. That list would have been written from the vendor's documentation
+rather than from the feed, which is exactly how the refusal guard was written
+and exactly why it was wrong for a fortnight. Every code-like value the feed
+sends is counted and printed with whether the parser reads it, and the judgement
+is left to a reader who can see the codes.
+
+**What has not been decided.** Whether dark_pool_volume is a parser bug or a
+column for something the feed never sends. That is the measurement, and it is one
+premarket run away.

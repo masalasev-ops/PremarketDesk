@@ -19,8 +19,12 @@ rem reconnected one second after a drop and was refused, and a restart 105
 rem seconds later was not. Four cycles at two minutes plus the settles is about
 rem 28 minutes.
 rem
-rem It spends NO EODHD quota. Measured 2026-08-13: websocket connections,
-rem subscribe frames and reconnects moved the account counter by exactly zero.
+rem The probe run spends NO EODHD quota. Measured 2026-08-13: websocket
+rem connections, subscribe frames and reconnects moved the account counter by
+rem exactly zero. Its --compare pass is a different matter and spends one
+rem intraday call per watched symbol, which is why it is a separate command
+rem run by hand the session after: the vendor does not publish a session until
+rem it is over, so a fetch from inside this job would buy nothing.
 rem
 rem Registered as a single one time trigger. Delete the task and this file once
 rem the question is answered:

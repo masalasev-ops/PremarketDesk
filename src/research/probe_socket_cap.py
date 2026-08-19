@@ -49,8 +49,10 @@ subscribe frames and reconnects moved the account counter by exactly zero.
 from __future__ import annotations
 
 import argparse
+import collections
 import datetime as dt
 import json
+import pathlib
 import ssl
 import sys
 import time
@@ -64,6 +66,48 @@ from core import ettime
 from collect import collect_premarket as collector
 
 _CRIT = criteria.load()
+
+
+# Every key the collector's own _handle_message reads off a trade message.
+# Written here rather than imported because the point of the census is to
+# compare what the parser looks at against what the feed sends, and a list
+# derived from the parser at runtime would agree with it by construction.
+# Checked against src/collect/collect_premarket.py _handle_message on
+# 2026-08-19: it reads s, p, v, t, dp and ms, and nothing else.
+COLLECTOR_READS = ("s", "p", "v", "t", "dp", "ms")
+
+# The one off exchange signal the collector currently understands. It has been
+# false in every bar the project has ever written: dark_pool_volume is 0.0 in
+# every row of every session file. Either the feed never sets it or it sets
+# something else, and those are the two answers this census separates.
+COLLECTOR_OFF_EXCHANGE_KEY = "dp"
+
+# Keys whose values are small enough to tabulate in full. A condition code
+# list, an exchange id and a market status are all short; a price is not.
+CENSUS_KEYS = ("c", "cond", "conditions", "x", "e", "dp", "ms", "z", "trf", "trfi")
+
+
+def _census_values(message: dict[str, Any]) -> list[tuple[str, str]]:
+    """Every (key, value) worth counting on one trade message.
+
+    A list valued key contributes one entry per element, because a message
+    carrying conditions [12, 37] is evidence about 12 and about 37 separately
+    and folding it to the string "[12, 37]" loses exactly the fact being
+    looked for.
+    """
+    out: list[tuple[str, str]] = []
+    for key in CENSUS_KEYS:
+        if key not in message:
+            continue
+        value = message[key]
+        if isinstance(value, (list, tuple)):
+            if not value:
+                out.append((key, "[]"))
+            for item in value:
+                out.append((key, str(item)))
+        else:
+            out.append((key, str(value)))
+    return out
 
 
 def filler_symbols(watch: list[str], want: int) -> list[str]:
@@ -96,6 +140,15 @@ def run_arm(symbols: list[str], watch: set[str], seconds: float) -> dict[str, An
     counts: dict[str, int] = {s: 0 for s in watch}
     volume: dict[str, float] = {s: 0.0 for s in watch}
     replayed: dict[str, int] = {s: 0 for s in watch}
+    # The off exchange question, measured rather than assumed. flagged counts
+    # messages the collector's own rule would call a dark pool print, and the
+    # census records every value of every code-like key the feed sends, so a
+    # code the parser has never heard of shows up as itself rather than as a
+    # missing number.
+    flagged: dict[str, int] = {s: 0 for s in watch}
+    flagged_volume: dict[str, float] = {s: 0.0 for s in watch}
+    census: dict[str, collections.Counter] = {s: collections.Counter() for s in watch}
+    keys_seen: collections.Counter = collections.Counter()
     status: list[dict[str, Any]] = []
     total = 0
 
@@ -171,6 +224,12 @@ def run_arm(symbols: list[str], watch: set[str], seconds: float) -> dict[str, An
                 continue
             counts[symbol] += 1
             volume[symbol] += size
+            keys_seen.update(message.keys())
+            for key, value in _census_values(message):
+                census[symbol][f"{key}={value}"] += 1
+            if message.get(COLLECTOR_OFF_EXCHANGE_KEY):
+                flagged[symbol] += 1
+                flagged_volume[symbol] += size
     finally:
         try:
             socket.close()
@@ -185,8 +244,149 @@ def run_arm(symbols: list[str], watch: set[str], seconds: float) -> dict[str, An
         "counts": counts,
         "volume": volume,
         "replayed": replayed,
+        "off_exchange": flagged,
+        "off_exchange_volume": flagged_volume,
+        "census": {s: dict(c) for s, c in census.items()},
+        "keys_seen": dict(keys_seen),
         "status": status,
     }
+
+
+def _report_off_exchange(runs: list[dict[str, Any]], watch: list[str]) -> None:
+    """Two of the three numbers, and the census that says what the third means.
+
+    The third number the question wants is the vendor's trade COUNT for the
+    same minutes, and EODHD's 1m intraday bars do not carry one: a bar is
+    timestamp, gmtoffset, datetime, open, high, low, close and volume, checked
+    2026-08-19. Volume is the closest thing the vendor publishes and it is what
+    compare_to_vendor() uses, with the substitution named rather than quietly
+    made.
+    """
+    live = [r for r in runs if not r.get("refused")]
+    print("")
+    print("Off exchange prints the collector's own rule would recognise")
+    print(f"  {'symbol':<10} {'messages':>10} {'flagged':>9} {'flagged %':>10} "
+          f"{'shares':>14} {'flagged shares':>15}")
+    for symbol in watch:
+        msgs = sum(r["counts"][symbol] for r in live)
+        scored = [r for r in live if "off_exchange" in r]
+        flag = sum(r["off_exchange"].get(symbol, 0) for r in scored)
+        vol = sum(r["volume"][symbol] for r in live)
+        fvol = sum(r["off_exchange_volume"].get(symbol, 0.0)
+                   for r in live if "off_exchange_volume" in r)
+        if not scored:
+            print(f"  {symbol:<10} {msgs:>10,} {'n/a':>9} {'n/a':>10} "
+                  f"{vol:>14,.0f} {'n/a':>15}")
+            continue
+        pct = (flag / msgs * 100.0) if msgs else float("nan")
+        print(f"  {symbol:<10} {msgs:>10,} {flag:>9,} {pct:>9.2f}% "
+              f"{vol:>14,.0f} {fvol:>15,.0f}")
+
+    keys: collections.Counter = collections.Counter()
+    counted = [run for run in live if "keys_seen" in run]
+    for run in counted:
+        keys.update(run["keys_seen"])
+    read = [k for k in keys if k in COLLECTOR_READS]
+    ignored = [k for k in keys if k not in COLLECTOR_READS]
+    print("")
+    print("Keys the feed sent on trade messages")
+    if not counted:
+        print("  NOT MEASURED, this result predates the key census.")
+    else:
+        print(f"  read by the collector : {', '.join(sorted(read)) or 'none'}")
+        print(f"  IGNORED by the collector: {', '.join(sorted(ignored)) or 'none'}")
+
+    # A run recorded before the census existed carries no census key at all,
+    # and that is not the same answer as a census that found nothing. Reading
+    # it as "the feed sent no codes" would be this tool making the exact
+    # mistake it was built to detect, so the absence is reported as absence.
+    measured = [run for run in live if "census" in run]
+    codes: collections.Counter = collections.Counter()
+    for run in measured:
+        for per_symbol in run["census"].values():
+            codes.update(per_symbol)
+    print("")
+    print("Every code-like value the feed sent, with counts")
+    if not measured:
+        print("  NOT MEASURED. This probe result was written before the census "
+              "existed, so it says nothing about what the feed sends. Rerun the "
+              "probe to answer the question.")
+    elif not codes:
+        print("  NONE. The feed sent no condition code, no exchange id and no "
+              "dark pool flag on any trade message. If the vendor volume for "
+              "these minutes is far above the socket volume, the shortfall is "
+              "structural: the trades stream is a subset of the consolidated "
+              "tape and no change to the collector's parser reaches it.")
+    else:
+        for value, count in codes.most_common(40):
+            key = value.split("=", 1)[0]
+            mark = "  <- read" if key in COLLECTOR_READS else "  <- IGNORED"
+            print(f"  {value:<24} {count:>9,}{mark}")
+        print("")
+        print("  A code under IGNORED that marks an off exchange print is the "
+              "fixable case: the feed carries the volume and the parser drops "
+              "it, which is why dark_pool_volume is empty in every bar.")
+
+
+def compare_to_vendor(path: pathlib.Path) -> int:
+    """The third number: what EODHD's own bars say those minutes traded.
+
+    Separate from the probe run because the probe runs premarket and the vendor
+    has not published the current session by the time it finishes. This costs
+    one intraday call per watched symbol, which is the only quota this tool has
+    ever spent.
+    """
+    from core import eodhd
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    runs = [r for r in payload["runs"] if not r.get("refused")]
+    if not runs:
+        print("probe: every arm was refused, so there is nothing to compare.")
+        return 1
+    starts = [dt.datetime.fromisoformat(r["started_at"]) for r in runs]
+    ends = [s + dt.timedelta(seconds=r["seconds"]) for s, r in zip(starts, runs)]
+    api = eodhd.client()
+
+    print(f"probe: comparing {path.name} against EODHD 1m bars for "
+          f"{ettime.hhmm(min(starts))} to {ettime.hhmm(max(ends))} ET")
+    print("probe: the vendor bar carries no trade count, only volume, so the "
+          "third number is vendor SHARES for the same minutes. The substitution "
+          "is the vendor's, not this tool's.")
+    print("")
+    print(f"  {'symbol':<10} {'socket msgs':>12} {'flagged':>9} "
+          f"{'socket shares':>14} {'vendor shares':>14} {'socket %':>10}")
+    for symbol in payload["watch"]:
+        rows, error = api.intraday(symbol, min(starts) - dt.timedelta(minutes=2),
+                                   max(ends) + dt.timedelta(minutes=2), "1m")
+        if error or not rows:
+            print(f"  {symbol:<10} vendor bars unavailable ({error or 'no rows'}). "
+                  "EODHD publishes a session after it closes.")
+            continue
+        bars = {int(r["timestamp"]): float(r.get("volume") or 0.0)
+                for r in rows if r.get("timestamp") is not None}
+        msgs = flag = 0
+        socket_shares = vendor_shares = 0.0
+        for run, start, end in zip(runs, starts, ends):
+            msgs += run["counts"].get(symbol, 0)
+            flag += run.get("off_exchange", {}).get(symbol, 0)
+            socket_shares += run["volume"].get(symbol, 0.0)
+            lo, hi = ettime.epoch_s(start), ettime.epoch_s(end)
+            # A minute bar counts when its minute overlaps the arm at all, and
+            # the arm's seconds are what the socket figure covers, so both
+            # sides are totals over the same clock.
+            vendor_shares += sum(v for ts, v in bars.items() if lo - 60 < ts < hi)
+        share = (socket_shares / vendor_shares * 100.0) if vendor_shares else float("nan")
+        print(f"  {symbol:<10} {msgs:>12,} {flag:>9,} {socket_shares:>14,.0f} "
+              f"{vendor_shares:>14,.0f} {share:>9.2f}%")
+    print("")
+    print("probe: a socket share near 100% with no flagged prints means the feed "
+          "and the tape agree and there was never anything to find. A socket "
+          "share far below 100% with no flagged prints and no ignored condition "
+          "code means the trades stream omits off exchange volume, which no "
+          "collector change reaches. A socket share far below 100% WITH flagged "
+          "prints or an ignored code means the parser is dropping volume the "
+          "feed delivered, which is a bug and is fixable.")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -210,7 +410,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--watch", default=None,
                         help="Comma separated watch set. Defaults to the CRITERIA "
                              "context symbols, which trade every premarket.")
+    parser.add_argument("--compare", default=None, metavar="FILE",
+                        help="Skip the socket entirely and compare an existing "
+                             "probe result against EODHD's 1m bars for the same "
+                             "minutes. Run this the session AFTER the probe, "
+                             "because the vendor does not publish a session "
+                             "until it is over. Name a file in data/ or a path.")
     args = parser.parse_args(argv)
+
+    if args.compare:
+        target = pathlib.Path(args.compare)
+        if not target.exists():
+            target = config.DATA_DIR / args.compare
+        if not target.exists():
+            print(f"probe: no such probe result: {args.compare}")
+            return 1
+        return compare_to_vendor(target)
 
     watch = ([collector._full(s) for s in args.watch.split(",") if s.strip()]
              if args.watch else
@@ -287,6 +502,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     print("")
+    _report_off_exchange(runs, watch)
+
     print("Per symbol messages per second, watch set only, A against B")
     print(f"  {'symbol':<10} {'A msg/s':>10} {'B msg/s':>10} {'B/A':>8} "
           f"{'A shares/s':>12} {'B shares/s':>12}")
@@ -308,6 +525,13 @@ def main(argv: list[str] | None = None) -> int:
 
     payload = {
         "generated_at": ettime.stamp(ettime.now_et()),
+        # The window, so the vendor comparison can be run once EODHD has
+        # published these minutes. It has not published the current session at
+        # the time any premarket run of this probe finishes, which is why the
+        # third number is a separate command rather than a third column here.
+        "window_start_et": min((r["started_at"] for r in runs), default=None),
+        "window_end_et": ettime.stamp(ettime.now_et()),
+        "collector_reads": list(COLLECTOR_READS),
         "cap": cap,
         "watch": watch,
         "arm_a_subscribed": len(small),
@@ -333,6 +557,9 @@ def main(argv: list[str] | None = None) -> int:
               "does, and the fix is to subscribe to fewer symbols or to split "
               "the list across connections.")
     print(f"probe: wrote {out}")
+    print("probe: the vendor side of the off exchange question needs EODHD's own "
+          "1m bars for these minutes, which are not published until the session "
+          f"is over. Run:  python -m research.probe_socket_cap --compare {out.name}")
     return 0
 
 
