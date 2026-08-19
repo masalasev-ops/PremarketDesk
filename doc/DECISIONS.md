@@ -2373,3 +2373,41 @@ and 12.7x on TLT against the vendor's own bars, replay does not account for it,
 no collector code change landed between that session and the next, and the
 subscription cap was measured innocent. It has no candidate mechanism, and it
 should not be quietly dropped for that reason.
+
+
+## 2026-08-19, eighth: empty one table rather than start again
+
+**The decision.** The picks table is emptied and nothing else is. The owner
+chose this over quarantining the contaminated rows in place, having been shown
+what each option costs.
+
+**Why a wider purge was argued against.** The question asked was whether the
+revisions of the last week had left the stored data untrustworthy. Measured
+rather than assumed, the answer was that they had not, except in one table. The
+baseline denominators come from EODHD intraday calls and gap_stats is end of day
+data, so neither can carry a collector defect. The prices in picks are
+corroborated: pm_source_disagreement is 0.0 on every backfilled row. Only volume
+was ever wrong, and only picks stores it.
+
+**Why the contamination was real anyway.** pm_rvol reached 882,728 on
+2026-08-14, with eleven of twelve rows above 10 and outcomes already filled
+against them. An earlier reading in this session that the volume component had
+never fired was true of 2026-08-19 alone and wrong about the table, and it is
+corrected here rather than left standing.
+
+**Why the rows were exported before deletion.** They are the evidence for an
+over count that has no explanation, and a file cannot be fitted against while a
+table can. The export lives in data/, which is gitignored, and deleting it is
+one command. This is not a hedge against the decision: the table is empty, which
+is what was asked for.
+
+**What this costs, stated rather than discovered later.** discover.py seeds a
+pool tier from prior picks. It now returns its designed empty state with
+sessions_considered 0, and the recent runner tier will be thin for
+recent_runner_lookback sessions. That is a real thinning of tomorrow's
+watchlist, it is visible in the packet, and it repairs itself.
+
+**What was not purged and why.** The bar files, packets, reports, archive and
+job-status.jsonl. Each is currently load bearing evidence in an open
+investigation, and none of them feeds a threshold fit. Tidiness is not a reason
+to delete the only record of a defect nobody has explained.

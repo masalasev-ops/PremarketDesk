@@ -15,6 +15,66 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-19, eighth: the picks table is emptied, and nothing else is
+
+### What was contaminated, measured before deciding
+
+The premarket volume question reaches exactly one stored table. Two others were
+checked and do not touch it: baseline, 130 rows, is built from EODHD intraday
+calls rather than from collector bars, and gap_stats, 10,997 rows, is end of day
+data. Neither has ever seen a collector bar.
+
+picks did, through pm_rvol, pm_float_rotation and the two score components they
+feed. All 51 rows:
+
+| session | picks | day eligible | swing eligible | pm_rvol above 10 | worst pm_rvol |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-08-13 | 13 | 0 | 3 | 0 | all null |
+| 2026-08-14 | 12 | 0 | 0 | 11 | 882,728.9362 |
+| 2026-08-17 | 2 | 0 | 0 | 0 | 0.0724 |
+| 2026-08-18 | 12 | 0 | 0 | 2 | 20.4751 |
+| 2026-08-19 | 12 | 0 | 2 | 0 | 0.7418 |
+
+Eleven of twelve picks on 2026-08-14 carry an impossible relative volume, six of
+them above 100 and one at 882,728, which is the over counting session reaching a
+stored decision. Their outcomes were filled on 2026-08-17, so any threshold fit
+run today would have used those numbers as data.
+
+Two things bound the damage. day_eligible is 0 on every session the project has
+ever run, so the RVOL screen has never admitted a name and no false pick was
+made. And pm_source_disagreement is 0.0 on every backfilled row: the collector's
+premarket PRICES agree with the vendor to the cent, 19.5984 against 19.60 and
+6.0002 against 6.09, so only volume was ever in question.
+
+### What was done
+
+picks is emptied, 51 rows to 0. Nothing else is touched: the bar files, the
+packets, the reports, the archive, job-status.jsonl, baseline and gap_stats all
+stand.
+
+The rows were written to data/purged-picks-2026-08-19.jsonl first. They are the
+evidence for an over count that still has no explanation, and the export is a
+file rather than a table so it cannot reach a fit. Deleting it is one command
+and nothing depends on it.
+
+### The visible consequence
+
+discover.py seeds one pool tier from prior picks, decayed by how many sessions
+ago they appeared. With the table empty that source now returns
+fetched_and_empty with sessions_considered 0, which is its designed honest empty
+state rather than a failure, and the packet records it as such. The recent
+runner tier will be thin until picks rebuild over recent_runner_lookback
+sessions.
+
+### What was deliberately not purged
+
+The bar files are the only record of the 2026-08-14 over count, which is the one
+open question with no candidate mechanism left. The packets are what the
+verification pass read. job-status.jsonl is what closed the restart question,
+and its GAPS, no collector records before 2026-08-15, were themselves a finding.
+Deleting any of them would end an investigation that is still live, to tidy data
+that is already quarantined behind data/UNVERIFIED.
+
 ## 2026-08-19, seventh: the replay is measured and is not the mechanism, and 2026-08-13 leaves the tables
 
 ### The replay, quantified before the probe rather than after
