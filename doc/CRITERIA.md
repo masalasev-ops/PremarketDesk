@@ -704,8 +704,41 @@ percent of stop_ref, so a negative adverse excursion means the stop reference
 was breached by that much. Both are measurements of what happened near the
 reference levels, not a simulation of any trade.
 
+max_adjustment_drift_pct      = 0.1        # SEED, not measured. See the price units note below.
 horizon_sessions_short        = 1
 horizon_sessions_long         = 5
+
+### The price units note
+
+The outcome fill measures mfe_pct, mae_pct and pm_high_broke_next_day by
+subtracting entry_ref, stop_ref and pm_high, the collector's raw live premarket
+levels from the pick date, from the high and low of the next session's end of
+day bar. A split, reverse split or spinoff whose ex date falls on that session
+leaves the two sides in different price units under either vendor adjustment
+convention, because retro-adjustment rewrites only the bars dated BEFORE the ex
+date and the next session's bar is post event either way. A 4-for-1 forward
+split writes both excursions near -75 percent with pm_high_broke_next_day 0,
+and a 1-for-10 reverse split near +900 percent, unflagged and indistinguishable
+from a real excursion, into the table this file says its thresholds will one day
+be recalibrated against. The screen's price floor is only "> 3", so a reverse
+split candidate is not an exotic case.
+
+The vendor's own record answers it. close divided by adjusted_close is flat
+between corporate actions and steps at each one, so that ratio moving between
+the pick date and the next session says an action has its ex date in between.
+Past this many percent the row is refused with the reason recorded, the way the
+module already refuses a pick the session calendar cannot date, rather than
+rescaled: entry_ref, stop_ref and pm_high are raw collector levels with no
+adjusted counterpart, and a rescaled excursion would be a computed number in a
+table meant to hold measured ones.
+
+0.1 percent is a seed fitted to nothing. It sits above the rounding noise of two
+four decimal vendor prices, which is a few hundredths of a percent on the
+smallest name the screen admits, and below any corporate action. An ordinary
+dividend ex date also moves the ratio and is also refused, which costs roughly
+one row in sixty for a dividend paying name and is the safe direction: a
+dividend drop is a mechanical adjustment rather than the market moving against a
+reference level. The header of this file applies.
 
 ## Scan
 
@@ -1053,10 +1086,11 @@ each PremarketDesk job fired and what it returned, reads the job's own dated
 log for the final step marker, and reruns what is safe to rerun. Safe means
 idempotent: the morning chain and the nightly can always be rerun, the
 collector may only be restarted when no collector is alive (two live
-collectors would write duplicate minutes), discover is only rerun before the
-collector window opens (a later rewrite would desync the watchlist from what
-the collector actually subscribed to), and the universe is rebuilt on a
-weekday only when the Sunday build was missed. Each job gets at most
+collectors would write duplicate minutes), discover is rerun whenever it did
+not finish and the collector has not yet written its subscription list, at
+any hour, because that file is the only thing a rewritten watchlist could
+desync and the clock was only ever a proxy for it, and the universe is
+rebuilt on a weekday only when the Sunday build was missed. Each job gets at most
 max_reruns_per_job_per_day so a hard failure cannot loop.
 
 discover_due                  = 07:25      # discover plus baseline warm should be done by here
@@ -1067,6 +1101,35 @@ collector_stale_after_s       = 180        # no bar file write for this long ins
 universe_rerun_after_days     = 8          # a fresh weekly build is 7 days old at most
 max_reruns_per_job_per_day    = 1
 flag_backlog_after_days       = 7          # an unjudged quantifier flag older than this is a backlog rather than a fresh flag
+job_log_stale_after_s         = 1200       # no write to a job's dated log for this long means the job is not alive. See the liveness note below.
+
+### The liveness note
+
+The watchdog reruns what is idempotent, and idempotent is not the same as safe
+to run twice at once. Until 2026-08-20 the morning chain and the nightly were
+rerun on the absence of a finish marker in the dated log alone, and a job that
+started seconds ago has not written that marker, so it read exactly like one
+that died. A late machine wake is what fires it: every task carries
+-StartWhenAvailable, and two catching up within 0.15 seconds of each other is
+already on record from 2026-08-19.
+
+_job_alive now asks the same two questions of every job that _collector_alive
+already asked of the collector. Does Task Scheduler say the task is running,
+which is Status Running or Last Result 267009, the code Scheduler returns while
+a task is still going and which the watchdog used to read as a failure. And was
+the job's dated log written to inside this many seconds.
+
+The number has to clear the longest silence a healthy job can produce, and that
+is the analyst step: cmd writes a step marker at each boundary but nothing
+touches the log while one python step runs, so the worst case is [Analyst]
+max_attempts times timeout_s, 1,074 seconds. 1,200 leaves two minutes over it.
+Measured within-run gaps to compare it against: the morning chain's worst is
+232.1 seconds on 2026-08-20 and 398.4 on 2026-08-13, discover's is 33.0 and the
+nightly's is 62.0.
+
+It does not delay a rerun past its window. The monitor repeats every thirty
+minutes, which is longer than this, so a job that really died at 08:46 reads as
+alive at the 08:55 pass and as dead at 09:25, still inside rerun_chain_until.
 
 ### The flag backlog note
 
@@ -1217,6 +1280,44 @@ Maps an EODHD news tag, lowercased, onto one of the classes above. Add lines
 here as you see which tags actually turn up in the feed. A tag that is not
 listed contributes nothing, and a name whose only news carries unlisted tags
 still counts as catalyst_found true with class none.
+
+max_tags_for_one_company      = 20         # SEED. See the article scope note below.
+max_candidates_sharing_article = 2         # SEED. See the article scope note below.
+
+### The article scope note
+
+EODHD tags are ARTICLE scoped, not company scoped, so a tag on a multi company
+roundup is a tag about the roundup and not about every name the feed returned
+it for. Until 2026-08-20 classify_catalyst read them the other way, and the
+CNBC piece "Stocks making the biggest moves premarket: Walmart, Coinbase,
+Moderna, Alibaba and more" conferred class earnings, worth 3 of the score's 10
+points, on MSTR, COIN and MARA, none of which was on that morning's calendar.
+Removing those 3 points moves MSTR from 7.0 green to 4.0 yellow and COIN, MARA
+and BLSH from 6.0 yellow to 3.0 red.
+
+So an article's tags classify a name only when the article is about it, and
+breadth is what decides that. Two counts measure breadth, because neither one
+sees the whole thing, and an article has to sit inside both.
+
+The first is the tag count, and it catches a roundup even when the feed handed
+it to a single candidate: that CNBC piece carried 46 tags naming 45 issuers,
+against a maximum of 7 tags on the single company releases the same morning.
+20 sits in the empty stretch between those two figures.
+
+The second catches what the tag count cannot, a roundup tagged by TOPIC rather
+than by issuer. "Biggest stock movers Thursday: Crypto stocks, WOLF, and more"
+carries seven purely topical tags, so nothing about its tag list gives it away,
+and the feed returned it for three of that morning's twelve candidates, one of
+which took class earnings off it. An article the feed hands to more than this
+many of one morning's candidates is not about any one of them. 2 sits where it
+does because two names sharing one genuine story is ordinary and three or more
+is a wire roundup or a sector piece.
+
+The cost of being wrong here is a class withheld rather than a class invented.
+A name whose every article is a roundup comes out class none with
+catalyst_found still true, which says the window was checked and paid nothing,
+where null would say it was never checked. Both numbers are seeds and the
+header of this file applies to them.
 
 tag = earnings : earnings
 tag = earnings report : earnings

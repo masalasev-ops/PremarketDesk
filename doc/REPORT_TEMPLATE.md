@@ -215,15 +215,23 @@ than the denominator and the ratio can only understate. It is not a reading
 that came out low, and a section describing RVOL across the set without that
 word describes a data gap as a quiet tape.
 
-THERE ARE TWO REASONS THE RATIO UNDERSTATES AND THE SECOND IS THE BIGGER ONE.
-The window shortfall above is arithmetic. The packet's collector_volume_check
-block is the other: the numerator comes from the collector's socket and the
-denominator from the vendor's intraday feed, and that block is the measured
-disagreement between those two feeds on identical minutes. Where it is present
-and not stale, give its median_abs_pct, its compared count and the day it was
-taken, and say plainly that every RVOL in this report is understated by about
-that much again. Where it is null or stale, say the feed is unmeasured this
-morning and do not describe an RVOL as merely a window effect.
+THERE ARE TWO REASONS THE RATIO IS WRONG AND ONLY ONE OF THEM HAS A KNOWN SIGN.
+The window shortfall above is arithmetic and can only understate. The packet's
+collector_volume_check block is the other: the numerator comes from the
+collector's socket and the denominator from the vendor's intraday feed, and
+that block is the measured disagreement between those two feeds on identical
+minutes. Where it is present and not stale, give its median_abs_pct, its
+compared count and the day it was taken, then quote its direction_phrase rather
+than composing one. direction is one of under, over, mixed and unknown, and
+only `under` permits the word understated. `over` means the collector recorded
+MORE than the vendor, so the ratio overstates and the window shortfall does not
+cancel it. `mixed` means the typical symbol and the aggregate tape fell on
+opposite sides of the vendor and neither direction may be assumed. `unknown`
+means the reading was written before the check recorded a sign. Where the block
+is null or stale, say the feed is unmeasured this morning and do not describe
+an RVOL as merely a window effect. Where collector_silent is above zero, say
+how many subscribed symbols the check never reached, because compared and
+unavailable do not partition the subscription on their own.
 
 A THIN WINDOW IS A STRONGER FACT THAN A LATE ONE AND GETS ITS OWN WORDS.
 pm_window_starts_late says a window opened late. pm_window_thin says it holds

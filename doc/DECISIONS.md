@@ -846,9 +846,12 @@ sessions. Whether Alpaca's free tier serves that sweep LIVE at 08:30 on a
 weekday is untested, and the whole design rests on it. probe-live-v1 is
 extended on 2026-08-17 to measure it against the live morning.
 [ANSWERED 2026-08-17: it does not. 23 sweeps from 07:30 to 09:15 on a live
-trading morning returned zero bars. See the entry dated 2026-08-17 on the
-free tier. Alpaca is closed as a candidate live source; this paragraph
-stands as the reasoning that was correct when it was written.] Adopting Alpaca
+trading morning were refused, all 46 requests HTTP 403. See the entry dated
+2026-08-17 on the free tier. Alpaca is closed as a candidate live source; this
+paragraph stands as the reasoning that was correct when it was written.]
+[corrected 2026-08-20: the sentence above read "returned zero bars", which is
+true of the count and wrong about the cause. Nothing was served. The correction
+sits with the 2026-08-17 entry it points at.] Adopting Alpaca
 would also break the standing rule that EODHD is the only data source, which is
 a decision for the operator and not one this entry makes.
 
@@ -1432,13 +1435,45 @@ weekday morning was untested while the whole design rested on it. It is tested
 now.
 
 **The measurement. 23 sweeps, 07:30 to 09:15 ET on Monday 2026-08-17, every
-one empty.** Zero active names, zero bars, no newest bar timestamp, on every
-sweep, across a live trading morning on which this project's own collector
-folded 33,489 trades from 50 symbols into 3,102 minute bars. The probe records
-its own denominator, which is what makes the emptiness informative rather than
-vacuous: sweeps taken outside a premarket window prove nothing, and these were
-taken across the middle of one. The table is
-data/probe-alpaca-live-table-2026-08-17.md and the raw readings are beside it.
+one REFUSED.** All 46 requests, two per sweep, came back HTTP 403, across a
+live trading morning on which this project's own collector folded 33,489
+trades from 50 symbols into 3,102 minute bars. The sweep asks for the sip feed
+over a window ending at the wall clock, and the free tier will not serve that,
+so not one request was answered. The zero active names and zero bars in the
+table are therefore the count of what an unanswered sweep returns, and not a
+reading of what the premarket held. The denominator an emptiness claim needs
+is requests SERVED, which was nought; symbols requested, which was 2,745, is
+not that denominator. The table is
+data/probe-alpaca-live-table-2026-08-17.md, regenerated on 2026-08-20 so that
+it carries the served and refused counts, and the raw readings are beside it.
+
+[corrected 2026-08-20: this read "every one empty", "Zero active names, zero
+bars, no newest bar timestamp, on every sweep", and "The probe records its own
+denominator, which is what makes the emptiness informative rather than
+vacuous". data/probe-alpaca-live-2026-08-17.jsonl says otherwise: 23 sweeps,
+23 with errors, 46 entries reading "status 403", and zero symbols with bars.
+The probe did NOT record its own denominator. It recorded symbols requested,
+and its table never read the errors key at all, so a refusal and an empty
+premarket printed identically and this entry was written off the wrong one.
+probe_alpaca_live.py carries the served and refused counts into the table from
+2026-08-20, and the three stored tables are rebuilt from the same jsonl. The
+contrast that proves the point is on disk beside them: the 2026-08-14 dry run,
+which swept a COMPLETED session, has zero errors and 1,461 to 1,845 names with
+bars, and it is the only one of the three where the sweep was answered.]
+
+**The conclusion stands, on firmer ground than the reasoning it was written
+on.** A blanket refusal of the sip feed for a window ending at the wall clock
+IS evidence that the free tier does not serve it live, and it is the narrower
+and stronger of the two claims. An empty feed admits other causes: a quiet
+morning, a badly built window, a filter upstream. HTTP 403 on every request for
+two hours is the vendor declining to answer the question at all, and no reading
+of the active count is needed to see it.
+
+It also sharpens what "not pending a better tier" below means. A 403 is an
+entitlement refusal, so a paid tier is precisely what would lift it. That
+reopens nothing, for the reason the stop paragraph below gives: the 2026-08-16
+stop was about whether the names are worth having and not about what they cost
+to find.
 
 **It does not stand alone.** Two other measurements from the same morning point
 the same way, and each closes a different candidate.
@@ -1597,9 +1632,12 @@ The reasoning matters more than the deletion. This project has been bitten
 repeatedly by the same shape: something is defined, looks reachable, and never
 runs. The bulk feed that served the last completed session while the gate
 compared it against its own high. The live v1 cumulative volume that was
-available and unsound. The Alpaca free tier that answered every request and
-returned no bars. In each case the thing existed, and its existing was read as
-its working. An enum key that no code path emits is that shape in miniature: a
+available and unsound. The Alpaca free tier that served a completed session in
+a second and refused every request for a live one. [corrected 2026-08-20: this
+read "that answered every request and returned no bars". It answered none of
+them: all 46 requests on 2026-08-17 came back 403.] In each case the thing
+existed, and its existing was read as its working. An enum key that no code
+path emits is that shape in miniature: a
 future reader finds it, assumes a producer somewhere, and either writes a row
 that no list can populate or spends an afternoon looking for the writer.
 
@@ -2771,8 +2809,8 @@ correct read on its own and was wrong read against its neighbour.
 
 That is an argument about where to look, not about writing more careful code.
 The defects did not live in the hard parts. scan.py's scoring, vintage's five
-checks, the transaction guard, the containment checker, the quota preflight —
-the places this project spent its thinking — came back clean. What came back
+checks, the transaction guard, the containment checker, the quota preflight,
+the places this project spent its thinking, all came back clean. What came back
 dirty was the plumbing between them, and plumbing is exactly what a reader
 skims because each piece is obvious.
 
@@ -2810,7 +2848,7 @@ list should be tuned on about a month of flags, and flag_backlog_after_days is
 7, so an unjudged flag makes every pass from day eight onward report a problem.
 Under the old pairing that meant no monitor record was ever STATUS_OK again, and
 two sessions later the morning report would carry "monitor has never recorded a
-success" — with max_steps_named_in_report at 4, crowding out the real overdue
+success", with max_steps_named_in_report at 4, crowding out the real overdue
 steps the line exists to surface. The watchdog would have been reporting itself
 broken for doing its job.
 
@@ -2836,7 +2874,7 @@ missing conversion is not. `.replace(tzinfo=ET)` reads as "this is Eastern", and
 it is, after the sentence has finished being false. There is no error, no
 warning, and the output is a plausible time on the right day. Every packet on
 disk carries it and nobody reading four reports noticed, because 12:30 for
-jobless claims is not absurd on its face — it is only wrong.
+jobless claims is not absurd on its face: it is only wrong.
 
 Two things follow. The packet now carries a `time_source` line saying these
 times are a conversion, so the pre-2026-08-20 packets are distinguishable from

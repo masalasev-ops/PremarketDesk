@@ -254,12 +254,39 @@ def prior_session_movers(
     move_floor = _CRIT.number("discovery", "prior_session_move_pct")
     dollar_multiple = _CRIT.number("discovery", "prior_session_dollar_multiple")
 
+    # The test is on the DATA, not on the error, for both calls. A 200 carrying
+    # an empty array is not an error, so the old guard let it through and the
+    # source was filed FETCHED_EMPTY, which is this module's own wording for a
+    # vendor that answered and had nothing to say. Zero rows in and zero names
+    # out are indistinguishable in the artifact, because unlike earnings
+    # (rows_in_window) and news (items_seen) this source records no input count,
+    # and nothing acts on FETCHED_EMPTY: the gaps_to_fill loop below, the empty
+    # pool gap and main's job_status.failed are all keyed on NOT_FETCHED. So a
+    # morning that lost its largest single source, 364 of 628 pool names on
+    # 2026-08-20, would have exited 0 and been recorded ok, with the empty
+    # closes map stripping pool_prior_close from every subscribed name on the
+    # way past.
+    #
+    # previous_trading_session has already had the exchange calendar confirm
+    # that both of these sessions were open, so no rows for one of them is the
+    # vendor failing and never a closed market. The identical guard was closed
+    # once in eodhd.quote_delayed under the rule "the test is now on the data
+    # rather than the error", see DECISIONS.md 2026-08-17, "the bill is not the
+    # call count". This is the caller it was not applied to.
     prior_rows, error = api.eod_bulk_last_day("US", day=prior)
     if error:
         return _source(NOT_FETCHED, {}, error=f"prior session bulk failed: {error}")
+    if not prior_rows:
+        return _source(NOT_FETCHED, {}, error=(
+            "prior session bulk: the vendor answered with no rows for "
+            f"{prior.isoformat()}, a session the exchange calendar says was open"))
     before_rows, error = api.eod_bulk_last_day("US", day=before)
     if error:
         return _source(NOT_FETCHED, {}, error=f"earlier session bulk failed: {error}")
+    if not before_rows:
+        return _source(NOT_FETCHED, {}, error=(
+            "earlier session bulk: the vendor answered with no rows for "
+            f"{before.isoformat()}, a session the exchange calendar says was open"))
 
     def by_symbol(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
@@ -387,6 +414,16 @@ def write_universe_closes(
             print(f"discover: the third session bulk call failed ({error}), so the "
                   "briefing's two session leg is absent this morning. The prior "
                   "session leg is unaffected.")
+        elif not third_rows:
+            # The same rule the two calls in prior_session_movers now apply: a
+            # 200 with an empty array is the vendor answering with nothing for a
+            # session the calendar says was open, which is a failed fetch rather
+            # than a market where nothing traded. Filling third_by from it would
+            # leave c3 null on every row while third_session_available said
+            # true.
+            print("discover: the third session bulk call answered with no rows for "
+                  f"{third.isoformat()}, so the briefing's two session leg is absent "
+                  "this morning. The prior session leg is unaffected.")
         else:
             for row in third_rows or []:
                 code = str(row.get("code") or "").strip().upper()
@@ -398,6 +435,17 @@ def write_universe_closes(
         return _as_float(row.get("close")) if row else None
 
     rows: dict[str, Any] = {}
+    # Per session, and per leg, because "at least one close" cannot tell a file
+    # whose c1 column is null on every row from a complete one. That is not
+    # hypothetical: a bulk call answering 200 with an empty array used to leave
+    # c1 null on all 2,754 rows while this file went on advertising
+    # names_with_at_least_one_close 2,754 and third_session_available true, and
+    # the briefing would have measured both of its legs against that. Both legs
+    # need c1, so the pairs are counted rather than only the columns, which is
+    # also what BUILD_PLAN.md 4.9 asks the section to report: per leg, how many
+    # names carried both of the closes that leg needs.
+    present = {"c1": 0, "c2": 0, "c3": 0}
+    both = {"prior_session": 0, "two_session": 0}
     for symbol in sorted(universe_symbols):
         c1 = close_of(prior_by, symbol)
         c2 = close_of(before_by, symbol)
@@ -405,6 +453,13 @@ def write_universe_closes(
         if c1 is None and c2 is None and c3 is None:
             continue
         rows[symbol] = {"c1": c1, "c2": c2, "c3": c3}
+        for key, value in (("c1", c1), ("c2", c2), ("c3", c3)):
+            if value is not None:
+                present[key] += 1
+        if c1 is not None and c2 is not None:
+            both["prior_session"] += 1
+        if c1 is not None and c3 is not None:
+            both["two_session"] += 1
 
     payload = {
         "generated_at": ettime.stamp(ettime.now_et()),
@@ -423,6 +478,8 @@ def write_universe_closes(
         },
         "universe_examined": len(universe_symbols),
         "names_with_at_least_one_close": len(rows),
+        "names_with_close": dict(present),
+        "names_with_both_closes_for_leg": dict(both),
         "third_session_available": bool(third_by),
         "closes": rows,
     }
@@ -839,8 +896,8 @@ def build(write: bool = True) -> dict[str, Any]:
         # A plain write_text truncates the existing 500 KB watchlist before it
         # writes a byte, so an interruption there leaves invalid JSON where the
         # last good one was. load_watchlist reads that as {"missing": True},
-        # and at 07:20 the collector prints "run discover.py first" and exits 1
-        # — with no premarket tape for any name that morning, and that tape
+        # and at 07:20 the collector prints "run discover.py first" and exits
+        # 1, leaving no premarket tape for any name that morning, and that tape
         # cannot be fetched later. YESTERDAY'S watchlist would have been a
         # usable fallback: the collector applies no freshness test, and
         # subscribed_symbols is written the way it is precisely to keep an

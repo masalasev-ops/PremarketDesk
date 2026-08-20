@@ -14,6 +14,198 @@ is history, and rewriting it destroys the reasoning.
 
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and 
+## 2026-08-20, seventh: all nineteen findings from the full review, closed
+
+The purge entry above says the findings were open. They are not any more. Every
+one carries a claim, the suite is green three runs running, and the tree
+photograph counts 2,038 paths unchanged. What follows is what each one was.
+
+**Containment invented tickers out of ordinary abbreviations, and it stopped
+the whole morning.** _prose_tokens blanked ISO dates and clock times and
+nothing else before _TOKEN_RE ran, so capitals joined by punctuation came apart
+into single letters: "S&P 500 futures are flat" gave P and S, "U.S. equity
+futures are soft" gave S and U, "the P/E is stretched" gave E and P.
+universe.json carries 21 one letter listings and prose_token_stopwords stops
+only A and I, so each fragment became a ticker claim and then an INVENTED one
+unless the packet happened to quote a headline holding the same bare letter.
+Injecting one ordinary Market trends sentence into the four archived reports
+and checking each against its real packet invented P, S and U on 2026-08-17 and
+2026-08-20 and P on 2026-08-19; 08-18 escaped only because its packet quotes a
+headline containing "S&P 500". check_report exits 2, the chain stops on a non
+zero return, and containment has no regeneration path, so the morning would
+have lost render, verify, deliver and archive to a sentence any writer would
+type. Abbreviations are now blanked like dates and times. Stopwording the
+letters was the cheap fix and was rejected: it would have blinded the guard to
+six real listings in prose, trading a false positive for a false negative in
+the one check that exists to catch invented evidence.
+
+**A multi company roundup paid its top catalyst class to every name in it.**
+EODHD tags are ARTICLE scoped and classify_catalyst read them as company
+scoped. On 2026-08-20 the CNBC piece "Stocks making the biggest moves
+premarket: Walmart, Coinbase, Moderna, Alibaba and more", tagged with 45
+issuers including EARNINGS for Walmart, conferred class earnings on MSTR, COIN
+and MARA, and "Biggest stock movers Thursday" did the same for BLSH. None was
+on that morning's calendar. Class earnings is 3 of the score's 10 points, so
+MSTR published 7.0 green where it should have been 4.0 yellow, and COIN, MARA
+and BLSH published 6.0 yellow where they should have been 3.0 red. The obvious
+fix does not work: the symbols array on every one of those articles is EMPTY,
+so the filter that reads it was never running. Breadth decides it instead, on
+two counts in CRITERIA [Score catalyst tags], because neither sees the whole
+thing: the tag count catches a roundup the feed handed to one candidate, and
+the sharing count catches one tagged by topic rather than by issuer. A name
+whose every article is a roundup now comes out class none with catalyst_found
+still true, which says the window was checked and paid nothing.
+
+**The trap verdict weighed three headlines and reported the truncated set as
+complete.** news_keep is 3, attach_traps read only the kept list, and
+min_headlines_for_balance is 2, so one negative against zero positives
+satisfied "strictly more negative than positive" and reinstated the single
+mis-scored headline verdict the balance rule was written that same day to stop.
+WMT published trap false on 3 of 45 headlines, COIN on 3 of 24, BABA on 3 of
+17, and trap_basis reported scored 3 unscored 0 with 42 counted nowhere. The
+balance is now counted over the whole window and news_keep is a display cap.
+This changes live verdicts: the next morning decides WMT, COIN and BABA on all
+of their headlines rather than on three.
+
+**The collector volume check returned an unsigned median and three consumers
+asserted a direction from it.** scan.volume_check wrote "understated by about
+that much again" into gaps_to_fill, analyst repeated it in the fallback, and
+REPORT_TEMPLATE ordered the model to say it plainly; the 2026-08-20 report
+published it. COLLECTOR_VOLUME.md refutes the assumption in the project's own
+words: 2026-08-17 reads -88.49 percent and 2026-08-14 comes back at 3.83 times
+the vendor in aggregate. On a morning shaped like the second one the report told
+its reader every RVOL was understated while the numerator was inflated, which is
+the direction that flatters volume. The check now returns a signed median, the
+aggregate ratio, per symbol minute counts and both missing side counts, and it
+publishes a direction of under, over, mixed or unknown with the phrase the
+template quotes rather than composes. Archived readings written before the sign
+existed degrade to "the direction of that disagreement is unknown", which is
+what the fallback prints against runs/2026-08-20 today.
+
+**The measurement that closed Alpaca recorded a refusal as an empty feed.**
+DECISIONS.md 2026-08-17 closes Alpaca as a live discovery source on "23 sweeps
+... every one empty" and argues the probe's own denominator makes that
+emptiness informative. The raw file says 23 sweeps, 46 chunk failures, every
+one HTTP 403, zero requests served, because sample() asks for the sip feed and
+the free tier will not serve it live. sample() recorded those failures and
+_table_rows never read the key, so a refusal and an empty premarket produced
+identical output. The table now carries requests served and refused, the prose
+refuses to interpret a sweep nothing answered, and the DECISIONS entry is
+corrected in place with the marker that file prescribes. The conclusion stands
+and is now narrower and stronger: a blanket refusal of the sip feed for a live
+window is itself the evidence.
+
+**A dark exchange calendar made the morning refuse instead of degrade.**
+is_trading_day answers True with "calendar unavailable, assuming the market is
+open" for every date, weekends included, and does not raise, so
+previous_trading_session's except branch never fired for the fault that
+actually happens. On a Monday it returned the Sunday and vintage then failed
+every dated row: check_packet on the real 2026-08-17 packet returns 6
+violations with no network at all, enforce() rewrites data/UNVERIFIED over the
+human's note, and the chain stops before the analyst with no packet and no
+report. market_today gained trading_day_state, which answers None when it
+cannot say, and vintage stands down on None the way check (e) already did.
+job_status.sessions_between reads it too: it counted a weekend as three
+sessions and called healthy jobs overdue, and its docstring had promised the
+weekday fallback since it was written.
+
+**The watchdog relaunched live jobs on top of themselves.** maybe_rerun fired
+on the absence of a finish marker alone, and a job that started seconds ago has
+not written one. Only the collector was gated. A late wake is the trigger:
+every task carries -StartWhenAvailable and two catching up within 0.15 seconds
+is on record from 2026-08-19. Two scans would write packet.json at once, two
+analyst steps each spend a CLI completion, and two archive builds race a non
+atomic write. At night it was easier still, because a running task reports
+267009 and fired_ok required "0", so the rerun fired even when the marker
+existed. _job_alive now asks the two questions _collector_alive already asked,
+with [Monitor] job_log_stale_after_s at 1200 seconds, derived above the
+analyst's own worst case of 1,074.
+
+**The discover rerun branch was unreachable.** It needed
+445 <= now_m < 440. CRITERIA and tasks/README both promised a safety net that
+no clock value could engage, and nothing anywhere detected a previous session's
+watchlist as stale. The rerun now triggers on the condition that actually
+matters, a watchlist from an earlier session with nothing yet subscribed, at
+any hour, and both documents say so.
+
+**An empty bulk payload read as a fetched one.** prior_session_movers checked
+only the error slot, so a vendor publication lag recorded FETCHED_EMPTY, this
+module's own wording for a source that succeeded with nothing, and every
+consumer keys on NOT_FETCHED so the run exited 0. That source supplied 364 of
+628 pool names on 2026-08-20. eodhd.quote_delayed had already closed this exact
+guard with "the test is now on the data rather than the error"; this is the
+caller it was not applied to.
+
+**pool_recall recorded missing evidence as measured zeros.** build() could only
+measure the day it was invoked on, and the 07:00 catchup fired it every weekday
+against a session that had not opened, overwriting the previous evening's real
+figures with gapped 0, addressable 0, recall 0.0. measure() collapsed an
+unknown published set with "published or set()" while _rate()'s own docstring
+argued the opposite case for the denominator. Both now refuse or null with the
+reason beside them, and job_nightly.bat gained a catchup mode that the 07:00
+registration passes: the evening pass is the one with a closed session to
+measure.
+
+**Outcome arithmetic was split blind.** mfe_pct, mae_pct and
+pm_high_broke_next_day subtracted raw collector premarket levels from the next
+session's adjusted bar, so a corporate action with an ex date in between left
+the two sides in different units: a 4-for-1 forward split writes both
+excursions near -75 percent, a 1-for-10 reverse split near +900, unflagged,
+into the table CRITERIA says its thresholds will be recalibrated against. The
+module already refused to "put a fabricated excursion into the record" and this
+was the one path through which it happened. close over adjusted_close is flat
+between actions and steps at each one, so the row is refused when that ratio
+moves by more than [Outcomes] max_adjustment_drift_pct.
+
+**The morning told its reader the vendor had no float data on a morning it
+never asked.** The thin quota path set quote = {} with no call made, and
+attach_float_rotation could not tell that from a fetched quote missing the
+field, so every candidate carried "the delayed quote carried no sharesFloat".
+attach_traps hard coded "the news call failed" for a call that was skipped. The
+template forbids the model to supply the reason a number is missing and orders
+it to quote the packet's, so the packet has to be right. Both now say skipped.
+
+**Prompt rule 5 still ordered the model to decide traps from sentiment.**
+f1b1fb9 removed that instruction from REPORT_TEMPLATE and left it in
+prompt_analyst.md, and _compose_stdin pipes both to the model in one stdin, so
+it read rule 5 beside "TRAPS ARE DECIDED IN THE PACKET AND YOU MUST NOT
+RE-DERIVE ONE". The state it fires on is live: MSTR at gap 9.06, trap false, a
+headline at polarity -0.914.
+
+**A truncated verification retired a session forever.** backfill decided a
+session was measured with is_file() while the only reader of that artifact
+skips a copy it cannot parse, and the writer used write_text, which truncates
+before it writes. It now writes through a temp file and renames, and refuses to
+call an unparsable summary a measurement.
+
+**Four things in the harness, and the harness is what the rest of this rests
+on.** ensure_dirs iterated a tuple of Paths frozen at import, so every call
+inside the sandbox mkdir'd the four REAL directories; it reads the attributes at
+call time now. standalone() printed that the real runs/ was not writable from
+a hand run while test_repricing.RUN_DIR still pointed straight at
+runs/2026-08-14, where claim_three opens a database; it rebinds the module's
+captured paths and prints what it moved. test_repricing returned ok for the
+whole module when two artifacts were absent, including three claims that read
+neither, so attach_float_rotation and the sharesOutstanding guards were
+unguarded on every machine but this one; only the five claims that replay that
+morning are gated now. And the intraday stub served one fixed day whatever was
+asked, so backfill's every _true_path call was rejected and the ten true
+premarket and outcome columns were written by no test at all: inverting the
+sign of the shortfall left the whole suite green. The stub answers the day it
+is asked for, and two new claims pin all ten columns and both excursion signs.
+
+**Fifteen em dashes, and now a guard.** Three in Python, eight in the running
+record, four written as an HTML entity on the architecture pages, which is the
+half a grep for the character would never have found and the half a reader
+actually saw. Hard rule 4 was enforced on the model and on nothing else. It is
+enforced on the repository now, both spellings, across every tracked file.
+
+**One thing the fixes broke and the suite caught.** The new em dash walk ran
+git ls-files, git refreshed and rewrote .git/index, and the tree photograph
+failed on a file the check itself had changed. build_identifier learned this on
+2026-08-14 and the note in differences() records it. Same fix,
+--no-optional-locks, and three consecutive clean runs.
+
 ## 2026-08-20, sixth: the purge, and nothing rectified in the same pass
 
 A full review ran over the whole tree and its findings are open. This entry is
@@ -296,8 +488,8 @@ write_failures, and never raised at the socket.
 
 **Replay was re-counted on every resubscription.** The vendor replays a last
 trade per symbol on each subscribe and nothing deduplicated the replay rows, so
-replay_volume in the packet — the number the tag was introduced to make
-measurable — was multiplied by the connection count.
+replay_volume in the packet, the number the tag was introduced to make
+measurable, was multiplied by the connection count.
 
 **The baseline reported its request as its result.** main discarded warm()'s
 counts and recorded len(tickers), so a warm in which every ticker failed
@@ -327,7 +519,7 @@ discards cells past the header count without complaint. New `_cell` helper.
 **watchlist.json was written non-atomically.** A plain write_text truncates the
 500 KB file before writing a byte, so an interruption at 07:15 leaves invalid
 JSON where the last good watchlist was and the 07:20 collector exits with no
-tape for any name — tape that cannot be fetched later. Yesterday's file would
+tape for any name, tape that cannot be fetched later. Yesterday's file would
 have served: the collector applies no freshness test. universe.write_atomically
 now takes a target and discover uses it.
 
@@ -341,7 +533,7 @@ PartialBuildError three credits into the run.
 
 **A hung schtasks killed the whole watchdog pass.** query_task absorbed a
 non-zero exit and not TimeoutExpired or FileNotFoundError, so on a thrashing
-machine the pass did none of its other work either — no collector restart, no
+machine the pass did none of its other work either: no collector restart, no
 chain rerun, no backlog line, just a traceback, with the next chance thirty
 minutes later.
 

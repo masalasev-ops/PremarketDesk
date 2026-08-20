@@ -43,6 +43,7 @@ import hashlib
 import json
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Iterator
@@ -320,6 +321,71 @@ def differences(before: dict[str, Any], after: dict[str, Any],
 SANDBOX_ACTIVE = False
 
 
+def _rebase(path: Path) -> Path | None:
+    """The sandbox path a real one maps onto, or None when it is not redirected.
+
+    Only the four writable roots move. A doc/ or src/ path is returned as None
+    and left exactly as it was, because nothing writes to those and rewriting
+    one would break a module that reads CRITERIA.md through an absolute path it
+    captured at import.
+    """
+    for real, live in ((REAL_DATA, config.DATA_DIR),
+                       (REAL_RUNS, config.RUNS_DIR),
+                       (REAL_LOGS, config.LOGS_DIR),
+                       (REAL_SITE, config.SITE_DIR)):
+        try:
+            relative = path.relative_to(real)
+        except ValueError:
+            continue
+        return live if relative == Path(".") else live / relative
+    return None
+
+
+@contextlib.contextmanager
+def redirect_captured_paths(module: Any) -> Iterator[list[str]]:
+    """Move one module's import time Path constants onto the live sandbox.
+
+    activate() rebinds the config attributes, and run_tests then reloads each
+    suite module inside the sandbox so anything that copied one at import gets
+    the sandbox copy. A hand run has neither half. The module executed before
+    the sandbox opened, and for `python -m tests.test_repricing` a reload could
+    not help at all: the running object is __main__, its __spec__ names
+    tests.test_repricing, and sys.modules holds something else under that name,
+    so importlib.reload raises rather than rebinding anything.
+
+    So the constants are rebound in place instead. Measured on 2026-08-20: with
+    the sandbox held, config.RUNS_DIR was the temporary copy while
+    test_repricing.RUN_DIR was still the real runs/2026-08-14, and claim_three
+    sets config.DB_PATH to RUN_DIR / "test_repricing.db" and opens it in WAL
+    mode, so a hand run created a SQLite database inside the preserved evidence
+    directory of the first live morning. The tree photograph cannot catch that:
+    it runs only inside run_tests.main(), which a hand run never enters.
+
+    Restored on exit, so a repeated or nested run leaves the module as it found
+    it. Only Path values are touched, so a module holding a path as a string
+    is left alone, which is a real hole and a rarer one than this.
+    """
+    saved: list[tuple[str, Any]] = []
+    moved: list[str] = []
+    if module is None:
+        yield moved
+        return
+    for name, value in list(vars(module).items()):
+        if name.startswith("__") or not isinstance(value, Path):
+            continue
+        rebased = _rebase(value)
+        if rebased is None or rebased == value:
+            continue
+        saved.append((name, value))
+        setattr(module, name, rebased)
+        moved.append(name)
+    try:
+        yield moved
+    finally:
+        for name, value in saved:
+            setattr(module, name, value)
+
+
 def standalone(entry) -> int:
     """Run one suite module's main() by hand, sandboxed the way run_tests is.
 
@@ -343,14 +409,28 @@ def standalone(entry) -> int:
     Nesting is safe and is why this checks rather than assumes: activate()
     saves whatever config currently holds and restores it on exit, so a module
     whose claims open their own sandbox still leaves the outer one intact.
+
+    Wrapping the run was only half of it. Until this function also rebound the
+    module's own path constants, a module that captured config.RUNS_DIR at
+    import kept the real one inside the sandbox: test_repricing.RUN_DIR is
+    runs/2026-08-14 and claim_three opened a database in it, inside the
+    preserved evidence of the first live morning. See
+    redirect_captured_paths() above.
     """
     if SANDBOX_ACTIVE:
         return entry()
+    module = sys.modules.get(getattr(entry, "__module__", "") or "")
     print("conftest: no sandbox was active, so this hand run is being wrapped "
-          "in one. Real data/, runs/, logs/ and site/ are not writable from "
-          "here; see standalone() in tests/conftest.py.")
+          "in one; see standalone() in tests/conftest.py.")
     with activate():
-        return entry()
+        with redirect_captured_paths(module) as moved:
+            if moved:
+                print("conftest: rebound this module's import time path "
+                      f"constant(s) onto the sandbox: {', '.join(sorted(moved))}")
+            else:
+                print("conftest: this module captured no real data/, runs/, "
+                      "logs/ or site/ path at import time.")
+            return entry()
 
 
 @contextlib.contextmanager

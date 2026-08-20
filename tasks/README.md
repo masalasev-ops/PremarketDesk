@@ -78,8 +78,9 @@ were registered, the tree does not refresh itself.
 - The watchdog's rerun policy lives in CRITERIA.md [monitor]. In short: the
   morning chain and the nightly are idempotent and get rerun automatically
   (at most once per day each), a dead collector is restarted only while its
-  window is open and no collector is alive, discover is never rerun after
-  the collector window opens, and a missed Sunday universe build is caught
+  window is open and no collector is alive, discover is rerun until the
+  collector has written its subscription list and never after, and a missed
+  Sunday universe build is caught
   on a later weekday morning rather than the next one: the rerun triggers on
   universe.json's age against CRITERIA [monitor] universe_rerun_after_days,
   so a file written the previous Sunday is not stale enough to trip it until

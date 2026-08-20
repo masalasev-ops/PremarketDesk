@@ -195,6 +195,31 @@ def _intraday_rows(day: dt.date) -> list[dict[str, Any]]:
     return out
 
 
+def _intraday_route(path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    """Bars for the day the caller asked about, not for one fixed day.
+
+    Until 2026-08-20 this served _intraday_rows(YESTERDAY) whatever was asked
+    for, and it discarded the requested symbol and window entirely, while
+    eodhd.py does no client side filtering either. backfill's --date defaults
+    to today, so it asked for today's 04:00 to 09:30 window and got yesterday's
+    bars: zero fell inside, _true_path rejected every one of them, and the ten
+    true premarket and outcome columns were never written by any test in this
+    suite. Both claims still reported ok, because backfill returns 0 whether it
+    filled twelve rows or none, and inverting the sign of the shortfall left
+    the whole suite green.
+
+    The DAY is taken from the requested window and the grid is left exactly as
+    it was, one bar every five minutes from 04:00 ET, so a request for
+    YESTERDAY returns byte for byte what it always did and the collector
+    verification fixture that builds its bar file from _intraday_rows(YESTERDAY)
+    is unaffected.
+    """
+    start = params.get("from")
+    day = (ettime.from_epoch_s(int(start)).date() if start is not None
+           else YESTERDAY)
+    return _intraday_rows(day)
+
+
 ROUTES: list[tuple[str, Any]] = [
     ("exchange-details/", {
         "Name": "USA Stocks", "Code": "US", "Timezone": "America/New_York",
@@ -209,7 +234,7 @@ ROUTES: list[tuple[str, Any]] = [
     ("eod-bulk-last-day/", lambda path, params: _bulk_rows(
         ettime.parse_date(params["date"]) if params.get("date") else YESTERDAY)),
     ("eod/", lambda path, params: _eod_series(path.split("/", 1)[1])),
-    ("intraday/", lambda path, params: _intraday_rows(YESTERDAY)),
+    ("intraday/", _intraday_route),
     ("us-quote-delayed", lambda path, params: {"data": {
         symbol: {
             "symbol": symbol, "previousClosePrice": 100.0,
@@ -715,13 +740,18 @@ def claim_calendar_refresh_keeps_the_cache(failures: list[str]) -> None:
     from ops import market_today
 
     holiday = dt.date(TODAY.year, 12, 25)
-    _install(ROUTES + [("exchange-details/", {
+    # The override goes FIRST. _ScriptedSession.get serves the first route
+    # whose needle is in the path, and ROUTES already carries an
+    # exchange-details entry with an empty holiday list at index 0, so
+    # appending this one meant it was never served: the claim seeded the cache
+    # with no holidays in it and then asserted about Christmas.
+    _install([("exchange-details/", {
         "Name": "USA Stocks", "Code": "US", "Timezone": "America/New_York",
         "ExchangeHolidays": {"1": {"Date": holiday.isoformat(),
                                    "Holiday": "Christmas Day"}},
         "TradingHours": {"Open": "09:30", "Close": "16:00",
                          "WorkingDays": "Mon,Tue,Wed,Thu,Fri"},
-    })])
+    })] + ROUTES)
     try:
         market_today.reset_memo()
         market_today.main(["--refresh"])
@@ -1804,6 +1834,154 @@ def claim_report_line(failures: list[str]) -> None:
 
 # ---------------------------------------------------------------------- main
 
+def claim_backfill_writes_the_true_window(failures: list[str]) -> None:
+    """The true premarket columns are written, and the shortfall keeps its sign.
+
+    No test referenced pm_high_true, pm_low_true, pm_vwap_true, pm_true_bars or
+    pm_source_disagreement, and the fill path was unreachable rather than
+    merely untested: the intraday stub served a fixed day, every bar fell
+    outside the requested window, and the
+    "shortfall = (live_high - true_high) / live_high * 100.0" block never
+    executed. claim_backfill could not detect it, because backfill returns 0
+    both when it fills and when it fills nothing and _check asserts only the
+    exit code and the status string. Inverting the sign left run_tests green.
+
+    Two rows, so the sign is pinned from both sides. A live high above the true
+    high records the magnitude; a live high below it records 0.0, meaning
+    checked and clean, which is a different fact from NULL and from a negative.
+    """
+    from core import store
+
+    day = "2026-08-04"
+    try:
+        with store.session() as connection:
+            store.init(connection)
+            for ticker, pm_high in (("DISAGREE.US", 125.0), ("CLEAN.US", 80.0)):
+                connection.execute(
+                    "INSERT OR REPLACE INTO picks (date, ticker, pm_high, pm_low, "
+                    "entry_ref, stop_ref, source) VALUES (?,?,?,?,?,?, 'live')",
+                    (day, ticker, pm_high, pm_high - 20.0, pm_high, pm_high - 20.0))
+            connection.commit()
+
+        outcome = _drive("backfill", "night.backfill_premarket",
+                         ["--date", day, "--no-catchup"])
+        _check(outcome, failures)
+
+        with store.session() as connection:
+            rows = {row["ticker"]: dict(row) for row in connection.execute(
+                "SELECT * FROM picks WHERE date=?", (day,)).fetchall()}
+
+        # The stub serves 60 bars an hour apart in five minute steps from
+        # 04:00, high 100.5, low 99.5, close 100.0, so hlc3 is exactly 100.0
+        # and every bar sits inside the 04:00 to 09:30 window.
+        for ticker in ("DISAGREE.US", "CLEAN.US"):
+            row = rows.get(ticker, {})
+            for column, want in (("pm_high_true", 100.5), ("pm_low_true", 99.5),
+                                 ("pm_vwap_true", 100.0), ("pm_true_bars", 60)):
+                if row.get(column) != want:
+                    failures.append(f"{ticker} {column} is {row.get(column)!r}, "
+                                    f"expected {want}")
+            if not row.get("backfilled_at"):
+                failures.append(f"{ticker} was not stamped backfilled_at")
+        if rows.get("DISAGREE.US", {}).get("pm_source_disagreement") != 19.6:
+            failures.append(
+                "a live high of 125.0 over a true high of 100.5 recorded "
+                f"{rows.get('DISAGREE.US', {}).get('pm_source_disagreement')!r}, "
+                "expected 19.6; the shortfall is (live - true) / live")
+        if rows.get("CLEAN.US", {}).get("pm_source_disagreement") != 0.0:
+            failures.append(
+                "a live high of 80.0 under a true high of 100.5 recorded "
+                f"{rows.get('CLEAN.US', {}).get('pm_source_disagreement')!r}, "
+                "expected 0.0, which means checked and clean rather than unchecked")
+    finally:
+        with store.session() as connection:
+            connection.execute("DELETE FROM picks WHERE date=?", (day,))
+            connection.commit()
+    print("  true window  the four true premarket columns are written and the "
+          "shortfall records 19.6 one way and 0.0 the other")
+
+
+def claim_outcomes_writes_the_excursions(failures: list[str]) -> None:
+    """next_day_close, day5_close, the break flag and both excursions are written.
+
+    No test referenced mfe_pct, mae_pct, pm_high_broke_next_day, next_day_close
+    or day5_close. claim_outcomes drove main() against picks dated today, the
+    eod stub's calendar ends at yesterday, so _sessions_after returned [] for
+    every row, both wants were False and all twelve were counted "not yet due".
+    fill() returns 0 either way and _check reads only the exit code, so the
+    whole expression block was dead and nothing said so.
+
+    The fixture is back dated far enough for five sessions to have elapsed, and
+    it supplies its own end of day series: the shared one is flat, so day one
+    and day five would be the same number and the two columns could not be told
+    apart. adjusted_close equals close on every bar, so the split refusal
+    fill_outcomes now applies sees no split and the row is fillable.
+    """
+    from core import store
+
+    calendar = [d.isoformat() for d in
+                (TODAY - dt.timedelta(days=n) for n in range(40, 0, -1))
+                if ettime.is_weekday(d)]
+    day = calendar[-8]
+    after = calendar[-7:-2]
+    shaped = {after[0]: (100.0, 120.0, 90.0, 110.0),
+              after[4]: (110.0, 135.0, 105.0, 130.0)}
+
+    def eod_route(path: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+        symbol = path.split("/", 1)[1]
+        if symbol not in ("BROKE.US", "HELD.US"):
+            return _eod_series(symbol)
+        out = []
+        for session in [day, *after]:
+            open_, high, low, close = shaped.get(session, (100.0, 101.0, 99.0, 100.0))
+            out.append({"date": session, "open": open_, "high": high, "low": low,
+                        "close": close, "adjusted_close": close,
+                        "volume": 5_000_000})
+        return out
+
+    try:
+        with store.session() as connection:
+            store.init(connection)
+            for ticker, pm_high in (("BROKE.US", 115.0), ("HELD.US", 125.0)):
+                connection.execute(
+                    "INSERT OR REPLACE INTO picks (date, ticker, pm_high, pm_low, "
+                    "entry_ref, stop_ref, source) VALUES (?,?,?,?,?,?, 'live')",
+                    (day, ticker, pm_high, 95.0, 100.0, 100.0))
+            connection.commit()
+
+        outcome = _drive("outcomes", "night.fill_outcomes", ["--before", day],
+                         routes=[("eod/", eod_route)] + list(ROUTES))
+        _check(outcome, failures)
+
+        with store.session() as connection:
+            rows = {row["ticker"]: dict(row) for row in connection.execute(
+                "SELECT * FROM picks WHERE date=?", (day,)).fetchall()}
+
+        # entry_ref and stop_ref are both 100.0, the next session runs 90.0 to
+        # 120.0, so the excursions are +20.0 and -10.0 exactly.
+        for ticker in ("BROKE.US", "HELD.US"):
+            row = rows.get(ticker, {})
+            for column, want in (("next_day_open", 100.0), ("next_day_high", 120.0),
+                                 ("next_day_low", 90.0), ("next_day_close", 110.0),
+                                 ("day5_close", 130.0), ("mfe_pct", 20.0),
+                                 ("mae_pct", -10.0)):
+                if row.get(column) != want:
+                    failures.append(f"{ticker} {column} is {row.get(column)!r}, "
+                                    f"expected {want}")
+        if rows.get("BROKE.US", {}).get("pm_high_broke_next_day") != 1:
+            failures.append("a 115.0 premarket high under a 120.0 next day high did "
+                            "not record as broken")
+        if rows.get("HELD.US", {}).get("pm_high_broke_next_day") != 0:
+            failures.append("a 125.0 premarket high above a 120.0 next day high "
+                            "recorded as broken")
+    finally:
+        with store.session() as connection:
+            connection.execute("DELETE FROM picks WHERE date=?", (day,))
+            connection.commit()
+    print("  excursions   the next session and day five columns are written and "
+          "both excursions carry their sign")
+
+
 def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
 
@@ -1839,6 +2017,8 @@ def main(argv: list[str] | None = None) -> int:
     claim_archive(failures)
     claim_backfill(failures)
     claim_outcomes(failures)
+    claim_backfill_writes_the_true_window(failures)
+    claim_outcomes_writes_the_excursions(failures)
     claim_pool_recall(failures)
     claim_monitor(failures)
     print("")

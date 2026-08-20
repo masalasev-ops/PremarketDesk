@@ -950,6 +950,40 @@ def run_poll(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str, Any]
 
 # -------------------------------------------------------------------- runner
 
+def _volume_check_direction(
+    median_signed: float, ratio: float | None
+) -> tuple[str, str]:
+    """Which way the collector is wrong, or that it is wrong both ways.
+
+    Two readings, and they answer different questions. The signed median is the
+    TYPICAL symbol. The aggregate ratio is the whole tape, so a handful of
+    enormous positives can carry it while most symbols sit below the vendor.
+    2026-08-14 is exactly that morning: a signed median of -33.77 percent
+    beside an aggregate 3.83 times the vendor's volume, recorded in
+    doc/research/COLLECTOR_VOLUME.md. A single word that averaged the two would
+    be a claim nothing measured, so a direction is only returned when both
+    readings agree, and the disagreement is reported as itself otherwise.
+    """
+    if ratio is None:
+        return "unknown", (
+            "the vendor reported no volume at all over the compared minutes, so "
+            "there is no direction to read")
+    if median_signed < 0 and ratio < 1:
+        return "under", (
+            "the collector recorded LESS than the vendor on both readings, the "
+            "typical symbol and the aggregate tape, so a ratio built on a "
+            "collector numerator understates by about that much")
+    if median_signed > 0 and ratio > 1:
+        return "over", (
+            "the collector recorded MORE than the vendor on both readings, the "
+            "typical symbol and the aggregate tape, so a ratio built on a "
+            "collector numerator OVERSTATES by about that much")
+    return "mixed", (
+        "the two readings disagree, the typical symbol falling on one side of "
+        "the vendor and the aggregate tape on the other, so a ratio built on a "
+        "collector numerator may be over or under and neither may be assumed")
+
+
 def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | None:
     """Compare a collected day against EODHD 1m intraday, minute for minute.
 
@@ -957,6 +991,35 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     window arithmetic. Intraday for the current day is published a few hours
     behind, so this runs in the evening, and the nightly backfill calls it for
     the record. Returns the summary, or None when intraday has nothing yet.
+
+    The summary is SIGNED, and until 2026-08-20 it was not. This function
+    computed a per symbol signed difference and then persisted only its
+    magnitude, and three consumers asserted a direction that a magnitude cannot
+    carry: scan.volume_check wrote "an RVOL below is understated by about that
+    much again" into gaps_to_fill, analyst.py repeated it in the degraded
+    fallback, and REPORT_TEMPLATE.md ordered the model to say it plainly, which
+    runs/2026-08-20/report.md published. The project's own diagnosis refutes
+    the assumption. doc/research/COLLECTOR_VOLUME.md records the collector
+    wrong in BOTH directions: 2026-08-14 came back 3.83 times the vendor in
+    aggregate against 2026-08-17 at -88.49 percent across all 29 comparable
+    symbols. So the signed median, the aggregate ratio and the direction the
+    two of them agree on all come back now, and a session where they disagree
+    is reported as mixed rather than as either.
+
+    The MEASUREMENT was biased the same way the summary was, so both missing
+    sides are counted rather than dropped. The loop walks the collected bars,
+    so a subscribed symbol the socket never answered for landed in neither
+    compared nor unavailable: LYTS.US and NBTX.US on 2026-08-20 were in
+    neither, and the summary read as though those two had been measured and
+    agreed. A vendor volume of zero over the common minutes was skipped without
+    incrementing anything either. Every subscribed symbol now lands in exactly
+    one of compared, unavailable, vendor_zero_volume or collector_silent, and
+    those four sum to the subscription list wherever the collector wrote one.
+
+    Per symbol comparable minute counts come back too. A symbol compared on two
+    minutes and one compared on 125 are not the same evidence, and a caller
+    could not tell them apart from a summary publishing only a count of
+    symbols.
     """
     import statistics as stats
 
@@ -969,7 +1032,8 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
         return None
 
     results: list[tuple[str, int, float, float, float]] = []
-    unavailable = 0
+    unavailable: list[str] = []
+    vendor_zero: list[str] = []
     for symbol in sorted(bars):
         mine = {b["minute_epoch"]: b for b in bars[symbol]}
         low, high = min(mine), max(mine)
@@ -977,29 +1041,49 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
             symbol, ettime.from_epoch_s(low), ettime.from_epoch_s(high + BAR_SECONDS), "1m"
         )
         if error or not rows:
-            unavailable += 1
+            unavailable.append(symbol)
             continue
         theirs = {int(r["timestamp"]): r for r in rows if r.get("timestamp") is not None}
         common = sorted(set(mine) & set(theirs))
         if not common:
-            unavailable += 1
+            unavailable.append(symbol)
             continue
         my_volume = sum(float(mine[t]["v"]) for t in common)
         their_volume = sum(float(theirs[t].get("volume") or 0) for t in common)
         if their_volume <= 0:
+            # Counted, not dropped. A vendor zero over the common minutes is a
+            # symbol this check could not measure, and it used to leave the loop
+            # without incrementing anything at all, so it disappeared out of
+            # every denominator the summary published.
+            vendor_zero.append(symbol)
             continue
         pct = (my_volume - their_volume) / their_volume * 100.0
         results.append((symbol, len(common), my_volume, their_volume, pct))
 
+    # The other missing side. read_bars only knows what the socket answered
+    # for, so a name that was subscribed and never heard from is invisible to
+    # the loop above. The subscription list is what the collector asked for and
+    # is the only record of the difference.
+    subscriptions = read_subscriptions(day) or {}
+    requested = sorted(str(s) for s in (subscriptions.get("symbols") or []))
+    collector_silent = sorted(set(requested) - set(bars))
+
     if not results:
         print(
             f"collector: intraday has no bars yet for {day} "
-            f"({unavailable} symbols empty). It is published a few hours behind, try later."
+            f"({len(unavailable)} symbols empty). It is published a few hours behind, try later."
         )
         return None
 
     within = sum(1 for r in results if abs(r[4]) <= 1.0)
     median_abs = stats.median(abs(r[4]) for r in results)
+    median_signed = stats.median(r[4] for r in results)
+    collector_total = sum(r[2] for r in results)
+    intraday_total = sum(r[3] for r in results)
+    ratio = (collector_total / intraday_total) if intraday_total > 0 else None
+    below = sum(1 for r in results if r[4] < 0)
+    above = sum(1 for r in results if r[4] > 0)
+    direction, direction_phrase = _volume_check_direction(median_signed, ratio)
     if not quiet:
         print("")
         print(f"verification against EODHD 1m intraday for {day}, identical minutes only")
@@ -1008,14 +1092,49 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
             print(f"  {symbol:<10} {minutes:>5} {mine_v:>13,.0f} {theirs_v:>13,.0f} {pct:>8.2f}%")
         print(f"  {within} of {len(results)} symbols within one percent on volume")
         print(f"  median absolute difference {median_abs:.3f}%")
+        print(f"  median SIGNED difference {median_signed:+.3f}%, "
+              f"{below} symbol(s) below the vendor and {above} above")
+        if ratio is not None:
+            print(f"  aggregate {collector_total:,.0f} collected against "
+                  f"{intraday_total:,.0f} intraday, {ratio:.4f} times the vendor")
+        print(f"  direction {direction}: {direction_phrase}")
         if unavailable:
-            print(f"  {unavailable} symbols had no intraday bars to compare")
+            print(f"  {len(unavailable)} symbols had no intraday bars to compare")
+        if vendor_zero:
+            print(f"  {len(vendor_zero)} symbols reported zero vendor volume on "
+                  "the common minutes and could not be compared")
+        if collector_silent:
+            print(f"  {len(collector_silent)} subscribed symbols the collector "
+                  f"never heard: {', '.join(collector_silent)}")
     return {
         "day": day,
         "compared": len(results),
         "within_one_percent": within,
         "median_abs_pct": median_abs,
-        "unavailable": unavailable,
+        # Everything below this line arrived on 2026-08-20. The four keys above
+        # are unchanged, so a reader of an older summary and a reader of this
+        # one are looking at the same fields where they overlap.
+        "median_signed_pct": median_signed,
+        "direction": direction,
+        "direction_phrase": direction_phrase,
+        "symbols_collector_below_vendor": below,
+        "symbols_collector_above_vendor": above,
+        "collector_volume_total": collector_total,
+        "intraday_volume_total": intraday_total,
+        "aggregate_ratio": ratio,
+        "minutes_compared_by_symbol": {r[0]: r[1] for r in results},
+        "minutes_compared_total": sum(r[1] for r in results),
+        "unavailable": len(unavailable),
+        "unavailable_symbols": unavailable,
+        "vendor_zero_volume": len(vendor_zero),
+        "vendor_zero_volume_symbols": vendor_zero,
+        "collector_silent": len(collector_silent),
+        "collector_silent_symbols": collector_silent,
+        "subscribed": len(requested) or None,
+        "subscribed_reason": (
+            None if requested else
+            f"the collector wrote no subscription list for {day}, so a symbol it "
+            "never heard cannot be told from one nobody asked for"),
     }
 
 
@@ -1072,14 +1191,30 @@ def latest_volume_check(before_day: str) -> dict[str, Any] | None:
         return None
     day, summary = best
     age = (cutoff - ettime.parse_date(day)).days
-    return {
+    # A summary written before verify_against_intraday recorded a sign carries
+    # a magnitude and nothing else. Those files are still on disk and the
+    # morning has to read them rather than crash on them, so the absence is
+    # filled in as an absence: direction "unknown" and sign_recorded False, so
+    # a caller reaches for the word "understated" only where something measured
+    # it. The old files are not rewritten. A measurement is not editable after
+    # the fact.
+    signed = summary.get("median_signed_pct")
+    read = {
         **summary,
         "day": summary.get("day") or day,
         "age_days": age,
         "stale": age > max_age,
         "max_age_days": max_age,
         "source": f"runs/{day}/{VOLUME_CHECK_FILE}, written by the nightly backfill",
+        "sign_recorded": signed is not None,
     }
+    if signed is None:
+        read["median_signed_pct"] = None
+        read["direction"] = "unknown"
+        read["direction_phrase"] = (
+            "this reading was written before the check recorded a sign, so the "
+            "direction of the disagreement is unknown and must not be stated")
+    return read
 
 
 # The exit codes that mean this step did its job. Declared at module level so

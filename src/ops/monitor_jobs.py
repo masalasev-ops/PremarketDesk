@@ -21,6 +21,13 @@ rerun what is idempotent, and never start a second live collector, because
 two collectors folding the same tape write duplicate minutes and double the
 premarket volume downstream. Reruns launch the job's own .bat detached, so
 the rerun writes the same dated log the scheduled run would have.
+
+Idempotent is not the same as safe to run TWICE AT ONCE, and until 2026-08-20
+only the collector branch knew the difference. The chain and the nightly were
+rerun on the absence of a finish marker alone, and a job that started seconds
+ago has not written that marker, so it read exactly like one that died.
+_job_alive is the gate the collector always had, now asked of every job before
+any rerun.
 """
 
 from __future__ import annotations
@@ -33,6 +40,7 @@ import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 from core import config
@@ -68,6 +76,14 @@ JOB_STATUS_NAMES = {
     "chain": "morning-chain",
     "nightly": "nightly",
 }
+
+# What Task Scheduler puts in the Last Result column while a task is still
+# going: 0x41301, "the task is currently running", 267009 in decimal. It is
+# not a failure code and the nightly branch used to read it as one, because it
+# required last_result == "0" to accept a finished log. A nightly still running
+# at 22:45 therefore counted as a nightly that had failed, and a second copy
+# was launched on top of the first.
+TASK_STILL_RUNNING = 267009
 
 
 # ------------------------------------------------------- task scheduler side
@@ -168,9 +184,19 @@ def failed_steps(job: str, day: str) -> tuple[list[str], int]:
     return out, len(latest)
 
 
+def _log_path(prefix: str, day: str) -> Path:
+    """The dated log a job appends to.
+
+    One definition because two readers ask different questions of the same
+    file: log_verdict reads its TEXT for the final step marker, and _job_alive
+    reads its MTIME for evidence that the job is still writing.
+    """
+    return config.LOGS_DIR / f"{prefix}-{day}.log"
+
+
 def log_verdict(prefix: str, marker: str, day: str) -> str:
     """finished | skipped_closed | started_not_finished | no_log"""
-    path = config.LOGS_DIR / f"{prefix}-{day}.log"
+    path = _log_path(prefix, day)
     if not path.exists():
         return "no_log"
     try:
@@ -309,6 +335,124 @@ def _collector_alive(now: dt.datetime) -> bool:
     return False
 
 
+def _task_running(task: dict[str, Any], today: dt.date) -> bool:
+    """Does Task Scheduler say this task is running at this instant.
+
+    Two spellings of one fact, because schtasks reports it in two columns.
+    Status reads Running while the task is live. Last Result reads
+    TASK_STILL_RUNNING, which is the column the nightly branch used to read as
+    a plain result code. The column comes back decimal on this machine and
+    0x41301 on some others, so the 0x form is parsed as hexadecimal and
+    everything else as the signed decimal Windows actually reports.
+    """
+    if not task.get("exists"):
+        return False
+    if str(task.get("status") or "").strip().lower() == "running":
+        return True
+    last_run = task.get("last_run")
+    if last_run is None or last_run.date() != today:
+        # A still running code left over from a PREVIOUS day is a run
+        # Scheduler never got a completion from, not one running now.
+        return False
+    raw = str(task.get("last_result") or "").strip()
+    try:
+        return int(raw, 16 if raw[:2].lower() == "0x" else 10) == TASK_STILL_RUNNING
+    except ValueError:
+        return False
+
+
+def _job_alive(job: str, now: dt.datetime, task: dict[str, Any]) -> str | None:
+    """Evidence that this job is running right now, as a phrase, or None.
+
+    The collector has had this gate since it was written, because two live
+    collectors fold the same tape into duplicate minutes. The chain, the
+    nightly and discover had none: they were rerun on the absence of a finish
+    marker in the dated log, and a job that started seconds ago has not
+    written that marker, so it was indistinguishable from one that died.
+
+    The trigger is a late machine wake. Every task carries
+    -StartWhenAvailable, and two of them catching up within 0.15 seconds of
+    each other is already on record: monitor 08:21:18.56 and nightly-catchup
+    08:21:18.71 on 2026-08-19. Sleep through 08:45, wake at 09:05, and
+    Scheduler fires the missed chain and the missed monitor together. At
+    09:05 chain_due has passed, rerun_chain_until has not, the log is fifteen
+    seconds old, and a second job_morning_chain.bat starts: two scans write
+    packet.json and premarket_snapshot.jsonl at once, two analyst steps each
+    spend a claude CLI completion (0.5 USD and 231.7 seconds measured on
+    2026-08-20), and two build_archive runs both do a non atomic write_text on
+    site/PremarketDesk.html. scan.thin_rerun_stands_down does not help, because
+    its "if not existing_path.is_file()" test is defeated by a concurrent
+    original that has not written yet.
+
+    Two kinds of evidence, the same two _collector_alive uses. Task Scheduler
+    covers the copy Scheduler itself started. The dated log covers the copy it
+    cannot see, since launch_bat Popens the .bat rather than starting the task:
+    a rerun this module launched detached, and the hand run the chain's own
+    FAILED message invites by name. job_log_stale_after_s has to clear the
+    longest silence a healthy job can produce, which is the analyst step at
+    [analyst] max_attempts times timeout_s.
+
+    There is deliberately no lock file. The .bat files do not take one, so a
+    lock held by this module alone would be a lie about what it protects.
+    """
+    if _task_running(task, now.date()):
+        return "Task Scheduler reports the task running"
+    stale_after = _CRIT.integer("monitor", "job_log_stale_after_s")
+    path = _log_path(JOBS[job][2], now.date().isoformat())
+    try:
+        age = now.timestamp() - path.stat().st_mtime
+    except OSError:
+        return None
+    # The lower bound guards the --at simulation and clock skew exactly as it
+    # does in _collector_alive: a log written this evening must not read as
+    # alive at a simulated 08:00.
+    if -60 <= age <= stale_after:
+        return f"its dated log was written {age:.0f}s ago"
+    return None
+
+
+def _watchlist_vintage(day: str) -> tuple[bool, str]:
+    """Is data/watchlist.json the file today's collector should subscribe from.
+
+    Returns (stale, a phrase naming what is on disk).
+
+    Nothing else in the pipeline asks this. collect_premarket checks only that
+    the file exists, discover.load_watchlist applies no date test, scan records
+    watchlist_generated_at into provenance and screens either way, and
+    vintage.enforce never mentions the watchlist at all, so a PREVIOUS
+    SESSION's names were nowhere detected as stale. That is the condition the
+    discover rerun below actually turns on, and the clock it used to turn on
+    was only ever a proxy for it.
+    """
+    from selection import discover
+
+    watchlist = discover.load_watchlist()
+    if watchlist.get("missing"):
+        return True, "data/watchlist.json is missing or unreadable"
+    generated = str(watchlist.get("generated_at") or "")
+    if not generated:
+        return True, "data/watchlist.json carries no generated_at, so its session is unknown"
+    if generated[:10] != day:
+        return True, (f"data/watchlist.json is from {generated[:10]}, a previous "
+                      "session, so the names on disk are not today's")
+    return False, f"data/watchlist.json is today's, written {generated[11:16]} ET"
+
+
+def _collector_has_subscribed(day: str) -> bool:
+    """Has today's collector already asked the socket for a symbol list.
+
+    write_subscriptions runs before the socket opens on every collector mode
+    and names exactly what was asked for, so this answers the question the
+    collector start clock was standing in for. Once the file exists, rewriting
+    the watchlist desyncs it from what is actually being listened to, which is
+    the reason CRITERIA gives for not rerunning discover late. Before it
+    exists there is nothing to desync, whatever the clock reads.
+    """
+    from collect import collect_premarket
+
+    return collect_premarket.subscriptions_path(day).is_file()
+
+
 def check_all(now: dt.datetime, dry_run: bool) -> int:
     day = now.date().isoformat()
     now_m = now.hour * 60 + now.minute
@@ -347,17 +491,25 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             report(job, "STEP FAILED", f"{line} ({examined} step record(s) read)")
         return False
 
-    def maybe_rerun(job: str, reason: str) -> None:
+    def maybe_rerun(job: str, reason: str) -> bool:
+        """True when a .bat was actually launched.
+
+        The answer is returned rather than dropped because one caller has to
+        sequence on it: a collector started in the same pass as a discover
+        rerun would read the watchlist that rerun is in the middle of
+        replacing.
+        """
         nonlocal actions
         if reruns_done.get(job, 0) >= max_reruns:
             report(job, "GAVE UP", f"{reason}; already rerun "
                    f"{reruns_done[job]} time(s) today, a human should look")
-            return
+            return False
         report(job, "RERUNNING", reason)
         launch_bat(JOBS[job][1], dry_run)
         if not dry_run:
             _record_rerun(day, job)
         actions += 1
+        return True
 
     # ---- universe freshness, the weekly job the weekday monitor can save
     try:
@@ -385,8 +537,26 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         report("universe", "OK", f"{age_days:.1f} days old")
 
     # ---- discover
+    #
+    # The rerun used to be gated on "now_m < collector_start" INSIDE the else
+    # of "now_m < discover_due", which needs 445 <= now_m < 440. No clock value
+    # satisfies that: discover_due is 07:25, the collector starts 07:20, and
+    # register_tasks.ps1 makes the monitor's earliest weekday firing 07:25
+    # anyway. CRITERIA and tasks/README both enumerate discover among the jobs
+    # this watchdog reruns, and the branch that was supposed to do it could
+    # never be entered, so the safety net they describe never existed. The
+    # sharpest case was the morning that missed both: the same 07:25 pass
+    # restarted the dead collector onto yesterday's names while declining to
+    # refresh the watchlist those names came from.
+    #
+    # The clock was standing in for a question about a FILE, so the file is
+    # what is asked now. A watchlist from a previous session is the condition
+    # that actually matters, and the subscription list is the thing a rewrite
+    # could desync, so it is the subscription list rather than the hour that
+    # decides whether a rewrite is still free.
     discover_due = _minutes(_CRIT.clock("monitor", "discover_due"))
     collector_start = _minutes(_CRIT.clock("collector", "start_time"))
+    discover_relaunched = False
     if now_m < discover_due:
         report("discover", "NOT DUE", "")
     else:
@@ -395,18 +565,41 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             if steps_ok("discover"):
                 report("discover", "OK", verdict)
         else:
-            problems += 1
             task = query_task(JOBS["discover"][0])
             fired = task.get("last_run") is not None and task["last_run"].date() == now.date()
             detail = ("fired but did not finish" if fired
                       else "never fired today, the machine was probably asleep")
-            if now_m < collector_start:
-                maybe_rerun("discover", detail)
+            alive = _job_alive("discover", now, task)
+            if alive:
+                # Not counted as a problem and not rerun: a pass still going is
+                # the ordinary state a minute after a late wake, and the rerun
+                # that used to follow from here would have rewritten the
+                # watchlist underneath the run that is writing it.
+                report("discover", "RUNNING", f"{alive}; no finish marker yet, "
+                       "which is what a pass in progress looks like")
             else:
-                report("discover", "FAILED", detail + ". Not rerun: the collector "
-                       "window has opened or passed, and a rewritten watchlist would "
-                       "desync it from what was actually subscribed. Scan flags the "
-                       "holes honestly.")
+                problems += 1
+                stale, vintage = _watchlist_vintage(day)
+                if not _collector_has_subscribed(day):
+                    discover_relaunched = maybe_rerun(
+                        "discover", f"{detail}; {vintage}. No subscription list "
+                        "has been written today, so nothing is listening to the "
+                        "watchlist and a rewrite desyncs nothing")
+                elif stale:
+                    report("discover", "FAILED", detail + f". {vintage}, and the "
+                           "collector has already written its subscription list, "
+                           "so a rewrite now would desync the watchlist from what "
+                           "is actually being listened to and the morning would "
+                           "screen names no tape was collected for. The stale "
+                           "watchlist is the worse fact of the two and this pass "
+                           "cannot fix it: a second collector is never started.")
+                else:
+                    report("discover", "FAILED", detail + f". {vintage}, so the "
+                           "names the collector subscribed to are the right ones "
+                           "and what is missing is the baseline warm. Not rerun: "
+                           "rewriting a good watchlist to refill a cache scan "
+                           "already reports as null with a reason costs more than "
+                           "it buys.")
 
     # ---- collector
     collector_stop = _minutes(_CRIT.clock("collector", "stop_time"))
@@ -415,6 +608,23 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     elif now_m < collector_stop:
         if _collector_alive(now):
             report("collector", "RUNNING", "bar file moving or task running")
+        elif discover_relaunched:
+            # Held rather than started, and only in the pass that just
+            # relaunched discover. The collector reads the watchlist once, at
+            # subscribe time, and nothing re-reads it afterwards, so a
+            # collector started in these few seconds subscribes to whichever
+            # version of the file won the race and is stuck with it for the
+            # whole window. That is how the both-missed morning used to end up
+            # listening to the previous session's names. The next pass is
+            # thirty minutes away against a window that runs 07:20 to 09:25,
+            # so waiting costs a quarter of the window where the wrong names
+            # would cost all of it.
+            problems += 1
+            report("collector", "HELD", "no live collector, and discover was "
+                   "relaunched in this pass, so the watchlist on disk is the "
+                   "one it is replacing. Starting now would subscribe to "
+                   "whichever version won the race and hold it all window. "
+                   "The next pass starts it on the file discover wrote.")
         else:
             problems += 1
             maybe_rerun("collector", "inside the window with no live collector; "
@@ -440,13 +650,24 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             if steps_ok("chain"):
                 report("chain", "OK", verdict)
         else:
-            problems += 1
             task = query_task(JOBS["chain"][0])
             fired = task.get("last_run") is not None and task["last_run"].date() == now.date()
             detail = "fired but did not finish" if fired else "never fired today"
-            if now_m <= chain_until:
+            alive = _job_alive("chain", now, task)
+            if alive:
+                # Neither a problem nor an action. The chain has no finish
+                # marker for most of the time it is legitimately running, and
+                # the analyst step alone can be silent for max_attempts times
+                # timeout_s.
+                report("chain", "RUNNING", f"{alive}; no finish marker yet, "
+                       "which is what a chain in progress looks like. A second "
+                       "one would race this one on packet.json and spend "
+                       "another claude CLI completion.")
+            elif now_m <= chain_until:
+                problems += 1
                 maybe_rerun("chain", detail + "; the chain is idempotent")
             else:
+                problems += 1
                 report("chain", "FAILED", detail + f". Past "
                        f"{_CRIT.clock_text('monitor', 'rerun_chain_until')} ET, a premarket "
                        "report is history; run tasks\\job_morning_chain.bat by hand if "
@@ -465,10 +686,23 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         # never fired or died before the bat even started (the 0x80070002
         # quoting failure looked exactly like that). The job is idempotent,
         # so the extra rerun is cheap.
+        #
+        # It is not free, though, and this test is why the nightly was the
+        # easier of the two jobs to duplicate: a task that is STILL RUNNING
+        # reports TASK_STILL_RUNNING rather than "0", so a nightly working its
+        # way through the backfill at 22:45 failed this test with a finish
+        # marker already on disk from the 07:00 catch-up run, and got a second
+        # copy launched on top of it. The liveness gate below is what separates
+        # "has not finished yet" from "did not finish".
         fired_ok = fired and task.get("last_result") == "0"
+        alive = _job_alive("nightly", now, task)
         if verdict == "skipped_closed" or (verdict == "finished" and fired_ok):
             if steps_ok("nightly"):
                 report("nightly", "OK", verdict)
+        elif alive:
+            report("nightly", "RUNNING", f"{alive}; no clean finish recorded "
+                   "yet, which is what a nightly in progress looks like rather "
+                   "than one that failed")
         else:
             problems += 1
             maybe_rerun("nightly", ("fired but did not finish" if fired

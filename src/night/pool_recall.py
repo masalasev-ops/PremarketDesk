@@ -186,20 +186,29 @@ def addressable_target(
     }
 
 
-def published_symbols(session_date: str) -> tuple[set[str], str | None]:
-    """What actually reached the report for one session.
+def published_symbols(session_date: str) -> tuple[set[str] | None, str | None]:
+    """What actually reached the report for one session, or None for unknown.
 
     Read from the packet rather than the pool, because the pool is what
     discovery found and the packet is what a reader saw. The gap between them
     is candidate_count, and that cap belongs in the funnel too.
+
+    None, not an empty set, for the two failure cases. An empty set is a
+    measurement, "the report published nothing", and handing one back for a
+    packet that is missing or unreadable puts a zero numerator over a real
+    denominator. _rate below already argues that case for the denominator, "an
+    empty denominator yields null rather than a misleading 0.0 that reads as
+    total failure", and the reasoning was never carried across to the numerator.
+    runs/2026-08-20/pool_recall.json is what that cost: a morning that produced
+    no packet at all was recorded as having published none of what gapped.
     """
     path = config.run_dir(session_date) / "packet.json"
     if not path.is_file():
-        return set(), f"no packet.json for {session_date}, so nothing can be said about what was published"
+        return None, f"no packet.json for {session_date}, so nothing can be said about what was published"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return set(), f"packet.json for {session_date} unreadable: {type(exc).__name__}"
+        return None, f"packet.json for {session_date} unreadable: {type(exc).__name__}"
     out = {
         str(c.get("symbol", "")).upper()
         for c in (payload.get("candidates") or [])
@@ -223,6 +232,7 @@ def measure(
     pool_rows: list[dict[str, Any]],
     addressable: dict[str, dict[str, Any]] | None = None,
     published: set[str] | None = None,
+    published_reason: str | None = None,
 ) -> dict[str, Any]:
     """Recall of the pool against the set that actually gapped.
 
@@ -230,6 +240,12 @@ def measure(
     reported separately, because a name the pool found and then cut is a
     different failure from one it never found: the first is a cap that is too
     small, the second is a source that is not looking in the right place.
+
+    published None means nobody knows what reached the report, which is a
+    different fact from a report that published nothing, and every published_*
+    count and every recall_* rate built on one comes back null with
+    published_unknown_reason beside it. The discovery_* and subscribed_* rates
+    never read it and stay measured either way.
     """
     by_symbol = {str(r.get("symbol", "")).upper(): r for r in pool_rows}
     held: list[dict[str, Any]] = []
@@ -256,20 +272,34 @@ def measure(
 
     total = len(gappers)
     addressable = addressable or {}
-    published = published or set()
+    # This line used to read `published = published or set()`, which collapsed an
+    # unknown into a measured zero and then published it as one. A missing or
+    # unreadable packet became published_gappers 0 and recall_addressable 0.0
+    # against a real denominator, which reads as a morning that found 145
+    # addressable gappers and published none of them.
+    published_known = published is not None
+    known = published if published_known else set()
 
     addressable_held = sum(1 for row in held if row["symbol"] in addressable)
     addressable_subscribed = sum(
         1 for row in held if row["symbol"] in addressable and row.get("subscribed")
     )
-    addressable_published = sum(1 for symbol in addressable if symbol in published)
+    addressable_published = sum(1 for symbol in addressable if symbol in known)
+    published_gappers = len(known & set(gappers))
 
     return {
         # The three counts, named so no reader has to infer which is which.
         "gapped": total,
         "addressable": len(addressable),
-        "published_gappers": len(published & set(gappers)),
-        "published_addressable_gappers": addressable_published,
+        "published_gappers": published_gappers if published_known else None,
+        "published_addressable_gappers": (
+            addressable_published if published_known else None),
+        # A null count is useless without this next to it, which is why the
+        # reason is repeated here rather than left in the payload key that
+        # names the packet path.
+        "published_unknown_reason": None if published_known else (
+            published_reason
+            or "what the report published for this session is not known"),
 
         # Intermediate stages, kept because they separate a source that is not
         # looking from a cap that is too small.
@@ -285,13 +315,15 @@ def measure(
         # and `subscribed_recall` are now the *_all_gappers pair.
         #
         # HEADLINE, denominator is the set the day screen could ever publish.
-        "recall_addressable": _rate(addressable_published, len(addressable)),
+        "recall_addressable": (
+            _rate(addressable_published, len(addressable)) if published_known else None),
         "discovery_recall_addressable": _rate(addressable_held, len(addressable)),
         "subscribed_recall_addressable": _rate(addressable_subscribed, len(addressable)),
 
         # Kept beside the headline, as the raw count the screen never claimed
         # to reach. Useful for spotting a floor that deletes the population.
-        "recall_all_gappers": _rate(len(published & set(gappers)), total),
+        "recall_all_gappers": (
+            _rate(published_gappers, total) if published_known else None),
         "discovery_recall_all_gappers": _rate(len(held), total),
         "subscribed_recall_all_gappers": _rate(subscribed_hits, total),
 
@@ -340,9 +372,50 @@ def build(session_date: str | None = None, write: bool = True,
     today_rows, error = api.eod_bulk_last_day("US", day=today)
     if error:
         raise RuntimeError(f"today's bulk end of day failed: {error}")
+    if not today_rows:
+        # The test is on the DATA, not on the error, which is the rule
+        # discover.prior_session_movers now applies to its own two bulk calls. A
+        # 200 carrying an empty array is not an error, so this fell straight
+        # through and every count below was computed from nothing: gapped 0,
+        # addressable 0, pool_held 0, missed [], and no reason recorded anywhere
+        # in the file. That artifact is on disk, runs/2026-08-20/pool_recall.json
+        # stamped 07:01:18.
+        #
+        # 07:00 is the whole of it. tasks/register_tasks.ps1 registers
+        # job_nightly.bat a second time at that hour as nightly-catchup with no
+        # --date, so this step asks the vendor for TODAY's end of day bars
+        # before today's session has opened. On an ordinary day the 22:15 pass
+        # overwrites the morning zeros; on a night that does not reach this
+        # step, the surviving artifact reads as a measured total failure of a
+        # morning that produced no report at all.
+        #
+        # Refused on the evidence rather than on a clock. A clock guard would
+        # have to name the hour at which a session counts as complete, which is
+        # a threshold this file does not own, and it would make the step behave
+        # differently depending on the hour somebody ran it.
+        catchup = ""
+        if today == ettime.today_et():
+            catchup = (
+                " This is the shape of the 07:00 nightly-catchup invocation, "
+                "which passes no --date and so asks for a session that has not "
+                "happened yet. That task wants a --date of the prior session, "
+                "or pool_recall taken out of it.")
+        raise RuntimeError(
+            f"the bulk end of day for {today.isoformat()} came back with no rows, "
+            "so there is nothing to measure, and a payload of zeros would be "
+            "published as a morning that caught none of what gapped." + catchup)
     prior_rows, error = api.eod_bulk_last_day("US", day=prior)
     if error:
         raise RuntimeError(f"the prior session bulk end of day failed: {error}")
+    if not prior_rows:
+        # The same rule one call down. Every gap below is measured against a
+        # prior close taken from this payload, so an empty one produces zero
+        # gappers for the same reason an empty today produces zero opens, and
+        # writes the same silent nothing.
+        raise RuntimeError(
+            f"the prior session bulk end of day for {prior.isoformat()} came back "
+            "with no rows, so no gap can be measured against a prior close and "
+            "the run would publish zero gappers it never looked for")
 
     prior_closes: dict[str, float] = {}
     for row in prior_rows or []:
@@ -360,7 +433,8 @@ def build(session_date: str | None = None, write: bool = True,
     target = addressable_target(gappers, universe_rows)
     published, published_reason = published_symbols(today.isoformat())
 
-    result = measure(gappers, pool_rows, target["addressable"], published)
+    result = measure(gappers, pool_rows, target["addressable"], published,
+                     published_reason=published_reason)
     payload = {
         "addressable_funnel": target["funnel"],
         "market_cap_sensitivity": target["market_cap_sensitivity"],
@@ -390,17 +464,23 @@ def build(session_date: str | None = None, write: bool = True,
     print(f"pool_recall: the market cap floor removed {funnel['market_cap_floor_cost']} "
           f"gapper(s) this session; {funnel['no_market_cap_on_file']} had no market cap "
           f"on file and were examined against nothing")
-    print(f"pool_recall: published {payload['published_addressable_gappers']} of "
-          f"{payload['addressable']} addressable "
-          f"(recall {payload['recall_addressable']} against the addressable target), "
-          f"and {payload['published_gappers']} of {payload['gapped']} raw "
-          f"(recall {payload['recall_all_gappers']} against all gappers)")
+    if payload["published_unknown_reason"]:
+        print("pool_recall: what the report published is not known, so every "
+              "published count and every recall rate built on one is null: "
+              f"{payload['published_unknown_reason']}")
+    else:
+        print(f"pool_recall: published {payload['published_addressable_gappers']} of "
+              f"{payload['addressable']} addressable "
+              f"(recall {payload['recall_addressable']} against the addressable target), "
+              f"and {payload['published_gappers']} of {payload['gapped']} raw "
+              f"(recall {payload['recall_all_gappers']} against all gappers)")
     print(f"pool_recall: discovery held {payload['pool_held']} raw, "
           f"{payload['addressable_pool_held']} addressable "
           f"(recall {payload['discovery_recall_addressable']} against the "
           f"addressable target), of which {payload['subscribed_held']} were subscribed")
-    if published_reason:
-        print(f"pool_recall: {published_reason}")
+    # published_reason used to be printed here as well. It is now named by the
+    # branch above, which fires on exactly the same two cases, and printing the
+    # same sentence twice teaches a reader to skim it.
     for row in payload["missed"][:15]:
         print(f"    missed {row['symbol']:<12} gap at open {row['gap_at_open_pct']:+8.2f}%")
     if len(payload["missed"]) > 15:

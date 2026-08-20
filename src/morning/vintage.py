@@ -54,12 +54,34 @@ def previous_trading_session(day: dt.date, limit: int = 10) -> dt.date | None:
     is the day before the holiday. Returns None when the calendar cannot answer
     within limit days, which the caller treats as unknown rather than as a
     violation: a check that cannot run must not fail a run it did not examine.
+
+    It asks market_today.trading_day_state, not is_trading_day, and the
+    difference is the whole reason that function exists. is_trading_day answers
+    True for every date when data/exchange-details.json is missing, weekends
+    included, because the scheduled .bat files branch on its exit code and a
+    morning that refuses to run over an absent cache file is worse than one
+    that runs. Reading that True as a session made a Monday's prior session the
+    Sunday, and since prior_session_date comes from the vendor's end of day bar
+    rather than from the calendar, checks (c) and (d) below then failed EVERY
+    candidate and every prior session snapshot row: the real 2026-08-17 packet
+    produced six violations with every date in it correct, enforce() rewrote
+    data/UNVERIFIED over the human's note, and the chain stopped before the
+    analyst blaming the vendor for a missing holiday list. Now the walk reports
+    the same "unknown" it already reported for a calendar that raises, the
+    checks stand down the way (e) already does, and the packet's calendar_cache
+    block is where a reader sees that the list was absent.
     """
     for back in range(1, limit + 1):
         candidate = day - dt.timedelta(days=back)
         try:
-            open_that_day, _why = market_today.is_trading_day(candidate)
+            open_that_day, _why = market_today.trading_day_state(candidate)
         except Exception:
+            return None
+        if open_that_day is None:
+            # The calendar declined to answer. Not the same as a closed day:
+            # walking further back would only collect more non answers, and
+            # returning the next candidate would be an assumption wearing a
+            # session date.
             return None
         if open_that_day:
             return candidate

@@ -24,7 +24,13 @@ $jobs = @(
     # same idempotent nightly runs again before the market day: it fills
     # yesterday via the catch-up sweep and completes the volume verification
     # before the new morning's collection is trusted.
-    @{ Name = "nightly-catchup"; Bat = "job_nightly.bat";      Days = $weekdays;    Start = "07:00" },
+    #
+    # It passes "catchup", which runs the backfill and the outcome fill and
+    # stops there. Without it this firing also ran pool_recall, which measures
+    # the session it is invoked on, so at 07:00 it asked for a session that had
+    # not opened and overwrote the previous evening's real recall figures with
+    # zeros. See job_nightly.bat.
+    @{ Name = "nightly-catchup"; Bat = "job_nightly.bat";      Days = $weekdays;    Start = "07:00"; Args = "catchup" },
     # 21:00, and the two earlier values are worth keeping in view because each
     # was wrong for a different reason.
     #
@@ -80,7 +86,14 @@ foreach ($job in $jobs) {
         continue
     }
 
-    $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
+    # -Argument is passed structurally like -Execute, so the spaced project
+    # path is not involved and the schtasks quoting trap does not apply here.
+    # Only nightly-catchup carries one today.
+    if ($job.Args) {
+        $action = New-ScheduledTaskAction -Execute $bat -Argument $job.Args -WorkingDirectory $root
+    } else {
+        $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
+    }
     $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $job.Days -At $job.Start
     if ($job.RepeatMin) {
         # Weekly triggers cannot take repetition parameters directly in this

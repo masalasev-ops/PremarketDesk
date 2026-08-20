@@ -1064,6 +1064,16 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
     An absent or stale check is itself a gap. An unmeasured feed is not a clean
     one, and a morning that says nothing about it reads exactly like a morning
     that measured zero.
+
+    The DIRECTION comes from the check and is never assumed. Until 2026-08-20
+    this function wrote "an RVOL below is understated by about that much again"
+    off a median ABSOLUTE difference, which cannot carry a sign, and
+    doc/research/COLLECTOR_VOLUME.md had already recorded the collector wrong
+    in both directions: 2026-08-14 came back 3.83 times the vendor in aggregate
+    against 2026-08-17 at -88.49 percent. So the check now returns a signed
+    median, an aggregate ratio and the direction those two agree on, this reads
+    it, and a reading that carries no sign, which every summary written before
+    that date does, says the direction is unknown rather than guessing it.
     """
     check = collect_premarket.latest_volume_check(session_date)
     if check is None:
@@ -1083,6 +1093,49 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
         f"{check['median_abs_pct']:.1f} percent across {check['compared']} "
         f"symbol(s), {check['within_one_percent']} of them within one percent"
     )
+    signed = check.get("median_signed_pct")
+    if signed is not None:
+        detail += f", signed median {signed:+.1f} percent"
+    ratio = check.get("aggregate_ratio")
+    if ratio is not None:
+        detail += f", aggregate {ratio:.2f} times the vendor's volume"
+    # The symbols the measurement never reached. Publishing compared and
+    # unavailable alone read as though they partitioned the subscription, and
+    # on 2026-08-20 two subscribed names were in neither.
+    silent = check.get("collector_silent")
+    if silent:
+        detail += (f", with {silent} subscribed symbol(s) the collector never "
+                   "heard and so never compared")
+    zero = check.get("vendor_zero_volume")
+    if zero:
+        detail += (f" and {zero} where the vendor reported no volume on the "
+                   "common minutes")
+
+    direction = check.get("direction") or "unknown"
+    if direction == "under":
+        consequence = (
+            "Every RVOL and every float rotation in this packet is UNDERSTATED "
+            "by about that much again")
+    elif direction == "over":
+        consequence = (
+            "Every RVOL and every float rotation in this packet is OVERSTATED "
+            "by about that much, which is the opposite of the window shortfall "
+            "and does not cancel it")
+    elif direction == "mixed":
+        consequence = (
+            "The disagreement ran in BOTH directions on that session, the "
+            "typical symbol falling on one side of the vendor and the aggregate "
+            "tape on the other, so an RVOL here may be over or under and "
+            "neither may be assumed")
+    else:
+        consequence = (
+            "That reading carries no sign, having been written before the check "
+            "recorded one, so the DIRECTION of the error is unknown and must "
+            "not be described as understatement")
+    consequence += (
+        ", and a screen decided on RVOL this morning should be read as an "
+        "instrument reading rather than as a fact about the tape.")
+
     if check["stale"]:
         packet.gap(
             f"the collector volume check is {check['age_days']} days old, past "
@@ -1096,9 +1149,7 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
             f"collector-sourced numerator by a vendor-sourced denominator, and "
             f"{detail}. That disagreement passes straight into the ratios in "
             "this packet and is LARGER than the window shortfall reported "
-            "separately. An RVOL below is understated by about that much "
-            "again, and a screen decided on RVOL this morning should be read "
-            "as an instrument reading rather than as a fact about the tape."
+            f"separately. {consequence}"
         )
     return check
 
@@ -1180,6 +1231,11 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
     min_ratio = _CRIT.number("float_rotation", "min_float_to_shares_outstanding")
     max_ratio = _CRIT.number("float_rotation", "max_float_to_shares_outstanding")
 
+    # Named once at the end rather than gapped one by one. On the thin quota
+    # path this is every candidate and the same sentence twelve times is not
+    # twelve findings, it is one.
+    quote_never_fetched: list[str] = []
+
     for candidate in candidates:
         candidate["pm_float_rotation"] = None
         candidate["pm_float_rotation_reason"] = None
@@ -1202,6 +1258,19 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             )
             packet.gap(f"{candidate['symbol']} float rotation is null: "
                        "no collector premarket volume")
+            continue
+        # Tested before the quote is blamed for anything. A quote that was
+        # never fetched is not a quote the vendor answered thinly, and until
+        # 2026-08-20 this function could not tell the two apart: it saw an
+        # empty dict either way and reported the vendor's silence. The thin
+        # quota path sets quote_skipped one line after it sets catalyst_error,
+        # so the real reason is on the candidate and only had to be read.
+        if candidate.get("quote_skipped") and share_float is None:
+            candidate["pm_float_rotation_reason"] = (
+                "the delayed quote was never fetched, so there is no sharesFloat "
+                "to divide by: " + str(candidate["quote_skipped"])
+            )
+            quote_never_fetched.append(candidate["symbol"])
             continue
         if share_float is None or share_float <= 0:
             candidate["pm_float_rotation_reason"] = (
@@ -1349,6 +1418,14 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             "is_lower_bound": numerator_window > true_open,
         }
 
+    if quote_never_fetched:
+        packet.gap(
+            f"float rotation is null for {len(quote_never_fetched)} of "
+            f"{len(candidates)} candidates because the delayed quote was never "
+            "fetched, not because the vendor carried no sharesFloat: "
+            + ", ".join(quote_never_fetched)
+        )
+
 
 # ---------------------------------------------------------- 6. catalyst news
 
@@ -1365,6 +1442,134 @@ def _publisher_from(link: str | None) -> str | None:
     return host[4:] if host.startswith("www.") else host or None
 
 
+def _article_key(headline: dict[str, Any]) -> str:
+    """One article, one key, so the same story is recognised across candidates.
+
+    The url when the feed gave one, because two candidates handed the same
+    story are handed the same link. The title is the fallback. A row carrying
+    neither is unique to itself rather than silently merged with every other
+    untitled row, since merging them would invent a breadth nobody measured.
+    """
+    url = str(headline.get("url") or "").strip()
+    if url:
+        return f"url:{url}"
+    title = str(headline.get("title") or "").strip()
+    return f"title:{title}" if title else f"row:{id(headline)}"
+
+
+def _scope_articles(
+    fetched: dict[str, list[dict[str, Any]]], candidate_count: int
+) -> None:
+    """Decide, per candidate, which of its articles are actually ABOUT it.
+
+    EODHD news tags are ARTICLE scoped, not company scoped, and until
+    2026-08-20 every tag on every kept headline was read as a tag about
+    whichever name the feed had returned it for. A multi company roundup
+    therefore conferred its strongest class on every one of them. That morning
+    the CNBC piece "Stocks making the biggest moves premarket: Walmart,
+    Coinbase, Moderna, Alibaba and more" carried 46 tags naming 45 companies,
+    EARNINGS among them, which belongs to Walmart. MSTR, COIN and MARA were
+    all classed earnings off it and BLSH off "Biggest stock movers Thursday:
+    Crypto stocks, WOLF, and more". Class earnings is worth 3 of the score's
+    10 points, so MSTR published green at 7.0 on a class it does not have and
+    three more names published yellow at 6.0.
+
+    The obvious fix does not work and it is worth saying why, because it is
+    the first thing a reader will reach for. attach_catalysts already filters
+    on the feed's own symbols array, and every roundup in that packet carried
+    an EMPTY one, so the filter was skipped and could not be tightened into
+    anything. The article really is associated with the candidate. What is
+    wrong is treating all of its tags as tags about the candidate.
+
+    So breadth is measured instead, by two counts, because neither one sees
+    the whole thing and this project holds no offline list of company names to
+    count issuers against directly.
+
+      tag_count     how many tags the article carries. A wire roundup lists
+                    every issuer it touched, so the CNBC piece ran to 46
+                    against a maximum of 7 on the single company releases the
+                    same morning. This is the count that catches a roundup
+                    even on a morning where only one candidate was handed it.
+      returned_for  how many of this morning's candidates the feed handed this
+                    same article to. A story given to seven of twelve names is
+                    not about any one of them, and this is the only count that
+                    catches a roundup tagged by TOPIC rather than by issuer:
+                    "Biggest stock movers Thursday" carries seven purely
+                    topical tags, so its tag count is unremarkable, and it went
+                    to three candidates.
+
+    Both have to sit inside their CRITERIA.md [Score catalyst tags] limits
+    before an article's tags are allowed to classify a name. A name whose
+    every article is a roundup comes out class "none" with catalyst_found
+    still true, which is the existing legal state meaning the window was
+    checked and paid nothing. It is NOT null: null means the feed was never
+    checked at all, and the two must not be confused.
+    """
+    max_tags = _CRIT.integer("score_catalyst_tags", "max_tags_for_one_company")
+    max_sharing = _CRIT.integer("score_catalyst_tags", "max_candidates_sharing_article")
+
+    returned_for: dict[str, set[str]] = {}
+    for symbol, articles in fetched.items():
+        for article in articles:
+            returned_for.setdefault(_article_key(article), set()).add(symbol)
+
+    for symbol, articles in fetched.items():
+        for article in articles:
+            shared = len(returned_for.get(_article_key(article)) or {symbol})
+            tags = len(article.get("tags") or [])
+            wide_tags = tags > max_tags
+            wide_feed = shared > max_sharing
+            if wide_tags and wide_feed:
+                why = (f"a roundup on both counts: {tags} tags, above {max_tags}, "
+                       f"and returned for {shared} of this morning's "
+                       f"{candidate_count} candidates, above {max_sharing}")
+            elif wide_tags:
+                why = (f"a roundup: {tags} tags, above the {max_tags} a single "
+                       "company article carries, so its tags name the issuers it "
+                       "lists rather than this one")
+            elif wide_feed:
+                why = (f"a roundup: the feed returned it for {shared} of this "
+                       f"morning's {candidate_count} candidates, above "
+                       f"{max_sharing}, so its tags are not about any one of them")
+            else:
+                why = (f"about this name: {tags} tag(s), returned for {shared} of "
+                       f"this morning's {candidate_count} candidates")
+            article["article_scope"] = {
+                "tag_count": tags,
+                "returned_for_candidates": shared,
+                "candidates_in_packet": candidate_count,
+                "about_this_name": not (wide_tags or wide_feed),
+                "why": why,
+            }
+
+
+def _polarity_counts(
+    headlines: list[dict[str, Any]], negative_at: float, positive_at: float
+) -> dict[str, Any]:
+    """Split a headline list by the vendor's polarity, counting what it cannot score.
+
+    Its own function because two callers need it over two different lists.
+    attach_catalysts counts over the WHOLE window, which is the balance the
+    trap rule was written for; attach_traps falls back to the displayed list
+    when it is handed a candidate nobody counted, and says which it used.
+    """
+    scored: list[float] = []
+    unscored = 0
+    for headline in headlines:
+        value = _as_float((headline.get("sentiment") or {}).get("polarity"))
+        if value is None:
+            unscored += 1
+        else:
+            scored.append(value)
+    return {
+        "scored": len(scored),
+        "unscored": unscored,
+        "negative": sum(1 for v in scored if v <= negative_at),
+        "positive": sum(1 for v in scored if v >= positive_at),
+        "mean_polarity": (round(sum(scored) / len(scored), 4) if scored else None),
+    }
+
+
 def attach_catalysts(
     api: eodhd.EodhdClient, candidates: list[dict[str, Any]], packet: Packet
 ) -> None:
@@ -1373,12 +1578,31 @@ def attach_catalysts(
     The symbol tag is the entire filter. No keyword matching, no company name
     regex, no stopword list. If the feed has nothing tagged with the symbol,
     catalyst_found is false and that is a finding, not a gap to paper over.
+
+    Two things are settled here that used to be settled downstream on the
+    truncated list, and both were wrong for the same reason: news_keep is a
+    DISPLAY cap and nothing more.
+
+    The polarity balance is the first. attach_traps weighed candidate
+    ["headlines"], which is recent[:news_keep] with news_keep at 3, while
+    news_in_window recorded the true count beside it. On 2026-08-20 WMT
+    published trap=False on 3 of 45 headlines, COIN on 3 of 24 and BABA on 3
+    of 17, and since min_headlines_for_balance is 2 and the sample can never
+    exceed 3, one negative against zero positives satisfied "strictly more
+    negative than positive". That is a verdict resting on one mis-scored
+    headline, which is exactly what the balance rule was written that same day
+    to stop. So the counts are taken over the whole window here and handed on.
+
+    Article scope is the second, and _scope_articles carries the argument.
     """
     hours = _CRIT.integer("scan", "news_lookback_hours")
     keep = _CRIT.integer("scan", "news_keep")
+    negative_at = _CRIT.number("traps", "negative_polarity")
+    positive_at = _CRIT.number("traps", "positive_polarity")
     now = ettime.now_et()
     since = now - dt.timedelta(hours=hours)
 
+    fetched: dict[str, list[dict[str, Any]]] = {}
     for candidate in candidates:
         rows, error = api.news(
             candidate["symbol"], start=since.date(), end=now.date()
@@ -1419,9 +1643,32 @@ def attach_catalysts(
             )
 
         recent.sort(key=lambda r: str(r.get("published_at") or ""), reverse=True)
+        fetched[candidate["symbol"]] = recent
+
+    # After every candidate, because how many of them the feed handed an
+    # article to is one of the two breadth counts and it cannot be known one
+    # candidate at a time.
+    _scope_articles(fetched, len(candidates))
+
+    for candidate in candidates:
+        recent = fetched.get(candidate["symbol"])
+        if recent is None:
+            # The news call failed for this one; the loop above already
+            # recorded the error and left catalyst_found unknown.
+            continue
+        counts = _polarity_counts(recent, negative_at, positive_at)
+        counts["counted_over"] = len(recent)
+        counts["source"] = ("every headline the feed returned inside the window, "
+                            "not the news_keep displayed beside it")
+        candidate["headline_polarity"] = counts
         candidate["headlines"] = recent[:keep]
         candidate["catalyst_found"] = bool(recent)
         candidate["news_in_window"] = len(recent)
+        candidate["headlines_note"] = (
+            f"{len(recent)} headline(s) carried the symbol tag in the window and "
+            f"the {len(recent[:keep])} newest are kept here, a display cap from "
+            "CRITERIA.md [Scan] news_keep. The trap balance is decided over all "
+            "of them; the catalyst class is read from the ones kept.")
 
 
 def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
@@ -1459,26 +1706,43 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
 
     flagged: list[str] = []
     for candidate in candidates:
-        scored: list[float] = []
-        unscored = 0
-        for headline in candidate.get("headlines") or []:
-            polarity = ((headline.get("sentiment") or {}).get("polarity"))
-            value = _as_float(polarity)
-            if value is None:
-                unscored += 1
-            else:
-                scored.append(value)
+        displayed = candidate.get("headlines") or []
+        counts = candidate.get("headline_polarity")
+        over_window = counts is not None
+        if not over_window:
+            # A candidate nobody counted: a packet rescored from before
+            # attach_catalysts recorded the window counts, or a caller handing
+            # this function a bare headline list. The displayed list is then
+            # all there is, and the basis says which one it read rather than
+            # presenting three of forty five as though they were the window.
+            counts = _polarity_counts(displayed, negative_at, positive_at)
+            counts["counted_over"] = len(displayed)
 
-        negatives = [v for v in scored if v <= negative_at]
-        positives = [v for v in scored if v >= positive_at]
+        scored_count = counts["scored"]
+        negatives = counts["negative"]
+        positives = counts["positive"]
         basis = {
-            "headlines_scored": len(scored),
-            "headlines_unscored": unscored,
-            "negative": len(negatives),
-            "positive": len(positives),
+            # Over the WHOLE window, not the displayed three. Until 2026-08-20
+            # these were counted off candidate["headlines"], which news_keep
+            # caps at 3, and trap_basis then published headlines_scored 3 and
+            # headlines_unscored 0 for a name with 45 headlines: 42 counted
+            # nowhere, in a pair of fields that read as a partition of the
+            # coverage. The two below plus nothing else now sum to
+            # headlines_in_window.
+            "headlines_scored": scored_count,
+            "headlines_unscored": counts["unscored"],
+            "headlines_in_window": counts["counted_over"],
+            "headlines_displayed": len(displayed),
+            "counted_over": (
+                "every headline the feed returned inside the window"
+                if over_window else
+                "the displayed headlines only, because no window count was "
+                "recorded for this candidate"),
+            "negative": negatives,
+            "positive": positives,
             "negative_at_or_below": negative_at,
             "positive_at_or_above": positive_at,
-            "mean_polarity": (round(sum(scored) / len(scored), 4) if scored else None),
+            "mean_polarity": counts["mean_polarity"],
             "rule": ("strictly more negative than positive headlines, not the "
                      "single worst one. See the balance note in CRITERIA.md"),
             "source": ("polarity as published by the EODHD news feed, which is "
@@ -1490,35 +1754,45 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
         gap = _as_float(candidate.get("gap_pct"))
         if candidate.get("catalyst_found") is None:
             candidate["trap"] = None
-            candidate["trap_why"] = ("the news call failed, so there is no "
-                                     "headline set to weigh and trap is unknown "
-                                     "rather than absent")
+            # The reason is quoted from catalyst_error rather than asserted.
+            # This line used to read "the news call failed" whatever had
+            # happened, and on the thin quota path nothing had failed: the call
+            # was skipped to protect a shared meter, which the packet already
+            # said one function earlier and this one contradicted.
+            candidate["trap_why"] = (
+                "there is no headline set to weigh, so trap is unknown rather "
+                "than absent: "
+                + (candidate.get("catalyst_error")
+                   or "the news feed was never checked"))
         elif gap is None or gap < min_gap:
             candidate["trap"] = None
             candidate["trap_why"] = (
                 f"a trap is a gap UP contradicted by its news; this gap is "
                 f"{'null' if gap is None else format(gap, '.2f') + ' percent'}, "
                 f"below the {min_gap:g} percent this question is asked above")
-        elif len(scored) < minimum:
+        elif scored_count < minimum:
             candidate["trap"] = None
             candidate["trap_why"] = (
-                f"{len(scored)} scored headline(s), below the {minimum} needed "
-                "for a balance; on fewer than that the balance IS the single "
-                "worst headline, which is the reading this rule exists to stop")
-        elif len(negatives) > len(positives):
+                f"{scored_count} scored headline(s) of {counts['counted_over']} "
+                f"in the window, below the {minimum} needed for a balance; on "
+                "fewer than that the balance IS the single worst headline, "
+                "which is the reading this rule exists to stop")
+        elif negatives > positives:
             candidate["trap"] = True
             candidate["trap_why"] = (
-                f"gaps up {gap:.2f} percent while {len(negatives)} of "
-                f"{len(scored)} scored headlines are negative at or below "
-                f"{negative_at:g} against {len(positives)} positive at or above "
-                f"{positive_at:g}")
+                f"gaps up {gap:.2f} percent while {negatives} of "
+                f"{scored_count} scored headlines are negative at or below "
+                f"{negative_at:g} against {positives} positive at or above "
+                f"{positive_at:g}, counted over "
+                f"{counts['counted_over']} headline(s) in the window")
             flagged.append(candidate["symbol"])
         else:
             candidate["trap"] = False
             candidate["trap_why"] = (
                 f"gaps up {gap:.2f} percent and its headlines do not contradict "
-                f"it: {len(negatives)} negative against {len(positives)} "
-                f"positive of {len(scored)} scored")
+                f"it: {negatives} negative against {positives} "
+                f"positive of {scored_count} scored, counted over "
+                f"{counts['counted_over']} headline(s) in the window")
 
     if flagged:
         packet.gap(
@@ -1697,6 +1971,14 @@ def classify_catalyst(
     interpretation. Then the EODHD news tags, mapped through the table in
     CRITERIA.md. Headlines are never pattern matched.
 
+    Only tags from an article that is ABOUT this candidate are read. EODHD
+    tags are article scoped, so a multi company roundup used to confer its
+    strongest class on every name the feed returned it for, which is how MSTR,
+    COIN, MARA and BLSH came out class earnings on 2026-08-20 while none of
+    them was on the calendar. _scope_articles decides which is which and the
+    why below names the article that paid, and how wide it was, so a reader
+    can audit the call rather than take it.
+
     catalyst_found None means the news feed was never successfully checked
     (call failed, or skipped for quota). That is unknown, not absent: the
     class is None, the why names the real reason, and nothing downstream may
@@ -1714,10 +1996,24 @@ def classify_catalyst(
         reason = candidate.get("catalyst_error") or "the news feed was never checked"
         return None, f"catalyst is unknown, not absent: {reason}"
 
+    kept = candidate.get("headlines") or []
     best_class = "none"
     best_points = -1.0
     matched_tag = None
-    for headline in candidate.get("headlines") or []:
+    matched_article: dict[str, Any] | None = None
+    roundups = 0
+    widest: tuple[int, Any, Any] | None = None
+    for headline in kept:
+        scope = headline.get("article_scope") or {}
+        # An article naming dozens of issuers classifies none of them. A
+        # headline carrying no scope at all is read as before, because a packet
+        # written before _scope_articles existed must still rescore.
+        if scope and not scope.get("about_this_name", True):
+            roundups += 1
+            shared = int(scope.get("returned_for_candidates") or 0)
+            if widest is None or shared > widest[0]:
+                widest = (shared, scope.get("tag_count"), headline.get("title"))
+            continue
         for tag in headline.get("tags") or []:
             mapped = tag_map.get(str(tag).strip().lower().replace("-", " "))
             if not mapped:
@@ -1725,9 +2021,31 @@ def classify_catalyst(
             points = class_points.get(mapped, 0.0)
             if points > best_points:
                 best_class, best_points, matched_tag = mapped, points, tag
+                matched_article = headline
 
     if matched_tag:
-        return best_class, f"EODHD news tag {matched_tag!r} mapped through CRITERIA.md"
+        article = matched_article or {}
+        scope = article.get("article_scope") or {}
+        breadth = ""
+        if scope:
+            breadth = (f", an article carrying {scope.get('tag_count')} tag(s) and "
+                       f"returned for {scope.get('returned_for_candidates')} of "
+                       f"this morning's {scope.get('candidates_in_packet')} "
+                       "candidates")
+        return best_class, (
+            f"EODHD news tag {matched_tag!r} mapped through CRITERIA.md, from "
+            f"{str(article.get('title') or 'an untitled headline')!r}{breadth}")
+    if roundups and candidate.get("catalyst_found"):
+        detail = ""
+        if widest:
+            detail = (f". The widest was {str(widest[2] or 'an untitled headline')!r}, "
+                      f"carrying {widest[1]} tag(s) and returned for {widest[0]} of "
+                      "this morning's candidates")
+        return "none", (
+            "no tag from an article about this name maps to a known class. "
+            f"Roundups set aside: {roundups} of the {len(kept)} kept article(s), "
+            "whose tags name the issuers they list rather than this one"
+            + detail)
     if candidate.get("catalyst_found"):
         return "none", "news carries the symbol tag but no tag maps to a known class"
     return "none", "no news carried the symbol tag in the window"
@@ -2270,6 +2588,15 @@ def build_packet() -> dict[str, Any]:
             )
             for candidate in candidates:
                 candidate["quote"] = {}
+                # An empty dict cannot say WHY it is empty, and everything
+                # downstream that reads a missing field out of it was blaming
+                # the vendor. attach_float_rotation wrote "the delayed quote
+                # carried no sharesFloat" for the whole watchlist on
+                # 2026-08-20's degrade path, and REPORT_TEMPLATE.md tells the
+                # model to quote the packet's reason rather than invent one, so
+                # the report told its reader the vendor had no float data for
+                # any name. No number was wrong; the provenance was false.
+                candidate["quote_skipped"] = quota_clause
                 candidate["prior_close"] = None
                 candidate["prior_high"] = None
                 candidate["prior_session_date"] = None

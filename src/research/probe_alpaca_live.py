@@ -24,6 +24,16 @@ to that design if true:
   the lag may be real but small, in which case the design stands and the number
   to record is how small.
 
+What actually happened was a fourth thing, recorded here because the three
+above do not include it and the code was written as though they did. On
+2026-08-16 and again on 2026-08-17 every request was REFUSED, HTTP 403: the
+free tier will not serve the sip feed over a window that ends at the wall
+clock. A refused sweep and an empty one produced identical zeros until
+2026-08-20, when the served and refused counts were carried into the table and
+the no-bars prose was made to stop interpreting a sweep nobody answered. The
+only file on disk where this sweep was ever served is the 2026-08-14 dry run,
+against a session that had already completed.
+
 So this samples the whole universe every five minutes through the premarket and
 records, per sample: how many symbols have any bar today, how far the newest
 bar is behind the wall clock, and the top names by gap computed from those
@@ -70,6 +80,12 @@ INTERVAL_S = 300
 # is stable as the morning goes on, not so many that the log becomes the data.
 TOP_N = 20
 
+# Symbols per request. Named rather than left inline because the report has to
+# reconstruct a request count for sweeps logged before 2026-08-20, when the
+# served and refused counts were not recorded at all, and that reconstruction
+# needs to know how many chunks a sweep of a given size was cut into.
+CHUNK_SIZE = 2000
+
 
 def log_path(day: str | None = None) -> Path:
     return config.DATA_DIR / f"probe-alpaca-live-{day or ettime.today_str()}.jsonl"
@@ -91,8 +107,8 @@ def prior_closes(probe: probe_alpaca.Probe, codes: list[str], today: dt.date) ->
     start = (today - dt.timedelta(days=10)).isoformat()
     end = (today - dt.timedelta(days=1)).isoformat()
     closes: dict[str, float] = {}
-    for index in range(0, len(codes), 2000):
-        chunk = codes[index:index + 2000]
+    for index in range(0, len(codes), CHUNK_SIZE):
+        chunk = codes[index:index + CHUNK_SIZE]
         token = None
         while True:
             params = {"symbols": ",".join(chunk), "timeframe": "1Day",
@@ -136,9 +152,17 @@ def sample(
     volume: dict[str, float] = {}
     bars_total = 0
     errors: list[str] = []
+    # Counted here rather than left to be inferred downstream. The 2026-08-17
+    # run was read as an empty premarket for two whole days because nothing
+    # after this function looked at the refusals: every chunk of every sweep
+    # came back 403, and a refused sweep printed a zero active count that was
+    # indistinguishable from a feed that answered and had nothing in it.
+    requests_served = 0
+    requests_refused = 0
+    refusal_codes: set[int] = set()
 
-    for index in range(0, len(codes), 2000):
-        chunk = codes[index:index + 2000]
+    for index in range(0, len(codes), CHUNK_SIZE):
+        chunk = codes[index:index + CHUNK_SIZE]
         token, pages = None, 0
         while True:
             params = {"symbols": ",".join(chunk), "timeframe": "1Min",
@@ -148,8 +172,11 @@ def sample(
             status, payload, _ = probe.get(params)
             pages += 1
             if status != 200:
+                requests_refused += 1
+                refusal_codes.add(int(status))
                 errors.append(f"chunk at {index}: status {status}")
                 break
+            requests_served += 1
             for symbol, bars in ((payload.get("bars") or {}).items()):
                 for bar in bars or []:
                     bars_total += 1
@@ -205,6 +232,11 @@ def sample(
         "gappers_over_3pct": sum(1 for g in gaps if abs(g["gap_pct"]) > 3.0),
         "top_gappers": gaps[:TOP_N],
         "requests_used": probe.request_count,
+        # These three are recorded rather than derived from "errors", which is
+        # truncated to four entries and therefore cannot be counted.
+        "requests_served": requests_served,
+        "requests_refused": requests_refused,
+        "refusal_status_codes": sorted(refusal_codes),
         "errors": errors[:4],
     }
 
@@ -257,8 +289,104 @@ DOCUMENTED_LAG_MINUTES = 15.0
 TABLE_PATH_STEM = "probe-alpaca-live-table"
 
 
+def sweep_requests(record: dict[str, Any]) -> dict[str, Any]:
+    """How many of one sweep's requests were answered, and how many refused.
+
+    Sweeps logged from 2026-08-20 carry the counts on the record. Earlier ones
+    carry only record["errors"], which sample() truncates to four entries, so
+    for those the counts are reconstructed from what the log does say.
+
+    The reconstruction rests on three facts about sample(). Every chunk costs
+    at least one request. A chunk is abandoned at its first non-200, so it
+    contributes at most one entry to the error list. And a chunk issues a
+    SECOND request only when the first came back carrying a page token, which
+    only happens when bars came with it. So for a sweep that returned no bars,
+    every chunk made exactly one request and the error list accounts for every
+    one of them that was turned away, which is knowable from an old record and
+    is precisely the 2026-08-17 case.
+
+    Where a reconstructed number is only a floor, the flags say so and the
+    table prints "at least". Presenting a floor as a measurement is the same
+    class of error this whole helper exists to undo.
+    """
+    requested = int(record.get("symbols_requested") or 0)
+    chunks = max(1, -(-requested // CHUNK_SIZE))
+
+    errors = [str(text) for text in (record.get("errors") or [])]
+    codes = record.get("refusal_status_codes")
+    if codes is None:
+        codes = []
+        for text in errors:
+            head, _, tail = text.rpartition("status ")
+            if head and tail.strip().isdigit():
+                codes.append(int(tail.strip()))
+        codes = sorted(set(codes))
+
+    refused = record.get("requests_refused")
+    # errors is capped at four entries, so a full list is a floor rather than
+    # a count. It has never been reached: the universe is two chunks wide.
+    refused_exact = refused is not None or len(errors) < 4
+    if refused is None:
+        refused = len(errors)
+    refused = int(refused)
+
+    served = record.get("requests_served")
+    served_exact = served is not None
+    if served is None:
+        if not record.get("bars_total"):
+            # No bars came back, so no page token did either, so every chunk
+            # made exactly one request. This is a count, not a floor.
+            served = max(chunks - refused, 0)
+            served_exact = True
+        else:
+            # Bars came back, so at least one request per chunk was answered
+            # and the page count is not recoverable from an old record. It is
+            # not needed either: what the report has to know is whether
+            # ANYTHING was served, and a floor answers that.
+            served = max(chunks - refused, 1)
+    return {"served": int(served), "served_exact": bool(served_exact),
+            "refused": refused, "refused_exact": bool(refused_exact),
+            "codes": list(codes)}
+
+
+def _codes_text(codes: list[int]) -> str:
+    """The refusal codes as text.
+
+    Probe.get returns status 0 when the request never got an HTTP answer at
+    all, which is a different failure from a refusal and would read as a status
+    code if it were printed as a number.
+    """
+    if not codes:
+        return "none"
+    return ", ".join("no response" if code == 0 else str(code) for code in codes)
+
+
+def _codes_phrase(codes: list[int]) -> str:
+    """The refusal codes as they read inside a sentence."""
+    if not codes:
+        return "no recorded status"
+    if codes == [0]:
+        return "no HTTP answer at all"
+    if len(codes) == 1:
+        return f"status {codes[0]}"
+    return f"statuses {_codes_text(codes)}"
+
+
+def _count_text(value: int, exact: bool, short: bool = False) -> str:
+    """A count, or a floor labelled as one."""
+    if exact:
+        return f"{value:,}"
+    return f"{value:,}+" if short else f"at least {value:,}"
+
+
+def _plural(count: int, noun: str, exact: bool = True) -> str:
+    """A count and its noun, agreeing. A floor always takes the plural."""
+    word = noun if (exact and count == 1) else f"{noun}s"
+    return f"{_count_text(count, exact)} {word}"
+
+
 def _table_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The four numbers the decision rests on, one row per sweep.
+    """The numbers the decision rests on, one row per sweep.
 
     Wall clock, newest bar anywhere in the universe, the difference between
     them, and how many names had any premarket bar at all. The lag is the
@@ -272,12 +400,19 @@ def _table_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     few hundred at 07:30 to a few thousand by 09:00 is a feed filling up
     normally; one that is flat near zero is a feed that does not serve this
     session at all.
+
+    The served and refused counts joined them on 2026-08-20, because that last
+    sentence turned out to have a third case it did not cover. A flat zero is
+    also what a sweep looks like when every request in it was turned away, and
+    until this row carried the refusals the two were the same table. The
+    2026-08-17 run was 46 requests, all 403, and it printed as an empty feed.
     """
     rows = []
     previous = None
     for record in records:
         lag = record.get("lag_minutes_newest")
         active = record.get("symbols_with_bars", 0)
+        requests = sweep_requests(record)
         rows.append({
             "clock_et": record["taken_at_et"][11:19],
             "newest_bar_et": (str(record.get("newest_bar_et") or "")[11:19]) or None,
@@ -289,6 +424,11 @@ def _table_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "new_since_last": (active - previous) if previous is not None else None,
             "bars_total": record.get("bars_total", 0),
             "gappers_over_3pct": record.get("gappers_over_3pct", 0),
+            "requests_served": requests["served"],
+            "requests_served_exact": requests["served_exact"],
+            "requests_refused": requests["refused"],
+            "requests_refused_exact": requests["refused_exact"],
+            "refusal_codes": requests["codes"],
         })
         previous = active
     return rows
@@ -303,12 +443,36 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
     rows = _table_rows(records)
     lags = [r["observed_lag_minutes"] for r in rows if r["observed_lag_minutes"] is not None]
     dry = any(record.get("dry_run") for record in records)
+    served_total = sum(r["requests_served"] for r in rows)
+    served_exact = all(r["requests_served_exact"] for r in rows)
+    refused_total = sum(r["requests_refused"] for r in rows)
+    refused_exact = all(r["requests_refused_exact"] for r in rows)
+    codes_seen = sorted({code for r in rows for code in r["refusal_codes"]})
+    # A served total of zero is never a floor: the reconstruction only produces
+    # a floor when bars came back, and bars mean something was served.
+    nothing_served = bool(refused_total) and not served_total
     lines = [
         f"# Alpaca live premarket probe, {day}",
         "",
         f"{len(rows)} sweeps. Every number observed, nothing inferred from documentation.",
         "",
     ]
+    if nothing_served:
+        # Loudly, and at the top, for the same reason the dry run banner is:
+        # the zeros below get quoted by someone who did not read the file that
+        # produced them, and on 2026-08-17 that is exactly what happened.
+        lines += [
+            f"> **EVERY REQUEST IN EVERY SWEEP WAS REFUSED.** "
+            f"{_plural(refused_total, 'request', refused_exact)} "
+            f"across {_plural(len(rows), 'sweep')}, "
+            f"{_codes_phrase(codes_seen)}, and not one "
+            "of them answered. The zeros in the columns below count what came back "
+            "from a feed that never replied, not what the premarket held, so NOTHING "
+            "here is evidence about the contents of the feed. What the refusals are "
+            "evidence of is narrower and firmer: this key was refused this feed for "
+            "this window, on every request, for the whole of the run.",
+            "",
+        ]
     if dry:
         # Loudly, and at the top. A table reporting a zero minute lag is exactly
         # the sort of number that gets quoted later by someone who did not read
@@ -325,8 +489,9 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
         ]
     lines += [
         "| clock ET | newest bar ET | observed lag (min) | vs documented 15 | "
-        "median lag | active names | new since last | bars | gap > 3% |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "median lag | active names | new since last | bars | gap > 3% | "
+        "requests served | requests refused | refusal codes |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
@@ -336,7 +501,10 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
             f"{row['median_lag_minutes'] if row['median_lag_minutes'] is not None else 'none'} | "
             f"{row['active_names']:,} | "
             f"{row['new_since_last'] if row['new_since_last'] is not None else ''} | "
-            f"{row['bars_total']:,} | {row['gappers_over_3pct']} |"
+            f"{row['bars_total']:,} | {row['gappers_over_3pct']} | "
+            f"{_count_text(row['requests_served'], row['requests_served_exact'])} | "
+            f"{_count_text(row['requests_refused'], row['requests_refused_exact'])} | "
+            f"{_codes_text(row['refusal_codes'])} |"
         )
     lines.append("")
     if lags:
@@ -352,13 +520,52 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
     else:
         lines += ["## Observed lag", "",
                   "No sweep returned a bar, so there is no lag to report.",
-                  "",
-                  "What that means depends on when this ran, and the table above says "
-                  "when. Sweeps taken across a trading morning with an empty active "
-                  "count are the answer: the free tier does not serve this session "
-                  "live. Sweeps taken outside a premarket window prove nothing at all, "
-                  "because there were no trades to serve.",
                   ""]
+        if nothing_served:
+            # This branch REFUSES to interpret, and that is the whole point of
+            # it. Until 2026-08-20 there was only the served-but-empty reading
+            # below, and it was printed over the 2026-08-17 run, where all 46
+            # requests came back 403. An unanswered sweep is not a measurement
+            # of the feed's contents and must not be reported as one.
+            lines += [
+                f"There is also nothing to interpret. All "
+                f"{_plural(refused_total, 'request', refused_exact)} "
+                f"across {_plural(len(rows), 'sweep')} were refused with "
+                f"{_codes_phrase(codes_seen)}, so the feed was never asked a question it "
+                "answered. An empty premarket and a refused request produce the same "
+                "zero here, and only the refusal column tells them apart.",
+                "",
+                "What the refusals DO establish, and it is the narrower and stronger "
+                "of the two claims: this key was refused this feed for this window, on "
+                "every request, across the whole run. That is a fact about entitlement, "
+                "not about what the premarket contained, and it needs no reading of the "
+                "active count at all.",
+                "",
+            ]
+        elif refused_total:
+            lines += [
+                f"Read the refusal column first. Refused: "
+                f"{_plural(refused_total, 'request', refused_exact)}, "
+                f"{_codes_phrase(codes_seen)}. Answered: "
+                f"{_count_text(served_total, served_exact)}. Part of this run was never "
+                "answered, so the emptiness of the part that was cannot be extended "
+                "over it. There is a reading here of what came back, and none of the "
+                "whole morning.",
+                "",
+            ]
+        else:
+            lines += [
+                f"All {_plural(served_total, 'request', served_exact)} were answered, "
+                "and came back with nothing in them, which is what makes the emptiness "
+                "a measurement.",
+                "",
+                "What that means depends on when this ran, and the table above says "
+                "when. Sweeps taken across a trading morning with an empty active "
+                "count are the answer: the free tier does not serve this session "
+                "live. Sweeps taken outside a premarket window prove nothing at all, "
+                "because there were no trades to serve.",
+                "",
+            ]
     path = config.DATA_DIR / f"{TABLE_PATH_STEM}-{day}.md"
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
@@ -376,17 +583,28 @@ def report(day: str | None = None) -> int:
         print(f"probe: {path.name} is empty")
         return 0
 
+    rows = _table_rows(records)
+    served_total = sum(r["requests_served"] for r in rows)
+    refused_total = sum(r["requests_refused"] for r in rows)
+    refused_exact = all(r["requests_refused_exact"] for r in rows)
+    codes_seen = sorted({code for r in rows for code in r["refusal_codes"]})
+    nothing_served = bool(refused_total) and not served_total
+
     print(f"probe: Alpaca live premarket, {path.name}, {len(records)} sweeps\n")
     print(f"{'clock ET':>9} {'newest bar':>11} {'lag min':>8} {'vs 15m':>7} "
-          f"{'med lag':>8} {'active':>8} {'new':>6} {'bars':>9} {'gap>3%':>7}")
-    for row in _table_rows(records):
+          f"{'med lag':>8} {'active':>8} {'new':>6} {'bars':>9} {'gap>3%':>7} "
+          f"{'served':>7} {'refused':>8} {'codes':>9}")
+    for row in rows:
         print(f"{row['clock_et']:>9} {str(row['newest_bar_et'] or '-'):>11} "
               f"{str(row['observed_lag_minutes']):>8} "
               f"{str(row['vs_documented']):>7} "
               f"{str(row['median_lag_minutes']):>8} "
               f"{row['active_names']:>8,} "
               f"{str(row['new_since_last'] if row['new_since_last'] is not None else ''):>6} "
-              f"{row['bars_total']:>9,} {row['gappers_over_3pct']:>7}")
+              f"{row['bars_total']:>9,} {row['gappers_over_3pct']:>7} "
+              f"{_count_text(row['requests_served'], row['requests_served_exact'], True):>7} "
+              f"{_count_text(row['requests_refused'], row['requests_refused_exact'], True):>8} "
+              f"{_codes_text(row['refusal_codes']):>9}")
 
     table = write_table(records, session)
     print(f"\nprobe: per sweep table written to {table}")
@@ -394,10 +612,22 @@ def report(day: str | None = None) -> int:
     lags = [r.get("lag_minutes_newest") for r in records
             if r.get("lag_minutes_newest") is not None]
     last = records[-1]
-    print(f"\nthe verdict rests on two numbers. If active names stays near zero through "
-          f"the morning, the free tier does not serve live premarket and the design in "
-          f"DECISIONS.md 2026-08-16 does not stand. If it is in the thousands, it does, "
-          f"and then the lag decides what freeze time is achievable.")
+    if nothing_served:
+        # The verdict below reads the active count, and reading the active
+        # count of a sweep nobody answered is what produced the 2026-08-17
+        # misreport. It is not printed at all when there is nothing to read.
+        print(f"\nnothing was served, so there is no verdict on the feed's contents. "
+              f"All {_plural(refused_total, 'request', refused_exact)} across "
+              f"{_plural(len(records), 'sweep')} were refused "
+              f"with {_codes_phrase(codes_seen)}. The zero active count above is "
+              f"what an unanswered sweep looks like, not what the premarket held. The "
+              f"narrower claim the refusals do support: this key was refused this feed "
+              f"for this window, on every request.")
+    else:
+        print(f"\nthe verdict rests on two numbers. If active names stays near zero through "
+              f"the morning, the free tier does not serve live premarket and the design in "
+              f"DECISIONS.md 2026-08-16 does not stand. If it is in the thousands, it does, "
+              f"and then the lag decides what freeze time is achievable.")
     if lags:
         print(f"observed lag: best {min(lags)}m, median {statistics.median(lags)}m, "
               f"worst {max(lags)}m, against a documented {DOCUMENTED_LAG_MINUTES:g}m")

@@ -151,7 +151,7 @@ def record_meter(step: str, when: str, source: str = "job",
     step, and a weekday runs sixteen tracked steps spread over nine job
     firings plus six watchdog firings, which measures at 68 to 92 job readings
     a day in the trail itself, plus the sampler's 48. Call it 120 to 140, or
-    about 0.13 percent of the shared 100,000 — still small, but seven times
+    about 0.13 percent of the shared 100,000, still small, but seven times
     what this sentence claimed, and this is the module whose whole job is to
     account for a shared key that a sibling project drains.] That is itself
     recorded rather than hidden: the reading moves the thing it reads, and a
@@ -397,6 +397,17 @@ def sessions_between(day: dt.date, now: dt.date) -> int:
     uses, so a holiday counts as no session rather than as a missed one. If
     the calendar cannot answer, weekdays are counted instead, which errs
     towards reporting a job as stale rather than towards silence.
+
+    That promise used to be kept only when the guard RAISED. is_trading_day
+    answers True with "calendar unavailable, assuming the market is open" for
+    every date when data/exchange-details.json is missing or unreadable, which
+    is how the calendar actually fails, and it does not raise, so the except
+    branch below never ran for the real fault. Every weekend day then counted
+    as a session: sessions_between(Friday, Monday) returned 3 rather than 1,
+    which is the watchdog reading three sessions of silence into one weekend
+    and calling healthy jobs overdue. trading_day_state answers None when the
+    calendar cannot say, and None is what routes to the weekday fallback the
+    docstring has always described.
     """
     from ops import market_today
 
@@ -407,8 +418,10 @@ def sessions_between(day: dt.date, now: dt.date) -> int:
     while cursor < now:
         cursor += dt.timedelta(days=1)
         try:
-            trades, _why = market_today.is_trading_day(cursor)
+            trades, _why = market_today.trading_day_state(cursor)
         except Exception:  # noqa: BLE001
+            trades = None
+        if trades is None:
             trades = ettime.is_weekday(cursor)
         if trades:
             count += 1

@@ -524,7 +524,7 @@
         distinction was learned the hard way: it used to sit at the tail of the
         same function, after the early return for a day with no picks, so
         emptying the table on 2026-08-19 also stopped the nightly writing
-        verify_intraday.json &mdash; the instrument for the open question went
+        verify_intraday.json, the instrument for the open question went
         quiet on the night the question got most urgent. It now runs first and
         reads the collector bar file rather than the table. A separate sweep
         picks up recent sessions that were collected and never measured, so

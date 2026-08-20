@@ -23,6 +23,7 @@ import datetime as dt
 import sys
 from typing import Any
 
+from core import config
 from core import criteria
 from core import eodhd
 from core import ettime
@@ -96,9 +97,60 @@ def _as_float(value: Any) -> float | None:
         return None
 
 
+def _adjustment_factor(bar: dict[str, Any] | None) -> float | None:
+    """close divided by adjusted_close for one end of day bar, or None.
+
+    The vendor retro-adjusts: a corporate action rewrites the adjusted_close of
+    every bar dated BEFORE its ex date and leaves the bars from the ex date
+    onward alone. So this ratio is flat between actions and steps at each one,
+    which is what makes a step between two dates evidence that an action fell
+    between them.
+    """
+    close = _as_float((bar or {}).get("close"))
+    adjusted = _as_float((bar or {}).get("adjusted_close"))
+    if close is None or not adjusted:
+        return None
+    return close / adjusted
+
+
+def _price_units_broke(
+    pick_bar: dict[str, Any] | None,
+    next_bar: dict[str, Any] | None,
+    max_drift_pct: float,
+) -> str | None:
+    """Why the pick date and D+1 are not in the same price units, or None.
+
+    Returns None when next_bar is missing, because the caller already refuses
+    that case with a better sentence, and None when the two sides agree.
+    """
+    if next_bar is None:
+        return None
+    before = _adjustment_factor(pick_bar)
+    after = _adjustment_factor(next_bar)
+    if before is None:
+        return ("the end of day bar for the pick date carries no readable close "
+                "and adjusted_close pair, so there is nothing to show that the "
+                "next session is priced in the same units as the morning's "
+                "premarket levels")
+    if after is None:
+        return ("the next session's bar carries no readable close and "
+                "adjusted_close pair, so there is nothing to show that it is "
+                "priced in the same units as the morning's premarket levels")
+    drift = abs(after / before - 1.0) * 100.0
+    if drift <= max_drift_pct:
+        return None
+    return (f"the vendor's split adjustment factor moved {drift:.4f} percent "
+            f"between the pick date and the next session, past the "
+            f"{max_drift_pct:g} percent in {config.CRITERIA_PATH.name} [outcomes] "
+            "max_adjustment_drift_pct, so a corporate action has its ex date in "
+            "between and the next session's high and low are not in the same "
+            "price units as entry_ref, stop_ref and pm_high")
+
+
 def fill(day_limit: str | None = None) -> int:
     short_n = _CRIT.integer("outcomes", "horizon_sessions_short")
     long_n = _CRIT.integer("outcomes", "horizon_sessions_long")
+    max_drift_pct = _CRIT.number("outcomes", "max_adjustment_drift_pct")
     api = eodhd.client()
 
     # Read, then fetch, then write. Three phases on purpose: a transaction must
@@ -163,6 +215,37 @@ def fill(day_limit: str | None = None) -> int:
             updates: dict[str, Any] = {}
             if wants_short:
                 next_bar = by_date.get(next_sessions[short_n - 1])
+
+                # A corporate action with its ex date on the session after the
+                # pick leaves the two sides of every excursion below in
+                # different price units. mfe_pct, mae_pct and
+                # pm_high_broke_next_day subtract entry_ref, stop_ref and
+                # pm_high, which are the collector's RAW live premarket levels
+                # from the pick date, from the high and low of the D+1 bar, and
+                # retro-adjustment rewrites only bars dated before the ex date,
+                # so that bar is post event under either vendor convention. A
+                # 4-for-1 forward split therefore writes mfe_pct and mae_pct
+                # near -75 percent and pm_high_broke_next_day 0, and a 1-for-10
+                # reverse split lands near +900 percent, unflagged and
+                # indistinguishable from a real excursion, into the table
+                # CRITERIA.md and BUILD_PLAN.md both designate as the record the
+                # seed thresholds will be recalibrated against. The screen's
+                # price floor is only "> 3", so a reverse split candidate is not
+                # an exotic case.
+                #
+                # Refused rather than rescaled, following the CalendarTooShort
+                # branch above: this module's stated position is that it will
+                # leave a row null rather than "put a fabricated excursion into
+                # the record", and a rescaled excursion is a computed number in
+                # a table meant to hold measured ones. The refusal takes the
+                # whole row, day5_close included, because an ex date sitting
+                # between the pick and D+1 also sits between the pick and D+5.
+                units = _price_units_broke(by_date.get(date), next_bar, max_drift_pct)
+                if units is not None:
+                    print(f"outcomes: {ticker} {date} left alone: {units}")
+                    unavailable += 1
+                    continue
+
                 if next_bar is None:
                     print(f"outcomes: {ticker} {date} has no bar on {next_sessions[short_n - 1]}, "
                           "possibly halted or delisted, left null")

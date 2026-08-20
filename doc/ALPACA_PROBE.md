@@ -8,6 +8,21 @@ Universe: 2,745 symbols from data/universe.json
 
 Every number below was observed. Nothing here is inferred from documentation.
 
+**[corrected 2026-08-20: every measurement in this file was taken against a
+COMPLETED session, and the answer in section 1 holds only for that case. The
+heading asks whether the free plan actually serves SIP and the table answers
+yes, without naming the restriction. The live probe found the same feed
+refused: all 46 requests in data/probe-alpaca-live-2026-08-17.jsonl, sweeping
+1Min sip bars over a window ending at the wall clock on a live trading
+morning, came back HTTP 403, and the two sweeps of 2026-08-16 did the same.
+So the free plan serves sip for a session that is over and refuses it for one
+that is running. The tables below measure the first of those and say nothing
+about the second. See DECISIONS.md 2026-08-17 on the free tier, whose own
+account of that morning was corrected the same day for reading the refusals
+as an empty feed. Written by hand rather than measured: probe_alpaca.py
+generates this file, and regenerating it needs a network run against a vendor
+this project no longer builds on, so a regeneration would drop this note.]**
+
 ## 1. Does the free plan actually serve SIP
 
 Symbol AAPL, one feed against the other, measured in two windows. The regular session pass is a control: without it, IEX returning nothing in premarket cannot be told apart from IEX not being served at all.

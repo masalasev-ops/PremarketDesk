@@ -12,6 +12,13 @@ call. The cache refreshes weekly; a fetch failure falls back to the stale
 cache; no cache at all assumes open. The failure direction is deliberate: a
 false closed silently loses a real morning, a false open produces one
 honestly thin report that says its own numbers are stale.
+
+That assumption is right for the exit code and wrong for anyone asking a
+question the exit code does not answer, so there are two ways in. Callers
+deciding whether to run today read is_trading_day, which never says it does
+not know. Callers asking which dates were sessions read trading_day_state,
+which answers None when there is no holiday list to answer from, so an
+assumption cannot be mistaken for a fact about the calendar.
 """
 
 from __future__ import annotations
@@ -172,7 +179,15 @@ def _working_days(details: dict[str, Any]) -> set[str]:
 
 
 def is_trading_day(date: dt.date) -> tuple[bool, str]:
-    """(trades_today, reason). Unknowable counts as open, see the module doc."""
+    """(trades_today, reason). Unknowable counts as open, see the module doc.
+
+    This function cannot say "I do not know" and must not learn to. Every
+    scheduled .bat runs `python -m ops.market_today` first and branches on the
+    EXIT CODE alone, so an assumption is exactly what is wanted here: refusing
+    to run the morning because a cache file is missing is worse than running
+    it. A caller that needs to tell an answer from an assumption calls
+    trading_day_state below instead.
+    """
     refresh_after_days = _CRIT.integer("calendar", "refresh_after_days")
     details = get_details(refresh_after_days)
     if details is None:
@@ -193,6 +208,47 @@ def is_trading_day(date: dt.date) -> tuple[bool, str]:
             return True, (f"{date} is a trading day with an early close "
                           f"({row.get('Holiday') or 'early close'})")
     return True, f"{date} is a regular trading day"
+
+
+# The one sentence trading_day_state says beside its None. A module constant
+# because a caller that wants to print WHY it stood down should quote the
+# guard rather than compose its own wording for a state the guard defines.
+CALENDAR_UNKNOWN_REASON = "there is no exchange calendar to answer from"
+
+
+def calendar_known() -> bool:
+    """Whether there is a holiday list at all to answer a date against.
+
+    Cheap to call in a loop: get_details answers from the in-process memo
+    after the first read, which is why the walk in vintage can ask per day.
+    """
+    return get_details(_CRIT.integer("calendar", "refresh_after_days")) is not None
+
+
+def trading_day_state(date: dt.date) -> tuple[bool | None, str]:
+    """(trades_today, reason), where a trades_today of None means unknown.
+
+    The same question is_trading_day answers, for the callers that can act on
+    "I do not know". is_trading_day answers True for EVERY date when
+    data/exchange-details.json is missing or unreadable, weekends included,
+    and that is deliberate for the exit code path. It was not deliberate
+    anywhere else. With no cache, vintage.previous_trading_session walked one
+    day back from a Monday, was told Sunday trades, and returned Sunday; the
+    2026-08-17 packet then failed vintage checks (c) and (d) on every
+    candidate and every prior session snapshot row it had, six violations on
+    a packet whose dates were all correct. enforce() rewrote the delivery gate
+    over the human's note and the chain stopped before the analyst, accusing
+    the vendor of stale data when the only thing missing was a holiday list.
+
+    Delegating to is_trading_day rather than repeating its body keeps the
+    calendar rules in one place, and means anything that replaces
+    is_trading_day, in a test or in a later wrapper, is still what answers
+    here. Only the "no details at all" case is decided before the delegation,
+    because that is the one case is_trading_day is unable to report.
+    """
+    if not calendar_known():
+        return None, CALENDAR_UNKNOWN_REASON
+    return is_trading_day(date)
 
 
 def main(argv: list[str] | None = None) -> int:

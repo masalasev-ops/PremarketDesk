@@ -54,7 +54,22 @@ WATCHLIST_PATH = DATA_DIR / "watchlist.json"
 REPORT_TEMPLATE_PATH = DOC_DIR / "REPORT_TEMPLATE.md"
 ANALYST_PROMPT_PATH = DOC_DIR / "prompt_analyst.md"
 
-_ALL_DIRS = (DATA_DIR, PREMARKET_DIR, RUNS_DIR, LOGS_DIR)
+# The four working directories, named rather than captured. ensure_dirs()
+# resolves each name against this module at CALL time, and that is the whole
+# reason they are strings here. This used to be a tuple of Path objects frozen
+# at import. The test sandbox rebinds config.DATA_DIR, PREMARKET_DIR, RUNS_DIR
+# and LOGS_DIR to temporary copies and cannot rebind a tuple built from them,
+# so ensure_dirs() was the one writer in the project a redirect could not
+# reach: every call made inside the sandbox created the REAL data,
+# data/premarket, runs and logs. No data ever landed in them, because every
+# other writer reads the attribute at call time, but two things went wrong
+# anyway. With the gitignored runs/ or logs/ cleared by hand, the first
+# sandboxed call recreated them for real and the suite's whole-tree check
+# failed on a path the harness itself had made, which reads as a test escaping
+# the sandbox. And test_entrypoints' call, placed to materialise the SANDBOX
+# directories, quietly materialised the repository's and did nothing for its
+# stated purpose.
+_ALL_DIR_NAMES = ("DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR")
 
 # EODHD addresses. These are locations, not criteria, so they live here rather
 # than in CRITERIA.md. Every number that shapes a decision lives in that file.
@@ -392,9 +407,20 @@ def tls_note() -> str:
     return f"TLS: certifi plus local inspection root ({names}), X509_STRICT relaxed"
 
 
+def _all_dirs() -> tuple[Path, ...]:
+    """The four working directories as this module has them bound right now.
+
+    Reading them out of the module globals is deliberate. It is the same
+    lookup a caller writing config.DATA_DIR performs, so anything that rebinds
+    the attribute is followed here too. See the note beside _ALL_DIR_NAMES for
+    what the import time capture cost.
+    """
+    return tuple(globals()[name] for name in _ALL_DIR_NAMES)
+
+
 def ensure_dirs() -> None:
     """Create the working directories. Safe to call on every run."""
-    for directory in _ALL_DIRS:
+    for directory in _all_dirs():
         directory.mkdir(parents=True, exist_ok=True)
 
 

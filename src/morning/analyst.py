@@ -1,4 +1,4 @@
-﻿"""The narrative pass. Turns packet.json into report.md through the claude CLI.
+"""The narrative pass. Turns packet.json into report.md through the claude CLI.
 
 The division of labor is absolute. Python computed membership, eligibility,
 scores and conviction before this module runs, and the packet records the
@@ -528,15 +528,33 @@ def fallback_report(
     # size nobody names reads as a rounding note.
     check = packet.get("collector_volume_check")
     if check:
+        # The last sentence used to read "so they understate by about that much
+        # again", asserting a direction from a magnitude. The check returned an
+        # UNSIGNED median, and COLLECTOR_VOLUME.md records the collector wrong
+        # in both directions: 2026-08-17 at -88.49 percent against 2026-08-14 at
+        # 3.83 times the vendor in aggregate. On a morning shaped like the
+        # second one this told the reader every RVOL was understated when the
+        # numerator was inflated, which is the direction that flatters volume.
+        # direction_phrase is now computed in scan from the signed median and
+        # the aggregate ratio, and is quoted rather than composed here.
         add("")
+        signed = check.get("median_signed_pct")
+        ratio = check.get("aggregate_ratio")
+        extra = ""
+        if signed is not None:
+            extra += f", signed median {signed:+.1f}%"
+        if ratio is not None:
+            extra += f", aggregate {ratio:.2f} times the vendor"
         add(f"Collector volume check, {check.get('day')}: median absolute "
             f"difference {check.get('median_abs_pct'):.1f}% against the vendor's "
             f"one minute bars on identical minutes, across "
             f"{check.get('compared')} symbol(s), "
-            f"{check.get('within_one_percent')} within one percent"
+            f"{check.get('within_one_percent')} within one percent{extra}"
             f"{'. STALE, ' + str(check.get('age_days')) + ' days old' if check.get('stale') else ''}"
             ". The premarket RVOL figures above divide a collector numerator by "
-            "a vendor denominator, so they understate by about that much again.")
+            "a vendor denominator, so "
+            + (check.get("direction_phrase")
+               or "the direction of that disagreement is unknown") + ".")
     else:
         add("")
         add("Collector volume check: not written. The disagreement between the "
@@ -978,16 +996,89 @@ _TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|A\.M\.|P\.M\.)?\s*
                       r"(?:ET|EST|EDT|UTC|GMT)?", re.IGNORECASE)
 _ISO_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.+-]+)?")
 
+# Capitals joined by a dot, an ampersand or a slash are ONE abbreviation, and
+# they are blanked here for the same reason dates and times are: _TOKEN_RE has
+# no idea what punctuation means, so it took "S&P 500 futures are flat" apart
+# into P and S, "U.S. equity futures are soft" into S and U, "the P/E is
+# stretched" into E and P, and "R&D spending rose" into D and R. Every one of
+# those fragments is a real listing. universe.json carries 21 one letter names
+# and prose_token_stopwords stops only A and I, so each fragment became a
+# ticker claim and then an INVENTED one on any morning whose packet did not
+# happen to quote a headline carrying the same bare letter.
+#
+# Measured on 2026-08-20 by injecting one ordinary Market trends sentence into
+# each archived report and checking it against that morning's real packet:
+# 08-17 and 08-20 invented P, S and U, 08-19 invented P, and 08-18 escaped
+# only because its packet quotes a headline containing "S&P 500". That is not
+# a cosmetic failure. check_report exits 2 on an invented ticker, the chain's
+# "if %RC% neq 0 exit /b %RC%" then skips render, verify, deliver and archive,
+# and containment has no regeneration path, so an abbreviation any writer
+# would reach for cost the morning everything downstream of the analyst.
+#
+# The other candidate fix was to add P, S, U, D, E and R to
+# prose_token_stopwords. It was rejected: that blinds the guard to six real
+# listings everywhere in prose, which pays for a false positive with a false
+# negative in the one check that exists to catch invented evidence.
+#
+# A run counts as an abbreviation only when one of its pieces is short, which
+# is the line between "S&P", "U.S.", "P/E", "AT&T" and "EV/EBITDA" on one side
+# and "SPY/QQQ" on the other. Two full length tickers a writer slashed together
+# are two claims and stay two claims. A bare ticker is untouched either way,
+# "the move in NVDA." included, because the pattern needs capitals on BOTH
+# sides of a separator and a sentence ending full stop has none.
+#
+# The hyphen is deliberately NOT one of the separators. It is the commonest
+# punctuation in ordinary prose and treating every hyphenated word as an
+# abbreviation would reach far past the three cases above. The fragments it
+# leaves behind are real and known: the 2026-08-20 report quotes a headline
+# saying "Economic D-Day" and D is Dominion Energy, which passes only because
+# the packet carries that same headline. If a morning ever fails on one of
+# those, the hyphen belongs here and this note is the argument for adding it.
+_ABBREVIATION_RE = re.compile(r"\b[A-Z][A-Z0-9]*(?:[.&/][A-Z][A-Z0-9]*)+\.?")
+_ABBREVIATION_SEPARATOR_RE = re.compile(r"[.&/]")
+# One or two characters. Longer than that and the piece is a word in its own
+# right rather than the wreckage of an abbreviation.
+_SHORT_ABBREVIATION_PIECE = 2
+
+# A ticker written with its exchange suffix. Prompt rule 8 forbids NVDA.US in
+# the report body, but the guard still has to read it as a claim about NVDA
+# rather than lose it, and without this line the abbreviation blanking above
+# would swallow the whole thing, because US is two characters long and the run
+# therefore looks abbreviated. Normalising the suffix away first preserves
+# exactly the claim the old tokenizer already found there.
+_EXCHANGE_SUFFIX_RE = re.compile(r"\b([A-Z][A-Z0-9]{0,5})\.US\b")
+
+
+def _blank_abbreviations(text: str) -> str:
+    """Blank punctuation joined abbreviations, leaving ticker claims alone.
+
+    The short piece test is the whole of the judgement, and the note on
+    _ABBREVIATION_RE says what it buys, what it costs, and why the line is
+    drawn where it is.
+    """
+    def blank(match: re.Match[str]) -> str:
+        pieces = [
+            piece for piece in _ABBREVIATION_SEPARATOR_RE.split(match.group(0))
+            if piece
+        ]
+        if any(len(piece) <= _SHORT_ABBREVIATION_PIECE for piece in pieces):
+            return " "
+        return match.group(0)
+
+    return _ABBREVIATION_RE.sub(blank, text)
+
 
 def _prose_tokens(report_text: str) -> set[str]:
     """Ticker shaped tokens from the report's prose, tables excluded.
 
-    Prose is ambiguous where a Ticker column is not, so two filters run before
-    anything is called a token. Time expressions and ISO dates are stripped
-    first, because "06:37 ET" is a time and ET is also Energy Transfer. Then
-    the stopword list in CRITERIA.md removes the finance and unit acronyms that
-    survive. What is left is intersected with the known symbols by the caller,
-    so an ordinary capitalised word never becomes a claim.
+    Prose is ambiguous where a Ticker column is not, so three filters run
+    before anything is called a token. Time expressions and ISO dates are
+    stripped first, because "06:37 ET" is a time and ET is also Energy
+    Transfer. Punctuation joined abbreviations go next, because "S&P" is one
+    word and not a claim about two one letter listings. Then the stopword list
+    in CRITERIA.md removes the finance and unit acronyms that survive. What is
+    left is intersected with the known symbols by the caller, so an ordinary
+    capitalised word never becomes a claim.
     """
     stopwords = {
         s.strip().upper()
@@ -999,6 +1090,8 @@ def _prose_tokens(report_text: str) -> set[str]:
     )
     prose = _ISO_RE.sub(" ", prose)
     prose = _TIME_RE.sub(" ", prose)
+    prose = _EXCHANGE_SUFFIX_RE.sub(r"\1 ", prose)
+    prose = _blank_abbreviations(prose)
     return {token for token in _TOKEN_RE.findall(prose) if token not in stopwords}
 
 

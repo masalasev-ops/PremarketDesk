@@ -128,7 +128,7 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
         # sessions back: a two session move stored as a one session gap. The
         # comment below already identified that exact mechanism and fixed it
         # for the returns list only, leaving gap_propensity, median_abs_gap_pct
-        # and atr_pct_20d on the unfixed one — and gap_propensity is
+        # and atr_pct_20d on the unfixed one, and gap_propensity is
         # [discovery] within_tier_key, the number 42 subscription slots are
         # ordered by, with atr_pct_20d as its fallback. A hole now costs one
         # gap rather than corrupting the next.

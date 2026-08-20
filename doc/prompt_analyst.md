@@ -31,8 +31,34 @@ decide nothing.
    catalyst_class earnings even when its news call failed, so report the
    class the packet carries and add that the news feed itself was never
    checked.
-5. A candidate gapping up while its packet headlines carry negative sentiment
-   is a trap. Say so plainly in Skips and traps.
+5. Traps are decided in the packet and you may not re-derive one. A candidate
+   is a trap exactly where its `trap` field is true. Say so plainly in Skips
+   and traps, give the reason from `trap_why`, and quote the headline counts
+   from `trap_basis` so a reader can disagree with the call. Where `trap` is
+   false, stay silent about traps for that ticker. Where `trap` is null the
+   question could not be asked, the reason sits in `trap_why`, and you again
+   say nothing about a trap for that ticker.
+
+   Never reach a trap verdict yourself, from a gap direction, from a
+   headline's sentiment, or from the two together. Until 2026-08-20 this rule
+   opened with the opposite instruction, quoted here as a specimen so that
+   nobody reinstates it:
+
+   `A candidate gapping up while its packet headlines carry negative sentiment is a trap.`
+
+   What that produced was the worst single headline deciding the verdict. On
+   2026-08-20 MSTR was published as a trap on "Bitcoin tops $71K as crypto
+   rally gains momentum", which the vendor scored -0.914 while the same name's
+   other two headlines scored +0.963 and +0.833, and FUTU was published as one
+   on a neutral earnings listing at -0.422 against +0.836 and +0.691. Both
+   were vendor scoring errors and both reached a reader as statements about
+   the market. The packet now weighs the balance of a ticker's headlines in
+   Python and keeps the counts in `trap_basis`.
+
+   The template's Skips and traps section says the same thing, and has said it
+   since 2026-08-20 while this rule went on saying the opposite. An
+   instruction to judge and an instruction not to judge cannot both be obeyed,
+   so one of them had to go, and it was this one.
 6. The one line disclaimer must name the candidates whose pm_rvol is null
    and the candidates whose pm_window_starts_late is true, stating that
    volume or path evidence is partial or missing for them, and must name

@@ -31,6 +31,7 @@ import datetime as dt
 import json
 import re
 import sys
+from pathlib import Path
 from typing import Any
 
 from collect import collect_premarket
@@ -47,6 +48,11 @@ _CRIT = criteria.load()
 # the stats and subscriptions sidecars in the same directory are never mistaken
 # for one, and neither is anything a human drops there.
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# The artifact's name, taken from the module that reads it rather than spelled
+# again here, because these two modules disagreeing about that file is the whole
+# of the defect _has_measurement below exists to close.
+VOLUME_CHECK_FILE = collect_premarket.VOLUME_CHECK_FILE
 
 _TRUE_COLUMNS = (
     ("pm_high_true", "REAL"),
@@ -179,17 +185,58 @@ def verify_volume(day: str, overwrite: bool = False) -> bool:
         return False
 
     from core import artifacts
+    from selection import universe
 
     verify_path, _spared = artifacts.resolve(
-        config.run_dir(day) / "verify_intraday.json",
+        config.run_dir(day) / VOLUME_CHECK_FILE,
         overwrite or artifacts.scheduled_run(),
         what="backfill",
     )
-    verify_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
-    print(f"backfill: collector volume verification written to {verify_path} "
-          f"({summary['within_one_percent']} of {summary['compared']} symbols within "
-          f"one percent, median absolute difference {summary['median_abs_pct']:.2f}%)")
+    # Atomically, because Path.write_text truncates the destination before it
+    # writes a byte, and this file is the only record that a session was ever
+    # measured. An interruption there leaves a result that parses as nothing and
+    # satisfies is_file() forever, and until _has_measurement below that was
+    # enough to make every later night skip the session for good.
+    # universe.write_atomically is the temp-file-and-os.replace pair this repo
+    # already owns for exactly this, serving universe.json and watchlist.json;
+    # it takes a payload and a target, which is this call. It does not sort
+    # keys, and nothing reads this file by key order.
+    universe.write_atomically(summary, verify_path)
+
+    # Read out of the summary rather than asserted from it. The key set belongs
+    # to verify_against_intraday and is being extended, and a print is not
+    # allowed to be the thing that ends the nightly.
+    detail = (f"{summary.get('within_one_percent')} of {summary.get('compared')} "
+              "symbols within one percent")
+    median = summary.get("median_abs_pct")
+    if isinstance(median, (int, float)):
+        detail += f", median absolute difference {median:.2f}%"
+    print(f"backfill: collector volume verification written to {verify_path} ({detail})")
     return True
+
+
+def _has_measurement(path: Path) -> bool:
+    """Whether a written verify_intraday.json is a measurement or a corpse.
+
+    is_file() was the old test, and it disagreed with the only programmatic
+    reader of this artifact. collect_premarket.latest_volume_check has always
+    skipped a copy it cannot parse, on the rule that "a half written or hand
+    mangled summary is no measurement", while this module counted the same file
+    as a session already measured. A zero byte result satisfies is_file()
+    forever, so unverified_sessions skipped that session on every future night,
+    _catchup_dates could not reach it because it only finds days with live picks
+    rows whose pm_high_true is null, and no output named the file.
+
+    The test is the day key rather than a schema on purpose. What
+    verify_against_intraday returns is being extended, and a parser validating a
+    fixed key set would start calling every summary written after that change
+    unmeasured, which is the same mistake pointed the other way.
+    """
+    try:
+        summary = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(summary, dict) and bool(summary.get("day"))
 
 
 def unverified_sessions(before_day: str, limit: int) -> list[str]:
@@ -220,8 +267,16 @@ def unverified_sessions(before_day: str, limit: int) -> list[str]:
             continue
         if not collect_premarket.subscriptions_path(day).is_file():
             continue
-        if (config.RUNS_DIR / day / "verify_intraday.json").is_file():
+        # RUNS_DIR / day rather than config.run_dir(day): this is a read only
+        # sweep and run_dir creates the directory it names, so asking it here
+        # would leave an empty runs/<date>/ behind for every session it looked
+        # at.
+        written = config.RUNS_DIR / day / VOLUME_CHECK_FILE
+        if _has_measurement(written):
             continue
+        if written.exists():
+            print(f"backfill: {written} exists and does not parse as a measurement, "
+                  f"so {day} still counts as unmeasured and is being measured again")
         days.append(day)
         if len(days) >= limit:
             break

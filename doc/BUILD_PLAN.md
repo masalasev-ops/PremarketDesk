@@ -409,6 +409,55 @@ recreates it deliberately.
 
 ## What remains
 
+STATE AS OF 2026-08-20, AFTER THE FULL REVIEW. A twenty agent adversarial read
+of the whole tree raised 187 findings, 19 survived verification, and all 19 are
+now closed with a claim each. What that review found is in CHANGELOG.md under
+"2026-08-20, seventh"; the purge that preceded it is under "sixth". Items 5a
+and 6i below were MIS-DOCUMENTED here, describing work that had already
+shipped, and are corrected in place. The suite is 44 claims in
+test_regressions plus eleven other modules, green three consecutive runs, with
+the tree photograph clean.
+
+WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
+reconstruct it from the numbered items below:
+
+  A. Collector premarket volume disagrees with the vendor and nobody knows why
+     (item 1). This is the delivery gate. The check now reports its SIGN, both
+     missing side counts and an aggregate ratio, so the next reading will say
+     which direction it is wrong in rather than only how far. The instrument
+     that would answer WHY is job_probe_socket_cap.bat and NO SCHEDULED TASK
+     EXISTS FOR IT: the re-arm recorded in CHANGELOG for 2026-08-19 used
+     `schtasks /Change` against a task that does not exist, so it failed
+     silently and the probe has not run since. Register it by hand for a
+     premarket morning. This is the top open item and it is a purchasing and
+     scheduling decision, not a code one.
+  B. The notable movers section, Layer 4, is specified below and NOT BUILT
+     (item 4). Everything it rests on is built, tested and committed, including
+     the vintage gate for its legs. Three of the four [Notable] CRITERIA keys
+     are read by nothing until it ships, which is deliberate.
+  C. Two threshold questions that belong to the owner, not to the code: the
+     seed thresholds await a few hundred filled outcome rows (item 3, and note
+     that picks was emptied on 2026-08-19 and now holds one session), and the
+     day-setup eligibility question for names rescued by float rotation (item
+     2b, with a second instance on 2026-08-20).
+  D. Nine lower severity findings from the same review were filed at high
+     severity and never adversarially verified, because the review verified
+     only the top 26 of 186. Three bear on numbers already relied on and are
+     the natural next unit of work: probe_socket_cap.compare_to_vendor sums
+     whole vendor minute bars against 120 second arms, which would inflate the
+     denominator by about 1.5x and is item A's own instrument;
+     float_rotation_study's ten session cold start would put roughly a third of
+     the population the shipped float rotation bands were fitted on inside a
+     warm-up artifact; and config.ca_bundle() writes the merged trust store
+     with a plain write_text and re-serves it on mtime alone, with the Norton
+     root written last, so a truncation loses exactly the root that makes
+     intercepted TLS verify.
+  E. data/UNVERIFIED is still in place and delivery is still gated. Nothing
+     about the review changes that; item A is what it is waiting on.
+
+The numbered items below are kept as written, with their outcomes recorded,
+because what a fix WAS is the useful part.
+
 1. The definitive collector volume verification (the last CP6 debt) now
    lands with the FIRST LIVE morning's nightly. The 2026-08-13 rows were
    all marked source='test' by the 2026-08-14 migration and the backfill
@@ -481,6 +530,20 @@ recreates it deliberately.
        because it changes what a scheduled job does on a night nobody is
        watching, and the diagnosis in doc/research/COLLECTOR_VOLUME.md may
        want a different shape of reading anyway.
+
+       [corrected 2026-08-20: the fix HAD ALREADY SHIPPED when this was
+       written, and this item described work that was done.
+       backfill_premarket.py calls verify_volume under the comment "Before
+       anything else, and before any path that can return early", ahead of the
+       early return, and unverified_sessions sweeps collected sessions with no
+       picks rows. CHANGELOG.md and both architecture pages recorded it; this
+       file did not, which matters because this file is what a new session is
+       told to read first. The full review found the discrepancy by checking
+       the code rather than the register. A separate and real hole in the same
+       instrument WAS found and is now closed: the writer used write_text,
+       which truncates before it writes, while the only reader skips a copy it
+       cannot parse, so a crash mid write retired that session from the sweep
+       forever. It writes through a temp file and renames now.]
 
    5b. CLOSED 2026-08-20 by re-deriving the number, and it leaves a question
        behind. CRITERIA [analyst] set timeout_s = 293 as three times the
@@ -604,6 +667,28 @@ recreates it deliberately.
        comparison cannot. Not attempted here because it is a different question
        from the one that bit, and because hashing 414 watched paths twice a run
        wants a measurement first.
+
+       [corrected 2026-08-20: THIS WEAKNESS DOES NOT EXIST AND DID NOT WHEN
+       THIS WAS WRITTEN. snapshot_tree records ("file", st_mtime, st_size) per
+       path and differences() compares the whole tuple, with an explicit
+       branch saying "a same size overwrite is a real escape mode and the check
+       must not start guessing which is which". A test that overwrites an
+       existing file moves its mtime and is caught. The paragraph above
+       described a set comparison the code has never done. What that escape
+       really left behind was residue, not a hole: runs/2026-01-05 and
+       runs/2026-01-06 held test_containment fixtures in the real runs tree,
+       published in the archive as sessions, and they were purged the same day.
+       See CHANGELOG.md "2026-08-20, sixth".]
+
+       WHAT IS STILL OPEN IN THE SAME AREA, found by the full review and now
+       closed, recorded because the shape recurs: standalone() wrapped a hand
+       run in the sandbox and printed that the real runs/ was not writable from
+       there, which was false. The module had already executed, so its import
+       time Path constants still pointed at the real tree, and importlib.reload
+       cannot rescue a module running as __main__. test_repricing.RUN_DIR was
+       runs/2026-08-14 inside the sandbox and claim_three opens a database in
+       it. standalone() rebinds those constants now and prints which ones it
+       moved.
 
 ## Layer 4: the notable movers section, specified
 

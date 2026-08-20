@@ -698,31 +698,50 @@ def claim_eleven(failures: list[str]) -> None:
 
 
 def main() -> int:
-    if not PACKET_PATH.is_file() or not SNAPSHOT_PATH.is_file():
-        print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
-              f"({PACKET_PATH} / {SNAPSHOT_PATH})")
-        return 0
-
     failures: list[str] = []
-    claim_one(failures)
-    claim_three(failures)
-    claim_four(failures)
+
+    # The gate used to cover the whole module, and three of these claims read
+    # neither artifact. Verified by cloning the repository, where runs/ and
+    # data/ are untracked: it printed the SKIP line and then
+    # "tests.test_repricing ok" having asserted nothing at all. Nothing else in
+    # src/tests covers attach_float_rotation or the sharesOutstanding guards,
+    # so that whole surface was unguarded on every machine but this one.
+    # test_vintage states the principle: a guard that only runs on the machine
+    # where the bug was first found is not a guard.
+    replayed = PACKET_PATH.is_file() and SNAPSHOT_PATH.is_file()
+    if not replayed:
+        print(f"SKIP  the 2026-08-14 artifacts are not on this machine "
+              f"({PACKET_PATH} / {SNAPSHOT_PATH}), so the five claims that "
+              "replay that morning are skipped. The rest ran.")
+
+    if replayed:
+        claim_one(failures)
+        claim_three(failures)
+        claim_four(failures)
     claim_six(failures)
-    claim_seven(failures)
-    claim_eight(failures)
+    if replayed:
+        claim_seven(failures)
+        claim_eight(failures)
     claim_nine(failures)
     claim_ten(failures)
+    # claim_eleven carries its own SKIP against its own file, so it decides for
+    # itself rather than riding a gate about two other files.
     claim_eleven(failures)
 
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")
         return 1
-    print("PASS  repricing from the collector, dropping the uncovered, flooring the "
-          "RVOL denominator, naming the build, telling a silent subscription "
-          "from an absent one, dropping a price too old to publish, scoring a name "
-          "with no baseline and refusing a sharesOutstanding that is not a share "
-          "count all hold on the 2026-08-14 packet")
+    if replayed:
+        print("PASS  repricing from the collector, dropping the uncovered, flooring the "
+              "RVOL denominator, naming the build, telling a silent subscription "
+              "from an absent one, dropping a price too old to publish, scoring a name "
+              "with no baseline and refusing a sharesOutstanding that is not a share "
+              "count all hold on the 2026-08-14 packet")
+    else:
+        print("PASS  naming the build, scoring a name with no baseline and refusing "
+              "a sharesOutstanding that is not a share count all hold; the five "
+              "claims that replay 2026-08-14 were skipped for want of its artifacts")
     return 0
 
 
