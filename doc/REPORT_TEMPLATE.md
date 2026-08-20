@@ -185,7 +185,28 @@ WHEN A RATIO IS A LOWER BOUND, SAY SO WHEREVER THE RATIO IS DISCUSSED. If
 pm_rvol_basis.is_lower_bound is true, the numerator covers a shorter window
 than the denominator and the ratio can only understate. It is not a reading
 that came out low, and a section describing RVOL across the set without that
-word describes a data gap as a quiet tape.}
+word describes a data gap as a quiet tape.
+
+THERE ARE TWO REASONS THE RATIO UNDERSTATES AND THE SECOND IS THE BIGGER ONE.
+The window shortfall above is arithmetic. The packet's collector_volume_check
+block is the other: the numerator comes from the collector's socket and the
+denominator from the vendor's intraday feed, and that block is the measured
+disagreement between those two feeds on identical minutes. Where it is present
+and not stale, give its median_abs_pct, its compared count and the day it was
+taken, and say plainly that every RVOL in this report is understated by about
+that much again. Where it is null or stale, say the feed is unmeasured this
+morning and do not describe an RVOL as merely a window effect.
+
+IF day_blocked_on_rvol_alone IS NOT EMPTY, NAME THOSE SYMBOLS AND SAY WHAT
+THEY MEAN. They cleared the day screen's other conditions and failed on
+premarket RVOL by itself. On a morning where collector_volume_check shows a
+large disagreement, an empty day watchlist is an instrument reading rather
+than a quiet market, and the reader has to be told which tickers the
+instrument cost. Say it in the Day watchlist section too, next to the
+failed-condition counts. Write it in counts, never in a quantifier: the guard
+in analyst.py rejects a quantifier standing within six words of candidate,
+name or watchlist, and this sentence is the one place that list may be spelled
+out, which is why it is not spelled out here.}
 
 ## Economic data and rates
 
@@ -210,10 +231,25 @@ of claiming there are no notable earnings.}
 {Named candidates to leave alone, listed with the packet fact that puts
 them here: catalyst_found false is a skip and is written as moving on no found
 catalyst, catalyst_found null is a separate line saying the catalyst status is
-unknown rather than absent and quoting catalyst_why for the reason, a positive
-gap on headlines whose sentiment is negative is a trap and is said plainly,
+unknown rather than absent and quoting catalyst_why for the reason,
 pm_rvol null means unverifiable volume, and pm_window_starts_late true means
-the premarket path is partial. Then name the symbols in dropped_no_coverage
+the premarket path is partial.
+
+TRAPS ARE DECIDED IN THE PACKET AND YOU MUST NOT RE-DERIVE ONE. Name a
+candidate a trap only where its `trap` field is true, and give the reason from
+its `trap_why`. Where `trap` is null, the question could not be asked and the
+reason is in the same field; say nothing about a trap for that ticker. Where
+`trap` is false, stay silent.
+
+DO NOT CALL A NAME A TRAP FROM A SINGLE HEADLINE'S POLARITY. Until 2026-08-20
+this section asked you to judge it, and the judgment came out as the worst
+single headline: on that morning MSTR was published as a trap on "Bitcoin tops
+$71K as crypto rally gains momentum", scored -0.914 by the vendor while its
+other two headlines scored +0.963 and +0.833, and FUTU on a neutral earnings
+listing at -0.422 against +0.836 and +0.691. Both were vendor scoring errors,
+and both reached the reader as statements about the market. The packet now
+reads the balance instead and keeps the counts in `trap_basis`. Quote those
+counts when you name a trap, so a reader can disagree with the call. Then name the symbols in dropped_no_coverage
 with its recorded reason: those names cleared selection and were dropped
 before pricing because the collector had no bars for them, so they carry no
 premarket price. Do NOT add a clause claiming they are absent from the rest of

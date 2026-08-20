@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import ssl
 import statistics
 import time
@@ -47,6 +48,11 @@ from ops import job_status
 _CRIT = criteria.load()
 
 BAR_SECONDS = _CRIT.integer("collector", "bar_seconds")
+# A run directory is named for its session. Matched rather than parsed so an
+# archive folder or anything a human drops under runs/ is never mistaken for
+# one. The same test backfill_premarket keeps for bar files, for the same
+# reason.
+_RUN_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_SUBSCRIPTIONS = _CRIT.integer("collector", "max_subscriptions")
 BACKOFF_START_S = _CRIT.number("collector", "reconnect_backoff_start_s")
 BACKOFF_MAX_S = _CRIT.number("collector", "reconnect_backoff_max_s")
@@ -1000,6 +1006,69 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
         "within_one_percent": within,
         "median_abs_pct": median_abs,
         "unavailable": unavailable,
+    }
+
+
+VOLUME_CHECK_FILE = "verify_intraday.json"
+
+
+def latest_volume_check(before_day: str) -> dict[str, Any] | None:
+    """The most recent written verify_against_intraday summary, read off disk.
+
+    READS ONLY. verify_against_intraday itself costs one intraday call per
+    collected symbol, fifty of them on an ordinary morning, and the 08:45
+    window does not spend that. The nightly takes the measurement and writes it
+    to runs/<date>/verify_intraday.json; this hands it to whoever needs to
+    quote it. See the volume check note in CRITERIA.md.
+
+    Strictly BEFORE before_day, because today's own check cannot exist yet: the
+    vendor publishes intraday hours behind live, which is the whole reason the
+    check is nightly.
+
+    Returns the summary with `age_days` and `stale` added, or None when no
+    check has ever been written. Age is reported rather than enforced here, so
+    the caller decides what a stale measurement is worth and can say so; a
+    reader silently dropping an old number would leave the morning looking
+    unmeasured when it is merely out of date, and those are different facts.
+    """
+    max_age = _CRIT.integer("collector", "volume_check_max_age_days")
+    directory = config.RUNS_DIR
+    if not directory.is_dir():
+        return None
+
+    cutoff = ettime.parse_date(before_day)
+    best: tuple[str, dict[str, Any]] | None = None
+    for child in directory.iterdir():
+        if not child.is_dir() or not _RUN_DATE_RE.match(child.name):
+            continue
+        if child.name >= before_day:
+            continue
+        path = child / VOLUME_CHECK_FILE
+        if not path.is_file():
+            continue
+        try:
+            summary = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # A half written or hand mangled summary is no measurement. Skipped
+            # rather than raised: this is read on the morning path, and a bad
+            # file from three weeks ago must not be what ends a run.
+            continue
+        if not isinstance(summary, dict) or summary.get("compared") is None:
+            continue
+        if best is None or child.name > best[0]:
+            best = (child.name, summary)
+
+    if best is None:
+        return None
+    day, summary = best
+    age = (cutoff - ettime.parse_date(day)).days
+    return {
+        **summary,
+        "day": summary.get("day") or day,
+        "age_days": age,
+        "stale": age > max_age,
+        "max_age_days": max_age,
+        "source": f"runs/{day}/{VOLUME_CHECK_FILE}, written by the nightly backfill",
     }
 
 

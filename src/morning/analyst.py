@@ -506,8 +506,48 @@ def fallback_report(
         add(f"Catalyst found and premarket evidence complete for "
             f"{len(candidates)} of {len(candidates)} candidates.")
     add("")
-    add("Trap judgment (a gap up on bad news) needs the narrative pass and is "
-        "not attempted here.")
+    # Traps used to say "needs the narrative pass and is not attempted here",
+    # which was true while the judgment lived in REPORT_TEMPLATE.md and the
+    # model made it. scan.attach_traps decides it now, from the balance of the
+    # headlines rather than the worst one, so the fallback can state it: a
+    # verdict computed in Python is exactly the kind of thing this degraded
+    # path is for.
+    traps = [_bare(c["symbol"]) for c in candidates if c.get("trap") is True]
+    unweighable = [_bare(c["symbol"]) for c in candidates if c.get("trap") is None]
+    if traps:
+        add(f"Gapping up against the balance of their own headlines, a trap: "
+            f"{', '.join(traps)}.")
+    else:
+        add(f"Traps: 0 of {len(candidates)} candidates gap up against the "
+            "balance of their own headlines.")
+    if unweighable:
+        add(f"Trap undecided for {', '.join(unweighable)}: trap_why on those "
+            "rows carries the reason, and undecided is not a verdict of safe.")
+
+    # The measured worth of every RVOL above, from the nightly check. Stated
+    # here for the same reason the template requires it: a lower bound whose
+    # size nobody names reads as a rounding note.
+    check = packet.get("collector_volume_check")
+    if check:
+        add("")
+        add(f"Collector volume check, {check.get('day')}: median absolute "
+            f"difference {check.get('median_abs_pct'):.1f}% against the vendor's "
+            f"one minute bars on identical minutes, across "
+            f"{check.get('compared')} symbol(s), "
+            f"{check.get('within_one_percent')} within one percent"
+            f"{'. STALE, ' + str(check.get('age_days')) + ' days old' if check.get('stale') else ''}"
+            ". The premarket RVOL figures above divide a collector numerator by "
+            "a vendor denominator, so they understate by about that much again.")
+    else:
+        add("")
+        add("Collector volume check: not written. The disagreement between the "
+            "collector feed and the vendor feed is unmeasured, which is not the "
+            "same as small.")
+
+    blocked = packet.get("day_blocked_on_rvol_alone") or []
+    if blocked:
+        add(f"Failed the day screen on premarket RVOL alone, having cleared "
+            f"the other day conditions: {', '.join(_bare(s) for s in blocked)}.")
     return "\n".join(lines) + "\n"
 
 

@@ -699,6 +699,240 @@ def claim_no_comment_describes_a_helper_that_does_not_exist(failures: list[str])
     print("  comments     the phantom helper is named only inside its correction")
 
 
+# ------------------------------------------- the 2026-08-20 report audit
+
+def claim_the_volume_check_reaches_the_packet(failures: list[str]) -> None:
+    """The measured collector shortfall is read by the morning and stated.
+
+    verify_against_intraday is the definitive measure of what the socket
+    misses, the nightly writes it to runs/<date>/verify_intraday.json, and
+    until 2026-08-20 nothing under src/morning read that file. So the
+    2026-08-20 report told its reader premarket RVOL was a lower bound and
+    named only the window shortfall, which is arithmetic and small, while the
+    feed shortfall measured 90.0 percent across 73 symbols the night before and
+    reached nobody. The numerator comes from the collector and the denominator
+    from the vendor, so that disagreement is IN every ratio the report prints.
+
+    Three states are proved, because the wrong one is silence: a fresh check is
+    read and quoted, a stale one is called stale rather than dropped, and no
+    check at all is itself said out loud. An unmeasured feed is not a clean one.
+    """
+    from collect import collect_premarket
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    with conftest_activate():
+        # activate() copies the real runs/ in, and the real tree carries
+        # written checks. Cleared first so the three states below are the
+        # fixture's rather than the machine's.
+        for existing in config.RUNS_DIR.glob("*/verify_intraday.json"):
+            existing.unlink()
+
+        # No check written at all.
+        sink = Sink()
+        if scan.volume_check("2026-08-20", sink) is not None:
+            failures.append("a volume check was returned when none is on disk")
+        if not any("never been written" in g for g in sink.gaps):
+            failures.append(
+                "no check on disk and the packet says nothing: "
+                f"{sink.gaps}")
+
+        def write(day: str, payload: dict) -> None:
+            target = config.run_dir(day)
+            target.mkdir(parents=True, exist_ok=True)
+            (target / "verify_intraday.json").write_text(
+                json.dumps(payload), encoding="utf-8")
+
+        fresh = {"day": "2026-08-19", "compared": 73, "within_one_percent": 0,
+                 "median_abs_pct": 90.0, "unavailable": 0}
+        write("2026-08-19", fresh)
+
+        read = collect_premarket.latest_volume_check("2026-08-20")
+        if not read or read.get("median_abs_pct") != 90.0:
+            failures.append(f"the written check was not read back: {read}")
+        elif read["age_days"] != 1 or read["stale"]:
+            failures.append(f"a one day old check read as {read['age_days']} "
+                            f"days and stale={read['stale']}")
+
+        sink = Sink()
+        returned = scan.volume_check("2026-08-20", sink)
+        if not returned or returned.get("compared") != 73:
+            failures.append(f"volume_check did not return the summary: {returned}")
+        stated = [g for g in sink.gaps if "90.0 percent" in g and "73" in g]
+        if not stated:
+            failures.append(
+                "the measured disagreement is not in gaps_to_fill, so the "
+                f"disclaimer cannot carry it: {sink.gaps}")
+        elif "LARGER than the window" not in stated[0]:
+            failures.append(
+                "the gap does not say the feed shortfall is the bigger of the "
+                f"two, which is the whole correction: {stated[0]}")
+
+        # A check older than the CRITERIA limit is named as stale, not dropped.
+        far = ettime.parse_date("2026-08-19") + dt.timedelta(days=40)
+        sink = Sink()
+        stale = scan.volume_check(far.isoformat(), sink)
+        if not stale or not stale["stale"]:
+            failures.append(f"a 40 day old check did not read as stale: {stale}")
+        if not any("days old" in g and "unmeasured" in g for g in sink.gaps):
+            failures.append(f"a stale check was not called stale: {sink.gaps}")
+
+    print("  volume check the measured collector shortfall is read, quoted, and "
+          "called stale or absent when it is")
+
+
+def claim_a_trap_is_the_balance_not_the_worst_headline(failures: list[str]) -> None:
+    """One mis-scored headline inside a positive set cannot carry a trap call.
+
+    Until 2026-08-20 REPORT_TEMPLATE.md asked the MODEL whether a gap up was
+    contradicted by its news, and the model answered with the worst single
+    headline. That morning it published MSTR as a trap on "Bitcoin tops $71K as
+    crypto rally gains momentum", which the vendor scored -0.914 against that
+    same name's +0.963 and +0.833, and FUTU on a neutral earnings listing at
+    -0.422 against +0.836 and +0.691. Two vendor scoring errors reached a
+    reader as statements about the market, and neither the containment checker
+    nor the quantifier guard could see it: the tickers were real and the
+    polarity was quoted correctly.
+
+    The real MSTR row is the fixture here, on purpose. A claim written from
+    invented numbers proves the rule; this one proves the case.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    def headline(polarity):
+        return {"title": "t", "sentiment": None if polarity is None
+                else {"polarity": polarity}}
+
+    cases = [
+        # The 2026-08-20 MSTR row, verbatim polarities.
+        ("MSTR.US", 9.0647, [0.963, -0.914, 0.833], False, "one negative in three"),
+        # The 2026-08-20 FUTU row.
+        ("FUTU.US", 9.4772, [0.691, 0.836, -0.422], False, "one negative in three"),
+        # Genuinely negative coverage still trips it.
+        ("BAD.US", 9.0, [-0.8, -0.6, 0.9], True, "two negative in three"),
+        # A gap DOWN is not the question a trap asks.
+        ("DOWN.US", -9.0, [-0.8, -0.6], None, "gap down"),
+        # One scored headline IS the worst single headline. Refused.
+        ("THIN.US", 9.0, [-0.9], None, "below the balance minimum"),
+        # Unscored headlines do not count toward the balance.
+        ("UNSC.US", 9.0, [None, None, -0.9], None, "one scored of three"),
+    ]
+    candidates = [
+        {"symbol": symbol, "gap_pct": gap, "catalyst_found": True,
+         "headlines": [headline(v) for v in polarities]}
+        for symbol, gap, polarities, _want, _why in cases
+    ]
+    sink = Sink()
+    scan.attach_traps(candidates, sink)
+
+    for candidate, (symbol, _gap, _pol, want, why) in zip(candidates, cases):
+        got = candidate.get("trap")
+        if got is not want:
+            failures.append(
+                f"{symbol} ({why}) came back trap={got!r}, expected {want!r}: "
+                f"{candidate.get('trap_why')}")
+        if not candidate.get("trap_why"):
+            failures.append(f"{symbol} carries a trap verdict with no reason")
+        basis = candidate.get("trap_basis") or {}
+        for field in ("negative", "positive", "headlines_scored", "rule"):
+            if field not in basis:
+                failures.append(f"{symbol} trap_basis carries no {field}: {basis}")
+
+    # A failed news call is unknown, never a clean False.
+    unknown = [{"symbol": "ERR.US", "gap_pct": 9.0, "catalyst_found": None,
+                "headlines": []}]
+    scan.attach_traps(unknown, Sink())
+    if unknown[0].get("trap") is not None:
+        failures.append("a failed news call produced a trap verdict rather than "
+                        f"unknown: {unknown[0].get('trap')}")
+
+    named = [g for g in sink.gaps if "BAD.US" in g]
+    if not named:
+        failures.append(f"the flagged trap is not in gaps_to_fill: {sink.gaps}")
+    elif "MSTR.US" in named[0] or "FUTU.US" in named[0]:
+        failures.append(f"a cleared name was flagged as a trap: {named[0]}")
+
+    # The template must not ask for the judgment it no longer makes.
+    template = (config.PROJECT_ROOT / "doc" / "REPORT_TEMPLATE.md").read_text(
+        encoding="utf-8")
+    if "sentiment is negative is a trap" in template:
+        failures.append(
+            "REPORT_TEMPLATE.md still asks the model to judge a trap from "
+            "headline sentiment, which is the instruction that produced the "
+            "2026-08-20 MSTR and FUTU calls")
+    if "trap_why" not in template:
+        failures.append("REPORT_TEMPLATE.md does not tell the report to quote "
+                        "the packet's trap_why")
+    print("  trap balance a mis-scored headline inside a positive set is not a "
+          "trap, and the template no longer asks the model to decide")
+
+
+def claim_the_day_screen_names_what_rvol_alone_blocked(failures: list[str]) -> None:
+    """Which names an understating numerator cost, counted rather than narrated.
+
+    The companion to the volume check, and the reason it is worth carrying. On
+    2026-08-20 seven of twelve candidates cleared price, gap, market cap and
+    the prior session high and failed on premarket RVOL by itself, against a
+    numerator the nightly had already measured at roughly a tenth of the
+    vendor's for the same minutes. The report published "the day screen
+    produced nothing today" as an observation about the market.
+
+    Counted here rather than left to the model for the reason screen_tally
+    argues: it has exactly one right answer, and the model was getting counts
+    wrong in prose.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    candidates = [
+        {"symbol": "ONLY.US", "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "ALSO.US", "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "BOTH.US", "day_failed_conditions": ["premarket_rvol",
+                                                        "market_cap"]},
+        {"symbol": "OTHER.US", "day_failed_conditions": ["market_cap"]},
+        {"symbol": "CLEAN.US", "day_failed_conditions": []},
+    ]
+    sink = Sink()
+    blocked = scan.rvol_only_day_failures(candidates, sink)
+    if blocked != ["ONLY.US", "ALSO.US"]:
+        failures.append(f"rvol-only blocking named {blocked}, expected the two "
+                        "that failed on nothing else")
+    if not sink.gaps or "ONLY.US" not in sink.gaps[0]:
+        failures.append(f"the blocked names are not in gaps_to_fill: {sink.gaps}")
+    elif "instrument reading" not in sink.gaps[0]:
+        failures.append("the gap does not tell the reader an empty day list may "
+                        f"be the instrument: {sink.gaps[0]}")
+
+    # Silent when nothing was blocked on RVOL alone, so the list stays readable.
+    quiet = Sink()
+    if scan.rvol_only_day_failures(
+            [{"symbol": "X.US", "day_failed_conditions": ["market_cap"]}], quiet):
+        failures.append("a name failing on market cap was called rvol blocked")
+    if quiet.gaps:
+        failures.append(f"a morning with nothing blocked still gapped: {quiet.gaps}")
+    print("  rvol blocked the names the day screen lost to RVOL alone are counted "
+          "and named, and a quiet morning stays silent")
+
+
 # ---------------------------------------------------------------- plumbing
 
 def conftest_activate():
@@ -725,6 +959,9 @@ def main() -> int:
     claim_vendor_text_cannot_break_a_table(failures)
     claim_the_quantifier_guard_reads_headings(failures)
     claim_no_comment_describes_a_helper_that_does_not_exist(failures)
+    claim_the_volume_check_reaches_the_packet(failures)
+    claim_a_trap_is_the_balance_not_the_worst_headline(failures)
+    claim_the_day_screen_names_what_rvol_alone_blocked(failures)
 
     if failures:
         for failure in failures:

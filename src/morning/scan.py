@@ -856,7 +856,7 @@ def _gap_for_lower_bound_rvol(
     candidates: list[dict[str, Any]], packet: Packet,
     numerator_window: str, denominator_window: str,
 ) -> None:
-    """Say in gaps_to_fill which RVOLs can only understate.
+    """Say in gaps_to_fill which RVOLs can only understate, and by which of two causes.
 
     The asymmetry is recorded per candidate in pm_rvol_basis and was reaching
     no reader. A lower bound is not a low reading, and a report describing RVOL
@@ -866,20 +866,122 @@ def _gap_for_lower_bound_rvol(
     named only the two null RVOLs, which told the reader the other ten were
     complete when every one of them was a lower bound.
 
-    Silent when nothing is bounded, because a gaps list that always carries a
-    sentence is a gaps list nobody reads.
+    Two causes, not one, and until 2026-08-20 this said only the first.
+
+    The WINDOW cause is arithmetic: the numerator starts at the collector's
+    start_time and the denominator at the baseline's session_start, so the
+    ratio is bounded below by construction and no measurement is needed to
+    know it.
+
+    The FEED cause is empirical and is the bigger of the two. The numerator
+    comes from the collector socket and the denominator from the vendor's
+    intraday endpoint, so whatever those two feeds disagree by passes straight
+    into the ratio. verify_against_intraday measures exactly that disagreement
+    on identical minutes, the nightly writes it, and on 2026-08-20 it read
+    90.0 percent across 73 symbols with none inside one percent. The morning
+    report of that date told its reader RVOL was a lower bound and named only
+    the window, which describes a ten-fold instrument error as an arithmetic
+    detail. See the volume check note in CRITERIA.md.
+
+    Silent about the bound when nothing is bounded, because a gaps list that
+    always carries a sentence is a gaps list nobody reads. NOT silent about the
+    feed, which is a property of the collector rather than of any candidate and
+    is reported whether or not a single RVOL survived the morning.
     """
     bounded = [c["symbol"] for c in candidates
                if (c.get("pm_rvol_basis") or {}).get("is_lower_bound")]
-    if not bounded:
-        return
-    packet.gap(
-        "premarket RVOL understates for these candidates and must be called a "
-        "lower bound wherever it is discussed: the numerator covers the "
-        f"collector window from {numerator_window} ET while the denominator is "
-        f"a baseline accumulated from {denominator_window} ET: "
-        + ", ".join(bounded)
+    if bounded:
+        packet.gap(
+            "premarket RVOL understates for these candidates and must be called a "
+            "lower bound wherever it is discussed: the numerator covers the "
+            f"collector window from {numerator_window} ET while the denominator is "
+            f"a baseline accumulated from {denominator_window} ET: "
+            + ", ".join(bounded)
+        )
+
+
+def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
+    """Read the nightly's collector-versus-vendor measurement and gap it.
+
+    Costs nothing: the measurement is taken by the nightly and written to
+    runs/<date>/verify_intraday.json, and this reads the newest one. Returned
+    for the packet and stated in gaps_to_fill, because the size of this number
+    decides how much the RVOL column is worth and the reader cannot see it
+    anywhere else.
+
+    An absent or stale check is itself a gap. An unmeasured feed is not a clean
+    one, and a morning that says nothing about it reads exactly like a morning
+    that measured zero.
+    """
+    check = collect_premarket.latest_volume_check(session_date)
+    if check is None:
+        packet.gap(
+            "the collector volume check has never been written, so the "
+            "disagreement between the collector socket that supplies the "
+            "premarket RVOL numerators and the vendor intraday feed that "
+            "supplies the denominators is UNMEASURED this morning. That is "
+            "not the same as small. Run the nightly backfill to take the "
+            "measurement."
+        )
+        return None
+
+    detail = (
+        f"the collector was last measured against the vendor's one minute bars "
+        f"on identical minutes for {check['day']}: median absolute difference "
+        f"{check['median_abs_pct']:.1f} percent across {check['compared']} "
+        f"symbol(s), {check['within_one_percent']} of them within one percent"
     )
+    if check["stale"]:
+        packet.gap(
+            f"the collector volume check is {check['age_days']} days old, past "
+            f"the {check['max_age_days']} day limit in CRITERIA.md [collector], "
+            f"so this morning's feed is effectively unmeasured. Last reading: "
+            f"{detail}."
+        )
+    else:
+        packet.gap(
+            f"premarket RVOL and premarket float rotation both divide a "
+            f"collector-sourced numerator by a vendor-sourced denominator, and "
+            f"{detail}. That disagreement passes straight into the ratios in "
+            "this packet and is LARGER than the window shortfall reported "
+            "separately. An RVOL below is understated by about that much "
+            "again, and a screen decided on RVOL this morning should be read "
+            "as an instrument reading rather than as a fact about the tape."
+        )
+    return check
+
+
+def rvol_only_day_failures(candidates: list[dict[str, Any]], packet: Packet) -> list[str]:
+    """Candidates the day screen rejected on premarket RVOL and nothing else.
+
+    The companion to volume_check above, and the reason it is worth carrying.
+    A measured feed shortfall is an abstraction until somebody says which names
+    it cost. On 2026-08-20, seven of twelve candidates cleared price, gap,
+    market cap and the prior session high and failed on RVOL alone, against a
+    numerator the nightly had measured at roughly a tenth of the vendor's for
+    the same minutes. The report published "the day screen produced nothing
+    today" as an observation about the market.
+
+    Computed here rather than left to the model for the reason screen_tally
+    argues at length: it is a count with one correct answer, and the model was
+    getting counts wrong in prose.
+    """
+    blocked = [
+        c["symbol"] for c in candidates
+        if (c.get("day_failed_conditions") or []) == ["premarket_rvol"]
+    ]
+    if blocked:
+        packet.gap(
+            f"{len(blocked)} of {len(candidates)} candidates failed the day "
+            "screen on premarket RVOL alone, having cleared the other day "
+            "conditions: "
+            + ", ".join(blocked)
+            + ". Read that against the collector volume check in this packet: "
+            "if the numerator understates, these are the tickers it cost, and "
+            "an empty day watchlist is then an instrument reading rather than "
+            "a quiet market."
+        )
+    return blocked
 
 
 def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> None:
@@ -1168,6 +1270,113 @@ def attach_catalysts(
         candidate["headlines"] = recent[:keep]
         candidate["catalyst_found"] = bool(recent)
         candidate["news_in_window"] = len(recent)
+
+
+def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
+    """Is this gap up contradicted by the balance of its own headlines.
+
+    Decided here and narrated by the report, which is the house rule and was
+    not being followed. Until 2026-08-20 REPORT_TEMPLATE.md told the model that
+    "a positive gap on headlines whose sentiment is negative is a trap", the
+    packet carried no such field, and the model did what that sentence invites:
+    it took the WORST SINGLE headline. On 2026-08-20 that published MSTR as a
+    trap on "Bitcoin tops $71K as crypto rally gains momentum", which the
+    vendor scored -0.914 against its own +0.963 and +0.833 that same morning,
+    and FUTU as a trap on "Here are the major earnings before the open
+    Thursday" at -0.422 against +0.836 and +0.691. Two vendor scoring errors
+    reached a reader as statements about the market, which is the one thing
+    the containment and quantifier guards do not catch: the tickers were real
+    and the polarity was quoted accurately.
+
+    So the rule reads the balance, strictly more negative than positive among
+    the headlines the vendor actually scored, and the counts it decided on are
+    kept next to the verdict. The vendor's polarity is the only sentiment
+    source on this plan and it is unreliable per item; carrying the evidence is
+    how a reader can disagree with the call.
+
+    trap is NULL, never False, when there is nothing to weigh: no headlines,
+    fewer than min_headlines_for_balance scored ones, a gap that is down or too
+    small for the question to mean anything, or a news call that failed. A
+    False that means "we could not look" is the failure mode this whole file
+    is written against.
+    """
+    negative_at = _CRIT.number("traps", "negative_polarity")
+    positive_at = _CRIT.number("traps", "positive_polarity")
+    minimum = _CRIT.integer("traps", "min_headlines_for_balance")
+    min_gap = _CRIT.number("traps", "min_gap_pct")
+
+    flagged: list[str] = []
+    for candidate in candidates:
+        scored: list[float] = []
+        unscored = 0
+        for headline in candidate.get("headlines") or []:
+            polarity = ((headline.get("sentiment") or {}).get("polarity"))
+            value = _as_float(polarity)
+            if value is None:
+                unscored += 1
+            else:
+                scored.append(value)
+
+        negatives = [v for v in scored if v <= negative_at]
+        positives = [v for v in scored if v >= positive_at]
+        basis = {
+            "headlines_scored": len(scored),
+            "headlines_unscored": unscored,
+            "negative": len(negatives),
+            "positive": len(positives),
+            "negative_at_or_below": negative_at,
+            "positive_at_or_above": positive_at,
+            "mean_polarity": (round(sum(scored) / len(scored), 4) if scored else None),
+            "rule": ("strictly more negative than positive headlines, not the "
+                     "single worst one. See the balance note in CRITERIA.md"),
+            "source": ("polarity as published by the EODHD news feed, which is "
+                       "unreliable per item and is read here in aggregate for "
+                       "that reason"),
+        }
+        candidate["trap_basis"] = basis
+
+        gap = _as_float(candidate.get("gap_pct"))
+        if candidate.get("catalyst_found") is None:
+            candidate["trap"] = None
+            candidate["trap_why"] = ("the news call failed, so there is no "
+                                     "headline set to weigh and trap is unknown "
+                                     "rather than absent")
+        elif gap is None or gap < min_gap:
+            candidate["trap"] = None
+            candidate["trap_why"] = (
+                f"a trap is a gap UP contradicted by its news; this gap is "
+                f"{'null' if gap is None else format(gap, '.2f') + ' percent'}, "
+                f"below the {min_gap:g} percent this question is asked above")
+        elif len(scored) < minimum:
+            candidate["trap"] = None
+            candidate["trap_why"] = (
+                f"{len(scored)} scored headline(s), below the {minimum} needed "
+                "for a balance; on fewer than that the balance IS the single "
+                "worst headline, which is the reading this rule exists to stop")
+        elif len(negatives) > len(positives):
+            candidate["trap"] = True
+            candidate["trap_why"] = (
+                f"gaps up {gap:.2f} percent while {len(negatives)} of "
+                f"{len(scored)} scored headlines are negative at or below "
+                f"{negative_at:g} against {len(positives)} positive at or above "
+                f"{positive_at:g}")
+            flagged.append(candidate["symbol"])
+        else:
+            candidate["trap"] = False
+            candidate["trap_why"] = (
+                f"gaps up {gap:.2f} percent and its headlines do not contradict "
+                f"it: {len(negatives)} negative against {len(positives)} "
+                f"positive of {len(scored)} scored")
+
+    if flagged:
+        packet.gap(
+            f"{len(flagged)} of {len(candidates)} candidates gap up against "
+            f"the balance of their own headlines and are traps: "
+            f"{', '.join(flagged)}. The verdict is in the trap field and the "
+            "counts it was decided on are in trap_basis; the report must quote "
+            "those and must not re-derive a trap from a single headline's "
+            "polarity."
+        )
 
 
 # ------------------------------------------------------ 7. economic events
@@ -1809,6 +2018,11 @@ def build_packet() -> dict[str, Any]:
         attach_float_rotation(candidates, packet)
         if not thin:
             attach_catalysts(api, candidates, packet)
+        # After the catalysts, whose headlines it weighs, and after attach_gap,
+        # whose gap_pct decides whether the question applies at all. On the thin
+        # path headlines is empty and every trap comes out null with its reason,
+        # which is the honest answer when the news was never fetched.
+        attach_traps(candidates, packet)
 
     if thin:
         packet.gap(f"economic events and the earnings calendar skipped: {quota_clause}")
@@ -1828,6 +2042,13 @@ def build_packet() -> dict[str, Any]:
 
     if candidates:
         stamp_all(candidates, earnings_block)
+
+    # Read, never computed: see volume_check's docstring. Placed after the
+    # screens have run so rvol_only_day_failures has decisions to read, and
+    # before the packet is assembled so both land in gaps_to_fill in the order
+    # a reader needs them, the measurement first and then what it cost.
+    volume_measurement = volume_check(session_date, packet)
+    rvol_only = rvol_only_day_failures(candidates, packet)
 
     late_window = [c["symbol"] for c in candidates if c.get("pm_window_starts_late")]
     if late_window:
@@ -1932,6 +2153,16 @@ def build_packet() -> dict[str, Any]:
         # What cleared and what failed, per screen condition. The report quotes
         # this rather than counting; see screen_tally for why.
         "screen_tally": screen_tally(candidates),
+        # What the collector's premarket volume is actually worth, measured by
+        # the nightly against the vendor on identical minutes. Every pm_rvol
+        # and every pm_float_rotation in this packet divides by a number from
+        # a different feed than its numerator, and this is the size of that
+        # difference. Null when no check has ever been written, which the gaps
+        # list says in words.
+        "collector_volume_check": volume_measurement,
+        # The names that cost. Empty on a morning where RVOL was not the
+        # deciding condition for anyone.
+        "day_blocked_on_rvol_alone": rvol_only,
         "gaps_to_fill": packet.gaps,
         "api_calls": eodhd.call_count(),
     }

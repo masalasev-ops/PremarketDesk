@@ -505,6 +505,35 @@ subscription_retry_wait_s     = 60         # measured 2026-08-19: a dropped conn
 max_subscription_retries      = 4          # four waits is four minutes, against a window that is two hours long
 verify_warmup_minutes         = 25         # see the verification note below
 verify_window_minutes         = 15
+volume_check_max_age_days     = 5          # how far back the 08:45 scan will read a written verify_intraday.json. See the volume check note
+
+### The volume check note
+
+verify_against_intraday compares the collector against the vendor's one minute
+bars on identical minutes and is the definitive measure of what the socket
+misses. The nightly writes it to runs/<date>/verify_intraday.json. Until
+2026-08-20 nothing under src/morning read that file, so the number existed and
+reached no reader, and the morning report described premarket RVOL as a lower
+bound while naming only the smaller of the two reasons it is one.
+
+The two reasons are different in kind. The WINDOW reason is arithmetic and
+needs no measurement: the numerator starts at [Collector] start_time and the
+denominator at [Baseline] session_start, so the ratio is bounded below by
+construction. The FEED reason is empirical and is exactly what this file
+measures: the numerator comes from the collector socket and the denominator
+from the vendor intraday endpoint, so whatever those two disagree by passes
+straight into the ratio. On the four sessions measured before this key existed
+the median absolute disagreement was 90.0, 90.0, 88.4 and 71.0 percent, with
+1 symbol out of 210 inside one percent.
+
+The scan reads and never computes. Computing it costs one intraday call per
+collected symbol, which is fifty of them, and the 08:45 window does not spend
+that. A check older than volume_check_max_age_days is reported with its age
+rather than used silently, and no check at all is itself written into the gaps
+list: an unmeasured feed is not a clean one.
+
+5 days covers a long weekend plus a session the vendor published late. It is
+not independently validated and the header of this file applies.
 
 ### The symbols limit note
 
@@ -706,6 +735,48 @@ run_time baseline. That skew is bounded and recorded: the packet
 carries both run_time_et and rvol_cutoff_hhmm, and they differ when snapped.
 Outside the snap window nothing is snapped, which is why an off hours test run
 honestly reports no cached baseline.
+
+## Traps
+
+A gap up contradicted by the news underneath it. Decided in scan.py and
+narrated by the report, never judged by the model.
+
+negative_polarity             = -0.35      # seed: at or below this a headline counts as negative
+positive_polarity             = 0.35       # seed: at or above this a headline counts as positive
+min_headlines_for_balance     = 2          # below this there is no balance to read and trap is NULL
+min_gap_pct                   = 3          # seed: a gap smaller than this is not the kind of move a trap describes
+
+### The balance note
+
+Until 2026-08-20 there was no rule here at all. REPORT_TEMPLATE.md told the
+model "a positive gap on headlines whose sentiment is negative is a trap and is
+said plainly", and the model read the WORST SINGLE headline. That is the wrong
+reduction and 2026-08-20 is the case that proves it. MSTR was published as a
+trap on "Bitcoin tops $71K as crypto rally gains momentum", which the vendor
+scored -0.914; its other two headlines that morning scored +0.963 and +0.833.
+FUTU was published as a trap on "Here are the major earnings before the open
+Thursday", scored -0.422, against +0.836 and +0.691. Both calls were vendor
+scoring errors on text that is plainly positive or plainly neutral, and both
+reached the reader as statements about the market.
+
+So the rule reads the BALANCE: a trap needs strictly more negative headlines
+than positive ones among those the vendor scored. One mis-scored headline
+inside a positive set can no longer carry a call on its own, which is the
+specific failure above, and a name whose coverage really is negative still
+trips it. Neither threshold is symmetric by accident: they are the same
+magnitude because nothing yet justifies treating a -0.35 as different evidence
+from a +0.35.
+
+min_headlines_for_balance exists because two is the smallest set where "more
+negative than positive" says anything. On a single headline the balance IS the
+worst single headline, which is the failure being fixed, so trap is NULL there
+with the reason recorded rather than decided on one item.
+
+The vendor's polarity is the only sentiment source on this plan and it is
+demonstrably unreliable at the item level. That is the argument for reading it
+in aggregate and for the packet carrying the counts it was decided on, so a
+reader can see the evidence rather than take the verdict. The magnitudes are
+seed values fitted to nothing, and the header of this file applies.
 
 ## Analyst
 

@@ -15,6 +15,90 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, fourth: the morning report's own two defects, found by reading it
+
+The audit above read the CODE. This one read the OUTPUT: the 08:45 report of
+2026-08-20, line by line, against packet.json, the raw collector file, the
+nightly's verification and the scheduler trail. The arithmetic all reconciled
+and two things did not.
+
+### The report described a ten-fold instrument error as an arithmetic detail
+
+Premarket RVOL divides a numerator the collector socket supplies by a
+denominator the vendor's intraday endpoint supplies. Those two feeds do not
+agree, verify_against_intraday measures exactly how much they disagree on
+identical minutes, and the 07:00 catch-up had written that morning's answer
+five hours before the report was built: **90.0 percent median absolute
+difference across 73 symbols, none inside one percent**. The three sessions
+before read 90.0, 88.4 and 71.0.
+
+The report said RVOL was a lower bound and gave one reason, the window
+shortfall, which is arithmetic and is the smaller of the two. It could not give
+the other, because nothing under src/morning read verify_intraday.json. The
+measurement existed, was taken on schedule, and reached no reader.
+
+collect_premarket.latest_volume_check now reads it, scan.volume_check puts it
+in the packet as collector_volume_check and states it in gaps_to_fill, and
+REPORT_TEMPLATE.md requires the report to quote its median, its symbol count
+and its date wherever RVOL is discussed. An absent or stale check is itself a
+gap: an unmeasured feed is not a clean one, and a morning silent about it reads
+exactly like a morning that measured zero. See the volume check note in
+CRITERIA.md and [Collector] volume_check_max_age_days.
+
+**What it cost that morning.** Seven of twelve candidates cleared price, gap,
+market cap and the prior session high and failed the day screen on premarket
+RVOL by itself: SCSC, FUTU, MSTR, ASST, BLSH, COIN and MARA. FUTU measured
+1.0282 against a 1.5 threshold. The report published "the day screen produced
+nothing today" as an observation about the market. scan.rvol_only_day_failures
+now counts that set into day_blocked_on_rvol_alone and the template requires it
+named, so an empty watchlist that the instrument caused says so.
+
+### Two traps were vendor sentiment errors, stated as conclusions
+
+REPORT_TEMPLATE.md told the model "a positive gap on headlines whose sentiment
+is negative is a trap and is said plainly". The packet carried no trap field,
+so the model did what that sentence invites and read the worst single headline.
+On 2026-08-20 it published MSTR as a trap on "Bitcoin tops $71K as crypto rally
+gains momentum", scored -0.914 by the vendor against that same name's own
++0.963 and +0.833, and FUTU on "Here are the major earnings before the open
+Thursday" at -0.422 against +0.836 and +0.691. Both are plainly mis-scored
+text. Both reached a reader as statements about the market, and neither guard
+could see it: the tickers were real and the polarity was quoted correctly.
+
+This was the house rule being broken. Python decides, the model narrates, and a
+trap is a decision. scan.attach_traps decides it now, on the BALANCE of a
+ticker's scored headlines rather than the worst one, and keeps the counts in
+trap_basis so a reader can disagree with the call. trap is NULL, never False,
+when there is nothing to weigh: a gap down, fewer than two scored headlines, or
+a news call that failed. Thresholds are in CRITERIA.md [Traps] with the balance
+note; the template now forbids re-deriving a trap and requires trap_why to be
+quoted.
+
+### Also
+
+- The fallback report states the trap verdict and the volume check rather than
+  saying trap judgment "needs the narrative pass", which stopped being true.
+- Three new claims in src/tests/test_regressions.py, one per finding. The trap
+  claim uses the real 2026-08-20 MSTR and FUTU polarities as its fixture: a
+  claim written from invented numbers proves the rule, this one proves the case.
+- The report of 2026-08-20 was regenerated against an amended packet. scan.py
+  cannot be re-run for a closed premarket window, so the three new passes were
+  applied to the evidence the 08:45 run had already gathered, with nothing
+  re-fetched and no price, volume or timestamp touched. The originals are
+  preserved as runs/2026-08-20/packet.0845.json and report.0845.md, and the
+  amendment says so in its own gaps list.
+
+### One thing this did not fix
+
+Nine smaller findings from the same read are recorded in BUILD_PLAN.md rather
+than fixed here: the six names a rank cap drops without saying so, a score
+roll-call that omits a tied name, "strongest scored" being direction blind on a
+name down 21.75 percent, null RVOL pooled with measured-low in one tally, two
+vendor prior closes for SCSC disagreeing by 1.67 percent, a premarket record of
+four bars described only as "partial", and two replay-only prints described as
+no print at all. They are accuracy and completeness, not falsehood, and each
+wants its own argument.
+
 ## 2026-08-20, third: an adversarial audit of the whole scheduled path, twenty defects fixed
 
 Forty findings raised by six readers over the six packages and the .bat files,
