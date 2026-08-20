@@ -451,6 +451,36 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
     # A served total of zero is never a floor: the reconstruction only produces
     # a floor when bars came back, and bars mean something was served.
     nothing_served = bool(refused_total) and not served_total
+    # Some refused and some answered, which is the shape the served versus
+    # refused split was added for and the one it could not describe. Every word
+    # about refusals sat under "no sweep returned a bar", so a run where some
+    # chunks came back 403 and the rest returned bars printed the best, median
+    # and worst lag with no mention of the refusals anywhere in the file. Those
+    # figures are readings of the part of the universe that answered, and
+    # unlabelled they read as readings of the whole of it, which is the
+    # 2026-08-17 misreport with the sign flipped: there an unanswered sweep was
+    # published as an empty feed, here a partial answer is published as a full
+    # one.
+    partly_refused = bool(refused_total) and bool(served_total)
+
+    def partial_refusal_note(with_bars: bool) -> list[str]:
+        """The paragraph a partially refused run gets, bars or no bars."""
+        body = (
+            "Part of this run was never answered, so the lag above, the active "
+            "count and the bar count are readings of the part that WAS. They "
+            "are floors for the universe and never totals of it."
+            if with_bars else
+            "Part of this run was never answered, so the emptiness of the part "
+            "that was cannot be extended over it. There is a reading here of "
+            "what came back, and none of the whole morning.")
+        return [
+            "Read the refusal column first. Refused: "
+            f"{_plural(refused_total, 'request', refused_exact)}, "
+            f"{_codes_phrase(codes_seen)}. Answered: "
+            f"{_count_text(served_total, served_exact)}. " + body,
+            "",
+        ]
+
     lines = [
         f"# Alpaca live premarket probe, {day}",
         "",
@@ -471,6 +501,21 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
             "here is evidence about the contents of the feed. What the refusals are "
             "evidence of is narrower and firmer: this key was refused this feed for "
             "this window, on every request, for the whole of the run.",
+            "",
+        ]
+    if partly_refused:
+        # At the top for the same reason as the banner above it: the columns
+        # get quoted by someone who did not read the file that produced them,
+        # and a column filled from half a universe looks exactly like one
+        # filled from all of it.
+        lines += [
+            f"> **PART OF THIS RUN WAS REFUSED.** "
+            f"{_plural(refused_total, 'request', refused_exact)} came back "
+            f"{_codes_phrase(codes_seen)} against "
+            f"{_count_text(served_total, served_exact)} answered. Every column "
+            "below counts what the ANSWERED requests returned, so the active "
+            "names, the bar totals and the lag describe the part of the "
+            "universe that was served and are floors for the whole of it.",
             "",
         ]
     if dry:
@@ -517,6 +562,11 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
             "is achievable and therefore what the report can contain",
             "",
         ]
+        if partly_refused:
+            # This is the branch the note could not reach. It lived under the
+            # else below, which needs "no sweep returned a bar", and a run with
+            # some chunks refused and bars from the rest lands here.
+            lines += partial_refusal_note(True)
     else:
         lines += ["## Observed lag", "",
                   "No sweep returned a bar, so there is no lag to report.",
@@ -542,17 +592,8 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
                 "active count at all.",
                 "",
             ]
-        elif refused_total:
-            lines += [
-                f"Read the refusal column first. Refused: "
-                f"{_plural(refused_total, 'request', refused_exact)}, "
-                f"{_codes_phrase(codes_seen)}. Answered: "
-                f"{_count_text(served_total, served_exact)}. Part of this run was never "
-                "answered, so the emptiness of the part that was cannot be extended "
-                "over it. There is a reading here of what came back, and none of the "
-                "whole morning.",
-                "",
-            ]
+        elif partly_refused:
+            lines += partial_refusal_note(False)
         else:
             lines += [
                 f"All {_plural(served_total, 'request', served_exact)} were answered, "
@@ -585,10 +626,12 @@ def report(day: str | None = None) -> int:
 
     rows = _table_rows(records)
     served_total = sum(r["requests_served"] for r in rows)
+    served_exact = all(r["requests_served_exact"] for r in rows)
     refused_total = sum(r["requests_refused"] for r in rows)
     refused_exact = all(r["requests_refused_exact"] for r in rows)
     codes_seen = sorted({code for r in rows for code in r["refusal_codes"]})
     nothing_served = bool(refused_total) and not served_total
+    partly_refused = bool(refused_total) and bool(served_total)
 
     print(f"probe: Alpaca live premarket, {path.name}, {len(records)} sweeps\n")
     print(f"{'clock ET':>9} {'newest bar':>11} {'lag min':>8} {'vs 15m':>7} "
@@ -623,6 +666,20 @@ def report(day: str | None = None) -> int:
               f"what an unanswered sweep looks like, not what the premarket held. The "
               f"narrower claim the refusals do support: this key was refused this feed "
               f"for this window, on every request.")
+    elif partly_refused:
+        # The verdict below turns on the active count, and on a partially
+        # refused run that count is a floor over the part of the universe that
+        # answered. Printed as a verdict it would say the feed is empty when
+        # what is empty is the half nobody was allowed to ask about, which is
+        # the 2026-08-17 reading applied to a smaller slice.
+        print(f"\npart of this run was refused: "
+              f"{_plural(refused_total, 'request', refused_exact)} with "
+              f"{_codes_phrase(codes_seen)}, against "
+              f"{_count_text(served_total, served_exact)} answered. The active count "
+              f"is a floor over the part of the universe that was served, so a count "
+              f"near zero is not on its own evidence that the feed is empty: it is "
+              f"also what refusing most of the requests looks like. The lag, where "
+              f"there is one, is a reading of the served part and of nothing else.")
     else:
         print(f"\nthe verdict rests on two numbers. If active names stays near zero through "
               f"the morning, the free tier does not serve live premarket and the design in "

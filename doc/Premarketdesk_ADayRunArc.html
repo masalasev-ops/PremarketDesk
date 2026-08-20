@@ -181,40 +181,51 @@
   is not a step at all but an instrument, the quota meter sampler, which takes one
   reading every thirty minutes of every day including weekends. Each task wakes at
   its clock time, reads the files earlier jobs left behind, and leaves files for
-  the next. The architecture is the clock. Three further .bat files sit in
-  <code>tasks\</code> and are research probes rather than pipeline; they were
-  registered by hand, are not in register_tasks.ps1, and are dormant.</p>
+  the next. The architecture is the clock. One further .bat file sits in
+  <code>tasks\</code> and is a research probe rather than pipeline:
+  job_probe_socket_cap.bat, which is not in register_tasks.ps1 and has no task
+  registered for it today. job_probe_alpaca_live.bat and job_probe_live_v1.bat
+  sat beside it until 2026-08-20 and were deleted once both questions were
+  answered and recorded in DECISIONS.md.</p>
 </header>
 
 <div class="callout">
   <h3>Where this actually stands, 2026-08-20</h3>
   <p>Everything below describes a machine that runs. It has run every weekday
-  since 2026-08-13 and produced a report on five of them. Four things qualify
+  since 2026-08-13 and produced a report on all six of them. Four things qualify
   the picture and none of them are visible from the diagrams alone.</p>
   <ul>
     <li><strong>No email has ever been sent.</strong> data/UNVERIFIED is still
       on disk, so deliver.py refuses every morning and records zero recipients.
       Reports live in runs\&lt;date&gt;\ and in site/PremarketDesk.html.</li>
-    <li><strong>The picks table is empty.</strong> All 51 rows were exported to
-      data/purged-picks-2026-08-19.jsonl and deleted on 2026-08-19, because
-      collector premarket volume feeds pm_rvol and pm_float_rotation and is
-      under investigation. The three pass row below is therefore a description
-      of the design, not of the database: nothing has been backfilled and no
-      outcome has been filled. The long goal is at zero.</li>
+    <li><strong>The picks table holds one morning.</strong> The 51 rows on it
+      before today were exported to data/purged-picks-2026-08-19.jsonl and
+      deleted on 2026-08-19, because collector premarket volume feeds pm_rvol
+      and pm_float_rotation and is under investigation. The purge did not stop
+      the scan writing, and the 08:45 pass on 2026-08-20 wrote twelve rows. So
+      the three pass row below has its first column and nothing else: nothing
+      has been backfilled and no outcome has been filled. The long goal is
+      still at zero.</li>
     <li><strong>Collector volume is the open question.</strong> One session over
       reported by 3.8x in aggregate, two under reported by about 10x, replay is
       measured and too small to be either, and the off exchange census is the
       next reading. doc/research/COLLECTOR_VOLUME.md is the whole diagnosis. The nightly's
       verification had stopped running when picks was emptied, because it sat
       behind that table's early return; it was decoupled on 2026-08-20 and now
-      sweeps sessions that were collected and never measured, so 2026-08-19
-      gets its reading on the next nightly.</li>
-    <li><strong>The quantifier guard is in warn mode and has not fired live.</strong>
-      data/quantifier-flags.jsonl does not exist yet. 2026-08-19 was the first
-      morning to come back with no flags at all, which is one of the three
-      things CRITERIA.md requires before the guard can be set to enforcing.</li>
+      sweeps sessions that were collected and never measured. The 07:00
+      catch-up took 2026-08-19's reading the same morning, 0 of 73 symbols
+      within one percent at a median absolute difference of 90.0 percent, and
+      the 08:45 packet read it back out of
+      runs/2026-08-19/verify_intraday.json.</li>
+    <li><strong>The quantifier guard is in warn mode and has now fired live.</strong>
+      data/quantifier-flags.jsonl exists and holds one row: the 2026-08-20
+      morning, 08:49, quantifier "no" over the word watchlist, outcome warned,
+      no disposition. 2026-08-19 was the first morning to come back with no
+      flags at all, which is the second of the three things CRITERIA.md
+      requires before the guard can be set to enforcing; the third is that the
+      flags already logged have dispositions, and this one does not.</li>
   </ul>
-  <p class="asof">Read against commit 2970090, tree clean, 16 scheduled steps recorded in data/job-status.jsonl.</p>
+  <p class="asof">Read against commit ea167d5, tree clean, 16 scheduled steps recorded in data/job-status.jsonl.</p>
 </div>
 
 <section>
@@ -421,20 +432,23 @@
     database rows the 08:45 scan created, hours after the report already
     went out.
     <br><br>
-    What four scheduled mornings then measured, from analyst_usage.json:
-    89.1s on 2026-08-14, 48.4s on 08-17, 98.5s on 08-18 and 178.9s on 08-19,
-    with output tokens over the same four rising 7,697, 4,000, 8,954, 16,005.
+    What five scheduled mornings then measured, from analyst_usage.json:
+    89.1s on 2026-08-14, 48.4s on 08-17, 98.5s on 08-18, 178.9s on 08-19 and
+    226.1s on 08-20, with output tokens over the same five rising 7,697, 4,000,
+    8,954, 16,005, 20,188.
     On the job trail, which times the whole step rather than the CLI, the
-    analyst took 54.4, 107.5 and 185.3 seconds across the three mornings it
-    covers, against 19.0, 20.6 and 19.1 seconds for everything else in the
-    chain together. The timeout of 293 seconds had been set at three times the
+    analyst took 54.4, 107.5, 185.3 and 231.7 seconds across the four mornings
+    it covers, against 16.6, 20.6, 19.4 and 22.3 seconds for everything else in
+    the chain together. The timeout of 293 seconds had been set at three times the
     slowest of five dry runs, and the schedule overtook that sample: against
     the slowest real morning it was 1.6 times. It was re-derived to 537 on
     2026-08-20 on the same rule, so two exhausted attempts now end at 09:03
     instead of 08:55, still 27 minutes clear of the open. The raise buys room
-    for the trend and explains none of it: the step is close to doubling every
-    session and it tracks output length, which went to 16,005 tokens on
-    2026-08-19 against a template whose nine sections did not change.</figcaption>
+    for the trend and explains none of it: the step went 54.4, 107.5, 185.3,
+    231.7 and it tracks output length, which went to 20,188 tokens on
+    2026-08-20 against a template whose nine sections did not change. The
+    growth slowed on that fourth point rather than doubling again, and 537 is
+    already only 2.4 times the slowest morning on record.</figcaption>
   </figure>
 </section>
 
@@ -674,7 +688,9 @@
       <td>analyst.py fails or times out</td>
       <td>Two attempts at 537 seconds each, set at three times the slowest
       measured MORNING, 178.9 seconds on 2026-08-19, re-derived on 2026-08-20
-      from the five dry runs the schedule had overtaken. Then the
+      off the five dry runs the schedule had overtaken. The morning that
+      followed took 226.1 seconds, so the standing headroom is 2.4 times and
+      the same rule is due to be applied again. Then the
       deterministic fallback:
       report.md is rebuilt as plain tables straight from packet.json, the
       disclaimer carries the failure reason, analyst_usage.json records
@@ -716,8 +732,7 @@
   <dl class="principles">
     <div>
       <dt>EODHD is the only market data source in the pipeline.</dt>
-      <dd>REST for quotes, history, news, calendars; the websocket for live trades. No second vendor, ever, in anything that reaches a report. The exception is named rather than hidden: src
-esearch\ carries Alpaca probes, written up in doc/ALPACA_PROBE.md, which exist to price an alternative feed against this one. Nothing in selection, collect, morning or night imports them, and no number they produce reaches picks or a packet.</dd>
+      <dd>REST for quotes, history, news, calendars; the websocket for live trades. No second vendor, ever, in anything that reaches a report. The exception is named rather than hidden: the research package carries Alpaca probes, written up in doc/ALPACA_PROBE.md, which exist to price an alternative feed against this one. Nothing in selection, collect, morning or night imports them, and no number they produce reaches picks or a packet.</dd>
     </div>
     <div>
       <dt>Every threshold lives in doc/CRITERIA.md.</dt>
@@ -745,7 +760,7 @@ esearch\ carries Alpaca probes, written up in doc/ALPACA_PROBE.md, which exist t
   <table class="files">
     <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, pool_recall, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the three probe_ scripts and the two measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the twelve test_ modules, the newest being test_regressions, one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
     <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the nine fixed report sections), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md and TEMPLATE_DERIVATIONS.md</td></tr>
-    <tr><td>tasks\</td><td>seven job .bat files registered as nine scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. Three more .bat files sit here and are NOT in register_tasks.ps1: job_probe_alpaca_live, job_probe_live_v1 and job_probe_socket_cap, research probes registered by hand and now dormant. They survive <code>register_tasks.ps1 -Unregister</code>, which only knows the nine</td></tr>
+    <tr><td>tasks\</td><td>seven job .bat files registered as nine scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. One more .bat file sits here and is NOT in register_tasks.ps1: job_probe_socket_cap, the instrument for the open collector volume question, with no scheduled task registered for it today. It survives <code>register_tasks.ps1 -Unregister</code>, which only knows the nine, so removing it is a manual step. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both questions were answered and recorded in DECISIONS.md</td></tr>
     <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks and gap_stats tables), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>

@@ -1,9 +1,11 @@
 """Regression tests for the candidate pool that replaced stale gap ranking.
 
-Run directly: `python src\\test_pool.py`, exit 0 on pass. Makes no network
+Run directly: `python -m tests.test_pool` with PYTHONPATH set to src/, exit 0
+on pass. Makes no network
 calls and writes nothing outside a temporary directory.
 
-Claims, one per clause of the pool rework:
+Claims. The first eight are one per clause of the pool rework; nine to sixteen
+were added by later work on the same path:
   1. Nothing in discover ranks on a /real-time field, and every pooled name
      carries a non-empty pool_source.
   2. A calendar that answers with nothing records fetched_and_empty, which is
@@ -18,6 +20,18 @@ Claims, one per clause of the pool rework:
   7. Recall is measured against what actually gapped, naming what was missed.
   8. pool_recall.build runs end to end and writes its file. claim 7 tests the
      pure function; this tests the one the scheduler actually calls.
+  9. The news window counts trading sessions, so a Monday reaches Friday's
+     close rather than Sunday evening.
+  10. An interrupted universe write leaves the previous file whole.
+  11. An unranked pool is refused rather than cut to the cap arbitrarily.
+  12. The quota refuse floor, driven by a fed meter rather than a real one.
+  13. A quota gate sized to the work, not to the flat 500 floor.
+  14. Every examined name leaves the market cap funnel by exactly one door,
+     and the doors are named.
+  15. The gates are wired into build(), and their failures reach the right
+     handler.
+  16. A calendar that cannot name the third session costs the two session leg,
+     not the morning.
 """
 
 from __future__ import annotations

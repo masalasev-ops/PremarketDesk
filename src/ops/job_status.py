@@ -148,12 +148,14 @@ def record_meter(step: str, when: str, source: str = "job",
 
     Costs one call per reading, so two per STEP, not per job. [corrected
     2026-08-20: was "two per job, about eighteen a day". run() wraps every
-    step, and a weekday runs sixteen tracked steps spread over nine job
-    firings plus six watchdog firings, which measures at 68 to 92 job readings
-    a day in the trail itself, plus the sampler's 48. Call it 120 to 140, or
-    about 0.13 percent of the shared 100,000, still small, but seven times
-    what this sentence claimed, and this is the module whose whole job is to
-    account for a shared key that a sibling project drains.] That is itself
+    step, and a weekday runs fourteen of the sixteen tracked steps, universe
+    and gap_stats belonging to Sunday, over thirty four step invocations spread
+    across five scheduled job firings plus six watchdog firings, which measures
+    at 68 to 92 job readings a day in the trail itself, plus the sampler's 48.
+    Call it 120 to 140, or about 0.13 percent of the shared 100,000, still
+    small, but seven times what this sentence claimed, and this is the module
+    whose whole job is to account for a shared key that a sibling project
+    drains.] That is itself
     recorded rather than hidden: the reading moves the thing it reads, and a
     delta of two across a step that made no other call is this function
     looking at itself.

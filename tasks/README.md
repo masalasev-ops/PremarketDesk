@@ -1,9 +1,14 @@
 # Scheduled jobs
 
-Eight Windows Task Scheduler tasks run PremarketDesk. Each .bat here changes to
-the project root, runs its scripts with the project venv, and appends stdout
-and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped by the
-project's own ET clock so a locale change cannot mangle the file name.
+Nine Windows Task Scheduler tasks run PremarketDesk, from seven .bat files:
+job_nightly registers twice and job_monitor registers twice. Each .bat here
+changes to the project root, runs its scripts with the project venv, and
+appends stdout and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped
+by the project's own ET clock so a locale change cannot mangle the file name.
+The meter sampler is the one exception: it appends to a single undated
+`logs\meter-sampler.log`, and the readings it takes go to the meter trail at
+`logs\meter-<quota day>.log`, which is keyed by the vendor's quota day rather
+than by the ET date.
 
 Each .bat sets `PYTHONPATH` to the project's `src` directory and invokes its
 steps as `python -m package.module`. src/ is the import root and every module
@@ -33,10 +38,11 @@ reason it was noticed is that a test happened to read it.
 | job_discover.bat | 07:15 | Mon to Fri | discover.py builds and ranks the candidate pool, then baseline.py warms the RVOL cache for the subscribed names only, not the whole pool |
 | job_collector.bat | 07:20 | Mon to Fri | collect_premarket.py, runs to the 09:25 stop time |
 | job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, verify_morning.py, deliver.py, build_archive.py, stopping on the first failure. verify_morning.py is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver.py |
-| job_nightly.bat | 22:15 | Mon to Fri | backfill_premarket.py, fill_outcomes.py, pool_recall.py to measure what the morning's pool missed against every universe name that actually gapped, then build_archive.py so a broken morning still gets archived that evening |
-| job_nightly.bat (again, as nightly-catchup) | 07:00 | Mon to Fri | the same idempotent run before the market day: the vendor usually publishes intraday overnight, so this fills yesterday via the catch-up sweep and finishes the volume verification before the new morning's collection is trusted |
-| job_universe.bat | 20:00 | Sunday | universe.py weekly rebuild, then gap_stats.py over every name in it. The gap statistics step is the larger of the two, measured at 2,745 calls and 421 seconds, and it produces the gap propensity discover ranks the pool by |
+| job_nightly.bat | 22:15 | Mon to Fri | market_today.py --refresh to renew the cached exchange calendar so the 08:45 chain never has to fetch it, then backfill_premarket.py, fill_outcomes.py, pool_recall.py to measure what the morning's pool missed against every universe name that actually gapped, then build_archive.py so a broken morning still gets archived that evening. The refresh never fails the chain: a stale calendar is survivable, a failed refresh leaves yesterday's holiday list in place, and the morning records that it is stale |
+| job_nightly.bat (again, as nightly-catchup) | 07:00 | Mon to Fri | the same .bat called with the argument "catchup", which runs the vendor lag half only: the calendar refresh, backfill_premarket.py and fill_outcomes.py, then stops. The vendor usually publishes intraday overnight, so this fills yesterday via the catch-up sweep and finishes the volume verification before the new morning's collection is trusted. pool_recall.py and build_archive.py are skipped, because pool_recall measures the session it is invoked ON: until 2026-08-20 this firing asked for a session that had not opened and wrote gapped 0, addressable 0, recall 0.0 over the real measurement the 22:15 pass had taken |
+| job_universe.bat | 21:00 | Sunday | universe.py weekly rebuild, then gap_stats.py over every name in it. The gap statistics step is the larger of the two, one counted call per universe name, measured at 2,745 calls and 421 seconds on 2026-08-13 when the universe held that many, and it produces the gap propensity discover ranks the pool by. Not 20:00: that was the exact instant of the 00:00 UTC quota reset, so which quota day the largest job in the schedule billed to was a coin toss. Not 20:30 either: the vendor's counter rolled 30 to 32 minutes late on 2026-08-16 |
 | job_monitor.bat | 07:25, repeating every 30 min until 09:25, and once at 22:45 | Mon to Fri | monitor_jobs.py, the watchdog: checks that each job fired and finished, reruns what is safe |
+| job_meter_sampler.bat | 00:00, repeating every 30 min for 24 hours | Every day, weekends included | meter_sampler.py takes one reading of the shared EODHD quota counter per firing, 48 a day, into `logs\meter-<quota day>.log`. It is an instrument and not a step: it sets no PMD_JOB, writes no job status record, runs no trading day guard, and CRITERIA.md [job status steps] must not gain an entry for it or the watchdog would start reporting it overdue. It exists because the job trail says which step spent what and cannot say when, and nothing else runs between the 22:45 monitor and the 07:00 catch-up |
 
 ## Registering
 
@@ -61,11 +67,17 @@ were registered, the tree does not refresh itself.
   nothing said so, which is why `data\job-status.jsonl` exists and why the
   next morning's report names any step overdue against its window in
   `doc\CRITERIA.md [job status steps]`.
-- Every weekday job first runs `src\market_today.py`, the trading day guard.
-  On a weekend or an official market holiday (from the cached EODHD exchange
-  calendar) the job writes one line to its log and exits 0 without doing
+- Every weekday job first runs `python -m ops.market_today`, the trading day
+  guard at `src\ops\market_today.py`. On a weekend or an official market
+  holiday (from the cached EODHD exchange calendar) it exits 3, and the .bat
+  turns that into one line in the log and a clean `exit /b 0` without doing
   anything. So the tasks stay registered plain Mon to Fri and holidays take
-  care of themselves.
+  care of themselves. Two jobs skip the guard on purpose. The Sunday universe
+  rebuild skips it because the guard counts Sunday as a non trading day, so
+  wiring it in would refuse the weekly rebuild every week. The meter sampler
+  skips it because the counter it reads is shared with everything else using
+  the token and rolls at midnight UTC, so a day this market is closed is
+  exactly a day a drain would otherwise go unrecorded.
 - The machine must be awake at trigger time. Task Scheduler does not wake a
   sleeping laptop by default; enable "wake the computer to run this task" in
   the task's properties, or keep the machine plugged in and awake weekday

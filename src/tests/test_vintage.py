@@ -2,8 +2,11 @@
 
 Run directly: `python src\\test_vintage.py`, exit 0 on pass. Makes no network
 calls: the exchange calendar is stubbed to a plain weekday rule so the test is
-hermetic and gives the same answer on any machine. The real gate marker is
-never touched; enforce() is pointed at a temporary file.
+hermetic and gives the same answer on any machine. The stub goes on
+market_today.decide, the one function both ways into that module answer from,
+so it is the whole calendar rather than half of one, and _run checks that it
+really is before any claim leans on it. The real gate marker is never touched;
+enforce() is pointed at a temporary file.
 
 Four claims. The two notable movers claims run FIRST, ahead of everything that
 needs the 2026-08-14 run on disk, because they are built entirely from
@@ -214,15 +217,19 @@ def claim_notable_legs_unknown_calendar(failures: list[str]) -> None:
     opens = ettime.at_hm(today, _CRIT.clock("baseline", "session_start"))
     too_early = ettime.stamp(opens - dt.timedelta(minutes=1))
 
-    # The same fault test_entrypoints uses on the calendar guard: is_trading_day
-    # raising, which previous_trading_session catches and reports as unknown.
-    # Restored to the weekday stub main() installed, not to the real calendar.
-    stubbed = market_today.is_trading_day
+    # The same fault test_entrypoints uses on the calendar guard: the calendar
+    # decision raising, which previous_trading_session catches and reports as
+    # unknown. Installed on decide() rather than on is_trading_day, because
+    # decide is what both ways into market_today answer from and is_trading_day
+    # is no longer the whole path: trading_day_state, which is what the walk in
+    # vintage asks, would have gone on answering from the real file on disk.
+    # Restored to the weekday stub _run installed, not to the real calendar.
+    stubbed = market_today.decide
 
-    def exploding(day):
+    def exploding(details, day):
         raise RuntimeError("simulated calendar fault")
 
-    market_today.is_trading_day = exploding
+    market_today.decide = exploding
     try:
         if vintage.previous_trading_session(today) is not None:
             failures.append("the simulated calendar fault still produced a session "
@@ -283,7 +290,7 @@ def claim_notable_legs_unknown_calendar(failures: list[str]) -> None:
                             "premarket leg is dated without asking the calendar "
                             "anything, so a fault must change nothing here at all")
     finally:
-        market_today.is_trading_day = stubbed
+        market_today.decide = stubbed
 
     print("  claim dark cal  an unanswerable calendar silences the session "
           f"comparison only: {len(honest)} honest rows pass, {len(required)} "
@@ -305,7 +312,12 @@ def _report(failures: list[str]) -> int:
 
 def main() -> int:
     failures: list[str] = []
-    real_calendar = market_today.is_trading_day
+    # decide, not is_trading_day. The calendar rule lives in one function that
+    # both ways into market_today answer from, and this suite replaces THAT so
+    # that a stub controls the unknown as well as the answer. See _run below
+    # for what replacing the wrong one cost.
+    real_calendar = market_today.decide
+    real_network = market_today.ALLOW_NETWORK
     try:
         return _run(failures)
     finally:
@@ -316,14 +328,55 @@ def main() -> int:
         # claims have been driving a weekday rule with no holidays in it ever
         # since, which is the exact shape of contamination conftest's network
         # boundary was built to remove.
-        market_today.is_trading_day = real_calendar
+        market_today.decide = real_calendar
+        market_today.ALLOW_NETWORK = real_network
+        # The memo holds whatever get_details read while the network was off,
+        # which on a machine with no cache is a remembered None. Dropped here
+        # so the next suite reads the calendar for itself rather than one this
+        # suite's conditions produced.
+        market_today.reset_memo()
 
 
 def _run(failures: list[str]) -> int:
     # Hermetic calendar: weekdays are open, weekends are not. 2026-08-13 and
     # 2026-08-14 are a Thursday and a Friday, so the prior session of the 14th
     # is the 13th under this rule exactly as it is under the real one.
-    market_today.is_trading_day = lambda day: (day.weekday() < 5, "stubbed")
+    #
+    # The stub goes on decide(), the one function is_trading_day and
+    # trading_day_state both answer from. It used to go on is_trading_day, and
+    # that stopped being the whole answer when trading_day_state began asking
+    # whether there was a calendar at all before delegating the date: vintage
+    # walks the calendar through trading_day_state, so on a machine with no
+    # data/exchange-details.json the walk below came back None however this
+    # stub was written. data/ is gitignored, so a fresh clone is exactly that
+    # machine, and the claim under it was passing here and failing there.
+    market_today.decide = lambda details, day: (day.weekday() < 5, "stubbed")
+    # get_details is still called, for the details this stub then ignores, and
+    # with no cache on disk it would go to the vendor for them. The morning
+    # chain runs with ALLOW_NETWORK false and so does this: no claim here may
+    # spend a call, and under the sandbox's blocked session the attempt raises
+    # rather than returning, which previous_trading_session reports as unknown.
+    market_today.ALLOW_NETWORK = False
+    market_today.reset_memo()
+
+    # The stub has to be the WHOLE answer before anything below leans on it,
+    # and that is asserted rather than assumed because the failure it guards
+    # against is silent in the worst way: an unanswerable calendar makes the
+    # vintage checks STAND DOWN, so a bypassed seam leaves these claims
+    # passing while examining nothing. Both directions are probed, since a
+    # seam that answered True to every date would satisfy a weekday alone.
+    for day, expected in ((dt.date(2026, 8, 14), True),
+                          (dt.date(2026, 8, 16), False)):
+        state, why = market_today.trading_day_state(day)
+        if state is not expected:
+            failures.append(
+                f"the stubbed calendar answered {state!r} ({why}) for {day}, "
+                f"expected {expected}. Part of that answer is being decided "
+                "outside decide(), so this suite is driving the calendar of "
+                "whatever machine it is running on rather than the weekday "
+                "rule it installed, and every claim below it is measuring "
+                "something other than what it says")
+            return _report(failures)
 
     prior = vintage.previous_trading_session(dt.date(2026, 8, 17))
     if prior != dt.date(2026, 8, 14):

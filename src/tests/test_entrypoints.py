@@ -21,8 +21,11 @@ the pool_recall shape specifically: a main that swallows its exception and
 returns zero still records the failure, so asserting the record catches a
 bug that asserting the exit code cannot.
 
-Run directly with `python src\\test_entrypoints.py`, or as part of
-`python src\\run_tests.py`, which is the sandboxed way.
+Run directly with `python -m tests.test_entrypoints`, or as part of
+`python -m tests.run_tests` for the whole suite. Both are sandboxed: the direct
+run goes through conftest.standalone(). Both need PYTHONPATH set to src/,
+because src/ is the import root and a run by file path would put src/tests on
+sys.path instead and break `from core import config`.
 """
 
 from __future__ import annotations
@@ -1507,8 +1510,9 @@ def claim_verification_is_not_gated_on_picks(failures: list[str]) -> None:
     gated on the thing it measures is not an instrument.
 
     Driven with picks deliberately empty for the day under test, which is also
-    the state of the real database today, so this asserts against the situation
-    the machine is actually in rather than a hypothetical one.
+    the state 2026-08-19 was left in when picks was emptied over the collector
+    volume defect, so this asserts against a situation the machine has actually
+    been in rather than a hypothetical one.
 
     On YESTERDAY rather than today because the stubbed vendor serves yesterday's
     minutes from its intraday route, and the check compares identical minutes
@@ -1986,7 +1990,7 @@ def main(argv: list[str] | None = None) -> int:
     failures: list[str] = []
 
     if config.RUNS_DIR == config.PROJECT_ROOT / "runs":
-        print("SKIP  not running under the sandbox; use python src\\run_tests.py")
+        print("SKIP  not running under the sandbox; use python -m tests.run_tests")
         return 0
 
     try:

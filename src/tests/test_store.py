@@ -1,6 +1,7 @@
 """Regression test for the storage helpers.
 
-Run it directly: `python src\\test_store.py`, exit 0 on pass.
+Run it directly: `python -m tests.test_store` with PYTHONPATH set to src/,
+exit 0 on pass.
 
 Two claims, both required:
   1. store.session() actually closes its connection on exit, success and

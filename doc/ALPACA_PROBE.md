@@ -14,7 +14,11 @@ heading asks whether the free plan actually serves SIP and the table answers
 yes, without naming the restriction. The live probe found the same feed
 refused: all 46 requests in data/probe-alpaca-live-2026-08-17.jsonl, sweeping
 1Min sip bars over a window ending at the wall clock on a live trading
-morning, came back HTTP 403, and the two sweeps of 2026-08-16 did the same.
+morning, came back HTTP 403. The four requests across the two sweeps of
+2026-08-16 were refused the same way, but 2026-08-16 was a Sunday and the
+earlier of those sweeps asked for a window whose end preceded its start, so
+they corroborate only that this key is refused the sip feed for a window
+ending at the wall clock, and say nothing about a session that is running.
 So the free plan serves sip for a session that is over and refuses it for one
 that is running. The tables below measure the first of those and say nothing
 about the second. See DECISIONS.md 2026-08-17 on the free tier, whose own

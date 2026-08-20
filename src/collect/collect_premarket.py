@@ -63,6 +63,7 @@ VERIFY_WARMUP_MINUTES = _CRIT.number("collector", "verify_warmup_minutes")
 VERIFY_WINDOW_MINUTES = _CRIT.number("collector", "verify_window_minutes")
 SUBSCRIPTION_RETRY_WAIT_S = _CRIT.number("collector", "subscription_retry_wait_s")
 MAX_SUBSCRIPTION_RETRIES = _CRIT.integer("collector", "max_subscription_retries")
+VOLUME_CHECK_AGREEMENT_PCT = _CRIT.number("collector", "volume_check_agreement_pct")
 
 
 def bar_path(day: str | None = None) -> Path:
@@ -950,10 +951,39 @@ def run_poll(symbols: list[str], stop_at, builder: BarBuilder) -> dict[str, Any]
 
 # -------------------------------------------------------------------- runner
 
+# Where one reading sits relative to the vendor. Names rather than bare
+# strings, because the direction below is decided by comparing two of these to
+# each other and a typo in a comparison of two string literals is silent.
+_BELOW, _AGREES, _ABOVE = "below", "agrees", "above"
+
+_MEDIAN_WORDS = {
+    _BELOW: "the typical symbol recorded LESS than the vendor",
+    _AGREES: "the typical symbol matched the vendor",
+    _ABOVE: "the typical symbol recorded MORE than the vendor",
+}
+_AGGREGATE_WORDS = {
+    _BELOW: "the aggregate tape recorded LESS",
+    _AGREES: "the aggregate tape matched it",
+    _ABOVE: "the aggregate tape recorded MORE",
+}
+
+
+def _reading_side(distance_pct: float, tolerance_pct: float) -> str:
+    """Which side of the vendor one reading sits on, or that it sits on it.
+
+    distance_pct is that reading's distance from the vendor in percent. The
+    signed median is already in those units; the aggregate ratio becomes them
+    as (ratio - 1) * 100.
+    """
+    if abs(distance_pct) <= tolerance_pct:
+        return _AGREES
+    return _BELOW if distance_pct < 0 else _ABOVE
+
+
 def _volume_check_direction(
     median_signed: float, ratio: float | None
 ) -> tuple[str, str]:
-    """Which way the collector is wrong, or that it is wrong both ways.
+    """Which way the collector is wrong, that it is wrong both ways, or neither.
 
     Two readings, and they answer different questions. The signed median is the
     TYPICAL symbol. The aggregate ratio is the whole tape, so a handful of
@@ -962,26 +992,51 @@ def _volume_check_direction(
     beside an aggregate 3.83 times the vendor's volume, recorded in
     doc/research/COLLECTOR_VOLUME.md. A single word that averaged the two would
     be a claim nothing measured, so a direction is only returned when both
-    readings agree, and the disagreement is reported as itself otherwise.
+    readings say the same thing about the collector.
+
+    Both readings are now placed against an agreement band, [collector]
+    volume_check_agreement_pct, rather than against zero, and there is a word
+    for the case where both land inside it. Until 2026-08-20 the tests were
+    "median_signed < 0 and ratio < 1" for under and its mirror for over, with
+    everything else falling through to mixed, and that had no branch at all for
+    a collector that MATCHES the vendor, which is the outcome this measurement
+    exists to work towards. A perfectly agreeing session came back "mixed: the
+    two readings disagree, the typical symbol falling on one side of the vendor
+    and the aggregate tape on the other", a sentence that is false of a session
+    where neither reading is on a side. So did every pair with one reading
+    inside the noise and the other outside it: a signed median of -50 against
+    an aggregate ratio of exactly 1.0 is a real disagreement, but it is not the
+    two readings straddling the vendor. REPORT_TEMPLATE.md orders the model to
+    quote direction_phrase verbatim, so each of those went out as written. The
+    mixed phrase is now built from what the two readings actually said.
     """
     if ratio is None:
         return "unknown", (
             "the vendor reported no volume at all over the compared minutes, so "
             "there is no direction to read")
-    if median_signed < 0 and ratio < 1:
+    tolerance = VOLUME_CHECK_AGREEMENT_PCT
+    median_side = _reading_side(median_signed, tolerance)
+    ratio_side = _reading_side((ratio - 1.0) * 100.0, tolerance)
+    if median_side == _AGREES and ratio_side == _AGREES:
+        return "agree", (
+            f"the collector matched the vendor to within {tolerance:g} percent "
+            "on both readings, the typical symbol and the aggregate tape, so "
+            "the feed adds no measurable distortion to a ratio built on a "
+            "collector numerator")
+    if median_side == _BELOW and ratio_side == _BELOW:
         return "under", (
             "the collector recorded LESS than the vendor on both readings, the "
             "typical symbol and the aggregate tape, so a ratio built on a "
             "collector numerator understates by about that much")
-    if median_signed > 0 and ratio > 1:
+    if median_side == _ABOVE and ratio_side == _ABOVE:
         return "over", (
             "the collector recorded MORE than the vendor on both readings, the "
             "typical symbol and the aggregate tape, so a ratio built on a "
             "collector numerator OVERSTATES by about that much")
     return "mixed", (
-        "the two readings disagree, the typical symbol falling on one side of "
-        "the vendor and the aggregate tape on the other, so a ratio built on a "
-        "collector numerator may be over or under and neither may be assumed")
+        f"the two readings do not agree: {_MEDIAN_WORDS[median_side]} and "
+        f"{_AGGREGATE_WORDS[ratio_side]}, so a ratio built on a collector "
+        "numerator may be over or under and neither may be assumed")
 
 
 def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | None:
@@ -1003,8 +1058,10 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     wrong in BOTH directions: 2026-08-14 came back 3.83 times the vendor in
     aggregate against 2026-08-17 at -88.49 percent across all 29 comparable
     symbols. So the signed median, the aggregate ratio and the direction the
-    two of them agree on all come back now, and a session where they disagree
-    is reported as mixed rather than as either.
+    two of them agree on all come back now, a session where they disagree is
+    reported as mixed rather than as either, and a session where both readings
+    sit inside the agreement band is reported as agreement rather than as a
+    disagreement running both ways.
 
     The MEASUREMENT was biased the same way the summary was, so both missing
     sides are counted rather than dropped. The loop walks the collected bars,
@@ -1012,9 +1069,25 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     compared nor unavailable: LYTS.US and NBTX.US on 2026-08-20 were in
     neither, and the summary read as though those two had been measured and
     agreed. A vendor volume of zero over the common minutes was skipped without
-    incrementing anything either. Every subscribed symbol now lands in exactly
-    one of compared, unavailable, vendor_zero_volume or collector_silent, and
-    those four sum to the subscription list wherever the collector wrote one.
+    incrementing anything either. Every symbol that has collected bars and
+    every symbol the subscription list names now lands in exactly one of
+    compared, unavailable, vendor_zero_volume or collector_silent, and those
+    four sum to symbols_accounted.
+
+    symbols_accounted is NOT the subscription count, and calling it that is
+    what this docstring got wrong on the day it was written.
+    write_subscriptions rewrites its file on every collector run, on purpose,
+    so a morning the collector was restarted onto a different list leaves that
+    file holding the last run while the bar file holds every run's trades.
+    2026-08-19 is such a morning and it is in the archive: the socket was
+    refused at 08:35 because the account's own dropped connection still held
+    the fifty slots, a hand restart at 08:37:14 subscribed to a different
+    fifty, and the file names 50 symbols against 73 that carry bars, so the
+    four buckets sum to 75 there against a `subscribed` of 50.
+    bars_outside_subscription counts the symbols the list does not reach and
+    subscribed_reason says why in a sentence, because a reader comparing
+    compared against subscribed on that day has to be told why 73 is larger
+    than 50 rather than left to decide which of the two numbers is broken.
 
     Per symbol comparable minute counts come back too. A symbol compared on two
     minutes and one compared on 125 are not the same evidence, and a caller
@@ -1067,6 +1140,15 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     subscriptions = read_subscriptions(day) or {}
     requested = sorted(str(s) for s in (subscriptions.get("symbols") or []))
     collector_silent = sorted(set(requested) - set(bars))
+    # And the side that is not missing but extra, which the four buckets used
+    # to imply could not exist. The loop above walks the bar file, so a symbol
+    # with bars is counted whether or not the subscription list on disk names
+    # it, and on a restarted morning that list is only the last run's. Counted
+    # and named rather than folded in quietly, because a symbol carrying bars
+    # that the list does not name is itself a fact about the morning: it says
+    # the collector ran twice on two different watchlists.
+    outside_subscription = sorted(set(bars) - set(requested))
+    accounted = len(set(bars) | set(requested))
 
     if not results:
         print(
@@ -1084,6 +1166,21 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
     below = sum(1 for r in results if r[4] < 0)
     above = sum(1 for r in results if r[4] > 0)
     direction, direction_phrase = _volume_check_direction(median_signed, ratio)
+    if not requested:
+        subscribed_reason = (
+            f"the collector wrote no subscription list for {day}, so a symbol it "
+            "never heard cannot be told from one nobody asked for")
+    elif outside_subscription:
+        subscribed_reason = (
+            f"the subscription list for {day} was written at "
+            f"{subscriptions.get('subscribed_at') or 'an unrecorded time'} and "
+            "every collector run rewrites it, so on a restarted morning it "
+            f"names the last run only: {len(outside_subscription)} symbol(s) "
+            "here carry collected bars it does not name, and the four buckets "
+            f"account for {accounted} symbol(s) rather than the "
+            f"{len(requested)} on the list")
+    else:
+        subscribed_reason = None
     if not quiet:
         print("")
         print(f"verification against EODHD 1m intraday for {day}, identical minutes only")
@@ -1106,6 +1203,18 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
         if collector_silent:
             print(f"  {len(collector_silent)} subscribed symbols the collector "
                   f"never heard: {', '.join(collector_silent)}")
+        if outside_subscription:
+            print(f"  {len(outside_subscription)} symbols carry collected bars "
+                  "that the subscription list on disk does not name, so the "
+                  "collector was restarted onto a different list during the "
+                  f"morning: {', '.join(outside_subscription)}")
+        if requested:
+            print(f"  the four buckets above account for {accounted} symbol(s) "
+                  f"against a subscription list of {len(requested)}")
+        else:
+            print(f"  the four buckets above account for {accounted} symbol(s); "
+                  "no subscription list was written for this day, so there is "
+                  "nothing to check that total against")
     return {
         "day": day,
         "compared": len(results),
@@ -1130,11 +1239,14 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
         "vendor_zero_volume_symbols": vendor_zero,
         "collector_silent": len(collector_silent),
         "collector_silent_symbols": collector_silent,
+        # What the four buckets above actually sum to, published so nobody has
+        # to reconstruct it from `subscribed` and be wrong on a restart day.
+        "symbols_accounted": accounted,
+        "bars_outside_subscription": len(outside_subscription),
+        "bars_outside_subscription_symbols": outside_subscription,
         "subscribed": len(requested) or None,
-        "subscribed_reason": (
-            None if requested else
-            f"the collector wrote no subscription list for {day}, so a symbol it "
-            "never heard cannot be told from one nobody asked for"),
+        "subscribed_at": subscriptions.get("subscribed_at"),
+        "subscribed_reason": subscribed_reason,
     }
 
 

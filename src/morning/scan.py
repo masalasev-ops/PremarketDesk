@@ -1151,7 +1151,44 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
             "this packet and is LARGER than the window shortfall reported "
             f"separately. {consequence}"
         )
-    return check
+    return _packet_safe_volume_check(check)
+
+
+# The keys the packet may carry from the volume check. Everything the report
+# and the fallback quote is a SCALAR; the four per symbol structures the check
+# also returns exist for a human reading runs/<date>/verify_intraday.json.
+#
+# They must not reach the packet, and the reason is the containment checker.
+# analyst._packet_uppercase_tokens builds the allowed set out of the raw packet
+# TEXT, and _TOKEN_RE finds AVGO inside the key "AVGO.US", so every symbol in
+# minutes_compared_by_symbol, unavailable_symbols, vendor_zero_volume_symbols
+# and collector_silent_symbols would become a claimable ticker for the morning.
+# That is the PREVIOUS session's collector roster, 73 names on 2026-08-19, and
+# the morning holds no evidence about any of them. Measured on the real
+# 2026-08-20 packet: ten large liquid listings, AMAT, AVGO, DE, HOOD, MU, NOK,
+# RIOT, SAP, TLT and TSM, moved from invented to allowed, which is exactly the
+# set a model reaches for when it writes a market context sentence. The guard
+# that exists to catch invented evidence would have been widened by the
+# instrument it reports on.
+_PACKET_VOLUME_CHECK_KEYS = (
+    "day", "compared", "within_one_percent", "median_abs_pct",
+    "median_signed_pct", "aggregate_ratio", "direction", "direction_phrase",
+    "collector_volume_total", "intraday_volume_total",
+    "symbols_collector_below_vendor", "symbols_collector_above_vendor",
+    "minutes_compared_total", "unavailable", "vendor_zero_volume",
+    "collector_silent", "subscribed", "subscribed_reason", "sign_recorded",
+    "age_days", "max_age_days", "stale", "source",
+)
+
+
+def _packet_safe_volume_check(check: dict[str, Any]) -> dict[str, Any]:
+    """The check with its per symbol evidence left in the file it came from.
+
+    A whitelist rather than a blacklist, so a key added to the check later
+    stays out of the packet until somebody decides it belongs there. See
+    _PACKET_VOLUME_CHECK_KEYS above for what a blacklist would have cost.
+    """
+    return {key: check[key] for key in _PACKET_VOLUME_CHECK_KEYS if key in check}
 
 
 def rvol_only_day_failures(candidates: list[dict[str, Any]], packet: Packet) -> list[str]:
@@ -1496,7 +1533,12 @@ def _scope_articles(
                     catches a roundup tagged by TOPIC rather than by issuer:
                     "Biggest stock movers Thursday" carries seven purely
                     topical tags, so its tag count is unremarkable, and it went
-                    to three candidates.
+                    to three candidates. It is counted over the candidates
+                    whose news call ANSWERED, which is what the scope publishes
+                    as its denominator; the packet count is published beside it
+                    because the two differ on any morning that lost a call, and
+                    a numerator taken from one set against a denominator taken
+                    from the other is not a ratio.
 
     Both have to sit inside their CRITERIA.md [Score catalyst tags] limits
     before an article's tags are allowed to classify a name. A name whose
@@ -1513,6 +1555,25 @@ def _scope_articles(
         for article in articles:
             returned_for.setdefault(_article_key(article), set()).add(symbol)
 
+    # The denominator the sharing count actually belongs to. `fetched` holds
+    # one entry per candidate whose news call ANSWERED, and candidate_count is
+    # the whole packet, so on a morning where some calls failed the two are
+    # different numbers and until 2026-08-20 the second one was published
+    # beside a numerator drawn from the first: "returned for 3 of this
+    # morning's 12 candidates" when only five were ever asked. The threshold
+    # is absolute, so nothing about which articles are called roundups moves
+    # here, but the ratio a reader and the model are handed does, and it moves
+    # in the direction that makes a wire roundup look narrow.
+    checked = len(fetched)
+    unchecked = max(candidate_count - checked, 0)
+    # And with a call missing, `shared` is a floor rather than a count: an
+    # article the feed would have handed to an unchecked candidate cannot be
+    # seen to have been. Said out loud rather than acted on, because guessing
+    # the missing side would invent breadth, and the cost of being wrong here
+    # is a class withheld rather than a class invented.
+    floor = (f"; {unchecked} candidate(s) had no news call answered, so this "
+             "sharing count is a floor") if unchecked else ""
+
     for symbol, articles in fetched.items():
         for article in articles:
             shared = len(returned_for.get(_article_key(article)) or {symbol})
@@ -1521,22 +1582,24 @@ def _scope_articles(
             wide_feed = shared > max_sharing
             if wide_tags and wide_feed:
                 why = (f"a roundup on both counts: {tags} tags, above {max_tags}, "
-                       f"and returned for {shared} of this morning's "
-                       f"{candidate_count} candidates, above {max_sharing}")
+                       f"and returned for {shared} of the {checked} candidate(s) "
+                       f"whose news was checked, above {max_sharing}{floor}")
             elif wide_tags:
                 why = (f"a roundup: {tags} tags, above the {max_tags} a single "
                        "company article carries, so its tags name the issuers it "
                        "lists rather than this one")
             elif wide_feed:
-                why = (f"a roundup: the feed returned it for {shared} of this "
-                       f"morning's {candidate_count} candidates, above "
-                       f"{max_sharing}, so its tags are not about any one of them")
+                why = (f"a roundup: the feed returned it for {shared} of the "
+                       f"{checked} candidate(s) whose news was checked, above "
+                       f"{max_sharing}, so its tags are not about any one of "
+                       f"them{floor}")
             else:
                 why = (f"about this name: {tags} tag(s), returned for {shared} of "
-                       f"this morning's {candidate_count} candidates")
+                       f"the {checked} candidate(s) whose news was checked{floor}")
             article["article_scope"] = {
                 "tag_count": tags,
                 "returned_for_candidates": shared,
+                "candidates_checked": checked,
                 "candidates_in_packet": candidate_count,
                 "about_this_name": not (wide_tags or wide_feed),
                 "why": why,
@@ -1698,6 +1761,11 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
     small for the question to mean anything, or a news call that failed. A
     False that means "we could not look" is the failure mode this whole file
     is written against.
+
+    trap_basis obeys the same rule, and until 2026-08-20 it did not. Where the
+    window was never read the headline counts are NULL with the reason beside
+    them, because a zero there is a claim that the feed was checked and held
+    nothing, which is a different fact and one this packet may not invent.
     """
     negative_at = _CRIT.number("traps", "negative_polarity")
     positive_at = _CRIT.number("traps", "positive_polarity")
@@ -1709,7 +1777,23 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
         displayed = candidate.get("headlines") or []
         counts = candidate.get("headline_polarity")
         over_window = counts is not None
-        if not over_window:
+        # catalyst_found None means the window was never read at all: the news
+        # call failed, or the thin quota path skipped it to protect the shared
+        # meter. Until this line existed such a candidate fell into the
+        # fallback below, counted an empty displayed list, and published
+        # headlines_scored 0, headlines_unscored 0 and headlines_in_window 0.
+        # That is byte for byte the trap_basis of a name whose window WAS read
+        # and held nothing, which is what SCSC and ASST published on
+        # 2026-08-20, so the packet gave a reader no way to tell an unknown
+        # from a measured zero. An unknown written as a zero is the failure
+        # this file spends its length on, so the counts are null here and the
+        # reason the feed went unread sits beside them in counted_over.
+        unchecked = candidate.get("catalyst_found") is None
+        if unchecked:
+            counts = {"scored": None, "unscored": None, "negative": None,
+                      "positive": None, "mean_polarity": None,
+                      "counted_over": None}
+        elif not over_window:
             # A candidate nobody counted: a packet rescored from before
             # attach_catalysts recorded the window counts, or a caller handing
             # this function a bare headline list. The displayed list is then
@@ -1717,6 +1801,18 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
             # presenting three of forty five as though they were the window.
             counts = _polarity_counts(displayed, negative_at, positive_at)
             counts["counted_over"] = len(displayed)
+
+        if unchecked:
+            counted_over = (
+                "nothing was counted, because the news feed was never read for "
+                "this candidate. The counts above are unknown and not zero: "
+                + (candidate.get("catalyst_error")
+                   or "no reason for that was recorded"))
+        elif over_window:
+            counted_over = "every headline the feed returned inside the window"
+        else:
+            counted_over = ("the displayed headlines only, because no window "
+                            "count was recorded for this candidate")
 
         scored_count = counts["scored"]
         negatives = counts["negative"]
@@ -1728,16 +1824,16 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
             # headlines_unscored 0 for a name with 45 headlines: 42 counted
             # nowhere, in a pair of fields that read as a partition of the
             # coverage. The two below plus nothing else now sum to
-            # headlines_in_window.
+            # headlines_in_window, and all three are null together when the
+            # window was never read, because a partition of nothing measured
+            # is not a partition of zero headlines.
             "headlines_scored": scored_count,
             "headlines_unscored": counts["unscored"],
             "headlines_in_window": counts["counted_over"],
+            # Measured either way: this is how many headlines the packet puts
+            # in front of a reader, and on the unread path that really is zero.
             "headlines_displayed": len(displayed),
-            "counted_over": (
-                "every headline the feed returned inside the window"
-                if over_window else
-                "the displayed headlines only, because no window count was "
-                "recorded for this candidate"),
+            "counted_over": counted_over,
             "negative": negatives,
             "positive": positives,
             "negative_at_or_below": negative_at,
@@ -2028,10 +2124,17 @@ def classify_catalyst(
         scope = article.get("article_scope") or {}
         breadth = ""
         if scope:
+            # The candidates whose news call answered, which is the set the
+            # sharing count was taken over. It used to read candidates_in_packet,
+            # a wider set that includes the names nobody asked the feed about,
+            # so a morning that lost calls published a ratio whose halves came
+            # from different populations. A packet written before that key
+            # existed keeps the old number rather than printing None.
+            denominator = (scope.get("candidates_checked")
+                           or scope.get("candidates_in_packet"))
             breadth = (f", an article carrying {scope.get('tag_count')} tag(s) and "
                        f"returned for {scope.get('returned_for_candidates')} of "
-                       f"this morning's {scope.get('candidates_in_packet')} "
-                       "candidates")
+                       f"this morning's {denominator} candidates")
         return best_class, (
             f"EODHD news tag {matched_tag!r} mapped through CRITERIA.md, from "
             f"{str(article.get('title') or 'an untitled headline')!r}{breadth}")

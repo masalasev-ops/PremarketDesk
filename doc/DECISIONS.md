@@ -16,6 +16,7 @@ its text, because that reasoning is the point of this file.
 What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
+in the commit messages.
 
 ## 2026-08-20: an unmeasured condition is counted apart, and nothing else changes
 
@@ -707,8 +708,13 @@ screen cannot reach by design.
 above the gap floor, gappers that also satisfy every non-premarket day_setup
 condition (the addressable target), and gappers actually published. Recall
 against the addressable target is the headline and the raw figure stays beside
-it. Every recall figure in the payload carries `numerator_is` and
-`denominator_is` strings, so no fraction can be read without its denominator.
+it. Every recall figure names its denominator in its own key,
+`recall_addressable` beside `recall_all_gappers`, and one `denominators` block
+spells both out, so no fraction can be read without its denominator.
+
+[corrected 2026-08-20: this read "Every recall figure in the payload carries
+`numerator_is` and `denominator_is` strings". No such keys were ever written.
+The mechanism is the key names themselves plus the `denominators` block.]
 
 The split of day_setup is `gap_pct`, `price` and `market_cap` IN, with
 `premarket_rvol` and `require_above_prior_high` OUT. The two excluded lines
@@ -845,12 +851,14 @@ to irrelevant and makes the rotation design of 2026-08-15 unnecessary.
 sessions. Whether Alpaca's free tier serves that sweep LIVE at 08:30 on a
 weekday is untested, and the whole design rests on it. probe-live-v1 is
 extended on 2026-08-17 to measure it against the live morning.
-[ANSWERED 2026-08-17: it does not. 23 sweeps from 07:30 to 09:15 on a live
+[ANSWERED 2026-08-17: it does not. 23 sweeps from 07:30 to 09:20 on a live
 trading morning were refused, all 46 requests HTTP 403. See the entry dated
 2026-08-17 on the free tier. Alpaca is closed as a candidate live source; this
 paragraph stands as the reasoning that was correct when it was written.]
 [corrected 2026-08-20: the sentence above read "returned zero bars", which is
-true of the count and wrong about the cause. Nothing was served. The correction
+true of the count and wrong about the cause. Nothing was served. It also read
+"09:15", which is the last sweep of the 2026-08-14 dry run; this run's last
+sweep is 09:20, in the jsonl and in the table. The correction
 sits with the 2026-08-17 entry it points at.] Adopting Alpaca
 would also break the standing rule that EODHD is the only data source, which is
 a decision for the operator and not one this entry makes.
@@ -1434,7 +1442,7 @@ completed sessions, and whether the free tier serves that sweep LIVE on a
 weekday morning was untested while the whole design rested on it. It is tested
 now.
 
-**The measurement. 23 sweeps, 07:30 to 09:15 ET on Monday 2026-08-17, every
+**The measurement. 23 sweeps, 07:30 to 09:20 ET on Monday 2026-08-17, every
 one REFUSED.** All 46 requests, two per sweep, came back HTTP 403, across a
 live trading morning on which this project's own collector folded 33,489
 trades from 50 symbols into 3,102 minute bars. The sweep asks for the sip feed
@@ -1442,7 +1450,7 @@ over a window ending at the wall clock, and the free tier will not serve that,
 so not one request was answered. The zero active names and zero bars in the
 table are therefore the count of what an unanswered sweep returns, and not a
 reading of what the premarket held. The denominator an emptiness claim needs
-is requests SERVED, which was nought; symbols requested, which was 2,745, is
+is requests SERVED, which was nought; symbols requested, which was 2,754, is
 not that denominator. The table is
 data/probe-alpaca-live-table-2026-08-17.md, regenerated on 2026-08-20 so that
 it carries the served and refused counts, and the raw readings are beside it.
@@ -1459,7 +1467,13 @@ probe_alpaca_live.py carries the served and refused counts into the table from
 2026-08-20, and the three stored tables are rebuilt from the same jsonl. The
 contrast that proves the point is on disk beside them: the 2026-08-14 dry run,
 which swept a COMPLETED session, has zero errors and 1,461 to 1,845 names with
-bars, and it is the only one of the three where the sweep was answered.]
+bars, and it is the only one of the three where the sweep was answered. Two
+numbers in the paragraph above were corrected with it. The window read "07:30
+to 09:15", which is the 2026-08-14 dry run's last pinned time; this run's last
+sweep is 09:20, in the jsonl and in the table, and is where 23 sweeps five
+minutes apart from 07:30 have to end. Symbols requested read 2,745, which is
+the 2026-08-14 and 2026-08-16 figure; every 2026-08-17 row says 2,754, matching
+the universe.json rebuilt at 00:50 that morning.]
 
 **The conclusion stands, on firmer ground than the reasoning it was written
 on.** A blanket refusal of the sip feed for a window ending at the wall clock

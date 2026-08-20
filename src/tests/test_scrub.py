@@ -1,6 +1,7 @@
 """Regression test for credential scrubbing at the HTTP chokepoint.
 
-Run it directly: `python src\\test_scrub.py`, exit 0 on pass. Makes no
+Run it directly: `python -m tests.test_scrub` with PYTHONPATH set to src/,
+exit 0 on pass. Makes no
 network calls: the session is stubbed to fail the way a real network
 failure fails, with the tokenised URL quoted in the exception text.
 

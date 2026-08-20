@@ -40,9 +40,9 @@ socket, so if a print happened, it has it.
 Cost. Five symbols batch into one request, so one call per sample, 26 samples,
 about 26 counted calls.
 
-  python src\\probe_live_v1.py                 run the sampling loop
-  python src\\probe_live_v1.py --report        read the log back as a table
-  python src\\probe_live_v1.py --once          take a single sample now
+  python -m research.probe_live_v1            run the sampling loop
+  python -m research.probe_live_v1 --report   read the log back as a table
+  python -m research.probe_live_v1 --once     take a single sample now
 """
 
 from __future__ import annotations

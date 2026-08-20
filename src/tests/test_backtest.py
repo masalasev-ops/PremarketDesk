@@ -1,6 +1,7 @@
 """Regression tests for the pool backtest harness.
 
-Run directly: `python src\\test_backtest.py`, exit 0 on pass.
+Run directly: `python -m tests.test_backtest` with PYTHONPATH set to src/,
+exit 0 on pass.
 
 The harness is the instrument that decides the tier ordering, so the property
 that matters most is that its evaluate stage is reproducible: same cache, same

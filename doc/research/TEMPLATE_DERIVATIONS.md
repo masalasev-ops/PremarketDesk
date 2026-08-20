@@ -35,7 +35,7 @@ owner's decision and deliberately not changed.
 | T3 | disclaimer, 24 to 26 | name every candidate whose score is null | filter across set | SUPPLY IN PACKET. Same reason as T2. | PROPOSED |
 | T4 | Summary, 43 | how many candidates cleared the floors | count | SUPPLY IN PACKET. A count is checkable and the model has no reason to compute it. | PROPOSED |
 | T5 | Summary, 44 | how many are day eligible and swing eligible | count | SUPPLY IN PACKET. Same. | PROPOSED |
-| T6 | Summary, 45 | the strongest conviction names by bucket | rank, superlative | SUPPLY IN PACKET. "Strongest" is an ordering over a computed score, so Python already knows the answer. | PROPOSED |
+| T6 | Summary, 45 | the strongest conviction names by bucket | rank, superlative | SUPPLY IN PACKET. "Strongest" is an ordering over a computed score, so Python already knows the answer. | APPLIED 2026-08-20 |
 | T7 | Summary, 45 to 46 | anything in gaps_to_fill that materially weakens the evidence | judge | KEEP AS PROSE. "Materially" is the judgement being asked for. | unchanged |
 | T8 | Summary, 43 | the market tone from the snapshot | characterise whole | KEEP AS PROSE. | unchanged |
 | T9 | Day watchlist, 77 to 78 | the most common failed condition | MOST | SUPPLY IN PACKET AND QUOTE. This is the instruction that produced the false claim. | APPLIED |
@@ -45,7 +45,7 @@ owner's decision and deliberately not changed.
 | T13 | Economic, 125 | which events have an actual published versus still pending | classify per row | KEEP AS PROSE. A direct field read per event, with no aggregation. | unchanged |
 | T14 | Economic, 125 to 126 | what the rate picture does to the gap trade | judge | KEEP AS PROSE. | unchanged |
 | T15 | Skips and traps, 141 to 147 | select the candidates belonging here, by five separate predicates | filter across set | SUPPLY IN PACKET. Membership in a published section decided by the model is the thing rule 2 forbids for watchlists, applied here by prose instead. | PROPOSED |
-| T16 | Skips and traps, 144 to 145 | a positive gap whose headlines carry negative sentiment is a trap | derive, combine two fields across headlines | SUPPLY IN PACKET. The model must read every headline's polarity and compare it to the gap sign. | PROPOSED |
+| T16 | Skips and traps, 144 to 145 | a positive gap whose headlines carry negative sentiment is a trap | derive, combine two fields across headlines | SUPPLY IN PACKET. The model must read every headline's polarity and compare it to the gap sign. | APPLIED 2026-08-20 |
 | T17 | Skips and traps, 151 to 153 | evaluate four predicates over the whole set, and if all are clear write "every candidate carries a found catalyst and full evidence" | universal quantifier over set | MUST CHANGE, and it is the sharpest case on this list: the template instructs the model to ASSERT A UNIVERSAL about the candidate set. It is also the one instruction that the new quantifier guard would fail, so it cannot be left as written. | APPLIED |
 
 Not a derivation, and worth naming as the pattern the rest should follow:
@@ -60,7 +60,7 @@ Not a derivation, and worth naming as the pattern the rest should follow:
 | # | Where | What the model is asked to derive | Class | Verdict | Status |
 | --- | --- | --- | --- | --- | --- |
 | P1 | rule 6 | name every candidate whose pm_rvol is null, every one whose pm_window_starts_late is true, every symbol in dropped_no_coverage | filter across set | SUPPLY IN PACKET. Duplicates T2 and T3 and should be fixed with them, in one place rather than two. | PROPOSED |
-| P2 | rule 5 | a candidate gapping up on negative sentiment headlines is a trap | derive | SUPPLY IN PACKET. Duplicates T16. | PROPOSED |
+| P2 | rule 5 | a candidate gapping up on negative sentiment headlines is a trap | derive | SUPPLY IN PACKET. Duplicates T16. | APPLIED 2026-08-20 |
 | P3 | rule 2 | the day watchlist is exactly the candidates with day_eligible true | filter, but on a precomputed boolean | KEEP. The predicate is a single computed field, and this rule is the guard rather than a derivation. | unchanged |
 | P4 | rule 4 | classify catalyst_found false against null | classify per candidate | KEEP. Direct field reads with the three states spelled out. | unchanged |
 | P5 | rule 10 | display rounding | compute per number | KEEP. Rounding for display, with the rule stated precisely and gap_pct's unit trap called out. | unchanged |
@@ -108,7 +108,7 @@ because the argument for each is different, and because moving a filter into the
 packet changes what the report says on a morning when the filter is empty, which
 is a judgement about the report rather than a bug fix.
 
-The three KEEP AS PROSE judgements, T7, T8, T11 and T14, are the ones where the
+The four KEEP AS PROSE judgements, T7, T8, T11 and T14, are the ones where the
 model is being asked for an opinion rather than a fact. They are the reason this
 audit is per instruction rather than a blanket rule.
 
@@ -155,3 +155,27 @@ Review after a month and tune the word list in analyst.py on that file. The
 words most likely to move are `each`, which produced the one clear false
 positive, and `no`, which was added on 2026-08-18 and is the most common English
 word on the list.
+
+## Third pass, 2026-08-20: what the trap and score work closed
+
+Two commits on 2026-08-20 moved rows on this list and nothing here recorded it,
+which matters because scan.py points a reader at this file as the audit of what
+the template still asks the model to derive.
+
+- T16 and P2 are APPLIED. scan.attach_traps decides the verdict in Python and
+  the packet carries `trap`, `trap_why` and `trap_basis` per candidate. Both
+  documents now forbid deriving a trap from headline polarity, a claim in the
+  suite reads both of them and refuses a sentence that asks for it, and rule
+  5's old wording survives only as a backticked specimen.
+- T6 is APPLIED. scan.score_roll builds `summary`, ordered strongest first with
+  the direction carried on every row, and the template quotes that string
+  rather than asking for a ranking.
+- T2, T3 and P1 are SUPPLIED IN PACKET but still phrased as filters. The lists
+  the model is asked to build are already in gaps_to_fill and in
+  score_roll.unscored; the instruction was never rewritten to quote them, so
+  the filter is still performed by the model over data Python already holds.
+- T12 and T15 are unchanged and still open.
+
+The Where column holds line numbers as of 2026-08-18. REPORT_TEMPLATE.md has
+roughly doubled in length since, so those numbers no longer locate the
+instructions and the section names are what to read.

@@ -9,6 +9,14 @@ intraday, identical minutes only. Its first live reading, 2026-08-14, was 0 of
 and nobody had looked at it. This is that look.
 
 The check reports an absolute median, which discards the most informative bit.
+[corrected 2026-08-20: it does not any more, and this document is why.
+verify_against_intraday now persists median_signed_pct, the aggregate ratio,
+the per symbol above and below counts, and a `direction` of under, over, mixed
+or unknown, returning mixed where the typical symbol and the aggregate tape
+fall on opposite sides of the vendor, which is the 2026-08-14 row below. The
+sentence stands as written because it was true when written. Summaries already
+on disk are not rewritten, so a reading taken before 2026-08-20 comes back with
+direction unknown rather than a guessed sign.]
 Everything below is SIGNED, positive meaning the collector recorded more volume
 than the vendor over the same minutes.
 
@@ -344,6 +352,13 @@ alternating so the rising premarket rate cannot be mistaken for the effect, and
 the first message per symbol discarded because of the replay documented above.
 It refuses to start after 07:10, because the fifty symbol pool is account wide
 and a probe holding slots would starve the morning it is meant to explain.
+[corrected 2026-08-20: the fixed hour is gone. probe_socket_cap.py now refuses
+any run that would start inside, or finish inside, the collector's own
+configured window, CRITERIA [collector] start_time to stop_time, which is what
+the reason above actually argues for. The fixed 07:10 refused every remaining
+moment of 2026-08-19 once the power outage moved the run, including the hours
+after 09:25 when the socket was free, which is why the answer below was taken
+at 09:35.]
 
 Registered as a one time task for 06:20 on 2026-08-19. It spends no quota.
 

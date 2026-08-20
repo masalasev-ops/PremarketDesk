@@ -347,6 +347,25 @@ def measure(
     }
 
 
+class NotMeasurable(RuntimeError):
+    """There is nothing to measure yet, which is not the same as a failure.
+
+    build() refuses rather than writing a payload of zeros, and that refusal is
+    right. Reporting it as a FAILED step is not, because one shape of it
+    happens every single weekday: the 07:00 nightly-catchup asks for a session
+    that has not opened. Until 2026-08-20 that wrote zeros over the previous
+    evening's real measurement; refusing fixed the artifact and would have put
+    a red step in every morning report instead, which is how a real failure
+    stops being visible.
+
+    So a refusal on the evidence is a SKIP with its reason recorded, and
+    anything else out of build() is still a failure. The distinction is
+    deliberately not a clock: this module does not own the hour at which a
+    session counts as complete, and a clock rule would make it behave
+    differently depending on when a person ran it.
+    """
+
+
 def build(session_date: str | None = None, write: bool = True,
           overwrite: bool = False) -> dict[str, Any]:
     config.ensure_dirs()
@@ -381,13 +400,16 @@ def build(session_date: str | None = None, write: bool = True,
         # in the file. That artifact is on disk, runs/2026-08-20/pool_recall.json
         # stamped 07:01:18.
         #
-        # 07:00 is the whole of it. tasks/register_tasks.ps1 registers
-        # job_nightly.bat a second time at that hour as nightly-catchup with no
-        # --date, so this step asks the vendor for TODAY's end of day bars
-        # before today's session has opened. On an ordinary day the 22:15 pass
-        # overwrites the morning zeros; on a night that does not reach this
-        # step, the surviving artifact reads as a measured total failure of a
-        # morning that produced no report at all.
+        # 07:00 was the whole of it. tasks/register_tasks.ps1 registers
+        # job_nightly.bat a second time at that hour as nightly-catchup, and
+        # until 2026-08-20 that firing passed no argument and ran the whole
+        # job, so this step asked the vendor for TODAY's end of day bars
+        # before today's session had opened. On an ordinary day the 22:15 pass
+        # overwrote the morning zeros; on a night that did not reach this
+        # step, the surviving artifact read as a measured total failure of a
+        # morning that produced no report at all. That firing passes "catchup"
+        # now and job_nightly.bat exits before pool recall, so the schedule can
+        # no longer reach this branch. A hand run still can.
         #
         # Refused on the evidence rather than on a clock. A clock guard would
         # have to name the hour at which a session counts as complete, which is
@@ -396,11 +418,12 @@ def build(session_date: str | None = None, write: bool = True,
         catchup = ""
         if today == ettime.today_et():
             catchup = (
-                " This is the shape of the 07:00 nightly-catchup invocation, "
-                "which passes no --date and so asks for a session that has not "
-                "happened yet. That task wants a --date of the prior session, "
-                "or pool_recall taken out of it.")
-        raise RuntimeError(
+                " This is the shape the 07:00 nightly-catchup invocation had "
+                "before 2026-08-20, when it began passing 'catchup' and "
+                "job_nightly.bat began exiting before pool recall. Reaching it "
+                "now means a run asked for today's session before it closed, "
+                "so pass --date with the prior session instead.")
+        raise NotMeasurable(
             f"the bulk end of day for {today.isoformat()} came back with no rows, "
             "so there is nothing to measure, and a payload of zeros would be "
             "published as a morning that caught none of what gapped." + catchup)
@@ -412,7 +435,7 @@ def build(session_date: str | None = None, write: bool = True,
         # prior close taken from this payload, so an empty one produces zero
         # gappers for the same reason an empty today produces zero opens, and
         # writes the same silent nothing.
-        raise RuntimeError(
+        raise NotMeasurable(
             f"the prior session bulk end of day for {prior.isoformat()} came back "
             "with no rows, so no gap can be measured against a prior close and "
             "the run would publish zero gappers it never looked for")
@@ -525,6 +548,14 @@ def main(argv: list[str] | None = None) -> int:
         payload = build(session_date=args.date, write=not args.dry_run,
                         overwrite=args.overwrite)
         job_status.produced("gappers measured", payload.get("gapped"))
+    except NotMeasurable as exc:
+        # Nothing to measure is not a failure. See NotMeasurable above: the
+        # 07:00 catch-up hits this every weekday, and a step that reports FAILED
+        # every weekday teaches its reader to stop reading it.
+        print(f"pool_recall: nothing to measure, {exc}")
+        job_status.produced("gappers measured", None)
+        eodhd.print_call_report()
+        return 0
     except Exception as exc:
         # A recall measurement that cannot be made is not a reason to fail the
         # nightly pass: nothing downstream depends on it. Broad on purpose,

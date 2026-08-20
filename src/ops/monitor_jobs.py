@@ -28,6 +28,18 @@ rerun on the absence of a finish marker alone, and a job that started seconds
 ago has not written that marker, so it read exactly like one that died.
 _job_alive is the gate the collector always had, now asked of every job before
 any rerun.
+
+That gate then made a mistake of its own, corrected the same day. It read any
+dated log written inside job_log_stale_after_s as proof of life, and the chain
+and nightly branches took that as a clean RUNNING: nothing counted, nothing
+done, exit 0. Each of those two jobs is judged by exactly ONE monitor pass
+inside the window it can still be fixed in, 09:25 for the chain and 22:45 for
+the nightly, so a job that died in the twenty minutes before its one pass spent
+that pass on a verdict of "ask again later" that nobody ever asks. A job that
+EXITED says so in its log, so the log is now read for a finish marker before
+its mtime is read for warmth; and where only the mtime answers, the pass with
+no successor inside the window counts the job as a problem rather than
+reporting it well.
 """
 
 from __future__ import annotations
@@ -187,9 +199,10 @@ def failed_steps(job: str, day: str) -> tuple[list[str], int]:
 def _log_path(prefix: str, day: str) -> Path:
     """The dated log a job appends to.
 
-    One definition because two readers ask different questions of the same
-    file: log_verdict reads its TEXT for the final step marker, and _job_alive
-    reads its MTIME for evidence that the job is still writing.
+    One definition because three readers ask different questions of the same
+    file: log_verdict reads its TEXT for the job's final step marker,
+    last_step_marker reads the same text for the last boundary of ANY step,
+    and _job_alive reads its MTIME for evidence that the job is still writing.
     """
     return config.LOGS_DIR / f"{prefix}-{day}.log"
 
@@ -208,6 +221,62 @@ def log_verdict(prefix: str, marker: str, day: str) -> str:
     if "market closed today" in text:
         return "skipped_closed"
     return "started_not_finished"
+
+
+# The step boundaries every .bat writes around every step it runs:
+# "===== scan started Thu 08/20/2026  8:45:01.16 =====" before, and
+# "===== scan finished rc=0 Thu 08/20/2026  8:45:22.03 =====" after. Lines that
+# are not step boundaries deliberately do not match, "===== gate table ====="
+# and "===== market closed today, morning chain skipped =====" among them,
+# because neither says anything about whether a step is running.
+_STEP_MARKER_RE = re.compile(
+    r"^===== (?P<step>.+?) (?:started|finished rc=(?P<rc>-?\d+))\b",
+    re.MULTILINE)
+
+
+def last_step_marker(prefix: str, day: str) -> tuple[str, int | None] | None:
+    """The last step boundary in a job's dated log, as (step, exit code).
+
+    The exit code is None for a "started" marker, which is the shape that means
+    a step is between its two lines, and an integer for a "finished" one, which
+    means the step returned and the .bat had control back when the line was
+    written. None for a log with no boundary in it at all, which is the first
+    seconds of a job: every .bat runs ops.market_today before its first marker.
+
+    Scanned from the whole file rather than read off the tail, for two reasons.
+    The python step writes its own output into the same log between the two
+    markers, so the marker is rarely the last line. And a dated log can carry
+    more than one run: the nightly appends both the 07:00 catch-up and the
+    22:15 pass to the same file, and the LAST marker is the one that describes
+    the state the machine is in now.
+    """
+    try:
+        text = _log_path(prefix, day).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    last = None
+    for match in _STEP_MARKER_RE.finditer(text):
+        last = match
+    if last is None:
+        return None
+    raw = last.group("rc")
+    return last.group("step"), None if raw is None else int(raw)
+
+
+def _exit_marker(job: str, day: str) -> str | None:
+    """A phrase naming the FAILING finish marker this job's log ends in.
+
+    None when the log ends in a started marker, in a clean finish, or in no
+    marker at all. This is the fact "fired but did not finish" cannot carry:
+    that sentence is the same one for a job that exited on a bad step, a job
+    still working, and a job the machine lost power under, and the report used
+    to print it for all three.
+    """
+    marker = last_step_marker(JOBS[job][2], day)
+    if marker is None or marker[1] is None or marker[1] == 0:
+        return None
+    return (f'its log ends in "{marker[0]} finished rc={marker[1]}", so it '
+            "exited on that step rather than being slow")
 
 
 # ------------------------------------------------------------- rerun state
@@ -316,6 +385,47 @@ def _minutes(clock: tuple[int, int]) -> int:
     return clock[0] * 60 + clock[1]
 
 
+def _clock_text(minute_of_day: int) -> str:
+    """Minutes past midnight back as HH:MM, for a line a human reads."""
+    return f"{minute_of_day // 60:02d}:{minute_of_day % 60:02d}"
+
+
+def _next_pass_minute(now_m: int) -> int | None:
+    """The next monitor firing after this one, in minutes past midnight, or None.
+
+    Several verdicts below defer to "the next pass": the collector hold waits
+    one pass rather than starting on a watchlist discover is rewriting, and the
+    liveness gate leaves a warm log to be read again. Every one of those is a
+    promise that a later pass acts, and a promise nobody keeps is worse than
+    the verdict it replaced, so the promise is checked here before it is made.
+
+    register_tasks.ps1 is the source of the schedule and CRITERIA holds the
+    values, because a schedule literal in this module is exactly as unowned as
+    a threshold literal would be. The weekday monitor starts at first_pass and
+    repeats every pass_interval_min through last_pass, which is 07:25, 07:55,
+    08:25, 08:55 and 09:25, and monitor-night is one firing at night_pass with
+    no repetition after it.
+
+    Tomorrow's first_pass is deliberately not a successor. Every log this
+    module reads is dated, so by tomorrow the job a deferred verdict was about
+    is in yesterday's file, and job_status.overdue cannot surface it either
+    because backfill, outcomes and pool_recall each carry a one session window.
+    """
+    first = _minutes(_CRIT.clock("monitor", "first_pass"))
+    last = _minutes(_CRIT.clock("monitor", "last_pass"))
+    night = _minutes(_CRIT.clock("monitor", "night_pass"))
+    every = _CRIT.integer("monitor", "pass_interval_min")
+    if every <= 0:
+        # A monitor registered without a repetition has only its two triggers.
+        # Reading it that way is the safe direction: every caller then acts now
+        # rather than deferring to a pass that is not going to come.
+        candidates = [first, night]
+    else:
+        candidates = list(range(first, last + 1, every)) + [night]
+    later = [minute for minute in candidates if minute > now_m]
+    return min(later) if later else None
+
+
 def _collector_alive(now: dt.datetime) -> bool:
     """A live collector shows either a Running task or a recently touched file."""
     task = query_task(JOBS["collector"][0])
@@ -361,8 +471,14 @@ def _task_running(task: dict[str, Any], today: dt.date) -> bool:
         return False
 
 
-def _job_alive(job: str, now: dt.datetime, task: dict[str, Any]) -> str | None:
-    """Evidence that this job is running right now, as a phrase, or None.
+def _job_alive(job: str, now: dt.datetime,
+               task: dict[str, Any]) -> tuple[str | None, bool]:
+    """Evidence that this job is running right now, and whether it settles it.
+
+    Returns (phrase, settled). The phrase is None when nothing says the job is
+    alive. settled qualifies the phrase and only means anything when there is
+    one: True where the evidence answers the question outright, False where it
+    is the reading a live job and a recently dead one both produce.
 
     The collector has had this gate since it was written, because two live
     collectors fold the same tape into duplicate minutes. The chain, the
@@ -394,21 +510,42 @@ def _job_alive(job: str, now: dt.datetime, task: dict[str, Any]) -> str | None:
 
     There is deliberately no lock file. The .bat files do not take one, so a
     lock held by this module alone would be a lie about what it protects.
+
+    The two kinds of evidence are not equally good, and the first version of
+    this gate treated them as if they were. Task Scheduler's Running settles it: the
+    task is live at this instant. A warm log does not, because it is the SAME
+    reading for a job writing now and for a job that stopped writing nineteen
+    minutes ago, and the caller has to know which of those it is holding. What
+    a log can settle is DEATH, and that is now asked first: every .bat echoes
+    "===== <step> finished rc=<n> =====" once the step has returned, and exits
+    on a non-zero one, so a log whose last marker is a finish belongs to a job
+    that is over however fresh the line is. The chain that died at 09:20 reads
+    as dead at 09:25 rather than as fifteen seconds of healthy work.
     """
     if _task_running(task, now.date()):
-        return "Task Scheduler reports the task running"
+        return "Task Scheduler reports the task running", True
+    day = now.date().isoformat()
+    marker = last_step_marker(JOBS[job][2], day)
+    if marker is not None and marker[1] is not None:
+        # A finish marker of ANY rc means the .bat had control back when it was
+        # written, so the job is not between two markers and the mtime is not
+        # asked. rc=0 is included because the mid job case it describes lasts
+        # only the microseconds between one echo and the next, while the whole
+        # job case it also describes is a job that is genuinely finished. The
+        # caller names a non-zero one through _exit_marker.
+        return None, True
     stale_after = _CRIT.integer("monitor", "job_log_stale_after_s")
-    path = _log_path(JOBS[job][2], now.date().isoformat())
+    path = _log_path(JOBS[job][2], day)
     try:
         age = now.timestamp() - path.stat().st_mtime
     except OSError:
-        return None
+        return None, True
     # The lower bound guards the --at simulation and clock skew exactly as it
     # does in _collector_alive: a log written this evening must not read as
     # alive at a simulated 08:00.
     if -60 <= age <= stale_after:
-        return f"its dated log was written {age:.0f}s ago"
-    return None
+        return f"its dated log was written {age:.0f}s ago", False
+    return None, True
 
 
 def _watchlist_vintage(day: str) -> tuple[bool, str]:
@@ -456,6 +593,11 @@ def _collector_has_subscribed(day: str) -> bool:
 def check_all(now: dt.datetime, dry_run: bool) -> int:
     day = now.date().isoformat()
     now_m = now.hour * 60 + now.minute
+    # Read once and consulted by three branches. Any verdict that defers work
+    # to a later pass has to know whether there is one, because the chain, the
+    # nightly and a held collector each have windows that outlast at most one
+    # more firing of this task.
+    next_pass = _next_pass_minute(now_m)
     reruns_done = _load_state(day)
     max_reruns = _CRIT.integer("monitor", "max_reruns_per_job_per_day")
     problems = 0
@@ -569,7 +711,15 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             fired = task.get("last_run") is not None and task["last_run"].date() == now.date()
             detail = ("fired but did not finish" if fired
                       else "never fired today, the machine was probably asleep")
-            alive = _job_alive("discover", now, task)
+            exited = _exit_marker("discover", day)
+            if exited:
+                detail = f"{detail}, and {exited}"
+            # The settled flag is not consulted for discover, and the chain and
+            # the nightly below explain why it is for them: every monitor pass
+            # from discover_due onwards evaluates discover, monitor-night's
+            # 22:45 firing included, so a provisional RUNNING here is always
+            # read again while the log path is still today's.
+            alive, _settled = _job_alive("discover", now, task)
             if alive:
                 # Not counted as a problem and not rerun: a pass still going is
                 # the ordinary state a minute after a late wake, and the rerun
@@ -603,12 +753,20 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
 
     # ---- collector
     collector_stop = _minutes(_CRIT.clock("collector", "stop_time"))
+    # A hold is a promise that a later pass starts the collector, so it may
+    # only be made when there is one INSIDE the window. Without this test the
+    # hold added on 2026-08-20 stranded the collector for a whole morning: with
+    # the machine waking at 08:25, the 08:55 pass held, the 09:25 pass reported
+    # the window over because the branch that starts a collector tests
+    # now_m < collector_stop and collector_stop is 09:25, and the collector
+    # never started at all, with its rerun budget unspent.
+    hold_is_answerable = next_pass is not None and next_pass < collector_stop
     if now_m < collector_start:
         report("collector", "NOT DUE", "")
     elif now_m < collector_stop:
         if _collector_alive(now):
             report("collector", "RUNNING", "bar file moving or task running")
-        elif discover_relaunched:
+        elif discover_relaunched and hold_is_answerable:
             # Held rather than started, and only in the pass that just
             # relaunched discover. The collector reads the watchlist once, at
             # subscribe time, and nothing re-reads it afterwards, so a
@@ -624,7 +782,23 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                    "relaunched in this pass, so the watchlist on disk is the "
                    "one it is replacing. Starting now would subscribe to "
                    "whichever version won the race and hold it all window. "
-                   "The next pass starts it on the file discover wrote.")
+                   f"The {_clock_text(next_pass)} pass starts it on the file "
+                   "discover wrote.")
+        elif discover_relaunched:
+            # Past the last pass that could act, so the choice is no longer
+            # between right names now and right names in half an hour. It is
+            # between possibly wrong names for the rest of the window and no
+            # tape at all, and the tape is worth more: the packet records
+            # watchlist_generated_at from whichever file the collector read, so
+            # a session collected on the previous session's names is visible in
+            # the morning rather than silent.
+            problems += 1
+            maybe_rerun("collector", "no live collector, and discover was "
+                        "relaunched in this pass, but no later pass falls "
+                        f"inside the window that ends {_clock_text(collector_stop)}, "
+                        "so a hold would strand the collector for the rest of "
+                        "the morning. Started on whichever watchlist version "
+                        "wins the race; scan records which one it was")
         else:
             problems += 1
             maybe_rerun("collector", "inside the window with no live collector; "
@@ -653,8 +827,20 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             task = query_task(JOBS["chain"][0])
             fired = task.get("last_run") is not None and task["last_run"].date() == now.date()
             detail = "fired but did not finish" if fired else "never fired today"
-            alive = _job_alive("chain", now, task)
-            if alive:
+            exited = _exit_marker("chain", day)
+            if exited:
+                # "fired but did not finish" is the same sentence for a chain
+                # that died on a step, one still working and one the machine
+                # lost power under. Where the log names the step, say so.
+                detail = f"{detail}, and {exited}"
+            alive, settled = _job_alive("chain", now, task)
+            # chain_due is 09:00 and register_tasks.ps1 fires this task 07:25,
+            # 07:55, 08:25, 08:55 and 09:25, so 08:55 reads NOT DUE and 09:25
+            # is the ONLY pass inside [chain_due, rerun_chain_until]. A verdict
+            # deferred at 09:25 is deferred to nobody.
+            revisited = (next_pass is not None
+                         and chain_due <= next_pass <= chain_until)
+            if alive and (settled or revisited):
                 # Neither a problem nor an action. The chain has no finish
                 # marker for most of the time it is legitimately running, and
                 # the analyst step alone can be silent for max_attempts times
@@ -662,7 +848,27 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                 report("chain", "RUNNING", f"{alive}; no finish marker yet, "
                        "which is what a chain in progress looks like. A second "
                        "one would race this one on packet.json and spend "
-                       "another claude CLI completion.")
+                       "another claude CLI completion."
+                       + ("" if settled else
+                          f" The {_clock_text(next_pass)} pass reads it again."))
+            elif alive:
+                # The last pass that could act, holding evidence that cannot
+                # tell a working chain from one that died minutes ago. It used
+                # to print RUNNING and exit 0, which is a clean bill of health
+                # for a morning with no report in it. Not rerun, because the
+                # cost of being wrong that way is two scans racing on
+                # packet.json and a second claude CLI completion; counted and
+                # named instead, so this pass exits non-zero and the 22:45 pass
+                # and the morning report both carry it.
+                problems += 1
+                report("chain", "UNRESOLVED", f"{alive}, which is the same "
+                       "reading for a chain still working as for one that died "
+                       "just before this pass. No later pass falls inside "
+                       f"{_clock_text(chain_due)} to {_clock_text(chain_until)} "
+                       "ET, so nothing revisits this. Not rerun: a second chain "
+                       "would race a live one. Read "
+                       f"logs\\morning-chain-{day}.log and rerun by hand if it "
+                       "died.")
             elif now_m <= chain_until:
                 problems += 1
                 maybe_rerun("chain", detail + "; the chain is idempotent")
@@ -695,19 +901,44 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         # copy launched on top of it. The liveness gate below is what separates
         # "has not finished yet" from "did not finish".
         fired_ok = fired and task.get("last_result") == "0"
-        alive = _job_alive("nightly", now, task)
+        alive, settled = _job_alive("nightly", now, task)
+        # monitor-night is a SINGLE firing at nightly_due, so unlike the
+        # morning there is no next pass to defer to. The morning's own passes
+        # cannot serve as one either: 07:25 is before nightly_due and prints
+        # NOT DUE, and by the next 22:45 the dated log path has rolled.
+        revisited = next_pass is not None and next_pass >= nightly_due
         if verdict == "skipped_closed" or (verdict == "finished" and fired_ok):
             if steps_ok("nightly"):
                 report("nightly", "OK", verdict)
-        elif alive:
+        elif alive and (settled or revisited):
             report("nightly", "RUNNING", f"{alive}; no clean finish recorded "
                    "yet, which is what a nightly in progress looks like rather "
                    "than one that failed")
+        elif alive:
+            # The same correction the chain carries above, and sharper here: a
+            # RUNNING printed at 22:45 was the last word on the nightly for the
+            # session, because nothing runs after it and the log rolls. It is
+            # rare for a SCHEDULED nightly, which Task Scheduler settles with
+            # Running or 267009; the warm log is the only evidence for a hand
+            # run or for a rerun this module launched with Popen, neither of
+            # which Scheduler can see.
+            problems += 1
+            report("nightly", "UNRESOLVED", f"{alive}, which is the same "
+                   "reading for a nightly still working as for one that died "
+                   "just before this pass, and monitor-night fires once so "
+                   "nothing revisits it. Not rerun: a second nightly on top of "
+                   "a live one duplicates the backfill. The 07:00 catch-up run "
+                   "fills the backfill and the outcomes again either way, so "
+                   "what is at risk here is pool recall and the archive: read "
+                   f"logs\\nightly-{day}.log.")
         else:
             problems += 1
-            maybe_rerun("nightly", ("fired but did not finish" if fired
-                                    else "the scheduled task never fired today")
-                        + "; fully idempotent")
+            reason = ("fired but did not finish" if fired
+                      else "the scheduled task never fired today")
+            exited = _exit_marker("nightly", day)
+            if exited:
+                reason = f"{reason}, and {exited}"
+            maybe_rerun("nightly", reason + "; fully idempotent")
 
     # ---- unjudged quantifier guard flags
     #

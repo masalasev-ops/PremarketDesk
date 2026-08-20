@@ -86,9 +86,13 @@ decide nothing.
     cell carries the word Ticker or the word Symbol, and it records how many
     such columns it scanned. A header carrying neither word gives the guard
     nothing to read in that table, so the names listed under it go unchecked.
-    If no table anywhere in the report carries either word while the prose
-    names real symbols, the run fails on structure and the chain stops before
-    delivery. Reproducing the headers exactly is the cheapest way to keep
+    The guard also requires BOTH of those header rows to be present. It
+    compares a header row to the two required ones cell by cell, so a third
+    table carrying a Ticker header contributes claims to be validated but
+    cannot stand in for a missing watchlist. If either required row is absent
+    the run fails on structure, analyst.py exits non-zero, and the chain stops
+    before render and deliver, whether or not the prose mentions a symbol.
+    Reproducing the headers exactly is the cheapest way to keep
     the listed names inside the guard.
 
     Both tables are written every morning, including mornings when nothing
@@ -137,7 +141,9 @@ decide nothing.
     it again with the offending sentence quoted back at you, and if the second
     answer breaks the rule too the morning gets a plain table with no
     narrative at all and your rejected sentence printed in its disclaimer.
-    There is no third attempt. Write it as though enforcing were live, because
+    The number of regenerations is CRITERIA analyst.quantifier_regenerations,
+    and when it is spent the plain table takes over. Write it as though
+    enforcing were live, because
     it will be.
 14. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.

@@ -1,11 +1,14 @@
 """One claim per defect found by the 2026-08-20 audit, so none of them returns.
 
 An adversarial read of the whole scheduled path raised forty findings and
-twenty survived independent verification. Every one of those twenty is fixed
-and every one of them is here. They have nothing in common except how they were
-found, which is why they are grouped by that rather than scattered across the
-themed suites: a reader asking "what did that audit actually catch" gets one
-file, and a reader asking "is it still caught" runs it.
+twenty survived independent verification, which is what this file started as:
+sixteen claims. Three further reads of the same tree that same day, the report
+audit, the nine smaller findings and the nineteen of the full review, added the
+rest, and it now carries forty four claims. They have nothing in common except
+how they were found, which is why they are grouped by that rather than
+scattered across the themed suites: a reader asking "what did those reads
+actually catch" gets one file, and a reader asking "is it still caught" runs
+it.
 
 The pattern across them, worth naming because it will recur. Almost none was a
 wrong algorithm. They were seams: a UTC clock relabelled instead of converted,
@@ -3064,6 +3067,1566 @@ def claim_a_refused_sweep_is_not_an_empty_feed(failures: list[str]) -> None:
     print("  alpaca probe  a sweep refused on every request reports as refused, "
           "and a served empty sweep keeps its original reading")
 
+def claim_the_volume_check_puts_no_roster_in_the_packet(failures: list[str]) -> None:
+    """The instrument that reports on the feed cannot widen the claim guard.
+
+    Fixing the unsigned median on 2026-08-20 gave verify_against_intraday four
+    per symbol structures: minutes_compared_by_symbol, unavailable_symbols,
+    vendor_zero_volume_symbols and collector_silent_symbols. They exist for a
+    human reading runs/<date>/verify_intraday.json, and latest_volume_check
+    spreads the whole summary, so on the first run of the new shape they would
+    have reached packet.json.
+
+    That widens containment. analyst._packet_uppercase_tokens builds the
+    allowed set from the raw packet TEXT and _TOKEN_RE finds AVGO inside the
+    key "AVGO.US", so every symbol in the PREVIOUS session's collector roster,
+    73 names on 2026-08-19, becomes a ticker this morning may claim while
+    holding no evidence about any of them. Measured against the real
+    2026-08-20 packet: AMAT, AVGO, DE, HOOD, MU, NOK, RIOT, SAP, TLT and TSM
+    moved from invented to allowed, which is the exact set a model reaches for
+    in a market context sentence. The guard that exists to catch invented
+    evidence would have been widened by the instrument that reports on the
+    feed it validates.
+
+    So the packet carries the counts and the file keeps the names.
+    """
+    from morning import analyst
+    from morning import scan
+
+    roster = {
+        "minutes_compared_by_symbol": {"MU.US": 125, "AVGO.US": 118, "TSM.US": 110},
+        "unavailable_symbols": ["DE.US", "SAP.US"],
+        "vendor_zero_volume_symbols": ["TLT.US"],
+        "collector_silent_symbols": ["NOK.US", "RIOT.US"],
+    }
+    check = {
+        "day": "2026-08-19", "compared": 73, "within_one_percent": 0,
+        "median_abs_pct": 90.0, "median_signed_pct": -90.0,
+        "aggregate_ratio": 0.1, "direction": "under",
+        "direction_phrase": "the collector recorded less than the vendor",
+        "collector_silent": 2, "vendor_zero_volume": 1, "unavailable": 2,
+        "stale": False, "age_days": 1, "max_age_days": 5, "source": "nightly",
+        **roster,
+    }
+
+    safe = scan._packet_safe_volume_check(check)
+    leaked = sorted(set(roster) & set(safe))
+    if leaked:
+        failures.append(f"the packet carries per symbol rosters {leaked}, which "
+                        "widens the containment allow list by the previous "
+                        "session's collector names")
+
+    # The counts must survive, or the fix traded one silence for another.
+    for key in ("compared", "collector_silent", "vendor_zero_volume",
+                "unavailable", "direction", "direction_phrase",
+                "median_signed_pct", "aggregate_ratio"):
+        if key not in safe:
+            failures.append(f"{key} was dropped from the packet with the "
+                            "rosters, so the reader loses the measurement too")
+
+    # The whitelist has to be a whitelist. A key nobody has decided about must
+    # not travel just because the check started returning it.
+    invented = scan._packet_safe_volume_check({**check, "new_symbols": ["ZZZ.US"]})
+    if "new_symbols" in invented:
+        failures.append("an unrecognised key reached the packet, so the filter "
+                        "is a blacklist and the next roster added to the check "
+                        "travels with it")
+
+    # And the thing it is all for: the allowed set must not grow.
+    base_packet = {"session_date": "2026-08-19",
+                   "candidates": [{"symbol": "NVDA.US"}],
+                   "collector_volume_check": safe}
+    wide_packet = {**base_packet, "collector_volume_check": check}
+    allowed = analyst._packet_uppercase_tokens(json.dumps(base_packet))
+    would_be = analyst._packet_uppercase_tokens(json.dumps(wide_packet))
+    widened = sorted(would_be - allowed)
+    if not widened:
+        failures.append("the unfiltered check widened the allowed set by "
+                        "nothing, so this claim cannot detect the defect it "
+                        "guards and the fixture no longer names real listings")
+    for token in ("MU", "AVGO", "TSM", "DE", "SAP", "TLT", "NOK", "RIOT"):
+        if token in allowed:
+            failures.append(f"{token} is claimable from the filtered packet, so "
+                            "a roster reached containment anyway")
+    print("  roster       the volume check puts its counts in the packet and "
+          f"leaves {len(widened)} previous session names in the file")
+
+
+# ------------------------------- the 2026-08-20 verification: what the fixes broke
+#
+# An adversarial pass over the nineteen fixes found eleven things they broke
+# or left half done. These guard the second round.
+
+def claim_a_finish_marker_outranks_a_fresh_log(failures: list[str]) -> None:
+    """A job that exited is dead however recently its log was written.
+
+    The liveness gate added on 2026-08-20 took any dated log written inside
+    job_log_stale_after_s as proof of life, and a job that dies writes its last
+    line at the instant it dies. A chain that failed its analyst step at 09:20
+    read as fifteen seconds of healthy work at 09:25, and 09:25 is the ONLY
+    pass that can act on it: register_tasks.ps1 fires the monitor 07:25 through
+    09:25 every thirty minutes, chain_due is 09:00, so 08:55 reads NOT DUE and
+    rerun_chain_until is past by the next firing. The rerun that used to happen
+    there stopped happening, and the pass printed RUNNING and exited 0.
+
+    Every .bat echoes "===== <step> finished rc=<n> =====" once a step has
+    returned and exits on a non-zero one, so the log itself says which of the
+    two states it is in. The marker is read before the mtime, and a log whose
+    last marker is a finish is a job that is over.
+    """
+    from ops import monitor_jobs
+
+    def one_pass(now, answer):
+        launched: list[str] = []
+        real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
+        monitor_jobs.query_task = lambda name: dict(answer)
+        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        printed = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(printed):
+                monitor_jobs.check_all(now, dry_run=True)
+        finally:
+            monitor_jobs.query_task = real_query
+            monitor_jobs.launch_bat = real_launch
+        return launched, printed.getvalue()
+
+    with conftest_activate():
+        day = ettime.today_str()
+        # Quiet the branches this claim is not about, exactly as the liveness
+        # claim above does: today's watchlist with a subscription list beside
+        # it, and an empty ledger so the daily rerun cap is not in the way.
+        config.WATCHLIST_PATH.write_text(
+            json.dumps({"generated_at": f"{day}T07:15:00-04:00", "symbols": []}),
+            encoding="utf-8")
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        (config.PREMARKET_DIR / f"{day}-subscriptions.json").write_text(
+            json.dumps({"symbols": []}), encoding="utf-8")
+        (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        chain_log = config.LOGS_DIR / f"morning-chain-{day}.log"
+        nightly_log = config.LOGS_DIR / f"nightly-{day}.log"
+        asleep = {"exists": True, "status": "Ready",
+                  "last_run": None, "last_result": "1"}
+
+        # The marker reader first, on the lines a real log actually holds.
+        chain_log.write_text(
+            "===== scan started Thu 08/20/2026  8:45:01.16 ===== \n"
+            "scan: 41 candidates\n"
+            "===== scan finished rc=0 Thu 08/20/2026  8:45:22.03 ===== \n"
+            "===== analyst started Thu 08/20/2026  8:45:22.03 ===== \n"
+            "===== analyst finished rc=2 Thu 08/20/2026  8:49:14.14 ===== \n",
+            encoding="utf-8")
+        if monitor_jobs.last_step_marker("morning-chain", day) != ("analyst", 2):
+            failures.append("the last step marker of a chain log that died in "
+                            "the analyst step read "
+                            f"{monitor_jobs.last_step_marker('morning-chain', day)!r}")
+        # Lines that are not step boundaries say nothing about a running step
+        # and must not be mistaken for one. Both of these are real .bat output.
+        chain_log.write_text(
+            "===== gate table Thu 08/20/2026  8:49:14.75 ===== \n"
+            "===== market closed today, morning chain skipped Thu ===== \n",
+            encoding="utf-8")
+        if monitor_jobs.last_step_marker("morning-chain", day) is not None:
+            failures.append("a gate table line or a market closed line was read "
+                            "as a step boundary")
+
+        # Now the same fact through the whole pass, at both clocks where the
+        # chain can still be rerun. Five seconds old is the reading the gate
+        # used to call life.
+        for clock in ((9, 5), (9, 25)):
+            chain_log.write_text(
+                "===== scan started =====\n"
+                "===== scan finished rc=0 =====\n"
+                "===== analyst started =====\n"
+                "===== analyst finished rc=2 =====\n", encoding="utf-8")
+            nightly_log.write_text("===== backfill finished rc=1 =====\n",
+                                   encoding="utf-8")
+            now = ettime.now_et().replace(hour=clock[0], minute=clock[1],
+                                          second=0, microsecond=0)
+            stamp = now.timestamp() - 5
+            os.utime(chain_log, (stamp, stamp))
+            os.utime(nightly_log, (stamp, stamp))
+            (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+            launched, printed = one_pass(now, asleep)
+            where = f"{clock[0]:02d}:{clock[1]:02d}"
+            if "job_morning_chain.bat" not in launched:
+                failures.append(
+                    f"a chain whose log ends in \"analyst finished rc=2\" five "
+                    f"seconds ago was not rerun at {where}; the pass launched "
+                    f"{launched or 'nothing'}")
+            if "analyst finished rc=2" not in printed:
+                failures.append(f"the {where} pass did not name the marker the "
+                                "chain died on")
+
+        # The mtime still governs a log whose last marker is a started one,
+        # which is the state a healthy job spends nearly all its time in.
+        chain_log.write_text("===== scan started =====\n"
+                             "===== scan finished rc=0 =====\n"
+                             "===== analyst started =====\n", encoding="utf-8")
+        now = ettime.now_et().replace(hour=9, minute=5, second=0, microsecond=0)
+        stamp = now.timestamp() - 5
+        os.utime(chain_log, (stamp, stamp))
+        launched, printed = one_pass(now, asleep)
+        if "job_morning_chain.bat" in launched:
+            failures.append("a chain between its analyst markers, written five "
+                            "seconds ago, was rerun on top of itself")
+
+        # The nightly half. A finish marker on the vendor-lag steps is the same
+        # proof of death, and the nightly is where a duplicate is cheapest to
+        # start and most expensive to explain.
+        for tail, expect_rerun in (("===== backfill finished rc=1 =====\n", True),
+                                   ("===== backfill started =====\n", False)):
+            nightly_log.write_text(tail, encoding="utf-8")
+            now = ettime.now_et().replace(hour=22, minute=45, second=0, microsecond=0)
+            stamp = now.timestamp() - 60
+            os.utime(nightly_log, (stamp, stamp))
+            (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+            launched, printed = one_pass(now, asleep)
+            if ("job_nightly.bat" in launched) is not expect_rerun:
+                failures.append(
+                    f"a nightly log ending {tail.strip()!r} a minute ago "
+                    f"{'was not' if expect_rerun else 'was'} rerun; the pass "
+                    f"launched {launched or 'nothing'}")
+    print("  exit marker a log ending in a failing finish marker is dead however "
+          "fresh, and one ending mid step is not")
+
+
+def claim_a_hold_needs_a_pass_that_can_act(failures: list[str]) -> None:
+    """The collector is held only while a later pass inside the window exists.
+
+    The hold added on 2026-08-20 waits one pass rather than starting a
+    collector on a watchlist discover is in the middle of rewriting, and it had
+    no test that a later pass exists. The collector window ends at [Collector]
+    stop_time 09:25 and the branch that starts a collector tests
+    now < stop_time, so a hold at the 08:55 pass was answered by nobody: 09:25
+    reported the window over and the morning ran with no collector at all and
+    the collector's rerun budget unspent. Half a window of the previous
+    session's names is worth more than no tape, and scan records
+    watchlist_generated_at, so past the last pass that can act the collector is
+    started instead of held.
+    """
+    from ops import monitor_jobs
+
+    def one_pass(now, answer):
+        launched: list[str] = []
+        real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
+        monitor_jobs.query_task = lambda name: dict(answer)
+        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        printed = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(printed):
+                monitor_jobs.check_all(now, dry_run=True)
+        finally:
+            monitor_jobs.query_task = real_query
+            monitor_jobs.launch_bat = real_launch
+        return launched, printed.getvalue()
+
+    # The schedule the hold reasons about, read from CRITERIA rather than
+    # assumed: register_tasks.ps1 fires the monitor at first_pass and repeats
+    # it every pass_interval_min through last_pass, and monitor-night once.
+    for now_m, expected in ((7 * 60 + 25, 7 * 60 + 55),
+                            (8 * 60 + 25, 8 * 60 + 55),
+                            (8 * 60 + 55, 9 * 60 + 25),
+                            (9 * 60 + 25, 22 * 60 + 45),
+                            (22 * 60 + 45, None)):
+        got = monitor_jobs._next_pass_minute(now_m)
+        if got != expected:
+            failures.append(f"the pass after {now_m // 60:02d}:{now_m % 60:02d} "
+                            f"was read as {got}, expected {expected}")
+
+    with conftest_activate():
+        day = ettime.today_str()
+        previous = (ettime.now_et().date() - dt.timedelta(days=1)).isoformat()
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        asleep = {"exists": True, "status": "Ready",
+                  "last_run": None, "last_result": "1"}
+
+        # The both-missed morning: yesterday's watchlist, nothing listening,
+        # no bars, no discover log. That is the one state that relaunches
+        # discover, which is the only state that can hold the collector.
+        def missed_morning():
+            config.WATCHLIST_PATH.write_text(
+                json.dumps({"generated_at": f"{previous}T07:15:00-04:00",
+                            "symbols": []}), encoding="utf-8")
+            (config.PREMARKET_DIR / f"{day}-subscriptions.json").unlink(missing_ok=True)
+            for name in (f"{day}.jsonl", f"{day}-stats.jsonl"):
+                (config.PREMARKET_DIR / name).unlink(missing_ok=True)
+            (config.LOGS_DIR / f"discover-{day}.log").unlink(missing_ok=True)
+            (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+
+        for clock, hold_expected in (((7, 25), True), ((8, 25), True),
+                                     ((8, 55), False), ((9, 5), False)):
+            missed_morning()
+            now = ettime.now_et().replace(hour=clock[0], minute=clock[1],
+                                          second=0, microsecond=0)
+            launched, printed = one_pass(now, asleep)
+            where = f"{clock[0]:02d}:{clock[1]:02d}"
+            if "job_discover.bat" not in launched:
+                failures.append(f"the {where} pass did not relaunch discover on "
+                                "a watchlist from the previous session, so the "
+                                "hold this claim is about was never reached")
+            held = "collector  HELD" in printed
+            started = "job_collector.bat" in launched
+            if held is not hold_expected:
+                failures.append(
+                    f"the {where} pass {'did not hold' if hold_expected else 'held'} "
+                    "the collector; the next pass inside the window is "
+                    f"{monitor_jobs._next_pass_minute(now.hour * 60 + now.minute)}")
+            if started is hold_expected:
+                failures.append(
+                    f"the {where} pass "
+                    f"{'started' if started else 'did not start'} the collector; "
+                    f"it launched {launched or 'nothing'}")
+    print("  hold gate    a collector is held only where a later pass inside the "
+          "window can start it, and started rather than stranded after that")
+
+
+def claim_the_last_pass_counts_what_it_cannot_resolve(failures: list[str]) -> None:
+    """A liveness verdict nobody will revisit is counted, not reported clean.
+
+    Task Scheduler settles the question for a job it started itself. A warm log
+    does not: it is the same reading for a job writing now as for one that
+    stopped writing nineteen minutes ago, and the gate added on 2026-08-20 read
+    both as RUNNING, with no problem counted and no action taken. That is a
+    verdict of "ask again later" in the two places where nobody asks again. The
+    chain gets ONE pass inside [chain_due, rerun_chain_until], 09:25, because
+    chain_due is 09:00 and the monitor's firings are 07:25 through 09:25. The
+    nightly gets one too, monitor-night at 22:45, and by the next one the dated
+    log path has rolled. So the pass with no successor inside the window
+    reports UNRESOLVED and counts the job as a problem, which is what puts it
+    in the exit code and in front of a reader.
+    """
+    from ops import monitor_jobs
+
+    def one_pass(now, answer):
+        launched: list[str] = []
+        real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
+        monitor_jobs.query_task = lambda name: dict(answer)
+        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        printed = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(printed):
+                monitor_jobs.check_all(now, dry_run=True)
+        finally:
+            monitor_jobs.query_task = real_query
+            monitor_jobs.launch_bat = real_launch
+        return launched, printed.getvalue()
+
+    def problems(printed: str) -> int:
+        for line in printed.splitlines():
+            if "problem(s)" in line:
+                return int(line.split()[1])
+        return -1
+
+    with conftest_activate():
+        day = ettime.today_str()
+        config.WATCHLIST_PATH.write_text(
+            json.dumps({"generated_at": f"{day}T07:15:00-04:00", "symbols": []}),
+            encoding="utf-8")
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        (config.PREMARKET_DIR / f"{day}-subscriptions.json").write_text(
+            json.dumps({"symbols": []}), encoding="utf-8")
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        chain_log = config.LOGS_DIR / f"morning-chain-{day}.log"
+        nightly_log = config.LOGS_DIR / f"nightly-{day}.log"
+        asleep = {"exists": True, "status": "Ready",
+                  "last_run": None, "last_result": "1"}
+        # Mid step, so the marker cannot settle it and only the mtime is left.
+        warm = "===== scan started =====\n===== analyst started =====\n"
+
+        def pass_at(clock, log, tail, age):
+            (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+            if tail is None:
+                log.unlink(missing_ok=True)
+            else:
+                log.write_text(tail, encoding="utf-8")
+            now = ettime.now_et().replace(hour=clock[0], minute=clock[1],
+                                          second=0, microsecond=0)
+            if tail is not None:
+                stamp = now.timestamp() - age
+                os.utime(log, (stamp, stamp))
+            return one_pass(now, asleep)
+
+        # 09:05 still has 09:25 after it, so a warm log is a fair RUNNING.
+        nightly_log.write_text(warm, encoding="utf-8")
+        launched, printed = pass_at((9, 5), chain_log, warm, 840)
+        if "chain      RUNNING" not in printed or "job_morning_chain.bat" in launched:
+            failures.append("a chain with a warm log at 09:05, which the 09:25 "
+                            f"pass reads again, was not left alone: {printed!r}")
+
+        # 09:25 has nobody after it inside rerun_chain_until. Same state, and
+        # the verdict has to change: named, counted, and still not rerun on top
+        # of what may be a live chain.
+        launched, printed = pass_at((9, 25), chain_log, warm, 840)
+        unresolved = problems(printed)
+        if "chain      UNRESOLVED" not in printed:
+            failures.append("a chain whose warm log nobody will read again was "
+                            f"not reported UNRESOLVED at 09:25: {printed!r}")
+        if "job_morning_chain.bat" in launched:
+            failures.append("a chain that may still be running was rerun at "
+                            "09:25 on evidence that cannot tell it from a dead "
+                            "one")
+        # The control: the same pass with no chain log at all counts one
+        # problem for the chain and reruns it. The warm case must count the
+        # same one, which is what "not a clean RUNNING" has to mean.
+        launched, printed = pass_at((9, 25), chain_log, None, 0)
+        if problems(printed) != unresolved:
+            failures.append(
+                f"the 09:25 pass counted {unresolved} problem(s) for a chain it "
+                f"could not resolve and {problems(printed)} for a chain that "
+                "never wrote a log, so the unresolved one is not being counted")
+        if "job_morning_chain.bat" not in launched:
+            failures.append("a chain with no log at all was not rerun at 09:25")
+
+        # The nightly, where monitor-night is a single firing and there is no
+        # later pass at any hour.
+        chain_log.write_text(warm, encoding="utf-8")
+        launched, printed = pass_at((22, 45), nightly_log, warm, 60)
+        unresolved = problems(printed)
+        if "nightly    UNRESOLVED" not in printed:
+            failures.append("a nightly whose warm log nobody will read again "
+                            f"was not reported UNRESOLVED at 22:45: {printed!r}")
+        if "job_nightly.bat" in launched:
+            failures.append("a nightly that may still be running was rerun at "
+                            "22:45 on top of itself")
+        launched, printed = pass_at((22, 45), nightly_log, None, 0)
+        if problems(printed) != unresolved:
+            failures.append(
+                f"the 22:45 pass counted {unresolved} problem(s) for a nightly "
+                f"it could not resolve and {problems(printed)} for one that "
+                "never wrote a log")
+
+        # Task Scheduler still settles it. A job Scheduler reports as running
+        # is running, at the last pass as at any other, and must not be
+        # dressed up as a problem.
+        running = {"exists": True, "status": "Running",
+                   "last_run": ettime.now_et(), "last_result": "267009"}
+        (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+        chain_log.write_text(warm, encoding="utf-8")
+        now = ettime.now_et().replace(hour=9, minute=25, second=0, microsecond=0)
+        stamp = now.timestamp() - 840
+        os.utime(chain_log, (stamp, stamp))
+        launched, printed = one_pass(now, running)
+        if "chain      RUNNING" not in printed:
+            failures.append("a chain Task Scheduler reports as running was not "
+                            f"reported RUNNING at the last pass: {printed!r}")
+    print("  last pass    a warm log nobody will read again is counted and named "
+          "rather than reported as a clean RUNNING")
+
+
+def claim_the_long_leg_checks_the_units_it_writes(failures: list[str]) -> None:
+    """A split inside D+2 to D+5 refuses day5_close instead of writing it.
+
+    The corporate action guard added on 2026-08-20 sat inside "if wants_short",
+    so it tested D+1 and nothing else, and the long leg wrote
+    updates['day5_close'] on every path with no unit check on any of them. That
+    is the ORDINARY cadence rather than an edge: the candidate query re-selects
+    on "next_day_close IS NULL OR day5_close IS NULL" and wants_short tests
+    next_day_close, so the short leg fills on the night of D+1 and the long leg
+    five nights later, in a run where wants_short is already False and the
+    guard never executes. A 4-for-1 split with its ex date at D+3 therefore put
+    a post action close of 2.50 in the same row as the pre action entry_ref of
+    10.50, stop_ref and pm_high it will be read against, silently and
+    permanently, in the table CRITERIA.md names as the record its seed
+    thresholds will be recalibrated from.
+
+    The refusal is written down rather than left as a null, because a null
+    day5_close is also what a fill that is not due yet looks like. It does not
+    move outcomes_filled_at either: that column records when an outcome was
+    obtained, and this row's outcome was obtained on the night of D+1.
+    """
+    from core import criteria, eodhd, store
+    from night import fill_outcomes
+
+    pick_date, ex_date = "2026-07-13", "2026-07-16"
+    calendar = ["2026-07-10", pick_date, "2026-07-14", "2026-07-15", ex_date,
+                "2026-07-17", "2026-07-20"]
+    calendar_symbol = criteria.load().text("universe", "session_calendar_symbol")
+    filled_at = "2026-07-14T20:00:00-04:00"
+
+    def _bars(split: bool) -> list[dict[str, Any]]:
+        """A ten dollar name whose 4-for-1 split has its ex date at D+3.
+
+        The vendor's shape: close is what printed, adjusted_close is rewritten
+        on the bars BEFORE the ex date and left alone from it on, so close over
+        adjusted_close is flat until the ex date and steps once there. D+1 is
+        on the near side of that step, which is what makes this the case the
+        short leg's guard cannot see.
+        """
+        out = []
+        for day in calendar:
+            raw = 2.5 if (split and day >= ex_date) else 10.0
+            out.append({"date": day, "open": raw, "high": raw * 1.1,
+                        "low": raw * 0.9, "close": raw,
+                        "adjusted_close": 2.5 if split else 10.0,
+                        "volume": 1_000_000})
+        return out
+
+    class _Api:
+        def __init__(self, split: bool) -> None:
+            self.split = split
+            self.name_calls = 0
+
+        def eod(self, symbol, start=None, end=None, period="d"):
+            if symbol == calendar_symbol:
+                return eodhd.ApiResult([{"date": d} for d in calendar], None)
+            self.name_calls += 1
+            return eodhd.ApiResult(_bars(self.split), None)
+
+    def _run(split: bool, runs: int = 1) -> tuple[dict[str, Any], str, int]:
+        with conftest_activate():
+            with store.session() as connection:
+                store.init(connection)
+                store.ensure_columns(connection, "picks",
+                                     fill_outcomes._OUTCOME_COLUMNS)
+                # The short leg already filled on the night of D+1, which is
+                # the ordinary cadence and the run in which wants_short is
+                # False and the old guard therefore never fired.
+                connection.execute(
+                    "INSERT INTO picks (date, ticker, source, pm_high, entry_ref, "
+                    "stop_ref, next_day_open, next_day_high, next_day_low, "
+                    "next_day_close, mfe_pct, mae_pct, pm_high_broke_next_day, "
+                    "outcomes_filled_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (pick_date, "AAA.US", "live", 10.5, 10.5, 9.5, 10.0, 11.0,
+                     9.0, 10.5, 4.7619, -5.2632, 1, filled_at))
+                connection.commit()
+            api = _Api(split)
+            saved = eodhd.client
+            eodhd.client = lambda: api
+            printed = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(printed):
+                    for _ in range(runs):
+                        # day_limit keeps the sandbox copy's own live rows,
+                        # which are dated later, off the stubbed feed.
+                        fill_outcomes.fill(pick_date)
+            finally:
+                eodhd.client = saved
+            with store.session() as connection:
+                # SELECT * rather than a column list, so a build where the
+                # refusal column does not exist reads as a missing reason
+                # rather than raising out of the claim.
+                row = dict(connection.execute(
+                    "SELECT * FROM picks WHERE date=? AND ticker=?",
+                    (pick_date, "AAA.US")).fetchone())
+            return row, printed.getvalue(), api.name_calls
+
+    # Run twice: the second run also proves the refused row is not re-selected.
+    row, said, calls = _run(split=True, runs=2)
+    if row["day5_close"] is not None:
+        failures.append(
+            f"a 4-for-1 split at D+3 still wrote day5_close {row['day5_close']!r} "
+            "beside an entry_ref of 10.5. That is the shape of a name that lost "
+            "three quarters of its value over the week rather than one that split.")
+    if not (row.get("day5_refused_reason") or ""):
+        failures.append(
+            "day5_close was left null with nothing recorded, so a refused fifth "
+            "session cannot be told from one that is merely not due yet")
+    elif "adjustment factor" not in row["day5_refused_reason"]:
+        failures.append("the recorded refusal does not name what was measured: "
+                        f"{row['day5_refused_reason']!r}")
+    if row["outcomes_filled_at"] != filled_at:
+        failures.append(
+            f"outcomes_filled_at moved to {row['outcomes_filled_at']!r} on a run "
+            f"that obtained no outcome, overwriting {filled_at}, so the column "
+            "no longer records when the measurement was taken")
+    if row["next_day_close"] != 10.5 or row["mfe_pct"] != 4.7619:
+        failures.append("the short leg written five nights earlier was disturbed: "
+                        f"{row!r}")
+    if "refused" not in said:
+        failures.append(f"the refusal was not reported to the operator: "
+                        f"{said.strip()[:200]!r}")
+
+    if calls != 1:
+        failures.append(
+            f"a refused row cost {calls} end of day call(s) over two runs, so it "
+            "is re-selected every night to be refused again for as long as the "
+            "session calendar reaches it")
+
+    row, said, _ = _run(split=False)
+    if row["day5_close"] != 10.0:
+        failures.append("an ordinary week was refused as well, so the guard has "
+                        f"stopped the long leg rather than corrected it: {row!r}")
+    if row.get("day5_refused_reason") is not None:
+        failures.append(f"an ordinary week recorded a refusal: "
+                        f"{row.get('day5_refused_reason')!r}")
+    if row["outcomes_filled_at"] == filled_at:
+        failures.append("a run that did obtain the fifth session left "
+                        "outcomes_filled_at at the short leg's stamp")
+    print("  day5 units   a corporate action between D+2 and D+5 refuses "
+          "day5_close in writing, and an ordinary week still fills")
+
+
+def claim_the_buckets_say_what_they_sum_to(failures: list[str]) -> None:
+    """The volume check totals its four buckets against the right number.
+
+    verify_against_intraday said every subscribed symbol lands in exactly one
+    of compared, unavailable, vendor_zero_volume or collector_silent and that
+    the four sum to the subscription list. Three of the four are counted off
+    the BAR FILE, and the list they were summed against is written by
+    write_subscriptions, which rewrites it on every collector run by design, so
+    a morning the collector restarted onto a different watchlist has a bar file
+    holding every run's symbols and a list holding the last run's only.
+    2026-08-19 is that morning and it is in the archive: the socket was refused
+    at 08:35 because the account's own dropped connection still held the fifty
+    slots, a hand restart at 08:37:14 subscribed to a different fifty, and 73
+    symbols carry bars against a list of 50. The four buckets summed to 75
+    there while the summary published subscribed 50 beside compared 73 and
+    described the two as a partition.
+    """
+    from collect import collect_premarket
+    from core import eodhd
+
+    day, minute = "2026-07-13", 1787236800
+    collected = {"A.US": 1000.0, "B.US": 1000.0, "C.US": 1000.0, "D.US": 500.0}
+    vendor = {"A.US": 1000.0, "B.US": 2000.0, "C.US": 1000.0, "D.US": 0.0}
+
+    class BarsApi:
+        def intraday(self, symbol, start, end, interval):
+            if symbol not in vendor:
+                return [], None
+            return [{"timestamp": minute, "volume": vendor[symbol]}], None
+
+    def _measure(requested: list[str]) -> dict[str, Any]:
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        collect_premarket.bar_path(day).write_text(
+            "".join(json.dumps({"symbol": symbol, "minute_epoch": minute,
+                                "o": 1.0, "h": 1.0, "l": 1.0, "c": 1.0,
+                                "v": volume, "trades": 1}) + "\n"
+                    for symbol, volume in collected.items()),
+            encoding="utf-8")
+        collect_premarket.subscriptions_path(day).write_text(json.dumps({
+            "symbols": sorted(requested), "requested_count": len(requested),
+            "socket_cap": 50, "subscribed_at": f"{day}T08:37:14-04:00"}),
+            encoding="utf-8")
+        saved = eodhd.client
+        eodhd.client = lambda *a, **k: BarsApi()
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                return collect_premarket.verify_against_intraday(day) or {}
+        finally:
+            eodhd.client = saved
+
+    def _buckets(summary: dict[str, Any]) -> int:
+        return (summary.get("compared", 0) + summary.get("unavailable", 0)
+                + summary.get("vendor_zero_volume", 0)
+                + summary.get("collector_silent", 0))
+
+    with conftest_activate():
+        # The restart: the list on disk is the second run's, and A and B were
+        # collected by the first.
+        restarted = _measure(["C.US", "D.US", "Z.US"])
+        if not restarted:
+            failures.append("the volume check returned nothing for a day it "
+                            "could compare three symbols on")
+        else:
+            if _buckets(restarted) != restarted.get("symbols_accounted"):
+                failures.append(
+                    f"the four buckets sum to {_buckets(restarted)} and the "
+                    f"summary says they account for "
+                    f"{restarted.get('symbols_accounted')!r}, so the number "
+                    "published beside them is not their total")
+            if restarted.get("bars_outside_subscription") != 2:
+                failures.append(
+                    "two collected symbols the subscription list does not name "
+                    "were not counted: "
+                    f"{restarted.get('bars_outside_subscription')!r}")
+            if restarted.get("bars_outside_subscription_symbols") != ["A.US", "B.US"]:
+                failures.append(
+                    "the symbols outside the list are not named in the file: "
+                    f"{restarted.get('bars_outside_subscription_symbols')!r}")
+            if _buckets(restarted) == restarted.get("subscribed"):
+                failures.append(
+                    "the fixture no longer restarts: the buckets and the "
+                    "subscription count agree, so this claim proves nothing")
+            reason = restarted.get("subscribed_reason") or ""
+            if "rewrite" not in reason:
+                failures.append(
+                    "nothing on the summary says why compared is larger than "
+                    f"subscribed on a restarted morning: {reason!r}")
+
+        # And the ordinary morning, where the old sentence was true and has to
+        # stay true: one run, one list, and the buckets do sum to it.
+        ordinary = _measure(sorted(list(collected) + ["Z.US"]))
+        if _buckets(ordinary) != ordinary.get("subscribed"):
+            failures.append(
+                f"on a morning with one collector run the buckets sum to "
+                f"{_buckets(ordinary)} against a subscription of "
+                f"{ordinary.get('subscribed')!r}")
+        if ordinary.get("bars_outside_subscription") != 0:
+            failures.append("an unrestarted morning reported symbols outside its "
+                            "own subscription list")
+        if ordinary.get("subscribed_reason") is not None:
+            failures.append("an unrestarted morning was given a reason it does "
+                            f"not need: {ordinary.get('subscribed_reason')!r}")
+
+        # The archived morning the finding was raised on, where the files still
+        # sit. Read rather than measured, because measuring it would cost one
+        # intraday call per symbol.
+        bars = collect_premarket.read_bars("2026-08-19")
+        listed = set((collect_premarket.read_subscriptions("2026-08-19") or {})
+                     .get("symbols") or [])
+        if bars and listed and not (set(bars) - listed):
+            failures.append(
+                "2026-08-19 no longer shows the restart this claim is built on: "
+                f"{len(bars)} symbols with bars, {len(listed)} on the list, none "
+                "outside it. Check the archive before trusting the fixture above.")
+    print("  bucket sum   the four buckets are totalled against the symbols "
+          "they cover, and a restarted morning says why that is not the list")
+
+
+def claim_a_matching_collector_is_not_called_a_disagreement(
+    failures: list[str]
+) -> None:
+    """The direction word has a branch for agreement, and mixed says what it saw.
+
+    _volume_check_direction returned "under" for a signed median below zero
+    beside an aggregate ratio below one, "over" for the mirror of that, and
+    "mixed" for everything else, so it had no branch at all for a collector
+    that MATCHES the vendor, which is the outcome the measurement exists to
+    work towards. A perfectly agreeing session came back "mixed: the two
+    readings disagree, the typical symbol falling on one side of the vendor and
+    the aggregate tape on the other". So did every pair with one reading on the
+    vendor and the other off it: a signed median of exactly zero against an
+    aggregate 0.75 times the vendor is a real disagreement, but the typical
+    symbol is not on a side of anything. REPORT_TEMPLATE.md orders the model to
+    quote direction_phrase verbatim, so each of those sentences was published
+    as written.
+    """
+    from collect import collect_premarket
+    from core import criteria
+
+    band = criteria.load().number("collector", "volume_check_agreement_pct")
+    read = getattr(collect_premarket, "VOLUME_CHECK_AGREEMENT_PCT", None)
+    if read != band:
+        failures.append(
+            "the agreement band is not the one in CRITERIA.md [collector] "
+            f"volume_check_agreement_pct: {read!r} against {band!r}")
+
+    # The two readings in COLLECTOR_VOLUME.md, the mixed session between them,
+    # and the cases that had no answer. Ratios are expressed through the band
+    # so that moving the threshold moves the fixture with it.
+    inside, outside = band / 2.0, band * 3.0
+    expected = {
+        (-88.49, 0.0994): "under",              # 2026-08-17
+        (40.0, 3.83): "over",
+        (-33.77, 3.8257): "mixed",              # 2026-08-14, genuinely straddling
+        (0.0, 1.0): "agree",                    # the collector matches the vendor
+        (-inside, 1.0 + inside / 100.0): "agree",
+        (band * 0.9, 1.0 + band * 0.9 / 100.0): "agree",   # just inside it
+        (outside, 1.0 + outside / 100.0): "over",
+        (-outside, 1.0 - outside / 100.0): "under",
+        (0.0, 0.75): "mixed",                   # typical on the vendor, tape below
+        (-50.0, 1.0): "mixed",                  # typical below, tape on the vendor
+        (-90.0, None): "unknown",
+    }
+    phrases: dict[str, str] = {}
+    for (median, ratio), want in expected.items():
+        got, phrase = collect_premarket._volume_check_direction(median, ratio)
+        phrases[f"{median}|{ratio}"] = phrase
+        if got != want:
+            failures.append(
+                f"a signed median of {median} against an aggregate ratio of "
+                f"{ratio} read as {got!r}, expected {want!r}")
+        if not phrase:
+            failures.append(f"direction {got!r} came back with no phrase")
+
+    agreeing = phrases["0.0|1.0"]
+    if "disagree" in agreeing or "one side" in agreeing:
+        failures.append(
+            "a collector that matched the vendor on both readings is still "
+            f"described as disagreeing, and the template quotes it: {agreeing!r}")
+    straddle = phrases["0.0|0.75"]
+    if "one side" in straddle or "on the other" in straddle:
+        failures.append(
+            "a signed median of exactly zero is still described as falling on a "
+            f"side of the vendor: {straddle!r}")
+    if "matched the vendor" not in straddle:
+        failures.append("the mixed phrase does not say what the two readings "
+                        f"actually were: {straddle!r}")
+    print("  agreement    a collector matching the vendor reads as agreement, "
+          "and mixed names which reading fell where")
+
+
+def claim_the_hand_run_redirect_moves_a_captured_run_directory(
+        failures: list[str]) -> None:
+    """The redirect that keeps a hand run out of the evidence is itself asserted.
+
+    standalone() wraps a direct `python -m tests.test_repricing` in the
+    sandbox, and that was half of the fix. The module had already executed, so
+    test_repricing.RUN_DIR still held the REAL runs/2026-08-14 while
+    config.RUNS_DIR held the temporary copy, and claim_three sets
+    config.DB_PATH to RUN_DIR / "test_repricing.db" and opens it in WAL mode. A
+    hand run therefore created a SQLite database and its journal files inside
+    the only copy of the first live morning's evidence.
+    conftest.redirect_captured_paths is the other half, and NOTHING asserted
+    it. The hand run claim above checks that standalone() exists, that every
+    suite file routes __main__ through it, that SANDBOX_ACTIVE nests and is
+    restored, and that the entry point runs sandboxed, every one of which stays
+    true with the redirect deleted. run_tests.main() never enters standalone()
+    at all, because it reloads each suite inside the sandbox and calls main()
+    directly. So deleting the fix left the whole suite green, and the next hand
+    run of test_repricing would have opened that database again.
+
+    The neutered pass at the end is the load bearing part. The same assertions
+    run a second time against a redirect that does nothing, and this claim
+    fails if they do not fail. A claim that cannot fail is worse than no claim,
+    and this one guards a function whose absence is invisible everywhere else.
+    """
+    import types
+
+    from tests import conftest
+
+    @contextlib.contextmanager
+    def neutered(module: Any) -> Any:
+        """The fix, deleted. Exactly what the suite failed to notice."""
+        yield []
+
+    def assertions(redirect: Any) -> list[str]:
+        """Every assertion about the redirect, against whichever one is given."""
+        found: list[str] = []
+        module = types.ModuleType("premarketdesk_throwaway")
+        # One path under a redirected root, and two that must not move: doc/
+        # and src/ are read only to a test run, and a module that captured
+        # CRITERIA.md's absolute path at import would be pointed at a file
+        # that does not exist if this rebased it into the sandbox.
+        module.RUN_DIR = conftest.REAL_RUNS / "2026-08-14"
+        module.DOC = config.PROJECT_ROOT / "doc" / "CRITERIA.md"
+        module.SRC = config.PROJECT_ROOT / "src" / "tests" / "conftest.py"
+        # The two shapes the walk was widened to on 2026-08-20, when
+        # standalone() was found printing an unqualified all clear over both.
+        # __module__ is assigned by hand because type() takes it from the frame
+        # that called it, which is this file, and the walk looks only at
+        # classes defined in the module it was handed.
+        module.RUN_DIRS = [conftest.REAL_RUNS / "2026-08-15"]
+        holder = type("Holder", (), {"RUN_DIR": conftest.REAL_RUNS / "2026-08-16"})
+        holder.__module__ = module.__name__
+        module.Holder = holder
+        before = {name: getattr(module, name)
+                  for name in ("RUN_DIR", "DOC", "SRC", "RUN_DIRS")}
+        was_held = holder.RUN_DIR
+
+        with redirect(module) as moved:
+            wanted = config.RUNS_DIR / "2026-08-14"
+            if module.RUN_DIR != wanted:
+                found.append(f"the captured run directory reads {module.RUN_DIR} "
+                             f"inside the sandbox, expected {wanted}. A claim that "
+                             "opens a database under it writes into the preserved "
+                             "evidence of the first live morning")
+            if module.RUN_DIRS != [config.RUNS_DIR / "2026-08-15"]:
+                found.append("a run directory held in a module level list was not "
+                             f"moved: {module.RUN_DIRS}")
+            if holder.RUN_DIR != config.RUNS_DIR / "2026-08-16":
+                found.append("a run directory held on a class defined in the "
+                             f"module was not moved: {holder.RUN_DIR}")
+            if module.DOC != before["DOC"] or module.SRC != before["SRC"]:
+                found.append(f"a doc/ or src/ path was rewritten: {module.DOC} and "
+                             f"{module.SRC}. Nothing writes to either, and a module "
+                             "reading CRITERIA.md through the absolute path it "
+                             "captured would find no file there")
+            if sorted(moved) != ["Holder.RUN_DIR", "RUN_DIR", "RUN_DIRS"]:
+                found.append(f"the redirect reported moving {sorted(moved)}, and "
+                             "standalone() prints that list as its account of what "
+                             "it did to the module it is about to run")
+        restored = {name: getattr(module, name) for name in before}
+        if restored != before or holder.RUN_DIR != was_held:
+            found.append(f"the redirect left {restored} and {holder.RUN_DIR} behind, "
+                         f"against the {before} and {was_held} it was handed")
+
+        # Restored out of a body that RAISES, which is the case that matters: a
+        # claim dying mid run must not leave the module pointing somewhere else
+        # for whatever runs after it in the same process. A bare yield with no
+        # try/finally around it passes every assertion above and fails this one.
+        try:
+            with redirect(module):
+                raise RuntimeError("a suite module raising with the sandbox held")
+        except RuntimeError:
+            pass
+        if module.RUN_DIR != before["RUN_DIR"]:
+            found.append(f"a raising body left the module holding {module.RUN_DIR}, "
+                         "so the next thing to run in this process reads a "
+                         "directory it did not choose")
+        return found
+
+    with conftest_activate():
+        if config.RUNS_DIR == conftest.REAL_RUNS:
+            failures.append("the sandbox did not move config.RUNS_DIR, so nothing "
+                            "below can tell a rebased path from an unmoved one")
+            return
+        # The root case, where relative_to gives Path("."). Joining that onto
+        # the sandbox gives <sandbox>/runs/. rather than <sandbox>/runs, which
+        # is a path that compares unequal to every path built from config.
+        root = conftest._rebase(conftest.REAL_RUNS)
+        if root != config.RUNS_DIR:
+            failures.append(f"_rebase of the runs root gave {root}, expected "
+                            f"{config.RUNS_DIR} exactly")
+        for outside in (config.PROJECT_ROOT / "doc",
+                        config.PROJECT_ROOT / "src" / "tests"):
+            if conftest._rebase(outside) is not None:
+                failures.append(f"_rebase moved {outside}, which sits under no "
+                                "writable root and must be left exactly as it is")
+        failures.extend(assertions(conftest.redirect_captured_paths))
+        neutered_found = assertions(neutered)
+        if not neutered_found:
+            failures.append("every assertion above passes with the redirect "
+                            "neutered, so they assert nothing: deleting "
+                            "redirect_captured_paths would leave this claim green "
+                            "and the hand run writing to the real runs directory")
+
+    print(f"  redirect    a captured run directory, one in a list and one on a "
+          f"class all move onto the sandbox, a doc/ and a src/ path do not, all "
+          f"are restored out of a raising body, and {len(neutered_found)} of "
+          "those assertions fail with the redirect neutered")
+
+
+# ------------------------------------- the 2026-08-20 verification: the packet
+
+def claim_an_unread_news_window_is_not_an_empty_one(failures: list[str]) -> None:
+    """A window nobody checked publishes null counts, never a measured zero.
+
+    attach_traps built trap_basis off the displayed headline list whenever
+    attach_catalysts had left no window counts behind, and a candidate whose
+    news call FAILED or was skipped for quota is exactly that candidate: its
+    headline list is empty because nobody ever filled it. So it published
+    headlines_scored 0, headlines_unscored 0 and headlines_in_window 0, which
+    is what SCSC and ASST published in runs/2026-08-20/packet.json after their
+    windows WERE read and held nothing. Every number in the two blocks matched.
+    The one line that differed said the counts came from "the displayed
+    headlines only, because no window count was recorded", which is the wording
+    for a packet rescored before those counts existed and says nothing about a
+    feed nobody asked.
+
+    That is the substitution this project forbids everywhere else. trap is
+    already null on both paths, so no verdict moved, but trap_basis is the
+    evidence the report is told to quote beside a trap and a reader auditing it
+    could not tell an unknown from a measurement.
+
+    Both routes to unknown are driven, because they arrive from different
+    places: attach_catalysts records catalyst_error when the call fails, and
+    the thin quota path writes the same fields by hand having fetched nothing.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    class FeedApi:
+        """Answers for one symbol and refuses for the other."""
+
+        def news(self, symbol, start=None, end=None):
+            if symbol == "READ.US":
+                return [], None
+            return None, "HTTP 500 from the news endpoint"
+
+    candidates = [{"symbol": "READ.US", "gap_pct": 9.0},
+                  {"symbol": "FAILED.US", "gap_pct": 9.0}]
+    # The thin quota path builds this by hand in run(): no call is made at all,
+    # so there is no error to quote and the reason is the skip itself.
+    thin = {"symbol": "THIN.US", "gap_pct": 9.0, "catalyst_found": None,
+            "catalyst_error": "news call skipped: quota preflight",
+            "headlines": []}
+
+    sink = Sink()
+    scan.attach_catalysts(FeedApi(), candidates, sink)
+    candidates.append(thin)
+    scan.attach_traps(candidates, sink)
+
+    basis = {c["symbol"]: (c.get("trap_basis") or {}) for c in candidates}
+    counted = ("headlines_in_window", "headlines_scored", "headlines_unscored",
+               "negative", "positive")
+
+    # The window that WAS read and held nothing. Zero is the right answer here
+    # and it has to stay zero, or this claim has traded one substitution for
+    # the opposite one.
+    for field in counted:
+        if basis["READ.US"].get(field) != 0:
+            failures.append(
+                f"a window the feed answered with no headlines published "
+                f"{field}={basis['READ.US'].get(field)!r}, expected a measured 0")
+    if "every headline the feed returned" not in str(basis["READ.US"].get("counted_over")):
+        failures.append("a window that was read does not say it was read: "
+                        f"{basis['READ.US'].get('counted_over')!r}")
+
+    # The two windows nobody read.
+    for symbol, reason in (("FAILED.US", "HTTP 500 from the news endpoint"),
+                           ("THIN.US", "news call skipped: quota preflight")):
+        for field in counted:
+            if basis[symbol].get(field, 0) is not None:
+                failures.append(
+                    f"{symbol} was never asked and published {field}="
+                    f"{basis[symbol].get(field)!r}, which is a claim that the "
+                    "window was counted")
+        said = str(basis[symbol].get("counted_over"))
+        if reason not in said:
+            failures.append(f"{symbol} does not carry the reason its window went "
+                            f"unread: {said!r}")
+        if "unknown" not in said:
+            failures.append(f"{symbol} does not say the counts are unknown: {said!r}")
+        # Measured either way, and it really is zero: the packet displays no
+        # headline for a name whose feed was never read.
+        if basis[symbol].get("headlines_displayed") != 0:
+            failures.append(
+                f"{symbol} reports {basis[symbol].get('headlines_displayed')!r} "
+                "displayed headlines with none on the candidate")
+
+    # The load bearing one, stated the way the defect was: the two blocks were
+    # the same bytes.
+    if json.dumps(basis["READ.US"], sort_keys=True) == json.dumps(
+            basis["FAILED.US"], sort_keys=True):
+        failures.append(
+            "a checked empty window and an unchecked one publish an identical "
+            "trap_basis, so the packet cannot say which fact it holds")
+
+    # And no verdict moved: both were null before and both are null now.
+    for symbol in ("READ.US", "FAILED.US", "THIN.US"):
+        candidate = next(c for c in candidates if c["symbol"] == symbol)
+        if candidate.get("trap") is not None:
+            failures.append(f"{symbol} came back trap={candidate.get('trap')!r}, "
+                            "and nothing about this fix may move a verdict")
+
+    print("  unread news  a news window nobody checked publishes null counts "
+          "with the reason, not the zeros of a window that was")
+
+
+def claim_the_sharing_count_names_the_set_it_was_taken_over(
+    failures: list[str]
+) -> None:
+    """The roundup denominator counts the candidates whose news call answered.
+
+    _scope_articles measures how many of this morning's candidates the feed
+    handed one article to. The numerator can only come from `fetched`, which
+    holds one entry per candidate whose news call ANSWERED; the denominator
+    published beside it was len(candidates), the whole packet. On a morning
+    that lost calls the two halves came from different populations, so three of
+    four checked names read as "3 of this morning's 7 candidates" and a wire
+    roundup looked narrower than it was. classify_catalyst quoted that same
+    ratio into the why a reader audits the class from.
+
+    Nothing about which articles are called roundups moves here and none is
+    claimed to: max_candidates_sharing_article is an absolute threshold, not a
+    fraction, so the last assertion below pins the verdicts in place.
+
+    The floor clause is the other half. With a call missing, an article the
+    feed WOULD have handed to an unchecked name cannot be seen to have been, so
+    the sharing count is a floor rather than a count. It is said out loud
+    rather than acted on: guessing the missing side would invent breadth, and
+    the cost of being wrong here is a class withheld, never a class invented.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    now = ettime.now_et()
+
+    def article(title: str, tags: list[str], link: str) -> dict[str, Any]:
+        return {"date": (now - dt.timedelta(minutes=30)).isoformat(),
+                "title": title, "link": link, "sentiment": {"polarity": 0.1},
+                "tags": list(tags), "symbols": []}
+
+    roundup = article("Biggest stock movers Thursday", ["EARNINGS", "STOCK-MOVERS"],
+                      "https://example.test/movers")
+    release = article("DAQO New Energy Non-GAAP EPADS misses",
+                      ["EARNINGS", "EARNINGS NEWS"], "https://example.test/daqo")
+
+    # Four candidates the feed answers for, three it refuses. The roundup went
+    # to three of the four that were asked, which is above
+    # max_candidates_sharing_article either way.
+    answered = {"AAA.US": [roundup], "BBB.US": [roundup], "CCC.US": [roundup],
+                "DQ.US": [release]}
+    refused = ["EEE.US", "FFF.US", "GGG.US"]
+
+    class ThinnedApi:
+        def news(self, symbol, start=None, end=None):
+            if symbol in answered:
+                return [dict(row) for row in answered[symbol]], None
+            return None, "HTTP 429 from the news endpoint"
+
+    candidates = [{"symbol": s} for s in list(answered) + refused]
+    scan.attach_catalysts(ThinnedApi(), candidates, Sink())
+
+    scopes = {}
+    for candidate in candidates:
+        for headline in candidate.get("headlines") or []:
+            scopes[candidate["symbol"]] = headline.get("article_scope") or {}
+
+    if len(scopes) != len(answered):
+        failures.append(f"only {len(scopes)} of {len(answered)} answered candidates "
+                        "carry an article scope, so the fixture proves nothing")
+        return
+
+    scope = scopes["AAA.US"]
+    if scope.get("candidates_checked") != len(answered):
+        failures.append(
+            f"the sharing count was published over "
+            f"{scope.get('candidates_checked')!r} candidates, not the "
+            f"{len(answered)} whose news call answered")
+    if scope.get("candidates_in_packet") != len(candidates):
+        failures.append(
+            f"the packet size is no longer recorded beside it: "
+            f"{scope.get('candidates_in_packet')!r}, expected {len(candidates)}")
+    if scope.get("returned_for_candidates") != 3:
+        failures.append(f"the roundup was seen on "
+                        f"{scope.get('returned_for_candidates')!r} candidates, "
+                        "not the 3 the feed returned it for")
+    why = str(scope.get("why"))
+    if f"{len(answered)} candidate(s) whose news was checked" not in why:
+        failures.append(f"the scope does not name the set it counted over: {why!r}")
+    if f"{len(refused)} candidate(s) had no news call answered" not in why:
+        failures.append(f"the scope does not say the sharing count is a floor on a "
+                        f"morning that lost calls: {why!r}")
+    if "floor" not in why:
+        failures.append(f"the scope calls a floor something other than a floor: {why!r}")
+
+    # The reason it matters: this is the sentence a reader audits the class from.
+    _, paid = scan.classify_catalyst(
+        next(c for c in candidates if c["symbol"] == "DQ.US"), set())
+    if f"of this morning's {len(answered)} candidates" not in paid:
+        failures.append(
+            f"the class DQ was paid quotes a denominator other than the "
+            f"{len(answered)} candidates the feed was asked about: {paid!r}")
+
+    # A morning where every call answered says nothing about a floor, or the
+    # clause is noise on every ordinary packet.
+    class WholeApi:
+        def news(self, symbol, start=None, end=None):
+            return [dict(row) for row in answered.get(symbol, [release])], None
+
+    whole = [{"symbol": s} for s in answered]
+    scan.attach_catalysts(WholeApi(), whole, Sink())
+    intact = ((whole[0].get("headlines") or [{}])[0].get("article_scope") or {})
+    if intact.get("candidates_checked") != intact.get("candidates_in_packet"):
+        failures.append("a morning that lost no call reports two different "
+                        f"candidate counts: {intact!r}")
+    if "floor" in str(intact.get("why")):
+        failures.append("a morning that lost no call still calls its sharing "
+                        f"count a floor: {intact.get('why')!r}")
+
+    # And the verdicts themselves, which this must not move. The threshold is
+    # absolute, so the thinned morning and the whole one agree.
+    for symbol, expected in (("AAA.US", False), ("BBB.US", False),
+                             ("CCC.US", False), ("DQ.US", True)):
+        if scopes[symbol].get("about_this_name") is not expected:
+            failures.append(
+                f"{symbol} came back about_this_name "
+                f"{scopes[symbol].get('about_this_name')!r}, expected {expected}: "
+                "the denominator is published, never applied")
+
+    print("  breadth      the roundup sharing count names the candidates whose "
+          "news was checked, and says so when it is a floor")
+
+
+# -------------------------------- the 2026-08-20 verification: the pool sources
+
+def claim_a_lost_second_bulk_call_keeps_the_first(failures: list[str]) -> None:
+    """A refusal on the earlier session does not throw the prior one away.
+
+    prior_session_movers buys two bulk end of day days and needs both to name a
+    mover, so either refusal leaves the source not_fetched and that is right.
+    The two refusals do not cost the same thing, and until now they were
+    written as though they did. When it is the SECOND call that comes back
+    empty or errored, the prior session's closes are already bought and paid
+    for, and the early return threw them out with it: the closes map went
+    unreturned, so every subscribed name reached the 08:45 scan with
+    pool_prior_close null and no close to measure a gap against, and the scan
+    spent one end of day call per name buying back a number the 07:15 pass had
+    been holding. The universe closes sidecar went unwritten too, and the
+    briefing's two session leg is c3 against c1, which does not touch the
+    session that failed at all.
+
+    So the first refusal still returns with nothing, because there is nothing,
+    and the second one carries c1 out with it. The status is not_fetched on
+    both paths, which is the only value the gaps_to_fill loop, the empty pool
+    gap and main's job_status.failed read.
+    """
+    from core import eodhd
+    from selection import discover
+
+    class _Bulk:
+        """Records the days asked for, and can answer empty or error per day."""
+
+        def __init__(self, empty_on: set[Any] = frozenset(),
+                     error_on: set[Any] = frozenset()) -> None:
+            self.empty_on = empty_on
+            self.error_on = error_on
+            self.days: list[Any] = []
+            self.closes: dict[Any, float] = {}
+
+        def eod_bulk_last_day(self, exchange="US", day=None, symbols=None,
+                              extended=False):
+            self.days.append(day)
+            if day in self.error_on:
+                return eodhd.ApiResult(None, "HTTP 503 from eod-bulk-last-day")
+            if day in self.empty_on:
+                return eodhd.ApiResult([], None)
+            return eodhd.ApiResult(
+                [{"code": "AAA", "close": self.closes.get(day, 10.0),
+                  "date": day.isoformat(), "volume": 1_000_000}], None)
+
+    with conftest_activate() as _sandbox:
+        from morning import vintage
+
+        today = ettime.today_et()
+        prior = vintage.previous_trading_session(today)
+        before = vintage.previous_trading_session(prior) if prior else None
+        third = vintage.previous_trading_session(before) if before else None
+        if prior is None or before is None or third is None:
+            failures.append("the sandbox exchange calendar could not name three "
+                            "prior sessions, so this claim cannot run at all")
+            return
+
+        sidecar = config.DATA_DIR / f"universe-closes-{today.isoformat()}.json"
+
+        def run(api: _Bulk) -> dict[str, Any]:
+            # The sandbox copies the real data/ in, and a live morning has
+            # already written today's sidecar into it. Removed first, or the
+            # assertion below reads yesterday's evidence as this run's work.
+            if sidecar.exists():
+                sidecar.unlink()
+            api.closes = {prior: 11.0, before: 10.0, third: 9.0}
+            with contextlib.redirect_stdout(io.StringIO()):
+                return discover.prior_session_movers(api, {"AAA.US"}, {}, today)
+
+        # The first call refused. Nothing is in hand, so nothing travels and
+        # the second call is not bought either.
+        first = _Bulk(empty_on={prior})
+        source = run(first)
+        if source["status"] != discover.NOT_FETCHED:
+            failures.append(f"an empty prior session payload was filed "
+                            f"{source['status']!r}, not not_fetched")
+        if source.get("closes"):
+            failures.append(f"the prior session call returned nothing and a closes "
+                            f"map was published anyway: {source.get('closes')!r}")
+        if first.days != [prior]:
+            failures.append(f"calls were made after the prior session answered with "
+                            f"nothing: {[str(d) for d in first.days]}")
+        if sidecar.exists():
+            failures.append("a closes sidecar was written from a prior session "
+                            "payload that never arrived")
+
+        # The second call refused, both ways it can be. c1 is in hand and has
+        # to come out.
+        for label, api in (("empty", _Bulk(empty_on={before})),
+                           ("errored", _Bulk(error_on={before}))):
+            source = run(api)
+            if source["status"] != discover.NOT_FETCHED:
+                failures.append(
+                    f"an {label} earlier session payload was filed "
+                    f"{source['status']!r}, not not_fetched, so nothing downstream "
+                    "sees the loss")
+            if before.isoformat() not in str(source.get("error")) and label == "empty":
+                failures.append(f"the recorded reason does not name the session that "
+                                f"came back empty: {source.get('error')!r}")
+            closes = source.get("closes") or {}
+            if (closes.get("AAA.US") or {}).get("close") != 11.0:
+                failures.append(
+                    f"the prior session close was discarded with the {label} "
+                    f"earlier session call: {closes!r}. It was bought before that "
+                    "call was made, and without it every subscribed name reaches "
+                    "the scan with pool_prior_close null.")
+            if not sidecar.exists():
+                failures.append(f"no universe closes sidecar was written after the "
+                                f"{label} earlier session call, so the briefing "
+                                "loses the two session leg as well as the one that "
+                                "failed")
+                continue
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            row = (payload.get("closes") or {}).get("AAA.US") or {}
+            if (row.get("c1"), row.get("c2"), row.get("c3")) != (11.0, None, 9.0):
+                failures.append(
+                    f"the sidecar rows read {row!r} after the {label} earlier "
+                    "session call, expected c1 11.0, c2 null and c3 9.0")
+            if payload.get("names_with_both_closes_for_leg") != {
+                    "prior_session": 0, "two_session": 1}:
+                failures.append(
+                    "the sidecar does not count the legs apart after the "
+                    f"{label} earlier session call: "
+                    f"{payload.get('names_with_both_closes_for_leg')!r}. "
+                    "two_session is c3 against c1 and does not touch the session "
+                    "that failed.")
+            if payload.get("names_with_close", {}).get("c2") != 0:
+                failures.append(
+                    f"the sidecar reports c2 closes it does not hold: "
+                    f"{payload.get('names_with_close')!r}")
+
+        # And an ordinary morning is untouched, or the separation has eaten the
+        # source it was meant to rescue.
+        whole = _Bulk()
+        source = run(whole)
+        if source["status"] != discover.FETCHED:
+            failures.append(f"a complete pair of bulk payloads came back "
+                            f"{source['status']!r}, expected fetched")
+        if (source.get("closes") or {}).get("AAA.US", {}).get("close") != 11.0:
+            failures.append("an ordinary morning lost its closes map: "
+                            f"{source.get('closes')!r}")
+
+    print("  bulk pair    a refused earlier session keeps the prior session's "
+          "closes and still writes the sidecar")
+
+
+def claim_the_watchlist_comment_matches_what_the_watchdog_does(
+    failures: list[str]
+) -> None:
+    """No module tells a reader the watchdog cannot rebuild a broken watchlist.
+
+    discover.build's note beside the atomic write ended with a sentence saying
+    the watchdog could not repair a truncated watchlist either, because it
+    declined to rerun discover once the collector window had opened. That was
+    true when it was written and stopped being true on 2026-08-20, when the
+    rerun moved off a clock comparison no value could satisfy and onto the
+    file. The comment is where a maintainer reads what the safety net does, and
+    it was describing a safety net that had been rebuilt underneath it.
+
+    Both halves are checked, because deleting the sentence is not the fix on
+    its own: the replacement has to be TRUE. The condition the watchdog turns
+    on is driven here on the exact file the comment is about, a watchlist
+    truncated mid write, with no subscription list on disk.
+
+    The walk skips src/tests/ deliberately and it is worth saying why. The same
+    retracted sentence was copied into this suite's own docstring for the
+    atomic write claim, and that file belongs to whoever is editing it; a walk
+    that included it would fail on somebody else's paragraph rather than on the
+    code. It is a real second copy and it wants the same correction.
+    """
+    import re
+    import subprocess
+
+    from ops import monitor_jobs
+    from collect import collect_premarket
+    from selection import discover
+
+    root = config.PROJECT_ROOT
+    listing = subprocess.run(["git", "--no-optional-locks", "ls-files"],
+                             cwd=str(root), capture_output=True, text=True)
+    if listing.returncode != 0:
+        failures.append("git ls-files failed, so the modules could not be walked: "
+                        f"{listing.stderr.strip()[:200]}")
+        return
+    walked = [name for name in listing.stdout.splitlines()
+              if name.startswith("src/") and name.endswith(".py")
+              and not name.startswith("src/tests/")]
+    if len(walked) < 20:
+        failures.append(f"the walk found only {len(walked)} modules, which is too "
+                        "few to be this project's source")
+        return
+
+    # Comments wrap, so the needle would never match the file as written.
+    # Whitespace and comment hashes collapse to single spaces first.
+    retracted = ("the watchdog cannot repair", "refuses to rerun discover",
+                 "cannot rerun discover", "will not rerun discover")
+    for name in walked:
+        try:
+            text = (root / name).read_bytes().decode("utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            continue
+        flat = re.sub(r"[\s#]+", " ", text).lower()
+        for needle in retracted:
+            if needle in flat:
+                failures.append(
+                    f"{name} still tells its reader {needle!r}, which the "
+                    "2026-08-20 rerun fix made false")
+
+    note = re.sub(r"[\s#]+", " ", (root / "src" / "selection" / "discover.py")
+                  .read_bytes().decode("utf-8-sig"))
+    if "_watchlist_vintage" not in note:
+        failures.append(
+            "discover.py no longer names the condition the rerun actually turns "
+            "on, so the paragraph beside the atomic write says nothing about the "
+            "safety net a maintainer is deciding against")
+
+    # The second half: the replacement sentence has to be true of the code.
+    with conftest_activate() as _sandbox:
+        day = ettime.today_str()
+        # A watchlist truncated mid write, which is the exact damage the
+        # paragraph is about: valid JSON destroyed, nothing readable left.
+        config.WATCHLIST_PATH.write_text('{"symbols": [{"sym', encoding="utf-8")
+        if not discover.load_watchlist().get("missing"):
+            failures.append("a truncated watchlist no longer reads as missing, so "
+                            "this claim is not driving the damage it describes")
+
+        stale, phrase = monitor_jobs._watchlist_vintage(day)
+        if not stale:
+            failures.append(f"the watchdog reads a truncated watchlist as usable: "
+                            f"{phrase!r}")
+        if "unreadable" not in phrase and "missing" not in phrase:
+            failures.append(f"the watchdog does not say what is wrong with the file "
+                            f"on disk: {phrase!r}")
+
+        subscriptions = collect_premarket.subscriptions_path(day)
+        if subscriptions.exists():
+            subscriptions.unlink()
+        if monitor_jobs._collector_has_subscribed(day):
+            failures.append("the watchdog thinks the collector has subscribed with "
+                            "no subscription list on disk, so the rerun it gates "
+                            "would never fire")
+
+        # And the gate closes again once something IS listening, which is the
+        # half of the paragraph that survives: a rewrite then desyncs the
+        # watchlist from what the socket was asked for.
+        subscriptions.parent.mkdir(parents=True, exist_ok=True)
+        subscriptions.write_text(json.dumps({"symbols": ["OLD.US"]}), encoding="utf-8")
+        if not monitor_jobs._collector_has_subscribed(day):
+            failures.append("a written subscription list does not close the rerun "
+                            "gate, so the watchdog would rewrite the watchlist "
+                            "under a running collector")
+
+    print("  stale note   no module claims the watchdog cannot rebuild a broken "
+          "watchlist, and the condition it does turn on is live")
+
+
+# ----------------------------------- the 2026-08-20 verification: an instrument
+
+def claim_a_partly_refused_sweep_is_reported_as_one(failures: list[str]) -> None:
+    """A run where some chunks were refused says so, bars or no bars.
+
+    The served versus refused split was added on 2026-08-20 for runs where the
+    feed answers part of a sweep and turns the rest away, and it could not
+    describe one. Every word about refusals sat under "No sweep returned a bar",
+    so the only run shaped like the thing the split was for, some chunks 403,
+    some served, bars found, took the other branch and printed best, median and
+    worst lag with no mention of a refusal anywhere in the file. Those lags and
+    the active count are readings of the part of the universe that answered.
+    Unlabelled they read as readings of all of it, which is the 2026-08-17
+    misreport with the sign flipped: there an unanswered sweep published as an
+    empty feed, here a half answered one publishes as a whole one.
+
+    The wholly refused and wholly served readings are pinned in place at the
+    end, because a fix that reached them would be undoing the finding that
+    produced them.
+    """
+    from research import probe_alpaca_live as probe
+
+    def sweep(clock: str, **extra: Any) -> dict[str, Any]:
+        record = {
+            "taken_at_et": f"2026-08-21T{clock}-04:00",
+            "window": {"start": "2026-08-21T11:00:00Z",
+                       "end": "2026-08-21T11:30:00Z"},
+            "symbols_requested": 2745,
+            "symbols_with_bars": 0,
+            "bars_total": 0,
+            "newest_bar_et": None,
+            "lag_minutes_newest": None,
+            "lag_minutes_median": None,
+            "gappers_over_3pct": 0,
+            "top_gappers": [],
+        }
+        record.update(extra)
+        return record
+
+    # One chunk refused, one served, and the served one came back full. This is
+    # the shape the split exists for.
+    with_bars = [
+        sweep("07:30:00", errors=["chunk at 2000: status 403"], requests_served=1,
+              requests_refused=1, refusal_status_codes=[403],
+              symbols_with_bars=812, bars_total=9_000,
+              newest_bar_et="2026-08-21T07:14:00-04:00",
+              lag_minutes_newest=16.0, lag_minutes_median=18.0),
+        sweep("07:35:00", errors=["chunk at 2000: status 403"], requests_served=1,
+              requests_refused=1, refusal_status_codes=[403],
+              symbols_with_bars=980, bars_total=11_000,
+              newest_bar_et="2026-08-21T07:19:00-04:00",
+              lag_minutes_newest=16.0, lag_minutes_median=17.0),
+    ]
+    # The same split with nothing served back, which already had prose and must
+    # keep it.
+    without_bars = [
+        sweep("07:30:00", errors=["chunk at 2000: status 403"], requests_served=1,
+              requests_refused=1, refusal_status_codes=[403]),
+    ]
+    # The 2026-08-17 shape: 46 requests, every one 403.
+    wholly_refused = [
+        sweep("07:30:00", errors=["chunk at 0: status 403",
+                                  "chunk at 2000: status 403"]),
+        sweep("07:35:00", errors=["chunk at 0: status 403",
+                                  "chunk at 2000: status 403"]),
+    ]
+    wholly_served = [
+        sweep("07:30:00", errors=[], requests_served=2, requests_refused=0,
+              refusal_status_codes=[]),
+    ]
+
+    with conftest_activate() as _sandbox:
+        bars_text = probe.write_table(with_bars, "2026-08-21").read_text(
+            encoding="utf-8")
+        dry_text = probe.write_table(without_bars, "2026-08-22").read_text(
+            encoding="utf-8")
+        refused_text = probe.write_table(wholly_refused, "2026-08-17").read_text(
+            encoding="utf-8")
+        served_text = probe.write_table(wholly_served, "2026-08-18").read_text(
+            encoding="utf-8")
+
+        printed = io.StringIO()
+        log = probe.log_path("2026-08-21")
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("\n".join(json.dumps(r) for r in with_bars), encoding="utf-8")
+        with contextlib.redirect_stdout(printed):
+            probe.report("2026-08-21")
+        said = printed.getvalue()
+
+    # The branch that could not be reached: bars came back and so did a 403.
+    if "PART OF THIS RUN WAS REFUSED" not in bars_text:
+        failures.append("a run with bars and refusals carries no refusal banner, so "
+                        "the columns below it read as the whole universe")
+    if "Read the refusal column first" not in bars_text:
+        failures.append("a run with bars and refusals never mentions the refusals "
+                        "beside the lag it reports")
+    if "403" not in bars_text:
+        failures.append("a run with bars and refusals does not name the status code "
+                        "the refused chunks came back with")
+    if "floors for the universe" not in bars_text:
+        failures.append("a run with bars and refusals presents its active count and "
+                        "its lag as totals rather than as floors")
+    # The measurement itself must survive: this adds a caveat, it does not
+    # delete the reading.
+    if "best 16.0 minutes" not in bars_text:
+        failures.append("the observed lag section was lost from a run that has one: "
+                        "the refusals qualify the reading, they do not remove it")
+    if "does not serve this session live" in bars_text:
+        failures.append("a partially refused run took the served empty reading, "
+                        "which is the 2026-08-17 misreport")
+
+    # The same split with nothing served back keeps the prose it had.
+    if "Read the refusal column first" not in dry_text:
+        failures.append("a partially refused run that returned no bars lost the note "
+                        "written for it")
+    if "does not serve this session live" in dry_text:
+        failures.append("a partially refused run with no bars read as a served empty "
+                        "feed")
+
+    # And neither wholly refused nor wholly served may move.
+    if "EVERY REQUEST IN EVERY SWEEP WAS REFUSED" not in refused_text:
+        failures.append("the wholly refused banner was lost, which is the "
+                        "2026-08-17 finding")
+    if "PART OF THIS RUN WAS REFUSED" in refused_text:
+        failures.append("a run where nothing was served reports as partly refused")
+    if "does not serve this session live" not in served_text:
+        failures.append("a sweep that WAS served and came back empty lost the "
+                        "reading the prose was written for")
+    if "403" in served_text or "PART OF THIS RUN WAS REFUSED" in served_text:
+        failures.append("a sweep with no refusals reported a refusal anyway")
+
+    # The terminal verdict is the other consumer, and it turns on the active
+    # count, which is exactly the number a refusal makes a floor.
+    if "part of this run was refused" not in said:
+        failures.append(f"the printed verdict for a partially refused run says "
+                        f"nothing about the refusals: {said.strip()[-300:]!r}")
+    if "the verdict rests on two numbers" in said:
+        failures.append("the printed verdict read a partially refused run as a "
+                        "measurement of the feed's contents")
+
+    print("  partial 403  a run with some chunks refused and bars from the rest "
+          "reports as partly refused, with its lag a floor")
+
+
 # ------------------------------------------------------- the 2026-08-20 review: the house rules
 
 # The character and the entity this claim hunts for, spelled so that they do
@@ -3072,7 +4635,11 @@ def claim_a_refused_sweep_is_not_an_empty_feed(failures: list[str]) -> None:
 # documents that describe it, and the answer there was the same: build the
 # needle rather than write it.
 _EM_DASH = chr(0x2014)
-_EM_DASH_ENTITY = "&" + "mdash;"
+# All three ways HTML can spell it. The named form is the one that was
+# actually in the architecture pages, but a numeric reference renders
+# identically and a guard that knows only the name would pass a page full
+# of the other two.
+_EM_DASH_ENTITIES = ("&" + "mdash;", "&" + "#8212;", "&" + "#x2014;")
 
 
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
@@ -3123,9 +4690,10 @@ def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
         for number, line in enumerate(text.splitlines(), 1):
             if _EM_DASH in line:
                 offences.append(f"{name}:{number} carries an em dash")
-            if _EM_DASH_ENTITY in line:
-                offences.append(f"{name}:{number} carries the entity, "
-                                "which renders as one")
+            for entity in _EM_DASH_ENTITIES:
+                if entity.lower() in line.lower():
+                    offences.append(f"{name}:{number} carries an em dash "
+                                    "entity, which renders as one")
 
     if offences:
         shown = "; ".join(offences[:8])
@@ -3136,14 +4704,17 @@ def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     # The needles have to be the real ones, or this is a walk over nothing that
     # passes because it can never match. This file is itself in the walk, so a
     # literal here would fail the claim: that is the point of building them.
-    if _EM_DASH != "\N{EM DASH}" or _EM_DASH_ENTITY != "&mdash" + ";":
-        failures.append("the needles are not an em dash and its entity, so the "
-                        "walk above cannot detect either")
+    if _EM_DASH != "\N{EM DASH}" or len(_EM_DASH_ENTITIES) != 3:
+        failures.append("the needles are not an em dash and its three entity "
+                        "spellings, so the walk above cannot detect them")
+    for entity in _EM_DASH_ENTITIES:
+        if not entity.startswith("&") or not entity.endswith(";"):
+            failures.append(f"{entity!r} is not an HTML entity")
     if len(_EM_DASH) != 1 or ord(_EM_DASH) != 8212:
         failures.append(f"the em dash needle is {_EM_DASH!r}, not U+2014")
 
-    print(f"  house rule  no em dash and no entity spelling anywhere in "
-          f"{len(tracked)} tracked files")
+    print(f"  house rule  no em dash and none of its three entity spellings "
+          f"anywhere in {len(tracked)} tracked files")
 
 
 # ---------------------------------------------------------------- plumbing
@@ -3200,6 +4771,19 @@ def main() -> int:
     claim_an_unparsable_verification_is_not_a_measurement(failures)
     claim_ensure_dirs_follows_a_redirected_config(failures)
     claim_a_refused_sweep_is_not_an_empty_feed(failures)
+    claim_the_volume_check_puts_no_roster_in_the_packet(failures)
+    claim_a_finish_marker_outranks_a_fresh_log(failures)
+    claim_a_hold_needs_a_pass_that_can_act(failures)
+    claim_the_last_pass_counts_what_it_cannot_resolve(failures)
+    claim_the_long_leg_checks_the_units_it_writes(failures)
+    claim_the_buckets_say_what_they_sum_to(failures)
+    claim_a_matching_collector_is_not_called_a_disagreement(failures)
+    claim_the_hand_run_redirect_moves_a_captured_run_directory(failures)
+    claim_an_unread_news_window_is_not_an_empty_one(failures)
+    claim_the_sharing_count_names_the_set_it_was_taken_over(failures)
+    claim_a_lost_second_bulk_call_keeps_the_first(failures)
+    claim_the_watchlist_comment_matches_what_the_watchdog_does(failures)
+    claim_a_partly_refused_sweep_is_reported_as_one(failures)
     claim_no_em_dash_survives_anywhere(failures)
 
     if failures:

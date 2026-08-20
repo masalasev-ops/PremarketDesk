@@ -14,10 +14,16 @@ every number was internally consistent and a session old. A price with no
 clock beside it cannot be checked by eye.
 
 When the table looks sane on a live morning, the human deletes the marker and
-the next morning goes out. Nothing in the code ever deletes it, and nothing
-recreates it on its own either: the marker is created exactly once at install
-time and by the explicit --arm flag, because a marker that quietly respawned
-after the human removed it would overrule a decision that belongs to them.
+the next morning goes out. Nothing here deletes it except --arm, which removes
+it only to write it straight back, and nothing recreates it on a healthy
+morning, because a marker that quietly respawned after the human removed it
+would overrule a decision that belongs to them.
+
+There is exactly one automatic writer, and it is not a respawn. vintage.enforce
+rewrites this marker, naming the rows that failed, when a packet's own
+timestamps say the data is not today's, and the body it writes says it was
+rewritten automatically. That is the gate doing its job rather than undoing the
+human's.
 """
 
 from __future__ import annotations

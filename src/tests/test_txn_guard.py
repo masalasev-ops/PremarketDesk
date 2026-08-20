@@ -1,6 +1,7 @@
 """Regression test for the no-transaction-across-a-network-call guard.
 
-Run directly: `python src\\test_txn_guard.py`, exit 0 on pass. Makes no real
+Run directly: `python -m tests.test_txn_guard` with PYTHONPATH set to src/,
+exit 0 on pass. Makes no real
 network calls: the session is stubbed to fail immediately, which is enough
 because the guard runs before the request is issued.
 

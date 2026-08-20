@@ -21,8 +21,9 @@ carries a quota gate. Prices are in CRITERIA.md [quota costs], measured.
       148    2,942  delayed quotes in batches of twenty, billed PER SYMBOL, only
                     for names that already cleared price, liquidity and history,
                     purely to attach market cap
+        1        0  the account meter read, free at [quota costs] user : 0
       ---    -----
-      171    4,945  measured on the 2026-08-17 rebuild
+      172    4,945  measured on the 2026-08-17 rebuild
 
 So the largest job in this project reports 172 http calls and takes five
 percent of a shared daily hundred thousand. Sizing anything off the call count

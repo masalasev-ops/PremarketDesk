@@ -20,7 +20,9 @@ missing, incomplete or broken, reaching the reader as nothing at all.
      only understate as a ratio that came out low.
 
 Claim 6 is the drift guard for the two sentences the template asked for and
-the packet contradicted.
+the packet contradicted. A seventh claim, added later, pins the replayed
+opening print: an out of window trade is written to the bar file tagged rather
+than dropped, and is never totalled into the morning's own minutes.
 """
 
 from __future__ import annotations

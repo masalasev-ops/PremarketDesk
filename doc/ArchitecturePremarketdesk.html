@@ -225,22 +225,28 @@ tbody tr:hover{background:var(--ground)}
   07:00 is exactly where a sibling project draining the shared key would hide.
   The schedule is the architecture.</p>
   <div class="meta">
-    <span>56 components</span><span>7 job scripts, 9 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
+    <span>58 components</span><span>7 job scripts, 9 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
   </div>
   <p class="sub" style="margin-top:18px;border-left:3px solid var(--accent);padding-left:14px">
   <b>Standing state, 2026-08-20.</b> Everything below describes a machine that runs, and has run every
   weekday since 2026-08-13. Four facts qualify it and none are visible from the figures.
   <b>No email has ever been sent</b>: data/UNVERIFIED is still on disk and C19 refuses every morning.
-  <b>The picks table is empty</b>: all 51 rows were exported to data/purged-picks-2026-08-19.jsonl and
-  deleted on 2026-08-19 because collector premarket volume, which feeds pm_rvol and
-  pm_float_rotation, is under investigation, so section 08 below describes the design rather than the
-  database and the long goal is at zero. <b>Collector volume is the open question</b>: one session over
+  <b>The picks table holds one morning</b>: the 51 rows on it before today were exported to
+  data/purged-picks-2026-08-19.jsonl and deleted on 2026-08-19 because collector premarket volume,
+  which feeds pm_rvol and pm_float_rotation, is under investigation. The purge did not stop the scan
+  writing, and the 08:45 pass on 2026-08-20 wrote twelve rows, so section 08 below has its first
+  column and nothing else: backfilled_at is null on all twelve and no outcome has been filled, which
+  is to say the long goal is still at zero. <b>Collector volume is the open question</b>: one session over
   reporting by 3.8x, two under reporting by about 10x, replay measured and too small to be either;
   doc/research/COLLECTOR_VOLUME.md is the diagnosis. C20's definitive verification had stopped
   running when picks was emptied, because it sat behind that table's early return; it was decoupled
-  on 2026-08-20, runs first now, and sweeps sessions that were collected and never measured, so
-  2026-08-19 gets its reading on the next nightly. <b>The quantifier guard is in warn mode</b> and has not fired on a live
-  morning; C57 does not exist yet.</p>
+  on 2026-08-20, runs first now, and sweeps sessions that were collected and never measured. The
+  07:00 catch-up took 2026-08-19's reading that same morning, 0 of 73 symbols within one percent at
+  a median absolute difference of 90.0 percent, and the 08:45 packet read it straight back out of
+  runs/2026-08-19/verify_intraday.json. <b>The quantifier guard is in warn mode</b> and fired on its first live
+  morning on 2026-08-20: one flag at 08:49, quantifier "no" over the word watchlist, outcome warned,
+  the narrative delivered anyway. C57 exists now and that flag carries no disposition, which is the
+  third of the three things CRITERIA.md wants true before the guard can read enforcing.</p>
 </header>
 
 <nav class="toc">
@@ -266,7 +272,7 @@ tbody tr:hover{background:var(--ground)}
   <h3>What this is for</h3>
   <p class="lede">PremarketDesk has two goals that live on different timescales, and most of the
   confusion about it comes from reading one and expecting the other.</p>
-  <p><strong>The daily goal is orientation before the bell.</strong> At 08:53 an email arrives naming
+  <p><strong>The daily goal is orientation before the bell.</strong> Between 08:46 and 08:49 an email arrives naming
   the stocks that gapped overnight, the headline behind each one, whether the premarket volume behind
   the move is unusual for that ticker or ordinary, and where price sits against the prior high, the
   premarket high, and the 200-day average. It replaces the hour most people spend scanning between
@@ -311,8 +317,8 @@ tbody tr:hover{background:var(--ground)}
       <div class="c conf">
         <h5>Rebuild the discovery population</h5>
         <p>Pulls the NYSE and NASDAQ symbol lists, keeps common stock only, and admits roughly 2,750
-        names on price, dollar volume, market cap, and history, 2,754 on the current file, built
-        2026-08-16. The whole week screens against it.
+        names on price, dollar volume, market cap, and history, 2,754 on the current file, stamped
+        2026-08-17T00:50 ET by the hand run that first carried the funnel and the gates. The whole week screens against it.
         A second step then measures gap propensity over 250 sessions and 20 day ATR for every
         admitted name, one end of day call each, so about 2,750 calls and seven minutes. It rides
         this schedule because every 07:15 pass of the coming week orders its pool within tier by
@@ -376,7 +382,7 @@ tbody tr:hover{background:var(--ground)}
         <div class="ids">C05 fires C17 &rarr; reads C24, C25, C29</div>
       </div>
 
-      <div class="t"><b>08:53</b>ET</div>
+      <div class="t"><b>08:46</b>to 08:49</div>
       <div class="c morn">
         <h5>Render, send, and rebuild the archive</h5>
         <p>Markdown to a single HTML file, then out by email. While the unverified marker file exists,
@@ -473,9 +479,9 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
       <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
-      <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:53</td><td>C32</td><td>C32</td></tr>
-      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay morn">Morning</span></td><td>08:53, and by hand</td><td>C29, C31, C32</td><td>Console</td></tr>
-      <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:53</td><td>C32, C33, C38</td><td>C34</td></tr>
+      <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, when C17 returns</td><td>C32</td><td>C32</td></tr>
+      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, and by hand</td><td>C29, C31, C32, C33</td><td>Console, C33 under --arm</td></tr>
+      <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49</td><td>C32, C33, C38</td><td>C34</td></tr>
 
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
@@ -526,7 +532,7 @@ tbody tr:hover{background:var(--ground)}
 
   <figure>
     <div class="relay">
-      <div class="box conf"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 20:00. Common stock only, ~2,700 names.</span></div>
+      <div class="box morn"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 21:00. Common stock only, 2,754 names.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">07:15. Four priors unioned, ranked by tier then gap propensity, 42 subscribed with 4 slots floored per tier.</span></div>
       <div class="ar">&rarr;</div>
@@ -546,11 +552,11 @@ tbody tr:hover{background:var(--ground)}
     <div class="relay" style="margin-top:18px">
       <div class="box morn"><span class="cid">C17</span><span class="nm">analyst.py</span><span class="dt">08:46. Claude CLI writes the prose only.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C18</span><span class="nm">render_report.py</span><span class="dt">08:53. Markdown to one HTML file.</span></div>
+      <div class="box morn"><span class="cid">C18</span><span class="nm">render_report.py</span><span class="dt">08:46-08:49. Markdown to one HTML file.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C19</span><span class="nm">deliver.py</span><span class="dt">08:53. Blocked while C33 exists.</span></div>
+      <div class="box morn"><span class="cid">C19</span><span class="nm">deliver.py</span><span class="dt">08:46-08:49. Blocked while C33 exists.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box ext"><span class="cid">C38</span><span class="nm">Resend</span><span class="dt">Inbox, 08:53.</span></div>
+      <div class="box ext"><span class="cid">C38</span><span class="nm">Resend</span><span class="dt">Inbox, 08:46 to 08:49.</span></div>
 
       <div class="box store"><span class="cid">C32</span><span class="nm">report.md</span></div>
       <div class="ar"></div>
@@ -575,12 +581,16 @@ tbody tr:hover{background:var(--ground)}
   decision is made. Eight ordered steps, no model involved in any of them, and between the seventh
   step and the eighth an assertion that can end the run outright. After every price and prior close
   is attached and before any eligibility flag or score is computed, <code>vintage.py</code> checks
-  four things: that every priced candidate's <code>price_time</code> is dated today and falls inside
+  five things: that every priced candidate's <code>price_time</code> is dated today and falls inside
   the 04:00 to 09:30 premarket window, that no <code>prior_high</code> sits below its own
   <code>prior_close</code> (two fields read from one OHLC bar cannot do that), that the prior close
   is dated to the prior trading session per the exchange calendar rather than merely to some earlier
   date, and that every market snapshot row is either dated today or labelled
-  <code>prior_session_only</code> and dated to that session. A violation rewrites
+  <code>prior_session_only</code> and dated to that session, and that every notable movers row is
+  stamped with the session its own leg declares. That last check asks a different question from the
+  other four, because that section mixes a premarket leg with completed session legs on purpose, and
+  it has nothing to read yet: the notable movers section is specified in BUILD_PLAN.md and not built,
+  no packet carries a <code>notable_movers</code> key, and the check passes vacuously. A violation rewrites
   <code>data/UNVERIFIED</code> naming each failing row and the check that caught it, and the scan
   exits non-zero, so nothing is stamped, no packet is written, and the morning chain stops before the
   analyst call. There is deliberately no degrade path: a stale price is not thin evidence a report
@@ -589,9 +599,9 @@ tbody tr:hover{background:var(--ground)}
   <figure>
     <ol class="steps">
       <li><b>Market snapshot</b><span>The index, volatility, rates, oil, and dollar tickers, last price and change against prior close. Context for the narrative, never an input to eligibility.</span></li>
+      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else, and so is the price every later step measures against. Membership is the subscribed list, so a name that first gaps after 07:20 is never a candidate at all. A subscribed name the collector recorded nothing for has no price either, and the only substitute on offer is a vendor field that at 08:45 still describes the last completed session, so it leaves the candidate list entirely and is named with its reason in <code>dropped_no_coverage</code>, rather than being published at a stale price or carried as a row of nulls. A second cut follows it. A name whose last collector print is older than <code>max_price_age_seconds</code> = 900 at the scan clock sits inside today's premarket window, so the vintage check passes it, but it is not this morning's price, and it leaves for <code>dropped_stale_price</code> carrying its age. On 2026-08-20 that removed ATAT at 4,087 seconds and EQNR at 1,627.</span></li>
       <li><b>Final candidates</b><span>The names discover subscribed the collector to at 07:20, with no bulk call made here: a name first found at 08:45 has no premarket tape and could not be priced at all. Ranking is by the gap actually measured from the collector's own last bar, keeping the top 12. The size of the pool those names were drawn from, and how many of it were subscribed, is recorded. The pool tier that put each name in front of the collector is carried as a recorded field and never as an ordering, so a prior about who might move cannot reach the report looking like a finding.</span></li>
       <li><b>Per-candidate enrichment</b><span>Runs after the ranking rather than before it, so the vendor calls land on names that already survived the cut. Extended-hours volume and its timestamp, market cap, float, average volume, and the 200-day average from the delayed quote. Prior session close, prior session high, that session's date, and 20-day average volume from one end-of-day record: close and high are read out of the same daily bar, because when they came from separate places, one from the bulk feed's previousClose and one from end-of-day history, they silently drifted a session apart. On 2026-08-14 six candidates carried a prior high below their own prior close, which cannot happen inside one OHLC bar, and the <code>require_above_prior_high</code> gate could never pass. Aligned by construction, that whole class of error is unreachable rather than merely unlikely. Two things break the order. A subscribed name that reached the scan with no prior close from the pool buys one end-of-day call before the ranking, since otherwise it is unrankable. And under a quota-thinned run the quote, history, and news calls are skipped altogether, so these fields are null for quota reasons rather than vendor ones.</span></li>
-      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else. Membership is the subscribed list, so a name that first gaps after 07:20 is never a candidate at all. A subscribed name the collector recorded nothing for has no price either, because the price is read from those same bars, and the only substitute on offer is a vendor field that at 08:45 still describes the last completed session. So it leaves the candidate list entirely and is named with its reason in <code>dropped_no_coverage</code>, rather than being published at a stale price or carried as a row of nulls.</span></li>
       <li><b>Premarket relative volume</b><span>The collector's premarket volume divided by the cached median for the same clock cutoff. Never the quote's extended-hours volume, which describes the previous extended session until the vendor rolls it (measured on 2026-08-14 as after 08:45 and before 08:56, where at 08:45 it gave ARX 20,744,130 shares against a premarket median of 23.5, an RVOL of 882,728), and never full-day relative volume. Fewer than ten baseline sessions, a median below the 1,000 share floor, or a missing collector file produces null plus a written reason. The numerator covers 07:20 onward while the denominator accumulates from 04:00, so the ratio is a lower bound, a direction that can only withhold a candidate from a screen and never smuggle one in.</span></li>
       <li><b>Catalyst</b><span>Vendor news filtered by symbol tag over 24 hours, top three with headline, publisher, link, time, and sentiment. No keyword matching and no company-name regex, because the feed is already tagged. No tagged story means <code>catalyst_found</code> false.</span></li>
       <li><b>Calendar</b><span>High-importance US economic events for today and tomorrow, and earnings for the candidates plus notable names reporting tomorrow.</span></li>
@@ -644,24 +654,27 @@ tbody tr:hover{background:var(--ground)}
     back refused, <code>analyst.py</code> writes the packet out itself as plain tables stamped with
     the reason, so a report always goes out.</p>
 
-    <figcaption><b>One model call per weekday.</b> The two runs on disk measure the prompt at about
-    25,200 tokens (25,202 written to cache on 2026-08-14, 25,381 read back on 2026-08-13) and the
-    report at 7,697 and 5,173 output tokens,
+    <figcaption><b>One model call per weekday.</b> The six runs on disk measure the prompt
+    growing with the packet, from 25,202 tokens written to cache on 2026-08-14 to 60,374 on
+    2026-08-20, and the report from 5,173 to 20,188 output tokens,
     against the existing Claude subscription rather than a metered API key. Token counts are written to
     <code>runs/&lt;date&gt;/analyst_usage.json</code> so the real cost is measured rather than assumed.
     <br><br>
-    <b>What four scheduled mornings then measured.</b> 89.1s and 7,697 output tokens on 2026-08-14,
-    48.4s and 4,000 on 08-17, 98.5s and 8,954 on 08-18, 178.9s and 16,005 on 08-19, at $0.47, $0.26,
-    $0.72 and $0.92. All four came back status ok with no fallback and no quantifier flag. Measured
-    on the job trail rather than the CLI, the analyst STEP took 54.4, 107.5 and 185.3 seconds across
-    the three mornings it covers, against 19.0, 20.6 and 19.1 seconds for everything else in the
-    chain put together. The 293 second timeout had been set at three times the slowest of five dry
+    <b>What five scheduled mornings then measured.</b> 89.1s and 7,697 output tokens on 2026-08-14,
+    48.4s and 4,000 on 08-17, 98.5s and 8,954 on 08-18, 178.9s and 16,005 on 08-19, 226.1s and
+    20,188 on 08-20, at $0.47, $0.26, $0.72, $0.92 and $1.05. All five came back status ok with no
+    fallback; the last one raised the first live quantifier flag. Measured
+    on the job trail rather than the CLI, the analyst STEP took 54.4, 107.5, 185.3 and 231.7 seconds
+    across the four mornings it covers, against 16.6, 20.6, 19.4 and 22.3 seconds for everything else
+    in the chain put together. The 293 second timeout had been set at three times the slowest of five dry
     runs, which the schedule overtook: against the slowest real morning it was 1.6 times. It was
     re-derived to 537 on 2026-08-20, on the same rule against the slowest morning on record, so two
     exhausted attempts now end at 09:03 rather than 08:55 and both still clear the open and the
-    watchdog's 09:25 pass. What the raise does not explain is why the step is close to doubling
-    every session, or why one morning produced double the previous high in output tokens against a
-    template whose nine sections did not change.</figcaption>
+    watchdog's 09:25 pass. What the raise does not explain is why the step grew 54.4, 107.5, 185.3, 231.7
+    across four mornings, or why output tokens went 7,697, 4,000, 8,954, 16,005, 20,188 against a
+    template whose nine sections did not change. The growth slowed on the fourth point rather than
+    doubling again, and the rule the number rests on has already moved under it: 537 is three times
+    2026-08-19's 178.9 seconds and 2.4 times 2026-08-20's 226.1, which is the next re-derivation due.</figcaption>
   </figure>
 </section>
 
@@ -721,10 +734,12 @@ tbody tr:hover{background:var(--ground)}
   the morning path no longer calls it: it serves the last completed session, so ranking by it ranked
   yesterday's movers. It survives only inside <code>measure_bulk_cost.py</code>, and
   <code>test_pool.py</code> fails if <code>discover.py</code> names it again. What the morning buys
-  instead is two end of day bulk calls, both in discover at 07:15, the prior session and the one
-  before it so the move is read close to close, measured at 98 counted calls each, about 196 counted
-  calls a morning. The nightly recall pass buys two more of the same call at 22:15 and the weekly
-  universe rebuild buys twenty, one per lookback session. At 98 each, every one of them sits far
+  instead is three end of day bulk calls, all in discover at 07:15: the prior session and the one
+  before it so the move is read close to close, and a third for the universe closes sidecar, which
+  the report's notable movers section needs at the same vintage as the other two. The 07:15 pass
+  moved the meter by 306 on 2026-08-20 against three bulk calls, so about 100 a call. The nightly
+  recall pass buys two more of the same call at 22:15 and the weekly universe rebuild buys twenty,
+  one per lookback session. At about 100 each, every one of them sits far
   below the 1,000 per call <code>bulk_redesign_line</code> in <code>CRITERIA.md</code> at which bulk
   calls would dominate the account, so the conclusion this measurement settled holds for the
   endpoint that replaced it. The same session recorded why the meter must be read
@@ -807,9 +822,11 @@ tbody tr:hover{background:var(--ground)}
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two columns were added on
   2026-08-20 for stores the page had never carried: the published archive (C54), whose single writer
   is build_archive at the end of both the morning chain and the nightly, and the job trail (C56),
-  which every scheduled step appends one line to as it exits. One store is not columned
-  here because nothing in the morning path writes it: the gap_stats table (C41) is written weekly by
-  C40 and read at 07:15 by C13.</p>
+  which every scheduled step appends one line to as it exits. Three stores are not columned
+  here. The gap_stats table (C41) is written weekly by C40 and read at 07:15 by C13, so nothing in
+  the morning path touches it. The quantifier flag log (C57) is written by the analyst's guard and
+  judged by hand through C55. And the exchange calendar cache (C58) is read by C50 as the first step
+  of every weekday job and rewritten only by the nightly's refresh pass.</p>
 
   <div class="tw">
   <table class="mx">
@@ -833,7 +850,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C53</td><td class="nm">build_archive.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="w">W</td><td class="w">W</td><td class="w">W</td></tr>
       <tr><td class="id">C50</td><td class="nm">market_today.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
-      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="rw">RW</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
     </tbody>
   </table>
   </div>
@@ -876,7 +893,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
       <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. On 2026-08-14 the chain exited zero at every step and published a report describing the previous session, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>
       <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 537 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
-      <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:53</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
+      <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46-08:49</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
       <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
       <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date, and the volume verification for it.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals. The volume check self-heals on a different query, because it has to: it asks which COLLECTED sessions were never measured rather than which picks rows lack a column, so it still runs when the table is empty. Until 2026-08-20 it sat behind the picks early return and did not.</td><td>Already sent</td></tr>
       <tr><td class="nm">C21 fill_outcomes<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Outcome columns.</td><td>Same. It scans for unfilled rows past the one and five session marks, so it catches up on its own.</td><td>Already sent</td></tr>
@@ -969,16 +986,20 @@ tbody tr:hover{background:var(--ground)}
 
     <dt>doc\</dt>
     <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md (nine fixed sections), BUILD_PLAN.md,
-    CHANGELOG.md, DECISIONS.md, ALPACA_PROBE.md, this page, the day run arc page beside it, and
-    <b>research\</b> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md and
-    TEMPLATE_DERIVATIONS.md
+    CHANGELOG.md, DECISIONS.md, ALPACA_PROBE.md, sample_report.html, this page, the day run arc page
+    beside it, and <b>research\</b> holding the written up studies: COLLECTOR_VOLUME.md,
+    VWAP_GAPPERS.md and TEMPLATE_DERIVATIONS.md, beside the two tracked float rotation study payloads
+    DECISIONS.md cites
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
     <dt>tasks\</dt>
-    <dd>the seven job batch files, register_tasks.ps1, and scheduling notes. Three more .bat files
-    sit here and are deliberately absent from register_tasks.ps1: job_probe_alpaca_live,
-    job_probe_live_v1 and job_probe_socket_cap, research probes registered by hand and now dormant.
-    They survive <code>register_tasks.ps1 -Unregister</code>, which only knows the nine
+    <dd>the seven job batch files, register_tasks.ps1, and scheduling notes. One more .bat file
+    sits here and is deliberately absent from register_tasks.ps1: job_probe_socket_cap, the
+    instrument for the open collector volume question, with no task registered for it today. It
+    survives <code>register_tasks.ps1 -Unregister</code>, which only knows the nine, so removing it
+    is a manual step. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
+    2026-08-20, once both questions were answered and recorded in DECISIONS.md; the modules they
+    wrapped stay in the research package
     <span style="color:var(--ink-3)">(C02-C06, C46, C48)</span></dd>
 
     <dt>data\</dt>
@@ -1004,7 +1025,7 @@ tbody tr:hover{background:var(--ground)}
 
     <dt>logs\</dt>
     <dd>one dated log per job per day, plus meter-&lt;date&gt;.log and meter-sampler.log from the
-    sampler, which is the only writer under logs\ that is not a scheduled step
+    sampler and the dated probe logs, which are the writers under logs\ that are not scheduled steps
     <span style="color:var(--ink-3)">(C34)</span></dd>
   </dl>
 </section>

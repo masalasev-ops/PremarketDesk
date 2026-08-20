@@ -87,12 +87,16 @@ records null RVOL with the reason when the cache is cold.
 The redesign line is the cost of one bulk call at which the day's bulk calls
 would dominate the shared account and force a design change. Nothing in the
 pipeline calls the bulk live endpoint any more, so the day's bulk calls are all
-end of day: two at 07:15 for discover's prior session movers source, and two at
-22:15 for the nightly pool recall, at a measured 100 credits each
+end of day: three at 07:15, two for discover's prior session movers source and
+one for the universe closes sidecar discover writes for the notable movers
+section, and two at 22:15 for the nightly pool recall, at a measured 100
+credits each
 [corrected 2026-08-17: was "98 counted calls each, about 392 a day". The
 ledger counts calls and the meter bills credits, and the meter says a flat
-100, reconciled exactly on two universe rebuilds], about 400 a day against a
-shared 100,000. The weekly universe rebuild buys
+100, reconciled exactly on two universe rebuilds], about 500 a day against a
+shared 100,000. [corrected 2026-08-20: was "two at 07:15" and "about 400 a
+day". write_universe_closes has bought a third bulk day since 2026-08-18 and
+every discover log since counts three eod-bulk-last-day calls.] The weekly universe rebuild buys
 lookback_sessions more of the same call in one Sunday run.
 measure_bulk_cost.py still judges its verdict against this number using the
 bulk live endpoint, because that is the call whose price would force the
@@ -137,7 +141,7 @@ be set twenty eight times too low.
 
 MEASURED, not seeded, and the arithmetic closes exactly on two independent
 runs. On the 00:06:53 rebuild, 2 symbol lists + 1 eod + 20 bulk days + 2,942
-staged names priced by this table gives 2 + 1 + 2,000 + 2,942 = 4,945, which is
+staged names priced by this table gives 2 + 1 + 2,000 + 2,942, or 4,945, which is
 the delta between the entry and exit readings in logs/meter-2026-08-17.log. The
 20:30:01 run of the evening before staged 2,941 and read 4,944 at its exit. The
 two runs also pin the user endpoint at zero: there is no slack in either sum for
@@ -155,6 +159,13 @@ cost = exchange-symbol-list : 1
 cost = user : 0
 
 ## Notable
+
+NOT BUILT YET, so this section is a specification and not a description.
+BUILD_PLAN.md Layer 4 holds the design, no report has ever carried the section,
+and list_size, min_abs_gap_pct and min_return_stdev_pct are read by no Python
+today. min_sessions_for_move_sigma is the one exception: gap_stats.py reads it
+as the floor on return_stdev_20d. Everything below says what the section will
+do, not what any morning has done.
 
 The briefing section of the report, and nothing else. These names are chosen
 for the size and unusualness of their move, not for tradeability. They are
@@ -421,8 +432,8 @@ published, which is a different question from how many go into it.
 The two are kept apart on purpose. A floor answers "is this measurable"; a
 window answers "measurable over what". Reusing one for the other is how the
 column ended up describing a different quantity from its own name, and
-BUILD_PLAN.md line 509 recorded the intended behaviour as already built the
-whole time.
+BUILD_PLAN.md, in the Layer 4 list of what is already built, recorded the
+intended behaviour as already built the whole time.
 
 What the year long version cost, since the section that reads it is not built
 yet and no report has carried it: a name that was violent for a year and has
@@ -505,6 +516,7 @@ subscription_retry_wait_s     = 60         # measured 2026-08-19: a dropped conn
 max_subscription_retries      = 4          # four waits is four minutes, against a window that is two hours long
 verify_warmup_minutes         = 25         # see the verification note below
 verify_window_minutes         = 15
+volume_check_agreement_pct    = 1.0        # SEED, not measured. How close either reading has to sit to the vendor to count as agreement. See the volume check note
 volume_check_max_age_days     = 5          # how far back the 08:45 scan will read a written verify_intraday.json. See the volume check note
 
 ### The volume check note
@@ -531,6 +543,29 @@ collected symbol, which is fifty of them, and the 08:45 window does not spend
 that. A check older than volume_check_max_age_days is reported with its age
 rather than used silently, and no check at all is itself written into the gaps
 list: an unmeasured feed is not a clean one.
+
+The check reports a DIRECTION, and it reports one only where its two readings
+say the same thing. The signed median is the typical symbol and the aggregate
+ratio is the whole tape, and doc/research/COLLECTOR_VOLUME.md records a session
+where those two point opposite ways: 2026-08-14 came back at a signed median of
+-33.77 percent beside an aggregate 3.83 times the vendor. Each reading is
+placed against volume_check_agreement_pct rather than against zero, as a
+distance from the vendor in percent, the aggregate ratio converted as
+(ratio - 1) * 100. Both inside the band is agree, both below is under, both
+above is over, and anything else is mixed with a phrase naming which reading
+fell where.
+
+Without the band there was no word for a collector that MATCHES the vendor,
+which is the outcome this measurement exists to work towards: a signed median
+of zero beside a ratio of one fell through to mixed and published as "the two
+readings disagree, the typical symbol falling on one side of the vendor and the
+aggregate tape on the other", which is false of a session where neither reading
+is on a side. 1.0 percent is a seed fitted to nothing, chosen to match the
+within one percent count this same function already reports so that the two
+readings of "close enough" in one summary are the same number. The four
+sessions measured so far sit at 90.0, 90.0, 88.4 and 71.0 percent median
+absolute disagreement, so the band has never yet been reached and nothing has
+tested it. The header of this file applies.
 
 5 days covers a long weekend plus a session the vendor published late. It is
 not independently validated and the header of this file applies.
@@ -748,7 +783,6 @@ candidate_count               = 12         # top N by the absolute gap measured 
 news_lookback_hours           = 24
 news_keep                     = 3
 economic_country              = US
-economic_importance           = high
 economic_days_ahead           = 1          # today plus this many days
 earnings_days_ahead           = 1
 run_time                      = 08:45
@@ -866,7 +900,7 @@ like the Api section above, not screen criteria.
 
 model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
-timeout_s                     = 537        # 3x the slowest MEASURED MORNING, 178.9s on 2026-08-19. See the timeout note below.
+timeout_s                     = 537        # 3x the slowest morning on record when it was set, 178.9s on 2026-08-19, and 2.4x the 226.1s of 2026-08-20 since. See the timeout note below.
                                            # [corrected 2026-08-20: was 293, "3x the slowest of five measured opus
                                            # medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds". The
                                            # rule did not change, the evidence under it did.]
@@ -888,6 +922,7 @@ five dry runs of 2026-08-14, which the schedule has overtaken.
 | 2026-08-17 | 54.4 | 48.4 | 4,000 |
 | 2026-08-18 | 107.5 | 98.5 | 8,954 |
 | 2026-08-19 | 185.3 | 178.9 | 16,005 |
+| 2026-08-20 | 231.7 | 226.1 | 20,188 |
 
 Nothing has timed out. This is not a fault being fixed, it is a threshold being
 kept faithful to the rule that defines it, and the direction is what forces it:
@@ -899,7 +934,8 @@ deterministic plain table for no reason at all. That is exactly the cost the
 
 What the new number costs, arithmetic rather than assertion. The chain starts at
 08:45:00. Everything that is not the analyst measured 19.0, 20.6 and 19.1
-seconds across the three recorded mornings: scan is 14 to 18 of it and render,
+seconds across the three mornings recorded when this was written, and 22.3 on
+2026-08-20 since: the scan step is 13.9 to 20.5 of it and render,
 verify, deliver and archive are about two seconds together. So the worst case is
 08:45:00 plus 19s plus max_attempts times timeout_s.
 
@@ -912,17 +948,26 @@ and the next is 09:25, by which time even the worst case has finished. Nothing
 downstream of the chain has a deadline between those two numbers.
 
 The output length is the thing actually worth watching. 16,005 output tokens on
-2026-08-19 is double the previous high on a template whose nine sections did not
-change. Raising the timeout buys room for that trend, it does not explain it,
-and a report that keeps doubling is its own question.
+2026-08-19 was double the previous high on a template whose nine sections did
+not change. Raising the timeout buys room for that trend, it does not explain
+it, and a report that keeps doubling is its own question. 2026-08-20 answered
+part of it: 231.7 seconds of analyst step and 20,188 output tokens, so the
+growth from 185.3 was 25 percent rather than 72 and the doubling did not
+continue. The number stays at 537 rather than moving to three times 226.1,
+because 231.7 is 43 percent of it and that is room for another session like
+this one. One session is not a trend broken, and the rule above is the one to
+reapply if the next morning is slower again.
 
 ### The prose stopword note
 
 Containment reads ticker claims out of the report's prose as well as its
 tables. Prose is ambiguous in a way a Ticker column is not: "06:37 ET" is a
 time, and ET is also Energy Transfer, so a naive reader of prose would fail
-every report ever written. Time expressions and ISO dates are stripped before
-tokens are taken, and this list removes what survives.
+every report ever written. Time expressions, ISO dates and punctuation joined
+abbreviations are stripped before tokens are taken, and this list removes what
+survives. The abbreviation pass was added on 2026-08-20, after "S&P 500 futures
+are flat" came apart into P and S, which are both real listings, so containment
+read two invented tickers and stopped the morning.
 
 A and I joined the list on 2026-08-14, when the token pattern widened from two
 characters to one so that single letter listings stop being invisible to the
@@ -1003,8 +1048,13 @@ agent loop. The CLI runs with --tools "" so there is nothing to loop on, a
 one line --system-prompt so the piped document is the entire instruction,
 and everything (prompt, template, packet) piped on stdin. num_turns is
 recorded in analyst_usage.json and must be 1. The report is produced either
-way: on any analyst failure, timeout included, analyst.py renders the plain
-table fallback straight from packet.json and the chain carries on to email.
+way: on any failure of the CLI call, timeout included, analyst.py renders the
+plain table fallback straight from packet.json and the chain carries on to
+email. The containment check is the one deliberate exception. An invented
+ticker or a missing watchlist table returns exit 2, the chain stops on the
+first non-zero code, and nothing is delivered, because a report naming a
+company the packet never saw is the failure this whole file is written
+against.
 
 ## Calendar
 
@@ -1027,7 +1077,7 @@ Every scheduled step appends one line to data/job-status.jsonl as it exits,
 written in a finally block so a step that dies still records dying. This
 exists because pool_recall raised NameError on every nightly run for a week
 and nothing said so: its exit code is ignored by design, its main caught the
-wrong exception type, and the watchdog only reads each job's final step
+wrong exception type, and the watchdog then read only each job's final step
 marker, which pool_recall does not write. An ignored exit code stays ignored
 and the chain still does not break on a diagnostic. What changed is that the
 failure now appears in the next morning's report.
@@ -1083,7 +1133,8 @@ calendar                      = 1
 
 The watchdog. It runs a few times each weekday, asks Task Scheduler whether
 each PremarketDesk job fired and what it returned, reads the job's own dated
-log for the final step marker, and reruns what is safe to rerun. Safe means
+log for the final step marker, reads the job-status record every step inside
+that job wrote, and reruns what is safe to rerun. Safe means
 idempotent: the morning chain and the nightly can always be rerun, the
 collector may only be restarted when no collector is alive (two live
 collectors would write duplicate minutes), discover is rerun whenever it did
@@ -1094,7 +1145,7 @@ rebuilt on a weekday only when the Sunday build was missed. Each job gets at mos
 max_reruns_per_job_per_day so a hard failure cannot loop.
 
 discover_due                  = 07:25      # discover plus baseline warm should be done by here
-chain_due                     = 09:00      # the 08:45 chain worst case ends about 08:53
+chain_due                     = 09:00      # a healthy chain is done by about 08:50; the worst case runs to 09:03, see the [Analyst] timeout note
 nightly_due                   = 22:45      # the 22:15 nightly is minutes long
 rerun_chain_until             = 09:30      # after the open a premarket report is history, report only
 collector_stale_after_s       = 180        # no bar file write for this long inside the window means dead
@@ -1102,6 +1153,10 @@ universe_rerun_after_days     = 8          # a fresh weekly build is 7 days old 
 max_reruns_per_job_per_day    = 1
 flag_backlog_after_days       = 7          # an unjudged quantifier flag older than this is a backlog rather than a fresh flag
 job_log_stale_after_s         = 1200       # no write to a job's dated log for this long means the job is not alive. See the liveness note below.
+pass_interval_min             = 30         # register_tasks.ps1: the monitor task repeats on this interval
+first_pass                    = 07:25      # register_tasks.ps1: the weekday monitor trigger, and what its repetition counts from
+last_pass                     = 09:25      # first_pass plus the two hour repetition duration in register_tasks.ps1
+night_pass                    = 22:45      # register_tasks.ps1: monitor-night, one firing with no repetition
 
 ### The liveness note
 
@@ -1117,7 +1172,10 @@ _job_alive now asks the same two questions of every job that _collector_alive
 already asked of the collector. Does Task Scheduler say the task is running,
 which is Status Running or Last Result 267009, the code Scheduler returns while
 a task is still going and which the watchdog used to read as a failure. And was
-the job's dated log written to inside this many seconds.
+the job's dated log written to inside this many seconds. A third question was
+added to it later the same day and is asked before the mtime one: what is the
+last step marker in that log, because a job that exited says so there. The
+correction below is why.
 
 The number has to clear the longest silence a healthy job can produce, and that
 is the analyst step: cmd writes a step marker at each boundary but nothing
@@ -1127,9 +1185,65 @@ Measured within-run gaps to compare it against: the morning chain's worst is
 232.1 seconds on 2026-08-20 and 398.4 on 2026-08-13, discover's is 33.0 and the
 nightly's is 62.0.
 
-It does not delay a rerun past its window. The monitor repeats every thirty
-minutes, which is longer than this, so a job that really died at 08:46 reads as
-alive at the 08:55 pass and as dead at 09:25, still inside rerun_chain_until.
+The first version of this note ended on a claim that is not true, kept here
+because the shape of the error is worth more than the sentence was: "It does
+not delay a rerun past its window. The monitor repeats every thirty minutes,
+which is longer than this, so a job that really died at 08:46 reads as alive at
+the 08:55 pass and as dead at 09:25, still inside rerun_chain_until." That
+inference needs a LATER pass to exist, and for the two jobs the gate guards
+there is none. register_tasks.ps1 fires the weekday monitor at first_pass and
+repeats it every pass_interval_min through last_pass, which is 07:25, 07:55,
+08:25, 08:55 and 09:25, and fires monitor-night once at night_pass. chain_due
+is 09:00, so the 08:55 pass reads NOT DUE, exactly as the [Analyst] timeout
+note already says, and the chain is judged by ONE pass inside
+[chain_due, rerun_chain_until]: 09:25. The nightly is judged by one pass too,
+monitor-night at 22:45, and nothing after it revisits that verdict. The next
+morning's 07:25 is before nightly_due and prints NOT DUE, by the following
+22:45 the dated log path has rolled, and job_status.overdue cannot surface it
+either because backfill, outcomes and pool_recall each carry a one session
+window.
+
+So the real property is narrower. A log written inside job_log_stale_after_s is
+the SAME reading for a job writing now as for a job that stopped writing up to
+twenty minutes ago, and it costs nothing only where a later pass inside the
+window reads it again. That leaves one blind band per job: a chain that dies in
+(09:05, 09:25] and a nightly that dies in (22:25, 22:45] are both twenty
+minutes fresh at their only pass, and until 2026-08-20 each printed a clean
+RUNNING with nothing counted and the pass exiting 0.
+
+Two things narrow those bands now, and neither pretends to close them on mtime.
+
+The mtime is asked LAST. Every .bat echoes a finish marker naming the step and
+its exit code once that step has returned, and exits on a non-zero one, so a
+log whose last marker is a finish belongs to a job that is over whatever its
+mtime says, and a non-zero code there is named in the report line. That covers
+every death where a step exited, which is most of them. What is left is power
+loss, a kill and a hang: no marker, a warm log, and nothing in the file that
+tells them apart from work in progress.
+
+And the pass with nobody after it stops pretending. Where the mtime is the only
+evidence and no later pass falls inside the window, the job is reported
+UNRESOLVED rather than RUNNING and counted as a problem, so the pass exits
+non-zero and the morning report names it. It is not rerun: a second chain races
+the first on packet.json and spends another claude CLI completion, and a second
+nightly duplicates the backfill. For a SCHEDULED job the path is rare, because
+Task Scheduler settles it with Status Running or 267009; the warm log is the
+only evidence for a hand run or for a rerun the watchdog launched with Popen,
+neither of which Scheduler can see. The nightly band is bounded further by the
+07:00 nightly-catchup, which runs the backfill and the outcome fill again
+regardless.
+
+The same schedule values decide whether the collector may be HELD. The hold
+waits one pass rather than starting a collector on a watchlist discover is in
+the middle of rewriting, so it is a promise that a later pass starts it. At the
+08:55 pass there is no later pass inside the collector window, because
+[Collector] stop_time is 09:25 and the branch that starts a collector tests
+now < stop_time. Held at 08:55, window over at 09:25, no collector all morning
+and its rerun budget unspent. A hold now requires a next pass inside the
+window, and past that point the collector is started on the names that are on
+disk instead: half a window of the previous session's tape is worth more than
+no tape, and scan records watchlist_generated_at, so the wrong names case stays
+visible in the packet rather than becoming a silent hole.
 
 ### The flag backlog note
 
@@ -1161,6 +1275,8 @@ embed_sessions                = 120
 ## Scan snapshot
 
 The market snapshot line, as report label to EODHD symbol. Order is preserved.
+The labels are lowercased on the way in, because pair_map lowercases every key,
+so the report table prints spy and 10y rather than SPY and 10Y.
 
 Resolution takes the collector's premarket price first and falls back to end of
 day. The end of day call is made for every label regardless, because the prior
@@ -1213,7 +1329,7 @@ runs, and 'reconstructed' reserved for any future row rebuilt after the
 fact. The writer decides at write time: the --test flag forces 'test', and
 so does a run clock outside the window, because a packet gathered at noon
 describes a different market than the one the report is about. Every query
-and every screen filters to source = 'live' and says so in its header when
+and every screen filters to source 'live' and says so in its header when
 it does not; test rows must never leak into outcome or calibration math.
 The migration on 2026-08-14 marked every earlier row 'test', which every
 one of them was.
@@ -1300,8 +1416,9 @@ breadth is what decides that. Two counts measure breadth, because neither one
 sees the whole thing, and an article has to sit inside both.
 
 The first is the tag count, and it catches a roundup even when the feed handed
-it to a single candidate: that CNBC piece carried 46 tags naming 45 issuers,
-against a maximum of 7 tags on the single company releases the same morning.
+it to a single candidate: that CNBC piece carried 46 tags, 19 of them issuer
+names covering 14 companies, against a maximum of 7 tags on the single company
+releases the same morning.
 20 sits in the empty stretch between those two figures.
 
 The second catches what the tag count cannot, a roundup tagged by TOPIC rather
@@ -1366,7 +1483,7 @@ by RVOL and never reach this section, so calibrating against them would set the
 rate for a population that never gets it.
 
 That distinction was got wrong first time and is worth stating rather than
-hiding. The first edges, `> 0.0006` and `>= 0.0003`, were matched on the
+hiding. The first edges, 0.0006 for two points and 0.0003 for one, sat on the
 overlap. The rescued names sit materially lower, at a median 0.61 of the
 overlap's on the scored population, so those edges paid two points to only
 45.87 percent of rescued names against a 53.87 percent target: the fallback
@@ -1396,8 +1513,10 @@ day they were measured. See DECISIONS.md 2026-08-17 sixth.
 **These edges are conditional on [Scan] candidate_count.** The scored
 population is the top N by gap, and rotation rises with gap size, so changing
 candidate_count changes the population these were fitted to and they must be
-re-derived. Run `research/float_rotation_study.py` and read
-`mapping_transfer.top_N_by_gap.rederived_on_rescued`.
+re-derived. Run `python -m research.float_rotation_study` with src on
+PYTHONPATH and read
+`mapping_transfer.top_<candidate_count>_by_gap.rederived_on_rescued`, which is
+`top_12_by_gap` at today's candidate_count.
 
 Read these as small numbers because the window is small: 0.0004 is four
 hundredths of one percent of the float changing hands between 07:20 and 08:45,

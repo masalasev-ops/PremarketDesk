@@ -38,6 +38,11 @@ _OUTCOME_COLUMNS = (
     ("next_day_low", "REAL"),
     ("next_day_close", "REAL"),
     ("day5_close", "REAL"),
+    # Why the fifth session was refused, on the rows where it was. A null
+    # day5_close is also how a fill that is simply not due yet looks, and until
+    # 2026-08-20 the units guard below had no way to say which of the two a
+    # given null was. See the long leg in fill().
+    ("day5_refused_reason", "TEXT"),
     ("pm_high_broke_next_day", "INTEGER"),
     ("mfe_pct", "REAL"),
     ("mae_pct", "REAL"),
@@ -115,36 +120,43 @@ def _adjustment_factor(bar: dict[str, Any] | None) -> float | None:
 
 def _price_units_broke(
     pick_bar: dict[str, Any] | None,
-    next_bar: dict[str, Any] | None,
+    later_bar: dict[str, Any] | None,
     max_drift_pct: float,
+    later_label: str,
 ) -> str | None:
-    """Why the pick date and D+1 are not in the same price units, or None.
+    """Why the pick date and a later session are not in the same units, or None.
 
-    Returns None when next_bar is missing, because the caller already refuses
+    Returns None when later_bar is missing, because the caller already refuses
     that case with a better sentence, and None when the two sides agree.
+
+    later_label names the session on the far side of the comparison, and it is
+    a parameter because this test now runs for whichever outcome leg is being
+    written rather than only for D+1. It was written for the short leg alone
+    and its sentences said "the next session" as a constant, which would have
+    named the wrong bar the moment it was pointed at D+5.
     """
-    if next_bar is None:
+    if later_bar is None:
         return None
     before = _adjustment_factor(pick_bar)
-    after = _adjustment_factor(next_bar)
+    after = _adjustment_factor(later_bar)
     if before is None:
         return ("the end of day bar for the pick date carries no readable close "
-                "and adjusted_close pair, so there is nothing to show that the "
-                "next session is priced in the same units as the morning's "
+                "and adjusted_close pair, so there is nothing to show that "
+                f"{later_label} is priced in the same units as the morning's "
                 "premarket levels")
     if after is None:
-        return ("the next session's bar carries no readable close and "
+        return (f"the bar for {later_label} carries no readable close and "
                 "adjusted_close pair, so there is nothing to show that it is "
                 "priced in the same units as the morning's premarket levels")
     drift = abs(after / before - 1.0) * 100.0
     if drift <= max_drift_pct:
         return None
     return (f"the vendor's split adjustment factor moved {drift:.4f} percent "
-            f"between the pick date and the next session, past the "
+            f"between the pick date and {later_label}, past the "
             f"{max_drift_pct:g} percent in {config.CRITERIA_PATH.name} [outcomes] "
             "max_adjustment_drift_pct, so a corporate action has its ex date in "
-            "between and the next session's high and low are not in the same "
-            "price units as entry_ref, stop_ref and pm_high")
+            f"between and the bar for {later_label} is not in the same price "
+            "units as the entry_ref, stop_ref and pm_high recorded beside it")
 
 
 def fill(day_limit: str | None = None) -> int:
@@ -163,8 +175,18 @@ def fill(day_limit: str | None = None) -> int:
         added = store.ensure_columns(connection, "picks", _OUTCOME_COLUMNS)
         # source = 'live' only: outcomes are the record the thresholds will
         # one day be calibrated against, and test rows have no business in it.
+        # A recorded day5 refusal takes the row out of the long leg's half of
+        # this condition, because what that refusal names is a corporate
+        # action's ex date and an ex date does not un-happen. Before the reason
+        # column existed the only way to refuse was to leave day5_close null,
+        # which is also what this query selects on, so a refused row came back
+        # every night for as long as the session calendar still reached it and
+        # spent one end of day call each time to be refused again. An operator
+        # who believes a refusal was wrong clears day5_refused_reason and the
+        # row is picked up on the next run.
         candidates = [dict(row) for row in connection.execute(
-            "SELECT * FROM picks WHERE (next_day_close IS NULL OR day5_close IS NULL) "
+            "SELECT * FROM picks WHERE (next_day_close IS NULL "
+            "OR (day5_close IS NULL AND day5_refused_reason IS NULL)) "
             "AND source='live' ORDER BY date, ticker"
         ).fetchall()]
 
@@ -177,7 +199,7 @@ def fill(day_limit: str | None = None) -> int:
         return 0
 
     calendar = _session_calendar(api, back_days=40)
-    filled = skipped = unavailable = 0
+    filled = skipped = unavailable = refused = 0
     now_stamp = ettime.stamp(ettime.now_et())
     writes: list[tuple[dict[str, Any], str, str]] = []
 
@@ -199,7 +221,9 @@ def fill(day_limit: str | None = None) -> int:
                 unavailable += 1
                 continue
             wants_short = pick["next_day_close"] is None and len(next_sessions) >= short_n
-            wants_long = pick["day5_close"] is None and len(next_sessions) >= long_n
+            wants_long = (pick["day5_close"] is None
+                          and pick["day5_refused_reason"] is None
+                          and len(next_sessions) >= long_n)
             if not wants_short and not wants_long:
                 skipped += 1
                 continue
@@ -212,6 +236,9 @@ def fill(day_limit: str | None = None) -> int:
                 continue
             by_date = {str(b.get("date")): b for b in bars}
 
+            # Read once here rather than inside a leg, because both legs are
+            # measured against it and each checks its own session's bar.
+            pick_bar = by_date.get(date)
             updates: dict[str, Any] = {}
             if wants_short:
                 next_bar = by_date.get(next_sessions[short_n - 1])
@@ -240,7 +267,8 @@ def fill(day_limit: str | None = None) -> int:
                 # a table meant to hold measured ones. The refusal takes the
                 # whole row, day5_close included, because an ex date sitting
                 # between the pick and D+1 also sits between the pick and D+5.
-                units = _price_units_broke(by_date.get(date), next_bar, max_drift_pct)
+                units = _price_units_broke(pick_bar, next_bar, max_drift_pct,
+                                           "the next session")
                 if units is not None:
                     print(f"outcomes: {ticker} {date} left alone: {units}")
                     unavailable += 1
@@ -287,18 +315,49 @@ def fill(day_limit: str | None = None) -> int:
 
             if wants_long:
                 day5_bar = by_date.get(next_sessions[long_n - 1])
-                # Only when it parses, for the reason above: day5_close is the
-                # other half of the candidate query, so writing a null into it
-                # re-arms the row rather than completing it.
-                if day5_bar is not None and _as_float(day5_bar.get("close")) is not None:
+
+                # The same units test as the short leg, run again against THIS
+                # leg's bar. Until 2026-08-20 it sat inside the "if wants_short"
+                # block above, so it guarded D+1 and nothing else, and on the
+                # ordinary cadence that block does not run at all on the night
+                # the long leg is written: the candidate query re-selects on
+                # next_day_close or day5_close being null, so the short leg
+                # fills on the night of D+1 and the long leg five nights later,
+                # in a run where wants_short is already False. An ex date
+                # anywhere from D+2 to D+5 therefore wrote a post action close
+                # into the same row as the pre action entry_ref, stop_ref and
+                # pm_high, silently and permanently, which is exactly the error
+                # the guard was added to refuse one session earlier.
+                units = _price_units_broke(pick_bar, day5_bar, max_drift_pct,
+                                           "the fifth session")
+                if units is not None:
+                    # Written down rather than left as a bare null. A refused
+                    # day5_close is otherwise indistinguishable from one that is
+                    # merely not due yet, and this one is never coming back with
+                    # a number, so the row says which of the two it is.
+                    updates["day5_refused_reason"] = units
+                    print(f"outcomes: {ticker} {date} day5_close refused: {units}")
+                    refused += 1
+                elif day5_bar is not None and _as_float(day5_bar.get("close")) is not None:
+                    # Only when it parses, for the reason above: day5_close is the
+                    # other half of the candidate query, so writing a null into it
+                    # re-arms the row rather than completing it.
                     updates["day5_close"] = _as_float(day5_bar.get("close"))
 
             if not updates:
                 skipped += 1
                 continue
-            updates["outcomes_filled_at"] = now_stamp
+            # outcomes_filled_at records when an OUTCOME was obtained, so a row
+            # whose only new column is a refusal reason must not move it. On the
+            # ordinary cadence such a row already carries the stamp from the
+            # night its short leg filled, and overwriting that with tonight's
+            # would make the column say the measurement was taken five sessions
+            # after it actually was.
+            measured = [column for column in updates if column != "day5_refused_reason"]
+            if measured:
+                updates["outcomes_filled_at"] = now_stamp
+                filled += 1
             writes.append((updates, date, ticker))
-            filled += 1
 
     with store.session() as connection:
         for updates, date, ticker in writes:
@@ -320,6 +379,10 @@ def fill(day_limit: str | None = None) -> int:
         job_status.produced("picks filled", filled)
         print(f"outcomes: {filled} picks filled, {skipped} not yet due, "
               f"{unavailable} had no data")
+        if refused:
+            print(f"outcomes: {refused} pick(s) had a fifth session the vendor "
+                  "reprices across, recorded in day5_refused_reason rather than "
+                  "left null, and they are not re-selected")
         print(f"outcomes: the table now holds {total_rows} live outcome rows across "
               f"{total_sessions} sessions; the sample unit is the session")
     return 0

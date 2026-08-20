@@ -12,12 +12,16 @@ recently site/ when build_archive was caught rewriting the published archive
 from inside the sandbox. It is inverted now: everything under the repository is
 guarded and the allowlist is the exception, so there is no next root to forget.
 
-  python src\\run_tests.py                        the suite, sandboxed and checked
-  python src\\run_tests.py --prove-check          write to the real runs/, to show
-                                                  the check catches it. FAILs.
-  python src\\run_tests.py --prove-check-outside  write to tasks/, which no version
-                                                  of the enumerated check ever
-                                                  watched. FAILs.
+Set PYTHONPATH to src/ first, the way every .bat does. src/ is the import root,
+so running this file by its path puts src/tests on sys.path instead and the
+`from tests import conftest` below fails before the suite starts.
+
+  python -m tests.run_tests                         the suite, sandboxed and checked
+  python -m tests.run_tests --prove-check           write to the real runs/, to show
+                                                    the check catches it. FAILs.
+  python -m tests.run_tests --prove-check-outside   write to tasks/, which no version
+                                                    of the enumerated check ever
+                                                    watched. FAILs.
 """
 
 from __future__ import annotations

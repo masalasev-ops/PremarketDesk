@@ -241,6 +241,13 @@ def prior_session_movers(
 
     This is the input the pool has always had. What changed is the label: it is
     a continuation prior about yesterday, not a reading of today.
+
+    The two calls fail differently and the refusals are separated for that
+    reason. Lose the first and there is nothing in hand. Lose the second and
+    the prior session's closes have already been bought: no mover can be named
+    without both sessions, so the status is not_fetched either way, but the
+    closes map and the sidecar the briefing reads still come out of the call
+    that succeeded rather than being thrown away with the one that did not.
     """
     prior = vintage.previous_trading_session(today)
     if prior is None:
@@ -253,6 +260,33 @@ def prior_session_movers(
 
     move_floor = _CRIT.number("discovery", "prior_session_move_pct")
     dollar_multiple = _CRIT.number("discovery", "prior_session_dollar_multiple")
+
+    # Both helpers are declared ahead of the calls because the refusal path for
+    # the second call needs them: it returns before the body below runs, and it
+    # returns carrying the first call's closes.
+    def by_symbol(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for row in rows or []:
+            code = str(row.get("code") or "").strip().upper()
+            if not code:
+                continue
+            out[code if "." in code else f"{code}.US"] = row
+        return out
+
+    def closes_from(rows_by: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        """The prior session close per universe name, out of a map already held.
+
+        The 08:45 scan needs one to rank the subscribed names by measured gap,
+        and buying it again there would be a bulk call for a number already in
+        hand. It is used for RANKING only: the published prior_close and
+        prior_high still come together out of one per name end of day record,
+        so they cannot drift a session apart.
+        """
+        return {
+            symbol: {"close": _as_float(row.get("close")), "date": row.get("date")}
+            for symbol, row in rows_by.items()
+            if symbol in universe_symbols and _as_float(row.get("close")) is not None
+        }
 
     # The test is on the DATA, not on the error, for both calls. A 200 carrying
     # an empty array is not an error, so the old guard let it through and the
@@ -280,24 +314,38 @@ def prior_session_movers(
         return _source(NOT_FETCHED, {}, error=(
             "prior session bulk: the vendor answered with no rows for "
             f"{prior.isoformat()}, a session the exchange calendar says was open"))
-    before_rows, error = api.eod_bulk_last_day("US", day=before)
-    if error:
-        return _source(NOT_FETCHED, {}, error=f"earlier session bulk failed: {error}")
-    if not before_rows:
-        return _source(NOT_FETCHED, {}, error=(
-            "earlier session bulk: the vendor answered with no rows for "
-            f"{before.isoformat()}, a session the exchange calendar says was open"))
-
-    def by_symbol(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        out: dict[str, dict[str, Any]] = {}
-        for row in rows or []:
-            code = str(row.get("code") or "").strip().upper()
-            if not code:
-                continue
-            out[code if "." in code else f"{code}.US"] = row
-        return out
 
     prior_by = by_symbol(prior_rows)
+
+    before_rows, error = api.eod_bulk_last_day("US", day=before)
+    refused: str | None = None
+    if error:
+        refused = f"earlier session bulk failed: {error}"
+    elif not before_rows:
+        refused = ("earlier session bulk: the vendor answered with no rows for "
+                   f"{before.isoformat()}, a session the exchange calendar says "
+                   "was open")
+    if refused:
+        # The two refusals cost different things and were handled as though
+        # they cost the same. A close to close move needs both sessions, so no
+        # mover can be named either way and the status stays not_fetched, which
+        # is the only value anything downstream reads. But when it is the
+        # SECOND call that fails, c1 is already bought and paid for, and
+        # returning here threw it away: the closes map went with it, so every
+        # subscribed name reached the 08:45 scan with pool_prior_close null,
+        # no close to measure a gap against, and the scan spent one end of day
+        # call per name buying back a number the 07:15 pass had been holding.
+        # The sidecar went unwritten too, and the briefing's two session leg is
+        # c3 against c1, which does not touch the session that failed at all.
+        # So the map travels and the file is still written, with c2 absent and
+        # counted as absent. The third call is bought as usual: it is the same
+        # three bulk calls an ordinary morning makes, and c3 is an older
+        # session than the one the vendor has just failed to publish.
+        write_universe_closes(api, universe_symbols, prior_by, {}, prior, before, today)
+        return _source(NOT_FETCHED, {}, error=refused,
+                       prior_session=prior.isoformat(),
+                       closes=closes_from(prior_by))
+
     before_by = by_symbol(before_rows)
 
     names: dict[str, Any] = {}
@@ -330,16 +378,10 @@ def prior_session_movers(
         }
 
     # The prior session close for every universe name, carried out of the same
-    # two calls at no extra cost. The 08:45 scan needs one to rank the
-    # subscribed names by measured gap, and buying it again there would be a
-    # third bulk call for a number already in hand. It is used for RANKING
-    # only: the published prior_close and prior_high still come together out of
-    # one per name end of day record, so they cannot drift a session apart.
-    closes = {
-        symbol: {"close": _as_float(row.get("close")), "date": row.get("date")}
-        for symbol, row in prior_by.items()
-        if symbol in universe_symbols and _as_float(row.get("close")) is not None
-    }
+    # two calls at no extra cost. See closes_from above, which the refusal path
+    # for the second call uses too, because that map is bought before that call
+    # is made and is not the second call's to lose.
+    closes = closes_from(prior_by)
 
     # The whole universe's recent closes, written to a sidecar rather than into
     # watchlist.json, which carries only the subscribed names. The report's
@@ -485,8 +527,15 @@ def write_universe_closes(
     }
     path = config.DATA_DIR / f"universe-closes-{today.isoformat()}.json"
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    # Sessions that actually carried a close, not sessions asked for. This read
+    # "3 if third_by else 2", which was true while prior_session_movers only
+    # ever called this function with two populated maps in hand. It now calls
+    # it with c2 empty when the second bulk call is refused, and the old count
+    # would have announced three completed sessions over a file whose c2 column
+    # is null on every row.
+    sessions_with_closes = sum(1 for count in present.values() if count)
     print(f"discover: wrote {len(rows)} universe closes over "
-          f"{3 if third_by else 2} completed sessions to {path.name}, for the "
+          f"{sessions_with_closes} completed session(s) to {path.name}, for the "
           "report's notable movers section only")
     return payload
 
@@ -901,10 +950,22 @@ def build(write: bool = True) -> dict[str, Any]:
         # cannot be fetched later. YESTERDAY'S watchlist would have been a
         # usable fallback: the collector applies no freshness test, and
         # subscribed_symbols is written the way it is precisely to keep an
-        # older file readable. The truncation is what destroys it. The watchdog
-        # cannot repair it either, because it refuses to rerun discover once
-        # the collector window has opened, and its first weekday firing is
-        # 07:25.
+        # older file readable. The truncation is what destroys it.
+        #
+        # Until 2026-08-20 this paragraph went on to say that the watchdog
+        # could not repair the damage either, because it declined to rerun
+        # discover once the collector window had opened. That described the
+        # code and no longer does. The rerun was gated on a clock comparison no
+        # value could satisfy, so the safety net it named never existed at all;
+        # monitor_jobs asks _watchlist_vintage instead, which reads an
+        # unparsable file as missing, and reruns discover at any hour while no
+        # subscription list has been written today. A collector that exited 1
+        # on a truncated watchlist wrote none, so the 07:25 pass rebuilds the
+        # file and holds the collector for one pass rather than starting it on
+        # the version it is replacing. The repair is real and it is still not
+        # the plan: it costs the first half hour of a window that runs 07:20 to
+        # 09:25 and cannot be collected later, so the atomic write below is
+        # what keeps the morning from needing any of it.
         universe.write_atomically(payload, config.WATCHLIST_PATH)
         print(f"discover: wrote {config.WATCHLIST_PATH}")
 

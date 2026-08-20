@@ -178,20 +178,46 @@ def _working_days(details: dict[str, Any]) -> set[str]:
     return {part.strip() for part in str(raw).split(",") if part.strip()}
 
 
-def is_trading_day(date: dt.date) -> tuple[bool, str]:
-    """(trades_today, reason). Unknowable counts as open, see the module doc.
+# The one sentence is_trading_day says when there is no holiday list to answer
+# from. A module constant because it is a signal as well as a sentence: it is
+# how trading_day_state below tells an assumption from an answer, and both
+# halves of that have to be the same string.
+CALENDAR_ASSUMED_REASON = "calendar unavailable, assuming the market is open"
 
-    This function cannot say "I do not know" and must not learn to. Every
-    scheduled .bat runs `python -m ops.market_today` first and branches on the
-    EXIT CODE alone, so an assumption is exactly what is wanted here: refusing
-    to run the morning because a cache file is missing is worse than running
-    it. A caller that needs to tell an answer from an assumption calls
-    trading_day_state below instead.
+# The one sentence trading_day_state says beside its None. A module constant
+# because a caller that wants to print WHY it stood down should quote the
+# guard rather than compose its own wording for a state the guard defines.
+CALENDAR_UNKNOWN_REASON = "there is no exchange calendar to answer from"
+
+
+def decide(details: dict[str, Any] | None,
+           date: dt.date) -> tuple[bool | None, str]:
+    """(trades_today, reason) for one date against a calendar already in hand.
+
+    The whole holiday rule, in one place, reading a details payload it is
+    handed rather than fetching one of its own. Both ways into this module
+    reach it and neither has another route to the calendar, which is what
+    makes it a seam: replacing this function, or replacing is_trading_day
+    below, replaces the answer BOTH of them give.
+
+    There was a second route until 2026-08-20, and it made a test machine
+    dependent. trading_day_state asked calendar_known() whether there was a
+    holiday list at all before delegating the date to is_trading_day, so a
+    suite that had replaced is_trading_day with a plain weekday rule still took
+    that half of the answer from whatever was on the machine's disk:
+    test_vintage's stubbed walk answered Friday 2026-08-14 on the machine the
+    stub was written on and None on a fresh clone, where data/ is gitignored
+    and the cache does not exist. A stub that cannot control the unknown is not
+    a stub of the calendar, and the claim resting on it was measuring the real
+    file rather than the rule it had installed.
+
+    A trades_today of None is that unknown, and the two entry points read it
+    differently on purpose: is_trading_day reads it as open, because a morning
+    that refuses to run over a missing cache file is worse than one that runs,
+    and trading_day_state hands it on as unknown.
     """
-    refresh_after_days = _CRIT.integer("calendar", "refresh_after_days")
-    details = get_details(refresh_after_days)
     if details is None:
-        return True, "calendar unavailable, assuming the market is open"
+        return None, CALENDAR_UNKNOWN_REASON
 
     day_name = _WEEKDAY_NAMES[date.weekday()]
     if day_name not in _working_days(details):
@@ -210,19 +236,25 @@ def is_trading_day(date: dt.date) -> tuple[bool, str]:
     return True, f"{date} is a regular trading day"
 
 
-# The one sentence trading_day_state says beside its None. A module constant
-# because a caller that wants to print WHY it stood down should quote the
-# guard rather than compose its own wording for a state the guard defines.
-CALENDAR_UNKNOWN_REASON = "there is no exchange calendar to answer from"
+def is_trading_day(date: dt.date) -> tuple[bool, str]:
+    """(trades_today, reason). Unknowable counts as open, see the module doc.
 
+    This function cannot say "I do not know" and must not learn to. Every
+    scheduled .bat runs `python -m ops.market_today` first and branches on the
+    EXIT CODE alone, so an assumption is exactly what is wanted here: refusing
+    to run the morning because a cache file is missing is worse than running
+    it. A caller that needs to tell an answer from an assumption calls
+    trading_day_state below instead, which reads the assumption back out of
+    this same call rather than asking the calendar a second question.
 
-def calendar_known() -> bool:
-    """Whether there is a holiday list at all to answer a date against.
-
-    Cheap to call in a loop: get_details answers from the in-process memo
-    after the first read, which is why the walk in vintage can ask per day.
+    Cheap to call in a loop: get_details answers from the in-process memo after
+    the first read, which is why the walk in vintage can ask per day.
     """
-    return get_details(_CRIT.integer("calendar", "refresh_after_days")) is not None
+    details = get_details(_CRIT.integer("calendar", "refresh_after_days"))
+    trades, reason = decide(details, date)
+    if trades is None:
+        return True, CALENDAR_ASSUMED_REASON
+    return trades, reason
 
 
 def trading_day_state(date: dt.date) -> tuple[bool | None, str]:
@@ -240,15 +272,22 @@ def trading_day_state(date: dt.date) -> tuple[bool | None, str]:
     over the human's note and the chain stopped before the analyst, accusing
     the vendor of stale data when the only thing missing was a holiday list.
 
-    Delegating to is_trading_day rather than repeating its body keeps the
-    calendar rules in one place, and means anything that replaces
-    is_trading_day, in a test or in a later wrapper, is still what answers
-    here. Only the "no details at all" case is decided before the delegation,
-    because that is the one case is_trading_day is unable to report.
+    Everything here comes back through is_trading_day, including the unknown.
+    That is what changed on 2026-08-20 and it is the whole point of the
+    arrangement: is_trading_day says CALENDAR_ASSUMED_REASON in exactly one
+    place and nowhere else, so that sentence IS the assumption, and this reads
+    it back. The version before this one asked calendar_known() first and
+    delegated only afterwards, which consulted the calendar twice and, the
+    half that mattered, decided the unknown OUTSIDE the function a caller can
+    replace. See decide() above for the machine dependent test that came of it.
     """
-    if not calendar_known():
+    trades, reason = is_trading_day(date)
+    if reason == CALENDAR_ASSUMED_REASON:
+        # Not a sniff at a message. That constant is returned from exactly one
+        # branch, the one with no calendar to answer from, and this is its only
+        # reader, so the two cannot drift apart the way a literal here would.
         return None, CALENDAR_UNKNOWN_REASON
-    return is_trading_day(date)
+    return trades, reason
 
 
 def main(argv: list[str] | None = None) -> int:

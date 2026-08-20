@@ -14,10 +14,18 @@ artifact is gone with nothing said. That is exactly how the 08:45 snapshot for
 2026-08-14 was destroyed on 2026-08-15, and it was only noticed because a test
 happened to read it.
 
-So every hand invokable writer routes its destination through resolve() here.
-The default spares the original and writes beside it; --overwrite is the
-explicit way to say otherwise, and even then the thing being replaced is
-described before it goes.
+So the hand invokable writers that have been through this route their
+destination through resolve() here: snapshot_bars, the nightly's
+verify_intraday.json and pool_recall's own file, which is the set
+test_entrypoints.claim_operator_tools_spare_artifacts pins. The default spares
+the original and writes beside it; --overwrite is the explicit way to say
+otherwise, and even then the thing being replaced is described before it goes.
+
+Three writers are NOT through it yet, and the gap is named rather than implied.
+analyst.write_report writes report.md and analyst_usage.json, and
+render_report.render writes report.html, each with a plain write_text into
+whatever run directory its --packet or --report argument points at, so a hand
+run against a past session still replaces that morning's narrative.
 """
 
 from __future__ import annotations

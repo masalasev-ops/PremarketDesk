@@ -341,6 +341,69 @@ def _rebase(path: Path) -> Path | None:
     return None
 
 
+# How far _rebase_value looks inside a module level container: three turns, so
+# a list of run directories, a dict of lists of them, and one more. Anything
+# deeper is a data structure rather than a captured constant, and a walk with
+# no floor under it can be handed a self referencing one and never come back.
+_CONTAINER_DEPTH = 3
+
+
+def _rebase_value(value: Any, depth: int = _CONTAINER_DEPTH) -> Any:
+    """The same value with every redirected Path inside it moved, or None.
+
+    None means nothing in it moved, which is what the caller needs in order to
+    leave an attribute alone rather than rebinding it to an equal copy.
+
+    Containers are REBUILT rather than edited in place. A module holding
+    RUN_DIRS = [RUNS_DIR / "2026-08-14"] shares that list object with anything
+    that did `from tests.test_x import RUN_DIRS`, so mutating it would reach
+    into modules this function was never asked about, and restoring it would
+    then have to unpick edits made through a second name for the same object.
+    Rebinding the attribute leaves the original list exactly as it was.
+
+    Exact types, not isinstance: a namedtuple is a tuple whose constructor
+    takes its fields positionally, and a defaultdict rebuilt as one loses its
+    factory. Rebuilding either would be a silent corruption of a value this
+    function was only asked to redirect.
+    """
+    if isinstance(value, Path):
+        return _rebase(value)
+    if depth <= 0:
+        return None
+    if type(value) in (list, tuple, set, frozenset):
+        items = [_rebase_value(item, depth - 1) for item in value]
+        if all(item is None for item in items):
+            return None
+        return type(value)(
+            original if moved is None else moved
+            for original, moved in zip(value, items)
+        )
+    if type(value) is dict:
+        items = {key: _rebase_value(item, depth - 1) for key, item in value.items()}
+        if all(item is None for item in items.values()):
+            return None
+        return {key: value[key] if moved is None else moved
+                for key, moved in items.items()}
+    return None
+
+
+def _path_holders(module: Any) -> list[tuple[Any, str]]:
+    """The module itself, and every class defined in it, each with a label.
+
+    A class is included only when it was defined in this module, which is what
+    __module__ records. Scanning imported classes as well would let this
+    function rebind an attribute on something it was never asked about, and
+    pathlib.Path itself is one import away from every suite file.
+    """
+    holders: list[tuple[Any, str]] = [(module, "")]
+    home = getattr(module, "__name__", None)
+    for name, value in list(vars(module).items()):
+        if (isinstance(value, type) and home is not None
+                and getattr(value, "__module__", None) == home):
+            holders.append((value, f"{name}."))
+    return holders
+
+
 @contextlib.contextmanager
 def redirect_captured_paths(module: Any) -> Iterator[list[str]]:
     """Move one module's import time Path constants onto the live sandbox.
@@ -362,28 +425,44 @@ def redirect_captured_paths(module: Any) -> Iterator[list[str]]:
     it runs only inside run_tests.main(), which a hand run never enters.
 
     Restored on exit, so a repeated or nested run leaves the module as it found
-    it. Only Path values are touched, so a module holding a path as a string
-    is left alone, which is a real hole and a rarer one than this.
+    it.
+
+    What is looked at grew on 2026-08-20 as well, and the reason is worth
+    keeping. This walked vars(module) for Path values and nothing else, so a
+    module holding its run directories in a LIST, or on a CLASS, was quietly
+    skipped and standalone() then printed an unqualified all clear over it. The
+    all clear is what made that dangerous rather than merely incomplete: a
+    reader who saw it had been told the hand run was safe. Module level lists,
+    tuples, sets and dicts and the classes defined in the module are now looked
+    inside too, and standalone() names what was examined rather than declaring
+    the module clean.
+
+    Two holes are left and are left knowingly, because saying which ones is
+    worth more than implying there are none. A path held as a string is not a
+    Path and is not moved. A path built inside a function from config at call
+    time is not a captured constant at all, and needs no moving: it reads the
+    redirected config the moment it runs.
     """
-    saved: list[tuple[str, Any]] = []
+    saved: list[tuple[Any, str, Any]] = []
     moved: list[str] = []
     if module is None:
         yield moved
         return
-    for name, value in list(vars(module).items()):
-        if name.startswith("__") or not isinstance(value, Path):
-            continue
-        rebased = _rebase(value)
-        if rebased is None or rebased == value:
-            continue
-        saved.append((name, value))
-        setattr(module, name, rebased)
-        moved.append(name)
+    for owner, label in _path_holders(module):
+        for name, value in list(vars(owner).items()):
+            if name.startswith("__"):
+                continue
+            rebased = _rebase_value(value)
+            if rebased is None or rebased == value:
+                continue
+            saved.append((owner, name, value))
+            setattr(owner, name, rebased)
+            moved.append(f"{label}{name}")
     try:
         yield moved
     finally:
-        for name, value in saved:
-            setattr(module, name, value)
+        for owner, name, value in saved:
+            setattr(owner, name, value)
 
 
 def standalone(entry) -> int:
@@ -416,6 +495,15 @@ def standalone(entry) -> int:
     runs/2026-08-14 and claim_three opened a database in it, inside the
     preserved evidence of the first live morning. See
     redirect_captured_paths() above.
+
+    The line printed when nothing moved says what was examined rather than
+    that the module is clean. It used to read "this module captured no real
+    data/, runs/, logs/ or site/ path at import time", which is a claim about
+    the module and was only ever a report on vars(module): a module holding
+    its paths in a list or on a class was scanned past and then told the
+    reader it had nothing. Both halves are fixed, the looking and the saying,
+    because widening the search would have left the same unqualified sentence
+    standing over whatever the next shape turns out to be.
     """
     if SANDBOX_ACTIVE:
         return entry()
@@ -428,8 +516,12 @@ def standalone(entry) -> int:
                 print("conftest: rebound this module's import time path "
                       f"constant(s) onto the sandbox: {', '.join(sorted(moved))}")
             else:
-                print("conftest: this module captured no real data/, runs/, "
-                      "logs/ or site/ path at import time.")
+                print("conftest: no real data/, runs/, logs/ or site/ path was "
+                      "found in this module's constants, in a list, tuple, set "
+                      "or dict of them, or on a class defined here. A path held "
+                      "as a string is not checked; a path built from config "
+                      "inside a function needs no check, because it reads the "
+                      "redirected config when it runs.")
             return entry()
 
 

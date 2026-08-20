@@ -38,14 +38,15 @@ All times are US Eastern, which the machine is expected to keep locally.
 
 | Time | Job | What it does |
 | --- | --- | --- |
-| Sun 20:00 | universe | Weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, measured at 2,745 calls and 421 seconds. That propensity is what discovery ranks the pool by inside each tier |
-| 07:00 | nightly-catchup | The nightly again: the vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not |
+| Sun 21:00 | universe | Weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, one counted call per name, measured at 2,745 calls and 421 seconds on the 2026-08-13 universe. That propensity is what discovery ranks the pool by inside each tier. 21:00 and not 20:00: 20:00 ET is the instant of the 00:00 UTC quota reset in daylight time, so the largest job in the schedule billed to whichever quota day it happened to land on |
+| 07:00 | nightly-catchup | The nightly's vendor lag half, the same .bat called with the argument "catchup": calendar refresh, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Pool recall and the archive rebuild are skipped, because pool_recall measures the session it is invoked on and at 07:00 that session has not opened |
 | 07:15 | discover | Builds today's candidate pool from four priors, ranks it, subscribes the collector to the top of it, warms the volume baseline |
 | 07:20 to 09:25 | collector | Websocket trades to one minute bars on disk, one file per day |
 | 07:25, every 30 min | monitor | The watchdog: checks each job fired and finished, reruns what is safe |
-| 08:45 | morning chain | scan, analyst, render, deliver, archive, stopping at the first failure |
-| 22:15 | nightly | Backfills the true premarket window, fills trade outcomes, measures what the morning's pool missed into `runs/YYYY-MM-DD/pool_recall.json`, rebuilds the archive |
+| 08:45 | morning chain | scan, analyst, render, verify, deliver, archive, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
+| 22:15 | nightly | Refreshes the cached exchange calendar so the 08:45 chain never fetches it, backfills the true premarket window, fills trade outcomes, measures what the morning's pool missed into `runs/YYYY-MM-DD/pool_recall.json`, rebuilds the archive |
 | 22:45 | monitor-night | The watchdog once more, over the nightly |
+| Every 30 min, all day, every day | meter-sampler | One reading of the shared EODHD quota counter into `logs/meter-<quota day>.log`, 48 a day, weekends included. Not a pipeline step: an instrument. The job trail says which step spent what and cannot say when, and nothing at all runs between 22:45 and 07:00, which is exactly where a sibling project draining the shared key would hide |
 
 ```mermaid
 flowchart LR
@@ -81,16 +82,19 @@ Every weekday job first runs `src/ops/market_today.py`, a trading day guard buil
 on the cached EODHD exchange calendar. It exits 3 on a weekend or an official
 holiday and the calling `.bat` logs one line and stops cleanly, so the tasks
 stay registered plain Monday to Friday and holidays take care of themselves.
-The Sunday universe job is the one exception and runs no guard: that guard
+Two jobs run no guard. The Sunday universe rebuild does not, because that guard
 counts Sunday as a non trading day, so wiring it in would skip the weekly
-rebuild every week, and the rebuild is what keeps the following week alive.
+rebuild every week, and the rebuild is what keeps the following week alive. The
+meter sampler does not either, because the counter it reads is shared with
+everything else using the token and rolls at midnight UTC, so a day this market
+is closed is exactly a day a drain would otherwise go unrecorded.
 
 ## What you need
 
 - **Windows 10 or 11.** Scheduling is Windows Task Scheduler plus the `.bat`
   files in `tasks/`. The pipeline itself is portable Python, but the provided
   automation is Windows.
-- **Python 3.11 or newer** (developed on 3.13). Dependencies are deliberately
+- **Python 3.11 or newer** (developed on 3.14.7). Dependencies are deliberately
   tiny: `requests`, `websocket-client`, `markdown`.
 - **An EODHD All-In-One subscription** and its API token. Lower EODHD tiers
   do not include the trades websocket that the collector needs.
@@ -185,7 +189,7 @@ Everything generated at runtime is git ignored and created on demand:
 | `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
-| `logs/` | One log per job per day, every step ending in a `rc=N` marker line |
+| `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
 | `site/PremarketDesk.html` | The whole report history as one self contained file, newest sessions embedded, older ones linked. Opens from disk, no server, no network |
 
 ## Configuration reference
@@ -208,27 +212,44 @@ Other documents:
   are the architecture pages; open them in a browser.
 - `doc/REPORT_TEMPLATE.md` and `doc/prompt_analyst.md` are the report shape
   and the narrative instructions piped to the CLI.
-- `doc/sample_report.html` is what a finished morning report looks like.
+- `doc/sample_report.html` is a hand built mock with invented data, kept
+  because `runs/` and `site/` are gitignored and no real report is in the
+  repository. It predates the settled template: its watchlist headers are the
+  old ones, so a report shaped like it would be reported by the containment
+  check as omitting both watchlist tables, and its footer records sonnet at low
+  effort where `doc/CRITERIA.md` sets opus at medium. The shape the code
+  actually produces is `doc/REPORT_TEMPLATE.md`.
 
 ## What it costs to run
 
 - **EODHD:** the websocket collector was measured at zero against the
   vendor's own API counter (connections, subscribes, and reconnects
   included; `src/research/measure_socket_cost.py` reproduces the measurement). REST
-  usage is a few hundred counted calls a day. Discovery spends two bulk end
-  of day calls at a measured 100 credits each, plus one earnings
-  calendar call and up to five news calls; the baseline warm spends one
+  usage is a few hundred counted calls a day. Discovery spends up to three
+  bulk end of day calls at a measured 100 credits each, two for the prior
+  session movers source and one more for the third session close the
+  briefing's two session leg is measured from, plus one earnings calendar
+  call and up to five news calls; the baseline warm spends one
   intraday call per stale name; the 08:45 scan spends a few dozen across
   quotes, history and news; the nightly spends one intraday call per pick
-  plus one bulk end of day for the pool recall measurement. The weekly job
+  plus two bulk end of day calls for the pool recall measurement, today's
+  session and the prior one. The weekly job
   is the largest single spend: the universe rebuild plus one call per name
-  for gap propensity, measured at 2,745. Every job preflights the shared
-  counter first, which is account wide across everything using your token
-  and resets at midnight UTC.
+  for gap propensity, measured at 2,745 on the 2026-08-13 universe. The jobs
+  that spend before the open read the shared counter once on entry and act on
+  what it says rather than discovering the limit through 429s: discover, the
+  baseline warm that follows it, the 08:45 scan, and the Sunday universe and
+  gap propensity sweeps, which refuse outright rather than start a sweep they
+  cannot afford. The nightly does not preflight. The counter is account wide
+  across everything using your token and resets at midnight UTC.
 - **Claude:** one non agentic completion per market day (plus at most one
-  retry), on the subscription. Measured 86.5 to 97.7 seconds per report over five
-  opus runs at medium reasoning effort on 2026-08-14, which is where the 293
-  second timeout in `doc/CRITERIA.md` comes from, three times the slowest. If the CLI fails or times out, the morning still ships:
+  retry), on the subscription. Measured at 48.4, 98.5 and 178.9 seconds of CLI
+  time on the three scheduled mornings of 2026-08-17 to 2026-08-19, opus at
+  medium reasoning effort, which is where the 537 second timeout in
+  `doc/CRITERIA.md` comes from, three times the slowest. The rule has always
+  been three times the slowest run on record; on 2026-08-20 what counts as a
+  run on record moved from the five dry runs of 2026-08-14 to the scheduled
+  mornings that overtook them. If the CLI fails or times out, the morning still ships:
   `analyst.py` falls back to a plain table report built from the packet and
   says so in the report itself.
 

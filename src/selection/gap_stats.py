@@ -1,7 +1,8 @@
 """Per name gap propensity, from history this plan already pays for.
 
-The pool has to be ordered inside a tier and the shipped key is 20 day average
-dollar volume. Measured against 2026-08-13 that key put MU, NVDA, AAPL, MSFT
+The pool has to be ordered inside a tier, and the key it shipped with was 20
+day average dollar volume. What this file writes replaced it: gap_propensity is
+CRITERIA.md [discovery] within_tier_key now, with atr_pct_20d as its fallback. Measured against 2026-08-13 that key put MU, NVDA, AAPL, MSFT
 and AMD into the last five subscription slots and none of them gapped, which is
 not surprising: dollar volume measures how much a name trades, and the thing
 being predicted is whether it will jump overnight. Those two run against each

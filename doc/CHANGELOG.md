@@ -13,7 +13,135 @@ it. A number that was right when it was written and has since been overtaken
 is history, and rewriting it destroys the reasoning.
 
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
-and 
+and in the git history.
+
+## 2026-08-20, eighth: what the nineteen fixes broke, and 173 corrections to the documents
+
+Two passes over the entry above. An adversarial review of commit ea167d5 itself
+raised 40 findings, 11 survived verification, and all 11 are closed here. A
+separate audit read every document in the repository against the code and
+returned 173 corrections, every one of which is applied. The suite is green and
+the tree photograph is clean at 2,090 paths.
+
+The lesson worth keeping is the shape of the worst one. A fix widened the guard
+it was written to protect, and nothing in the suite could see it.
+
+**The volume check was putting the previous session's collector roster into the
+packet, and containment reads the packet.** Giving verify_against_intraday a
+signed median also gave it four per symbol structures:
+minutes_compared_by_symbol, unavailable_symbols, vendor_zero_volume_symbols and
+collector_silent_symbols. latest_volume_check spreads the whole summary, so all
+four reached packet.json. analyst._packet_uppercase_tokens builds the allowed
+set out of the raw packet TEXT and _TOKEN_RE finds AVGO inside the key
+"AVGO.US", so every name the collector heard or was subscribed to LAST session,
+73 of them on 2026-08-19, became a ticker this morning may claim while holding
+no evidence about any of it. Measured against the real 2026-08-20 packet: AMAT,
+AVGO, DE, HOOD, MU, NOK, RIOT, SAP, TLT and TSM moved from invented to allowed,
+which is exactly the set a model reaches for in a market context sentence.
+Tonight's nightly would have written the first new shape file and tomorrow's
+08:45 packet would have read it. The packet now carries a whitelist of scalars
+and the names stay in runs/<date>/verify_intraday.json where a human reads
+them.
+
+**The watchdog's new liveness gate created two blind bands.** A dated log
+written inside job_log_stale_after_s was taken as proof of life, but the chain
+is evaluated by exactly ONE pass inside its rerun window and the nightly by
+exactly one at 22:45, so a job that died in the twenty minutes before that pass
+consumed its only chance and was not even counted as a problem. The liveness
+note justified the gate with "reads as alive at the 08:55 pass and as dead at
+09:25", and CRITERIA's own analyst timeout note already said the 08:55 pass
+reads NOT DUE. A job that EXITED writes a finish marker, so the marker now
+outranks the mtime, which removes every death where a step returned; where only
+the mtime can answer, the pass works out from the schedule whether a successor
+firing exists and reports UNRESOLVED and counts a problem when none does. The
+collector HELD branch had the same missing question and stranded the collector
+for the whole morning if it fired at 08:55; it now holds only when a pass that
+can act still exists, and starts the collector rather than stranding it after
+that.
+
+**The 07:00 catch-up fix was written and not deployed.** job_nightly.bat gained
+a catchup mode and register_tasks.ps1 was edited to pass it, but the task
+registered on the machine still carried no argument, so pool_recall's new
+refusal would have fired every weekday at 07:01 and landed in the published
+morning report as a failed step. Two fixes, because either alone is fragile:
+the tasks are re-registered, and a refusal on the evidence is now NotMeasurable,
+recorded as a skip with its reason, while anything else out of build() is still
+a failure. A step that reports FAILED every weekday teaches its reader to stop
+reading it.
+
+**The corporate action guard only ever ran on the night the short leg filled.**
+It sat inside "if wants_short:" and day5_close was written raw. On the ordinary
+cadence the short leg fills on the night of D+1 and the long leg five nights
+later with wants_short already False, so an ex date anywhere in D+2 to D+5 put a
+post action close beside pre action premarket levels, silently and permanently.
+Each leg now checks the units it writes, and a refused day5_close says so rather
+than leaving a null indistinguishable from a pending fill.
+
+**Four smaller ones, all of the same family: a fact and an absence written the
+same way.** trap_basis published headlines_scored 0 and headlines_in_window 0
+for a window the news call never reached, byte for byte what a window that WAS
+read and held nothing publishes. The roundup sharing count was measured over
+candidates whose news call never ran, so a quota thinned morning changed which
+articles counted as roundups without saying so. discover threw away an in hand
+prior close map when only the SECOND bulk call came back empty, so every
+subscribed name reached the scan with pool_prior_close null and the scan bought
+each one back. And _volume_check_direction had no agreement branch at all: a
+collector that matched the vendor was published as "the two readings disagree",
+which is the outcome the whole measurement exists to work towards.
+
+**Two guards that guarded nothing.** conftest.redirect_captured_paths, the
+harness fix from the entry above, was asserted by no claim: deleting it left the
+whole suite green, because run_tests never enters standalone(). And
+trading_day_state's calendar_known() short circuit meant test_vintage's stub of
+is_trading_day no longer controlled the path it was stubbing, so that claim had
+become machine dependent and would fail on a fresh clone. Both are closed, the
+second by routing the unknown through the same seam as the answer so replacing
+one function replaces the whole decision.
+
+**The documents. 173 corrections, and the two worst were in this file.** The
+entry above said "WMT published trap false on 3 of 45 headlines, COIN on 3 of
+24, BABA on 3 of 17" and that the next morning would decide all three on their
+whole window. WMT and BABA carry trap NULL, not false: their gaps are down,
+-7.26 and -5.35 percent, and a trap is a gap UP contradicted by its news, so
+their verdicts cannot move at all. Only COIN was right. The same entry said
+build() "could only measure the day it was invoked on"; build(session_date=None)
+has always taken a --date and the 07:00 firing simply passed none. Both are
+corrected in place with the marker this file's header prescribes, because a
+number that was wrong when it was written is a mistake rather than history.
+
+Elsewhere: BUILD_PLAN said eight scheduled tasks against nine registered, and
+put the day's bulk spend at 392 calls when discover makes three end of day
+calls rather than two and the real figure is about 500. Its Layer 4 section
+told a future session to add "rule 10, after the existing nine" to
+prompt_analyst.md, which holds fourteen rules and whose rule 10 has been the
+display rounding rule since 2026-08-14, so a session following it literally
+would have overwritten one. It also listed gap_stats.return_stdev_20d under
+"already built" without saying that all 10,997 rows of that column are NULL and
+stay null until the Sunday rebuild, which is the denominator every Layer 4
+move_sigma divides by. Both READMEs gave the Sunday universe build as 20:00,
+the one time register_tasks.ps1 records as actively harmful because it is the
+instant of the quota reset, and neither had a row for the meter sampler, which
+fires 48 times a day. tasks/README.md pointed at src\market_today.py, a path
+from before the package split. Every suite module's docstring told the reader to
+run it as "python src\test_x.py", which cannot work: the file is under
+src/tests/ and running it by path breaks the package imports. The architecture
+pages still described picks as empty when it holds twelve live rows, said the
+quantifier guard had never fired live when data/quantifier-flags.jsonl holds a
+flag from that morning, and said the 2026-08-19 volume reading was still owed
+when it landed at 07:01 that day. CRITERIA's analyst timeout table stopped at
+2026-08-19 and its chain_due comment contradicted the file's own arithmetic
+thirteen sections later.
+
+**One knob deleted.** CRITERIA [scan] economic_importance = high was read by no
+Python at all; economic_events() hardcodes the string and filters on the
+[Economic importance] term list instead. A live looking knob that does nothing
+is worse than no knob.
+
+**And the em dash guard got wider.** It knew only the named entity, so a page
+written with the decimal or hexadecimal numeric reference would have passed
+while rendering identically. It knows all three now, case insensitively, and a
+planted one of each is caught.
+
 ## 2026-08-20, seventh: all nineteen findings from the full review, closed
 
 The purge entry above says the findings were open. They are not any more. Every
@@ -42,8 +170,10 @@ the one check that exists to catch invented evidence.
 **A multi company roundup paid its top catalyst class to every name in it.**
 EODHD tags are ARTICLE scoped and classify_catalyst read them as company
 scoped. On 2026-08-20 the CNBC piece "Stocks making the biggest moves
-premarket: Walmart, Coinbase, Moderna, Alibaba and more", tagged with 45
-issuers including EARNINGS for Walmart, conferred class earnings on MSTR, COIN
+premarket: Walmart, Coinbase, Moderna, Alibaba and more", carrying 46 tags of
+which 19 name companies, 14 issuers between them, and 27 name topics, desks and
+bylines, EARNINGS among those 27 and Walmart's, conferred class earnings on
+MSTR, COIN
 and MARA, and "Biggest stock movers Thursday" did the same for BLSH. None was
 on that morning's calendar. Class earnings is 3 of the score's 10 points, so
 MSTR published 7.0 green where it should have been 4.0 yellow, and COIN, MARA
@@ -56,16 +186,33 @@ the sharing count catches one tagged by topic rather than by issuer. A name
 whose every article is a roundup now comes out class none with catalyst_found
 still true, which says the window was checked and paid nothing.
 
+[corrected 2026-08-20: the tag count read "tagged with 45 issuers including
+EARNINGS for Walmart". The article carries 46 tags; 19 of them name companies,
+14 issuers between them, and the remaining 27 are topics, desks and bylines,
+with EARNINGS among those 27. The fix reads the tag COUNT against
+max_tags_for_one_company, so nothing downstream moves. CRITERIA's article scope
+note and _scope_articles carry the same figure.]
+
 **The trap verdict weighed three headlines and reported the truncated set as
 complete.** news_keep is 3, attach_traps read only the kept list, and
 min_headlines_for_balance is 2, so one negative against zero positives
 satisfied "strictly more negative than positive" and reinstated the single
 mis-scored headline verdict the balance rule was written that same day to stop.
-WMT published trap false on 3 of 45 headlines, COIN on 3 of 24, BABA on 3 of
-17, and trap_basis reported scored 3 unscored 0 with 42 counted nowhere. The
-balance is now counted over the whole window and news_keep is a display cap.
-This changes live verdicts: the next morning decides WMT, COIN and BABA on all
-of their headlines rather than on three.
+COIN published trap false on 3 of 24 headlines, MSTR on 3 of 8 and MARA on 3
+of 7, and WMT's trap_basis reported scored 3 unscored 0 with 42 of its 45
+counted nowhere. The balance is now counted over the whole window and news_keep
+is a display cap. This changes live verdicts: the next morning decides COIN,
+MSTR and MARA on all of their headlines rather than on three.
+
+[corrected 2026-08-20: this read "WMT published trap false on 3 of 45
+headlines, COIN on 3 of 24, BABA on 3 of 17" and named WMT and BABA among the
+verdicts that change. Both gapped DOWN, 7.26 and 5.35 percent, and attach_traps
+returns null for a gap below [Traps] min_gap_pct before it weighs a headline,
+so neither ever carried a false and neither verdict can move.
+runs/2026-08-20/packet.json holds trap null for both with that reason beside
+it. The truncation itself was real on all four windows, 45, 24, 17 and 8
+headlines against three weighed. attach_catalysts' docstring carries the same
+sentence.]
 
 **The collector volume check returned an unsigned median and three consumers
 asserted a direction from it.** scan.volume_check wrote "understated by about
@@ -136,15 +283,32 @@ consumer keys on NOT_FETCHED so the run exited 0. That source supplied 364 of
 guard with "the test is now on the data rather than the error"; this is the
 caller it was not applied to.
 
-**pool_recall recorded missing evidence as measured zeros.** build() could only
-measure the day it was invoked on, and the 07:00 catchup fired it every weekday
-against a session that had not opened, overwriting the previous evening's real
-figures with gapped 0, addressable 0, recall 0.0. measure() collapsed an
+**pool_recall recorded missing evidence as measured zeros.** build() measures
+the day it is invoked for and the 07:00 catchup passes no --date, so every
+weekday it asked the vendor for a session that had not opened, got an empty
+bulk payload and wrote gapped 0, addressable 0 and no reason at all into
+runs/<that day>/pool_recall.json. runs/2026-08-20/pool_recall.json, stamped
+07:01:18, is the artifact. On an ordinary day the 22:15 pass overwrites those
+zeros; on a night that does not reach the step they stand as a measured total
+failure of a morning that produced no report. measure() collapsed an
 unknown published set with "published or set()" while _rate()'s own docstring
 argued the opposite case for the denominator. Both now refuse or null with the
-reason beside them, and job_nightly.bat gained a catchup mode that the 07:00
-registration passes: the evening pass is the one with a closed session to
-measure.
+reason beside them, and job_nightly.bat gained a catchup mode that
+register_tasks.ps1 passes at 07:00: the evening pass is the one with a closed
+session to measure. The registered task predates that argument and still
+carries none, so the machine goes on running the whole nightly at 07:00 until
+register_tasks.ps1 is run again.
+
+[corrected 2026-08-20: this read that the catchup was "overwriting the previous
+evening's real figures with gapped 0, addressable 0, recall 0.0". It writes the
+file for the day it was invoked for, so the previous evening's file is never
+touched: runs/2026-08-19/pool_recall.json still holds gapped 167 stamped
+2026-08-19T22:15:13 after the 07:00 run of 08-20. The rates in the 07:00
+artifact are null and not 0.0, because _rate returns null on an empty
+denominator; the 0.0 belongs to the published collapse named next. It also said
+build() could only measure the day it was invoked on, and build() has always
+taken a --date. pool_recall.py's own comment has the direction right; the
+header of tasks/job_nightly.bat repeats the wrong one.]
 
 **Outcome arithmetic was split blind.** mfe_pct, mae_pct and
 pm_high_broke_next_day subtracted raw collector premarket levels from the next
@@ -228,7 +392,10 @@ quantifier_flags, float_cache, float_rotation_study, probe_alpaca_live,
 probe_socket_cap and vwap_gappers: none is read by anything, none of those
 modules is in test_entrypoints' SCHEDULED list, and probe_alpaca_live carried a
 comment explaining why it is deliberately not wrapped in job_status.run
-directly above a constant implying it is. The seventeen live OK_CODES stay.
+directly above a constant implying it is. The sixteen live OK_CODES stay, one
+for each entrypoint in test_entrypoints' SCHEDULED list. [corrected 2026-08-20:
+this read "The seventeen live OK_CODES stay". 23 modules defined one before the
+purge and seven went, which leaves sixteen.]
 
 **Two spent scheduler wrappers.** tasks/job_probe_live_v1.bat and
 tasks/job_probe_alpaca_live.bat both said in their own headers to delete them
@@ -326,7 +493,10 @@ same sandbox run_tests uses, and every suite module routes its __main__ through
 it. Refusing the direct run was the alternative and is worse, because running
 one module is exactly what a person does while chasing a failure.
 
-Nine claims, one per finding, in src/tests/test_regressions.py. Two new
+Eight claims covering the nine findings, in src/tests/test_regressions.py: the
+roll-call omission and the unsigned score share one, because they were one
+cause. [corrected 2026-08-20: this read "Nine claims, one per finding". The
+commit adds eight and the file went 19 claims to 27.] Two new
 CRITERIA keys with their notes: [Scan] min_bars_for_full_window and
 prior_close_disagreement_pct.
 
@@ -413,14 +583,16 @@ quoted.
 
 ### One thing this did not fix
 
-Nine smaller findings from the same read are recorded in BUILD_PLAN.md rather
-than fixed here: the six names a rank cap drops without saying so, a score
-roll-call that omits a tied name, "strongest scored" being direction blind on a
-name down 21.75 percent, null RVOL pooled with measured-low in one tally, two
-vendor prior closes for SCSC disagreeing by 1.67 percent, a premarket record of
-four bars described only as "partial", and two replay-only prints described as
-no print at all. They are accuracy and completeness, not falsehood, and each
-wants its own argument.
+Nine smaller findings from the same read are recorded in BUILD_PLAN.md as 6a to
+6i rather than fixed here: the six names a rank cap drops without saying so, a
+score roll-call that omits a tied name, "strongest scored" being direction
+blind on a name down 21.75 percent, null RVOL pooled with measured-low in one
+tally, two vendor prior closes for SCSC disagreeing by 1.67 percent, a
+premarket record of four bars described only as "partial", two replay-only
+prints described as no print at all, three RVOL denominators up to six days old
+with nothing beside them to say so, and the suite writing to real data when a
+module is run directly. They are accuracy and completeness, not falsehood, and
+each wants its own argument.
 
 ## 2026-08-20, third: an adversarial audit of the whole scheduled path, twenty defects fixed
 

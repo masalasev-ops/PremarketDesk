@@ -1,14 +1,22 @@
 """Regression test for the containment checker.
 
-Run it directly: `python src\\test_containment.py`, exit 0 on pass.
+Run it directly: `python -m tests.test_containment` with PYTHONPATH set to
+src/, exit 0 on pass.
 
-Two claims, both required:
+Six claims are written inline in main(), numbered 1 to 6 in its comments, and
+seven more are the claim_ functions below. Two are the foundation:
   1. Ordinary finance acronyms in prose (ETF, CEO, FDA, SEC, EPS, IPO, GDP,
      CPI, FOMC) never trip containment, because prose tokens are not ticker
      claims. Only tokens in table cells or prefixed with $ are candidates,
      and only candidates that name a real universe symbol are claims.
   2. A report naming a real universe ticker that is absent from packet.json
      still fails, through a table cell and through a $ prefix alike.
+
+The rest widen that to context ETFs and single letter listings, to whether the
+check examined anything at all, to the two watchlist tables the template
+requires even when empty, and then to the quantifier guard, its flag log, the
+watchdog's backlog line and the single word list all three sources of report
+prose are checked against.
 """
 
 from __future__ import annotations

@@ -1,11 +1,12 @@
 """Regression tests for the 2026-08-14 stale vintage defect and its guards.
 
-Run directly: `python src\\test_repricing.py`, exit 0 on pass. Makes no network
+Run directly: `python -m tests.test_repricing` with PYTHONPATH set to src/,
+exit 0 on pass. Makes no network
 calls. The evidence is the artifacts the failing morning left behind:
 runs/2026-08-14/packet.json and the collector snapshot beside it.
 
-Eight claims, numbered after the clause each was written for rather than
-counted off, which is why the list reaches ten and carries no 2 and no 5:
+Nine claims, numbered after the clause each was written for rather than
+counted off, which is why the list reaches eleven and carries no 2 and no 5:
   1. Repricing from the collector reproduces this morning's real gaps in place
      of yesterday's session moves.
   3. A candidate the collector never subscribed to is dropped, not priced.
@@ -22,6 +23,10 @@ counted off, which is why the list reaches ten and carries no 2 and no 5:
   10. A sharesOutstanding that is not a share count never passes as a cross
      check: a zero or an absent one falls to the absolute share floor, a
      negative one is refused outright, each with a reason and a gap.
+  11. A trade stamped outside the run's window is written to the bar file
+     tagged as a replay rather than folded into the morning's minutes, proven
+     against the real 2026-08-18 file rather than a fixture, and carrying its
+     own SKIP rather than riding the 2026-08-14 gate.
 """
 
 from __future__ import annotations

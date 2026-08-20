@@ -8,7 +8,7 @@ The parser is deliberately small and deliberately strict. A missing key raises
 and names the section, the key and the file, because a silently defaulted
 threshold is a threshold you no longer own.
 
-Run `python criteria.py` to print everything the file currently defines.
+Run `python -m core.criteria` to print everything the file currently defines.
 """
 
 from __future__ import annotations
