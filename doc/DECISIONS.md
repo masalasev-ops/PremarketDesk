@@ -2499,3 +2499,166 @@ A cheap guard would be for run_tests to photograph the stubbed-out module
 attributes the way it already photographs the working tree; not built, because
 the tree check took several iterations to get right and the same care is owed
 here.
+
+## 2026-08-20, second: an instrument must not be gated on the thing it measures
+
+`verify_against_intraday` is the check BUILD_PLAN names as definitive for
+collector volume, which is the project's top open question. It ran at the tail
+of `backfill()`, after `if not picks: return 0`. That coupling was invisible
+while picks had rows in it and became total the moment the table was emptied on
+2026-08-19 over the very defect the check exists to measure.
+
+The shape is worth naming because it will recur. The check was PUT there for a
+good reason: the comment said "while it is here with the intraday feed open",
+and it is genuinely cheaper to make those calls in a pass that is already
+talking to that endpoint. What was not noticed is that sharing a function with
+the picks fill also inherits the picks fill's preconditions. Co-location for
+convenience becomes coupling the first time one of them fails.
+
+The rule this leaves: a measurement's preconditions must be the preconditions
+of what it reads, and nothing else. This one reads the collector bar file and
+the intraday feed. It now runs first, before any path that can return early,
+and its catch-up sweep asks its own question, which sessions were collected and
+never measured, rather than borrowing the fill's question about which picks
+rows lack a column.
+
+**What bounds the sweep, and why it is not a date.** Only sessions the collector
+wrote a subscription list for. 2026-08-13's bar file holds an afternoon
+shakedown, 13:32 to 20:00 ET, and BUILD_PLAN already records that no
+verification is owed for it. A date floor would have worked today and rotted;
+the subscription sidecar is the actual definition of "this was a scheduled
+premarket run" and it is written before the socket opens, so a collector that
+died early is still correctly included.
+
+**What this does not fix.** The reading it produces is not expected to be good.
+2026-08-19 will come back with the same disagreement the other sessions show,
+because the defect is real and undiagnosed. The point is that the disagreement
+is measured every night rather than not at all.
+
+## 2026-08-20, third: the timeout rule kept, its evidence replaced
+
+CRITERIA [analyst] timeout_s moves 293 to 537. The rule that defines it, three
+times the slowest run on record, is untouched. What changed is that "on record"
+now means scheduled mornings rather than the five dry runs of 2026-08-14, which
+the schedule has overtaken.
+
+This is deliberately not a new policy, and the distinction matters for a file
+whose header says every number in it is an unvalidated seed. A seed threshold
+moved on a hunch is a worse number than the one it replaced. A derived
+threshold recomputed on better evidence, by the same derivation, is the same
+number better measured, and that is the only kind of change this file should
+accept without a study behind it.
+
+**Why not leave it.** Nothing has timed out, so the case for acting is entirely
+the trend: the analyst step measured 54.4, then 107.5, then 185.3 seconds on
+consecutive mornings, close to a doubling each time, and it tracks output
+length rather than model speed. At 293 the next session on that trend rides
+both attempts into the deterministic fallback. That is not a lost morning, but
+it is a lost narrative on a morning that had nothing wrong with it, and the
+2026-08-18 work established that the guard-shaped version of exactly that trade
+was the wrong price to pay.
+
+**Why not more.** 537 is what the rule yields. Two exhausted attempts end at
+09:03, which clears the open by 27 minutes and clears the watchdog's next pass
+at 09:25. Rounding up further would buy nothing measurable and would be a
+choice rather than a derivation.
+
+**The question this leaves with the owner.** Raising the timeout accommodates
+the trend and explains none of it. 16,005 output tokens on 2026-08-19 is double
+the previous high, against a template whose nine sections did not change and a
+packet that carried the usual twelve candidates. If the next morning lands near
+350 seconds the question is what the model is being asked for, not what the
+timeout is, and no threshold edit answers it.
+
+## 2026-08-20, fourth: what twenty verified defects had in common
+
+Six readers over six packages raised forty findings; independent verifiers told
+to refute them killed twenty. The twenty that survived are in CHANGELOG the same
+date. What is worth keeping is the shape, because almost none of them was a
+wrong algorithm.
+
+**They were seams.** A UTC clock relabelled instead of converted. An instrument
+sharing a function with the thing it measures. A write that marked its work done
+before doing it. A guard whose docstring described a stricter test than the code
+made. A count that reported its request instead of its result. Every one looked
+correct read on its own and was wrong read against its neighbour.
+
+That is an argument about where to look, not about writing more careful code.
+The defects did not live in the hard parts. scan.py's scoring, vintage's five
+checks, the transaction guard, the containment checker, the quota preflight —
+the places this project spent its thinking — came back clean. What came back
+dirty was the plumbing between them, and plumbing is exactly what a reader
+skims because each piece is obvious.
+
+**The strongest single signal was a docstring making a claim.** Four of the
+twenty were found by reading a docstring's promise and then checking whether the
+code kept it: thin_rerun_stands_down said "a rerun is only idempotent when it
+carries at least as much evidence" and tested one narrow case; monitor_jobs said
+"the morning chain can always be rerun" while deliver had no send-once record;
+fill_outcomes said "a second run straight after the first changes nothing" and
+rewrote null-close rows forever; query_task's return shape said it absorbed
+failures and it absorbed one of three. This project writes unusually long
+docstrings, and that turns out to be a testing asset rather than only
+documentation: a promise written down is a promise that can be checked.
+
+**The refuted twenty were not noise either.** Several were mechanically accurate
+and stopped at reachability: real behaviour, no scheduled path to it. Keeping
+the verify step adversarial and separate from the finding step is what made that
+distinction cheap, and it is why the fixed list is twenty rather than forty. A
+list of forty would have meant changing twenty pieces of working code.
+
+## 2026-08-20, fifth: the watchdog's exit code and its status record answer different questions
+
+monitor_jobs.check_all returns 1 when it FINDS a problem. job_monitor.bat
+documents that as "something needs a human eye", which is right, and OK_CODES
+was (0,), which made every such pass record STATUS_FAILED in the job trail.
+
+Those are two different questions and they had one answer between them. The exit
+code is for Task Scheduler's last result column and for a person looking at it.
+The status record feeds job_status.overdue and report_line, which put a sentence
+on the next morning's report, and there it has to mean "the watchdog ran".
+
+The reason it matters is that several conditions setting `problems` are designed
+to persist. CRITERIA's own note on the quantifier flag backlog says the word
+list should be tuned on about a month of flags, and flag_backlog_after_days is
+7, so an unjudged flag makes every pass from day eight onward report a problem.
+Under the old pairing that meant no monitor record was ever STATUS_OK again, and
+two sessions later the morning report would carry "monitor has never recorded a
+success" — with max_steps_named_in_report at 4, crowding out the real overdue
+steps the line exists to surface. The watchdog would have been reporting itself
+broken for doing its job.
+
+OK_CODES is (0, 1) and the produced count is `problems found`. A pass that
+genuinely fails still raises, and job_status.run records the exception whatever
+the tuple says, so nothing is lost by admitting 1.
+
+What this costs, stated rather than discovered later: the trail no longer
+carries `jobs checked` as its count, so the denominator moved to the printed
+line. That is a constant, four, and a constant in a trail is not a measurement.
+
+## 2026-08-20, sixth: an economic calendar is not a news feed, and both are the vendor's
+
+scan parsed the EODHD economic events feed with
+`fromisoformat(raw).replace(tzinfo=ET)`. attach_catalysts, forty lines away,
+parsed the news feed with `ettime.to_et`. One of those keeps the digits and
+changes their meaning; the other converts. The feeds are both UTC, so the news
+timestamps in every archived report are right and the macro ones are four hours
+late in daylight time and five in standard.
+
+The wrong one shipped because a re-label is invisible in a code review the way a
+missing conversion is not. `.replace(tzinfo=ET)` reads as "this is Eastern", and
+it is, after the sentence has finished being false. There is no error, no
+warning, and the output is a plausible time on the right day. Every packet on
+disk carries it and nobody reading four reports noticed, because 12:30 for
+jobless claims is not absurd on its face — it is only wrong.
+
+Two things follow. The packet now carries a `time_source` line saying these
+times are a conversion, so the pre-2026-08-20 packets are distinguishable from
+the ones after rather than silently comparable. And the fetch window is widened
+a day past the ET window, because the vendor is asked in dates and answers in
+UTC, so membership has to be decided after the conversion rather than by the
+query.
+
+The general rule, which this project already followed everywhere except here:
+`.replace(tzinfo=...)` is only ever correct on a value that is ALREADY in that
+zone and merely naive. On anything from a vendor it is a bug with no symptom.

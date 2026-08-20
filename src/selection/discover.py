@@ -834,7 +834,21 @@ def build(write: bool = True) -> dict[str, Any]:
               f"{'+'.join(row['pool_source']):<40} {ranking_key} {shown:>8}")
 
     if write:
-        config.WATCHLIST_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        # Atomic, for the reason universe.write_atomically argues at length
+        # about universe.json, and this file has the stronger case of the two.
+        # A plain write_text truncates the existing 500 KB watchlist before it
+        # writes a byte, so an interruption there leaves invalid JSON where the
+        # last good one was. load_watchlist reads that as {"missing": True},
+        # and at 07:20 the collector prints "run discover.py first" and exits 1
+        # — with no premarket tape for any name that morning, and that tape
+        # cannot be fetched later. YESTERDAY'S watchlist would have been a
+        # usable fallback: the collector applies no freshness test, and
+        # subscribed_symbols is written the way it is precisely to keep an
+        # older file readable. The truncation is what destroys it. The watchdog
+        # cannot repair it either, because it refuses to rerun discover once
+        # the collector window has opened, and its first weekday firing is
+        # 07:25.
+        universe.write_atomically(payload, config.WATCHLIST_PATH)
         print(f"discover: wrote {config.WATCHLIST_PATH}")
 
     return payload

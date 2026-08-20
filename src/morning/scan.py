@@ -1173,7 +1173,26 @@ def attach_catalysts(
 # ------------------------------------------------------ 7. economic events
 
 def economic_events(api: eodhd.EodhdClient, packet: Packet) -> dict[str, Any]:
-    """US only, high importance, today and tomorrow in ET."""
+    """US only, high importance, today and tomorrow in ET.
+
+    The vendor stamps this feed in UTC with no offset on the string. Until
+    2026-08-20 the parse was `fromisoformat(raw).replace(tzinfo=ET)`, which
+    keeps the wall clock digits and staples an ET offset onto them, so every
+    event was published four hours late in daylight time and five in standard.
+    It was not subtle and it was in every report: the 2026-08-19 packet carries
+    Initial Jobless Claims at 12:30 ET and FOMC Minutes at 18:00 ET, against
+    real release times of 08:30 and 14:00. A premarket briefing whose macro
+    line moves the morning's only print from an hour before the open to after
+    lunch has inverted the one thing that section is for.
+
+    attach_catalysts had it right on the news feed, through ettime.to_et, which
+    is the same call this now uses.
+
+    The fetch window is widened a day past the ET window on purpose. The vendor
+    is asked in dates and answers in UTC, so an event late in the ET evening
+    carries the next UTC date; filtering after conversion is what decides
+    membership, and the extra day costs nothing because it is the same call.
+    """
     country = _CRIT.text("scan", "economic_country")
     days_ahead = _CRIT.integer("scan", "economic_days_ahead")
     high_terms = [
@@ -1184,7 +1203,8 @@ def economic_events(api: eodhd.EodhdClient, packet: Packet) -> dict[str, Any]:
 
     today = ettime.today_et()
     end = today + dt.timedelta(days=days_ahead)
-    rows, error = api.economic_events(country, today, end, limit=1000)
+    rows, error = api.economic_events(
+        country, today, end + dt.timedelta(days=1), limit=1000)
     if error:
         packet.gap(f"economic events call failed: {error}")
         return {"events": [], "error": error}
@@ -1198,7 +1218,9 @@ def economic_events(api: eodhd.EodhdClient, packet: Packet) -> dict[str, Any]:
             continue
         raw_date = str(row.get("date") or "")
         try:
-            when = dt.datetime.fromisoformat(raw_date).replace(tzinfo=ettime.ET)
+            # to_et, never replace(): the feed is UTC and replace() would keep
+            # the digits and change their meaning. See this function's docstring.
+            when = ettime.to_et(dt.datetime.fromisoformat(raw_date))
         except ValueError:
             when = None
         if when and not (today <= when.date() <= end):
@@ -1224,6 +1246,12 @@ def economic_events(api: eodhd.EodhdClient, packet: Packet) -> dict[str, Any]:
         "importance_source": (
             "matched against the high importance list in CRITERIA.md, because the "
             "EODHD economic events feed has no importance field"
+        ),
+        "time_source": (
+            "the vendor stamps this feed in UTC and every time_et above is a "
+            "conversion, not a relabelling. Packets written before 2026-08-20 "
+            "carry these times four hours late in daylight time and five in "
+            "standard, and must not be compared against these"
         ),
     }
 
@@ -1909,33 +1937,91 @@ def build_packet() -> dict[str, Any]:
     }
 
 
+def evidence_width(payload: dict[str, Any]) -> dict[str, int]:
+    """How much a packet actually knows, on the axes a rerun can lose.
+
+    Counts rather than a score, because the point is to say WHICH kind of
+    evidence a rerun would cost and a single number cannot.
+    """
+    candidates = payload.get("candidates") or []
+    return {
+        "candidates": len(candidates),
+        "priced": sum(1 for c in candidates if c.get("price") is not None),
+        "with_rvol": sum(1 for c in candidates if c.get("pm_rvol") is not None),
+        "scored": sum(1 for c in candidates if c.get("score") is not None),
+    }
+
+
+def thinner_than(fresh: dict[str, int], prior: dict[str, int]) -> list[str]:
+    """The axes on which fresh knows strictly less, empty unless it knows no more.
+
+    A rerun that gains on any axis is not a thinner rerun even if it loses on
+    another, because that is a different morning rather than a degraded copy of
+    this one, and standing down on it would be the guard refusing an
+    improvement.
+    """
+    if any(fresh[key] > prior[key] for key in prior):
+        return []
+    return sorted(key for key in prior if fresh[key] < prior[key])
+
+
 def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
-    """True when this quota thinned payload must not replace a fuller day.
+    """True when this payload must not replace a fuller one already on disk.
 
     A rerun is only idempotent when it carries at least as much evidence as
-    what it replaces. A quota thinned rerun of a day that already has a full
-    width packet must not overwrite that packet, and must not upsert nulls
-    over real values in picks, so it is written alongside as
+    what it replaces. A thinner rerun must not overwrite the packet and must
+    not upsert nulls over real values in picks, so it is written alongside as
     packet_degraded.json instead and the caller stands down. The watchdog's
     rerun of a broken chain then proceeds against the fuller packet.
+
+    Until 2026-08-20 this asserted exactly that and tested only one way of
+    being thin, a quota degraded preflight. The audit found the other one, and
+    it is the one the schedule actually produces. The RVOL cutoff is snapped to
+    [scan] run_time only within rvol_cutoff_snap_minutes of it, while [picks]
+    live_window_start to live_window_end is 07:00 to 09:30, so a watchdog rerun
+    of a broken chain at 09:25, which [monitor] rerun_chain_until explicitly
+    allows until 09:30, computes a 09:25 cutoff, finds no baseline row warmed
+    for it, publishes a null pm_rvol for every candidate, flips day_eligible
+    false for all of them, and upserts that over the 08:45 rows as source
+    'live'. The morning's real evidence would have been replaced by a rerun
+    whose only fault was the clock.
+
+    So the test is now the sentence the docstring already made: is this payload
+    thinner than what is on disk, on any axis, and better on none.
     """
-    quota = payload.get("quota_preflight") or {}
-    if not quota.get("degraded"):
-        return False
-    existing_path = config.run_dir(payload["session_date"]) / "packet.json"
+    session_date = payload["session_date"]
+    existing_path = config.run_dir(session_date) / "packet.json"
     if not existing_path.is_file():
         return False
     try:
         prior = json.loads(existing_path.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return False
-    if (prior.get("quota_preflight") or {}).get("degraded"):
-        return False  # equally thin; the fresher run may replace it
-    side_path = config.run_dir(payload["session_date"]) / "packet_degraded.json"
+
+    quota = payload.get("quota_preflight") or {}
+    prior_quota = prior.get("quota_preflight") or {}
+    reasons: list[str] = []
+    if quota.get("degraded") and not prior_quota.get("degraded"):
+        reasons.append("this run was quota thinned and the one on disk was not")
+
+    fresh_width, prior_width = evidence_width(payload), evidence_width(prior)
+    lost = thinner_than(fresh_width, prior_width)
+    if lost:
+        reasons.append(
+            "it knows less on " + ", ".join(
+                f"{key} ({fresh_width[key]} against {prior_width[key]})"
+                for key in lost
+            )
+        )
+    if not reasons:
+        return False
+
+    side_path = config.run_dir(session_date) / "packet_degraded.json"
     side_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    print(f"scan: a full width packet already exists for {payload['session_date']} "
-          f"and this rerun is quota thinned. Wrote {side_path.name} for the "
-          "record; packet.json and the picks table keep the fuller evidence.")
+    print(f"scan: a fuller packet already exists for {session_date} and this rerun "
+          f"stands down because {'; and '.join(reasons)}. Wrote {side_path.name} "
+          "for the record; packet.json and the picks table keep the fuller "
+          "evidence, and the rest of the chain runs against it.")
     return True
 
 

@@ -18,7 +18,10 @@ a bad bar worth chasing, and the morning value is never silently corrected.
 
 While it is here with the intraday feed open, this job also runs the
 definitive collector volume check, verify_against_intraday, and writes the
-result into the day's run directory for the record.
+result into the day's run directory for the record. That check runs FIRST and
+independently of picks, because it reads the collector bar file rather than the
+table, and gating an instrument on the thing it measures is how it stopped
+being taken at all when picks was emptied on 2026-08-19.
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import re
 import sys
 from typing import Any
 
@@ -38,6 +42,11 @@ from ops import job_status
 from core import store
 
 _CRIT = criteria.load()
+
+# A premarket bar file is named for its session. Matched rather than parsed so
+# the stats and subscriptions sidecars in the same directory are never mistaken
+# for one, and neither is anything a human drops there.
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 _TRUE_COLUMNS = (
     ("pm_high_true", "REAL"),
@@ -145,6 +154,80 @@ def _gap_report(connection, sessions: int) -> None:
 _FILLED = [0]
 
 
+def verify_volume(day: str, overwrite: bool = False) -> bool:
+    """The definitive collector volume check, written to runs/<date>/.
+
+    Reads the collector bar file and the intraday feed and touches no database
+    at all, which is why it now runs FIRST and outside the picks path rather
+    than at the tail of a successful fill.
+
+    It used to sit at the end of backfill(), after the early return that fires
+    when a day has no live picks rows. That coupling was invisible until picks
+    was emptied on 2026-08-19 over the collector volume defect, at which point
+    the nightly stopped writing verify_intraday.json entirely. The measurement
+    that BUILD_PLAN.md's top open question depends on stopped being taken on
+    the night that question got most urgent, and nothing said so. The bar file
+    is what it reads, the bar file is written whether or not a pick was ever
+    scored, and an instrument must not be gated on the thing it measures.
+
+    Returns True when a summary was written.
+    """
+    summary = collect_premarket.verify_against_intraday(day, quiet=True)
+    if summary is None:
+        print(f"backfill: collector volume verification for {day} had nothing to "
+              "compare, either no collector bars or intraday has not published yet")
+        return False
+
+    from core import artifacts
+
+    verify_path, _spared = artifacts.resolve(
+        config.run_dir(day) / "verify_intraday.json",
+        overwrite or artifacts.scheduled_run(),
+        what="backfill",
+    )
+    verify_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    print(f"backfill: collector volume verification written to {verify_path} "
+          f"({summary['within_one_percent']} of {summary['compared']} symbols within "
+          f"one percent, median absolute difference {summary['median_abs_pct']:.2f}%)")
+    return True
+
+
+def unverified_sessions(before_day: str, limit: int) -> list[str]:
+    """Recent sessions with a collector bar file and no verification written.
+
+    The companion to _catchup_dates below, and deliberately a different query.
+    That one asks which picks rows still lack their true columns, so it can only
+    ever find days that HAVE picks rows. This one asks which collected sessions
+    were never measured, which is the question that survives an empty picks
+    table. Both exist because the vendor publishes intraday later than 22:15
+    often enough that one pass is not enough.
+
+    A session counts only when the collector wrote a subscription list for it,
+    which is what makes it a premarket run rather than a bar file somebody
+    produced by hand. 2026-08-13 is the case that forces the distinction: its
+    file holds 1,810 bars across 38 symbols from 13:32 to 20:00 ET, an
+    afternoon shakedown, and BUILD_PLAN.md records that no verification is owed
+    for it. Without this test the sweep would spend 38 intraday calls measuring
+    it and write the answer into a preserved run directory.
+    """
+    days: list[str] = []
+    directory = config.PREMARKET_DIR
+    if not directory.is_dir():
+        return days
+    for path in sorted(directory.glob("*.jsonl"), key=lambda p: p.name, reverse=True):
+        day = path.stem
+        if not _DATE_RE.match(day) or day >= before_day:
+            continue
+        if not collect_premarket.subscriptions_path(day).is_file():
+            continue
+        if (config.RUNS_DIR / day / "verify_intraday.json").is_file():
+            continue
+        days.append(day)
+        if len(days) >= limit:
+            break
+    return days
+
+
 def backfill(day: str, overwrite: bool = False) -> int:
     """Read, close, fetch, then write. The three phases are not cosmetic.
 
@@ -157,6 +240,10 @@ def backfill(day: str, overwrite: bool = False) -> int:
     after the last one.
     """
     api = eodhd.client()
+
+    # Before anything else, and before any path that can return early. See
+    # verify_volume's own docstring for what put it here.
+    verify_volume(day, overwrite=overwrite)
 
     # ---- phase 1, read. No network call may happen inside this block.
     with store.session() as connection:
@@ -239,20 +326,6 @@ def backfill(day: str, overwrite: bool = False) -> int:
         _FILLED[0] += filled
         _gap_report(connection, _CRIT.integer("backfill", "gap_report_sessions"))
 
-    # The definitive collector volume check, for the record.
-    summary = collect_premarket.verify_against_intraday(day, quiet=True)
-    if summary is not None:
-        from core import artifacts
-
-        verify_path, _spared = artifacts.resolve(
-            config.run_dir(day) / "verify_intraday.json",
-            overwrite or artifacts.scheduled_run(),
-            what="backfill",
-        )
-        verify_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
-        print(f"backfill: collector volume verification written to {verify_path}")
-    else:
-        print("backfill: collector volume verification had nothing to compare")
     return 0
 
 
@@ -294,9 +367,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     result = backfill(args.date, overwrite=args.overwrite)
     if not args.no_catchup:
-        for day in _catchup_dates(args.date, _CRIT.integer("backfill", "catchup_days")):
+        catchup_days = _CRIT.integer("backfill", "catchup_days")
+        filled = _catchup_dates(args.date, catchup_days)
+        for day in filled:
             print(f"backfill: catching up {day}, its true premarket columns are still null")
             backfill(day, overwrite=args.overwrite)
+        # And separately, sessions that were collected and never measured. A day
+        # with no picks rows is invisible to the sweep above and still has a bar
+        # file worth comparing, which is the whole of what the volume question
+        # has left to work with while picks is empty.
+        for day in unverified_sessions(args.date, catchup_days):
+            if day in filled:
+                continue  # already measured by its own backfill pass just now
+            print(f"backfill: {day} was collected and never verified, measuring it now")
+            verify_volume(day, overwrite=args.overwrite)
     return result
 
 

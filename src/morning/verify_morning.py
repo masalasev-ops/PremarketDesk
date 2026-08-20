@@ -52,8 +52,22 @@ def print_table(packet_path: Path, count: int = 3) -> int:
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
     candidates = packet.get("candidates", [])[:count]
     if not candidates:
-        print("gate: the packet has no candidates to verify")
-        return 1
+        # Exit ZERO. A packet with no candidates is a supported state
+        # everywhere else in this system: scan.main returns 0 on it, the
+        # analyst's fallback is written to print "0 of 0", and the report goes
+        # out with empty tables and the reason on the disclaimer. Returning 1
+        # here recorded the verify step as failed on a morning where nothing
+        # went wrong, which the watchdog then counted as a problem and the next
+        # day's report put on its disclaimer line as a failed scheduled step.
+        # A false alarm on a quiet morning is how a real alarm stops being read.
+        # The count below is what carries the fact, and zero rows tabled is
+        # visible in the trail without pretending to be a fault.
+        print("gate: the packet has no candidates to verify, which is a quiet "
+              "morning rather than a fault. Nothing to table.")
+        print(f"gate: marker {UNVERIFIED_MARKER} "
+              f"{'EXISTS, no email will be sent' if UNVERIFIED_MARKER.exists() else 'is absent, email is live'}")
+        job_status.produced("rows tabled", 0)
+        return 0
 
     print(f"gate: verification table for {packet.get('session_date')}, "
           f"packet generated {packet.get('generated_at')}")

@@ -54,8 +54,37 @@ def _session_calendar(api: eodhd.EodhdClient, back_days: int = 40) -> list[str]:
     return [str(b["date"]) for b in bars if b.get("date")]
 
 
+class CalendarTooShort(LookupError):
+    """The session calendar does not reach back far enough to answer for a pick."""
+
+
 def _sessions_after(calendar: list[str], date: str, count: int) -> list[str]:
-    """The next `count` sessions strictly after `date`, or fewer if not elapsed."""
+    """The next `count` sessions strictly after `date`, or fewer if not elapsed.
+
+    Raises when `date` sits BEFORE the calendar's own first session, because
+    then every entry satisfies `d > date` and the first one returned is the
+    oldest session in the window rather than the session after the pick. That
+    is not a smaller answer, it is a wrong one, and it was silent: the caller
+    would fetch bars from the pick's date to a session weeks later, find the
+    window's first day present in the response, and write it into
+    next_day_open/high/low/close, pm_high_broke_next_day, mfe_pct and mae_pct
+    as though it were the day after the pick.
+
+    The path there is ordinary. A name halted the session after a pick leaves
+    that row null, so it is re-selected every night and correctly reported as
+    unavailable. Forty-one days later the calendar no longer reaches the pick,
+    the guard that was refusing it stops applying, and the row is filled with
+    excursions measured against a tape six weeks removed from the levels they
+    are computed from. That table is the one CRITERIA says its thresholds will
+    eventually be recalibrated against.
+    """
+    if not calendar:
+        raise CalendarTooShort("the session calendar is empty")
+    if date < calendar[0]:
+        raise CalendarTooShort(
+            f"the pick is dated {date} and the session calendar starts at "
+            f"{calendar[0]}, so it cannot say which session follows it"
+        )
     later = [d for d in calendar if d > date]
     return later[:count]
 
@@ -106,7 +135,17 @@ def fill(day_limit: str | None = None) -> int:
             if day_limit and date > day_limit:
                 skipped += 1
                 continue
-            next_sessions = _sessions_after(calendar, date, long_n)
+            try:
+                next_sessions = _sessions_after(calendar, date, long_n)
+            except CalendarTooShort as exc:
+                # Loud and null, never guessed. A row this old with outcomes
+                # still missing is a real question (halted, delisted, or the
+                # vendor never published), and answering it with the wrong
+                # sessions would put a fabricated excursion into the record.
+                print(f"outcomes: {ticker} {date} left alone: {exc}. Widen "
+                      "back_days if this row should still be fillable.")
+                unavailable += 1
+                continue
             wants_short = pick["next_day_close"] is None and len(next_sessions) >= short_n
             wants_long = pick["day5_close"] is None and len(next_sessions) >= long_n
             if not wants_short and not wants_long:
@@ -127,6 +166,22 @@ def fill(day_limit: str | None = None) -> int:
                 if next_bar is None:
                     print(f"outcomes: {ticker} {date} has no bar on {next_sessions[short_n - 1]}, "
                           "possibly halted or delisted, left null")
+                    unavailable += 1
+                elif _as_float(next_bar.get("close")) is None:
+                    # The bar exists and its close does not parse. Writing the
+                    # other three columns and a null close looks like progress
+                    # and is not: the candidate query re-selects on
+                    # `next_day_close IS NULL`, so the row came back every
+                    # night, was re-fetched at one end of day call each time,
+                    # was recounted in `filled`, and had outcomes_filled_at
+                    # moved forward, which stopped that column recording when
+                    # the outcome was obtained. The docstring's claim that a
+                    # second run straight after the first changes nothing was
+                    # false for exactly these rows. Treated as unavailable, the
+                    # same as a missing bar, so the row stays honestly null.
+                    print(f"outcomes: {ticker} {date} has a bar on "
+                          f"{next_sessions[short_n - 1]} with no readable close, "
+                          "left null rather than half filled")
                     unavailable += 1
                 else:
                     next_open = _as_float(next_bar.get("open"))
@@ -149,7 +204,10 @@ def fill(day_limit: str | None = None) -> int:
 
             if wants_long:
                 day5_bar = by_date.get(next_sessions[long_n - 1])
-                if day5_bar is not None:
+                # Only when it parses, for the reason above: day5_close is the
+                # other half of the candidate query, so writing a null into it
+                # re-arms the row rather than completing it.
+                if day5_bar is not None and _as_float(day5_bar.get("close")) is not None:
                     updates["day5_close"] = _as_float(day5_bar.get("close"))
 
             if not updates:

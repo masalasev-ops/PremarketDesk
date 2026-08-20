@@ -75,7 +75,10 @@ at the root and is gitignored along with .env.
              addressable_sweep, vwap_gappers, probe_live_v1, probe_alpaca_live,
              probe_socket_cap, the two measure_ scripts.
              Instruments, not pipeline. Nothing downstream reads their output.
-  - tests/   conftest, run_tests and the eleven test_ modules.
+  - tests/   conftest, run_tests and the twelve test_ modules. test_regressions
+             holds one claim per defect confirmed by the 2026-08-20 audit;
+             they are grouped by how they were found because that is the
+             only thing they have in common.
   - src/probe_alpaca.py sits at the root beside the packages: the shared
              Alpaca client the probes use. Research only, and no pipeline
              module imports it.
@@ -157,7 +160,11 @@ at the root and is gitignored along with .env.
   time, ~31k tokens, about 17 cents equivalent. Effort moved to medium on
   2026-08-14 after the comparison recorded under the reinstated review items
   below, and five medium runs measured 97.4, 86.5, 97.7, 91.1 and 92.4
-  seconds, so timeout_s is now 293, three times the slowest.
+  seconds, so timeout_s is now 537, three times the slowest morning ON
+  RECORD, which is 178.9 seconds on 2026-08-19. [corrected 2026-08-20: was
+  "timeout_s is now 293, three times the slowest", derived from those five dry
+  runs. The rule is unchanged and the evidence under it is not; see the timeout
+  note in CRITERIA.md for the table and the slack arithmetic.]
 - .env holds the real EODHD token (100k daily request limit). RESEND_API_KEY
   and EMAIL_TO are empty, so delivery skips even without the gate.
 - `.claude/settings.local.json` grants broad tool permissions.
@@ -335,10 +342,10 @@ timeouts. Second, the invocation became one completion instead of an agent
 loop (see the CLI facts above): model back to sonnet per the owner,
 timeout_s = 218, three times the slowest of the five measured runs named in
 CRITERIA.md. [Superseded the same evening: the owner re-asserted opus, and
-CRITERIA [analyst] has read model = opus, timeout_s = 293 since. The original
-text stands because it records what was true when it was written; see the
-2026-08-20 note under "What remains" for what four real mornings have since
-measured against that 293.] The containment checker was also rebuilt: a claim is an
+CRITERIA [analyst] has read model = opus ever since. timeout_s read 293 from
+that evening until 2026-08-20, when four real mornings re-derived it to 537 on
+the same 3x rule; the timeout note in CRITERIA.md carries the table. The
+original text stands because it records what was true when it was written.] The containment checker was also rebuilt: a claim is an
 uppercase token in a table cell or with a $ prefix that names a real
 universe member; prose acronyms (CEO, FOMC, CPI...) can no longer trip it,
 src/tests/test_containment.py proves both directions, and a containment failure is
@@ -472,17 +479,26 @@ recreates it deliberately.
        watching, and the diagnosis in doc/research/COLLECTOR_VOLUME.md may
        want a different shape of reading anyway.
 
-   5b. The analyst timeout headroom is quoting a sample the schedule has
-       overtaken. CRITERIA [analyst] sets timeout_s = 293 as three times the
+   5b. CLOSED 2026-08-20 by re-deriving the number, and it leaves a question
+       behind. CRITERIA [analyst] set timeout_s = 293 as three times the
        slowest of five dry runs (97.4, 86.5, 97.7, 91.1, 92.4 seconds). Four
        scheduled mornings have since measured 89.1, 48.4, 98.5 and 178.9
-       seconds, with output tokens over the same four at 7,697, 4,000, 8,954
-       and 16,005. Against the slowest real morning 293 is 1.6x, not 3x, and
-       both numbers are moving one way. Nothing has timed out and the chain
-       finished at 08:48 on the longest of them, so this is a measurement to
-       redo rather than a fault to fix: five dry runs are no longer the best
-       evidence available and the comment in CRITERIA should cite the real
-       mornings.
+       seconds of CLI time, 54.4, 107.5 and 185.3 seconds of analyst step time
+       on the three the job trail covers, with output tokens at 7,697, 4,000,
+       8,954 and 16,005. The rule did not change; its evidence did. timeout_s
+       is now 537, three times the slowest morning on record, and the timeout
+       note in CRITERIA carries the table and the slack arithmetic: two
+       attempts exhaust at 09:03 rather than 08:55, both well clear of the open
+       and of the watchdog's 09:25 pass.
+
+       WHAT IS STILL OPEN, and it is a threshold question rather than a code
+       one, so it stays with the owner: the analyst step is close to DOUBLING
+       every session, 54.4 to 107.5 to 185.3, and it tracks output length
+       rather than model speed. 16,005 output tokens on 2026-08-19 is double
+       the previous high against a template whose nine sections did not change.
+       Raising the timeout buys room for that trend and explains none of it. If
+       the next morning lands near 350 seconds the question is what the model
+       is being asked for, not what the timeout is.
 
 ## Layer 4: the notable movers section, specified
 
@@ -780,7 +796,10 @@ actually happened to it, dated, so none of them silently becomes folklore.
   seconds, all clean single completions, about 25 seconds slower than low.
   CRITERIA [analyst] now reads effort = medium with timeout_s = 293 (3x the
   slowest of the five). One CRITERIA edit flips it back if a real morning
-  says otherwise.
+  says otherwise. [A real morning did say otherwise. timeout_s is 537 from
+  2026-08-20, on the same 3x rule against the slowest scheduled morning rather
+  than the slowest dry run. This paragraph stands as what was true when it was
+  written; the timeout note in CRITERIA.md carries the current derivation.]
 - The sibling consumer on the shared key: IDENTIFIED 2026-08-14. Three
   sibling projects under the same parent directory reference EODHD:
   AlphaFinanceLab, StockResearcherLab, and OptionsWheelLab. The 2026-08-13

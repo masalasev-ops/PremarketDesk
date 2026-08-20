@@ -146,10 +146,17 @@ def record_meter(step: str, when: str, source: str = "job",
     attributes consumption to a time of day and to a step, which is the cheap
     half of what a second API token would buy, and it works without buying one.
 
-    Costs one call per reading, so two per job, about eighteen a day against a
-    shared 100,000. That is itself recorded rather than hidden: the reading
-    moves the thing it reads, and a delta of two across a job that made no
-    other call is this function looking at itself.
+    Costs one call per reading, so two per STEP, not per job. [corrected
+    2026-08-20: was "two per job, about eighteen a day". run() wraps every
+    step, and a weekday runs sixteen tracked steps spread over nine job
+    firings plus six watchdog firings, which measures at 68 to 92 job readings
+    a day in the trail itself, plus the sampler's 48. Call it 120 to 140, or
+    about 0.13 percent of the shared 100,000 — still small, but seven times
+    what this sentence claimed, and this is the module whose whole job is to
+    account for a shared key that a sibling project drains.] That is itself
+    recorded rather than hidden: the reading moves the thing it reads, and a
+    delta of two across a step that made no other call is this function
+    looking at itself.
 
     Never raises. A meter that cannot be read is a missing line in an
     operational log, and must not be able to fail a job that was otherwise

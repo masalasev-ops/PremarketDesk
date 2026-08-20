@@ -406,6 +406,35 @@ never drift apart.
 lookback_sessions             = 250        # about one trading year
 min_sessions                  = 100        # seed: below this the propensity is NULL, never a computed zero
 atr_sessions                  = 20         # sessions in the average true range
+return_stdev_sessions         = 20         # sessions in return_stdev_20d. See the stdev window note
+
+### The stdev window note
+
+return_stdev_20d is the denominator [Notable] move_sigma divides by, and until
+2026-08-20 this key did not exist. gap_stats trimmed its CLOSES to
+lookback_sessions and took the standard deviation over every return in that
+list, so a column named for twenty sessions held a trailing one year figure.
+[Notable] min_sessions_for_move_sigma was doing duty as the window and it is
+not one: it is a floor on how many returns are needed before the answer may be
+published, which is a different question from how many go into it.
+
+The two are kept apart on purpose. A floor answers "is this measurable"; a
+window answers "measurable over what". Reusing one for the other is how the
+column ended up describing a different quantity from its own name, and
+BUILD_PLAN.md line 509 recorded the intended behaviour as already built the
+whole time.
+
+What the year long version cost, since the section that reads it is not built
+yet and no report has carried it: a name that was violent for a year and has
+been quiet for a month keeps the violent denominator, so a genuinely unusual
+move reads as ordinary and never reaches the list. The reverse overstates a
+megacap that has just started moving. It also disarmed min_return_stdev_pct,
+whose whole purpose is that "a name that has barely moved in twenty sessions
+would otherwise report an enormous sigma on any move at all": over 250 sessions
+almost nothing sits below 0.1, so the floor never fired.
+
+20 matches the column name and the specification. It is not independently
+measured, and the header of this file applies.
 
 ### The null note
 
@@ -687,11 +716,55 @@ like the Api section above, not screen criteria.
 
 model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
-timeout_s                     = 293        # 3x the slowest of five measured opus medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds
+timeout_s                     = 537        # 3x the slowest MEASURED MORNING, 178.9s on 2026-08-19. See the timeout note below.
+                                           # [corrected 2026-08-20: was 293, "3x the slowest of five measured opus
+                                           # medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds". The
+                                           # rule did not change, the evidence under it did.]
 max_attempts                  = 2          # total tries, including the first
 quantifier_regenerations      = 1          # flagged narratives thrown away and asked for again before the plain table takes over
 quantifier_guard              = warn       # warn: log and print flags, deliver the narrative anyway. enforcing: regenerate, then fall back. See the note below for what has to be true before this flips.
 prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI, A, I
+
+### The timeout note, and why the number moved
+
+The rule has always been three times the slowest run on record. What changed on
+2026-08-20 is that runs on record now means scheduled mornings rather than the
+five dry runs of 2026-08-14, which the schedule has overtaken.
+
+| session | analyst step | CLI duration | output tokens |
+| --- | ---: | ---: | ---: |
+| the five dry runs, 2026-08-14 | - | 86.5 to 97.7 | - |
+| 2026-08-14 | - | 89.1 | 7,697 |
+| 2026-08-17 | 54.4 | 48.4 | 4,000 |
+| 2026-08-18 | 107.5 | 98.5 | 8,954 |
+| 2026-08-19 | 185.3 | 178.9 | 16,005 |
+
+Nothing has timed out. This is not a fault being fixed, it is a threshold being
+kept faithful to the rule that defines it, and the direction is what forces it:
+54.4, 107.5, 185.3 is close to a doubling per session, and it tracks output
+length rather than the model being slow. One more session on that trend rides
+the first attempt past 293, retries, rides the second, and hands the morning the
+deterministic plain table for no reason at all. That is exactly the cost the
+2026-08-18 regeneration work was built to stop paying.
+
+What the new number costs, arithmetic rather than assertion. The chain starts at
+08:45:00. Everything that is not the analyst measured 19.0, 20.6 and 19.1
+seconds across the three recorded mornings: scan is 14 to 18 of it and render,
+verify, deliver and archive are about two seconds together. So the worst case is
+08:45:00 plus 19s plus max_attempts times timeout_s.
+
+  at 293: two attempts exhaust at 08:55:05, 35 minutes before the open
+  at 537: two attempts exhaust at 09:03:13, 27 minutes before the open
+
+Both clear the open, and both clear the watchdog: [monitor] chain_due is 09:00
+but the watchdog only fires on its half hours, so the 08:55 pass reads NOT DUE
+and the next is 09:25, by which time even the worst case has finished. Nothing
+downstream of the chain has a deadline between those two numbers.
+
+The output length is the thing actually worth watching. 16,005 output tokens on
+2026-08-19 is double the previous high on a template whose nine sections did not
+change. Raising the timeout buys room for that trend, it does not explain it,
+and a report that keeps doubling is its own question.
 
 ### The prose stopword note
 

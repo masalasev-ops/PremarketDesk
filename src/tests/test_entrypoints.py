@@ -1463,6 +1463,117 @@ def claim_archive(failures: list[str]) -> None:
 def claim_backfill(failures: list[str]) -> None:
     outcome = _drive("backfill", "night.backfill_premarket", [])
     _check(outcome, failures)
+    claim_verification_is_not_gated_on_picks(failures)
+
+
+def claim_verification_is_not_gated_on_picks(failures: list[str]) -> None:
+    """The collector volume check runs on a day with no live picks rows.
+
+    This is the instrument for BUILD_PLAN.md's top open question, and it used
+    to sit at the tail of backfill(), after the early return that fires when a
+    day has no live picks. Emptying picks on 2026-08-19 therefore also stopped
+    the nightly writing runs/<date>/verify_intraday.json, on the night the
+    question it measures got most urgent, and nothing said so. An instrument
+    gated on the thing it measures is not an instrument.
+
+    Driven with picks deliberately empty for the day under test, which is also
+    the state of the real database today, so this asserts against the situation
+    the machine is actually in rather than a hypothetical one.
+
+    On YESTERDAY rather than today because the stubbed vendor serves yesterday's
+    minutes from its intraday route, and the check compares identical minutes
+    only: a collector file stamped today would intersect it on nothing and the
+    claim would pass or fail for a reason that has nothing to do with the gate.
+    """
+    from collect import collect_premarket
+    from core import store
+    from night import backfill_premarket
+
+    day = YESTERDAY.isoformat()
+    verify_path = config.run_dir(day) / "verify_intraday.json"
+    bars_path = collect_premarket.bar_path(day)
+    saved_verify = verify_path.read_bytes() if verify_path.is_file() else None
+    saved_bars = bars_path.read_bytes() if bars_path.is_file() else None
+
+    # Bars on exactly the minutes the stub's intraday route serves, at a volume
+    # that deliberately disagrees with it, so a real comparison happens and
+    # produces a real disagreement rather than an empty intersection.
+    rows = [
+        json.dumps({
+            "symbol": "AAPL.US", "minute_epoch": int(bar["timestamp"]),
+            "minute_et": ettime.stamp(ettime.from_epoch_s(int(bar["timestamp"]))),
+            "o": 100.0, "h": 100.5, "l": 99.5, "c": 100.0,
+            "v": 9_000.0, "pv": 900_000.0, "trades": 12,
+        })
+        for bar in _intraday_rows(YESTERDAY)
+    ]
+    bars_path.parent.mkdir(parents=True, exist_ok=True)
+    bars_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    try:
+        with store.session() as connection:
+            store.init(connection)
+            live = connection.execute(
+                "SELECT COUNT(*) FROM picks WHERE date=? AND source='live'", (day,)
+            ).fetchone()[0]
+            connection.commit()
+        if live:
+            print(f"  verify gate  SKIPPED, the sandbox database holds {live} live "
+                  f"pick(s) for {day}, so the ungated path is not the one under test")
+            return
+
+        verify_path.unlink(missing_ok=True)
+        _install(ROUTES)
+        try:
+            code = backfill_premarket.backfill(day, overwrite=True)
+        finally:
+            _uninstall()
+
+        if code != 0:
+            failures.append(f"backfill exited {code} on a day with no live picks; "
+                            "an empty table is not a failure")
+        if not verify_path.is_file():
+            failures.append(
+                "backfill wrote no verify_intraday.json for a day with no live "
+                "picks rows. The collector volume check reads the bar file, not "
+                "the picks table, and must not be gated on it.")
+            return
+
+        summary = json.loads(verify_path.read_text(encoding="utf-8"))
+        for key in ("day", "compared", "within_one_percent", "median_abs_pct"):
+            if key not in summary:
+                failures.append(f"the verification summary has no {key}: {summary}")
+        if summary.get("compared", 0) < 1:
+            failures.append(f"the verification compared nothing: {summary}")
+        if summary.get("day") != day:
+            failures.append(f"the summary is stamped {summary.get('day')}, not {day}")
+        # The fixture disagrees by 10 percent on purpose, so a summary claiming
+        # agreement would mean the comparison never ran on these bars.
+        if summary.get("within_one_percent"):
+            failures.append(
+                f"the fixture's 9,000 shares a minute against the vendor's 10,000 "
+                f"came back as {summary['within_one_percent']} symbol(s) within one "
+                "percent, so the numbers being compared are not the ones written")
+        print(f"  verify gate  written with picks empty for {day}, "
+              f"{summary.get('compared')} symbol(s) compared, median absolute "
+              f"difference {summary.get('median_abs_pct'):.1f}%")
+
+        # And the sweep that finds a session nobody measured, which is the other
+        # half: a day with no picks row is invisible to the true-column catch-up.
+        found = backfill_premarket.unverified_sessions(
+            ettime.today_str(), _CRIT.integer("backfill", "catchup_days"))
+        if day in found:
+            failures.append(f"{day} still reads as unverified after its summary "
+                            "was written, so the sweep would measure it every night")
+    finally:
+        if saved_bars is None:
+            bars_path.unlink(missing_ok=True)
+        else:
+            bars_path.write_bytes(saved_bars)
+        if saved_verify is None:
+            verify_path.unlink(missing_ok=True)
+        else:
+            verify_path.write_bytes(saved_verify)
 
 
 def claim_outcomes(failures: list[str]) -> None:

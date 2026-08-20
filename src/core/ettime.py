@@ -7,8 +7,21 @@ Windows ships no IANA time zone database, and the tzdata package is not one of
 the three dependencies this project is allowed. So zoneinfo is tried first and
 a small fixed rule implementation is used when it is not available. The rule
 has been stable since the Energy Policy Act of 2005 took effect in 2007:
-daylight time starts on the second Sunday in March at 02:00 local and ends on
-the first Sunday in November at 02:00 local.
+daylight time starts on the second Sunday in March at 02:00 local standard
+time, which is 07:00 UTC, and ends on the first Sunday in November at 02:00
+local daylight time, which is 06:00 UTC.
+
+Both of those UTC instants are written down here because the fallback needs
+them, and needing them is the whole of what went wrong. Read as local wall
+clock rules they are exactly right, and dt.tzinfo's default fromutc() evaluates
+the daylight test on the STANDARD time clock, which puts the November
+transition an hour late: every UTC instant from 06:00 to 06:59 on that Sunday
+came back as 02:xx EST when it is 01:xx EST, and 02:00 EST was produced twice
+while 01:00 EST was never produced at all. March was unaffected, because there
+the standard clock and the rule agree. The schedule never noticed because
+nothing runs between 01:00 and 02:00 ET on a Sunday, but a vendor timestamp in
+that hour was bucketed into the wrong minute once a year. _USEasternFallback
+now carries its own fromutc() that compares the UTC instant directly.
 
 If tzdata ever lands in the environment, zoneinfo wins automatically and this
 fallback stops being used.
@@ -38,6 +51,20 @@ def _nth_sunday(year: int, month: int, nth: int) -> dt.datetime:
     return first + dt.timedelta(days=days_ahead + 7 * (nth - 1))
 
 
+def _transitions_utc(year: int) -> tuple[dt.datetime, dt.datetime]:
+    """The two transition INSTANTS, as naive UTC.
+
+    Daylight time begins at 02:00 EST, which is UTC-5, so 07:00 UTC. It ends at
+    02:00 EDT, which is UTC-4, so 06:00 UTC. The asymmetry is the entire reason
+    this function exists: the same "02:00 local" reads against a different
+    offset at each end, and a comparison made on one clock is right at one
+    transition and an hour out at the other.
+    """
+    start = _nth_sunday(year, _DST_START_MONTH, _DST_START_WEEK) - _STD_OFFSET
+    end = _nth_sunday(year, _DST_END_MONTH, _DST_END_WEEK) - _DST_OFFSET
+    return start, end
+
+
 class _USEasternFallback(dt.tzinfo):
     """US Eastern under the post 2007 daylight saving rule."""
 
@@ -50,12 +77,40 @@ class _USEasternFallback(dt.tzinfo):
     def tzname(self, when: dt.datetime | None) -> str:
         return "EDT" if self._is_dst(when) else "EST"
 
+    def fromutc(self, when: dt.datetime) -> dt.datetime:
+        """UTC to local, decided on the UTC instant rather than on a local clock.
+
+        dt.tzinfo's default implementation asks utcoffset() and dst() about a
+        datetime carrying UTC digits, then shifts by the standard offset and
+        asks again, so the daylight test lands on the standard clock. At the
+        November end that is an hour early against a rule written in daylight
+        time, and the whole ambiguous hour came out shifted. Comparing the UTC
+        instant against the UTC transitions has no such asymmetry.
+        """
+        naive = when.replace(tzinfo=None)
+        start, end = _transitions_utc(naive.year)
+        if start <= naive < end:
+            return when + _DST_OFFSET
+        local = when + _STD_OFFSET
+        if end <= naive < end + _HOUR:
+            # The repeated hour. This wall clock already happened once today on
+            # daylight time; fold=1 is how Python says "the second one", and
+            # _is_dst below reads it so the offset and the name agree with the
+            # instant this came from.
+            local = local.replace(fold=1)
+        return local
+
     def _is_dst(self, when: dt.datetime | None) -> bool:
         if when is None:
             return False
         naive = when.replace(tzinfo=None)
         start = _nth_sunday(naive.year, _DST_START_MONTH, _DST_START_WEEK)
         end = _nth_sunday(naive.year, _DST_END_MONTH, _DST_END_WEEK)
+        # The one local hour that happens twice, 01:00 to 02:00 on the November
+        # Sunday. Nothing but fold can tell the two apart, and a wall clock
+        # built without one is the first of them by Python's own convention.
+        if end - _HOUR <= naive < end:
+            return getattr(when, "fold", 0) == 0
         return start <= naive < end
 
     def __repr__(self) -> str:

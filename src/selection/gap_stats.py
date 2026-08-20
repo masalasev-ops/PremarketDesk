@@ -54,6 +54,13 @@ ATR_SESSIONS = _CRIT.integer("gap_stats", "atr_sessions")
 # min_sessions is deliberately higher because a propensity RATE needs more
 # observations than a spread does.
 MIN_SESSIONS_FOR_SIGMA = _CRIT.integer("notable", "min_sessions_for_move_sigma")
+# The WINDOW the stdev is taken over, which is a different question from the
+# floor above. min_sessions_for_move_sigma says how many returns are needed
+# before the answer is publishable; this says how many go into it. Until
+# 2026-08-20 there was no such key and the stdev was taken over every return in
+# the 250 session list, so a column named return_stdev_20d held a trailing one
+# year figure. See the stdev window note in CRITERIA.md.
+RETURN_STDEV_SESSIONS = _CRIT.integer("gap_stats", "return_stdev_sessions")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS gap_stats (
@@ -116,7 +123,17 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
         open_price = _as_float(bar.get("open"))
         high = _as_float(bar.get("high"))
         low = _as_float(bar.get("low"))
-        if close is None or open_price is None:
+        # A bar with no open stays in the chain with open_price None. It used
+        # to be dropped whole, which removed its CLOSE from the chain too, so
+        # the session after a hole had its gap measured against a close two
+        # sessions back: a two session move stored as a one session gap. The
+        # comment below already identified that exact mechanism and fixed it
+        # for the returns list only, leaving gap_propensity, median_abs_gap_pct
+        # and atr_pct_20d on the unfixed one — and gap_propensity is
+        # [discovery] within_tier_key, the number 42 subscription slots are
+        # ordered by, with atr_pct_20d as its fallback. A hole now costs one
+        # gap rather than corrupting the next.
+        if close is None:
             continue
         rows.append((day, open_price, high, low, close))
     rows.sort()
@@ -148,8 +165,20 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
     # Null, not zero, below the floor. A name with one session of history has
     # no measurable volatility, and dividing a move by a fabricated one would
     # report a sigma nobody measured.
-    return_stdev = (round(statistics.stdev(returns), 6)
-                    if len(returns) >= MIN_SESSIONS_FOR_SIGMA else None)
+    # Over the LAST RETURN_STDEV_SESSIONS returns, not over all of them. The
+    # column is called return_stdev_20d and BUILD_PLAN specifies it as "the
+    # standard deviation of daily close to close returns in percent over the
+    # trailing 20 sessions"; it was being computed over the whole 250 session
+    # list, because min_sessions_for_move_sigma was read as the window when it
+    # is a floor. A year long denominator understates a name that has just
+    # started moving and overstates one that has just stopped, and it also
+    # disarmed the min_return_stdev_pct floor, which exists so that a name
+    # which has barely moved in twenty sessions does not report an enormous
+    # sigma: almost nothing sits below 0.1 over 250 sessions.
+    window = returns[-RETURN_STDEV_SESSIONS:]
+    return_stdev = (round(statistics.stdev(window), 6)
+                    if len(returns) >= MIN_SESSIONS_FOR_SIGMA and len(window) >= 2
+                    else None)
 
     gaps: list[float] = []
     true_ranges: list[float] = []
@@ -157,7 +186,11 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
         _day, open_price, high, low, close = rows[index]
         prior_close = rows[index - 1][4]
         if prior_close:
-            gaps.append((open_price - prior_close) / prior_close * 100.0)
+            # Each measurement is guarded on the field IT needs, so a bar
+            # missing an open still contributes its true range and still
+            # anchors the next session's gap.
+            if open_price is not None:
+                gaps.append((open_price - prior_close) / prior_close * 100.0)
             if high is not None and low is not None:
                 true_ranges.append(max(
                     high - low, abs(high - prior_close), abs(low - prior_close)

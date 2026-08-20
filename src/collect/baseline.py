@@ -364,8 +364,30 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"baseline: cutoff {cutoff} ET, {len(tickers)} tickers, "
           f"{LOOKBACK_SESSIONS} session lookback, refresh after {REFRESH_AFTER_DAYS} days")
-    warm(tickers, cutoff, force=args.force)
-    job_status.produced("tickers warmed", len(tickers))
+    # The RESULT, not the length of the request. warm() has always returned its
+    # counts and this line always discarded them, so a run in which every
+    # single ticker failed recorded "tickers warmed 42" and exit 0. That
+    # directly contradicts the stand-down branch above, whose whole argument is
+    # that the number is worth reading because zero warmed is visible: it can
+    # only be visible if it counts warms. On the morning it mattered the scan
+    # would publish a null pm_rvol for the entire watchlist and the trail would
+    # say the baseline job did its job.
+    result = warm(tickers, cutoff, force=args.force)
+    warmed = int(result.get("computed", 0)) + int(result.get("cached", 0))
+    failed = list(result.get("failed") or [])
+    job_status.produced("tickers warmed", warmed)
+    if failed:
+        print(f"baseline: {len(failed)} of {len(tickers)} ticker(s) could not be "
+              f"warmed: {', '.join(str(f) for f in failed[:10])}"
+              + (" and more" if len(failed) > 10 else ""))
+    if failed and warmed == 0:
+        # Exit stays 0, for the reason the stand down gives: a baseline the
+        # scan can survive without must not stop the morning. What must not
+        # happen is the trail calling it a success.
+        job_status.failed(
+            f"every one of the {len(tickers)} requested ticker(s) failed to warm, "
+            "so the scan will publish a null premarket RVOL for the whole "
+            "watchlist and say the cache was cold")
     eodhd.print_call_report()
     return 0
 

@@ -236,9 +236,10 @@ tbody tr:hover{background:var(--ground)}
   pm_float_rotation, is under investigation, so section 08 below describes the design rather than the
   database and the long goal is at zero. <b>Collector volume is the open question</b>: one session over
   reporting by 3.8x, two under reporting by about 10x, replay measured and too small to be either;
-  doc/research/COLLECTOR_VOLUME.md is the diagnosis, and note that C20 only runs the definitive
-  verification for days that have live picks, so with the table empty that measurement has stopped
-  being taken automatically. <b>The quantifier guard is in warn mode</b> and has not fired on a live
+  doc/research/COLLECTOR_VOLUME.md is the diagnosis. C20's definitive verification had stopped
+  running when picks was emptied, because it sat behind that table's early return; it was decoupled
+  on 2026-08-20, runs first now, and sweeps sessions that were collected and never measured, so
+  2026-08-19 gets its reading on the next nightly. <b>The quantifier guard is in warn mode</b> and has not fired on a live
   morning; C57 does not exist yet.</p>
 </header>
 
@@ -638,8 +639,8 @@ tbody tr:hover{background:var(--ground)}
     <p style="font-size:13.5px">A containment check compares every ticker in the report against the
     packet and fails the run on any name that is not there. The prompt requires the disclaimer line to
     name any candidate with a null relative volume or a partial premarket window. The claude CLI gets
-    two attempts, each capped at 293 seconds, three times the slowest of five measured opus medium
-    runs (97.4, 86.5, 97.7, 91.1, 92.4 seconds). When both attempts time out, exit non-zero, or come
+    two attempts, each capped at 537 seconds, three times the slowest measured opus medium
+    MORNING, 178.9 seconds on 2026-08-19. When both attempts time out, exit non-zero, or come
     back refused, <code>analyst.py</code> writes the packet out itself as plain tables stamped with
     the reason, so a report always goes out.</p>
 
@@ -651,11 +652,16 @@ tbody tr:hover{background:var(--ground)}
     <br><br>
     <b>What four scheduled mornings then measured.</b> 89.1s and 7,697 output tokens on 2026-08-14,
     48.4s and 4,000 on 08-17, 98.5s and 8,954 on 08-18, 178.9s and 16,005 on 08-19, at $0.47, $0.26,
-    $0.72 and $0.92. All four came back status ok with no fallback and no quantifier flag. The 293
-    second timeout was set at three times the slowest of five dry runs; against the slowest real
-    morning it is 1.6 times, and both the duration and the output length are moving one way. The
-    chain still finished at 08:48 on the longest of them, so the slack is real, but the headroom
-    argument in CRITERIA.md is now quoting a sample the schedule has overtaken.</figcaption>
+    $0.72 and $0.92. All four came back status ok with no fallback and no quantifier flag. Measured
+    on the job trail rather than the CLI, the analyst STEP took 54.4, 107.5 and 185.3 seconds across
+    the three mornings it covers, against 19.0, 20.6 and 19.1 seconds for everything else in the
+    chain put together. The 293 second timeout had been set at three times the slowest of five dry
+    runs, which the schedule overtook: against the slowest real morning it was 1.6 times. It was
+    re-derived to 537 on 2026-08-20, on the same rule against the slowest morning on record, so two
+    exhausted attempts now end at 09:03 rather than 08:55 and both still clear the open and the
+    watchdog's 09:25 pass. What the raise does not explain is why the step is close to doubling
+    every session, or why one morning produced double the previous high in output tokens against a
+    template whose nine sections did not change.</figcaption>
   </figure>
 </section>
 
@@ -869,10 +875,10 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
       <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. On 2026-08-14 the chain exited zero at every step and published a report describing the previous session, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>
-      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 293 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
+      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 537 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
       <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:53</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
       <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
-      <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date, and the volume verification for it.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals. The volume check self-heals on a different query, because it has to: it asks which COLLECTED sessions were never measured rather than which picks rows lack a column, so it still runs when the table is empty. Until 2026-08-20 it sat behind the picks early return and did not.</td><td>Already sent</td></tr>
       <tr><td class="nm">C21 fill_outcomes<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Outcome columns.</td><td>Same. It scans for unfilled rows past the one and five session marks, so it catches up on its own.</td><td>Already sent</td></tr>
     </tbody>
   </table>
@@ -956,7 +962,7 @@ tbody tr:hover{background:var(--ground)}
     <b>night</b> (backfill_premarket, fill_outcomes, pool_recall, build_archive),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
     vwap_gappers, three probe_ scripts and two measure_ scripts &mdash; instruments, not pipeline),
-    <b>tests</b> (conftest, run_tests and eleven test_ modules). One file sits at the root beside the
+    <b>tests</b> (conftest, run_tests and twelve test_ modules). One file sits at the root beside the
     packages, probe_alpaca.py, the shared Alpaca client the probes use; nothing in the pipeline
     imports it.
     <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55)</span></dd>

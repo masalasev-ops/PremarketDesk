@@ -15,6 +15,230 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, third: an adversarial audit of the whole scheduled path, twenty defects fixed
+
+Forty findings raised by six readers over the six packages and the .bat files,
+each then handed to an independent verifier told to REFUTE it. Twenty survived
+and all twenty are fixed here, with one claim each in the new
+src/tests/test_regressions.py. The twenty that were refuted are not listed:
+they were wrong, and a list of wrong things is how a next reader wastes a day.
+
+### Wrong numbers reaching a reader
+
+**The macro line was four hours late in every report ever written.** The EODHD
+economic events feed is UTC with no offset on the string, and scan parsed it
+with `fromisoformat(raw).replace(tzinfo=ET)`, which keeps the digits and
+changes what they mean. Every archived packet carries it: 2026-08-19 has FOMC
+Minutes at 18:00 ET against a real 14:00 release and Initial Jobless Claims at
+12:30 against a real 08:30. A premarket briefing that moves the morning's only
+macro print from an hour before the open to after lunch has inverted the one
+thing that section is for. Now `ettime.to_et`, which attach_catalysts was
+already using on the news feed, and the packet records that the times are a
+conversion so the old ones cannot be compared against the new.
+
+**return_stdev_20d was a 250 session standard deviation.** The closes list was
+trimmed to lookback_sessions and the stdev taken over all of it;
+min_sessions_for_move_sigma was doing duty as the window and it is a floor. New
+[gap stats] return_stdev_sessions = 20, with a note on why a floor and a window
+are different questions. Nothing consumes the column yet, so no report carried
+it, but every Sunday was writing it wrong.
+
+**A bar with no open broke the close chain.** gap_stats dropped such a bar
+whole, which removed its close, so the next session's gap was measured against
+a close two sessions back: a two session move stored as a one session gap, in
+gap_propensity, which is [discovery] within_tier_key, the number 42
+subscription slots are ordered by. The comment beside it had identified this
+exact mechanism and fixed it for the returns list only.
+
+**The fixed rule DST fallback put November on the wrong hour.** zoneinfo is
+unavailable here so the fallback is load bearing. dt.tzinfo's default fromutc
+runs the daylight test on the standard clock, which is right in March and an
+hour out in November: every UTC instant from 06:00 to 06:59 on that Sunday came
+back as 02:xx EST when it is 01:xx EST, and 02:00 EST was produced twice while
+01:00 EST never was. It now carries its own fromutc comparing UTC instants, and
+all 8,760 hours of 2026 round trip.
+
+### Losses that were silent
+
+**A rerun that knew less replaced a packet that knew more.** The RVOL cutoff
+snaps to run_time only within ten minutes of 08:45, while the picks live window
+is 07:00 to 09:30 and the watchdog may rerun a broken chain until 09:30. So a
+09:25 rerun found no warmed baseline, nulled every pm_rvol, flipped
+day_eligible false for all twelve, and upserted that over the 08:45 rows as
+source 'live'. thin_rerun_stands_down asserted exactly this in its docstring
+and tested only for a degraded quota. It now measures the evidence: candidates,
+priced, with_rvol, scored, and stands down when the fresh run loses on any axis
+and gains on none.
+
+**flush marked minutes written before writing them.** Bars were popped from
+open_bars and their keys added to `written` while the batch was built, and only
+then was the file opened. An OSError there lost them twice: never on disk, and
+`written` then made add_trade refuse every later trade for those minutes as a
+late print. The OSError also reached run_websocket's socket handler, which
+reported a disk fault as a lost connection and resubscribed into a 50 slot pool
+known to refuse. Now written last, held and retried on failure, counted in
+write_failures, and never raised at the socket.
+
+**Replay was re-counted on every resubscription.** The vendor replays a last
+trade per symbol on each subscribe and nothing deduplicated the replay rows, so
+replay_volume in the packet — the number the tag was introduced to make
+measurable — was multiplied by the connection count.
+
+**The baseline reported its request as its result.** main discarded warm()'s
+counts and recorded len(tickers), so a warm in which every ticker failed
+recorded "tickers warmed 42" and exit 0, while the scan published a null
+pm_rvol for the whole watchlist.
+
+**A pick older than the session calendar was measured against the wrong
+sessions.** _session_calendar fetches 40 calendar days; _sessions_after did not
+check that the pick was inside it, so for an older row every entry qualified
+and the first returned was the window's OLDEST session. A name halted the day
+after a pick stays null and is re-selected nightly until, six weeks later, the
+calendar no longer reaches it and the row is filled with excursions from a tape
+weeks removed. It now raises CalendarTooShort and the row stays honestly null.
+
+**A null close was written, counted and rewritten forever.** next_day_close
+could be set to None beside real open/high/low, and the candidate query
+re-selects on that column being null, so the row came back every night, was
+re-fetched, recounted, and had outcomes_filled_at moved. The idempotency claim
+in the docstring was false for exactly those rows.
+
+**A pipe in a headline ate the rest of the headline.** The fallback report
+interpolates vendor text straight into a markdown table cell; python-markdown
+discards cells past the header count without complaint. New `_cell` helper.
+
+### Guards that did not guard
+
+**watchlist.json was written non-atomically.** A plain write_text truncates the
+500 KB file before writing a byte, so an interruption at 07:15 leaves invalid
+JSON where the last good watchlist was and the 07:20 collector exits with no
+tape for any name — tape that cannot be fetched later. Yesterday's file would
+have served: the collector applies no freshness test. universe.write_atomically
+now takes a target and discover uses it.
+
+**One failed exchange list wrote half a universe and passed every gate.** The
+sweeps and the funnel are computed from that index so they agree with each
+other; only the count fraction floor stands between it and the disk, and at 0.5
+against a 1,519/1,235 split it catches a lost NYSE and not a lost NASDAQ. Which
+half the vendor dropped decided whether the gate spoke, and max_age_days is 10
+so the monitor's age keyed relaunch never fires on a fresh bad file. Now a
+PartialBuildError three credits into the run.
+
+**A hung schtasks killed the whole watchdog pass.** query_task absorbed a
+non-zero exit and not TimeoutExpired or FileNotFoundError, so on a thrashing
+machine the pass did none of its other work either — no collector restart, no
+chain rerun, no backlog line, just a traceback, with the next chance thirty
+minutes later.
+
+**deliver had no send-once record.** The watchdog reruns the whole chain on the
+reasoning that it is idempotent, and the chain's finish marker is written by
+the archive step AFTER deliver, so an archive failure leaves a chain that has
+already emailed looking unfinished. It now writes runs/<date>/delivered.json
+and refuses a second send; an unreadable record reads as no record, because a
+second copy is a cheaper mistake than no copy.
+
+**The quantifier guard skipped headings.** Only the table skip was documented.
+A heading is prose in the most prominent position on the page and is exactly
+where a model summarising an empty screen puts a set-wide claim. The warn mode
+flag rate was undercounting by however many lived there.
+
+### Records that lied about themselves
+
+**A quiet morning recorded a failed step.** verify_morning returned 1 on a
+zero candidate packet against OK_CODES (0,), so a thin premarket day put a
+failed scheduled step in the trail, the watchdog counted it, and the next
+morning's disclaimer named it. Exit 0 now, with zero rows tabled.
+
+**The watchdog recorded finding a problem as failing.** check_all returns 1
+when it FINDS something, which job_monitor.bat documents as "come and look",
+but OK_CODES was (0,) so every such pass recorded STATUS_FAILED. One unjudged
+quantifier flag past its seven day window would have made every later pass
+record failed, and two sessions later the morning report would tell the reader
+the watchdog had never succeeded and had stopped running. OK_CODES is (0, 1)
+and the count is now problems found.
+
+**Two comments described code that does not exist.** analyst's token comment
+cited a `_single_letter_listings` helper that was never written, and
+job_status's meter comment claimed "about eighteen a day" when the trail
+measures 84 to 92 job readings a day plus the sampler's 48. Both corrected in
+place with the old text quoted, per this file's own convention.
+
+### The suite
+
+src/tests/test_regressions.py, sixteen claims covering all twenty findings, in
+run_tests' SUITE. Grouped by how they were found rather than by theme, because
+that is the only thing they have in common and a reader asking what the audit
+caught should get one file.
+
+## 2026-08-20, second: the volume instrument is ungated, and the analyst timeout is re-derived
+
+The two consequences the morning review recorded rather than fixed, closed
+before the 07:15 run. Reasoning in DECISIONS.md the same date.
+
+### The collector volume check no longer depends on the picks table
+
+`night.backfill_premarket` called `verify_against_intraday` at the very end of
+`backfill()`, after the early return that fires when a day has no live picks
+rows. Emptying picks on 2026-08-19 therefore also stopped the nightly writing
+`runs/<date>/verify_intraday.json`. 2026-08-14, 08-17 and 08-18 have one;
+2026-08-19 does not, and no night would have produced another until picks
+refilled. The instrument for the project's top open question went quiet on the
+night that question got most urgent, and nothing said so.
+
+The check reads the collector bar file and the intraday feed and touches no
+database at all, so it is now `verify_volume()`, called FIRST in `backfill()`
+before any path that can return early.
+
+A second sweep was added beside it. `_catchup_dates` asks which picks rows
+still lack their true columns, so it can only ever find days that HAVE picks
+rows. `unverified_sessions` asks which COLLECTED sessions were never measured,
+which is the question that survives an empty table. It is bounded to sessions
+the collector wrote a subscription list for, so an afternoon shakedown is not
+mistaken for a premarket morning: 2026-08-13 holds 1,810 bars across 38 symbols
+from 13:32 to 20:00 ET and BUILD_PLAN records that no verification is owed for
+it. Without that test the sweep would spend 38 intraday calls measuring it and
+write the answer into a preserved run directory.
+
+Tonight's nightly will therefore measure 2026-08-19, which is the one reading
+the register currently lacks.
+
+`claim_verification_is_not_gated_on_picks` in test_entrypoints drives the day
+with picks empty against a collector file that disagrees with the stubbed
+vendor by ten percent, and asserts both that the summary is written and that
+the disagreement is the one that was written, so an empty comparison cannot
+pass it.
+
+### timeout_s 293 to 537, on the same rule against better evidence
+
+CRITERIA [analyst] set `timeout_s = 293` as three times the slowest of five dry
+runs on 2026-08-14 (97.4, 86.5, 97.7, 91.1, 92.4 seconds). Four scheduled
+mornings have since run. From analyst_usage.json, CLI duration: 89.1, 48.4,
+98.5, 178.9 seconds, with output tokens 7,697, 4,000, 8,954, 16,005. From
+data/job-status.jsonl, which times the whole step, the three mornings it covers
+are 54.4, 107.5 and 185.3 seconds, against 19.0, 20.6 and 19.1 seconds for
+every other step in the chain put together.
+
+The rule is unchanged and its evidence is not, so the number is now three times
+the slowest MORNING rather than three times the slowest dry run: 537.
+
+Nothing has timed out. What forces this is the direction: 54.4, 107.5, 185.3 is
+close to a doubling per session and it tracks output length rather than model
+speed. One more session on that trend rides the first attempt past 293,
+retries, rides the second, and hands a perfectly good morning the deterministic
+plain table, which is the cost the 2026-08-18 regeneration work exists to stop
+paying.
+
+What it costs, arithmetic rather than assertion: two exhausted attempts now end
+at 09:03:13 rather than 08:55:05. Both clear the 09:30 open, and both clear the
+watchdog, whose [monitor] chain_due of 09:00 is only consulted on its half
+hours, so the 08:55 pass reads NOT DUE and the next is 09:25.
+
+The timeout note in CRITERIA carries the table and the arithmetic. BUILD_PLAN
+item 5b is closed with the half that is not a code question left open: the step
+doubling every session is not explained by raising the timeout, and 16,005
+output tokens against a template whose nine sections did not change is its own
+question.
+
 ## 2026-08-20: three defects the architecture pages already described correctly, and the pages brought back into sync
 
 A full code review against the two architecture pages. What follows is what

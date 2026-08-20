@@ -42,12 +42,28 @@ _CRIT = criteria.load()
 #
 # Widening it costs almost nothing measurably. Across both archived reports it
 # produced zero new invented-ticker findings and raised the claims examined
-# from 25 to 29 and from 20 to 23. But two reports is a small sample and a
-# stray capital letter in prose is a plausible false alarm, so single
-# character tokens are additionally required to be real listings, which
-# _single_letter_listings supplies from universe.json. A one letter token that
-# is not a listing cannot be a ticker claim and is dropped before it can
-# become one.
+# from 25 to 29 and from 20 to 23.
+#
+# [corrected 2026-08-20: this comment used to end "so single character tokens
+# are additionally required to be real listings, which _single_letter_listings
+# supplies from universe.json. A one letter token that is not a listing cannot
+# be a ticker claim and is dropped before it can become one." No such helper
+# exists, and none ever did. There is no pre-drop.]
+#
+# What actually happens: a one character token is treated exactly like a six
+# character one. It enters the claims set in _ticker_claims, and the only test
+# applied to it is the `token in known_symbols` intersection in check_report,
+# which every token of every length goes through. So the guard against a stray
+# capital letter in prose is the stopword list, which is why A and I are on it
+# and why the note beside them says they are stopped in PROSE only: a Ticker
+# COLUMN cell reading A is unambiguous and is still checked, and that is the
+# case the widening was for.
+#
+# The correction matters beyond tidiness. coverage["tokens_examined"] and
+# coverage["claims_checked"] are counts of tokens that reached the
+# intersection, not of tokens that survived a listings pre-filter, and anyone
+# reasoning about the guard's coverage from the old comment would have read
+# them as narrower than they are.
 _TOKEN_RE = re.compile(r"\b[A-Z][A-Z0-9]{0,5}\b")
 _DOLLAR_RE = re.compile(r"\$([A-Z][A-Z0-9]{0,5})\b")
 
@@ -247,6 +263,21 @@ def _cap(value: Any) -> str:
     return f"{number / 1e6:.0f}M"
 
 
+def _cell(value: Any) -> str:
+    """A free text value, safe to drop into a markdown table cell.
+
+    An unescaped pipe in vendor text ends the cell early. python-markdown's
+    tables extension does not complain: it discards every cell past the header
+    count, so a headline reading "Q2 beat | guidance raised" reaches the
+    delivered HTML as "Q2 beat" and the rest is gone with nothing said. Feeds
+    put pipes in headlines constantly, and this table is the fallback report,
+    which is what a reader gets on the mornings the narrative already failed.
+    Newlines are flattened for the same reason, one row per row.
+    """
+    text = str(value if value is not None else "")
+    return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ").strip()
+
+
 def _bare(symbol: str) -> str:
     return str(symbol).split(".")[0]
 
@@ -367,9 +398,9 @@ def fallback_report(
         found = c.get("catalyst_found")
         catalyst = c.get("catalyst_class") if found else (
             "none found" if found is False else "unknown")
-        add(f"| {_bare(c['symbol'])} | {quote.get('name') or ''} | {_f(c.get('gap_pct'))} "
+        add(f"| {_bare(c['symbol'])} | {_cell(quote.get('name'))} | {_f(c.get('gap_pct'))} "
             f"| {_f(c.get('price'))} | {_f(c.get('prior_close'))} | {_cap(quote.get('marketCap'))} "
-            f"| {catalyst} | {title} |")
+            f"| {_cell(catalyst)} | {_cell(title)} |")
     add("")
     add("## Day watchlist")
     add("")
@@ -660,18 +691,30 @@ def record_quantifier_flags(
 
 
 def quantifier_violations(report: str) -> list[dict[str, Any]]:
-    """Every place the prose asserts a quantifier over the candidate set.
+    """Every place the report asserts a quantifier over the candidate set.
 
     Markdown table rows are skipped entirely. The empty watchlist table's own
     `| none | | | | | | | |` row sits three lines under a heading carrying the
     word watchlist, so scanning tables would fail every empty morning, which is
     exactly the morning this guard is most needed on.
+
+    HEADINGS ARE SCANNED, with their marker run stripped so the words are
+    judged the same way prose is. They were skipped alongside table rows until
+    2026-08-20 and the docstring only ever accounted for the table skip. A
+    heading is not a table row: it is prose in the most prominent position on
+    the page, and "## No candidates cleared the day screen" is exactly the
+    sentence this guard exists to refuse, written where a reader is most likely
+    to believe it. Skipping them also meant the flag rate the warn mode is
+    being measured on undercounted by however many flags lived in headings,
+    which is a measurement problem as well as a guard one.
     """
     out: list[dict[str, Any]] = []
     for number, line in enumerate(report.splitlines(), start=1):
         stripped = line.strip()
-        if stripped.startswith("|") or stripped.startswith("#"):
+        if stripped.startswith("|"):
             continue
+        if stripped.startswith("#"):
+            stripped = stripped.lstrip("#").strip()
         out.extend(_scan_prose(number, stripped))
     return out
 

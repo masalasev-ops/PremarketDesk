@@ -74,12 +74,35 @@ JOB_STATUS_NAMES = {
 # ------------------------------------------------------- task scheduler side
 
 def query_task(task_name: str) -> dict[str, Any]:
-    """Last run time, last result and status straight from schtasks."""
-    proc = subprocess.run(
-        ["schtasks", "/Query", "/TN", task_name, "/V", "/FO", "CSV"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=60,
-    )
+    """Last run time, last result and status straight from schtasks.
+
+    Every failure comes back as {"exists": False, "error": ...}, which is what
+    every caller already handles. The non-zero exit was absorbed from the
+    start; TimeoutExpired and OSError were not, and they are the two that
+    matter on a struggling machine. schtasks taking more than sixty seconds
+    while the box is thrashing, or not being on PATH at all, raised straight
+    through _collector_alive and check_all and killed the whole watchdog pass,
+    which then did none of its other work either: no collector restart, no
+    chain rerun, no flag backlog line, just a traceback in the log. The next
+    chance was thirty minutes later, by which time the collector has lost half
+    its window. A watchdog that dies when the machine is unwell is a watchdog
+    absent exactly when it is needed.
+
+    The same pair is caught the same way around config.build_identifier's
+    subprocess call, which is the convention this now follows.
+    """
+    try:
+        proc = subprocess.run(
+            ["schtasks", "/Query", "/TN", task_name, "/V", "/FO", "CSV"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        # SubprocessError covers TimeoutExpired; OSError covers a missing or
+        # unrunnable schtasks. Both mean the same thing to every caller: this
+        # task could not be queried.
+        return {"exists": False,
+                "error": f"{type(exc).__name__}: {config.scrub_secrets(exc)}"[:200]}
     if proc.returncode != 0:
         return {"exists": False, "error": proc.stderr.strip()[:200]}
     rows = list(csv.DictReader(io.StringIO(proc.stdout)))
@@ -490,8 +513,22 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                f"{backlog_after} day judging window: "
                "python -m ops.quantifier_flags --pending")
 
-    print(f"monitor: {problems} problem(s), {actions} action(s) taken")
-    job_status.produced("jobs checked", len(JOBS))
+    print(f"monitor: {problems} problem(s), {actions} action(s) taken, "
+          f"{len(JOBS)} job(s) checked")
+    # Two different questions, and they had one answer between them. The exit
+    # code is for the scheduler and for a human reading Task Scheduler's last
+    # result column: non-zero means come and look. The status record is for the
+    # job trail, and there it must mean "the watchdog ran", never "the watchdog
+    # found nothing", because several of the conditions that set problems are
+    # designed to persist for weeks. An unjudged quantifier flag past
+    # flag_backlog_after_days is the clearest: CRITERIA says to tune the word
+    # list on a month of them. With OK_CODES = (0,) one such flag made every
+    # later pass record STATUS_FAILED, and two sessions after that the morning
+    # report's job health line told the reader the watchdog had never recorded
+    # a success and had stopped running. It was running perfectly and reporting
+    # one unjudged flag, and with max_steps_named_in_report at four that noise
+    # line crowds out the real overdue steps it exists to surface.
+    job_status.produced("problems found", problems)
     return 0 if problems == 0 else 1
 
 
@@ -499,7 +536,13 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
 # the __main__ line below and the entrypoint test harness read the same value:
 # a literal inside __main__ is invisible to a harness that imports the module
 # and calls main() directly. See ops/job_status.py for the contract.
-OK_CODES = (0,)
+#
+# 1 is here because this job's exit code answers a different question from its
+# status record. check_all returns 1 when it FINDS something, which job_monitor
+# .bat documents as "something needs a human eye", and that is a successful
+# watchdog pass. A pass that genuinely fails raises, and job_status.run records
+# the exception whatever this tuple says, so nothing is lost by admitting 1.
+OK_CODES = (0, 1)
 
 
 def main(argv: list[str] | None = None) -> int:

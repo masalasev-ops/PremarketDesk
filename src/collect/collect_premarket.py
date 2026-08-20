@@ -256,6 +256,20 @@ class BarBuilder:
         # file, and for 2026-08-14 that file does not exist.
         self.replay_bars: dict[tuple[str, int], dict[str, Any]] = {}
         self.replay_rows_written = 0
+        # A replayed minute already on disk, offered again. The vendor replays
+        # a last trade per symbol on EVERY subscription, and this run
+        # resubscribes on every reconnect, so without this the same replayed
+        # print is appended once per connection and read back as that many
+        # times the volume. replay_volume in the packet is the number a human
+        # reads to judge how much replay a session carried, which is the whole
+        # reason the tag was introduced, so inflating it by the reconnect count
+        # defeats the measurement it exists to make.
+        self.duplicate_replay_skipped = 0
+        # Minutes that could not be appended. Counted rather than lost: see
+        # flush() for why they go back into open_bars instead of being marked
+        # written.
+        self.write_failures = 0
+        self.last_write_error: str | None = None
         self._load_existing()
 
     def _load_existing(self) -> None:
@@ -415,26 +429,44 @@ class BarBuilder:
             return 0
         ready.sort(key=lambda k: (k[1], k[0]))
 
+        # Nothing is marked written and no counter moves until the bytes are
+        # on disk. The order used to be the other way round: keys were popped
+        # from open_bars and added to `written` while the batch was being
+        # built, and only then was the file opened. An OSError there lost those
+        # minutes twice over, because `written` then made add_trade refuse
+        # every later trade for them as a late print, so they could not even be
+        # rebuilt from the tape still arriving. rows_written did not move
+        # either, so the counter and the file disagreed in the opposite
+        # direction from the loss.
+        pending: list[tuple[tuple[str, int], dict[str, Any], bool]] = []
         lines: list[str] = []
-        for key in replay_ready:
-            bar = self.replay_bars.pop(key)
+
+        def finish(bar: dict[str, Any]) -> str:
             bar["vwap"] = round(bar["pv"] / bar["v"], 6) if bar["v"] else None
             bar["minute_et"] = ettime.stamp(ettime.from_epoch_s(bar["minute_epoch"]))
-            lines.append(json.dumps(bar, separators=(",", ":")))
-            self.replay_rows_written += 1
-        real = 0
+            return json.dumps(bar, separators=(",", ":"))
+
+        for key in replay_ready:
+            bar = self.replay_bars.pop(key)
+            # Replay rows are deduplicated against `written` exactly like real
+            # bars now. They were not, so a resubscription rewrote them.
+            if key in self.written:
+                self.duplicate_replay_skipped += 1
+                continue
+            lines.append(finish(bar))
+            pending.append((key, bar, True))
         for key in ready:
             bar = self.open_bars.pop(key)
             if key in self.written:
                 self.duplicates_skipped += 1
                 continue
-            bar["vwap"] = round(bar["pv"] / bar["v"], 6) if bar["v"] else None
-            bar["minute_et"] = ettime.stamp(ettime.from_epoch_s(bar["minute_epoch"]))
-            lines.append(json.dumps(bar, separators=(",", ":")))
-            self.written.add(key)
-            real += 1
+            lines.append(finish(bar))
+            pending.append((key, bar, False))
 
-        if lines:
+        if not lines:
+            return 0
+
+        try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # One write and one flush per bar, so the file never holds a
             # buffered partial line while scan.py reads it at 08:45. The
@@ -444,11 +476,36 @@ class BarBuilder:
                 for line in lines:
                     handle.write(line + "\n")
                     handle.flush()
-            # rows_written counts MINUTES OF THIS MORNING'S TAPE and nothing
-            # else. Folding the replay rows into it would make the collector's
-            # own exit line report a wider window than it covered, which is the
-            # defect the tag exists to prevent, one layer up.
-            self.rows_written += real
+        except OSError as exc:
+            # Put every bar back where it came from and DO NOT raise. Raising
+            # would reach run_websocket's `except (..., OSError)`, which would
+            # report a disk fault as a lost connection, count a reconnect and
+            # resubscribe into a 50 slot pool that is known to refuse. Instead
+            # the minutes stay open, the next flush retries them, and a fault
+            # that persists shows up as a bar file that stops growing with the
+            # reason counted beside it rather than as a phantom socket drop.
+            for key, bar, is_replay in pending:
+                (self.replay_bars if is_replay else self.open_bars).setdefault(key, bar)
+            self.write_failures += 1
+            self.last_write_error = f"{type(exc).__name__}: {exc}"
+            print(f"collector: FAILED to append {len(lines)} minute(s) to "
+                  f"{self.path.name}: {self.last_write_error}. They are held and "
+                  "will be retried on the next settle; nothing has been marked "
+                  "written.")
+            return 0
+
+        real = 0
+        for key, _bar, is_replay in pending:
+            self.written.add(key)
+            if is_replay:
+                self.replay_rows_written += 1
+            else:
+                real += 1
+        # rows_written counts MINUTES OF THIS MORNING'S TAPE and nothing
+        # else. Folding the replay rows into it would make the collector's
+        # own exit line report a wider window than it covered, which is the
+        # defect the tag exists to prevent, one layer up.
+        self.rows_written += real
         return len(lines)
 
 
@@ -1138,6 +1195,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"collector: trades folded        {builder.trades_seen}")
     print(f"collector: late trades dropped  {builder.late_trades} "
           f"({builder.late_volume:,.0f} shares, {late_share:.2f}% of volume)")
+    if builder.duplicate_replay_skipped:
+        print(f"collector: replay not rewritten {builder.duplicate_replay_skipped} "
+              "(a resubscription offered a replayed minute already on disk)")
+    if builder.write_failures:
+        print(f"collector: WRITE FAILURES       {builder.write_failures}, last "
+              f"{builder.last_write_error}. Minutes were held and retried rather "
+              "than lost; a non zero count here means the disk, not the socket.")
     if builder.out_of_window_trades:
         print(f"collector: out of window        {builder.out_of_window_trades} "
               f"({builder.out_of_window_volume:,.0f} shares) refused, stamped "
@@ -1178,6 +1242,13 @@ def main(argv: list[str] | None = None) -> int:
             "out_of_window_trades": builder.out_of_window_trades,
             "out_of_window_volume": builder.out_of_window_volume,
             "out_of_window_examples": builder.out_of_window_examples[:5],
+            # Replayed minutes already on disk that a resubscription offered
+            # again, and settle batches the filesystem refused. Both are zero
+            # on a healthy morning and both used to be invisible: the first as
+            # inflated replay_volume, the second as minutes that vanished.
+            "duplicate_replay_skipped": builder.duplicate_replay_skipped,
+            "write_failures": builder.write_failures,
+            "last_write_error": builder.last_write_error,
             "chaos_reconnects_requested": args.chaos_reconnects,
         }
         with stats_path().open("a", encoding="utf-8") as handle:

@@ -38,6 +38,7 @@ import argparse
 import datetime as dt
 import json
 import os
+from pathlib import Path
 import sys
 from typing import Any, NamedTuple
 
@@ -168,11 +169,13 @@ def _common_stock_index(api: eodhd.EodhdClient, notes: list[str]) -> dict[str, s
     exchanges = _CRIT.text_list("universe", "exchanges")
 
     index: dict[str, str] = {}
+    answered: list[str] = []
     for exchange in exchanges:
         rows, error = api.exchange_symbol_list(exchange)
         if error:
             notes.append(f"exchange symbol list for {exchange} failed: {error}")
             continue
+        answered.append(exchange)
         kept = 0
         for row in rows:
             if str(row.get("Type", "")).strip().lower() != wanted_type.lower():
@@ -183,6 +186,38 @@ def _common_stock_index(api: eodhd.EodhdClient, notes: list[str]) -> dict[str, s
             index.setdefault(code, row.get("Exchange") or exchange)
             kept += 1
         print(f"universe: {exchange} listed {len(rows)}, kept {kept} as {wanted_type}")
+
+    # An exchange that did not answer is a MISSING HALF OF THE MARKET, not a
+    # note. Raised here, three credits into the run, rather than left to the
+    # admissibility gate, because that gate cannot see this: the bulk sweep,
+    # the market cap sweep and the funnel are all computed from whatever this
+    # returns, so they come out internally consistent, market_cap_funnel reports
+    # zero unswept, and the count lands inside expected_count_range. Only the
+    # count fraction floor stands between a half universe and the disk, and it
+    # is 0.5: the 2026-08-17 file splits about 1,519 NYSE to 1,235 NASDAQ, so
+    # losing NASDAQ leaves 0.552 of the previous count and clears the floor by
+    # two points, while losing NYSE leaves 0.448 and is correctly refused.
+    # Which half of the market the vendor drops decided whether the gate spoke.
+    #
+    # The consequence was a week long one. max_age_days is 10, so the monitor's
+    # age-keyed relaunch never fires on a fresh bad file, and every 07:15 pass
+    # until the next Sunday builds its pool from a universe with an entire
+    # exchange missing. PartialBuildError is exactly the right shape for this
+    # and its own docstring already argues the case.
+    missing = [name for name in exchanges if name not in answered]
+    if missing:
+        raise PartialBuildError(
+            f"the exchange symbol list failed for {', '.join(missing)} of "
+            f"{', '.join(exchanges)}, so this build would cover only "
+            f"{', '.join(answered) or 'no exchange at all'} and admit a "
+            "universe with a whole exchange missing. Nothing downstream can "
+            "tell that from a real one: the sweeps and the funnel are computed "
+            "from this index, so they agree with each other, and the count "
+            "fraction floor only catches it when the LARGER exchange is the one "
+            "that failed. Last week's universe.json is left in place, which the "
+            "10 day max_age_days makes usable until the next Sunday. Rerun "
+            "tasks\\job_universe.bat when the vendor answers."
+        )
     return index
 
 
@@ -833,8 +868,16 @@ def check_admissible(payload: dict[str, Any]) -> str | None:
     return refusal.verdict if refusal else None
 
 
-def write_atomically(payload: dict[str, Any]) -> None:
+def write_atomically(payload: dict[str, Any], target: Path | None = None) -> None:
     """Write to a temporary file in the same directory, then rename into place.
+
+    Serves two files. universe.json by default, which is what the argument
+    below is about, and watchlist.json when discover passes its path: the
+    watchlist has the same destructive-replace problem and a sharper version
+    of the consequence, since a truncated one at 07:15 costs the collector its
+    whole 07:20 window and that tape cannot be fetched afterwards. It stays
+    here rather than moving to core because both callers already import this
+    module and a move would be a bigger change than the fix.
 
     os.replace is atomic on Windows and on POSIX, so a reader either sees the
     whole previous file or the whole new one and never a half written one. The
@@ -853,7 +896,7 @@ def write_atomically(payload: dict[str, Any]) -> None:
     how to refuse one that is too old. A half written one is not usable, and
     until this nothing could tell the two apart.
     """
-    target = config.UNIVERSE_PATH
+    target = Path(target) if target is not None else config.UNIVERSE_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_name(target.name + ".partial")
     try:
