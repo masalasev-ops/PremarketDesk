@@ -15,6 +15,88 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20: three defects the architecture pages already described correctly, and the pages brought back into sync
+
+A full code review against the two architecture pages. What follows is what
+changed; the reasoning is in DECISIONS.md the same date.
+
+### Three code defects, all reproduced before fixing
+
+**scan.py: an empty candidate pool ended the run with UnboundLocalError.**
+`dropped_stale` was bound inside `build_packet`'s `if candidates:` branch and
+read unconditionally in the payload beside `dropped` and `rank_stats`, which
+were bound before it. A morning with an absent or empty watchlist therefore
+lost the packet, the report, the picks rows and the email, where both pages say
+the report goes out with no candidates and the holes named. Bound before the
+branch now.
+
+**scan.py: a watchlist that subscribes nobody wrote no gap.** `pool_candidates`
+gapped on a MISSING watchlist and said nothing about a present one holding no
+subscribed row, so that packet carried zero candidates and an empty
+`gaps_to_fill`. It now names itself, with the pool row count and the
+watchlist's own generated_at, and says the tables are empty for that reason
+rather than because the market was quiet.
+
+**market_today.py: the nightly calendar refresh deleted the cache before
+fetching.** One vendor outage at 22:15 left no `data/exchange-details.json` at
+all, and the guard's deliberate assume-open direction then applied to every job
+the next morning. `get_details` takes a `force` flag that skips the memo and
+the age check but not the fall-back-to-cache branch, and `--refresh` uses it,
+so the old file stands until a new one is in hand.
+
+### One test defect
+
+**test_vintage leaked its calendar stub into every later suite.** The
+`market_today.is_trading_day` replacement it takes in `main` was never
+restored, and run_tests runs the suites in one process, so every suite after it
+including test_entrypoints' calendar claims had been running against a weekday
+rule with no holidays. Restored in a `finally`; the body moved to `_run`.
+
+### Three claims added
+
+`claim_scan_survives_an_empty_pool` drives the scan with a present-but-empty
+watchlist and with no watchlist at all, and asserts a zero candidate packet
+with both drop lists empty and gaps_to_fill non-empty reaches disk.
+`claim_calendar_refresh_keeps_the_cache` seeds a calendar carrying Christmas,
+fails the refresh, and asserts the cache survives and the guard still refuses
+2026-12-25. Both live in test_entrypoints.py. The empty pool claim saves and
+restores packet.json and watchlist.json around itself, because claim_analyst
+runs next and reads the first.
+
+### The two architecture pages, resynced
+
+Both had drifted since the 2026-08-16 package split and the 2026-08-17
+schedule change. Corrected in both: the universe job is Sunday 21:00, not
+20:00; the discovery population is 2,754, not 2,745; the file map carries
+artifacts, meter_sampler, quantifier_flags, build_archive, market_today,
+job_status, site/, the eleven test modules, the ten research modules and
+probe_alpaca.py at the src root; the nightly's steps are named as modules
+rather than as the pre-split file paths; the "one vendor" rule is qualified to
+the pipeline, with the Alpaca research probes named rather than left as a
+silent exception; and the failure table carries the calendar row and the
+corrected discover row.
+
+The architecture page also gained nine components it had never carried
+(C48-C58: job_meter_sampler.bat, meter_sampler, market_today, job_status,
+artifacts, build_archive, quantifier_flags, site/PremarketDesk.html,
+job-status.jsonl, quantifier-flags.jsonl and exchange-details.json), two
+columns in the read and write matrix for the published archive and the job
+trail, and its header now reads 56 components and seven job scripts as nine
+tasks rather than 47 and six as eight.
+
+Both pages gained a standing-state block at the top, because neither said any
+of this: no email has ever been sent, the picks table is empty, collector
+volume is the open question, and the quantifier guard has not fired live.
+
+### Two consequences recorded rather than fixed
+
+Both are now items 5a and 5b under "What remains" in BUILD_PLAN.md. The
+nightly stopped writing `verify_intraday.json` when picks was emptied, because
+that write sits after backfill's early return on a day with no live picks, so
+the instrument for the top open question has stopped running. And the analyst
+timeout's 3x headroom claim is now 1.6x against the slowest of four real
+mornings, which is a measurement to redo rather than a fault to fix.
+
 ## 2026-08-19, eighth: the picks table is emptied, and nothing else is
 
 ### What was contaminated, measured before deciding

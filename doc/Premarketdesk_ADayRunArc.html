@@ -140,8 +140,12 @@
     margin: 24px 0;
   }
   .callout h3 { margin: 0 0 8px; font-size: 1rem; color: var(--accent); }
-  .callout ol { margin: 0; padding-left: 20px; }
+  .callout ol, .callout ul { margin: 0; padding-left: 20px; }
   .callout li { margin-bottom: 6px; }
+  .callout p { margin: 0 0 10px; }
+  .callout .asof { font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted); margin: 10px 0 0; }
   dl.principles { margin: 18px 0 0; display: grid; gap: 12px; }
   dl.principles dt { font-weight: 650; }
   dl.principles dd { margin: 2px 0 0; color: var(--muted); max-width: 68ch; }
@@ -173,10 +177,44 @@
   <p class="lede">There is no server and no queue. The whole system is seven .bat
   files on one machine, registered as nine Windows Task Scheduler tasks: two of
   them are registered twice, the nightly at 22:15 and again at 07:00, and the
-  watchdog every 30 minutes from 07:25 to 09:25 and once more at 22:45. Each task
-  wakes at its clock time, reads the files earlier jobs left behind, and leaves
-  files for the next. The architecture is the clock.</p>
+  watchdog every 30 minutes from 07:25 to 09:25 and once more at 22:45. The ninth
+  is not a step at all but an instrument, the quota meter sampler, which takes one
+  reading every thirty minutes of every day including weekends. Each task wakes at
+  its clock time, reads the files earlier jobs left behind, and leaves files for
+  the next. The architecture is the clock. Three further .bat files sit in
+  <code>tasks\</code> and are research probes rather than pipeline; they were
+  registered by hand, are not in register_tasks.ps1, and are dormant.</p>
 </header>
+
+<div class="callout">
+  <h3>Where this actually stands, 2026-08-20</h3>
+  <p>Everything below describes a machine that runs. It has run every weekday
+  since 2026-08-13 and produced a report on five of them. Four things qualify
+  the picture and none of them are visible from the diagrams alone.</p>
+  <ul>
+    <li><strong>No email has ever been sent.</strong> data/UNVERIFIED is still
+      on disk, so deliver.py refuses every morning and records zero recipients.
+      Reports live in runs\&lt;date&gt;\ and in site/PremarketDesk.html.</li>
+    <li><strong>The picks table is empty.</strong> All 51 rows were exported to
+      data/purged-picks-2026-08-19.jsonl and deleted on 2026-08-19, because
+      collector premarket volume feeds pm_rvol and pm_float_rotation and is
+      under investigation. The three pass row below is therefore a description
+      of the design, not of the database: nothing has been backfilled and no
+      outcome has been filled. The long goal is at zero.</li>
+    <li><strong>Collector volume is the open question.</strong> One session over
+      reported by 3.8x in aggregate, two under reported by about 10x, replay is
+      measured and too small to be either, and the off exchange census is the
+      next reading. doc/research/COLLECTOR_VOLUME.md is the whole diagnosis.
+      Note the side effect: the nightly only runs that verification for days
+      that have live picks, so with the table empty the measurement has stopped
+      being taken automatically.</li>
+    <li><strong>The quantifier guard is in warn mode and has not fired live.</strong>
+      data/quantifier-flags.jsonl does not exist yet. 2026-08-19 was the first
+      morning to come back with no flags at all, which is one of the three
+      things CRITERIA.md requires before the guard can be set to enforcing.</li>
+  </ul>
+  <p class="asof">Read against commit 2970090, tree clean, 16 scheduled steps recorded in data/job-status.jsonl.</p>
+</div>
 
 <section>
   <p class="eyebrow">The weekday, end to end</p>
@@ -193,9 +231,12 @@
     not_subscribed, so the cut is auditable rather than invisible. The collector
     listens to live trades, the 08:45 chain turns evidence into an emailed
     report, and the night jobs, shown in amber here and throughout this page,
-    come back at 22:15 to write down what was really true. Sunday evening a sixth
+    come back at 22:15 to write down what was really true. Sunday at 21:00 a sixth
     pass rebuilds the discovery universe for the coming week and measures the gap
-    propensity the weekday pool is ordered by.</p>
+    propensity the weekday pool is ordered by. It ran at 20:00 until 2026-08-16,
+    which was the exact instant of the quota reset, and at 20:30 until 2026-08-17,
+    which assumed the vendor's counter rolls on the hour; it does not, and the
+    observed roll was 30 to 32 minutes late.</p>
   </div>
 
   <figure>
@@ -259,8 +300,8 @@
       <text x="760" y="128" text-anchor="middle" font-size="10" class="svg-muted">writes the truth into picks</text>
       <line x1="760" y1="138" x2="760" y2="154" stroke="currentColor" stroke-width="1"/>
 
-      <text x="60" y="210" font-size="10.5" class="svg-muted">Sunday 20:00, off this timeline: universe.py rebuilds the 2,745 name discovery population, then gap_stats.py measures the gap propensity the 07:15 pool ranks on.</text>
-      <text x="60" y="224" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST): the nightly and next morning spend from the same day; every job logs its quota day.</text>
+      <text x="60" y="210" font-size="10.5" class="svg-muted">Sunday 21:00, off this timeline: universe.py rebuilds the 2,754 name discovery population, then gap_stats.py measures the gap propensity the 07:15 pool ranks on.</text>
+      <text x="60" y="224" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST), observed 30 to 32 minutes late: the nightly and next morning spend from the same day; every job logs its quota day.</text>
     </svg>
     <figcaption>One weekday. Morning jobs gather live evidence while it exists;
     the amber night job returns after the data vendor has published the full
@@ -311,7 +352,7 @@
         <rect x="780" y="30" width="130" height="46" rx="8"/>
       </g>
       <g font-size="9.5" class="svg-muted svg-mono" text-anchor="middle">
-        <text x="80"  y="45">SUN 20:00</text>
+        <text x="80"  y="45">SUN 21:00</text>
         <text x="233" y="45">07:15</text>
         <text x="386" y="45">07:20-09:25</text>
         <text x="539" y="45">08:45</text>
@@ -377,7 +418,16 @@
     09:30 open. A morning that rides both analyst timeouts, 293 seconds each,
     into the fallback report still finishes by about 08:55, leaving 35. The dashed amber arrow is the night returning to the same
     database rows the 08:45 scan created, hours after the report already
-    went out.</figcaption>
+    went out.
+    <br><br>
+    What four scheduled mornings then measured, from analyst_usage.json:
+    89.1s on 2026-08-14, 48.4s on 08-17, 98.5s on 08-18 and 178.9s on 08-19,
+    with output tokens over the same four rising 7,697, 4,000, 8,954, 16,005.
+    The timeout of 293 seconds was set at three times the slowest of the five
+    dry runs; against the slowest real morning it is 1.6 times, and the
+    direction of travel is one way. The slack is still large, the chain still
+    finished at 08:48 on the longest of them, and the headroom claim in
+    CRITERIA.md is now describing a sample the schedule has overtaken.</figcaption>
   </figure>
 </section>
 
@@ -447,18 +497,27 @@
     <h3>Where, concretely, does it run?</h3>
     <ol>
       <li>Task Scheduler fires <span class="mono">PremarketDesk\nightly</span> at 22:15 on weekdays.</li>
-      <li>That runs <span class="mono">tasks\job_nightly.bat</span>, which runs
-        <span class="mono">src\backfill_premarket.py</span>, then
-        <span class="mono">src\fill_outcomes.py</span>, then
-        <span class="mono">src\pool_recall.py</span>, then
-        <span class="mono">src\build_archive.py</span> on this machine. The recall
+      <li>That runs <span class="mono">tasks\job_nightly.bat</span>, which refreshes
+        the exchange calendar so the 08:45 window never has to, then runs
+        <span class="mono">python -m night.backfill_premarket</span>, then
+        <span class="mono">night.fill_outcomes</span>, then
+        <span class="mono">night.pool_recall</span>, then
+        <span class="mono">night.build_archive</span> on this machine. Every module
+        moved into a package on 2026-08-16 and every job now runs by module name
+        rather than by file path. The recall
         step is the one that never fails the chain: it measures which real
         gappers the morning's pool missed, and since nothing downstream reads
         the answer, a bad measurement must not cost the archive its rebuild.</li>
       <li>Backfill writes the true premarket columns into the
         <span class="mono">picks</span> table of <span class="mono">data\premarketdesk.db</span>,
         and while the intraday feed is open it also runs the definitive collector
-        volume check, saved to <span class="mono">runs\&lt;date&gt;\verify_intraday.json</span>.</li>
+        volume check, saved to <span class="mono">runs\&lt;date&gt;\verify_intraday.json</span>.
+        Both steps are gated on the day having live picks rows. The table was
+        emptied on 2026-08-19 over the collector volume defect, so since that
+        night the backfill has returned immediately and written no verification
+        file, which is the one measurement the open question needs. Until picks
+        refill, run it by hand:
+        <span class="mono">python -m collect.collect_premarket --verify-intraday &lt;date&gt;</span>.</li>
       <li>Everything it prints lands in <span class="mono">logs\nightly-&lt;date&gt;.log</span>.</li>
     </ol>
   </div>
@@ -545,12 +604,17 @@
     <tr>
       <td>a market holiday arrives</td>
       <td>Every weekday job runs market_today.py first. On a weekend or an
-      official exchange holiday (cached from EODHD exchange-details,
-      refreshed weekly) the job logs one line and exits cleanly: no
-      watchlist from stale quotes, no empty collection, no report about a
-      session that does not exist. If the calendar is unreachable and no
-      cache exists, the guard assumes the market is open, because a false
-      closed silently loses a real morning.</td>
+      official exchange holiday (cached from EODHD exchange-details, refreshed
+      by the nightly so the 08:45 window never fetches it) the job logs one
+      line and exits cleanly: no watchlist from stale quotes, no empty
+      collection, no report about a session that does not exist. If the
+      calendar is unreachable and no cache exists, the guard assumes the market
+      is open, because a false closed silently loses a real morning. That trade
+      is only safe while "no cache" is rare, and until 2026-08-20 it was not:
+      the nightly refresh deleted the cache before fetching, so one vendor
+      outage at 22:15 left no holiday list at all and the next morning ran on
+      the assumption that the market was open. The refresh now overwrites only
+      once the vendor has answered.</td>
     </tr>
     <tr>
       <td>universe.py fails Sunday</td>
@@ -565,10 +629,18 @@
       disk). Scan no longer rebuilds membership and makes no bulk call of its
       own: it reads the subscribed rows of watchlist.json, so a missing
       watchlist leaves it with no candidates at all and gaps_to_fill says
-      exactly that. A stale watchlist still on disk gives it yesterday's pool,
-      which is also what the collector subscribed to, so the morning runs on
-      the wrong names rather than on none. Either way the report goes out with
-      the holes named in the disclaimer.</td>
+      exactly that. A watchlist that is present and subscribes nobody says so
+      separately, because an empty pool and an absent file are different
+      failures and only the second used to be named. A stale watchlist still on
+      disk gives it yesterday's pool, which is also what the collector
+      subscribed to, so the morning runs on the wrong names rather than on
+      none. Either way the report goes out with the holes named in the
+      disclaimer. That last sentence was false until 2026-08-20: every per
+      candidate stage sits inside one branch of scan.py, one of its outputs was
+      read outside that branch, and an empty pool ended the scan with an
+      UnboundLocalError instead of a zero candidate packet, which stopped the
+      chain and cost the whole morning. Fixed, and both routes into it are now
+      claims in the suite.</td>
     </tr>
     <tr>
       <td>collector never connects</td>
@@ -589,7 +661,7 @@
     </tr>
     <tr>
       <td>analyst.py fails or times out</td>
-      <td>Two attempts at 293 seconds each, three times the slowest of five
+      <td>Two attempts at 293 seconds each, set at three times the slowest of five
       measured opus medium runs on 2026-08-14 (97.4, 86.5, 97.7, 91.1 and 92.4
       seconds), then the deterministic fallback:
       report.md is rebuilt as plain tables straight from packet.json, the
@@ -631,8 +703,9 @@
   <h2>Five decisions that shape everything above</h2>
   <dl class="principles">
     <div>
-      <dt>EODHD is the only market data source.</dt>
-      <dd>REST for quotes, history, news, calendars; the websocket for live trades. No second vendor, ever.</dd>
+      <dt>EODHD is the only market data source in the pipeline.</dt>
+      <dd>REST for quotes, history, news, calendars; the websocket for live trades. No second vendor, ever, in anything that reaches a report. The exception is named rather than hidden: src
+esearch\ carries Alpaca probes, written up in doc/ALPACA_PROBE.md, which exist to price an alternative feed against this one. Nothing in selection, collect, morning or night imports them, and no number they produce reaches picks or a packet.</dd>
     </div>
     <div>
       <dt>Every threshold lives in doc/CRITERIA.md.</dt>
@@ -658,11 +731,11 @@
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, pool_recall, build_archive), <strong>research</strong> (backtest_pool, probe_live_v1 and the two measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the nine test_ modules). Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
-    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md, prompt_analyst.md, BUILD_PLAN.md, sample_report.html, this page and the system architecture page beside it</td></tr>
-    <tr><td>tasks\</td><td>seven job .bat files registered as nine scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, and job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45), register_tasks.ps1, README with scheduling notes</td></tr>
-    <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, premarket\&lt;date&gt;.jsonl minute bars, premarketdesk.db, exchange-details.json holiday cache, UNVERIFIED gate marker</td></tr>
-    <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, verify_intraday.json</td></tr>
+    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, pool_recall, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the three probe_ scripts and the two measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the eleven test_ modules). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
+    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the nine fixed report sections), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md and TEMPLATE_DERIVATIONS.md</td></tr>
+    <tr><td>tasks\</td><td>seven job .bat files registered as nine scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. Three more .bat files sit here and are NOT in register_tasks.ps1: job_probe_alpaca_live, job_probe_live_v1 and job_probe_socket_cap, research probes registered by hand and now dormant. They survive <code>register_tasks.ps1 -Unregister</code>, which only knows the nine</td></tr>
+    <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks and gap_stats tables), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
+    <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>
     <tr><td>logs\</td><td>one dated log per job per day</td></tr>
   </table>

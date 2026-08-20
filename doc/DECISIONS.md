@@ -2411,3 +2411,91 @@ watchlist, it is visible in the packet, and it repairs itself.
 job-status.jsonl. Each is currently load bearing evidence in an open
 investigation, and none of them feeds a threshold fit. Tidiness is not a reason
 to delete the only record of a defect nobody has explained.
+
+## 2026-08-20: three failures the pages described and the code did not do
+
+A full read of the pipeline against doc/ArchitecturePremarketdesk.html and
+doc/Premarketdesk_ADayRunArc.html, looking for places the two disagree. Three
+of the disagreements were not documentation drift. The pages were right and the
+code was wrong.
+
+**The documented degrade path was the total loss path.** Both pages describe a
+morning where discover produced nothing as a report that still goes out with no
+candidates and the holes named: "Yes, no candidates" in the architecture page's
+failure table. It did not. Every per candidate stage in `build_packet` sits
+inside one `if candidates:` branch, and three of that branch's outputs are read
+unconditionally in the payload at the bottom of the function. Two of the three
+were bound before the branch. `dropped_stale` was not, so an empty pool ended
+the scan with `UnboundLocalError` before it wrote anything. The morning chain
+stops on the first non-zero exit, so a quiet 07:15 cost the packet, the report,
+the picks rows and the email, on precisely the morning the degrade path exists
+for. Reproduced under the sandbox before fixing, both ways in: a watchlist that
+is present with nothing subscribed, and no watchlist at all.
+
+The bug is small and the reason it survived is not. `write_picks`, the
+`for candidate in payload["candidates"]` loops in `main`, the archive, the
+report: every one of them handles zero candidates correctly. It is only the
+literal that assembles the payload that reads a name the branch may not have
+bound, and no test had ever driven the scan with an empty pool, because every
+fixture writes a working watchlist. A static pass over the whole tree for
+locals that may be read before they are certainly bound found exactly one other
+site of this shape and it was a false positive, which is the reassuring half of
+the finding.
+
+**A watchlist that subscribes nobody said nothing.** Related and separately
+wrong. `pool_candidates` gaps when `watchlist.json` is MISSING and says nothing
+when it is present and holds no subscribed row. That produced a packet with
+zero candidates and an empty `gaps_to_fill`, so the report's tables would have
+been empty with no sentence anywhere explaining why, which is the one thing this
+project's rule about missing evidence forbids. An empty pool and an absent file
+are different failures with different fixes and both now name themselves.
+
+**The calendar refresh destroyed the fallback it depends on.** market_today's
+failure direction is deliberate and stated in its own docstring: an unknown
+calendar reads as OPEN, because a false closed silently loses a real morning
+where a false open produces one honestly thin report that says its numbers are
+stale. The same docstring promises "a fetch failure falls back to the stale
+cache". The `--refresh` path, which the nightly runs every weeknight, did
+`CACHE_PATH.unlink(missing_ok=True)` and then fetched. One vendor outage at
+22:15 therefore left no holiday list at all, and every job the next morning ran
+on the assumption that the market was open. Reproduced: with the cache deleted
+by a failed refresh, `is_trading_day(2026-12-25)` returns
+`(True, 'calendar unavailable, assuming the market is open')`.
+
+The unlink existed for a real reason, which is why it was not simply removed.
+`get_details` short-circuits on a cache younger than `refresh_after_days`, so a
+refresh that honoured the age check would decline on six days out of seven, and
+deleting the file was the cheapest way to force the fetch. The fix keeps the
+force and moves it into the function: `get_details(force=True)` skips the memo
+and the age check, goes to the vendor, and falls through to the existing
+"refresh failed, using the cache from X" branch when the vendor does not
+answer. The old file now stands until a new one is in hand.
+
+**Why these three and not a rewrite.** Each is a case where the design was
+already written down, already correct, and the code diverged from it silently.
+The architecture pages have been carrying the right answer for these three for
+a week. That is an argument for reading the pages against the code on a
+schedule, not for trusting either one alone.
+
+## 2026-08-20: a test that stubs a module attribute must restore it
+
+`test_vintage.main()` replaced `market_today.is_trading_day` with a weekday
+rule and never put it back. run_tests imports every suite into ONE process and
+runs them in a fixed order, so from test_vintage onward every suite in the
+sweep, test_repricing, test_pool, test_backtest, test_txn_guard,
+test_entrypoints, test_sandbox and test_evidence_gaps, has been running against
+a calendar with no holidays in it. test_entrypoints' `claim_calendar` drives
+the real guard as a scheduled entrypoint, and it has been driving that stub.
+
+The stub itself is right and stays. What was wrong is its lifetime. It is now
+taken in `main` and restored in a `finally`, with the body moved to `_run`.
+
+This is the same failure conftest's `block_network` was built to remove, one
+layer up. That docstring already argues the principle: a claim whose outcome
+depends on state another claim left behind is not a test, and the fix belongs
+at the boundary rather than in whichever claim happens to trip over it first.
+The boundary here is the suite's own process, and nothing was watching it.
+A cheap guard would be for run_tests to photograph the stubbed-out module
+attributes the way it already photographs the working tree; not built, because
+the tree check took several iterations to get right and the same care is owed
+here.

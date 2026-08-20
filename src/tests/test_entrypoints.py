@@ -694,6 +694,70 @@ def claim_calendar(failures: list[str]) -> None:
         failures.append(f"calendar exited {outcome.code}, expected 0 or 3")
 
 
+def claim_calendar_refresh_keeps_the_cache(failures: list[str]) -> None:
+    """A failed nightly refresh leaves yesterday's holiday list on disk.
+
+    market_today's whole failure direction is that an unknown calendar reads
+    as OPEN, because a false closed silently loses a real morning. That is the
+    right trade only while "unknown" is rare. The refresh deleted the cache
+    and then fetched, so one 22:15 vendor outage produced no calendar at all,
+    and every job the following morning ran on the assumption that the market
+    was open. On the night before a holiday that assumption builds a watchlist
+    from stale quotes, collects nothing, and emails a report about a session
+    that does not exist, which is the exact failure the guard exists to
+    prevent.
+
+    Asserted on Christmas rather than on the file's presence alone, because
+    the file existing is not the claim. The claim is that the guard can still
+    answer.
+    """
+    from core import eodhd
+    from ops import market_today
+
+    holiday = dt.date(TODAY.year, 12, 25)
+    _install(ROUTES + [("exchange-details/", {
+        "Name": "USA Stocks", "Code": "US", "Timezone": "America/New_York",
+        "ExchangeHolidays": {"1": {"Date": holiday.isoformat(),
+                                   "Holiday": "Christmas Day"}},
+        "TradingHours": {"Open": "09:30", "Close": "16:00",
+                         "WorkingDays": "Mon,Tue,Wed,Thu,Fri"},
+    })])
+    try:
+        market_today.reset_memo()
+        market_today.main(["--refresh"])
+    finally:
+        _uninstall()
+
+    if not market_today.CACHE_PATH.is_file():
+        failures.append("the seeding refresh wrote no cache, so this claim has "
+                        "nothing to protect")
+        return
+
+    saved = eodhd.EodhdClient.exchange_details
+    eodhd.EodhdClient.exchange_details = lambda self, exchange: (
+        None, "simulated vendor outage at 22:15")
+    try:
+        market_today.reset_memo()
+        code = market_today.main(["--refresh"])
+        market_today.reset_memo()
+        trades, reason = market_today.is_trading_day(holiday)
+    finally:
+        eodhd.EodhdClient.exchange_details = saved
+        market_today.reset_memo()
+
+    if code != 0:
+        failures.append(f"a failed refresh exited {code}; it must not fail the "
+                        "nightly, the calendar is survivable")
+    if not market_today.CACHE_PATH.is_file():
+        failures.append("a failed refresh removed the cached calendar, so the "
+                        "next morning has no holiday list at all")
+    if trades:
+        failures.append(f"after a failed refresh the guard called Christmas a "
+                        f"trading day: {reason}")
+    print("  calendar keep a failed refresh leaves the cache standing and the "
+          "guard still names the holiday")
+
+
 def claim_universe(failures: list[str]) -> None:
     """The rebuild, driven with no previous file on disk.
 
@@ -1061,6 +1125,7 @@ def claim_scan(failures: list[str]) -> None:
               f"endpoints {','.join(outcome.session.endpoints())}")
 
     claim_packet_names_its_build(failures)
+    claim_scan_survives_an_empty_pool(failures)
     claim_scan_degrades_on_a_thin_meter(failures)
 
 
@@ -1106,6 +1171,81 @@ def claim_packet_names_its_build(failures: list[str]) -> None:
             failures.append(f"{path.name} build block has no {key}: {build}")
     print(f"  {'packet':<12} names its build: commit "
           f"{str(build.get('commit'))[:12]} dirty={build.get('dirty')}")
+
+
+def claim_scan_survives_an_empty_pool(failures: list[str]) -> None:
+    """A morning with nothing subscribed writes a zero candidate packet.
+
+    Both architecture pages describe this as the discover.py failure: the
+    watchlist is absent or empty, the collector heard nothing, and the report
+    still goes out with no candidates and the holes named. It did not. Every
+    per candidate stage in build_packet lives inside one `if candidates:`
+    block, and dropped_stale was bound there and read unconditionally in the
+    payload, so an empty pool ended the scan with UnboundLocalError. The chain
+    stops on the first non-zero exit, so the documented degrade path was in
+    fact the total loss path: no packet, no report, no email.
+
+    Driven both ways, because the two arrive by different routes and the
+    payload is assembled once for both. A watchlist that is present and holds
+    no subscribed row is what a quiet 07:15 leaves; a watchlist that is not on
+    disk at all is what a discover that died leaves.
+    """
+    from morning import scan
+
+    day = ettime.today_str()
+    packet_path = config.run_dir(day) / "packet.json"
+    # claim_analyst runs next and reads this file, so whatever the working
+    # morning left is put back before returning.
+    saved_packet = packet_path.read_bytes() if packet_path.is_file() else None
+    saved_watchlist = (config.WATCHLIST_PATH.read_bytes()
+                       if config.WATCHLIST_PATH.is_file() else None)
+
+    cases = (
+        ("empty", lambda: config.WATCHLIST_PATH.write_text(
+            json.dumps({"generated_at": ettime.stamp(ettime.now_et()),
+                        "pool_size": 0, "subscribed_count": 0, "symbols": []}),
+            encoding="utf-8")),
+        ("absent", lambda: config.WATCHLIST_PATH.unlink(missing_ok=True)),
+    )
+    try:
+        for label, arrange in cases:
+            arrange()
+            _install(ROUTES)
+            try:
+                payload = scan.build_packet()
+            except BaseException as exc:  # noqa: BLE001
+                failures.append(
+                    f"scan raised on an {label} watchlist: {type(exc).__name__}: "
+                    f"{exc}. The degrade path both architecture pages describe "
+                    "is a zero candidate packet, not a dead chain.")
+                continue
+            finally:
+                _uninstall()
+
+            if payload.get("candidates"):
+                failures.append(f"an {label} watchlist produced "
+                                f"{len(payload['candidates'])} candidates")
+            for key in ("dropped_no_coverage", "dropped_stale_price"):
+                if payload.get(key) != []:
+                    failures.append(f"an {label} watchlist left {key} as "
+                                    f"{payload.get(key)!r}, expected an empty list")
+            if not payload.get("gaps_to_fill"):
+                failures.append(f"an {label} watchlist wrote no gaps_to_fill, so "
+                                "the report would not say why it is empty")
+            written = scan.write_packet(payload)
+            if not written.is_file():
+                failures.append(f"an {label} watchlist wrote no packet to disk")
+        print("  empty pool   an absent and an empty watchlist both write a zero "
+              "candidate packet that names its own gaps")
+    finally:
+        if saved_watchlist is None:
+            config.WATCHLIST_PATH.unlink(missing_ok=True)
+        else:
+            config.WATCHLIST_PATH.write_bytes(saved_watchlist)
+        if saved_packet is None:
+            packet_path.unlink(missing_ok=True)
+        else:
+            packet_path.write_bytes(saved_packet)
 
 
 def claim_scan_degrades_on_a_thin_meter(failures: list[str]) -> None:
@@ -1573,6 +1713,7 @@ def main(argv: list[str] | None = None) -> int:
     claim_subscription_refusal_is_fatal(failures)
     claim_operator_tools_spare_artifacts(failures)
     claim_calendar(failures)
+    claim_calendar_refresh_keeps_the_cache(failures)
     claim_universe(failures)
     claim_universe_force(failures)
     claim_gap_stats(failures)

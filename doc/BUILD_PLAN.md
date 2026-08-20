@@ -56,11 +56,13 @@ at src/core/config.py and resolves the project root two levels up. Everything a 
 at the root and is gitignored along with .env.
 
 - src/ is split into packages by role, and src/ itself is the import root:
-  - core/    config, criteria, ettime, store, eodhd. Infrastructure every
-             other package rests on; nothing here knows what a gapper is.
-  - ops/     job_status, market_today, monitor_jobs. Whether the machine is
-             running correctly: the status record, the trading day guard and
-             the watchdog.
+  - core/    config, criteria, ettime, store, eodhd, artifacts. Infrastructure
+             every other package rests on; nothing here knows what a gapper is.
+  - ops/     job_status, market_today, monitor_jobs, meter_sampler,
+             quantifier_flags. Whether the machine is running correctly: the
+             status record, the trading day guard, the watchdog, the half
+             hourly quota reading and the hand judging tool for the guard's
+             flag log.
   - selection/ universe, discover, gap_stats. Which names are worth watching,
              decided before the open.
   - collect/ collect_premarket, baseline. Today's tape, and the volume
@@ -69,21 +71,33 @@ at the root and is gitignored along with .env.
              The 08:45 chain in order.
   - night/   backfill_premarket, fill_outcomes, pool_recall, build_archive.
              What runs once the vendor has published the full day.
-  - research/ backtest_pool, probe_live_v1, the two measure_ scripts.
+  - research/ backtest_pool, float_cache, float_rotation_study,
+             addressable_sweep, vwap_gappers, probe_live_v1, probe_alpaca_live,
+             probe_socket_cap, the two measure_ scripts.
              Instruments, not pipeline. Nothing downstream reads their output.
-  - tests/   conftest, run_tests and the nine test_ modules.
+  - tests/   conftest, run_tests and the eleven test_ modules.
+  - src/probe_alpaca.py sits at the root beside the packages: the shared
+             Alpaca client the probes use. Research only, and no pipeline
+             module imports it.
 - doc/: this file, CHANGELOG.md, DECISIONS.md, CRITERIA.md,
   REPORT_TEMPLATE.md, prompt_analyst.md, the two architecture pages,
   sample_report.html
 - tasks/: seven job .bat files, register_tasks.ps1, README.md. They
   register as nine scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
-  repeating weekday trigger and once more at 22:45
-- data/: universe.json, watchlist.json, premarket/YYYY-MM-DD.jsonl,
+  repeating weekday trigger and once more at 22:45. Three further .bat files
+  sit here and are NOT in register_tasks.ps1: job_probe_alpaca_live,
+  job_probe_live_v1 and job_probe_socket_cap, registered by hand and now
+  dormant. They survive `register_tasks.ps1 -Unregister`, which only knows
+  the nine, so removing them is a manual step
+- data/: universe.json, watchlist.json, universe-closes-YYYY-MM-DD.json,
+  premarket/YYYY-MM-DD.jsonl, premarket/YYYY-MM-DD-stats.jsonl,
   premarket/YYYY-MM-DD-subscriptions.json (what the collector asked the socket
   for, written at subscribe time), premarketdesk.db, ca-bundle.pem,
   job-status.jsonl (one line per scheduled step per run),
-  UNVERIFIED (the delivery gate marker)
+  exchange-details.json (the holiday cache), monitor-reruns.json,
+  float_cache.json, quantifier-flags.jsonl once the guard fires on a live
+  morning, UNVERIFIED (the delivery gate marker)
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
   report.html, analyst_usage.json, and once the nightly job has run,
   verify_intraday.json and pool_recall.json
@@ -302,7 +316,9 @@ CRITERIA.md.
 CP9 deterministic score: `--rescore` run twice on the same packet produced
 byte identical output (fc: no differences).
 
-CP10 analyst: doc/REPORT_TEMPLATE.md (eleven fixed sections),
+CP10 analyst: doc/REPORT_TEMPLATE.md (nine fixed sections)
+[corrected 2026-08-20: was "eleven fixed sections"; the file has held nine
+since it was written, and the architecture page has said nine throughout],
 doc/prompt_analyst.md (the numbered rules), src/morning/analyst.py. Pipes prompt plus
 template plus packet to the CLI on stdin, parses the JSON envelope, writes
 report.md and analyst_usage.json, logs tokens and cost, then runs the
@@ -318,7 +334,11 @@ a forced CLI failure and again live when the shim mangling caused real
 timeouts. Second, the invocation became one completion instead of an agent
 loop (see the CLI facts above): model back to sonnet per the owner,
 timeout_s = 218, three times the slowest of the five measured runs named in
-CRITERIA.md. The containment checker was also rebuilt: a claim is an
+CRITERIA.md. [Superseded the same evening: the owner re-asserted opus, and
+CRITERIA [analyst] has read model = opus, timeout_s = 293 since. The original
+text stands because it records what was true when it was written; see the
+2026-08-20 note under "What remains" for what four real mornings have since
+measured against that 293.] The containment checker was also rebuilt: a claim is an
 uppercase token in a table cell or with a $ prefix that names a real
 universe member; prose acronyms (CEO, FOMC, CPI...) can no longer trip it,
 src/tests/test_containment.py proves both directions, and a containment failure is
@@ -351,14 +371,23 @@ excursions around entry_ref and stop_ref, on the SPY session calendar, never
 weekday math. Proven idempotent: a seeded synthetic pick filled correctly
 and a second run left the table hash unchanged.
 
-CP15 scheduling: tasks/ holds five .bat jobs, each cd's to the project root,
+CP15 scheduling: tasks/ holds five .bat jobs
+[superseded, see Repository layout above: seven job .bat files register as
+nine tasks today, the two additions being job_monitor.bat and
+job_meter_sampler.bat, and the universe job moved from Sunday 20:00 to 20:30
+on 2026-08-16 and to 21:00 on 2026-08-17], each cd's to the project root,
 stamps its log date with the project's own ET clock, and appends to
 logs/<job>-YYYY-MM-DD.log. The 08:45 chain (scan, analyst, render, gate
 table, deliver) ran end to end from the bat with rc=0 at every step.
 register_tasks.ps1 registered all five: discover 07:15 (which also warms the
 baseline cache, an addition to the original brief, because scan must never
 fetch baselines), collector 07:20, morning chain 08:45, nightly 22:15, all
-Mon to Fri, universe Sunday 20:00.
+Mon to Fri, universe Sunday 20:00. [The universe hour moved twice after this
+was written. 20:00 was the exact instant of the quota reset, so which quota
+day the largest job in the schedule billed to was a coin toss; 20:30 assumed
+the vendor's counter rolls on the hour, and the 2026-08-16 run measured the
+roll landing 30 to 32 minutes late. It has read Sunday 21:00 since
+2026-08-17, and CRITERIA [job status steps] carries the same correction.]
 
 CP16 gate: src/morning/verify_morning.py prints the evidence table (ethVolume,
 baseline median, pm_rvol, collector premarket high, bars) for the top
@@ -415,6 +444,45 @@ recreates it deliberately.
    specification is the "Layer 4" section immediately below, written out in
    full on 2026-08-17 so that no part of the design lives only in a
    conversation.
+
+5. From the 2026-08-20 review, two of five findings still open. The three
+   that are closed are recorded here because the closure is the useful part:
+   an empty candidate pool ended scan.py with an UnboundLocalError instead of
+   writing the zero candidate packet both architecture pages describe; the
+   nightly calendar refresh deleted data/exchange-details.json before
+   fetching, so one 22:15 vendor outage left no holiday list at all and the
+   next morning assumed the market was open; and test_vintage replaced
+   market_today.is_trading_day for the whole process and never restored it, so
+   every suite after it in run_tests, test_entrypoints' calendar claims
+   included, had been running against a weekday rule with no holidays in it.
+   All three are fixed and all three now have claims. What remains open:
+
+   5a. THE NIGHTLY NO LONGER TAKES THE COLLECTOR VOLUME MEASUREMENT. Item 1
+       above is the top open question and its instrument has stopped running.
+       backfill_premarket returns early when the day has no live picks rows,
+       and verify_against_intraday sits after that return, so emptying picks
+       on 2026-08-19 also ended the nightly's write of
+       runs/<date>/verify_intraday.json. 2026-08-14, 08-17 and 08-18 have one;
+       08-19 does not, and nor will any night until picks refill. Until then
+       the reading has to be taken by hand:
+       `python -m collect.collect_premarket --verify-intraday <date>`. The fix
+       is to move that block ahead of the early return, since it reads the bar
+       file and the intraday feed and needs no picks row at all. Not done here
+       because it changes what a scheduled job does on a night nobody is
+       watching, and the diagnosis in doc/research/COLLECTOR_VOLUME.md may
+       want a different shape of reading anyway.
+
+   5b. The analyst timeout headroom is quoting a sample the schedule has
+       overtaken. CRITERIA [analyst] sets timeout_s = 293 as three times the
+       slowest of five dry runs (97.4, 86.5, 97.7, 91.1, 92.4 seconds). Four
+       scheduled mornings have since measured 89.1, 48.4, 98.5 and 178.9
+       seconds, with output tokens over the same four at 7,697, 4,000, 8,954
+       and 16,005. Against the slowest real morning 293 is 1.6x, not 3x, and
+       both numbers are moving one way. Nothing has timed out and the chain
+       finished at 08:48 on the longest of them, so this is a measurement to
+       redo rather than a fault to fix: five dry runs are no longer the best
+       evidence available and the comment in CRITERIA should cite the real
+       mornings.
 
 ## Layer 4: the notable movers section, specified
 

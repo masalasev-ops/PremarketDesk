@@ -93,7 +93,7 @@ def cache_state(refresh_after_days: int) -> dict[str, Any]:
     }
 
 
-def get_details(refresh_after_days: int) -> dict[str, Any] | None:
+def get_details(refresh_after_days: int, force: bool = False) -> dict[str, Any] | None:
     """Cached exchange details, refreshed weekly, stale cache over nothing.
 
     Three layers now. The in-process memo answers repeat calls without
@@ -102,13 +102,23 @@ def get_details(refresh_after_days: int) -> dict[str, Any] | None:
     sets ALLOW_NETWORK false, so a stale calendar degrades to the cached copy
     with the staleness recorded rather than blocking the 08:45 window on a
     fetch and its retries.
+
+    force skips the memo and the age check and goes to the vendor, which is
+    what the nightly --refresh wants: leave the cache young enough that
+    tomorrow morning finds it fresh, on six days out of seven when an age
+    test would decline. It does NOT skip the fallback below. The refresh used
+    to delete the cache first and then fetch, which turned one 22:15 vendor
+    outage into no holiday list at all, and this module's whole failure
+    direction is that an unknown calendar reads as open. A Christmas Eve
+    outage would have run the full pipeline on a closed market. The old file
+    now stands until a new one is actually in hand.
     """
-    if _MEMO["loaded"]:
+    if _MEMO["loaded"] and not force:
         return _MEMO["details"]
 
     cache = _load_cache()
     age = _cache_age_days(cache) if cache else None
-    if cache is not None and age is not None and age <= refresh_after_days:
+    if not force and cache is not None and age is not None and age <= refresh_after_days:
         _MEMO.update({"details": cache, "loaded": True})
         return cache
 
@@ -197,10 +207,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.refresh:
         # Deliberately ignores the age check: the point is to leave the cache
         # young enough that tomorrow's morning finds it fresh, which a
-        # refresh_after_days test would skip on six days out of seven.
-        CACHE_PATH.unlink(missing_ok=True)
+        # refresh_after_days test would skip on six days out of seven. The
+        # existing cache is NOT removed first; get_details(force=True) writes
+        # over it only once the vendor has answered, so a failed refresh
+        # leaves yesterday's holiday list in place instead of leaving none.
         reset_memo()
-        details = get_details(_CRIT.integer("calendar", "refresh_after_days"))
+        details = get_details(_CRIT.integer("calendar", "refresh_after_days"),
+                              force=True)
         state = cache_state(_CRIT.integer("calendar", "refresh_after_days"))
         print(f"calendar: refresh {'succeeded' if details else 'FAILED'}, "
               f"cache {state}")

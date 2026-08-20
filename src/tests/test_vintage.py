@@ -305,7 +305,21 @@ def _report(failures: list[str]) -> int:
 
 def main() -> int:
     failures: list[str] = []
+    real_calendar = market_today.is_trading_day
+    try:
+        return _run(failures)
+    finally:
+        # Restored, and the restore is the point. run_tests imports every
+        # suite into ONE process and runs them in order, so a module attribute
+        # replaced here and left replaced belongs to every suite after this
+        # one. This stub was left in place, and test_entrypoints' calendar
+        # claims have been driving a weekday rule with no holidays in it ever
+        # since, which is the exact shape of contamination conftest's network
+        # boundary was built to remove.
+        market_today.is_trading_day = real_calendar
 
+
+def _run(failures: list[str]) -> int:
     # Hermetic calendar: weekdays are open, weekends are not. 2026-08-13 and
     # 2026-08-14 are a Thursday and a Friday, so the prior session of the 14th
     # is the 13th under this rule exactly as it is under the real one.

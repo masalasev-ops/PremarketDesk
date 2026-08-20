@@ -368,6 +368,20 @@ def pool_candidates(
     if watchlist.get("missing"):
         packet.gap("watchlist.json is missing, so there is no subscribed list and "
                    "no candidate can be built")
+    elif not subscribed:
+        # A watchlist that exists and subscribes nobody is not the same failure
+        # as one that is not there, and until now only the second said
+        # anything. The first left a packet with zero candidates and an empty
+        # gaps_to_fill, so the report would have carried empty tables with no
+        # sentence explaining them, which is the one thing this project's
+        # rule about missing evidence forbids.
+        packet.gap(
+            f"watchlist.json was written at {watchlist.get('generated_at')} and "
+            f"marks none of its {len(rows)} pool row(s) subscribed, so the "
+            "collector was asked for nothing and there is no candidate to "
+            "price. The report's tables are empty for that reason, not because "
+            "the market was quiet."
+        )
     print(f"scan: {len(subscribed)} subscribed names from a pool of {len(rows)}")
     return candidates, provenance
 
@@ -1692,6 +1706,15 @@ def build_packet() -> dict[str, Any]:
               "this morning, noted in the packet")
 
     dropped: list[dict[str, Any]] = []
+    # Bound here rather than inside the branch below, like dropped and
+    # rank_stats beside it. A morning that reaches this point with no
+    # subscribed names skips that branch entirely, and the payload at the
+    # bottom of this function reads every one of these three. Two were bound
+    # and this one was not, so an absent or empty watchlist ended the scan
+    # with an UnboundLocalError instead of the zero candidate packet both
+    # architecture pages describe, which cost the whole chain: no packet, no
+    # report, no email, on the one morning the degrade path exists for.
+    dropped_stale: list[dict[str, Any]] = []
     rank_stats: dict[str, Any] = {}
     if candidates:
         # All local: the premarket path, the price it implies, the drop, then
