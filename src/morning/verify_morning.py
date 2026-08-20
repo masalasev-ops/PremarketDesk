@@ -104,8 +104,28 @@ def print_table(packet_path: Path, count: int = 3) -> int:
               f"(cap {coverage.get('socket_cap')}), {coverage.get('produced_bars')} "
               f"produced bars, peak {coverage.get('peak_trades_per_minute')} "
               "trades per minute")
-        if coverage.get("silent_symbols"):
-            print(f"gate: {coverage['silent']} subscribed symbol(s) produced NOTHING: "
+        # Split the way collector_coverage now splits it. A symbol that sent a
+        # replayed print from before the window is absent from the bars for the
+        # same reason as one that sent nothing, and is not the same failure:
+        # the replay proves the subscription was accepted. This line said
+        # NOTHING about all four on 2026-08-20 while the report, correctly, did
+        # not, and an operator table that contradicts the report it gates is
+        # worse than one that says less.
+        nothing = coverage.get("silent_with_nothing")
+        replayed = coverage.get("silent_with_replay_only")
+        if nothing or replayed:
+            if nothing:
+                print(f"gate: {len(nothing)} subscribed symbol(s) produced NOTHING: "
+                      + ", ".join(nothing))
+            if replayed:
+                print(f"gate: {len(replayed)} subscribed symbol(s) produced only a "
+                      "replayed print from outside the collection window, so the "
+                      "subscription was accepted and the window was silent: "
+                      + ", ".join(replayed))
+        elif coverage.get("silent_symbols"):
+            # A packet written before the split. Reported the old way rather
+            # than dropped, because an older run directory is still evidence.
+            print(f"gate: {coverage['silent']} subscribed symbol(s) produced no bars: "
                   + ", ".join(coverage["silent_symbols"]))
     elif coverage.get("reason"):
         print(f"gate: collector coverage unknown, {coverage['reason']}")

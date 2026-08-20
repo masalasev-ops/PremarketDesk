@@ -41,6 +41,14 @@ from morning import vintage
 
 _CRIT = criteria.load()
 
+# Below this many collected minutes a premarket window is THIN, which is a
+# different fact from opening late and had been sharing a word with it. See the
+# thin window note in CRITERIA.md.
+MIN_BARS_FOR_FULL_WINDOW = _CRIT.integer("scan", "min_bars_for_full_window")
+# Percent between the two vendor prior closes above which the packet says they
+# disagree. See the two prior closes note in CRITERIA.md.
+PRIOR_CLOSE_DISAGREEMENT_PCT = _CRIT.number("scan", "prior_close_disagreement_pct")
+
 
 def _as_float(value: Any) -> float | None:
     if value is None or value == "" or value == "NA":
@@ -82,7 +90,8 @@ def _collector_last(bars: list[dict[str, Any]]) -> tuple[float | None, str | Non
 
 
 def collector_coverage(
-    bars_by_symbol: dict[str, list[dict[str, Any]]], session_date: str
+    bars_by_symbol: dict[str, list[dict[str, Any]]], session_date: str,
+    replay_by_symbol: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """Which subscribed symbols the socket actually served, and which stayed silent.
 
@@ -103,6 +112,7 @@ def collector_coverage(
     """
     subscriptions = collect_premarket.read_subscriptions(session_date)
     with_bars = {symbol for symbol, bars in bars_by_symbol.items() if bars}
+    replay_only = set(replay_by_symbol or {}) - with_bars
 
     if not subscriptions:
         return {
@@ -110,6 +120,9 @@ def collector_coverage(
             "produced_bars": len(with_bars),
             "silent": None,
             "silent_symbols": [],
+            "silent_with_replay_only": [],
+            "silent_with_nothing": [],
+            "replay_by_symbol": {},
             "unsubscribed_with_bars": [],
             "reason": (f"the collector wrote no subscription list for {session_date}, "
                        "so a silent symbol cannot be told from one that was never "
@@ -134,6 +147,19 @@ def collector_coverage(
         # Named, not counted. A count says the socket is lossy; the names say
         # which report rows are missing their evidence because of it.
         "silent_symbols": silent,
+        # Of the silent ones, which delivered a REPLAYED print from outside the
+        # window and which delivered nothing at all. Both are absent from the
+        # bars and they are not the same failure: a replayed print proves the
+        # subscription was accepted and the symbol exists on the feed, so the
+        # socket went quiet during the window rather than never answering. The
+        # report said "the socket delivered no trade for them" about both on
+        # 2026-08-20, which is exact for one group and wrong for the other.
+        "silent_with_replay_only": sorted(replay_only & set(requested)),
+        "silent_with_nothing": sorted(set(silent) - replay_only),
+        "replay_by_symbol": {
+            symbol: count for symbol, count in sorted((replay_by_symbol or {}).items())
+            if symbol in replay_only
+        },
         "dropped_to_fit_cap": subscriptions.get("dropped_to_fit_cap") or [],
         "unsubscribed_with_bars": sorted(with_bars - set(requested)),
         "peak_trades_per_minute": _peak_trades_per_minute(bars_by_symbol),
@@ -422,10 +448,31 @@ def rank_by_measured_gap(
 
     ranked.sort(key=lambda r: abs(r["provisional_gap_pct"]), reverse=True)
     kept = ranked[:keep]
+    # Named, not merely subtracted. "18 cleared the floors and 12 were kept" is
+    # arithmetic a reader can do and an explanation they cannot: the six that
+    # vanished were TRUNCATED by candidate_count, not rejected by a screen, and
+    # the packet recorded no difference between the two. On 2026-08-20 the
+    # report published both numbers and could say nothing about the gap between
+    # them, because nothing here told it there was a cap.
+    capped_out = [
+        {"symbol": c["symbol"], "gap_pct": c["provisional_gap_pct"]}
+        for c in ranked[keep:]
+    ]
     if unrankable:
         packet.gap(
             f"{unrankable} subscribed name(s) could not be ranked: no premarket "
             "price from the collector, or no prior session close carried by the pool"
+        )
+    if capped_out:
+        packet.gap(
+            f"{len(capped_out)} name(s) cleared the price and gap floors and were "
+            f"then CUT BY THE RANK CAP of {keep} in CRITERIA.md [Scan] "
+            "candidate_count, not by any screen: "
+            + ", ".join(f"{row['symbol']} at {row['gap_pct']:+.2f} percent"
+                        for row in capped_out)
+            + ". A reader comparing the cleared count against the kept count "
+            "cannot tell a rejected name from a truncated one, and these are "
+            "the truncated ones."
         )
     stats = {
         "subscribed_considered": len(candidates),
@@ -433,6 +480,12 @@ def rank_by_measured_gap(
         "kept": len(kept),
         "below_floor": below_floor,
         "unrankable": unrankable,
+        # Why cleared_floors and kept differ, which is the question those two
+        # numbers raise and neither answers.
+        "cap": keep,
+        "cap_source": "CRITERIA.md [Scan] candidate_count",
+        "capped_out": len(capped_out),
+        "capped_out_symbols": capped_out,
         "floors": {"price": price_rule.describe(), "gap_pct_absolute": gap_rule.describe()},
         "ranked_on": "the premarket gap measured from the collector, not the pool tier",
     }
@@ -522,6 +575,31 @@ def attach_daily_history(
         candidate["prior_source"] = (
             f"one end of day record dated {prior.get('date')}, close and high together"
         )
+
+        # The OTHER prior close, and whether it agrees. attach_quotes has
+        # already run, so previousClosePrice is on the candidate; the packet
+        # carried both numbers and never compared them. On 2026-08-20 they were
+        # 1.67 percent apart for SCSC, 51.42 here against 52.2909 there, which
+        # is the difference between a published gap of 16.34 and one of 14.4.
+        # The end of day record still wins: this is a disclosure and not a
+        # tiebreak, for the reason the two prior closes note in CRITERIA.md
+        # gives. Recorded as a magnitude like pm_source_disagreement, so feed
+        # noise and a real disagreement stay distinguishable.
+        quoted = _as_float((candidate.get("quote") or {}).get("previousClosePrice"))
+        candidate["prior_close_quoted"] = quoted
+        candidate["prior_close_disagreement_pct"] = None
+        if quoted and candidate["prior_close"]:
+            drift = abs(candidate["prior_close"] - quoted) / quoted * 100.0
+            candidate["prior_close_disagreement_pct"] = round(drift, 4)
+            if drift > PRIOR_CLOSE_DISAGREEMENT_PCT:
+                packet.gap(
+                    f"{candidate['symbol']} has two vendor prior closes "
+                    f"{drift:.2f} percent apart: the end of day record dated "
+                    f"{prior.get('date')} says {candidate['prior_close']} and the "
+                    f"delayed quote says {quoted}. The gap in this packet is "
+                    "measured from the end of day record; measured from the "
+                    "quote it would differ by about that much."
+                )
         volumes = [_as_float(b.get("volume")) for b in completed[-lookback:]]
         volumes = [v for v in volumes if v is not None]
         candidate["avg_volume_20d"] = round(sum(volumes) / len(volumes), 2) if volumes else None
@@ -569,6 +647,9 @@ def attach_premarket_path(
             candidate["pm_window_start"] = None
             candidate["pm_window_end"] = None
             candidate["pm_window_starts_late"] = None
+            candidate["pm_window_thin"] = None
+            candidate["pm_window_bars"] = 0
+            candidate["pm_window_thin_reason"] = None
             if not on_watchlist:
                 candidate["pm_reason"] = (
                     "not on watchlist.json, so the collector never subscribed to it. "
@@ -576,7 +657,10 @@ def attach_premarket_path(
                 )
             else:
                 candidate["pm_reason"] = (
-                    "on the watchlist but the collector recorded no bars for it"
+                    "on the watchlist but the collector recorded no bars INSIDE "
+                    "THE COLLECTION WINDOW for it. A replayed print from before "
+                    "the window is filtered out upstream and is not a bar here, "
+                    "so this does not assert the socket was silent all morning"
                 )
             continue
 
@@ -607,6 +691,24 @@ def attach_premarket_path(
             "configured collector start"
         )
         candidate["pm_window_starts_late"] = window_start_hhmm > collector_start
+        # Independent of the flag above and a different fact. A window that
+        # opened on time can still hold four minutes of prints, and a window
+        # that opened twenty minutes late can hold fifty. Until 2026-08-20 both
+        # were "partial", which is true of both and useful about neither: SCSC
+        # carried a 16.34 percent gap, a VWAP and a high off FOUR bars holding
+        # 1,487 shares that morning, described in the same word as AAP's fifty.
+        # See the thin window note in CRITERIA.md.
+        candidate["pm_window_thin"] = len(bars) < MIN_BARS_FOR_FULL_WINDOW
+        candidate["pm_window_bars"] = len(bars)
+        if candidate["pm_window_thin"]:
+            candidate["pm_window_thin_reason"] = (
+                f"{len(bars)} minute(s) carried a print, below the "
+                f"{MIN_BARS_FOR_FULL_WINDOW} in CRITERIA.md [Scan] "
+                "min_bars_for_full_window. Every premarket level for this name "
+                "rests on those minutes."
+            )
+        else:
+            candidate["pm_window_thin_reason"] = None
 
 
 # --------------------------------- 4b. pricing, from the collector and nowhere else
@@ -809,6 +911,15 @@ def attach_premarket_rvol(
                     "median_volume": row["median_volume"],
                     "sessions_used": row["sessions_used"],
                     "computed_at": row["computed_at"],
+                    # How old the DENOMINATOR is. The 07:15 warm recomputes
+                    # anything past [Baseline] refresh_after_days and reuses
+                    # the rest, which is the design and is invisible: on
+                    # 2026-08-20 the report set BLSH's RVOL, whose denominator
+                    # was computed six days earlier, beside COIN's, computed
+                    # that morning, with nothing to tell them apart. Legal is
+                    # not the same as current.
+                    "age_days": _baseline_age_days(row.get("computed_at")),
+                    "computed_today": _baseline_age_days(row.get("computed_at")) == 0,
                 }
 
             if not candidate.get("collector_covered"):
@@ -850,6 +961,47 @@ def attach_premarket_rvol(
 
     _gap_for_lower_bound_rvol(candidates, packet, numerator_window,
                               denominator_window)
+    _gap_for_stale_baselines(candidates, packet)
+
+
+def _baseline_age_days(computed_at: str | None) -> int | None:
+    """Whole days between a baseline's computation and this session."""
+    if not computed_at:
+        return None
+    try:
+        when = ettime.parse_date(str(computed_at)[:10])
+    except ValueError:
+        return None
+    return (ettime.today_et() - when).days
+
+
+def _gap_for_stale_baselines(candidates: list[dict[str, Any]], packet: Packet) -> None:
+    """Name the RVOLs whose denominator was not computed this morning.
+
+    Not a fault and not a threshold. [Baseline] refresh_after_days is 7 and the
+    warm legitimately reuses anything younger, so every one of these is inside
+    policy. What was missing is that the report presented a denominator from
+    six days ago beside one from this morning with no way to tell, and a reader
+    comparing two RVOLs was comparing two different vintages without knowing.
+    Reported as a fact with its age, never as a warning.
+    """
+    aged = [
+        (c["symbol"], (c.get("baseline") or {}).get("age_days"))
+        for c in candidates
+        if c.get("pm_rvol") is not None
+        and (c.get("baseline") or {}).get("age_days")
+    ]
+    if not aged:
+        return
+    aged.sort(key=lambda row: (-(row[1] or 0), row[0]))
+    packet.gap(
+        f"{len(aged)} premarket RVOL denominator(s) were not computed this "
+        "morning and were reused from the baseline cache, which is the design "
+        "under CRITERIA.md [Baseline] refresh_after_days and is stated here "
+        "because the report otherwise sets them beside same-day ones with "
+        "nothing to tell them apart: "
+        + ", ".join(f"{symbol} {age} day(s) old" for symbol, age in aged)
+    )
 
 
 def _gap_for_lower_bound_rvol(
@@ -1603,75 +1755,104 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
     prior_high = candidate.get("prior_high")
     sma200 = quote.get("twoHundredDayAveragePrice")
 
-    day: list[tuple[str, str]] = []
+    rvol = candidate.get("pm_rvol")
+    catalyst = candidate.get("catalyst_found")
+
+    # Each entry is (key, why, MEASURED). The third element is the 2026-08-20
+    # finding: a condition can fail because the input was measured and came in
+    # low, or because it was never measured at all, and screen_tally counted
+    # both as one number. "premarket_rvol 10 of 12" that morning folded in AAP
+    # and SCSC, whose RVOL is null because the baseline denominator is
+    # unusable, alongside eight names that were measured and read low.
+    # Withholding an unmeasured name from a screen is right. Reporting the two
+    # under one count contradicts the rule that missing evidence stays visibly
+    # missing, which the rest of this file spends hundreds of lines enforcing.
+    day: list[tuple[str, str, bool]] = []
     if gap is None:
         day.append(("gap_pct",
                     f"the gap was never computed: "
-                    f"{candidate.get('gap_reason') or 'reason unrecorded'}"))
+                    f"{candidate.get('gap_reason') or 'reason unrecorded'}", False))
     elif not _CRIT.rule("day_setup", "gap_pct").test(gap):
         day.append(("gap_pct",
-                    f"gap_pct {gap:.2f} fails {_CRIT.rule('day_setup', 'gap_pct').describe()}"))
+                    f"gap_pct {gap:.2f} fails {_CRIT.rule('day_setup', 'gap_pct').describe()}",
+                    True))
     if not _CRIT.rule("day_setup", "price").test(price):
         day.append(("price",
-                    f"price {price} fails {_CRIT.rule('day_setup', 'price').describe()}"))
+                    f"price {price} fails {_CRIT.rule('day_setup', 'price').describe()}",
+                    price is not None))
     if not _CRIT.rule("day_setup", "market_cap").test(market_cap):
         day.append(("market_cap",
                     f"market_cap {market_cap} fails "
-                    f"{_CRIT.rule('day_setup', 'market_cap').describe()}"))
-    if not _CRIT.rule("day_setup", "premarket_rvol").test(candidate.get("pm_rvol")):
+                    f"{_CRIT.rule('day_setup', 'market_cap').describe()}",
+                    market_cap is not None))
+    if not _CRIT.rule("day_setup", "premarket_rvol").test(rvol):
         day.append(("premarket_rvol",
-                    f"premarket_rvol {candidate.get('pm_rvol')} fails "
-                    f"{_CRIT.rule('day_setup', 'premarket_rvol').describe()}"))
+                    (f"premarket_rvol {rvol} fails "
+                     f"{_CRIT.rule('day_setup', 'premarket_rvol').describe()}")
+                    if rvol is not None else
+                    (f"premarket_rvol was never measured: "
+                     f"{candidate.get('pm_rvol_reason') or 'reason unrecorded'}"),
+                    rvol is not None))
     if _CRIT.flag("day_setup", "require_above_prior_high"):
         if prior_high is None or price is None or price <= prior_high:
             day.append(("require_above_prior_high",
-                        f"price {price} is not above the prior day high {prior_high}"))
+                        f"price {price} is not above the prior day high {prior_high}",
+                        prior_high is not None and price is not None))
 
-    swing: list[tuple[str, str]] = []
+    swing: list[tuple[str, str, bool]] = []
     if gap is None:
         swing.append(("gap_pct",
                       f"the gap was never computed: "
-                      f"{candidate.get('gap_reason') or 'reason unrecorded'}"))
+                      f"{candidate.get('gap_reason') or 'reason unrecorded'}", False))
     elif not _CRIT.rule("swing_setup", "gap_pct").test(gap):
         swing.append(("gap_pct",
                       f"gap_pct {gap:.2f} fails "
-                      f"{_CRIT.rule('swing_setup', 'gap_pct').describe()}"))
+                      f"{_CRIT.rule('swing_setup', 'gap_pct').describe()}", True))
     if not _CRIT.rule("swing_setup", "price").test(price):
         swing.append(("price",
-                      f"price {price} fails {_CRIT.rule('swing_setup', 'price').describe()}"))
+                      f"price {price} fails {_CRIT.rule('swing_setup', 'price').describe()}",
+                      price is not None))
     if not _CRIT.rule("swing_setup", "market_cap").test(market_cap):
         swing.append(("market_cap",
                       f"market_cap {market_cap} fails "
-                      f"{_CRIT.rule('swing_setup', 'market_cap').describe()}"))
+                      f"{_CRIT.rule('swing_setup', 'market_cap').describe()}",
+                      market_cap is not None))
     if _CRIT.flag("swing_setup", "require_open_above_prior_high"):
         if prior_high is None or price is None or price <= prior_high:
             swing.append(("require_open_above_prior_high",
                           f"premarket price {price} is not above the prior day "
-                          f"high {prior_high}"))
+                          f"high {prior_high}",
+                          prior_high is not None and price is not None))
     if _CRIT.flag("swing_setup", "require_open_above_200sma"):
         if sma200 is None or price is None or price <= sma200:
             swing.append(("require_open_above_200sma",
                           f"premarket price {price} is not above the 200 day "
-                          f"average {sma200}"))
+                          f"average {sma200}",
+                          sma200 is not None and price is not None))
     if _CRIT.flag("swing_setup", "require_catalyst"):
         # Three states, not two. None means the news feed was never fetched
         # (failed call or quota skip), and an unchecked feed must not produce
         # a sentence claiming a search came back empty. Either way the
         # requirement is unmet, so both fail the screen; only the reason
         # differs, and the reason is what the report shows the reader.
-        found = candidate.get("catalyst_found")
-        if found is None:
+        if catalyst is None:
             swing.append(("require_catalyst",
-                          "the news feed was never checked, so catalyst is unknown"))
-        elif not found:
-            swing.append(("require_catalyst", "no catalyst was found"))
+                          "the news feed was never checked, so catalyst is unknown",
+                          False))
+        elif not catalyst:
+            swing.append(("require_catalyst", "no catalyst was found", True))
 
     candidate["day_eligible"] = not day
-    candidate["day_failed"] = [why for _key, why in day]
-    candidate["day_failed_conditions"] = [key for key, _why in day]
+    candidate["day_failed"] = [why for _key, why, _m in day]
+    candidate["day_failed_conditions"] = [key for key, _why, _m in day]
+    # The subset of the list above whose input was never observed. Named rather
+    # than counted, because the fix for an unmeasured condition is an
+    # instrument and the fix for a failed one is nothing at all.
+    candidate["day_failed_unmeasured"] = [key for key, _why, m in day if not m]
     candidate["swing_eligible"] = not swing
-    candidate["swing_failed"] = [why for _key, why in swing]
-    candidate["swing_failed_conditions"] = [key for key, _why in swing]
+    candidate["swing_failed"] = [why for _key, why, _m in swing]
+    candidate["swing_failed_conditions"] = [key for key, _why, _m in swing]
+    candidate["swing_failed_unmeasured"] = [key for key, _why, m in swing if not m]
 
 
 def screen_tally(candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1700,9 +1881,13 @@ def screen_tally(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     for screen, key in (("day", "day_failed_conditions"),
                         ("swing", "swing_failed_conditions")):
         counts: dict[str, int] = {}
+        unmeasured: dict[str, int] = {}
         for candidate in candidates:
+            never_seen = set(candidate.get(f"{screen}_failed_unmeasured") or [])
             for condition in candidate.get(key) or []:
                 counts[condition] = counts.get(condition, 0) + 1
+                if condition in never_seen:
+                    unmeasured[condition] = unmeasured.get(condition, 0) + 1
         eligible = sum(1 for c in candidates if c.get(f"{screen}_eligible"))
         # Ordered by how many failed, descending, so the template can quote the
         # list in that order without sorting anything itself.
@@ -1710,14 +1895,98 @@ def screen_tally(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         out[screen] = {
             "eligible": eligible,
             "failed_by_condition": {
-                name: {"failed": n, "cleared": examined - n} for name, n in ranked
+                name: {
+                    "failed": n,
+                    "cleared": examined - n,
+                    # Of the failures, how many were never measured. A
+                    # condition failing on a null input is a missing
+                    # instrument; a condition failing on a real number is a
+                    # verdict. See the (key, why, measured) comment above.
+                    "unmeasured": unmeasured.get(name, 0),
+                    "measured_and_failed": n - unmeasured.get(name, 0),
+                }
+                for name, n in ranked
             },
             # The sentence the template quotes, built here so the model neither
             # counts nor ranks. Empty when nothing failed, which is not the same
-            # as a screen nobody ran.
-            "failed_summary": ", ".join(f"{name} {n} of {examined}" for name, n in ranked),
+            # as a screen nobody ran. A condition with unmeasured failures says
+            # so inline rather than hiding them inside its total.
+            "failed_summary": ", ".join(
+                (f"{name} {n} of {examined}"
+                 + (f" ({unmeasured[name]} of those never measured)"
+                    if unmeasured.get(name) else ""))
+                for name, n in ranked
+            ),
         }
     return out
+
+
+def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Who is in which conviction bucket, with the direction of the move.
+
+    Two 2026-08-20 findings meet here and the same sentence caused both.
+
+    The report wrote "MSTR and WMT green at 7" on a morning where SCSC also
+    scored 7.0 green. Nothing false; the enumeration simply read as complete
+    and was not. That is the model summarising a set the packet already knows
+    exactly, which is the shape screen_tally exists to prevent.
+
+    And it wrote "the strongest scored names, both green at 8, are AAP and
+    FUTU" when AAP was down 21.75 percent on an earnings miss, below its VWAP,
+    its prior high and its 200 day average. The gap component scores the
+    ABSOLUTE gap, so the score has no sign, and a sentence ranking names by it
+    without saying so points a reader the wrong way. So direction travels with
+    every entry here and the summary string carries it, which makes the
+    omission impossible to write rather than merely discouraged.
+    """
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    unscored: list[str] = []
+    for candidate in candidates:
+        score = candidate.get("score")
+        if score is None:
+            unscored.append(candidate["symbol"])
+            continue
+        gap = _as_float(candidate.get("gap_pct"))
+        buckets.setdefault(candidate.get("conviction") or "unbucketed", []).append({
+            "symbol": candidate["symbol"],
+            "score": score,
+            "gap_pct": gap,
+            "direction": None if gap is None else ("up" if gap >= 0 else "down"),
+        })
+    for rows in buckets.values():
+        rows.sort(key=lambda r: (-r["score"], r["symbol"]))
+
+    # Bucket order comes from CRITERIA's own band list, so the report reads
+    # them strongest first without this file holding a second copy of the
+    # names. Band.result IS the bucket label; there is no separate field.
+    order: list[str] = []
+    for band in _CRIT.bands("score_buckets"):
+        if band.result in buckets and band.result not in order:
+            order.append(band.result)
+    order += sorted(name for name in buckets if name not in order)
+
+    def phrase(row: dict[str, Any]) -> str:
+        if row["gap_pct"] is None:
+            return f"{row['symbol']} {row['score']:.1f} (gap unknown)"
+        return (f"{row['symbol']} {row['score']:.1f} "
+                f"({row['direction']} {abs(row['gap_pct']):.2f} percent)")
+
+    return {
+        "by_bucket": {name: buckets[name] for name in order},
+        "unscored": unscored,
+        "score_is_direction_blind": True,
+        "direction_note": (
+            "the gap component scores the ABSOLUTE gap, so this score ranks how "
+            "much confluence a name has and not which way it is moving. A name "
+            "falling hard and a name rising hard can tie. Direction is carried "
+            "on every row here for that reason and must be given wherever names "
+            "are grouped or ranked by score."
+        ),
+        "summary": "; ".join(
+            f"{name}: " + ", ".join(phrase(row) for row in buckets[name])
+            for name in order
+        ),
+    }
 
 
 def score_candidate(candidate: dict[str, Any]) -> None:
@@ -2057,6 +2326,19 @@ def build_packet() -> dict[str, Any]:
             f"labelled as such in the report: {', '.join(late_window)}"
         )
 
+    thin_window = [c for c in candidates if c.get("pm_window_thin")]
+    if thin_window:
+        packet.gap(
+            "these candidates have a THIN premarket window, which is a separate "
+            "fact from a late one and a stronger one: every premarket level "
+            "published for them rests on the handful of minutes named here, and "
+            "the report must say so rather than calling them partial: "
+            + ", ".join(
+                f"{c['symbol']} on {c.get('pm_window_bars')} minute(s) "
+                f"and {c.get('pm_volume') or 0:,.0f} shares"
+                for c in thin_window)
+        )
+
     return {
         "generated_at": ettime.stamp(now),
         "session_date": now.date().isoformat(),
@@ -2114,7 +2396,9 @@ def build_packet() -> dict[str, Any]:
         # Separate from collector_snapshot above, which describes the file;
         # this describes the subscription, and the two answer different
         # questions when a symbol is missing from the file.
-        "collector_coverage": collector_coverage(bars_by_symbol, session_date),
+        "collector_coverage": collector_coverage(
+            bars_by_symbol, session_date,
+            collector_stats.get("replay_by_symbol")),
         # What the tape actually covered this morning, against what the
         # collector was scheduled for.
         "collector_window_observed": observed_collector_window(
@@ -2153,6 +2437,10 @@ def build_packet() -> dict[str, Any]:
         # What cleared and what failed, per screen condition. The report quotes
         # this rather than counting; see screen_tally for why.
         "screen_tally": screen_tally(candidates),
+        # Who is in which conviction bucket, and which way each one is moving.
+        # Built here so the report neither enumerates a set it can miscount nor
+        # ranks by a score that has no sign without saying so.
+        "score_roll": score_roll(candidates),
         # What the collector's premarket volume is actually worth, measured by
         # the nightly against the vendor on identical minutes. Every pm_rvol
         # and every pm_float_rotation in this packet divides by a number from

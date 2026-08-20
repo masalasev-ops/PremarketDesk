@@ -720,6 +720,52 @@ economic_days_ahead           = 1          # today plus this many days
 earnings_days_ahead           = 1
 run_time                      = 08:45
 rvol_cutoff_snap_minutes      = 10         # see the cutoff snap note below
+min_bars_for_full_window      = 10         # seed: below this many collected minutes the premarket window is called THIN, not merely partial. See the thin window note
+prior_close_disagreement_pct  = 0.5        # seed: percent between the two vendor prior closes above which the packet says so. See the two prior closes note
+
+### The thin window note
+
+pm_window_starts_late already says a window opened after the collector's
+start_time. It says nothing about how much of the window then carried trades,
+and those are different facts that were reaching the reader as one word.
+
+2026-08-20 is the case. SCSC's entire premarket record that morning was FOUR
+one minute bars holding 1,487 shares, and its 16.34 percent gap, its 56.78
+VWAP and its 59.82 high all rested on them. AAP's window also opened late and
+carried fifty bars. Both were described as "partial", which is true of both
+and useful about neither.
+
+So a window is now THIN as well as late when it holds fewer than
+min_bars_for_full_window minutes with prints. The two flags are independent on
+purpose: a window can open on time and still be thin, which is a silent socket
+rather than a late one, and the fixes differ.
+
+10 of a roughly 85 minute window is a seed fitted to nothing. It is set where
+it is because four bars is plainly not a price path and fifty plainly is, and
+somewhere in between is a line nobody has measured. The header of this file
+applies.
+
+### The two prior closes note
+
+Two vendor endpoints carry a prior close and they do not always agree. The end
+of day record is authoritative here and attach_daily_history has read it from
+one OHLC bar since 2026-08-14, for the reason that function's docstring gives.
+The delayed quote carries previousClosePrice as well, and the packet holds both
+without ever comparing them.
+
+On 2026-08-20 they disagreed for SCSC by 1.67 percent, 51.42 against 52.2909.
+The gap was measured from the first and published as 16.34 percent; from the
+second it is 14.4. Every other candidate agreed to within rounding except BLSH
+at 0.15 percent. Neither number was wrong and nothing said they differed.
+
+So the disagreement is now recorded as a magnitude, the way
+pm_source_disagreement already is for the premarket high, and gapped above
+prior_close_disagreement_pct. The end of day record still wins: this is a
+disclosure, not a tiebreak, and a packet that quietly switched sources on a
+disagreement would be harder to explain than one that reports it.
+
+0.5 percent is a seed. It sits above the rounding noise the other eleven
+candidates showed that morning and below the one real disagreement.
 
 ### The cutoff snap note
 

@@ -506,15 +506,19 @@ recreates it deliberately.
        not a trend broken, but the alarming reading of this is no longer the
        best one, and the timeout has room for another session like it.
 
-6. From reading the 2026-08-20 REPORT rather than the code, nine smaller
-   findings still open. The two material ones are fixed and are in
+6. From reading the 2026-08-20 REPORT rather than the code, eleven findings.
+   ALL ELEVEN ARE NOW CLOSED. The two material ones landed first and are in
    CHANGELOG.md: the collector volume check now reaches the packet and the
    report, and the trap verdict is decided on the balance of a ticker's
-   headlines in Python rather than on the worst single one by the model. These
-   nine are accuracy and completeness rather than falsehood, and each wants its
-   own argument, so none was fixed in the same pass.
+   headlines in Python rather than on the worst single one by the model. The
+   nine below were accuracy and completeness rather than falsehood, each wanted
+   its own argument, and each got one in the pass recorded as the fifth
+   CHANGELOG entry for that date. Every one carries a claim in
+   src/tests/test_regressions.py. They are kept here rather than deleted
+   because what the fix WAS is the useful part, and because one of them
+   is only partly recoverable.
 
-   6a. A RANK CAP DROPS SIX NAMES AND THE REPORT CANNOT SAY SO. The 2026-08-20
+   6a. CLOSED. A RANK CAP DROPS SIX NAMES AND THE REPORT CANNOT SAY SO. The 2026-08-20
        report said 18 cleared the price and gap floors and 12 were kept, which
        is correct and unexplained: [Scan] candidate_count is 12 and the other
        six were truncated, not screened out. candidate_provenance.ranking
@@ -522,13 +526,13 @@ recreates it deliberately.
        tell a rejected name from a cut one. Wants a capped_out count and the
        symbols, or an argument that a reader does not need them.
 
-   6b. THE SCORE ROLL-CALL OMITS A TIED NAME. "MSTR and WMT green at 7" was
+   6b. CLOSED. THE SCORE ROLL-CALL OMITS A TIED NAME. "MSTR and WMT green at 7" was
        written on a morning where SCSC also scored 7.0 green. Nothing false,
        but the enumeration reads as complete. This is the model summarising a
        set the packet already knows exactly, which is the same shape as the
        screen_tally problem and probably has the same answer.
 
-   6c. "STRONGEST SCORED" IS DIRECTION BLIND. The gap component scores the
+   6c. CLOSED. "STRONGEST SCORED" IS DIRECTION BLIND. The gap component scores the
        ABSOLUTE gap, so AAP tied FUTU at 8 while falling 21.75 percent on an
        earnings miss, below its VWAP, its prior high and its 200 day average.
        Calling the two of them jointly the strongest scored names without
@@ -537,14 +541,14 @@ recreates it deliberately.
        template says so every time, or the packet carries a direction next to
        the score.
 
-   6d. A NULL RVOL AND A MEASURED LOW ONE ARE COUNTED AS ONE FAILURE.
+   6d. CLOSED. A NULL RVOL AND A MEASURED LOW ONE ARE COUNTED AS ONE FAILURE.
        "premarket_rvol 10 of 12" folded in the two candidates whose RVOL could
        not be computed at all. Withholding them from the screen is right;
        presenting an unmeasured condition and a failed one under one number is
        not, and it runs against the rule that missing evidence stays visibly
        missing. screen_tally wants a third count.
 
-   6e. TWO VENDOR PRIOR CLOSES FOR SCSC DISAGREED BY 1.67 PERCENT. The end of
+   6e. CLOSED. TWO VENDOR PRIOR CLOSES FOR SCSC DISAGREED BY 1.67 PERCENT. The end of
        day record said 51.42 and the delayed quote in the same packet said
        52.2909. The gap was computed from the first, 16.34 percent; from the
        second it is 14.4. Every other candidate agreed to within rounding
@@ -552,14 +556,14 @@ recreates it deliberately.
        carry the disagreement the way pm_source_disagreement already does for
        the premarket high.
 
-   6f. FOUR BARS AND 1,487 SHARES WAS DESCRIBED ONLY AS "PARTIAL". SCSC's
+   6f. CLOSED. FOUR BARS AND 1,487 SHARES WAS DESCRIBED ONLY AS "PARTIAL". SCSC's
        entire premarket record that morning was four one minute bars, and the
        16.34 percent gap, the 56.78 VWAP and the 59.82 high all rest on it.
        pm_window_starts_late covers a window that opened twenty minutes late
        and a window that is essentially not there with the same word. Wants a
        floor below which the evidence is called what it is.
 
-   6g. TWO REPLAY-ONLY PRINTS WERE DESCRIBED AS NO PRINT AT ALL. "HOV, LYTS,
+   6g. CLOSED. TWO REPLAY-ONLY PRINTS WERE DESCRIBED AS NO PRINT AT ALL. "HOV, LYTS,
        NBTX and UUP were subscribed and the socket delivered no trade for
        them" is true of HOV and LYTS, which have no row. NBTX has one bar at
        04:23 for 20 shares and UUP one at 07:00 for 1 share, both correctly
@@ -567,14 +571,14 @@ recreates it deliberately.
        the window" is the exact sentence and the packet's own reason string is
        what needs rewording.
 
-   6h. THREE RVOL DENOMINATORS WERE UP TO SIX DAYS OLD. The 07:15 baseline
+   6h. CLOSED. THREE RVOL DENOMINATORS WERE UP TO SIX DAYS OLD. The 07:15 baseline
        warmed 26 and reused 24, which is the design under a seven day refresh.
        But BLSH's denominator was computed on 2026-08-14, BABA's on 08-17 and
        ASST's on 08-18, and the report presented those RVOLs beside freshly
        computed ones with no distinction. Legal and invisible. baseline
        computed_at is already in the packet per candidate; nothing reads it.
 
-   6i. THE SUITE WRITES TO REAL DATA WHEN A MODULE IS RUN DIRECTLY. Running
+   6i. CLOSED IN PART. THE SUITE WRITES TO REAL DATA WHEN A MODULE IS RUN DIRECTLY. Running
        `python -m tests.test_containment` outside run_tests.py appends its
        fixtures to the real data/quantifier-flags.jsonl, because
        conftest.activate() is applied by run_tests and by nothing else. Found
@@ -585,6 +589,18 @@ recreates it deliberately.
        since the path already exists and only its contents change. Wants
        either a refusal to run a suite module outside the sandbox, or a
        content hash in the photograph.
+
+       CLOSED by the first, inverted: conftest.standalone() WRAPS the hand run
+       in the sandbox rather than refusing it, and every suite module routes
+       its __main__ through it. Refusing would push a person chasing a failure
+       toward a twelve suite pass or toward commenting the guard out.
+
+       STILL OPEN, and it is the other half: the tree photograph compares path
+       SETS, so a test that overwrites a file that already exists is invisible
+       to it. A content hash over the watched paths would catch what the set
+       comparison cannot. Not attempted here because it is a different question
+       from the one that bit, and because hashing 414 watched paths twice a run
+       wants a measurement first.
 
 ## Layer 4: the notable movers section, specified
 

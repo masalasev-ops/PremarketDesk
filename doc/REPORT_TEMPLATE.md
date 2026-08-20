@@ -58,6 +58,29 @@ eligible {screen_tally.day.eligible} of {screen_tally.candidates_examined},
 swing eligible {screen_tally.swing.eligible} of
 {screen_tally.candidates_examined}.
 
+WHEN cleared_floors AND kept DIFFER, SAY WHY IN THE SAME BREATH. The
+difference is candidate_provenance.ranking.capped_out, and those names were
+CUT BY THE RANK CAP rather than rejected by a screen. Give the count, the cap
+from ranking.cap, and the symbols from ranking.capped_out_symbols. On
+2026-08-20 this report published "18 cleared the price and gap floors and 12
+were kept" and could say nothing about the six that vanished, leaving a
+reader unable to tell a screened-out ticker from a truncated one.
+
+THE BUCKET ROLL IS QUOTED FROM score_roll, NEVER ENUMERATED. Write the
+strongest names from score_roll.summary, which already holds every scored
+ticker, its score, and which way it is moving, ordered strongest first. Do not
+assemble that list yourself from the candidates: on 2026-08-20 this report
+wrote "MSTR and WMT green at 7" on a morning when SCSC also scored 7.0 green,
+which is not false and reads as complete.
+
+GIVE THE DIRECTION WHENEVER NAMES ARE GROUPED OR RANKED BY SCORE. The gap
+component scores the ABSOLUTE gap, so the score is unsigned and a falling
+ticker ties a rising one. score_roll.score_is_direction_blind is true and
+score_roll.direction_note says it in words. On 2026-08-20 this report called
+AAP and FUTU jointly "the strongest scored names, both green at 8" while AAP
+was down 21.75 percent on an earnings miss, below its VWAP, its prior high and
+its 200 day average.
+
 The first noun is `ranked`, and it is not decoration. subscribed_considered
 counts what reached the ranking, which is the subscribed list AFTER
 dropped_no_coverage and dropped_stale_price have been taken out of it. It is
@@ -114,7 +137,12 @@ The day screen produced nothing today. Failed conditions: {packet
 screen_tally.day.failed_summary}.
 
 screen_tally.day.failed_summary is already ordered with the most failed
-condition first and already reads "condition N of M". Do not count, do not rank,
+condition first and already reads "condition N of M". Where a condition failed
+on inputs that were never observed, the summary says so inline as "(K of those
+never measured)", and that clause is QUOTED WITH THE REST. A condition failing
+on a null is a missing instrument and a condition failing on a real number is a
+verdict, and on 2026-08-20 this report wrote "premarket_rvol 10 of 12" with two
+of those ten carrying no RVOL at all. Do not count, do not rank,
 and do not describe the set with every, all or most: on 2026-08-18 this
 instruction asked for "the most common failed condition", the packet carried no
 such number, and the report said a condition was missed by `every candidate`
@@ -196,6 +224,34 @@ and not stale, give its median_abs_pct, its compared count and the day it was
 taken, and say plainly that every RVOL in this report is understated by about
 that much again. Where it is null or stale, say the feed is unmeasured this
 morning and do not describe an RVOL as merely a window effect.
+
+A THIN WINDOW IS A STRONGER FACT THAN A LATE ONE AND GETS ITS OWN WORDS.
+pm_window_starts_late says a window opened late. pm_window_thin says it holds
+fewer minutes than CRITERIA's floor, and pm_window_thin_reason gives the count.
+Where a candidate is thin, say how many minutes and how many shares every one
+of its premarket levels rests on, rather than calling it partial: on 2026-08-20
+SCSC's gap, VWAP and high all came off four bars holding 1,487 shares and the
+report used the same word for it as for AAP's fifty.
+
+IF prior_close_disagreement_pct IS ABOVE THE CRITERIA FLOOR FOR A CANDIDATE,
+SAY SO WHERE ITS GAP IS DISCUSSED. Two vendor endpoints carry a prior close and
+the gap is measured from the end of day record. Give both numbers and the
+percentage between them. Do not switch sources and do not average them.
+
+THE BASELINE AGE TRAVELS WITH THE RVOL. baseline.age_days is how old the
+DENOMINATOR is and baseline.computed_today is whether it was warmed this
+morning. Reusing a cached one is the design, not a fault, so state it as a fact
+and never as a warning; the point is that a reader comparing two RVOLs should
+know when they are two different vintages.
+
+A SILENT SYMBOL AND A REPLAY-ONLY SYMBOL ARE DIFFERENT AND collector_coverage
+TELLS THEM APART. silent_with_nothing delivered nothing whatever;
+silent_with_replay_only delivered a replayed print stamped outside the
+collection window, which is filtered out upstream and proves the subscription
+was accepted. Say "no trade inside the collection window", never "the socket
+delivered no trade", about the second group. On 2026-08-20 NBTX had one 04:23
+print of 20 shares and UUP one 07:00 print of 1 share, and both were described
+as having delivered nothing.
 
 IF day_blocked_on_rvol_alone IS NOT EMPTY, NAME THOSE SYMBOLS AND SAY WHAT
 THEY MEAN. They cleared the day screen's other conditions and failed on

@@ -326,6 +326,45 @@ def differences(before: dict[str, Any], after: dict[str, Any],
     return out
 
 
+# True while activate() is holding the redirects. Read by standalone() below,
+# so a nested activate is recognised rather than assumed, and by anything that
+# needs to ask "am I sandboxed" without guessing from a path.
+SANDBOX_ACTIVE = False
+
+
+def standalone(entry) -> int:
+    """Run one suite module's main() by hand, sandboxed the way run_tests is.
+
+    run_tests.py wraps the whole suite in activate(). NOTHING ELSE DID, so
+    `python -m tests.test_containment` ran every claim against the real data/,
+    runs/, logs/ and site/. That is not hypothetical: on 2026-08-20 a direct
+    run of test_containment appended sixteen of its own fixtures to the real
+    data/quantifier-flags.jsonl, two of them carrying a verdict, and the next
+    SANDBOXED run then failed too, because activate() copies data/ in and the
+    fixtures came with it. The suite broke the suite.
+
+    The tree photograph cannot catch this. It compares the set of paths before
+    and after, and this path already existed; only its contents changed.
+
+    Refusing the direct run was the other option and is worse. Running one
+    module is exactly what a person does while chasing a failure, and a refusal
+    would push them to run_tests for a twelve suite pass or to comment the
+    guard out. So the direct run works and is sandboxed, which makes the
+    footgun unreachable rather than merely discouraged.
+
+    Nesting is safe and is why this checks rather than assumes: activate()
+    saves whatever config currently holds and restores it on exit, so a module
+    whose claims open their own sandbox still leaves the outer one intact.
+    """
+    if SANDBOX_ACTIVE:
+        return entry()
+    print("conftest: no sandbox was active, so this hand run is being wrapped "
+          "in one. Real data/, runs/, logs/ and site/ are not writable from "
+          "here; see standalone() in tests/conftest.py.")
+    with activate():
+        return entry()
+
+
 @contextlib.contextmanager
 def activate(copy_data: bool = True) -> Iterator[Path]:
     """Point every writable root at a temporary copy for the duration.
@@ -334,9 +373,15 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
     from it: universe.json, the collector bar file, the backtest cache. Reads
     stay honest, writes land in the copy.
     """
+    global SANDBOX_ACTIVE
+
     sandbox = Path(tempfile.mkdtemp(prefix="premarketdesk-suite-"))
     saved_config = {name: getattr(config, name) for name in _CONFIG_PATHS}
     saved_modules: list[tuple[Any, str, Any]] = []
+    # Captured before anything is redirected, and restored rather than cleared,
+    # so a nested activate hands the flag back to the outer one instead of
+    # telling it the sandbox is gone.
+    was_active = SANDBOX_ACTIVE
 
     try:
         data_copy = sandbox / "data"
@@ -371,9 +416,11 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
             saved_modules.append((module, attribute, getattr(module, attribute, None)))
             setattr(module, attribute, build(config))
 
+        SANDBOX_ACTIVE = True
         with block_network():
             yield sandbox
     finally:
+        SANDBOX_ACTIVE = was_active
         for name, value in saved_config.items():
             setattr(config, name, value)
         for module, attribute, value in saved_modules:

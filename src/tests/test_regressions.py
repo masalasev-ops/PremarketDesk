@@ -933,6 +933,437 @@ def claim_the_day_screen_names_what_rvol_alone_blocked(failures: list[str]) -> N
           "and named, and a quiet morning stays silent")
 
 
+def claim_a_truncated_name_is_not_a_rejected_one(failures: list[str]) -> None:
+    """The rank cap names what it cut, so the two counts stop being a riddle.
+
+    "18 cleared the price and gap floors and 12 were kept" is arithmetic a
+    reader can do and an explanation they cannot. The six that vanished on
+    2026-08-20 were cut by [Scan] candidate_count, not rejected by a screen,
+    and candidate_provenance.ranking recorded kept: 12 without recording that a
+    cap did it.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    def rows(count: int) -> list[dict[str, Any]]:
+        # Descending gaps, every one clear of the discovery floors, so the ONLY
+        # thing that removes a name here is the cap. A fixture where some fell
+        # to the floor would prove nothing about truncation.
+        return [{"symbol": f"T{i:02d}.US", "price": 50.0,
+                 "pool_prior_close": 50.0 / (1 + (count - i + 6) / 100.0)}
+                for i in range(count)]
+
+    sink = Sink()
+    kept, stats = scan.rank_by_measured_gap(rows(8), sink, 3)
+    if stats["kept"] != 3 or stats["cleared_floors"] != 8:
+        failures.append(f"the cap did not keep 3 of 8: {stats}")
+    if stats["capped_out"] != 5:
+        failures.append(f"capped_out counted {stats['capped_out']}, expected 5")
+    cut = [row["symbol"] for row in stats["capped_out_symbols"]]
+    if len(cut) != 5 or set(cut) & {c["symbol"] for c in kept}:
+        failures.append(f"capped_out_symbols overlaps what was kept: {cut}")
+    if stats.get("cap") != 3 or "candidate_count" not in (stats.get("cap_source") or ""):
+        failures.append(f"the cap and its source are not recorded: {stats}")
+    named = [g for g in sink.gaps if "RANK CAP" in g]
+    if not named:
+        failures.append(f"the cap said nothing in gaps_to_fill: {sink.gaps}")
+    elif not all(symbol in named[0] for symbol in cut):
+        failures.append(f"the gap does not name what was cut: {named[0]}")
+
+    # Nothing cut, nothing said. A gaps list that always speaks is not read.
+    quiet = Sink()
+    scan.rank_by_measured_gap(rows(3), quiet, 12)
+    if any("RANK CAP" in g for g in quiet.gaps):
+        failures.append(f"a run under the cap still reported one: {quiet.gaps}")
+    print("  rank cap    the names a cap truncated are counted and named, and a "
+          "short morning stays silent")
+
+
+def claim_the_bucket_roll_is_complete_and_signed(failures: list[str]) -> None:
+    """Every scored name is in the roll, and each carries its direction.
+
+    Two 2026-08-20 sentences, one cause. "MSTR and WMT green at 7" omitted SCSC,
+    which also scored 7.0 green, because the model was enumerating a set the
+    packet already knew. And "the strongest scored names, both green at 8, are
+    AAP and FUTU" ranked by a score that has no sign, on a morning AAP was down
+    21.75 percent.
+    """
+    from morning import scan
+
+    candidates = [
+        {"symbol": "AAP.US", "score": 8.0, "conviction": "green", "gap_pct": -21.7515},
+        {"symbol": "FUTU.US", "score": 8.0, "conviction": "green", "gap_pct": 9.4772},
+        {"symbol": "SCSC.US", "score": 7.0, "conviction": "green", "gap_pct": 16.3361},
+        {"symbol": "MSTR.US", "score": 7.0, "conviction": "green", "gap_pct": 9.0647},
+        {"symbol": "WMT.US", "score": 7.0, "conviction": "green", "gap_pct": -7.2616},
+        {"symbol": "ASST.US", "score": 2.0, "conviction": "red", "gap_pct": 6.5173},
+        {"symbol": "DARK.US", "score": None, "conviction": None, "gap_pct": 4.0},
+    ]
+    roll = scan.score_roll(candidates)
+
+    scored = {c["symbol"] for c in candidates if c["score"] is not None}
+    rolled = {row["symbol"] for rows in roll["by_bucket"].values() for row in rows}
+    if rolled != scored:
+        failures.append(f"the roll is not the scored set: {sorted(rolled ^ scored)}")
+    if roll["unscored"] != ["DARK.US"]:
+        failures.append(f"the unscored name is not held apart: {roll['unscored']}")
+
+    # The specific omission. SCSC scored 7.0 green and was left out of the
+    # 2026-08-20 sentence; it cannot be left out of a roll built from the set.
+    if "SCSC.US" not in roll["summary"]:
+        failures.append(f"SCSC is missing from the roll summary: {roll['summary']}")
+    for symbol in ("AAP.US", "FUTU.US", "MSTR.US", "WMT.US"):
+        if symbol not in roll["summary"]:
+            failures.append(f"{symbol} is missing from the roll summary")
+
+    if not roll.get("score_is_direction_blind"):
+        failures.append("the roll does not say the score is unsigned")
+    if "down 21.75 percent" not in roll["summary"]:
+        failures.append("AAP's direction is not carried beside its score: "
+                        f"{roll['summary']}")
+    if "up 9.48 percent" not in roll["summary"]:
+        failures.append("FUTU's direction is not carried beside its score")
+
+    green = [row["symbol"] for row in roll["by_bucket"]["green"]]
+    if green[:2] != ["AAP.US", "FUTU.US"]:
+        failures.append(f"the bucket is not ordered strongest first: {green}")
+
+    template = (config.PROJECT_ROOT / "doc" / "REPORT_TEMPLATE.md").read_text(
+        encoding="utf-8")
+    if "score_roll.summary" not in template:
+        failures.append("REPORT_TEMPLATE.md does not tell the report to quote "
+                        "score_roll rather than enumerate the buckets")
+    print("  bucket roll every scored name is in the roll with its direction, "
+          "and the template quotes it rather than counting")
+
+
+def claim_an_unmeasured_condition_is_not_a_failed_one(failures: list[str]) -> None:
+    """A screen condition that was never measured is counted apart.
+
+    "premarket_rvol 10 of 12" on 2026-08-20 folded AAP and SCSC, whose RVOL is
+    null because the baseline denominator is unusable, in with eight names that
+    were measured and read low. Withholding them from the screen is right.
+    Reporting a missing instrument and a verdict under one number is the thing
+    the rest of scan.py exists to prevent.
+    """
+    from morning import scan
+
+    measured = {
+        "symbol": "LOW.US", "price": 40.0, "gap_pct": 9.0,
+        "quote": {"marketCap": 5e9, "twoHundredDayAveragePrice": 10.0},
+        "prior_high": 39.0, "pm_rvol": 0.2, "catalyst_found": True,
+    }
+    unmeasured = {
+        "symbol": "NULL.US", "price": 40.0, "gap_pct": 9.0,
+        "quote": {"marketCap": 5e9, "twoHundredDayAveragePrice": 10.0},
+        "prior_high": 39.0, "pm_rvol": None, "catalyst_found": True,
+        "pm_rvol_reason": "baseline median volume is zero or missing",
+    }
+    candidates = [measured, unmeasured]
+    for candidate in candidates:
+        scan.evaluate_eligibility(candidate)
+
+    if "premarket_rvol" not in (measured.get("day_failed_conditions") or []):
+        failures.append("a measured low RVOL did not fail the day screen")
+    if measured.get("day_failed_unmeasured"):
+        failures.append("a measured RVOL was recorded as never measured: "
+                        f"{measured['day_failed_unmeasured']}")
+    if unmeasured.get("day_failed_unmeasured") != ["premarket_rvol"]:
+        failures.append("a null RVOL was not recorded as never measured: "
+                        f"{unmeasured.get('day_failed_unmeasured')}")
+    why = " ".join(unmeasured.get("day_failed") or [])
+    if "never measured" not in why:
+        failures.append(f"the null RVOL's reason does not say so: {why}")
+
+    tally = scan.screen_tally(candidates)
+    rvol = tally["day"]["failed_by_condition"]["premarket_rvol"]
+    if rvol != {"failed": 2, "cleared": 0, "unmeasured": 1, "measured_and_failed": 1}:
+        failures.append(f"the tally does not split the two failures: {rvol}")
+    if "never measured" not in tally["day"]["failed_summary"]:
+        failures.append("the summary sentence hides the unmeasured failure: "
+                        f"{tally['day']['failed_summary']}")
+
+    # Eligibility itself is untouched: both still fail, only the reporting differs.
+    if measured["day_eligible"] or unmeasured["day_eligible"]:
+        failures.append("splitting the count changed an eligibility decision")
+    print("  unmeasured  a null input and a measured miss are counted apart, and "
+          "the screen decision is unchanged")
+
+
+def claim_a_thin_window_is_not_merely_a_late_one(failures: list[str]) -> None:
+    """Four bars and fifty bars stop sharing the word partial.
+
+    SCSC on 2026-08-20 carried a 16.34 percent gap, a VWAP and a high off FOUR
+    one minute bars holding 1,487 shares. AAP's window also opened late and
+    held fifty. Both were "partial".
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    def bars(count: int, start_minute: int) -> list[dict[str, Any]]:
+        base = int(ettime.epoch_s(dt.datetime(
+            2026, 8, 20, 7, start_minute, tzinfo=ettime.ET)))
+        return [{"minute_epoch": base + 60 * i, "h": 10.0, "l": 9.0, "c": 9.5,
+                 "v": 100.0, "pv": 950.0} for i in range(count)]
+
+    thin = {"symbol": "THIN.US", "on_watchlist": True}
+    full = {"symbol": "FULL.US", "on_watchlist": True}
+    watchlist = {"symbols": [{"symbol": "THIN.US", "subscribed": True},
+                             {"symbol": "FULL.US", "subscribed": True},
+                             {"symbol": "GONE.US", "subscribed": True}]}
+    sink = Sink()
+    scan.attach_premarket_path(
+        [thin, full], watchlist, sink,
+        {"THIN.US": bars(4, 42), "FULL.US": bars(50, 26)})
+
+    if thin.get("pm_window_thin") is not True:
+        failures.append(f"a four bar window was not called thin: "
+                        f"{thin.get('pm_window_thin')}")
+    if full.get("pm_window_thin") is not False:
+        failures.append(f"a fifty bar window was called thin: "
+                        f"{full.get('pm_window_thin')}")
+    if thin.get("pm_window_bars") != 4 or full.get("pm_window_bars") != 50:
+        failures.append("the bar count is not carried beside the flag")
+    if "4 minute" not in (thin.get("pm_window_thin_reason") or ""):
+        failures.append(f"the thin reason gives no count: "
+                        f"{thin.get('pm_window_thin_reason')}")
+    # Late and thin are independent. Both of these opened late.
+    if not (thin.get("pm_window_starts_late") and full.get("pm_window_starts_late")):
+        failures.append("the fixture did not exercise two late windows, so the "
+                        "independence of the two flags is untested")
+
+    # A candidate with no window at all carries the keys, so a reader of the
+    # packet cannot mistake a missing key for a full window.
+    absent = {"symbol": "GONE.US", "on_watchlist": True}
+    scan.attach_premarket_path([absent], watchlist, Sink(), {})
+    if "pm_window_thin" not in absent or absent["pm_window_thin"] is not None:
+        failures.append("an absent window does not carry a null thin flag: "
+                        f"{absent.get('pm_window_thin')}")
+    if "INSIDE THE COLLECTION WINDOW" not in (absent.get("pm_reason") or ""):
+        failures.append("the no-bars reason still claims the socket was silent "
+                        f"all morning: {absent.get('pm_reason')}")
+    print("  thin window a four bar window is called thin, a fifty bar one is "
+          "not, and lateness is a separate flag")
+
+
+def claim_a_replayed_print_is_not_silence(failures: list[str]) -> None:
+    """A symbol that delivered one replayed print is told from one that did not.
+
+    Both are absent from the bars, because the replay filter sits in
+    read_bars_file for good reasons. They are not the same failure: a replayed
+    print proves the subscription was accepted. On 2026-08-20 NBTX delivered
+    one 04:23 print of 20 shares and UUP one 07:00 print of 1 share, and the
+    report said the socket "delivered no trade for them" alongside two symbols
+    that really had produced nothing.
+    """
+    from collect import collect_premarket
+    from morning import scan
+
+    with conftest_activate():
+        day = "2026-08-20"
+        rows = [
+            {"symbol": "LIVE.US", "minute_epoch": 1787224800, "h": 1.0, "l": 1.0,
+             "c": 1.0, "v": 10.0, "pv": 10.0, "minute_et": "2026-08-20T07:20:00-04:00"},
+            {"symbol": "REPLAY.US", "minute_epoch": 1787214000, "h": 1.0, "l": 1.0,
+             "c": 1.0, "v": 20.0, "pv": 20.0, "replay": True,
+             "minute_et": "2026-08-20T04:23:00-04:00"},
+        ]
+        path = config.PREMARKET_DIR / f"{day}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+        (config.PREMARKET_DIR / f"{day}-subscriptions.json").write_text(
+            json.dumps({"symbols": ["LIVE.US", "REPLAY.US", "MUTE.US"],
+                        "socket_cap": 50, "subscribed_at": "2026-08-20T07:20:03-04:00"}),
+            encoding="utf-8")
+
+        bars, stats = collect_premarket.read_bars_file(path)
+        if stats.get("replay_by_symbol") != {"REPLAY.US": 1}:
+            failures.append(f"replay is not counted per symbol: "
+                            f"{stats.get('replay_by_symbol')}")
+
+        coverage = scan.collector_coverage(bars, day, stats.get("replay_by_symbol"))
+        if coverage["silent_with_replay_only"] != ["REPLAY.US"]:
+            failures.append("a replay-only symbol is not held apart: "
+                            f"{coverage.get('silent_with_replay_only')}")
+        if coverage["silent_with_nothing"] != ["MUTE.US"]:
+            failures.append("a truly silent symbol is not held apart: "
+                            f"{coverage.get('silent_with_nothing')}")
+        if sorted(coverage["silent_symbols"]) != ["MUTE.US", "REPLAY.US"]:
+            failures.append("the combined silent list changed meaning: "
+                            f"{coverage.get('silent_symbols')}")
+    print("  replay only a symbol that sent one replayed print is told apart "
+          "from one that sent nothing")
+
+
+def claim_the_two_prior_closes_are_compared(failures: list[str]) -> None:
+    """The end of day close and the quoted close stop disagreeing in silence.
+
+    On 2026-08-20 SCSC's were 1.67 percent apart, 51.42 against 52.2909. The
+    gap was measured from the first and published as 16.34 percent; from the
+    second it is 14.4. Nothing said they differed. The end of day record still
+    wins, because this is a disclosure and not a tiebreak.
+    """
+    from morning import scan
+
+    if scan.PRIOR_CLOSE_DISAGREEMENT_PCT <= 0:
+        failures.append("the disagreement floor is not a positive percentage")
+
+    class Api:
+        def eod(self, symbol, start, end):
+            return [{"date": "2026-08-19", "close": 51.42, "high": 53.0573,
+                     "volume": 100.0}], None
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    disagreeing = {"symbol": "SCSC.US", "quote": {"previousClosePrice": 52.2909}}
+    agreeing = {"symbol": "OK.US", "quote": {"previousClosePrice": 51.42}}
+    sink = Sink()
+    scan.attach_daily_history(Api(), [disagreeing, agreeing], sink)
+
+    if disagreeing.get("prior_close") != 51.42:
+        failures.append("the end of day record stopped winning: "
+                        f"{disagreeing.get('prior_close')}")
+    drift = disagreeing.get("prior_close_disagreement_pct")
+    if drift is None or not (1.6 < drift < 1.7):
+        failures.append(f"the 2026-08-20 SCSC disagreement measured {drift}, "
+                        "expected about 1.67 percent")
+    if agreeing.get("prior_close_disagreement_pct") != 0.0:
+        failures.append("two agreeing closes did not measure zero: "
+                        f"{agreeing.get('prior_close_disagreement_pct')}")
+    named = [g for g in sink.gaps if "SCSC.US" in g and "prior closes" in g]
+    if not named:
+        failures.append(f"the disagreement said nothing: {sink.gaps}")
+    elif "OK.US" in " ".join(sink.gaps):
+        failures.append("an agreeing pair was reported as a disagreement")
+    print("  prior close two vendor closes 1.67 percent apart are reported, the "
+          "end of day one still wins, and an agreeing pair stays quiet")
+
+
+def claim_the_baseline_age_travels_with_the_rvol(failures: list[str]) -> None:
+    """A denominator warmed six days ago is not presented as this morning's.
+
+    Reusing a cached baseline inside [Baseline] refresh_after_days is the
+    design. On 2026-08-20 BLSH's denominator was computed on 08-14, BABA's on
+    08-17 and ASST's on 08-18, and the report set those RVOLs beside COIN's,
+    computed that morning, with nothing to tell them apart.
+    """
+    from morning import scan
+
+    today = ettime.today_et()
+    if scan._baseline_age_days(None) is not None:
+        failures.append("a missing computed_at did not read as an unknown age")
+    if scan._baseline_age_days(today.isoformat() + "T07:15:00-04:00") != 0:
+        failures.append("a baseline warmed today did not read as zero days old")
+    six = (today - dt.timedelta(days=6)).isoformat()
+    if scan._baseline_age_days(six + "T07:15:16-04:00") != 6:
+        failures.append("a six day old baseline did not read as six days old")
+    if scan._baseline_age_days("not a date") is not None:
+        failures.append("an unparseable computed_at raised or guessed")
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    stale = {"symbol": "OLD.US", "pm_rvol": 0.19,
+             "baseline": {"age_days": 6, "computed_today": False}}
+    fresh = {"symbol": "NEW.US", "pm_rvol": 0.29,
+             "baseline": {"age_days": 0, "computed_today": True}}
+    sink = Sink()
+    scan._gap_for_stale_baselines([stale, fresh], sink)
+    if not sink.gaps:
+        failures.append("a six day old denominator was not reported")
+    elif "OLD.US 6 day" not in sink.gaps[0]:
+        failures.append(f"the age is not named beside the symbol: {sink.gaps[0]}")
+    elif "NEW.US" in sink.gaps[0]:
+        failures.append("a denominator warmed this morning was reported as reused")
+
+    quiet = Sink()
+    scan._gap_for_stale_baselines([fresh], quiet)
+    if quiet.gaps:
+        failures.append(f"a fully fresh morning still reported one: {quiet.gaps}")
+    print("  baseline age a reused denominator is named with its age, and a "
+          "fully warmed morning stays silent")
+
+
+def claim_a_hand_run_of_one_suite_cannot_touch_real_data(failures: list[str]) -> None:
+    """Running a suite module directly sandboxes itself.
+
+    run_tests.py wraps the suite in conftest.activate() and nothing else did,
+    so `python -m tests.test_containment` ran every claim against the real
+    data/, runs/, logs/ and site/. On 2026-08-20 exactly that appended sixteen
+    of test_containment's own fixtures to the real quantifier flag log, two of
+    them carrying a verdict, and the next SANDBOXED run failed too because
+    activate() copies data/ in and the fixtures came with it.
+
+    The tree photograph cannot catch it: the path already existed and only its
+    contents changed.
+    """
+    from tests import conftest
+
+    if not hasattr(conftest, "standalone"):
+        failures.append("conftest has no standalone() for a hand run to use")
+        return
+
+    # Every suite module routes its __main__ through it. A new suite added
+    # without that line is the way this comes back.
+    from tests import run_tests
+
+    for module_name in run_tests.SUITE:
+        path = config.PROJECT_ROOT / "src" / (module_name.replace(".", "/") + ".py")
+        tail = path.read_text(encoding="utf-8")
+        if "_conftest.standalone(main)" not in tail:
+            failures.append(f"{path.name} runs main() directly under __main__, so "
+                            "a hand run of it writes to the real data directory")
+
+    # The flag tracks nesting rather than being set once, so an inner activate
+    # hands it back instead of reporting the sandbox gone.
+    # Relative, not absolute: run_tests already holds a sandbox around this
+    # claim, so the assertion is that activate() RESTORES what it found rather
+    # than that the flag starts false.
+    outside = conftest.SANDBOX_ACTIVE
+    with conftest_activate():
+        if not conftest.SANDBOX_ACTIVE:
+            failures.append("SANDBOX_ACTIVE is not set inside a sandbox")
+        with conftest_activate():
+            pass
+        if not conftest.SANDBOX_ACTIVE:
+            failures.append("a nested sandbox exit cleared the outer one, so "
+                            "standalone() would wrap an already wrapped run")
+    if conftest.SANDBOX_ACTIVE is not outside:
+        failures.append("activate() did not restore the flag it found, leaving "
+                        f"{conftest.SANDBOX_ACTIVE} against {outside}")
+
+    # standalone runs the entry point, and does not open a second sandbox when
+    # one is already up.
+    seen: list[bool] = []
+    with conftest_activate():
+        conftest.standalone(lambda: seen.append(conftest.SANDBOX_ACTIVE) or 0)
+    if seen != [True]:
+        failures.append(f"standalone did not run its entry point sandboxed: {seen}")
+    print("  hand run    every suite module sandboxes its own __main__, and the "
+          "flag nests instead of being cleared by the inner exit")
+
+
 # ---------------------------------------------------------------- plumbing
 
 def conftest_activate():
@@ -962,6 +1393,14 @@ def main() -> int:
     claim_the_volume_check_reaches_the_packet(failures)
     claim_a_trap_is_the_balance_not_the_worst_headline(failures)
     claim_the_day_screen_names_what_rvol_alone_blocked(failures)
+    claim_a_truncated_name_is_not_a_rejected_one(failures)
+    claim_the_bucket_roll_is_complete_and_signed(failures)
+    claim_an_unmeasured_condition_is_not_a_failed_one(failures)
+    claim_a_thin_window_is_not_merely_a_late_one(failures)
+    claim_a_replayed_print_is_not_silence(failures)
+    claim_the_two_prior_closes_are_compared(failures)
+    claim_the_baseline_age_travels_with_the_rvol(failures)
+    claim_a_hand_run_of_one_suite_cannot_touch_real_data(failures)
 
     if failures:
         for failure in failures:
@@ -972,4 +1411,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Sandboxed even when run by hand. See standalone() in conftest.py:
+    # run_tests wraps the suite, and until 2026-08-20 a direct module
+    # run wrote to the real data/ and runs/.
+    from tests import conftest as _conftest
+
+    sys.exit(_conftest.standalone(main))

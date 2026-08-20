@@ -539,6 +539,14 @@ def read_bars_file(path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any
         "replay_rows": 0,
         "replay_volume": 0.0,
         "replay_first_et": None,
+        # Per symbol, not just the total. A symbol whose ONLY row is a replayed
+        # print is absent from the bars dict exactly like a symbol the socket
+        # never answered for, and on 2026-08-20 the packet called both silent:
+        # NBTX delivered one 04:23 print of 20 shares and UUP one 07:00 print
+        # of 1 share, and the report said the socket "delivered no trade for
+        # them". The filter is right and the sentence was not, and the sentence
+        # could not be better because the count was aggregate.
+        "replay_by_symbol": {},
     }
     if not path.exists():
         return out, stats
@@ -565,6 +573,8 @@ def read_bars_file(path) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any
         if row.get("replay"):
             stats["replay_rows"] += 1
             stats["replay_volume"] += float(row.get("v") or 0.0)
+            stats["replay_by_symbol"][symbol] = (
+                stats["replay_by_symbol"].get(symbol, 0) + 1)
             at = row.get("minute_et")
             if at and (stats["replay_first_et"] is None or at < stats["replay_first_et"]):
                 stats["replay_first_et"] = at

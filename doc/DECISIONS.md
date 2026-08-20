@@ -16,7 +16,99 @@ its text, because that reasoning is the point of this file.
 What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
-in the commit messages.
+
+## 2026-08-20: an unmeasured condition is counted apart, and nothing else changes
+
+**The choice.** A screen condition failing on a null input could be counted with
+the measured failures, held out of the tally entirely, or counted alongside them
+with the split recorded.
+
+**The third.** Holding it out would understate what the screen rejected and
+break the identity screen_tally exists to keep, that cleared plus failed equals
+examined. Counting it in silently is what produced "premarket_rvol 10 of 12" on
+a morning two of those ten carried no RVOL at all.
+
+**What deliberately did NOT change is the eligibility decision.** An unmeasured
+condition still fails its screen. That is the [Notable] rule this whole system
+runs on: evidence that was never observed withholds a candidate rather than
+admitting one, and the safe direction is out. This change is reporting only, and
+the amendment that applied it re-derived every decision and compared it against
+the original to prove exactly that.
+
+**The mechanism is a third element on the failure tuple**, not a second list
+built beside it. Two lists that must agree are two lists that will eventually
+disagree, and this file already carries the case: prior_close and prior_high
+drifted a session apart when they came from two places, and were fixed by being
+read from one record.
+
+## 2026-08-20: direction travels with the score, rather than being warned about
+
+**The choice.** The score's gap component uses the absolute gap, so a name down
+21.75 percent ties one up 9.48. That could be fixed by signing the score, by
+telling the template to add a caveat, or by carrying direction in the data.
+
+**Signing the score would change what it measures.** It is a confluence count,
+and confluence is real in both directions: a violent gap down with an earnings
+catalyst and heavy volume IS a high confluence setup, and the day screen already
+decides direction separately. Making the score directional would collapse two
+questions into one number.
+
+**A caveat in the template is a rule that has to be remembered every time.** The
+report already carried an accurate polarity and drew a wrong conclusion from it
+on the same morning, which is what instructions-only fixes look like when they
+fail.
+
+**So score_roll carries direction on every row and in the summary string the
+template quotes.** "AAP.US 8.0 (down 21.75 percent)" cannot be written as a
+bullish claim by accident. The omission became impossible rather than
+discouraged, which is the same move that fixed the bucket roll beside it.
+
+## 2026-08-20: a hand run of one suite is sandboxed, not refused
+
+**The choice.** run_tests.py wrapped the suite in conftest.activate() and nothing
+else did, so a direct `python -m tests.test_containment` wrote to the real data/,
+runs/, logs/ and site/. Either refuse the direct run, or make it sandbox itself.
+
+**Refusing is worse and the reason is behavioural.** Running one module is
+exactly what a person does while chasing a failure in that module, which is how
+this was found in the first place. A refusal sends them to a twelve suite pass
+for a one suite question, or to commenting the guard out, and a guard that gets
+commented out is not a guard.
+
+**So standalone() wraps it.** The footgun becomes unreachable rather than
+discouraged, and the useful thing stays useful. It prints that it wrapped, so
+nobody is confused about why their real data did not change.
+
+**Why the flag nests rather than being set once.** Several suites open their own
+sandbox inside their claims. activate() saves whatever it found and restores
+that, rather than clearing the flag, so an inner exit cannot tell an outer
+sandbox it has gone. A boolean set to False on exit would have made standalone()
+wrap an already wrapped run, which works but hides the nesting from anything
+that later needs to ask.
+
+**What this does not fix.** The tree photograph still compares path SETS, so a
+test that overwrites an existing file it should not touch is still invisible to
+it. That is a separate question and needs a content hash, not a sandbox.
+
+## 2026-08-20: a thin window and a late window are two flags, not one word
+
+**The choice.** pm_window_starts_late already existed. A window holding four
+minutes of prints could be folded into it, given its own flag, or left to the
+reader to infer from bars_collected.
+
+**Its own flag, because the two facts have different fixes.** A late window is
+a collector that started late, and the fix is the schedule. A thin window is a
+socket that was quiet while it was listening, and the fix is the feed. They are
+independent: a window can open on time and be thin, or open late and be full,
+and 2026-08-20 carried one of each described in the same word.
+
+**Leaving it to the reader was the status quo and it failed.** bars_collected
+was in the packet the whole time. SCSC's four appeared beside AAP's fifty and
+the report called both partial, because nothing asked it to look.
+
+**The floor is a seed and is admitted as one.** Ten minutes of an eighty five
+minute window is set where it is because four is plainly not a price path and
+fifty plainly is. Nobody has measured where the line belongs.
 
 ## 2026-08-20: a trap is decided on the balance, not on the worst headline
 

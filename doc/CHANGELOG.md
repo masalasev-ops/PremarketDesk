@@ -13,7 +13,86 @@ it. A number that was right when it was written and has since been overtaken
 is history, and rewriting it destroys the reasoning.
 
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
-and in the git history.
+and 
+## 2026-08-20, fifth: the nine smaller findings from the same read, all closed
+
+None of these was a false statement. Each was the report being accurate and
+incomplete, or precise about the wrong thing, and each needed its own argument,
+which is why they were held back from the pass above rather than swept in.
+
+**A rank cap dropped six names and nothing recorded it.** "18 cleared the price
+and gap floors and 12 were kept" is arithmetic a reader can do and an
+explanation they cannot. rank_by_measured_gap now records cap, cap_source,
+capped_out and capped_out_symbols, and gaps them, so a truncated name is
+distinguishable from a rejected one.
+
+**The bucket roll was enumerated by the model and the score has no sign.** Two
+sentences, one cause. "MSTR and WMT green at 7" omitted SCSC, which also scored
+7.0 green; and "the strongest scored names, both green at 8, are AAP and FUTU"
+ranked by a score whose gap component uses the ABSOLUTE gap, on a morning AAP
+was down 21.75 percent on an earnings miss. The new score_roll block holds every
+scored ticker with its bucket, its score AND its direction, ordered strongest
+first, and the template quotes it rather than assembling one.
+
+**A screen condition that was never measured was counted as one that failed.**
+"premarket_rvol 10 of 12" folded in AAP and SCSC, whose RVOL is null because the
+baseline denominator is unusable, alongside eight measured and low. Every
+eligibility test now carries a third element saying whether its input was
+observed, screen_tally splits failed into measured_and_failed and unmeasured,
+and failed_summary says "(K of those never measured)" inline. No eligibility
+decision changed: withholding an unmeasured name from a screen was always right,
+and only the reporting was wrong.
+
+**Two vendor prior closes disagreed by 1.67 percent in silence.** SCSC's end of
+day record said 51.42 and the delayed quote in the same packet said 52.2909,
+which is the difference between a published gap of 16.34 percent and one of
+14.4. Now recorded as prior_close_disagreement_pct, a magnitude like
+pm_source_disagreement, and gapped above the CRITERIA floor. The end of day
+record still wins; this is a disclosure and not a tiebreak.
+
+**Four bars and fifty bars shared the word partial.** SCSC's entire premarket
+record was four one minute bars holding 1,487 shares, and its gap, its VWAP and
+its high all rested on them. pm_window_thin is now a separate flag from
+pm_window_starts_late, with its own floor in CRITERIA and its own count in the
+reason, because a window can open on time and still be thin and the fixes
+differ.
+
+**Two replay-only prints were described as no print at all.** The report said
+the socket "delivered no trade" for HOV, LYTS, NBTX and UUP. True of the first
+two; NBTX sent one 04:23 print of 20 shares and UUP one 07:00 print of 1 share,
+correctly filtered from the window and correctly absent from the bars.
+read_bars_file now counts replay per symbol and collector_coverage splits
+silent_with_nothing from silent_with_replay_only, because a replayed print
+proves the subscription was accepted and silence does not.
+
+**Three RVOL denominators were up to six days old and looked like today's.**
+Reusing a cached baseline inside refresh_after_days is the design. Presenting a
+denominator warmed on 08-14 beside one warmed this morning with nothing to tell
+them apart is not. baseline.age_days and baseline.computed_today now travel with
+every RVOL, reported as a fact and never as a warning.
+
+**The test suite wrote to real data when a module was run directly.** Found by
+doing it: `python -m tests.test_containment` outside run_tests.py appended
+sixteen of its own fixtures to the real data/quantifier-flags.jsonl, two of them
+carrying a verdict, and the next SANDBOXED run then failed as well, because
+conftest.activate() copies data/ in and the fixtures came with it. The suite
+broke the suite. The tree photograph cannot catch this: the path already existed
+and only its contents changed. conftest.standalone() now wraps a hand run in the
+same sandbox run_tests uses, and every suite module routes its __main__ through
+it. Refusing the direct run was the alternative and is worse, because running
+one module is exactly what a person does while chasing a failure.
+
+Nine claims, one per finding, in src/tests/test_regressions.py. Two new
+CRITERIA keys with their notes: [Scan] min_bars_for_full_window and
+prior_close_disagreement_pct.
+
+The report of 2026-08-20 was regenerated a second time against a second
+amendment, on the same terms as the first: nothing re-fetched, no price, volume
+or timestamp touched. The screens were re-derived rather than trusted and came
+back byte identical. One field could not be recovered and says so instead of
+guessing: capped_out_symbols needs the pre-cap ranked list, and the 08:45 packet
+only ever held the twelve that survived the cap. The count is arithmetic and is
+sound; the symbols start being recorded from the next scheduled run.
 
 ## 2026-08-20, fourth: the morning report's own two defects, found by reading it
 

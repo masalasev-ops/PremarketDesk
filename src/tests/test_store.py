@@ -108,4 +108,9 @@ def _run(failures: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # Sandboxed even when run by hand. See standalone() in conftest.py:
+    # run_tests wraps the suite, and until 2026-08-20 a direct module
+    # run wrote to the real data/ and runs/.
+    from tests import conftest as _conftest
+
+    sys.exit(_conftest.standalone(main))
