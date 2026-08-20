@@ -35,7 +35,7 @@ import ssl
 import statistics
 import time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import websocket
 

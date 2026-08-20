@@ -88,11 +88,14 @@ at the root and is gitignored along with .env.
 - tasks/: seven job .bat files, register_tasks.ps1, README.md. They
   register as nine scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
-  repeating weekday trigger and once more at 22:45. Three further .bat files
-  sit here and are NOT in register_tasks.ps1: job_probe_alpaca_live,
-  job_probe_live_v1 and job_probe_socket_cap, registered by hand and now
-  dormant. They survive `register_tasks.ps1 -Unregister`, which only knows
-  the nine, so removing them is a manual step
+  repeating weekday trigger and once more at 22:45. One further .bat file
+  sits here and is NOT in register_tasks.ps1: job_probe_socket_cap, the
+  instrument for the open collector volume question, with NO task currently
+  registered for it. It survives `register_tasks.ps1 -Unregister`, which only
+  knows the nine, so removing it is a manual step. job_probe_alpaca_live and
+  job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both
+  questions were answered and recorded in DECISIONS.md; their modules stay
+  under src/research/
 - data/: universe.json, watchlist.json, universe-closes-YYYY-MM-DD.json,
   premarket/YYYY-MM-DD.jsonl, premarket/YYYY-MM-DD-stats.jsonl,
   premarket/YYYY-MM-DD-subscriptions.json (what the collector asked the socket

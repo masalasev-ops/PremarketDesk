@@ -199,22 +199,6 @@ def is_weekday(day: dt.date) -> bool:
     return day.weekday() < 5
 
 
-def previous_weekdays(count: int, before: dt.date | None = None) -> list[dt.date]:
-    """Weekdays strictly before the given day, newest first.
-
-    Weekdays are not trading days. Market holidays are handled by taking the
-    session dates from the data the API actually returned, never by guessing
-    here. This helper only exists to bound a request window.
-    """
-    day = before or today_et()
-    out: list[dt.date] = []
-    while len(out) < count:
-        day -= dt.timedelta(days=1)
-        if is_weekday(day):
-            out.append(day)
-    return out
-
-
 def _self_check() -> int:
     print(f"tz source     {TZ_SOURCE} ({ET!r})")
     now = now_et()

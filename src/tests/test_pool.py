@@ -27,7 +27,6 @@ import io
 import datetime as dt
 import inspect
 import json
-import re
 import shutil
 import sys
 import tempfile

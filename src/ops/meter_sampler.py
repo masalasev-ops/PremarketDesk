@@ -37,7 +37,6 @@ import time
 from typing import Any
 
 from core import config
-from core import ettime
 from ops import job_status
 
 INTERVAL_MINUTES = 30
@@ -157,12 +156,6 @@ def report(day: str | None = None) -> int:
     return 0
 
 
-# Not wrapped in job_status.run and deliberately so: this is an instrument
-# rather than a scheduled step, and a step that appeared in the status record
-# would make the watchdog expect it and report it overdue.
-OK_CODES = (0,)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Sample the shared quota meter on a clock.")
     parser.add_argument("--loop", action="store_true",
@@ -188,5 +181,8 @@ def main(argv: list[str] | None = None) -> int:
         time.sleep(args.interval_minutes * 60)
 
 
+# Not wrapped in job_status.run and deliberately so: this is an instrument
+# rather than a scheduled step, and a step that appeared in the status record
+# would make the watchdog expect it and report it overdue.
 if __name__ == "__main__":
     sys.exit(main())

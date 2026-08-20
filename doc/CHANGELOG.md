@@ -14,6 +14,58 @@ is history, and rewriting it destroys the reasoning.
 
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and 
+## 2026-08-20, sixth: the purge, and nothing rectified in the same pass
+
+A full review ran over the whole tree and its findings are open. This entry is
+only the deletions, kept separate so that a commit which removes things cannot
+be confused with one that changes behaviour. Everything below was proven unused
+before it was removed, the suite is green either side of it, and the tree
+photograph counts 1,994 paths where it counted 2,005.
+
+**Dead code, by reference count across all 51 modules.** `ApiResult.or_empty`
+in core/eodhd.py had no caller and substituted a fallback for a vendor failure,
+which hard rule 5 forbids, so removing it removes the temptation as well as the
+code. `ettime.previous_weekdays` had no caller and put weekday date arithmetic
+in the one blessed clock module, next to the rule that says session dates come
+from the data the vendor returned. `conftest._allowed` was never called and
+disagreed with the live filter beside it, matching any path component where the
+live one matches only the entry's own name. The `snapshot = snapshot_tree`
+alias had no remaining user. Twelve unused imports went, each checked by AST
+rather than by eye. Seven copies of `OK_CODES = (0,)` went, in meter_sampler,
+quantifier_flags, float_cache, float_rotation_study, probe_alpaca_live,
+probe_socket_cap and vwap_gappers: none is read by anything, none of those
+modules is in test_entrypoints' SCHEDULED list, and probe_alpaca_live carried a
+comment explaining why it is deliberately not wrapped in job_status.run
+directly above a constant implying it is. The seventeen live OK_CODES stay.
+
+**Two spent scheduler wrappers.** tasks/job_probe_live_v1.bat and
+tasks/job_probe_alpaca_live.bat both said in their own headers to delete them
+once the question was answered. Both questions were answered on 2026-08-17 and
+recorded in DECISIONS.md, neither task exists on the machine, and
+register_tasks.ps1 never knew them. The research modules they wrapped stay,
+because they are how the evidence behind both decisions is read back.
+tasks/README.md and BUILD_PLAN.md's repository layout are corrected to match,
+and the README now records that job_probe_socket_cap.bat survives with NO TASK
+REGISTERED for it.
+
+**Two fabricated sessions that were being published.** runs/2026-01-05/ and
+runs/2026-01-06/ held test_containment fixtures for ARX.US, written at 09:51 on
+2026-08-20 by a hand run of that module 44 minutes before the commit that added
+conftest.standalone(). They were not an open hole: the suite is sandboxed and
+the photograph is clean. They were residue, and build_archive had embedded both
+into site/PremarketDesk.html as sessions indistinguishable in form from the six
+real mornings. Deleted, archive rebuilt, six embedded and no Jan rows.
+
+**One exact duplicate.** data/float_rotation_study.json is byte equal to
+doc/research/float_rotation_study-2026-08-17-postfix.json once `_provenance` is
+popped, and the tracked copy is the one DECISIONS.md cites and the only one
+carrying provenance.
+
+**Three .gitignore lines.** `premarketdesk.db`, `universe.json` and
+`watchlist.json` were each already ignored by `data/` at line 6, confirmed with
+`git check-ignore -v`. They are unanchored, so they would have silently
+swallowed a future fixture of any of those names anywhere in the tree.
+
 ## 2026-08-20, fifth: the nine smaller findings from the same read, all closed
 
 None of these was a false statement. Each was the report being accurate and

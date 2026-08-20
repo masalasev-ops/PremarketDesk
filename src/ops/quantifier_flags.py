@@ -28,7 +28,7 @@ import argparse
 import json
 from typing import Any
 
-from core import config, ettime
+from core import ettime
 from morning import analyst
 
 # Public: monitor_jobs.py reads the same two words to tell a judged flag
@@ -171,9 +171,6 @@ def main(argv: list[str] | None = None) -> int:
         print("  Fewer than 20 judged. Tune the word list on a month of these, "
               "not on this line.")
     return 0
-
-
-OK_CODES = (0,)
 
 
 if __name__ == "__main__":

@@ -693,9 +693,6 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     return result
 
 
-OK_CODES = (0,)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Measure premarket float rotation against reconstructed RVOL.")

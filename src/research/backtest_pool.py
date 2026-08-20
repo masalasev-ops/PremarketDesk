@@ -35,7 +35,7 @@ import datetime as dt
 import json
 import statistics
 import sys
-from typing import Any, Callable
+from typing import Any
 
 from core import config
 from core import criteria

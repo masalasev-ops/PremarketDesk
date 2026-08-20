@@ -302,9 +302,6 @@ def build(limit: int | None = None) -> dict[str, Any]:
     return cache
 
 
-OK_CODES = (0,)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Cache sharesFloat for the addressable gappers.")
     parser.add_argument("--limit", type=int, default=None,

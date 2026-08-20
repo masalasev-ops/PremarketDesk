@@ -101,9 +101,6 @@ class ApiResult(NamedTuple):
     def ok(self) -> bool:
         return self.error is None
 
-    def or_empty(self, fallback: Any) -> Any:
-        return self.data if self.ok and self.data is not None else fallback
-
 
 class CallLedger:
     """Per run accounting for every HTTP call the process makes."""

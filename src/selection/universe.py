@@ -39,7 +39,6 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
-import sys
 from typing import Any, NamedTuple
 
 from core import config

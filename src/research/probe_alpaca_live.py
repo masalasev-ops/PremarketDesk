@@ -452,9 +452,6 @@ def dry_run(day: str) -> int:
     return report(day)
 
 
-OK_CODES = (0,)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Probe whether Alpaca serves live premarket.")
     parser.add_argument("--once", action="store_true", help="Take one sample and stop.")

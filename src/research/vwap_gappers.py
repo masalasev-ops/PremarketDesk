@@ -1053,9 +1053,6 @@ def verdict(result: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-OK_CODES = (0,)
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="VWAP on gappers, a research test.")
     parser.add_argument("--preregister", action="store_true",

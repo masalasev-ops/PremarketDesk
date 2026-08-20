@@ -24,7 +24,6 @@ import datetime as dt
 import statistics
 from typing import Any
 
-from core import config
 from core import criteria
 from core import eodhd
 from core import ettime

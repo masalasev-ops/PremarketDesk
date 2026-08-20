@@ -212,14 +212,6 @@ def sampler_append_allowed(path: Path, before: tuple[Any, ...] | None,
     return _parses_as_sampler_rows(kind, now[was_size:])
 
 
-def _allowed(path: Path) -> bool:
-    try:
-        relative = path.relative_to(TREE_ROOT)
-    except ValueError:
-        return False
-    return any(part in ALLOWED_DIR_NAMES for part in relative.parts)
-
-
 def snapshot_tree(root: Path | None = None,
                   logs_root: Path | None = None) -> dict[str, tuple[Any, ...]]:
     """Every file and directory under the working tree, excluding the allowlist.
@@ -278,10 +270,6 @@ def snapshot_tree(root: Path | None = None,
             except OSError:
                 out[str(path)] = ("file", stat.st_mtime, stat.st_size)
     return out
-
-
-# Kept under the old name so the call reads the same at both ends of the suite.
-snapshot = snapshot_tree
 
 
 def differences(before: dict[str, Any], after: dict[str, Any],
