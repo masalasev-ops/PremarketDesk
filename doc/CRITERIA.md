@@ -280,6 +280,7 @@ session_calendar_symbol       = SPY.US   # its EOD history supplies the real ses
 expected_count_min            = 1000       # a smaller result means the build went wrong
 expected_count_max            = 3000       # a larger result means the type filter went wrong
 max_age_days                  = 10         # every later script refuses to run past this
+closes_retention_days         = 7          # days; night.prune_data deletes universe-closes-<date>.json older than this. See the closes retention note
 min_count_fraction_of_previous = 0.5       # SEED, not measured. A rebuild that
                                            # admits less than this share of the
                                            # previous run's names is treated as a
@@ -314,6 +315,46 @@ max_unswept_fraction          = 0.02       # SEED, not measured. Names the marke
                                            # baseline here is zero and 0.02 of 2,942
                                            # is 58 names, which clears two lost
                                            # batches of twenty and trips on the third.
+
+### The closes retention note
+
+This is the project's first retention window of any kind. Until 2026-08-21
+nothing under data/ was ever deleted on a schedule, and a grep of the whole
+tree for prune, retention or unlink returned one call, in probe_alpaca_live,
+cleaning up after itself. data/ grew by about 900 KB a trading day with nothing
+watching it.
+
+**What the window is protecting against is not disk, it is a wrong deletion.**
+universe-closes-<date>.json is written by discover at 07:15 and read by
+scan.load_universe_closes at 08:45 for the SAME session_date, which scan.main
+takes from the clock rather than from an argument. There is no second reader in
+the tree, and no supported way to ask for a past one: --rescore reads the saved
+packet and never reaches this file. The file is therefore dead to the CODE the
+moment its own chain window closes at [Monitor] rerun_chain_until the same
+morning, and every day kept after that is margin for a human reading it by
+hand.
+
+7 is that margin, not a measurement, and it is marked SEED for that reason. It
+covers any weekday plus a long weekend, so "something looked wrong last
+Tuesday" is still answerable on Monday. It holds about five files, near 1.2 MB,
+in steady state, against 233 KB a trading day and no ceiling.
+
+**What is NOT prunable is the more important half of this note.** night/
+prune_data.py deletes only what its PRUNABLE whitelist names, which today is
+this one file class. data/premarket/ is the collector's own socket capture and
+is not reproducible at any price, being a recording of a tape that no longer
+exists, as well as the only record of the 2026-08-14 over count. data/backtest/
+eod is the population the shipped float rotation edges were fitted on and a
+re-fit reads it. data/backtest/sessions is the replay behind the subscription
+cap recall table, which is an open purchasing decision. runs/ is what
+build_archive rebuilds site/ from, so pruning it would silently shorten the
+archive. None of those is a candidate, and a sweeper that decided by age alone
+would have reached all four.
+
+The age is read from the FILENAME, never the mtime. The file describes the
+session its name carries whoever copied it and whenever; an mtime rule would
+spare a file a backup had touched and delete one it had not, which makes the
+window a property of the filesystem rather than of the data.
 
 ## Discovery
 
@@ -1311,6 +1352,7 @@ archive                       = 1
 backfill                      = 1
 outcomes                      = 1
 pool_recall                   = 1
+prune                         = 1
 monitor                       = 1
 calendar                      = 1
 

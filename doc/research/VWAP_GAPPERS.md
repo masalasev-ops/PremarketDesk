@@ -1,5 +1,25 @@
 # VWAP on gappers
 
+## The inputs to this study were deleted on 2026-08-21, and this file is now the whole of it
+
+data/backtest/bars (98.7 MB, Alpaca minute bars for 61 sessions),
+data/vwap_gappers_trades.csv (10.3 MB, every simulated trade) and
+data/alpaca_assets.json were removed on the owner's instruction: 110 MB of raw
+material for a question this file closes. Nothing under data/ is in git, so
+that is permanent.
+
+Every number below stays where it was written. What is gone is
+reproducibility: `--cache-only`, the mode built to prove a rerun touches no
+network, cannot run until the bars are refetched from Alpaca, which the
+2026-08-17 decision closed as a LIVE source but kept available for history.
+vwap_gappers.py stays and prints that on startup rather than reporting the
+absent cache as symbols that failed to fetch.
+
+The cost is stated plainly because it is real: a reader who doubts a table
+below can no longer recompute it from the trades, only re-derive it from
+scratch. That was judged acceptable for a study whose own pre-registered stop
+rule fired.
+
 ## Status
 
 **Pre-registered. No result exists at the time this section was written.**

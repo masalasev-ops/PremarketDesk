@@ -27,6 +27,20 @@ that has been run is part of the record.
     python -m research.vwap_gappers --preregister    write the rules, once
     python -m research.vwap_gappers                  run and append results
     python -m research.vwap_gappers --cache-only     prove a rerun needs no network
+
+ITS INPUTS WERE DELETED ON 2026-08-21, ON THE OWNER'S INSTRUCTION, AFTER THE
+STOP RULE FIRED. data/backtest/bars (98.7 MB of Alpaca minute bars for 61
+sessions), data/vwap_gappers_trades.csv (10.3 MB of per trade rows) and
+data/alpaca_assets.json are gone. The RESULTS are not: every table, both
+pre-registrations and the verdict are in doc/research/VWAP_GAPPERS.md, which is
+748 lines and is the record.
+
+What is gone is reproducibility, and that was the trade. --cache-only exists to
+prove a rerun needs no network, and it cannot do that now. A rerun means
+refetching the bars from Alpaca, which the 2026-08-17 decision closed as a LIVE
+source but explicitly kept available for history. The module stays for the same
+reason probe_alpaca_live and probe_live_v1 stayed after their jobs were
+deleted: the code that produced a recorded result is part of the record.
 """
 
 from __future__ import annotations
@@ -1083,6 +1097,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f"vwap: version {VERSION} pre-registration appended to {REPORT_PATH} "
               f"at {stamp}")
         return 0
+
+    # A missing cache is not a broken install here. It was deleted on purpose
+    # once the stop rule fired, and the refusal further down would otherwise
+    # report that as "N symbols are not cached", which reads like a fetch that
+    # never finished rather than a decision that was taken.
+    if not BAR_CACHE_DIR.is_dir():
+        print("vwap: data/backtest/bars is absent. It was DELETED on "
+              "2026-08-21, after this study's pre-registered stop rule fired, "
+              "because it was 98.7 MB of input to a question that is closed.")
+        print("vwap: the results are not gone. Every table and both verdicts "
+              f"are in {REPORT_PATH}.")
+        print("vwap: to run this again, refetch the bars from Alpaca, which "
+              "the 2026-08-17 decision keeps available for history. A "
+              "--cache-only run cannot work until that is done.")
+        if args.cache_only:
+            return 1
 
     result = run(args.sessions, args.cost_bps, args.cache_only)
     csv_path = write_trades_csv(result["trades"], args.cost_bps)

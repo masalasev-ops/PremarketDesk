@@ -118,9 +118,21 @@ at the root and is gitignored along with .env.
   instruments' outputs, which no pipeline module reads but which two open items
   above rest on: socket-cap-probe-YYYY-MM-DD.json (item A's own instrument,
   run 2026-08-19 and 2026-08-21, nothing armed after that), purged-picks-YYYY-MM-DD.jsonl (the picks rows emptied
-  on 2026-08-19), addressable_sweep.json, alpaca_assets.json,
-  vwap_gappers_trades.csv, the probe-alpaca-live and probe-live-v1 files, and
-  backtest/
+  on 2026-08-19), addressable_sweep.json, the probe-alpaca-live and
+  probe-live-v1 files, and backtest/eod and backtest/sessions.
+  [2026-08-21: data/ was 145 MB and is 35 MB. backtest/bars,
+  vwap_gappers_trades.csv and alpaca_assets.json were deleted on the owner's
+  instruction: 109.9 MB, all of it input to the VWAP gappers study, whose
+  pre-registered stop rule fired. The 748 line report keeps every table and
+  both verdicts; what is gone is the ability to rerun it offline, and a rerun
+  now means refetching from Alpaca. vwap_gappers.py stays and says so on
+  startup. NOTHING under data/ is in git, so none of this was recoverable and
+  none of it was decided here.
+  data/ also gained its first retention of any kind. night/prune_data.py runs
+  in the nightly and deletes universe-closes files past [Universe]
+  closes_retention_days. What it may delete is a WHITELIST naming that one file
+  class; premarket/, backtest/eod, backtest/sessions and runs/ are not in it
+  and claim 72 holds that. See CRITERIA's closes retention note.]
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
   report.html, analyst_usage.json, and once the nightly job has run,
   verify_intraday.json and pool_recall.json

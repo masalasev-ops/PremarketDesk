@@ -15,6 +15,33 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, seventh: data/ is 35 MB instead of 145, and stops growing unwatched
+
+data/backtest/bars, vwap_gappers_trades.csv and alpaca_assets.json deleted on
+the owner's instruction: 109.9 MB, every byte of it input or output of the VWAP
+gappers study, whose pre-registered stop rule fired. doc/research/
+VWAP_GAPPERS.md keeps all 748 lines of results and now records the deletion and
+its cost, which is that the study can no longer be rerun offline.
+vwap_gappers.py stays and prints what happened to its cache instead of
+reporting it as symbols that failed to fetch.
+
+night/prune_data.py is new and is the first thing in this project that deletes
+on a schedule. It runs in the nightly after pool recall, and it deletes only
+what its PRUNABLE whitelist names, which is universe-closes-<date>.json past
+CRITERIA [Universe] closes_retention_days, 7. The age is read from the filename
+rather than the mtime. It reports what it kept as well as what it took, and
+names the directories it never examined.
+
+CRITERIA gains closes_retention_days, the closes retention note explaining why
+premarket/, backtest/eod, backtest/sessions and runs/ are deliberately not
+prunable, and a prune entry under [Job status steps] so the monitor can report
+it overdue. job_nightly.bat runs the step; test_entrypoints drives it.
+
+Claim 72 puts an ancient file of every non whitelisted kind in front of the
+prune and requires it to survive, sets the mtimes to contradict the filenames
+on both sides, and asserts a second run is a no-op because the monitor reruns
+the nightly. Suite 2,441 paths.
+
 ## 2026-08-21, sixth: the probe's off exchange answer, and the cap reading it never had
 
 The 06:30 socket cap probe ran on a premarket tape. Its census came back

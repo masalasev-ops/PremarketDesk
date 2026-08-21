@@ -18,6 +18,64 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21, fifth: data/ gets a retention policy, and a closed study gives back 110 MB
+
+Two things, and the second is the one worth reading.
+
+**110 MB deleted, all of it one closed study's raw material.** data/backtest/
+bars, vwap_gappers_trades.csv and alpaca_assets.json were the inputs and the
+per trade output of the VWAP gappers study, whose pre-registered stop rule
+fired: no rule cleared both conditions, and by the rule written before the
+numbers were seen that work stopped. The 748 line report keeps every table,
+both pre-registrations and the verdict.
+
+What was given up is reproducibility, not results. `--cache-only` existed to
+prove a rerun needs no network and cannot do that now. The module stays, on the
+same principle that kept probe_alpaca_live and probe_live_v1 after their jobs
+were deleted, and it prints what happened rather than letting the cache miss
+surface as symbols that failed to fetch. **Nothing under data/ is in git**, so
+this was not recoverable and was not a decision to take on the owner's behalf.
+
+**The retention policy is the part that will matter next month.** Until today
+this project had NO retention anywhere: a grep of the whole tree for prune,
+retention or unlink returned one call, in probe_alpaca_live cleaning up after
+itself. data/ grew by about 900 KB every trading day with nothing watching it,
+and the only reason that had not become a problem is that the project is nine
+days old.
+
+night/prune_data.py runs in the nightly and deletes what CRITERIA [Universe]
+closes_retention_days puts past its window. Three design choices, each because
+the obvious alternative is worse:
+
+**What may be deleted is a WHITELIST, not a rule about age.** It names one file
+class. A sweeper that took anything older than a window would, on its first
+run, have reached data/premarket, which is a recording of a tape that no longer
+exists and cannot be refetched at any price; data/backtest/eod, the population
+the shipped float rotation edges were fitted on; data/backtest/sessions, the
+replay behind an open purchasing decision; and runs/, which build_archive
+rebuilds the whole site from. Four only-copies, one careless glob. Claim 72
+puts an ancient file of every one of those kinds in front of the prune and
+requires it to survive.
+
+**The age comes from the FILENAME.** universe-closes-2026-08-18.json describes
+the session of the 18th whoever copied it and whenever. An mtime rule would
+spare a file a backup had touched and take one it had not, which makes the
+window a property of the filesystem rather than of the data. The claim sets the
+mtimes to say the opposite of the names on both sides.
+
+**Why universe-closes is the only entry.** discover writes it at 07:15 and
+scan.load_universe_closes reads it at 08:45 for the SAME session_date, which
+scan.main takes from the clock rather than an argument. There is no second
+reader in the tree and no supported way to ask for a past one: --rescore reads
+the saved packet and never reaches this file. It is dead to the code the moment
+its own chain window closes. 7 days is margin for a human, not a measurement,
+and it is marked SEED.
+
+The step costs two EODHD calls a night, which is job_status.run recording the
+meter at entry and exit. That is kept deliberately: the trail's value is that
+it is continuous, and a step that skipped it would fold its own spending into
+the next step's delta.
+
 ## 2026-08-21, fourth: the probe answered one question and was found to have never answered the other
 
 The one off socket cap probe fired at 06:30, on the premarket tape it was armed

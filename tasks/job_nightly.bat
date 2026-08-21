@@ -71,6 +71,15 @@ echo ===== pool recall started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.pool_recall >> "%LOG%" 2>&1
 echo ===== pool recall finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
+rem Delete the dated data files past their retention window. Never fails the
+rem chain: unfreed disk is not a reason to fail a night, and the step reports
+rem what it kept as well as what it took. It deletes only what its PRUNABLE
+rem whitelist names, which is one file class; see CRITERIA.md [Universe] the
+rem closes retention note for what is deliberately NOT in it.
+echo ===== prune started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m night.prune_data >> "%LOG%" 2>&1
+echo ===== prune finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
 rem The archive also rebuilds here so a morning that failed after the scan
 rem still gets archived the same evening.
 echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"

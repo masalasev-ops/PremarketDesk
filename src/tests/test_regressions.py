@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries seventy one claims, a count read off the file rather than remembered,
+carries seventy two claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5704,6 +5704,159 @@ def claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(
           "back it or the run's own cycles move it further than the effect")
 
 
+def claim_the_prune_deletes_only_what_its_whitelist_names(
+        failures: list[str]) -> None:
+    """The first thing in this project that deletes on a schedule.
+
+    Nothing under data/ was ever removed automatically before 2026-08-21, so
+    this module is the only code in the tree that can destroy evidence without
+    a person typing the command. Several things in that directory are the only
+    copy: data/premarket holds the collector's own socket capture, which is a
+    recording of a tape that no longer exists and cannot be refetched at any
+    price, and is also the only record of the 2026-08-14 over count.
+    data/backtest/eod is the population the shipped float rotation edges were
+    fitted on.
+
+    So what may be deleted is a WHITELIST and not a rule about age. A sweeper
+    that took anything older than the window would have reached all of the
+    above on its first run. This asserts the containment from the outside: an
+    ancient file of every other kind is put in front of it and has to survive.
+
+    It also asserts that the age comes from the FILENAME. The file describes
+    the session its name carries whoever copied it and whenever, and an mtime
+    rule would spare a file a backup had touched and take one it had not,
+    which makes the retention window a property of the filesystem rather than
+    of the data.
+    """
+    import shutil
+
+    from core import criteria as _criteria
+    from night import prune_data as _prune
+
+    day = ettime.parse_date("2026-08-21")
+    window = _criteria.load().integer("universe", "closes_retention_days")
+
+    # The window has a FLOOR, and it is not derived from the window. The note
+    # in CRITERIA argues 7 as margin for a human reading the file by hand, and
+    # the shortest span that argument has to survive is a Friday file still
+    # being there on Monday. Below three days the key is set to a number its
+    # own justification does not support, and every boundary test below would
+    # still pass, because a fixture built from the window moves with it. That
+    # is how the first version of this claim let a window of zero through.
+    if window < 3:
+        failures.append(
+            f"closes_retention_days is {window}. A Friday file is then gone "
+            "before Monday, which is the one span the retention note's own "
+            "argument has to cover, and nothing else in this claim can catch "
+            "it because the fixtures scale with the window")
+    box = pathlib.Path(tempfile.mkdtemp())
+    original = config.DATA_DIR
+    try:
+        config.DATA_DIR = box
+        (box / "premarket").mkdir()
+        (box / "backtest" / "eod").mkdir(parents=True)
+
+        # Named for a session, which is the only class the whitelist carries.
+        over = f"universe-closes-{(day - dt.timedelta(days=window + 1))}.json"
+        edge = f"universe-closes-{(day - dt.timedelta(days=window))}.json"
+        today_file = f"universe-closes-{day}.json"
+        undated = "universe-closes-.json"
+        for name in (over, edge, today_file, undated):
+            (box / name).write_text("{}", encoding="utf-8")
+
+        # Everything else, all of it older than any window could ever be.
+        bystanders = [
+            box / "premarket" / "2026-05-01.jsonl",
+            box / "premarket" / "2026-05-01-stats.jsonl",
+            box / "backtest" / "eod" / "2026-05-01.json",
+            box / "float_cache.json",
+            box / "purged-picks-2026-05-01.jsonl",
+            box / "socket-cap-probe-2026-05-01.json",
+            box / "UNVERIFIED",
+        ]
+        for path in bystanders:
+            path.write_text("keep me", encoding="utf-8")
+
+        # The mtime says the opposite of the filename on both sides, so a rule
+        # reading the clock instead of the name gets both of them wrong.
+        ancient = 1000000000.0
+        fresh = 1900000000.0
+        os.utime(box / over, (fresh, fresh))
+        os.utime(box / today_file, (ancient, ancient))
+
+        result = _prune.prune(today=day)
+
+        if (box / over).exists():
+            failures.append(
+                f"{over} is {window + 1} days old against a {window} day "
+                "window and survived. Nothing in the tree can read it: it is "
+                "written by discover for one session and read by that same "
+                "session's scan, and there is no way to ask for a past one")
+        if not (box / edge).exists():
+            failures.append(
+                f"{edge} is exactly {window} days old and was deleted. The "
+                "window is how many days are KEPT, so the boundary day is "
+                "inside it and a reader who counted back that far still finds "
+                "the file")
+        if not (box / today_file).exists():
+            failures.append(
+                "this morning's own closes file was deleted. Its mtime is "
+                "ancient and its NAME is today, and the name is the session it "
+                "describes. Deleting it mid morning would take out the file "
+                "the 08:45 scan is about to read")
+        if not (box / undated).exists():
+            failures.append(
+                "a file matching the glob but carrying no readable date was "
+                "deleted on a guess. An unparseable name is a reason to leave "
+                "it alone and say so, not to assume it is old")
+
+        for path in bystanders:
+            if not path.exists():
+                failures.append(
+                    f"{path.relative_to(box).as_posix()} was deleted. It is "
+                    "months old and it is not in PRUNABLE, and several files "
+                    "in that position are the only copy that exists")
+
+        # And the report has to say what it left, or a night where the glob
+        # silently stopped matching reads exactly like a night it did its job.
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            _prune.report(_prune.prune(dry_run=True, today=day))
+        text = printed.getvalue()
+        if "kept" not in text or edge not in text:
+            failures.append(
+                f"the prune reports what it took and not what it kept: {text!r}")
+        if "were not looked at" not in text:
+            failures.append(
+                "the prune does not say which directories it never examined. "
+                "That sentence is the difference between a whitelist and a "
+                "sweeper that happened to find nothing")
+
+        # A second run must be a no-op rather than an error, because the
+        # monitor reruns the nightly and a step that cannot be rerun safely
+        # cannot be in it.
+        again = _prune.prune(today=day)
+        if again["removed"] or again["failed"]:
+            failures.append(
+                f"a second prune on the same day did something: "
+                f"{again['removed']} removed, {again['failed']} failed. The "
+                "monitor reruns the nightly, so every step in it has to be "
+                "idempotent")
+    finally:
+        config.DATA_DIR = original
+        shutil.rmtree(box, ignore_errors=True)
+
+    if result["freed"] <= 0:
+        failures.append(
+            "the prune reported no bytes freed on a run that deleted a file, "
+            "so the one number telling a reader whether this step is worth "
+            "its two meter calls is wrong")
+
+    print("  prune        only the whitelisted file class is deletable, the "
+          "date comes from the name, and an ancient file of every other kind "
+          "survives")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -6280,6 +6433,7 @@ def main() -> int:
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
+    claim_the_prune_deletes_only_what_its_whitelist_names(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:
