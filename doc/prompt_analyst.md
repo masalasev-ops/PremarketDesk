@@ -148,6 +148,14 @@ decide nothing.
 14. Output only the finished report markdown, starting at the title line.
     No preamble, no closing remarks, no code fences around the report.
 
+15. The notable movers section describes and never recommends. You may
+    describe these names and quote their numbers. You may NOT assign any of
+    them a conviction, may not move one onto the day or swing watchlist, may
+    not call one a setup, an entry, a trigger or a level, and may not imply
+    that any of them was screened. They were not: `these names have not been
+    screened`. A name that appears both here and on a watchlist keeps the
+    conviction the watchlist gave it and gains nothing from appearing here.
+
 ## Why these rules exist
 
 The numbers were computed deterministically from criteria that live in a

@@ -140,11 +140,22 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
     rows = rows[-(LOOKBACK_SESSIONS + 1):]
 
     # The volatility denominator for the report's move_sigma, built from its
-    # OWN filtered list rather than from rows above. rows drops any bar missing
-    # an open, which is right for a gap that needs one and silently wrong here:
-    # walking it for close to close returns would treat two sessions either
-    # side of a dropped bar as adjacent and quietly widen one return into two.
-    # Closes are all this needs, so closes are all it filters on.
+    # OWN filtered list rather than from rows above.
+    #
+    # [corrected 2026-08-20: the reason written here was that rows "drops any
+    # bar missing an open". It did until 2026-08-20, when that drop was found
+    # to break the close chain and each measurement was guarded on the field it
+    # needs instead; rows now keeps a bar whose open is None. The sentence is
+    # replaced rather than left standing, because it is the one a next reader
+    # would use to justify this second list and it is false in this same file
+    # thirty lines up.]
+    #
+    # The surviving reason is the close filter below: rows keeps a bar carrying
+    # any usable field, and this list refuses a close of zero or less. Walking
+    # a list that admitted one would divide by it. Closes are all this needs,
+    # so closes are all it filters on, and a chain broken by a refused bar
+    # would treat two sessions either side of it as adjacent and quietly widen
+    # one return into two.
     closes: list[tuple[Any, float]] = []
     for bar in bars or []:
         try:

@@ -779,11 +779,27 @@ def watchlist_headers() -> dict[str, str]:
     the template now breaks every fixture built on it, loudly, in the same run
     that changed it.
     """
+    return {kind: row for kind, row in template_headers().items()
+            if kind.endswith("watchlist")}
+
+
+def template_headers() -> dict[str, str]:
+    """Every Ticker header row the template pins, keyed by its section.
+
+    Three of them: the two watchlists and, since 2026-08-20, the notable movers
+    table. The notable one is kept in this map and OUT of watchlist_headers()
+    above, because analyst._REQUIRED_TABLES must contain exactly the two
+    watchlists and claim_headers_cannot_diverge compares that map against
+    watchlist_headers() key for key. A briefing table that could satisfy the
+    vacuum detector would let a report ship with no watchlist at all, which is
+    the failure the detector exists to catch.
+    """
     from core import config
 
     text = config.REPORT_TEMPLATE_PATH.read_text(encoding="utf-8")
     wanted = {"## Day watchlist": "day watchlist",
-              "## Swing watchlist": "swing watchlist"}
+              "## Swing watchlist": "swing watchlist",
+              "## Notable movers": "notable movers"}
     found: dict[str, str] = {}
     section: str | None = None
     for line in text.splitlines():
@@ -807,14 +823,14 @@ def watchlist_headers() -> dict[str, str]:
 
 
 def watchlist_table(kind: str, rows: list[str] | None = None) -> str:
-    """A whole watchlist section, header and separator and body, from the template.
+    """A whole table section, header and separator and body, from the template.
 
-    kind is "day watchlist" or "swing watchlist". rows are body lines already
-    formatted as markdown; the default is the template's own empty table row,
-    because REPORT_TEMPLATE.md requires the table to be written even when the
-    screen produced nothing.
+    kind is "day watchlist", "swing watchlist" or "notable movers". rows are
+    body lines already formatted as markdown; the default is the template's own
+    empty table row, because REPORT_TEMPLATE.md requires each of these tables to
+    be written even when it selected nothing.
     """
-    header = watchlist_headers()[kind]
+    header = template_headers()[kind]
     columns = len([cell for cell in header.strip().strip("|").split("|")])
     separator = "| " + " | ".join(["---"] * columns) + " |"
     body = rows if rows else ["| none |" + " |" * (columns - 1)]

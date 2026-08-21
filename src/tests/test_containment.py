@@ -80,12 +80,16 @@ def claim_briefing_table_cannot_stand_in(failures: list[str]) -> None:
         return
     report_text = real_report.read_text(encoding="utf-8")
     packet_text = real_packet.read_text(encoding="utf-8")
-    NOTABLE = (
-        "\n## Notable movers\n\n"
-        "| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst |\n"
-        "| --- | --- | --- | --- | --- | --- | --- |\n"
-        "| OMER | prior_session | 2026-08-13 | +7.10 | 3.2 | 1.2B | not checked |\n"
-    )
+    # Built from REPORT_TEMPLATE.md rather than written out. This literal
+    # carried seven columns while the shipped section carries nine, and it was
+    # decoupled from the template for as long as it existed, which is the exact
+    # drift conftest.watchlist_table was written to end.
+    from tests import conftest
+
+    NOTABLE = "\n" + conftest.watchlist_table("notable movers", [
+        "| OMER | prior_session | 2026-08-13 | +7.10 | 3.2 | 1.2B "
+        "| not checked | - | - |",
+    ])
 
     _, _, plain = analyst.check_report(report_text, packet_text)
     if not plain["structure_failed"]:
@@ -151,7 +155,7 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
     fallback = analyst.fallback_report(
         json.loads(build_packet_text()),
         "the narrative pass was stubbed out by this claim")
-    for kind, header in template.items():
+    for kind, header in conftest.template_headers().items():
         if header not in fallback:
             failures.append(
                 f"fallback_report does not emit the {kind} header the template "
@@ -177,17 +181,35 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
         if module.name == "conftest.py":
             continue  # it is the extractor, so it names the prefix it looks for
         body = module.read_text(encoding="utf-8")
-        for kind, header in template.items():
+        for kind, header in conftest.template_headers().items():
             if header in body:
                 failures.append(
                     f"{module.name} carries the {kind} header as a literal. Build "
                     "it with conftest.watchlist_table so a template change breaks "
                     "the fixture instead of silently decoupling it.")
 
-    print(f"  claim headers   {len(template)} watchlist header(s) agree across "
-          "REPORT_TEMPLATE.md, analyst._REQUIRED_TABLES and fallback_report, the "
-          "fallback passes the structure gate, and no test module carries either "
-          "as a literal")
+    # (5) the notable header is pinned the same way and is deliberately NOT a
+    # required table. It has the same four places to drift between as the two
+    # watchlists, minus the guard, so it gets the same treatment minus that one.
+    notable = conftest.template_headers().get("notable movers")
+    if notable != analyst.NOTABLE_HEADER:
+        failures.append(
+            "the notable movers header in REPORT_TEMPLATE.md and in "
+            "analyst.NOTABLE_HEADER have diverged.\n"
+            f"      template: {notable}\n"
+            f"      analyst:  {analyst.NOTABLE_HEADER}")
+    if "notable movers" in analyst._REQUIRED_TABLES:
+        failures.append(
+            "the notable movers table is in analyst._REQUIRED_TABLES. The vacuum "
+            "detector requires the two watchlists BY NAME precisely so that a "
+            "briefing table cannot satisfy it, and a report with no watchlist "
+            "and a full notable section would now pass the structure gate.")
+
+    print(f"  claim headers   {len(conftest.template_headers())} header(s) agree "
+          "across REPORT_TEMPLATE.md, analyst and fallback_report, the notable "
+          "one is pinned without being able to satisfy the vacuum detector, the "
+          "fallback passes the structure gate, and no test module carries any of "
+          "them as a literal")
 
 def claim_quantifiers_over_the_set_are_rejected(failures: list[str]) -> None:
     """A quantifier about the candidate set fails, and the tally sentence passes.

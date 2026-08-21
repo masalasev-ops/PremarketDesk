@@ -49,6 +49,7 @@ SUITE = (
     "tests.test_entrypoints",
     "tests.test_sandbox",
     "tests.test_evidence_gaps",
+    "tests.test_notable",
     "tests.test_regressions",
 )
 

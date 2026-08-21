@@ -468,10 +468,19 @@ reconstruct it from the numbered items below:
      is the tape the defect appears in. Arm it with
      `register_tasks.ps1 -Probe YYYY-MM-DD`. What to do with the answer is a
      decision; taking it is no longer one.
-  B. The notable movers section, Layer 4, is specified below and NOT BUILT
-     (item 4). Everything it rests on is built, tested and committed, including
-     the vintage gate for its legs. Three of the four [Notable] CRITERIA keys
-     are read by nothing until it ships, which is deliberate.
+  B. The notable movers section, Layer 4, IS BUILT as of 2026-08-20 and all
+     four [Notable] CRITERIA keys are now read. scan.notable_movers assembles
+     it, the packet carries notable_movers, REPORT_TEMPLATE.md has the section,
+     prompt_analyst.md has rule 15, fallback_report emits it too, and
+     tests/test_notable.py holds thirteen claims wired into run_tests.SUITE.
+     What it produces on the first shipped morning is thin and correctly so:
+     every return_stdev_20d in the database is null until the Sunday 21:00
+     rebuild, so lists 1 and 4 come back empty on their ranking key while their
+     legs are perfectly available, and list_reasons says exactly that. Two
+     things it surfaced belong to the owner and are in DECISIONS.md: universe.json
+     carries at least two implausible market caps and list 2 is the first thing
+     in this project that RANKS by that column, and a close to close move over
+     these windows is not adjusted for corporate actions.
   C. Two threshold questions that belong to the owner, not to the code: the
      seed thresholds await a few hundred filled outcome rows (item 3, and note
      that picks was emptied on 2026-08-19 and now holds one session), and the
@@ -560,11 +569,15 @@ because what a fix WAS is the useful part.
    prior high, and was the only one of twelve to do so, and its whole day_failed
    list was the null RVOL. That one is a threshold question and stays with the
    owner.
-4. The notable movers section: SPECIFIED BELOW, NOT BUILT. Everything it
-   rests on is built, tested and committed. The section itself is not. Its
+4. The notable movers section: SPECIFIED BELOW, AND BUILT ON 2026-08-20. Its
    specification is the "Layer 4" section immediately below, written out in
    full on 2026-08-17 so that no part of the design lives only in a
-   conversation.
+   conversation. The specification is kept exactly as written, including the
+   four places building it proved the specification wrong, because what the
+   design WAS is the useful part and each of those four is annotated where it
+   stands. See CHANGELOG.md "2026-08-20, eleventh" for what shipped and
+   DECISIONS.md for the five calls made while building rather than by the
+   owner.
 
 5. From the 2026-08-20 review, two of five findings that were thought open when
    this was written, both since closed: 5a described work that had already
@@ -808,12 +821,21 @@ the owner, it says so, so it can be overruled cheaply.
 - conftest.watchlist_headers and watchlist_table: fixtures build their tables
   from REPORT_TEMPLATE.md, so a template header change breaks them loudly.
 
-### Still to build
+### Built on 2026-08-20, and this list is what it was
 
 The scan fields and the section assembly in src/morning/scan.py, the section
 in doc/REPORT_TEMPLATE.md, one further rule at the end of doc/prompt_analyst.md,
 rule 15 as that file stands today, the claims, and
 the CHANGELOG and DECISIONS entries.
+
+All of it shipped, plus four things this list did not anticipate because they
+were defects rather than work: vintage.enforce was being called on a hand built
+dict and so check (e) walked zero rows on every run ever made; evidence_width
+had no axis for the section, so a rerun that lost it was thinner on nothing;
+fallback_report writes its own headings and would have dropped the section on
+any morning the model call failed; and the suite's only notable header was a
+seven column hand written literal pinned by nothing, against the nine the
+section publishes.
 
 ### 4.1 Scope fence
 

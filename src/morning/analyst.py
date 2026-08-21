@@ -438,6 +438,48 @@ def fallback_report(
         add(f"The swing screen produced nothing this morning: 0 of {len(candidates)} "
             "candidates are swing eligible.")
         add("")
+    # Layer 4, in the same order the template puts it, because a fallback that
+    # silently drops a section teaches its reader that the section is optional.
+    # This runs on the morning the model call failed, which is exactly the
+    # morning nobody is reading closely.
+    notable = packet.get("notable_movers") or {}
+    add("## Notable movers")
+    add("")
+    add("These names were selected for the size and unusualness of their move, "
+        "rather than for tradeability.")
+    add("They have not been screened against the day or swing criteria.")
+    add("No conviction applies to any of them.")
+    add("Every row states which leg produced it and the session it is as of.")
+    add("No leg can carry today's regular session move, because this report is "
+        "written before the open.")
+    add("A name may appear on more than one row, once per leg, because a row "
+        "carries one window and one vintage.")
+    add("No move here is adjusted for a split or any other corporate action, so "
+        "a very large one may be an action rather than a move.")
+    add("")
+    add(NOTABLE_HEADER)
+    add("|---|---|---|---|---|---|---|---|---|")
+    notable_rows = notable.get("rows") or []
+    for row in notable_rows:
+        catalyst = row.get("catalyst") or row.get("catalyst_state") or "not checked"
+        add(f"| {_bare(row.get('symbol') or '')} | {row.get('leg') or ''} "
+            f"| {row.get('as_of_session') or ''} | {_f(row.get('move_pct'))} "
+            f"| {_f(row.get('move_sigma'), 2)} | {_cap(row.get('market_cap'))} "
+            f"| {catalyst} | {row.get('also_on_watchlist') or '-'} "
+            f"| {row.get('price_time') or '-'} |")
+    if not notable_rows:
+        add("| none | | | | | | | | |")
+    add("")
+    for leg, report in sorted((notable.get("legs") or {}).items()):
+        if not report.get("available") and report.get("reason"):
+            add(f"The {leg} leg was lost: {report['reason']}")
+    for name, reason in sorted((notable.get("list_reasons") or {}).items()):
+        if reason:
+            add(f"The {name} list is short: {reason}")
+    examined = notable.get("universe_examined")
+    counted = f"{examined:,}" if isinstance(examined, int) else "an unknown number of"
+    add(f"The section examined {counted} universe names.")
+    add("")
     add("## Market trends")
     add("")
     add("| Label | Last | Change % | Source |")
@@ -1107,6 +1149,18 @@ def _prose_tokens(report_text: str) -> set[str]:
 # So the requirement names the tables. Any other table with a Ticker header
 # still contributes its cells as claims to validate, which is what keeps the
 # briefing section honest, but it cannot satisfy this.
+# Layer 4's header, carried here so fallback_report can emit it and checked
+# against REPORT_TEMPLATE.md by claim_headers_cannot_diverge, on the precedent
+# the two watchlist headers already set. It is deliberately NOT in
+# _REQUIRED_TABLES below: the vacuum detector requires the two watchlists BY
+# NAME, and a briefing table must never be able to satisfy that requirement.
+# Its cells still reach the containment guard as claims to validate, which is
+# what keeps the section honest about the tickers it publishes.
+NOTABLE_HEADER = (
+    "| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | "
+    "On watchlist | Price time |"
+)
+
 _REQUIRED_TABLES = {
     "day watchlist": (
         "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "

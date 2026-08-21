@@ -18,6 +18,94 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-20: five calls made while building Layer 4, none of them by the owner
+
+BUILD_PLAN's Layer 4 says to record any point decided while building rather than
+by the owner, so it can be overruled cheaply. Five, and the third is the one
+most likely to be wanted differently.
+
+**One: the eight context tickers are excluded from the premarket leg.** 4.3 says
+the premarket leg reads bars_by_symbol rather than the candidate list and that
+every subscribed name is eligible, and it describes the population as "at most
+[Collector] max_subscriptions of the universe, 50 including the eight context
+tickers". That phrase cannot be satisfied: the eight are inside the 50 and are
+not in the universe. They are ETFs, the universe is common stock, and they have
+no row in universe.json, no close in the closes sidecar and no row in gap_stats.
+A premarket row for SPY would carry a price and a null in every other column,
+including the move it is supposed to be notable for, because there is no c1 to
+measure it against. Their moves are already in market_snapshot, which is where
+a reader looks for them. The count of excluded names is reported rather than
+the exclusion being silent, and claim_the_context_tickers_stay_out_of_the_premarket_leg
+asserts it. To overrule: give them a baseline source and delete the exclusion.
+
+**Two: list 2's floor is read as "at least", not "more than".** 4.4 says list 2
+ranks market cap descending "among names whose absolute prior session move
+clears min_abs_gap_pct". Every other min_ threshold in scan.py is a floor a
+value may sit exactly on, and a name moving exactly 1.00 percent is not the one
+this floor was written to exclude.
+
+**Three: the section states that its moves are unadjusted, and does not try to
+detect a corporate action.** The 2026-08-20 run puts MRNA on the two session
+list at plus 170.52 percent, off closes of 64.46, 62.96 and 174.38. That is
+either a genuine move or a corporate action, and this section cannot tell them
+apart: the guard fill_outcomes uses costs one vendor call per name, and the
+universe leg covers 2,754 names, which 4.6's fence forbids for exactly this
+reason. So the template carries a seventh fixed sentence saying no move here is
+adjusted for a split or any other corporate action and that a very large one may
+be an action rather than a move. A caveat rather than a filter, because a filter
+needs a threshold nobody has measured and would silently drop real movers. To
+overrule: buy the actions for the universe on the Sunday rebuild and adjust the
+closes at source, which fixes it for the whole project rather than for this
+section.
+
+**Four: a closes sidecar whose own session_date is not today's is refused.**
+data/ accumulates these files and nothing else in the project compares the one
+it reads against the session it is reading for. A morning where discover did not
+run would otherwise read the most recent file on disk and publish its closes
+under today's leg labels, which is precisely the failure the leg labelling
+exists to prevent. generated_at cannot serve: the 2026-08-19 file is stamped
+08:21:27 rather than the scheduled 07:15, so a rule derived from the clock would
+refuse a legitimate file.
+
+**Five: the per leg counters are derived when the sidecar is too old to carry
+them, and the block says which.** BUILD_PLAN says discover already writes
+names_with_close and names_with_both_closes_for_leg and that they must not be
+recomputed. The writer landed in ea167d5 at 13:37 on 2026-08-20, about six hours
+AFTER that morning's 07:15 run, so the first file carrying them is 2026-08-21's
+and every file before it has neither. Deriving them silently would violate 4.9
+in the other direction: a count nobody can tell apart from a written one is a
+count whose provenance is false. counter_source reads "read" or "derived".
+
+## 2026-08-20: list 2 is the first thing in this project that RANKS by market cap, and universe.json carries at least two it should not
+
+Not a decision so much as a finding that needs one, recorded here because it
+arrived with Layer 4 and belongs to the owner.
+
+Every other use of market cap in this project is a FLOOR. universe.market_cap_funnel
+admits a row when the cap clears the minimum, and a cap that is wrongly LARGE
+sails through a floor doing no harm at all. Layer 4's list 2 ranks on it
+descending, so a wrongly large cap goes straight to the top of a list a human
+reads.
+
+Two names in the 2,754 sit among the genuine megacaps and should not:
+
+| symbol | market cap | price | implied shares |
+| --- | ---: | ---: | ---: |
+| SPCX | 1,853,081,185,336 | 140.00 | 13,236,294,181 |
+| SKHY | 1,179,423,901,396 | 166.33 | 7,090,866,960 |
+
+SPCX reached the published list on 2026-08-20, ranked third by size behind AAPL
+and AMZN. Its avg_dollar_volume_20d is 14.08 billion a day, comparable to
+AAPL's, which is the same implausibility a second way. NVDA's 24.2 billion
+implied shares is the only other outlier over 20 billion and is real.
+
+No filter was added, deliberately. A plausibility floor on market cap needs a
+threshold nobody has measured, and it would be applied at the wrong layer: the
+fix belongs in universe.market_cap_funnel, where it would serve the whole
+project, or in the vendor row that produced it. Layer 4 publishes what
+universe.json gives it, which is what 4.4 says to do, and this entry is the
+record of what that currently costs.
+
 ## 2026-08-20: the float rotation bands were fitted on a population that is 36 percent warm up
 
 **Correcting the entry of 2026-08-16 second in the one place it is wrong, and

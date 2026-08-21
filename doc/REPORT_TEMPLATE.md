@@ -201,6 +201,55 @@ screen_tally.swing.failed_summary}.
 
 As with the day table, it is never omitted.}
 
+## Notable movers
+
+{The notable_movers block from the packet, and nothing composed. Seven sentences
+of fixed text first, reproduced exactly as these lines, character for
+character:
+
+These names were selected for the size and unusualness of their move, rather
+than for tradeability.
+They have not been screened against the day or swing criteria.
+No conviction applies to any of them.
+Every row states which leg produced it and the session it is as of.
+No leg can carry today's regular session move, because this report is written
+before the open.
+A name may appear on more than one row, once per leg, because a row carries one
+window and one vintage.
+No move here is adjusted for a split or any other corporate action, so a
+very large one may be an action rather than a move.
+
+Then a markdown table of exactly the rows in notable_movers.rows, in the order
+the packet gives them. The header row is fixed and is reproduced exactly as
+this line, character for character, because the containment guard locates
+ticker columns by it:
+
+| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | On watchlist | Price time |
+
+One row per packet row. Leg and As of are quoted from the row's leg and
+as_of_session and are never reworded. Sigma is move_sigma; where it is null
+write the word null and nothing else, because the reason is in the packet and
+belongs to the caveat line below rather than to the cell. On watchlist carries
+the row's also_on_watchlist value or a dash. Price time carries the row's
+price_time or a dash, and only the premarket leg has one at all. Catalyst is
+the headline where catalyst_state is fetched, the words not checked where it is
+not checked, and the words no catalyst found where it is that.
+
+If notable_movers.rows is empty the table is still written, header and
+separator and one row, exactly like this:
+
+| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | On watchlist | Price time |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| none | | | | | | | | |
+
+Then one sentence per leg in notable_movers.legs whose available is false,
+quoting its reason word for word, and one sentence per entry in
+notable_movers.list_reasons that is not null, quoting that the same way.
+Finish by stating what the section examined, using
+notable_movers.universe_examined and the per leg examined counts, so a reader
+can tell a leg that examined the whole universe and selected nothing apart from
+a leg that lost its input. This section is never omitted.}
+
 ## Market trends
 
 {The market_snapshot rows as a short table or tight prose: label, last,

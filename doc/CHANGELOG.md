@@ -15,6 +15,114 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, eleventh: Layer 4 ships, and the spec was wrong in four places
+
+The notable movers section is built. Three legs, four ranked lists, universe
+wide for two of them, 2,754 names examined against the twelve the screen
+publishes. BUILD_PLAN.md Layer 4 is the design and it was followed; where it
+was wrong the code follows the tree and this entry says so.
+
+**The section.** scan.notable_movers assembles it and attaches 4.2's three
+report fields to every candidate off the same two reads, so the section and the
+candidate rows cannot disagree about a name's sigma. It costs NO EODHD call:
+universe.json, universe-closes-<date>.json, the collector bars the scan already
+holds and one SQLite read are all local, which is why a quota degraded morning
+loses this section no leg at all. Every row is keyed "symbol" and uppercase,
+deliberately: vintage accepts either spelling, and analyst._packet_uppercase_tokens
+builds the allowed set only from values under keys named symbol or label, so a
+row keyed "ticker" would pass the vintage gate and then be reported as an
+invented ticker by containment, which stops the chain before render, verify,
+deliver and archive.
+
+**Where the spec was wrong.**
+
+FIRST, and it is the one that mattered most: 4.10 said a mis-stamped row failing
+vintage.enforce was "already proven by claim_notable_legs". It was not.
+claim_notable_legs calls check() and check_packet() and never enforce(), and a
+full inventory of enforce calls in the suite found none exercising a check (e)
+violation at all. Worse, and this is the part nobody would have noticed:
+vintage.enforce runs in build_packet against a HAND BUILT dict carrying
+candidates, market_snapshot and session_date, so check (e) walked ZERO ROWS on
+every run this project has ever made. The whole check was dead. Adding
+notable_movers to that dict is the line that armed it, and
+claim_a_mis_stamped_notable_row_stops_the_run now exercises enforce raising,
+rewriting data/UNVERIFIED and re-gating delivery, over a mis-stamped leg, a
+missing leg and an unrecognised one.
+
+SECOND, 4.9 says the per leg counters are already in the closes sidecar and must
+not be recomputed. The writer landed in ea167d5 at 13:37 on 2026-08-20, about
+six hours after that morning's 07:15 run, so no file on disk carries them and
+"do not recompute" was not executable on the day it was written. They are read
+when present, counted from the closes map when not, and counter_source says
+which, because a count nobody can tell apart from a written one is a count whose
+provenance is false.
+
+THIRD, CRITERIA.md named a threshold key that does not exist. Its [Notable]
+prose said the premarket leg covers "at most subscribe_cap of the universe";
+there is no subscribe_cap anywhere in the project. The key is [Collector]
+max_subscriptions, which BUILD_PLAN had right. CRITERIA is the one document that
+must not name a key it does not define.
+
+FOURTH, 4.3 describes the premarket population as "at most max_subscriptions of
+the universe, 50 including the eight context tickers", which cannot be
+satisfied: the eight are inside the 50 and are not in the universe. They are
+ETFs and have no row in universe.json, no close in the sidecar and no row in
+gap_stats, so a premarket row for SPY would carry a price and a null in every
+other column including the move. They are excluded and the count is reported.
+See DECISIONS.md for that and four other calls made here rather than by the
+owner.
+
+**Three defects beside the section, all in code the section touches.**
+evidence_width counted candidates, priced, with_rvol and scored and nothing
+else, so a rerun that produced the full watchlist and lost the whole notable
+section was thinner on no axis at all and thin_rerun_stands_down would have let
+it overwrite a fuller packet. It has a notable_rows axis now.
+analyst.fallback_report writes its own headings in Python and would have shipped
+a report with no notable section on any morning the model call failed, which is
+exactly the morning nobody reads closely; it emits the section now, with the
+header pinned to the template by claim_headers_cannot_diverge like the two
+watchlists. And the one skip on the quota degraded path that recorded nothing,
+the end of day buy for unpriced names, now records it: those names came out
+unrankable and rank_stats attributed it to the collector or the pool, neither of
+which was true.
+
+**And a fixture that had been decoupled since the day it was written.**
+test_containment carried the notable movers header as a hand written literal
+with seven columns, against the nine the section publishes. conftest.watchlist_headers
+pins the two watchlists to REPORT_TEMPLATE.md and pinned nothing else, so that
+literal was pinned by nothing at all. template_headers() now covers all three,
+the literal scan covers all three, and the notable header is checked against
+analyst.NOTABLE_HEADER and asserted to be ABSENT from _REQUIRED_TABLES: the
+vacuum detector requires the two watchlists BY NAME precisely so a briefing
+table cannot satisfy it, and a report with no watchlist and a full notable
+section must not pass the structure gate.
+
+**What the first shipped section actually produces, so nobody hunts it.** Lists
+1 and 4 are empty. Every return_stdev_20d in the database is null and stays null
+until the Sunday 21:00 rebuild, so no name carries a move_sigma, and both sigma
+lists come back with no ranking key while their legs are perfectly available.
+list_reasons says exactly that, one level down from 4.9's leg rule, because "the
+ranking key is null for every name on this leg" and "the market was quiet" are
+different facts and an empty list cannot tell them apart. The two remaining
+lists filled: five names by market cap over the 1 percent floor, five by the
+size of their two session move.
+
+**Thirteen claims in a new tests/test_notable.py**, wired into run_tests.SUITE,
+which does not discover modules. They cover the fence, the square root of time
+scaling with a name up 2 percent on each of two sessions against one up 2
+percent on a single session, the four null sigma outcomes and the fact that they
+are four, a 2 percent move at 2.0 sigma outranking an 8 percent move at 0.8, the
+leg labelling, enforce, the context tickers, and the four degrades of 4.9.
+
+**One finding handed over rather than fixed.** List 2 is the first thing in this
+project that RANKS by market cap; every other use is a floor, and a wrongly
+LARGE cap sails through a floor doing no harm. universe.json carries at least
+two that are not: SPCX at 1.85 trillion on a 140 dollar price, and SKHY at 1.18
+trillion on 166. SPCX reached the published list on 2026-08-20, third by size
+behind AAPL and AMZN. No filter was added: a plausibility floor needs a
+threshold nobody has measured and belongs in universe.market_cap_funnel where it
+would serve the whole project. DECISIONS.md carries the numbers.
+
 ## 2026-08-20, tenth: the three unverified findings were all real, and the suite stops failing on the editor
 
 The 2026-08-20 review filed 186 findings and adversarially verified only the

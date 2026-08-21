@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 from typing import Any
 from urllib.parse import urlparse
 
@@ -2548,6 +2549,603 @@ def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) 
 
 # ------------------------------------------------------------------- runner
 
+# ------------------------------------------- Layer 4, the notable movers section
+#
+# The briefing section, and nothing else. BUILD_PLAN.md "Layer 4" is the design,
+# CRITERIA.md [Notable] holds every threshold, and DECISIONS.md carries the calls
+# that were made here rather than by the owner. Read those before changing this.
+#
+# The fence from 4.1, repeated because it is the part most likely to be eroded by
+# a later change that means well: this section is ADDITIVE TO THE REPORT ONLY. It
+# writes no picks row, touches no score, no eligibility, no conviction and no
+# CRITERIA setup block, and it shares no code with pool_recall. It reads exactly
+# two files it does not own, universe.json for market caps and
+# universe-closes-<date>.json for prices, plus the collector bars the scan
+# already holds and the gap statistics table. None of that costs an EODHD call,
+# which is why a quota degraded morning loses this section no leg at all.
+#
+# If a change here seems to need a picks column, stop and report rather than
+# adding one: picks is the record of what the trading screen claimed, and mixing
+# briefing names into it destroys the recall measurement.
+
+NOTABLE_LIST_SIZE = _CRIT.integer("notable", "list_size")
+NOTABLE_MIN_ABS_GAP_PCT = _CRIT.number("notable", "min_abs_gap_pct")
+NOTABLE_MIN_RETURN_STDEV_PCT = _CRIT.number("notable", "min_return_stdev_pct")
+NOTABLE_MIN_SESSIONS_FOR_SIGMA = _CRIT.integer("notable", "min_sessions_for_move_sigma")
+
+# How many sessions each leg's move SPANS. This is the sigma scaling in 4.3.1
+# and it is NOT the vintage offset: vintage._LEG_NEWEST_SESSION_BACK maps
+# two_session to 1 because that row is stamped with c1's session, while the move
+# itself spans 2. Two different questions about the same leg, and conflating
+# them is how a two session move gets divided by a one session denominator.
+_LEG_SPAN_SESSIONS = {
+    "premarket": 1,
+    "prior_session": 1,
+    "two_session": 2,
+}
+
+# The four ranked lists of 4.4. Every list ranks WITHIN ONE LEG: ranking a
+# premarket move against a prior session one would order a fresher window
+# against an older one, and would put the 50 collector names, already selected
+# for gap propensity and news, into the same ordering as the 2,704 names nothing
+# selected. They would dominate systematically and the section would end up
+# restating the watchlist it exists not to restate.
+NOTABLE_LISTS = (
+    "prior_session_by_sigma",
+    "prior_session_by_market_cap",
+    "two_session_by_move",
+    "premarket_by_sigma",
+)
+
+
+def move_sigma(move_pct: float | None,
+               stats_row: dict[str, Any] | None,
+               span_sessions: int) -> tuple[float | None, str | None]:
+    """The move in units of the name's own daily volatility, or null and why.
+
+    THE SCALING ASSUMES DAILY RETURNS ARE INDEPENDENT, and they are not. The
+    denominator return_stdev_20d is a ONE DAY return standard deviation, so an n
+    session move is divided by that times the square root of n. Consecutive
+    moves in one name frequently are dependent: momentum and a multi day
+    catalyst both produce runs, and dependent returns accumulate faster than the
+    square root allows. The scaled sigma is therefore an UNDERESTIMATE of how
+    unusual a sustained run is. That is the safe direction for a briefing,
+    because it cannot inflate a name into the section, only keep one out.
+
+    Where the sustained mover is still caught, so this is not re-litigated: a
+    large quiet name up 2 percent on each of two consecutive sessions surfaces
+    on list 1 for the unusualness of its prior session move, since a quiet
+    name's sigma is small and 2 percent over it is large, and on list 3 for the
+    size of its two session move. The scaling's work is to stop the two session
+    leg overstating that name by the square root of 2, not to move it between
+    lists.
+
+    Four null outcomes and they are four, not one, because the fixes differ. A
+    name absent from the gap statistics table was never measured; a name present
+    with a null column has fewer than [Notable] min_sessions_for_move_sigma
+    returns behind it; a name whose stdev is below min_return_stdev_pct has
+    barely moved in twenty sessions and would otherwise report an enormous sigma
+    on any move at all; and a null move has nothing to scale. Never a
+    substituted number, never a silent drop.
+    """
+    if move_pct is None:
+        return None, "no move on this leg to scale"
+    if stats_row is None:
+        return None, ("no gap statistics row for this name, so its daily "
+                      "volatility was never measured")
+    stdev = _as_float(stats_row.get("return_stdev_20d"))
+    if stdev is None:
+        return None, (f"return_stdev_20d is null, which is fewer than "
+                      f"{NOTABLE_MIN_SESSIONS_FOR_SIGMA} sessions of returns "
+                      "behind the name")
+    if stdev < NOTABLE_MIN_RETURN_STDEV_PCT:
+        return None, (f"daily return stdev {stdev:.4f} percent is below "
+                      f"{NOTABLE_MIN_RETURN_STDEV_PCT} in CRITERIA.md [Notable] "
+                      "min_return_stdev_pct, too small to divide by")
+    denominator = stdev * math.sqrt(span_sessions)
+    return round(move_pct / denominator, 4), None
+
+
+def load_universe_closes(session_date: str, packet: Packet) -> dict[str, Any] | None:
+    """Today's universe closes sidecar, or None with the reason recorded.
+
+    THE SECTION'S ONLY PRICE SOURCE for every name the collector did not hear,
+    written by discover at 07:15 and holding one vintage across all three
+    closes. A name missing from a session is null there and is never backfilled
+    from a neighbouring session, so this reader never does either.
+
+    The session_date check is not defensive padding. data/ accumulates these
+    files, three of them are on disk as this is written, and nothing else in the
+    project compares the file's own session_date against today. A morning where
+    discover did not run would otherwise read yesterday's closes and publish
+    them under today's leg labels, which is precisely the failure the leg
+    labelling exists to prevent. generated_at is not usable for this: the
+    2026-08-19 file is stamped 08:21:27 rather than 07:15, so a rule derived
+    from the scheduled time would refuse a legitimate file.
+    """
+    path = config.DATA_DIR / f"universe-closes-{session_date}.json"
+    if not path.is_file():
+        packet.gap(
+            f"{path.name} is absent, so the notable movers section lost both "
+            "universe legs. discover writes it at 07:15 and returns before "
+            "writing when the calendar cannot name the prior sessions or the "
+            "first bulk call comes back empty."
+        )
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        packet.gap(f"{path.name} could not be read ({type(exc).__name__}), so the "
+                   "notable movers section lost both universe legs")
+        return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("closes"), dict):
+        packet.gap(f"{path.name} does not carry a closes map, so the notable "
+                   "movers section lost both universe legs")
+        return None
+    stamped = str(payload.get("session_date") or "")
+    if stamped != session_date:
+        packet.gap(
+            f"{path.name} carries session_date {stamped or 'nothing'} rather than "
+            f"{session_date}, so it is not this morning's file and the notable "
+            "movers section refused it rather than publishing its closes under "
+            "today's leg labels"
+        )
+        return None
+    return payload
+
+
+def closes_denominators(payload: dict[str, Any]) -> dict[str, Any]:
+    """What the closes file examined, read from it where it says and derived where not.
+
+    4.9 asks the section to report universe_examined and, per leg, how many
+    names carried BOTH of the closes that leg needs, and BUILD_PLAN says not to
+    recompute them because discover already writes them. It writes them as of
+    2026-08-20, and the writer landed about six hours AFTER that morning's 07:15
+    run, so the first file carrying them is 2026-08-21's. Every file on disk
+    before then has universe_examined and names_with_at_least_one_close and
+    neither of the other two.
+
+    So they are read when present and counted from the closes map when not, and
+    the block says which of the two happened. Deriving silently would violate
+    4.9 in the other direction: a count nobody can tell apart from a written one
+    is a count whose provenance is false.
+    """
+    closes = payload.get("closes") or {}
+    written_per_session = payload.get("names_with_close")
+    written_per_leg = payload.get("names_with_both_closes_for_leg")
+    read_from_file = (isinstance(written_per_session, dict)
+                      and isinstance(written_per_leg, dict))
+    if read_from_file:
+        per_session = {key: written_per_session.get(key) for key in ("c1", "c2", "c3")}
+        per_leg = {leg: written_per_leg.get(leg)
+                   for leg in ("prior_session", "two_session")}
+    else:
+        per_session = {
+            key: sum(1 for row in closes.values()
+                     if isinstance(row, dict) and row.get(key) is not None)
+            for key in ("c1", "c2", "c3")
+        }
+        per_leg = {
+            "prior_session": sum(
+                1 for row in closes.values()
+                if isinstance(row, dict)
+                and row.get("c1") is not None and row.get("c2") is not None),
+            "two_session": sum(
+                1 for row in closes.values()
+                if isinstance(row, dict)
+                and row.get("c1") is not None and row.get("c3") is not None),
+        }
+    return {
+        "universe_examined": payload.get("universe_examined"),
+        "names_with_at_least_one_close": payload.get("names_with_at_least_one_close"),
+        "names_with_close": per_session,
+        "names_with_both_closes_for_leg": per_leg,
+        "third_session_available": payload.get("third_session_available"),
+        # "read" means discover wrote these counts; "derived" means this section
+        # counted them off the closes map because the file predates the writer.
+        "counter_source": "read" if read_from_file else "derived",
+    }
+
+
+def _pct_move(newer: Any, older: Any) -> float | None:
+    """The percent move from older to newer, or None when either is unusable."""
+    a, b = _as_float(newer), _as_float(older)
+    if a is None or b is None or b <= 0:
+        return None
+    return round((a - b) / b * 100.0, 4)
+
+
+def attach_notable_candidate_fields(
+    candidates: list[dict[str, Any]],
+    closes: dict[str, Any],
+    stats: dict[str, dict[str, Any]],
+) -> None:
+    """4.2's three report fields, beside gap_pct on every candidate.
+
+    move_sigma, gap_2session and gap_3session are REPORT FIELDS, not screen
+    conditions. Nothing in evaluate_eligibility or score_candidate reads them
+    and no CRITERIA setup block gains a key for them.
+
+    They are also NOT LEGS, which is the one place 4.2 and 4.3 read as though
+    they contradict each other. gap_2session is c2 against this morning's
+    premarket price and spans two sessions; the two_session LEG is c3 against
+    c1 and spans two completed sessions. gap_3session spans three and there is
+    no three session leg at all, deliberately, because a three session move
+    universe wide would need a fourth close where the sidecar holds three. A row
+    in the section can only carry a leg from vintage._LEG_NEWEST_SESSION_BACK,
+    so neither of these two fields ever becomes one. They travel on the
+    candidate, where the report can quote them beside its gap.
+    """
+    for candidate in candidates:
+        symbol = candidate.get("symbol")
+        row = (closes.get(symbol) or {}) if isinstance(closes, dict) else {}
+        price = candidate.get("price")
+        candidate["gap_2session"] = _pct_move(price, row.get("c2"))
+        candidate["gap_3session"] = _pct_move(price, row.get("c3"))
+        sigma, reason = move_sigma(candidate.get("gap_pct"), stats.get(symbol),
+                                   _LEG_SPAN_SESSIONS["premarket"])
+        candidate["move_sigma"] = sigma
+        candidate["move_sigma_reason"] = reason
+
+
+def _watchlist_mark(candidate: dict[str, Any] | None) -> str | None:
+    """Which watchlist a notable name is already on, or None.
+
+    A name on a watchlist appears in this section anyway and the row says so.
+    It is not suppressed: two sections selecting the same name on different
+    grounds is information, and hiding it is not. Expect most premarket rows to
+    carry a mark, since that leg draws from the pool the watchlist came from,
+    which is precisely why the premarket leg was given its own list rather than
+    being allowed to crowd the others.
+    """
+    if not candidate:
+        return None
+    day = bool(candidate.get("day_eligible"))
+    swing = bool(candidate.get("swing_eligible"))
+    if day and swing:
+        return "day and swing"
+    if day:
+        return "day"
+    if swing:
+        return "swing"
+    return None
+
+
+def _catalyst_of(candidate: dict[str, Any] | None) -> tuple[str | None, str]:
+    """The headline where one was fetched, and which of three states this is.
+
+    4.6: no news is fetched for any name outside the existing candidate set,
+    because doing so would multiply the call count over a set an order of
+    magnitude larger and this section is a briefing rather than a screen. A name
+    with no news fetched is NOT CHECKED and never "no catalyst": the two are
+    different facts and the report says which one it is holding.
+    """
+    if not candidate:
+        return None, "not checked"
+    if candidate.get("catalyst_error"):
+        return None, "not checked"
+    if candidate.get("catalyst_found") is None:
+        return None, "not checked"
+    headlines = candidate.get("headlines") or []
+    if candidate.get("catalyst_found") and headlines:
+        title = headlines[0].get("title") if isinstance(headlines[0], dict) else None
+        return (str(title) if title else None), "fetched"
+    return None, "no catalyst found"
+
+
+# Which leg each of the four lists ranks within. One table, read by the
+# shortfall note and by the row assembly, because two copies of this mapping is
+# how a list ends up ranking one leg and stamping another.
+_LIST_LEG = {
+    "prior_session_by_sigma": "prior_session",
+    "prior_session_by_market_cap": "prior_session",
+    "two_session_by_move": "two_session",
+    "premarket_by_sigma": "premarket",
+}
+
+
+def leg_of_list_key(name: str) -> str:
+    """The leg a ranked list draws from. Every list ranks within exactly one."""
+    return _LIST_LEG[name]
+
+
+def _leg_report(available: bool, reason: str | None, examined: Any,
+                selected: int) -> dict[str, Any]:
+    """One leg's line in the section's own accounting.
+
+    examined and selected are both reported because 4.9 says zero examined is a
+    different outcome from zero selected. A leg that looked at 2,754 names and
+    picked none is a quiet market; a leg that looked at none is a lost input,
+    and a section that published one number could not tell you which it had.
+    """
+    return {"available": available, "reason": reason,
+            "examined": examined, "selected": selected}
+
+
+def notable_movers(
+    session_date: str,
+    universe_payload: dict[str, Any],
+    bars_by_symbol: dict[str, list[dict[str, Any]]],
+    candidates: list[dict[str, Any]],
+    packet: Packet,
+) -> dict[str, Any]:
+    """The notable movers block, and 4.2's three fields on every candidate.
+
+    Three legs, four ranked lists, and every list ranks within one leg. The
+    denominator is the UNIVERSE and not the survivors: the block reports what
+    each leg examined beside what it selected, so a quiet morning and a lost
+    input are told apart.
+
+    Two calls were made here rather than by the owner and are cheap to overrule,
+    which is why they are named rather than buried.
+
+    ONE: the eight [Collector] context_symbols are excluded from the premarket
+    leg. They are subscribed, so they are in bars_by_symbol, and 4.3 says every
+    subscribed name is eligible. But they are ETFs, and the universe is common
+    stock, so they are in NONE of the three joins this section needs: no row in
+    universe.json, no row in the closes sidecar, no row in gap_stats. A row for
+    SPY would carry a price and a null in every other column, including the
+    move it is supposed to be notable for, because there is no c1 to measure it
+    against. Their moves are already in market_snapshot, which is where a reader
+    looks for them. The count is reported rather than the exclusion being
+    silent.
+
+    TWO: list 2's floor is read as "at least min_abs_gap_pct", not "more than".
+    Every other min_ threshold in this file is a floor a value may sit exactly
+    on, and a name moving exactly 1.00 percent is not the one this floor was
+    written to exclude.
+    """
+    from selection import gap_stats
+
+    block: dict[str, Any] = {
+        "rows": [],
+        "lists": {name: [] for name in NOTABLE_LISTS},
+        "list_size": NOTABLE_LIST_SIZE,
+        "legs": {},
+        "sessions": None,
+        "universe_examined": None,
+        "counter_source": None,
+        "names_with_close": None,
+        "names_with_both_closes_for_leg": None,
+        "third_session_available": None,
+        "context_symbols_excluded": 0,
+        "names_without_market_cap": 0,
+        "skipped": None,
+    }
+
+    caps: dict[str, float] = {}
+    for row in (universe_payload.get("symbols") or []):
+        symbol = str(row.get("symbol") or "").upper()
+        cap = _as_float(row.get("market_cap"))
+        if symbol and cap is not None:
+            caps[symbol] = cap
+
+    # SELECT * over the newest as_of, so every row already carries
+    # return_stdev_20d. Local import on discover.load_metrics's precedent, and
+    # it opens the database rather than the network: no EODHD call is made
+    # anywhere in this section.
+    try:
+        stats = gap_stats.load_all()
+    except Exception as exc:  # a missing table is a lost sigma, not a lost run
+        stats = {}
+        packet.gap(f"the gap statistics table could not be read "
+                   f"({type(exc).__name__}), so every notable move_sigma is null "
+                   "with that reason and lists 1 and 4 have no ranking key")
+
+    closes_payload = load_universe_closes(session_date, packet)
+    closes = (closes_payload or {}).get("closes") or {}
+    sessions = (closes_payload or {}).get("sessions") or {}
+    attach_notable_candidate_fields(candidates, closes, stats)
+
+    by_symbol = {str(c.get("symbol") or "").upper(): c for c in candidates}
+
+    if closes_payload is None:
+        lost = ("data/universe-closes-<date>.json is not readable for this "
+                "session, so both universe legs were lost")
+        block["skipped"] = lost
+        block["legs"]["prior_session"] = _leg_report(False, lost, None, 0)
+        block["legs"]["two_session"] = _leg_report(False, lost, None, 0)
+    else:
+        counters = closes_denominators(closes_payload)
+        block["universe_examined"] = counters["universe_examined"]
+        block["counter_source"] = counters["counter_source"]
+        block["names_with_close"] = counters["names_with_close"]
+        block["names_with_both_closes_for_leg"] = \
+            counters["names_with_both_closes_for_leg"]
+        block["third_session_available"] = counters["third_session_available"]
+        block["sessions"] = {key: sessions.get(key) for key in ("c1", "c2", "c3")}
+
+    # ------------------------------------------------------------- the legs
+    # Every value is (move_pct, sigma, sigma_reason, price_time).
+    legs: dict[str, dict[str, tuple[Any, ...]]] = {name: {} for name in _LEG_SPAN_SESSIONS}
+
+    if closes_payload is not None:
+        for symbol, row in closes.items():
+            if not isinstance(row, dict):
+                continue
+            c1, c2, c3 = row.get("c1"), row.get("c2"), row.get("c3")
+            prior = _pct_move(c1, c2)
+            if prior is not None:
+                sigma, reason = move_sigma(prior, stats.get(symbol),
+                                           _LEG_SPAN_SESSIONS["prior_session"])
+                legs["prior_session"][symbol] = (prior, sigma, reason, None)
+            two = _pct_move(c1, c3)
+            if two is not None:
+                sigma, reason = move_sigma(two, stats.get(symbol),
+                                           _LEG_SPAN_SESSIONS["two_session"])
+                legs["two_session"][symbol] = (two, sigma, reason, None)
+
+        per_leg = block["names_with_both_closes_for_leg"] or {}
+        for leg in ("prior_session", "two_session"):
+            block["legs"][leg] = _leg_report(
+                bool(legs[leg]),
+                None if legs[leg] else
+                (f"no name carried both of the closes the {leg} leg needs"),
+                per_leg.get(leg), 0)
+
+    context = {collect_premarket._full(s)
+               for s in _CRIT.text_list("collector", "context_symbols")}
+    heard = [s for s in bars_by_symbol if s not in context]
+    block["context_symbols_excluded"] = len(
+        [s for s in bars_by_symbol if s in context])
+    if closes_payload is not None:
+        for symbol in heard:
+            price, price_time = _collector_last(bars_by_symbol.get(symbol) or [])
+            baseline_close = (closes.get(symbol) or {}).get("c1")
+            move = _pct_move(price, baseline_close)
+            if move is None:
+                continue
+            sigma, reason = move_sigma(move, stats.get(symbol),
+                                       _LEG_SPAN_SESSIONS["premarket"])
+            legs["premarket"][symbol] = (move, sigma, reason, price_time)
+
+    if not bars_by_symbol:
+        premarket_reason = ("the collector file carried no bars, so the "
+                            "premarket leg had nothing to measure")
+    elif closes_payload is None:
+        premarket_reason = ("the closes sidecar is unreadable, so the premarket "
+                            "leg had no c1 baseline to measure against")
+    elif not legs["premarket"]:
+        premarket_reason = ("no subscribed name outside the context tickers "
+                            "carried both a collector price and a c1 close")
+    else:
+        premarket_reason = None
+    block["legs"]["premarket"] = _leg_report(
+        bool(legs["premarket"]), premarket_reason, len(heard), 0)
+
+    # ------------------------------------------------------------ the lists
+    def top(leg: str, key, population=None) -> list[str]:
+        source = population if population is not None else legs[leg]
+        ranked = sorted(source, key=key, reverse=True)
+        return ranked[:NOTABLE_LIST_SIZE]
+
+    picks: dict[str, list[str]] = {name: [] for name in NOTABLE_LISTS}
+    populations: dict[str, dict[str, tuple[Any, ...]]] = {}
+
+    def with_sigma(leg: str) -> dict[str, tuple[Any, ...]]:
+        return {s: v for s, v in legs[leg].items() if v[1] is not None}
+
+    populations["prior_session_by_sigma"] = with_sigma("prior_session")
+    picks["prior_session_by_sigma"] = top(
+        "prior_session", lambda s: legs["prior_session"][s][1],
+        populations["prior_session_by_sigma"])
+
+    # See call TWO in the docstring: at least, not more than.
+    populations["prior_session_by_market_cap"] = {
+        s: v for s, v in legs["prior_session"].items()
+        if abs(v[0]) >= NOTABLE_MIN_ABS_GAP_PCT and s in caps}
+    block["names_without_market_cap"] = len(
+        [s for s, v in legs["prior_session"].items()
+         if abs(v[0]) >= NOTABLE_MIN_ABS_GAP_PCT and s not in caps])
+    picks["prior_session_by_market_cap"] = top(
+        "prior_session", lambda s: caps[s],
+        populations["prior_session_by_market_cap"])
+
+    populations["two_session_by_move"] = dict(legs["two_session"])
+    picks["two_session_by_move"] = top(
+        "two_session", lambda s: abs(legs["two_session"][s][0]))
+
+    populations["premarket_by_sigma"] = with_sigma("premarket")
+    picks["premarket_by_sigma"] = top(
+        "premarket", lambda s: legs["premarket"][s][1],
+        populations["premarket_by_sigma"])
+
+    block["lists"] = dict(picks)
+
+    # 4.9's rule applied one level down. A list holding fewer than list_size
+    # names says why, because "the ranking key is null for every name on this
+    # leg" and "the market was quiet" are different facts and an empty list
+    # cannot tell them apart. This is not hypothetical on the first shipped
+    # section: every return_stdev_20d in the database is null until the Sunday
+    # 21:00 rebuild, so lists 1 and 4 come back empty on their ranking key
+    # while their legs are perfectly available.
+    def shortfall(name: str, leg: str) -> str | None:
+        if len(picks[name]) >= NOTABLE_LIST_SIZE:
+            return None
+        report = block["legs"].get(leg) or {}
+        if not report.get("available"):
+            return report.get("reason") or f"the {leg} leg is unavailable"
+        population = populations[name]
+        if population:
+            return (f"only {len(population)} name(s) on the {leg} leg qualified "
+                    f"for this list, fewer than the {NOTABLE_LIST_SIZE} it holds")
+        if name.endswith("_by_sigma"):
+            return (f"no name on the {leg} leg carries a move_sigma, so this "
+                    "list has no ranking key at all. The reason is on every "
+                    "row's move_sigma_reason and is the same one for all of "
+                    "them when the gap statistics column is empty.")
+        if name == "prior_session_by_market_cap":
+            return (f"no name on the {leg} leg both moved at least "
+                    f"{NOTABLE_MIN_ABS_GAP_PCT} percent, which is "
+                    "CRITERIA.md [Notable] min_abs_gap_pct, and carried a "
+                    "market cap on file")
+        return f"no name on the {leg} leg carried a move over this window"
+
+    block["list_reasons"] = {
+        name: shortfall(name, leg_of_list_key(name)) for name in NOTABLE_LISTS}
+
+    # ------------------------------------------------------------- the rows
+    # Deduplication is WITHIN a leg and never across legs. A name selected by
+    # both list 1 and list 2 becomes ONE row carrying both reasons, on the
+    # pool_source precedent. A name selected on two different legs stays TWO
+    # rows, because they are two measurements of different windows at different
+    # vintages and a row can carry only one leg and one as_of_session. The
+    # template must therefore not imply one row per name.
+    selected_by: dict[tuple[str, str], list[str]] = {}
+    order: list[tuple[str, str]] = []
+    for name in NOTABLE_LISTS:
+        leg = leg_of_list_key(name)
+        for symbol in picks[name]:
+            key = (leg, symbol)
+            if key not in selected_by:
+                selected_by[key] = []
+                order.append(key)
+            selected_by[key].append(name)
+
+    stamp_for = {
+        "premarket": session_date,
+        "prior_session": sessions.get("c1"),
+        "two_session": sessions.get("c1"),
+    }
+    rows: list[dict[str, Any]] = []
+    for leg, symbol in order:
+        move, sigma, sigma_reason, price_time = legs[leg][symbol]
+        candidate = by_symbol.get(symbol)
+        catalyst, catalyst_state = _catalyst_of(candidate)
+        rows.append({
+            # Keyed "symbol" and uppercase, deliberately. vintage accepts
+            # either spelling, and analyst._packet_uppercase_tokens builds the
+            # allowed set only from values under keys named symbol or label, so
+            # a row keyed "ticker" would pass the vintage gate and then be
+            # reported as an invented ticker by containment, which stops the
+            # chain before render, verify, deliver and archive.
+            "symbol": symbol,
+            "leg": leg,
+            "as_of_session": stamp_for[leg],
+            "move_pct": move,
+            "move_sigma": sigma,
+            "move_sigma_reason": sigma_reason,
+            "market_cap": caps.get(symbol),
+            "market_cap_reason": None if symbol in caps else
+                                 "no market cap on file for this name, so it "
+                                 "was never examined against the floor",
+            "catalyst": catalyst,
+            "catalyst_state": catalyst_state,
+            "also_on_watchlist": _watchlist_mark(candidate),
+            # The premarket leg is the only one with an intraday price, and
+            # vintage holds that one to the premarket window as well as to the
+            # session. Null elsewhere means not applicable, not missing.
+            "price_time": price_time,
+            "selected_by": selected_by[(leg, symbol)],
+        })
+    block["rows"] = rows
+    for leg in _LEG_SPAN_SESSIONS:
+        if leg in block["legs"]:
+            block["legs"][leg]["selected"] = sum(1 for r in rows if r["leg"] == leg)
+
+    return block
+
+
 def _calendar_cache_state() -> dict[str, Any]:
     from ops import market_today
 
@@ -2661,6 +3259,19 @@ def build_packet() -> dict[str, Any]:
         # unrankable and the report would come out empty for a reason that has
         # nothing to do with the market. So buy them here when they are absent.
         unpriced = [c for c in candidates if c.get("pool_prior_close") is None]
+        if unpriced and thin:
+            # The one skip on the thin path that recorded nothing. These names
+            # come out with provisional_gap_pct null and are counted into
+            # rank_stats["unrankable"], whose note attributes the cause to the
+            # collector or the pool. Neither is true here and the packet said
+            # so nowhere.
+            packet.gap(
+                f"{len(unpriced)} subscribed name(s) reached the scan without a "
+                "prior close from the pool, and the one end of day call each "
+                f"that would have made them rankable was skipped: {quota_clause}. "
+                "They are unrankable for that reason and not for the two "
+                "rank_stats names."
+            )
         if unpriced and not thin:
             packet.gap(
                 f"{len(unpriced)} subscribed name(s) reached the scan without a prior "
@@ -2731,12 +3342,26 @@ def build_packet() -> dict[str, Any]:
         events = economic_events(api, packet)
         earnings_block = earnings(api, candidates, packet)
 
+    # Layer 4. Assembled HERE rather than down in the packet literal, and the
+    # position is forced rather than preferred: vintage.enforce runs on the next
+    # statement against a hand built dict, so anything computed after it is
+    # never vintage checked in this process. Check (e) exists entirely for these
+    # rows, and until they were passed to it, it walked zero rows on every run
+    # the project has ever made.
+    #
+    # It also attaches 4.2's three report fields to every candidate, off the
+    # same closes file and gap statistics read, so the section and the candidate
+    # rows cannot disagree about a name's sigma.
+    notable = notable_movers(session_date, universe_payload, bars_by_symbol,
+                             candidates, packet)
+
     # After pricing, before scoring. A violation ends the run here: nothing is
     # stamped, no packet is written, and the chain stops before the analyst.
     vintage.enforce({
         "candidates": candidates,
         "market_snapshot": snapshot,
         "session_date": session_date,
+        "notable_movers": notable,
     })
 
     if candidates:
@@ -2867,6 +3492,10 @@ def build_packet() -> dict[str, Any]:
         # What cleared and what failed, per screen condition. The report quotes
         # this rather than counting; see screen_tally for why.
         "screen_tally": screen_tally(candidates),
+        # The briefing section. Three legs, four ranked lists, universe wide
+        # for two of them, and no name here is screened, scored, given a
+        # conviction or written to picks. See notable_movers.
+        "notable_movers": notable,
         # Who is in which conviction bucket, and which way each one is moving.
         # Built here so the report neither enumerates a set it can miscount nor
         # ranks by a score that has no sign without saying so.
@@ -2898,6 +3527,13 @@ def evidence_width(payload: dict[str, Any]) -> dict[str, int]:
         "priced": sum(1 for c in candidates if c.get("price") is not None),
         "with_rvol": sum(1 for c in candidates if c.get("pm_rvol") is not None),
         "scored": sum(1 for c in candidates if c.get("score") is not None),
+        # Layer 4's axis. Without it a rerun that produced the full watchlist
+        # and lost the whole notable section is thinner on nothing, and
+        # thin_rerun_stands_down lets it overwrite a fuller packet. A packet
+        # written before the section existed carries no such key, and
+        # thinner_than iterates the PRIOR packet's keys, so an old one on disk
+        # is compared on the axes it actually has.
+        "notable_rows": len((payload.get("notable_movers") or {}).get("rows") or []),
     }
 
 

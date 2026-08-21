@@ -160,19 +160,20 @@ cost = user : 0
 
 ## Notable
 
-NOT BUILT YET, so this section is a specification and not a description.
-BUILD_PLAN.md Layer 4 holds the design, no report has ever carried the section,
-and list_size, min_abs_gap_pct and min_return_stdev_pct are read by no Python
-today. min_sessions_for_move_sigma is the one exception: gap_stats.py reads it
-as the floor on return_stdev_20d. Everything below says what the section will
-do, not what any morning has done.
+The briefing section of the report, and nothing else. Built on 2026-08-20 and
+live from that morning; BUILD_PLAN.md Layer 4 holds the design and DECISIONS.md
+carries the calls made while building it. All four keys below are read:
+list_size, min_abs_gap_pct and min_return_stdev_pct by morning/scan.py, and
+min_sessions_for_move_sigma by both selection/gap_stats.py, as the floor on
+return_stdev_20d, and scan.py, which quotes it in the reason a null sigma
+carries.
 
-The briefing section of the report, and nothing else. These names are chosen
-for the size and unusualness of their move, not for tradeability. They are
-never screened against day_setup or swing_setup, never scored, never given a
-conviction, and never written to picks. Nothing in this section may be read by
-the trading path: picks is the record of what the screen claimed, and mixing
-briefing names into it would destroy the recall measurement.
+These names are chosen for the size and unusualness of their move, not for
+tradeability. They are never screened against day_setup or swing_setup, never
+scored, never given a conviction, and never written to picks. Nothing in this
+section may be read by the trading path: picks is the record of what the screen
+claimed, and mixing briefing names into it would destroy the recall
+measurement.
 
 Three legs, each measured over a different window, and every row states which
 leg produced it and the session it is as of. A section that silently mixes an
@@ -183,7 +184,8 @@ list that orders a fresher window against an older one is not an ordering.
 
 No leg can carry today's regular session move, because the report is written
 before the open. The premarket leg exists only for names the collector
-subscribed to, which is at most subscribe_cap of the universe, so for every
+subscribed to, which is at most [Collector] max_subscriptions of the
+universe, so for every
 other name the most recent evidence is the previous session's close.
 
 move_sigma is the move divided by the name's own daily volatility, scaled by
