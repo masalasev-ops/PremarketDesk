@@ -583,7 +583,7 @@ volume. Premarket float rotation divides the same socket numerator by a float,
 against bands fitted on Alpaca volume, which is consolidated. Both ratios
 therefore understate by about the reciprocal of this number, and the day
 screen's premarket_rvol floor of 1.5 was being applied to a value that could
-not reach it: six mornings, 62 candidates, zero day eligible, 19 of them
+not reach it: six mornings, 62 candidates, zero day eligible, [2026-08-21: still exactly true, and now also a measure of the cost: re-read against Alpaca full SIP, those six mornings would have held twenty four names instead of six. See DECISIONS 2026-08-21 eighth.] 19 of them
 failing on that line alone.
 
 **How it was measured.** verify_against_intraday compares collector volume

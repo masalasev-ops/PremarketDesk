@@ -18,6 +18,87 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21, eighth: the record re-read against true volume, and what it costs the watchlists
+
+Every session with a packet was re-measured against Alpaca full SIP over the
+window its own morning used, not examined. night/true_volume.py --reread does
+it from the packet rather than picks, so it reaches the four sessions whose
+rows were purged on 2026-08-19 and writes to nothing.
+
+| session | candidates | day watchlist as published | would gain on true volume | would lose | swing | names that change side |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 2026-08-13 | | | | | | not a morning: gathered 16:40, excluded |
+| 2026-08-14 | 12 | 0 | 0 | 0 | 0 | none |
+| 2026-08-17 | 2 | 0 | 2 | 0 | 0 | +HTHT, +KEEL |
+| 2026-08-18 | 12 | 0 | 1 | 0 | 0 | +AS |
+| 2026-08-19 | 12 | 0 | 4 | 2 | 0 | +KC, +MRVL, +EL, +DRD |
+| 2026-08-20 | 12 | 0 | 7 | 0 | 0 | +SCSC, +FUTU, +MSTR, +ASST, +BLSH, +COIN, +MARA |
+| 2026-08-21 | 12 | 6 | 4 | 0 | 0 | +BKE, +GLXY, +CLSK, +HUT |
+
+**Six published day watchlists held six names between them. On the true volume
+they hold twenty four.** Not one name moves the other way: no name the morning
+admitted fails the floor on its true RVOL.
+
+**The rule for changing side is narrow on purpose.** A name counts only when
+premarket_rvol was the ONLY day condition it failed AND its true RVOL clears
+the floor. Far more names clear the floor than change side: on 2026-08-14
+eleven did and none is admitted, because all eleven also failed the prior day
+high, which no volume number touches. Counting floor clearances instead would
+have put 2026-08-20 at ten rather than seven, overstating the defect in the
+same direction, and for the same reason, that the estimate understated it. The
+weekly page counted it the wrong way for one afternoon and was corrected.
+
+**Swing watchlists cannot move here and none does.** [Swing setup] carries no
+volume condition at all. Stated because a reader would otherwise have to
+reconstruct it.
+
+**The first run of the re-read was itself wrong, in the way this project keeps
+catching.** day_failed_conditions did not exist before 2026-08-19, and reading
+the missing field as an empty list said "this name failed nothing" for every
+candidate in the three older packets. It reported 2026-08-14, 08-17 and 08-18
+as gaining zero names. That is an absence dressed as a measurement, the same
+failure as the off exchange counter that printed a missing field as a measured
+zero. day_failed carries the same fact as prose in every packet ever written,
+and the single question here needs no lossy mapping: one entry beginning
+"premarket_rvol" is exactly the case. Where neither field exists the answer is
+UNRESOLVABLE and the report says so.
+
+**2026-08-13 is excluded and that is a finding, not a gap.** Its packet was
+gathered at 16:40 against a scheduled 08:45, so it describes a different market
+and its watchlists are not a morning's. The re-read refuses any packet whose
+run_time_et is not [Scan] run_time rather than quietly averaging it in.
+
+### What this corrects in the documents
+
+The 2026-08-18 float rotation entry argued the open eligibility question around
+AS.US, on the grounds that its premarket RVOL was null and float rotation was
+the only measure that could rescue it. **Its true RVOL is 606.85.** The name is
+admitted by the volume screen itself once the volume is right, so the entry's
+strongest example is no longer an example. Corrected in place. The eligibility
+question survives, narrowed: the case for a float rotation floor now needs a
+name whose RVOL is null AFTER the correction, and none has been observed.
+
+The 2026-08-18 model-summary entry counted correctly and one word under it
+changed meaning: AS.US's RVOL failure is now known to be an instrument reading.
+Corrected in place.
+
+**"Six mornings, 62 candidates, zero day eligible" is quoted in three places
+and it is still exactly true.** It describes what the screen DID, and the
+screen did that. What has changed is what it means: it was written as evidence
+that the ratio could not reach its floor, and it is now also the measure of
+what that cost. Each of the three is annotated rather than rewritten, because
+the sentence is not wrong.
+
+### The compounded shortfall, in one figure
+
+The socket carried a median 0.0296 of the true premarket tape: about one share
+in thirty four. Range 0.0087 to 0.3334 across 24 rows, a 38 fold spread. Feed
+capture ran 0.0288 to 0.4231 on the socket's own window; window share ran
+0.1562 to 0.9779. Multiplying the two medians gives 0.0337 where the rows give
+0.0296, because the two fractions are not independent, which is why the product
+is now published rather than left for a reader to compute. Table in
+doc/research/COLLECTOR_VOLUME.md.
+
 ## 2026-08-21, seventh: the code is frozen except for defects that make published numbers wrong
 
 **THE RULE.** From this entry forward a change is in scope if, and only if, it
@@ -382,7 +463,7 @@ research/float_rotation_study.py fitted on Alpaca volume. Both denominators
 measure the whole tape. The numerator measured a fraction of it, 8.6 to 10.3
 percent across the four sessions from 2026-08-17. So both ratios understated by
 about nine times, and [Day setup] premarket_rvol > 1.5 was being applied to a
-number that could not reach it. Six mornings, 62 candidates, ZERO day eligible
+number that could not reach it. [2026-08-21: still exactly true, and now also a measure of the cost: re-read against Alpaca full SIP, those six mornings would have held twenty four names instead of six. See DECISIONS 2026-08-21 eighth.] Six mornings, 62 candidates, ZERO day eligible
 ever, 19 of them failing on that line alone.
 
 **The correction.** pm_volume_consolidated is the socket's shares divided by
@@ -2900,6 +2981,13 @@ list carries exactly one line, the null premarket RVOL. Counted from the packet,
 11 of 12 candidates failed the price condition and 10 of 12 failed the RVOL one.
 The mode is right and the universal is false.
 
+**[2026-08-21: the counting above is still exact and one word under it has
+changed meaning. AS.US failed on RVOL, and that failure is now known to be an
+instrument reading rather than a market one: its true premarket RVOL is 606.85
+against a published null. So the 2026-08-18 day watchlist was empty by one
+name, and that name was kept off it by the volume defect. Re-read in the
+2026-08-21 eighth entry.]**
+
 **Why the model was in a position to get it wrong.** REPORT_TEMPLATE.md asks for
 "one sentence below it saying the day screen produced nothing today and the most
 common failed condition". That is a COMPUTED STATISTIC, and the packet does not
@@ -2973,6 +3061,30 @@ gapped down and cannot pass a long only screen. So on 2026-08-18 the open
 eligibility question was not a marginal case at the edge of the watchlist, it
 WAS the watchlist. The published day list is empty rather than holding one green
 earnings name, and the difference is entirely this unresolved question.
+
+**[corrected 2026-08-21: THE LAST SENTENCE IS WRONG, and it was wrong when it
+was written. The difference is NOT entirely the eligibility question. AS.US's
+premarket RVOL was null because the collector saw 37,169 shares against a
+baseline median of 383.5, and the true premarket tape measured from Alpaca full
+SIP over the same window carried 818,638 shares against a true baseline median
+of 1,349. Its pm_rvol_true is 606.85. It clears [Day setup] premarket_rvol of
+> 1.5 by a factor of four hundred.
+
+So AS.US did not need float rotation to reach the day watchlist. It needed the
+RVOL to be computed on the tape the baseline is measured on, which is the
+defect corrected on 2026-08-21 and measured that night. The entry is kept
+because everything else in it is true and the question it raises is still open,
+but its strongest example is no longer an example: the name it was built around
+is admitted by the volume screen itself once the volume is right.
+
+What this does to the eligibility question is narrow it rather than settle it.
+The case for a float rotation floor in [Day setup] now has to rest on a name
+whose RVOL is null AFTER the correction, and no such name has yet been
+observed. That is a reason to wait for evidence, not a reason to decide.
+
+The baseline behind 606.85 rests on 13 prior sessions rather than the 20
+[Truth] baseline_sessions asks for, because Alpaca returned no bars for AS.US
+on seven of the days walked. Recorded rather than rounded up.]**
 
 **Compounding, recorded so the two are not treated separately.** AS.US's float
 rotation came out at 0.000264, which earns one point against the 0.0002 edge and

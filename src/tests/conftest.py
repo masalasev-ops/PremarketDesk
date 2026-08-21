@@ -154,6 +154,52 @@ _SAMPLER_TRAIL_KEYS = frozenset({"at", "quota_day", "source", "step"})
 # something in this project starts fetching is the day this exemption begins
 # hiding a real write, and the claim fails on that day rather than on the one
 # somebody notices.
+@contextlib.contextmanager
+def isolated_store() -> Iterator[Path]:
+    """A private data root, runs root and database, for the duration.
+
+    THE FIXTURE A CLAIM CARRIES WITH IT. Until 2026-08-21 isolation was
+    supplied by run_tests: conftest rebound config.DATA_DIR, RUNS_DIR and
+    DB_PATH around the whole suite, and a claim inherited it without asking.
+    That is correct under the runner and absent everywhere else, and calling a
+    claim directly is the normal way to debug one. Claim 73 was written that
+    way, rebound two of the three names and not DB_PATH, and while it was being
+    checked by hand it wrote fixture rows into the live picks table and
+    overwrote a real session's truth columns.
+
+    So the isolation moved into the module a claim imports. Any claim that
+    touches the store opens with
+
+        with conftest.isolated_store() as box:
+
+    and is then safe under run_tests, under a REPL, and under whatever runs it
+    next. store.guard_live_database refuses the live file outright if a claim
+    forgets, so the two together are a fixture and a backstop rather than one
+    of each.
+
+    ALL THREE NAMES, because rebinding a subset is exactly the failure this
+    replaces. DB_PATH is not derived from DATA_DIR at call time: config sets it
+    once at import, so moving DATA_DIR alone leaves the database where it was.
+    """
+    box = Path(tempfile.mkdtemp(prefix="pmd-claim-"))
+    saved = (config.DATA_DIR, config.RUNS_DIR, config.DB_PATH,
+             config.PREMARKET_DIR, config.LOGS_DIR)
+    try:
+        config.DATA_DIR = box / "data"
+        config.RUNS_DIR = box / "runs"
+        config.LOGS_DIR = box / "logs"
+        config.PREMARKET_DIR = config.DATA_DIR / "premarket"
+        config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        yield box
+    finally:
+        (config.DATA_DIR, config.RUNS_DIR, config.DB_PATH,
+         config.PREMARKET_DIR, config.LOGS_DIR) = saved
+        shutil.rmtree(box, ignore_errors=True)
+
+
 def _external_fetch_marker(path: Path, root: Path | None = None) -> bool:
     """True for the one path a git client rewrites and nothing here does."""
     return path == (root or TREE_ROOT) / ".git" / "FETCH_HEAD"

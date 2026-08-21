@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries seventy four claims, a count read off the file rather than remembered,
+carries seventy five claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -36,6 +36,7 @@ from typing import Any
 
 from core import config
 from core import ettime
+from tests import conftest
 
 
 # --------------------------------------------------------------- the clock
@@ -5913,22 +5914,9 @@ def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
             return 200, {"bars": {s: [{"v": v}] for s, v in bars.items()}}, 0.0
 
     day = "2026-08-21"
-    box = pathlib.Path(tempfile.mkdtemp())
-    original = (config.RUNS_DIR, config.DATA_DIR, config.DB_PATH)
-    try:
-        config.RUNS_DIR = box / "runs"
-        config.DATA_DIR = box / "data"
-        config.DATA_DIR.mkdir(parents=True)
-        # DB_PATH TOO, and not because the suite needs it. conftest already
-        # rebinds all three for every claim, so inside run_tests this line
-        # changes nothing. It is here because this claim WRITES picks rows, and
-        # rebinding DATA_DIR without DB_PATH left the writes pointing at the
-        # live database for anyone who called the claim directly. That is
-        # exactly what happened while this was being built: two fixture rows
-        # landed in the real table and a real session's truth columns were
-        # overwritten with the fixture's nulls. A claim that is only safe
-        # inside its harness is a trap for the next person who reaches for it.
-        config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
+    # The isolation travels with the claim rather than with the runner. See
+    # conftest.isolated_store: this claim is the reason it exists.
+    with conftest.isolated_store():
 
         with store.session() as connection:
             store.init(connection)
@@ -6060,10 +6048,6 @@ def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
             failures.append(
                 "a null true volume carries no reason, so a reader cannot tell "
                 "a row the pass could not measure from one it never reached")
-    finally:
-        config.RUNS_DIR, config.DATA_DIR, config.DB_PATH = original
-        shutil.rmtree(box, ignore_errors=True)
-
     print("  truth        the night measures volume from Alpaca over the "
           "morning's own window, divides capture by the socket's window, and "
           "writes beside the morning rather than over it")
@@ -6117,14 +6101,8 @@ def claim_the_weekly_page_reads_and_renders_and_nothing_else(
             "a row with neither number came back labelled as measured")
 
     # 2. The page, driven for real against an empty world.
-    box = pathlib.Path(tempfile.mkdtemp())
-    original = (config.RUNS_DIR, config.DATA_DIR, config.DB_PATH,
-                _weekly.OUT_PATH)
-    try:
-        config.RUNS_DIR = box / "runs"
-        config.DATA_DIR = box / "data"
-        config.DATA_DIR.mkdir(parents=True)
-        config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
+    saved_out = _weekly.OUT_PATH
+    with conftest.isolated_store() as box:
         _weekly.OUT_PATH = box / "site" / "Weekly.html"
 
         calls: list[str] = []
@@ -6193,14 +6171,117 @@ def claim_the_weekly_page_reads_and_renders_and_nothing_else(
                 "a name the morning failed on volume and the night cleared was "
                 "not counted. That column is the cost of the estimate in "
                 "names, which is the only unit anybody reads it in")
-    finally:
-        (config.RUNS_DIR, config.DATA_DIR, config.DB_PATH,
-         _weekly.OUT_PATH) = original
-        shutil.rmtree(box, ignore_errors=True)
+    _weekly.OUT_PATH = saved_out
 
     print("  weekly       four sections rendered from disk with no vendor "
           "call, an empty week says it is empty, and the measurement is read "
           "wherever it exists")
+
+
+def claim_a_claim_cannot_reach_the_live_database(failures: list[str]) -> None:
+    """Isolation belongs to the module, not to the harness.
+
+    conftest rebinds config.DATA_DIR, RUNS_DIR and DB_PATH around the whole
+    suite, so under run_tests no claim can reach the real premarketdesk.db.
+    Call the same claim directly, which is the normal way to debug one, and the
+    rebinding never happens. That was the one path with no guard on it, and on
+    2026-08-21 claim 73 took it: written with DATA_DIR and RUNS_DIR rebound and
+    DB_PATH left alone, checked by hand while it was being built, it wrote two
+    fixture rows into the live picks table and its fake probe overwrote a real
+    session's truth columns with nulls.
+
+    A sweep of every claim in the tree, invoked directly, then found SEVEN more
+    with the same gap. Claim 73 was found by damage; the other seven were found
+    by looking, and they were there the whole time.
+
+    So the refusal sits in store.connect, which every connection goes through,
+    and it holds however the claim was invoked. It REFUSES rather than
+    redirecting: a silent redirect would let a claim pass against a database it
+    did not mean to open, trading a loud failure for a quiet one.
+    """
+    from core import store as _store
+
+    # THE LIVE PATH IS DERIVED, not read off config.DB_PATH. Under run_tests
+    # conftest has already pointed DB_PATH at the sandbox, so a claim that
+    # treated "whatever DB_PATH is now" as the real database would test the
+    # sandbox against itself and pass while proving nothing. That is the same
+    # mistake the guard itself made in its first version, one level up.
+    live = (config.PROJECT_ROOT / "data" / "premarketdesk.db").resolve()
+    entry = config.DB_PATH
+
+    # 1. Refused, by name, on the real file while a tests module is loaded.
+    #    This module is one, so the condition is already true.
+    config.DB_PATH = live
+    try:
+        _store.connect().close()
+        failures.append(
+            "store.connect opened the LIVE database from inside a test "
+            "module. That is how a claim destroys the record it exists to "
+            "protect, and it is not hypothetical: it happened on 2026-08-21")
+    except _store.LiveDatabaseUnderTestError as refusal:
+        text = str(refusal)
+        if "isolated_store" not in text:
+            failures.append(
+                f"the refusal does not say what to do instead: {text!r}. A "
+                "guard that stops the work without naming the fixture just "
+                "moves the problem to whoever hits it next")
+    except Exception as exc:  # noqa: BLE001
+        failures.append(
+            f"store.connect raised {type(exc).__name__} rather than "
+            "LiveDatabaseUnderTestError, so the refusal cannot be told apart "
+            f"from a broken database: {exc}")
+    finally:
+        config.DB_PATH = entry
+
+    # 2. Not refused inside the fixture, or claims could not use the store at
+    #    all and the guard would have replaced one problem with another.
+    with conftest.isolated_store() as box:
+        if config.DB_PATH.resolve() == live:
+            failures.append(
+                "isolated_store left DB_PATH pointing at the live database. "
+                "Rebinding DATA_DIR alone is exactly the subset that caused "
+                "this: config sets DB_PATH once at import, so it does not "
+                "follow DATA_DIR")
+        try:
+            with _store.session() as connection:
+                _store.init(connection)
+                _store.upsert(connection, "picks", ["date", "ticker"], {
+                    "date": "2026-01-01", "ticker": "SANDBOX.US",
+                    "source": "test"})
+                connection.commit()
+        except _store.LiveDatabaseUnderTestError:
+            failures.append(
+                "the guard refused the SANDBOX database. It must refuse the "
+                "real file and nothing else, or no claim can test the store")
+
+        # 3. The guard reads the real root captured at import, not
+        #    config.DATA_DIR at call time. A guard doing the latter would
+        #    compare the sandbox against itself and refuse nothing, which is
+        #    a guard that passes its own test and stops nothing.
+        config.DB_PATH = live
+        try:
+            _store.connect().close()
+            failures.append(
+                "with DB_PATH pointed back at the real file from inside the "
+                "sandbox, the guard allowed it. It is reading the CURRENT "
+                "data root rather than the one captured before any rebinding, "
+                "so it compares the sandbox with itself and protects nothing")
+        except _store.LiveDatabaseUnderTestError:
+            pass
+        finally:
+            config.DB_PATH = box / "data" / "premarketdesk.db"
+
+    # 4. And the fixture puts everything back, or the claim after this one
+    #    runs against a directory that has been deleted.
+    if config.DB_PATH != entry:
+        failures.append(
+            f"isolated_store left DB_PATH as {config.DB_PATH!r} rather than "
+            "restoring it. A fixture that does not restore is a fixture that "
+            "breaks the next claim instead of this one")
+
+    print("  isolation    the live database refuses any connection opened "
+          "while a test module is loaded, the sandbox does not, and the "
+          "fixture restores every name it rebound")
 
 
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
@@ -6782,6 +6863,7 @@ def main() -> int:
     claim_the_prune_deletes_only_what_its_whitelist_names(failures)
     claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
+    claim_a_claim_cannot_reach_the_live_database(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:

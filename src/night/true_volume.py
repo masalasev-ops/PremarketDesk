@@ -214,6 +214,169 @@ def _ratio(top: float | None, bottom: float | None) -> float | None:
     return round(top / bottom, 6)
 
 
+def _only_failure_was_volume(candidate: dict[str, Any]) -> tuple[bool, bool]:
+    """(was premarket_rvol the only day condition it failed, could we tell).
+
+    day_failed_conditions did not exist before 2026-08-19, and reading a
+    missing field as an empty list said "this name failed nothing" for every
+    candidate in the three packets that predate it. The first run of --reread
+    did exactly that and reported 2026-08-14, 08-17 and 08-18 as gaining zero
+    names, which is an ABSENCE DRESSED AS A MEASUREMENT: the same failure this
+    project has caught in the off exchange counter and in the socket cap
+    reading.
+
+    day_failed carries the same fact as prose in every packet ever written,
+    and the one question here needs no mapping from prose to condition names:
+    a single entry beginning "premarket_rvol" is exactly the case. Where
+    neither field exists the answer is UNRESOLVABLE and says so, rather than
+    defaulting either way.
+    """
+    conditions = candidate.get("day_failed_conditions")
+    if conditions is not None:
+        return list(conditions) == ["premarket_rvol"], True
+    prose = candidate.get("day_failed")
+    if prose is not None:
+        return (len(prose) == 1
+                and str(prose[0]).startswith("premarket_rvol")), True
+    return False, False
+
+
+def reread(day: str, probe: Any = None) -> dict[str, Any]:
+    """What the morning admitted, against what the true volume would have.
+
+    Reads the PACKET rather than picks, so it reaches sessions whose rows were
+    purged on 2026-08-19, and it never writes to a table those rows were
+    deliberately removed from. It writes nothing at all.
+
+    A name changes side only when premarket_rvol was the ONLY condition it
+    failed. That distinction is the whole value of this: on 2026-08-18 eleven
+    of the twelve candidates also failed the prior day high, which no volume
+    number touches, so an empty watchlist that reads as a volume story is
+    mostly an honest one with a single name buried in it. Counting every name
+    whose true RVOL clears the floor would overstate the defect by an order of
+    magnitude, in the same direction and for the same reason the estimate
+    understated it.
+
+    Swing eligibility carries NO volume condition at all, so a swing watchlist
+    cannot move here. Reported anyway, because "unchanged" is the answer to a
+    question a reader would otherwise have to work out for themselves.
+    """
+    packet_path = config.run_dir(day) / "packet.json"
+    if not packet_path.is_file():
+        return {"day": day, "skipped": f"no packet at {packet_path.name}"}
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        return {"day": day, "skipped": f"packet unreadable: {type(exc).__name__}"}
+    cutoff = packet.get("rvol_cutoff_hhmm")
+    if not cutoff:
+        return {"day": day, "skipped": "packet carries no rvol_cutoff_hhmm"}
+    run_time = str(packet.get("run_time_et") or "")
+    scheduled = _CRIT.clock_text("scan", "run_time")
+    candidates = packet.get("candidates") or []
+    if not candidates:
+        return {"day": day, "skipped": "packet carries no candidates"}
+    if run_time != scheduled:
+        return {"day": day, "skipped":
+                f"the packet was gathered at {run_time or 'an unrecorded time'}, "
+                f"not the scheduled {scheduled}, so it describes a different "
+                "market and its watchlists are not a morning's"}
+
+    floor = _CRIT.rule("day_setup", "premarket_rvol")
+    symbols = sorted({c["symbol"].split(".", 1)[0] for c in candidates})
+    probe = probe if probe is not None else probe_alpaca.Probe()
+    session_day = ettime.parse_date(day)
+    start, end = _window(session_day, cutoff)
+    observed, error = fetch_window(probe, symbols, start, end)
+    history, sessions_used = prior_sessions(probe, symbols, session_day, cutoff)
+
+    rows = []
+    for candidate in candidates:
+        symbol = candidate["symbol"]
+        bare = symbol.split(".", 1)[0]
+        found = observed.get(bare) or {"volume": 0.0, "bars": 0}
+        prior = history.get(bare) or []
+        failed, resolvable = _only_failure_was_volume(candidate)
+        true_rvol = None
+        if found["bars"] and prior:
+            true_rvol = _ratio(found["volume"], statistics.median(prior))
+        rows.append({
+            "symbol": symbol,
+            "was_day": bool(candidate.get("day_eligible")),
+            "was_swing": bool(candidate.get("swing_eligible")),
+            "pm_rvol": candidate.get("pm_rvol"),
+            "pm_rvol_true": true_rvol,
+            "failed": candidate.get("day_failed_conditions")
+                      or candidate.get("day_failed") or [],
+            "volume_was_the_only_failure": failed,
+            "resolvable": resolvable,
+            "clears_on_true": bool(true_rvol is not None and floor.test(true_rvol)),
+            "true_volume": round(found["volume"], 2) if found["bars"] else None,
+            "baseline_sessions": len(prior),
+        })
+
+    gained = [r["symbol"] for r in rows
+              if not r["was_day"] and r["volume_was_the_only_failure"]
+              and r["clears_on_true"]]
+    # A name the morning ADMITTED whose true RVOL does not clear the floor.
+    # Reported in both directions or this is advocacy rather than a re-read.
+    lost = [r["symbol"] for r in rows if r["was_day"]
+            and r["pm_rvol_true"] is not None and not r["clears_on_true"]]
+    blocked = [r["symbol"] for r in rows
+               if not r["was_day"] and r["clears_on_true"]
+               and not r["volume_was_the_only_failure"]]
+    return {
+        "day": day, "skipped": None,
+        "window": f"{start.strftime('%H:%M')}-{cutoff}",
+        "run_time_et": run_time,
+        "candidates": len(rows), "rows": rows,
+        "admitted_day": [r["symbol"] for r in rows if r["was_day"]],
+        "admitted_swing": [r["symbol"] for r in rows if r["was_swing"]],
+        "would_gain": gained, "would_lose": lost, "clears_but_blocked": blocked,
+        "baseline_sessions": len(sessions_used),
+        "unresolvable": [r["symbol"] for r in rows if not r["resolvable"]],
+        "fetch_error": error, "requests": getattr(probe, "request_count", 0),
+    }
+
+
+def reread_report(results: list[dict[str, Any]]) -> None:
+    print("")
+    print("ADMITTED, AGAINST WOULD HAVE BEEN ADMITTED ON TRUE VOLUME")
+    print(f"  {'session':<12} {'cands':>5} {'day':>4} {'+true':>6} "
+          f"{'-true':>6} {'swing':>6}  {'names that change side'}")
+    for result in results:
+        if result.get("skipped"):
+            print(f"  {result['day']:<12} {result['skipped']}")
+            continue
+        change = ", ".join(f"+{s}" for s in result["would_gain"])
+        if change and result["would_lose"]:
+            change += ", "
+        change += ", ".join(f"-{s}" for s in result["would_lose"])
+        print(f"  {result['day']:<12} {result['candidates']:>5} "
+              f"{len(result['admitted_day']):>4} {len(result['would_gain']):>6} "
+              f"{len(result['would_lose']):>6} "
+              f"{len(result['admitted_swing']):>6}  {change or 'none'}")
+    print("")
+    print("  +true means premarket_rvol was the ONLY day condition the name "
+          "failed AND its true RVOL clears the floor.")
+    print("  Swing setup carries no volume condition, so a swing watchlist "
+          "cannot move on this and none does.")
+    for result in results:
+        if result.get("skipped") or not result.get("unresolvable"):
+            continue
+        print(f"  {result['day']}: UNRESOLVED for "
+              f"{len(result['unresolvable'])} name(s). The packet records "
+              "neither day_failed_conditions nor day_failed, so whether "
+              "volume was the only thing that failed cannot be read: "
+              f"{', '.join(result['unresolvable'])}")
+    for result in results:
+        if result.get("skipped") or not result["clears_but_blocked"]:
+            continue
+        print(f"  {result['day']}: cleared the volume floor on the true "
+              f"numbers and still failed another condition, so it stays out: "
+              f"{', '.join(result['clears_but_blocked'])}")
+
+
 def measure(day: str, dry_run: bool = False, probe: Any = None,
             ) -> dict[str, Any]:
     """Everything this pass writes for one session, computed before it writes."""
@@ -445,7 +608,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="The session to measure. Defaults to today.")
     parser.add_argument("--dry-run", action="store_true",
                         help="Measure and print, write nothing.")
+    parser.add_argument("--reread", action="store_true",
+                        help="Re-read past sessions from their packets and "
+                             "print what the true volume would have admitted. "
+                             "Writes nothing.")
     args = parser.parse_args(argv)
+    if args.reread:
+        days = ([args.date] if args.date else
+                sorted(p.parent.name
+                       for p in config.RUNS_DIR.glob("*/packet.json")))
+        results = [reread(one) for one in days]
+        reread_report(results)
+        job_status.produced("sessions re-read", len(results))
+        return 0
     day = args.date or ettime.today_str()
     result = measure(day, dry_run=args.dry_run)
     written = write(result)

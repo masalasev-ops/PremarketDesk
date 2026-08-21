@@ -281,6 +281,15 @@ def claim_flags_are_logged_for_measurement(failures: list[str]) -> None:
     """
     from ops import quantifier_flags
 
+    # START FROM AN EMPTY LOG. This read the sandbox COPY of the live
+    # quantifier-flags.jsonl, and the assertion below is that a fresh flag
+    # arrives with nothing judged. That held while no real morning had ever
+    # judged one. On 2026-08-21 the live file carried a judged flag, the
+    # sandbox copy carried it too, and this claim went red against code that
+    # had not changed: a claim resting on the CONTENT of live data rather than
+    # on a fixture of its own. The path here is the sandbox's, so emptying it
+    # costs nothing and makes the claim say the same thing on every tree.
+    analyst.flag_log_path().write_text("", encoding="utf-8")
     before = len(quantifier_flags.load_flags())
     hits = analyst.quantifier_violations(
         "Every candidate missed the prior day high.\n")

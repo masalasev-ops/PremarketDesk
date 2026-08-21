@@ -171,6 +171,35 @@ def is_it_trustworthy(days: list[str]) -> dict[str, Any]:
     }
 
 
+_PACKET_FAILURES: dict[str, dict[str, bool]] = {}
+
+
+def _volume_was_the_only_failure(day: str, ticker: str) -> bool:
+    """Did this name fail the day screen on premarket_rvol and nothing else.
+
+    Read from runs/<day>/packet.json, which is the only record of WHY a
+    candidate failed; picks carries the verdict and not the reasons. Cached per
+    day because the page walks every row of every session in the window.
+
+    A name that also failed the prior day high does not join a watchlist
+    however large its true volume turns out to be, and counting it would
+    overstate the estimate's cost.
+    """
+    if day not in _PACKET_FAILURES:
+        found: dict[str, bool] = {}
+        path = config.run_dir(day) / "packet.json"
+        if path.is_file():
+            try:
+                packet = json.loads(path.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                packet = {}
+            for candidate in packet.get("candidates") or []:
+                only, resolvable = true_volume._only_failure_was_volume(candidate)
+                found[candidate["symbol"]] = bool(only and resolvable)
+        _PACKET_FAILURES[day] = found
+    return _PACKET_FAILURES[day].get(ticker, False)
+
+
 def what_did_it_publish(days: list[str]) -> dict[str, Any]:
     with store.session() as connection:
         store.init(connection)
@@ -193,9 +222,18 @@ def what_did_it_publish(days: list[str]) -> dict[str, Any]:
             seen["unscored"] += 1
             for reason in str(row["score_unavailable"] or "unrecorded").split(", "):
                 reasons[reason] = reasons.get(reason, 0) + 1
-        # A name the morning could not measure at all, or measured under the
-        # floor, that the night's true numbers put over it. This is the cost of
-        # the estimate expressed in names rather than in ratios.
+        # A name the morning left off the day watchlist that the night's true
+        # numbers would have PUT ON IT. Not the same as a name whose true RVOL
+        # clears the floor, and the difference is large: on 2026-08-20 twelve
+        # candidates, ten cleared the floor on true volume and only SEVEN would
+        # have been admitted, because the other three also failed the prior day
+        # high, which no volume number touches. This column counted ten until
+        # 2026-08-21 and overstated the defect in the same direction, and for
+        # the same reason, as the estimate understated it.
+        #
+        # The extra condition comes from the packet, which is the only record
+        # of WHY a name failed. A session whose packet is missing counts
+        # nothing here rather than counting everything.
         #
         # The BEST available ratio comes from true_volume.volume_ratio, which
         # refuses to hand back the estimate when the measurement is in the same
@@ -204,7 +242,9 @@ def what_did_it_publish(days: list[str]) -> dict[str, Any]:
         # is the difference between the two.
         floor = _CRIT.rule("day_setup", "premarket_rvol")
         best, which = true_volume.volume_ratio(row)
-        if which == "measured" and floor.test(best) and not floor.test(row["pm_rvol"]):
+        if (which == "measured" and floor.test(best)
+                and not row["day_eligible"]
+                and _volume_was_the_only_failure(row["date"], row["ticker"])):
             seen["rescued_by_truth"] += 1
     return {"by_day": by_day, "reasons": reasons,
             "floor": _CRIT.rule("day_setup", "premarket_rvol").describe()}
@@ -429,7 +469,7 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
     add("<h2>What did it publish</h2>")
     add("<div class='card scroll'><table><tr><th>Session</th>"
         "<th>Candidates</th><th>Day watchlist</th><th>Swing watchlist</th>"
-        "<th>Unscored</th><th>Cleared on true volume only</th></tr>")
+        "<th>Unscored</th><th>Would have been admitted on true volume</th></tr>")
     for day in days:
         seen = published["by_day"].get(day)
         if not seen:
@@ -442,10 +482,14 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
         add("<tr><td colspan=6><span class=null>no live picks rows in this "
             "window</span></td></tr>")
     add("</table>")
-    add(f"<p class=note>The last column counts names the morning failed on "
-        f"volume and the night's true numbers cleared, against the day "
-        f"screen's {_esc(published['floor'])}. It is the cost of the estimate "
-        "in names rather than in ratios.</p></div>")
+    add(f"<p class=note>The last column counts names the morning left OFF the "
+        f"day watchlist that the night's true volume would have put on it: "
+        f"premarket_rvol was the only condition they failed, against the day "
+        f"screen's {_esc(published['floor'])}, and the true number clears it. "
+        "A name that also failed the prior day high does not join a watchlist "
+        "however large its volume turns out to be, so it is not counted here. "
+        "This is the cost of the estimate in names rather than in ratios.</p>"
+        "</div>")
     if published["reasons"]:
         add("<div class=card><div class=lab>Why a row went unscored</div>"
             "<table>")

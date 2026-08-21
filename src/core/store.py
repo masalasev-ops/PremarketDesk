@@ -14,6 +14,8 @@ from __future__ import annotations
 import contextlib
 import re
 import sqlite3
+import sys
+from pathlib import Path
 import weakref
 from typing import Any, Iterable, Iterator
 
@@ -212,7 +214,79 @@ def assert_no_open_transaction(context: str) -> None:
     )
 
 
+class LiveDatabaseUnderTestError(RuntimeError):
+    """Raised when test code opens the real premarketdesk.db."""
+
+
+def _real_data_root() -> Path:
+    """The live data directory, derived rather than captured.
+
+    NOT config.DATA_DIR, which the sandbox rebinds, and NOT a value captured at
+    import, which was the first attempt and was wrong in a way worth keeping on
+    the record: under run_tests this module is imported AFTER conftest has
+    already pointed config.DATA_DIR at the sandbox copy, so the captured root
+    WAS the sandbox and the guard refused every legitimate connection. Six
+    suites went red at once.
+
+    config.PROJECT_ROOT is derived from this file's own location and is the one
+    name conftest never rebinds, so deriving from it is correct whatever the
+    import order turns out to be.
+    """
+    return (config.PROJECT_ROOT / "data").resolve()
+
+
+def _test_module_is_loaded() -> str | None:
+    """The name of a loaded tests module, or None. Cheap enough to call often.
+
+    Import graph rather than a flag anybody has to remember to set. A claim
+    called directly from a REPL has tests.test_regressions in sys.modules just
+    as surely as one called by run_tests, and that is precisely the case with
+    no other protection on it.
+    """
+    for name in sys.modules:
+        if name == "tests" or name.startswith("tests."):
+            return name
+    return None
+
+
+def guard_live_database(path: Path) -> None:
+    """Refuse to open the real database while test code is loaded.
+
+    THE GAP THIS CLOSES. conftest rebinds config.DB_PATH for every claim, so
+    inside run_tests nothing can reach the live file. Call the same claim
+    directly, which is the normal way to debug one, and the rebinding never
+    happens. On 2026-08-21 claim 73 was written that way: it rebound DATA_DIR
+    and RUNS_DIR, not DB_PATH, and while it was being checked by hand its two
+    fixture rows landed in the live picks table and its fake probe overwrote a
+    real session's truth columns with nulls.
+
+    Isolation was a property of the RUNNER and not of the code. It is now a
+    property of the code: the refusal is here, at the one function every
+    connection goes through, so it holds however the claim was invoked.
+
+    Refuses rather than redirects. A silent redirect would make a claim pass
+    against a database it did not mean to open, which trades a loud failure for
+    a quiet one.
+    """
+    if not _test_module_is_loaded():
+        return
+    try:
+        target = Path(path).resolve()
+    except OSError:
+        return
+    if target.parent != _real_data_root():
+        return
+    raise LiveDatabaseUnderTestError(
+        f"refusing to open {target}: it is the LIVE database and "
+        f"{_test_module_is_loaded()} is loaded. A test that reaches the real "
+        "picks table can destroy the record it exists to protect, which is "
+        "what happened on 2026-08-21. Use tests.conftest.isolated_store(), or "
+        "rebind config.DB_PATH, before opening a connection."
+    )
+
+
 def connect() -> sqlite3.Connection:
+    guard_live_database(config.DB_PATH)
     config.ensure_dirs()
     connection = sqlite3.connect(config.DB_PATH, timeout=30, factory=_TrackedConnection)
     connection.row_factory = sqlite3.Row

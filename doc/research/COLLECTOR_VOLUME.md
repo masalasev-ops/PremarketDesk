@@ -974,7 +974,7 @@ from the vendor's 1m intraday bars. Two tapes. The published RVOL is therefore
 understated by about 1/f, roughly nine times, and the [Day setup] floor of 1.5
 is applied to a number that cannot reach it.
 
-Six mornings, 62 candidates, **zero day eligible, ever**, and 19 of the 62
+Six mornings, 62 candidates, **zero day eligible, ever**, [2026-08-21: still exactly true, and now also a measure of the cost: re-read against Alpaca full SIP, those six mornings would have held twenty four names instead of six. See DECISIONS 2026-08-21 eighth.] and 19 of the 62
 failed on the RVOL line alone. Correcting each candidate by the capture rate
 measured for its own symbol:
 
@@ -1093,6 +1093,34 @@ print "a code under IGNORED that marks an off exchange print is the fixable
 case" beneath a census of c=[] and dp=False, which pointed its only reader at a
 change that does not exist. A value that says nothing is here is the feed
 answering, not a code being ignored, and the two now print differently.
+
+## The compounded shortfall, as one number
+
+This file and CRITERIA between them have published two fractions and left the
+reader to multiply. They are now measured per row and the product is stated
+here so nobody has to.
+
+**The socket carried a median 0.0296 of the true premarket tape. About one
+share in thirty four.** Range 0.0087 to 0.3334 over 24 rows and two sessions,
+a spread of 38 fold.
+
+| | low | median | high |
+| --- | ---: | ---: | ---: |
+| feed capture, on the socket's own 07:20 window | 0.0288 | 0.0948 | 0.4231 |
+| window share, 07:20 window over the 04:00 session | 0.1562 | 0.3552 | 0.9779 |
+| **compounded, socket over true premarket** | **0.0087** | **0.0296** | **0.3334** |
+
+Per session: 2026-08-20 ran 0.0144 to 0.3334 with a median of 0.0350;
+2026-08-21 ran 0.0087 to 0.0873 with a median of 0.0268.
+
+**Multiplying the two published medians gives 0.0337 and the rows give 0.0296.**
+The two fractions are not independent, so the product of the medians is not the
+median of the products, and a reader doing the multiplication by hand would get
+a different answer from the one the data gives. That is the reason this section
+exists rather than a sentence pointing at the other two.
+
+Both fractions are measured on the same rows over the same windows, from
+Alpaca full SIP, by night/true_volume.py. Neither is a seed.
 
 ## What is still open
 
