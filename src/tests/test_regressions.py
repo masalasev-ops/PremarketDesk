@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries seventy claims, a count read off the file rather than remembered,
+carries seventy one claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5257,9 +5257,33 @@ def claim_both_volume_ratios_divide_the_same_tape(failures: list[str]) -> None:
             "corrected one is 2.0, and a correction that moves a name onto a "
             "watchlist without saying so is worse than the defect it fixes")
 
+    # What the code SAYS it divides, in the three places a reader looks it up.
+    # Both docstrings and the day screen's own comment still called the
+    # numerator "collector premarket volume" a day after commit a62429b made
+    # both functions divide the estimate. A definition that names the wrong
+    # tape is the defect this whole correction exists to fix, sitting in the
+    # two functions doing the correcting and in the file that is the single
+    # source of truth for the threshold.
+    stale = "collector premarket volume divided"
+    for where, text in (
+            ("attach_premarket_rvol", _scan.attach_premarket_rvol.__doc__ or ""),
+            ("attach_float_rotation",
+             _scan.attach_float_rotation.__doc__ or ""),
+            ("CRITERIA [Day setup]",
+             (config.DOC_DIR / "CRITERIA.md").read_text(encoding="utf-8")
+             .split("## Swing setup")[0])):
+        if stale in text.lower():
+            failures.append(
+                f"{where} still defines the ratio as {stale!r}. It divides an "
+                "ESTIMATE of the consolidated tape, and a reader who takes the "
+                "definition at its word reapplies a nine times correction in "
+                "their head, which is the exact error the first live report "
+                "published")
+
     print("  one tape     RVOL and float rotation both divide the consolidated "
-          "estimate, pm_volume still holds what the socket saw, and the "
-          "correction names what it moved")
+          "estimate, pm_volume still holds what the socket saw, the "
+          "correction names what it moved, and all three definitions of the "
+          "numerator name the estimate")
 
 
 def claim_a_thin_capture_share_is_refused_rather_than_divided_by(
@@ -5483,6 +5507,201 @@ def claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(
     print("  no rebound   the packet calls the measured feed gap the "
           "correction's input, keeps a floor apart from a watchlist, and "
           "neither report applies the correction a second time")
+
+
+def claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(
+        failures: list[str]) -> None:
+    """A ratio is not a reading unless it beats the instrument that made it.
+
+    probe_socket_cap exists to answer one question: does the 50 symbol socket
+    cap starve delivery. It answers by comparing message rates at 8 and 50
+    subscriptions, and until 2026-08-21 it printed a median of those ratios
+    with a sentence reading anything well below 1 as the cap starving
+    delivery, and nothing at all about the sample behind it.
+
+    Both existing runs fail that standard, in opposite ways. On 2026-08-21 the
+    premarket tape carried 123 trade messages across 8 symbols in 14 minutes of
+    arm time; IWM's printed 0.14 was 49 messages against 9 and UUP's 0.00 was
+    one against none, and the median printed as 0.58. On 2026-08-19 the tape
+    was 65 times richer, 8,056 messages, and the median printed as 0.87. A
+    reader holding both would conclude the cap bites in premarket and not in
+    the session, when the entire difference between them is how much tape there
+    was.
+
+    The instrument's own noise settles it and is measurable from what the probe
+    already collects: recomputing each symbol's ratio per cycle, with nothing
+    about the cap changing between them, the well measured symbols still moved
+    by a factor of 2.4. The effect being looked for is the same size. So a
+    median inside that spread separates nothing, and saying so is the reading.
+
+    Two refusals, then, and both are asserted through _report_delivery rather
+    than recomputed here: too few messages behind a ratio, and a median the
+    run's own dispersion cannot beat.
+    """
+    from research import probe_socket_cap as _probe
+
+    # The fixtures are the two runs that ACTUALLY HAPPENED, message counts
+    # copied from data/socket-cap-probe-2026-08-19.json and -08-21.json. A
+    # fixture derived from the floor moves when the floor does, and the first
+    # version of this claim did exactly that: setting the floor to zero left
+    # it green. These pin the floor into a corridor instead, above 2 so UUP's
+    # three messages are refused and at or below 32 so USO's are not, without
+    # the claim ever reading the value.
+    watch = ["X.US"]
+
+    def legs(pairs, seconds=(100.0, 100.0)):
+        runs = []
+        for cycle, (count_a, count_b) in enumerate(pairs, start=1):
+            for arm, count, secs in (("A", count_a, seconds[0]),
+                                     ("B", count_b, seconds[1])):
+                runs.append({
+                    "arm": arm, "cycle": cycle, "seconds": secs,
+                    "counts": {"X.US": count},
+                    "volume": {"X.US": float(count)},
+                    "refused": False,
+                })
+        return runs
+
+    def read(runs: list[dict[str, Any]], names=None) -> dict[str, Any]:
+        with contextlib.redirect_stdout(io.StringIO()) as sink:
+            verdict = _probe._report_delivery(runs, names or watch)
+        verdict["printed"] = sink.getvalue()
+        return verdict
+
+    def session(counts: dict[str, tuple[int, int]], seconds):
+        runs = []
+        for arm, index, secs in (("A", 0, seconds[0]), ("B", 1, seconds[1])):
+            runs.append({
+                "arm": arm, "cycle": 1, "seconds": secs, "refused": False,
+                "counts": {s: v[index] for s, v in counts.items()},
+                "volume": {s: float(v[index]) for s, v in counts.items()},
+            })
+        return runs, list(counts)
+
+    # 1. The premarket run of 2026-08-21, exactly as it came off the socket.
+    #    123 messages over eight symbols, and it printed a median of 0.58.
+    runs, names = session({
+        "SPY.US": (11, 4), "QQQ.US": (18, 14), "IWM.US": (49, 9),
+        "DIA.US": (0, 0), "TLT.US": (2, 9), "USO.US": (1, 4),
+        "UUP.US": (1, 0), "VIXY.US": (0, 1),
+    }, (360.0, 480.0))
+    thin = read(runs, names)
+    if thin["median_b_over_a"] is not None:
+        failures.append(
+            f"the 2026-08-21 premarket run published a median of "
+            f"{thin['median_b_over_a']!r}. Its richest symbol was 49 messages "
+            "against 9 and its whole tape was 123 messages, which measures "
+            "when trades happened rather than whether the cap starved delivery")
+    if "NO READING" not in thin["printed"]:
+        failures.append(
+            "the probe does not say it has no reading when no symbol carried "
+            f"enough messages: {thin['printed']!r}")
+    # QQQ is the best of them on 14, not IWM on 49: the ratio rests on the
+    # SMALLER arm, and IWM's 49 against 9 is a nine message measurement wearing
+    # a big number. The refusal has to lead with the right one or it tells a
+    # reader the run came closer than it did. Not asserted against the floor's
+    # value, which fixture 2 pins from the other side.
+    refusal = thin["printed"].split("NO READING", 1)[-1]
+    if "the best being QQQ.US on 14" not in refusal or "49" in refusal:
+        failures.append(
+            "the refusal does not lead with the SMALLER of the best symbol's "
+            "two arms, which is the number a ratio rests on and the number "
+            f"that says how far short the run fell: {refusal!r}")
+
+    # 2. The regular hours run of 2026-08-19, 8,056 messages. Everything but
+    #    UUP's three against two has to survive, or the floor has been raised
+    #    to the point where the probe cannot answer anything.
+    rich, rich_names = session({
+        "SPY.US": (580, 544), "QQQ.US": (2342, 2863), "IWM.US": (413, 307),
+        "DIA.US": (223, 164), "TLT.US": (223, 164), "USO.US": (32, 41),
+        "UUP.US": (3, 2), "VIXY.US": (83, 72),
+    }, (480.0, 480.0))
+    session_run = read(rich, rich_names)
+    if session_run["symbols_with_enough"] != 7:
+        failures.append(
+            f"the 2026-08-19 run admitted {session_run['symbols_with_enough']} "
+            "of 8 symbols, not 7. UUP carried three messages against two and "
+            "must be refused; USO carried 32 against 41 and must not be, or "
+            "the floor has been raised until the probe cannot read anything")
+    if session_run["median_b_over_a"] is None or not (
+            0.86 < session_run["median_b_over_a"] < 0.88):
+        failures.append(
+            f"the 2026-08-19 median came out "
+            f"{session_run['median_b_over_a']!r} rather than 0.87, so the "
+            "reading this file has cited since that day is no longer what the "
+            "code produces from the same counts")
+
+    # 2. Enough messages, but the same symbol's ratio moves further across the
+    #    run's own cycles than the median sits from 1. This is 2026-08-19.
+    noisy = read(legs([(100, 50), (100, 200)]))
+    if noisy["median_b_over_a"] is None:
+        failures.append(
+            "a symbol with 200 and 250 messages was refused as thin. The "
+            "floor is meant to remove what cannot be a measurement, not "
+            "everything that is imprecise")
+    if noisy["own_noise_factor"] is None:
+        failures.append(
+            "the probe published a median with no measure of how far that "
+            "same ratio moves on its own. The cycles it already ran are the "
+            "measure and they cost nothing to read")
+    if noisy["reading_supported"]:
+        failures.append(
+            f"a median of {noisy['median_b_over_a']!r} was reported as a "
+            f"reading when the same symbol's own ratio moved by "
+            f"{noisy['own_noise_factor']!r} across the run's cycles. The "
+            "instrument cannot resolve the effect it is being asked about")
+    if "INSIDE that noise" not in noisy["printed"]:
+        failures.append(
+            "the probe prints an unsupported median without saying it is "
+            f"inside its own noise: {noisy['printed']!r}")
+    for banned in ("cap does not starve delivery", "the fix is to subscribe"):
+        if banned in noisy["printed"]:
+            failures.append(
+                f"the probe still offers {banned!r} off a median its own "
+                "dispersion swallows, which is how a null result becomes a "
+                "finding")
+
+    # 3. A reading the instrument CAN resolve still gets published, or the
+    #    refusals above have quietly turned the probe off.
+    clean = read(legs([(1000, 100), (1000, 110)]))
+    if not clean["reading_supported"]:
+        failures.append(
+            f"a median of {clean['median_b_over_a']!r} against a noise factor "
+            f"of {clean['own_noise_factor']!r} was refused. A refusal that "
+            "fires on a clean separation leaves the probe unable to answer "
+            "anything, which is worse than the overclaim it replaced")
+    if "cap does not starve delivery" not in clean["printed"]:
+        failures.append(
+            "a supported reading no longer carries the sentence that says how "
+            f"to read it: {clean['printed']!r}")
+
+    # 4. The census must not call the feed's own answer a parser bug. Every
+    #    value on 2026-08-21 was c=[] or dp=False, an empty condition list and
+    #    an explicit not a dark pool print, and the probe named "a code under
+    #    IGNORED" as the fixable case underneath them.
+    census_runs = [{
+        "arm": "A", "cycle": 1, "seconds": 100.0, "refused": False,
+        "counts": {"X.US": 10}, "volume": {"X.US": 10.0},
+        "off_exchange": {"X.US": 0}, "off_exchange_volume": {"X.US": 0.0},
+        "keys_seen": {"c": 10, "dp": 10, "p": 10, "s": 10, "t": 10, "v": 10},
+        "census": {"X.US": {"c=[]": 10, "dp=False": 10}},
+    }]
+    with contextlib.redirect_stdout(io.StringIO()) as sink:
+        _probe._report_off_exchange(census_runs, watch)
+    census = sink.getvalue()
+    if "fixable case" in census:
+        failures.append(
+            "an empty condition list and dp=False are read as a code the "
+            "parser is dropping. They are the feed ANSWERING the question in "
+            "the negative, and pointing at a parser fix that does not exist "
+            "is the one mistake this census was built to prevent")
+    if "STRUCTURAL" not in census:
+        failures.append(
+            "the census does not say the shortfall is structural when every "
+            f"value the feed sent marks nothing: {census!r}")
+
+    print("  probe noise  a socket cap ratio is refused when too few messages "
+          "back it or the run's own cycles move it further than the effect")
 
 
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
@@ -6060,6 +6279,7 @@ def main() -> int:
     claim_the_documents_count_what_is_actually_here(failures)
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
+    claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:

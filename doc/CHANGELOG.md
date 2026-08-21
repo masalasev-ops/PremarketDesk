@@ -15,6 +15,41 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, sixth: the probe's off exchange answer, and the cap reading it never had
+
+The 06:30 socket cap probe ran on a premarket tape. Its census came back
+unanimous: all 123 trade messages carried c=[], an empty condition list, and
+dp=False. There is no condition code for the parser to be missing, so the
+trades stream omits off exchange volume rather than mislabelling it, no
+collector change reaches the shortfall, and the capture calibration is the
+whole answer. BUILD_PLAN item A's fork closes on the structural side.
+
+Its cap reading is withdrawn, and so is 2026-08-19's. The premarket run printed
+a median B/A of 0.58 off 123 messages, where no symbol reached 20 messages on
+both arms and IWM's 0.14 was 49 against 9. The 2026-08-19 run printed 0.87 off
+8,056 messages, and recomputing each symbol per cycle on that same payload the
+well measured symbols moved by a factor of 2.4 with nothing about the cap
+changing, against an effect of 1.15. "The cap is innocent" is unchanged: it
+rests on fifty symbols at fourteen times the collector's rate losing none, and
+on the vendor comparison holding at both subscription sizes.
+
+CRITERIA [Collector] gains min_probe_messages_per_arm at 20 with the derivation
+in a new probe evidence note. probe_socket_cap prints raw message counts beside
+every rate, computes its own noise from the cycles it already runs, refuses a
+median inside that noise, and writes both refusals into the payload.
+_report_delivery is lifted out of main() so an archived payload can be re-read
+with no socket, which is how both runs above were re-read.
+
+Three stale definitions of the RVOL numerator are corrected: CRITERIA
+[Day setup] premarket_rvol, attach_premarket_rvol and attach_float_rotation all
+still called it collector premarket volume a day after both functions began
+dividing the consolidated estimate. Claim 68 now holds all three.
+
+Claim 71 holds the probe refusals, with fixtures taken from the two runs that
+actually happened rather than derived from the floor, after the first version
+ran GREEN under a floor set to zero because the fixture moved with it. Nine
+mutations, nine caught. Suite 2,424 paths.
+
 ## 2026-08-21, fifth: the first live morning audited, and four defects in the correction closed
 
 The correction ran at 08:45 and produced six day eligible candidates where every

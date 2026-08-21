@@ -243,7 +243,7 @@ when every line here passes.
 gap_pct                       = > 3        # absolute gap versus prior close, percent
 price                         = > 3        # dollars, latest premarket print
 market_cap                    = > 1B
-premarket_rvol                = > 1.5      # collector premarket volume divided by the cached baseline median
+premarket_rvol                = > 1.5      # the CONSOLIDATED premarket volume estimate divided by the cached baseline median. Was the collector's socket volume until 2026-08-21; see the capture rate note
 require_above_prior_high      = true       # latest premarket print above prior regular session high
 
 ## Swing setup
@@ -527,6 +527,7 @@ volume_check_max_age_days     = 5          # how far back the 08:45 scan will re
 premarket_capture_rate        = 0.1172     # the share of the consolidated tape the socket carries for a symbol nothing has been measured for. MEASURED, see the capture rate note
 min_capture_vendor_volume     = 2000       # shares; a per symbol capture share measured on less vendor volume than this is refused and the default is used instead. SEED, see the capture evidence note
 min_capture_minutes           = 3          # common minutes; the same refusal on a share backed by fewer. SEED, see the capture evidence note
+min_probe_messages_per_arm    = 20         # messages; probe_socket_cap leaves a symbol out of its B/A median unless BOTH arms carried this many for it. SEED, see the probe evidence note
 
 ### The capture rate note
 
@@ -643,6 +644,53 @@ a value that cannot occur is refused for being impossible, not for being thin.
 Below any of these the symbol uses premarket_capture_rate and the row records
 which refusal sent it there, so a thin measurement is visible rather than
 silently averaged in.
+
+### The probe evidence note
+
+src/research/probe_socket_cap.py answers one question: does the 50 symbol
+socket cap starve delivery, so that the collector's volume shortfall is the
+cap's doing rather than the tape's. It subscribes 8 symbols on arm A and 50 on
+arm B, alternating, and compares the per symbol message rate. B over A near 1
+means the cap is not the cause.
+
+**The reading is only as good as the smaller of the two counts behind it, and
+until 2026-08-21 nothing said so.** That morning's premarket run carried 123
+trade messages across 8 symbols over 14 minutes of arm time. IWM's B/A of 0.14
+was 49 messages against 9. UUP's 0.00 was one against none. The probe printed
+"median B/A message rate across 6 watched symbols is 0.58" and the sentence
+that reads a ratio well below 1 as the cap starving delivery, with nothing on
+the page about the sample. The 2026-08-19 run, taken on a regular hours tape,
+carried 8,056 messages and its median was 0.87. A reader with both would
+conclude the cap bites in premarket and not in the session, when the whole
+difference is 65 times less tape.
+
+**Where 20 comes from.** Each symbol's B/A was recomputed per cycle on the
+2026-08-19 payload, where four cycles of both arms ran on a rich tape. The
+spread between a symbol's highest and lowest cycle ratio is how far the same
+measurement moves with nothing about the cap changing:
+
+| thinnest cycle, messages | that symbol's own B/A spread |
+| ---: | ---: |
+| 0 | undefined |
+| 2 | 66.0 |
+| 3 | 6.2 |
+| 23 | 2.5 and 8.4 |
+| 47 | 1.9 |
+| 97 | 1.4 |
+| 255 | 2.4 |
+
+Below about 20 the ratio is not a measurement of anything. Above it the ratio
+is still noisy, and that is the more important half: the best measured symbols
+in the richest sample available still moved by 1.4 to 2.4 times, which is the
+same size as the effect the probe is asked to detect. So the floor removes what
+cannot be a reading, and the probe now also computes that spread from its own
+cycles and prints it beside the median. A median inside the spread is reported
+as separating nothing rather than as a number.
+
+**Not capped, floored, for the reason [Baseline]'s denominator floor note
+gives.** And unlike the capture floors this one guards a research instrument,
+not the live screen: nothing under src/morning reads it, so a wrong value here
+mismeasures a question and cannot mis-screen a candidate.
 
 ### The volume check note
 

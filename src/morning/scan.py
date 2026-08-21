@@ -880,20 +880,33 @@ def drop_uncovered(
 def attach_premarket_rvol(
     candidates: list[dict[str, Any]], packet: Packet, cutoff: str
 ) -> None:
-    """Collector premarket volume divided by the cached baseline median.
+    """The consolidated premarket volume estimate over the baseline median.
 
     Never full day relative volume. If the denominator is not trustworthy the
     answer is null and the reason is recorded, because a number computed off the
     wrong denominator is worse than no number.
 
-    The numerator used to be the delayed quote's ethVolume. It cannot be: that
-    field describes the previous extended session until the vendor rolls it,
-    which measurement on 2026-08-14 put after 08:45 and before 08:56. At 08:45
-    it gave ARX 20,744,130 shares, which was yesterday's post market, against a
-    premarket median of 23.5 shares, for an RVOL of 882,728. The collector is
-    the only source of today's premarket volume on this plan, so it is the
-    numerator, matching the rule that already governs premarket high, low and
-    VWAP.
+    The NUMERATOR is not what the collector saw. It is what the collector saw
+    divided by that symbol's measured share of the consolidated tape, which
+    attach_capture_estimate puts on the candidate as pm_volume_consolidated
+    before this runs. The observation itself stays on the row as pm_volume, and
+    pm_capture_share and pm_capture_basis say what was done to it and on what
+    evidence. Both are on the gate table, so the two divisions can be redone by
+    hand. See CRITERIA [Collector] the capture rate note for why: the socket
+    carries about a ninth of the tape and the baseline is built from the
+    vendor's consolidated bars, so dividing the raw socket count by it compared
+    two different tapes and the day screen's 1.5 floor could not be reached.
+
+    The observation used to be the delayed quote's ethVolume. It cannot be:
+    that field describes the previous extended session until the vendor rolls
+    it, which measurement on 2026-08-14 put after 08:45 and before 08:56. At
+    08:45 it gave ARX 20,744,130 shares, which was yesterday's post market,
+    against a premarket median of 23.5 shares, for an RVOL of 882,728. The
+    collector is still the only OBSERVATION of today's premarket volume on this
+    plan, matching the rule that already governs premarket high, low and VWAP.
+    Estimating the tape it is a share of does not breach that rule: the
+    estimate is derived from the observation and a measured ratio, and no value
+    is substituted from another source.
 
     One asymmetry is recorded rather than hidden. The baseline accumulates from
     CRITERIA [baseline] session_start, 04:00, while the collector starts at
@@ -1469,7 +1482,7 @@ def capture_correction_report(
 
 
 def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> None:
-    """Collector premarket volume divided by shares float.
+    """The consolidated premarket volume estimate divided by shares float.
 
     The second volume measure, and the reason it exists is the first one's
     blind spot. RVOL divides by a cached baseline, so it is null for any name
@@ -1480,11 +1493,15 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
     computable from the first minute a name trades, and the two are scored as
     alternatives filling one slot rather than as two requirements.
 
-    The numerator is the same collector volume RVOL uses, so the same lower
-    bound applies and is flagged the same way: the collector starts at 07:20
-    and the premarket opens at 04:00, so this understates rotation over the
-    full session. That direction is the safe one, as it can only hold a
-    candidate down a band, never lift it up one.
+    The numerator is the same pm_volume_consolidated RVOL uses, and it has to
+    be: the bands below were fitted on Alpaca volume, which is consolidated, so
+    a socket numerator would be scored against edges measured on a tape nine
+    times larger. The window lower bound still applies and is flagged the same
+    way: the collector starts at 07:20 and the premarket opens at 04:00, so
+    this understates rotation over the full session. That direction is the safe
+    one, as it can only hold a candidate down a band, never lift it up one.
+    What is NOT a lower bound any more is the feed gap, which the capture
+    correction divides out before this function sees the number.
 
     The denominator has no window, which is the whole point, but it does have a
     trustworthiness problem of its own. A float reported far below shares

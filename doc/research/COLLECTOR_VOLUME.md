@@ -413,6 +413,30 @@ times the collector's message rate, did not lose a symbol.
 By the test this document pre registered, that is the first branch: the cap is
 innocent and the gap has another cause.
 
+**[corrected 2026-08-21: the verdict stands and its headline number never
+carried it.** Each symbol's B/A was recomputed per cycle on this same payload,
+four cycles of both arms, with nothing about the cap changing between them. The
+well measured symbols moved by a factor of 2.4 across those cycles. The effect
+this table is being read for is the distance of 0.87 from 1.00, which is 1.15.
+A measurement whose own repeat spread is twice the effect it is asked about
+separates nothing, and the median above should never have been offered as the
+reason for anything.
+
+Two other legs of this section do carry the verdict and neither is a ratio of
+rates. Arm B held fifty symbols at fourteen times the collector's message rate
+and lost no symbol, which is an existence test, not a comparison. And the
+vendor comparison later in this file put the socket at 2.1 to 12.1 percent of
+EODHD's consolidated bars at BOTH subscription sizes, which is a shortfall the
+cap cannot explain because it does not change with the cap. The conclusion is
+therefore unchanged and its support is now named correctly.
+
+probe_socket_cap.py computes that spread from the cycles it already runs and
+prints it beside the median, and CRITERIA [Collector] min_probe_messages_per_arm
+keeps a symbol out of the median unless both arms carried 20 messages for it,
+which is why UUP.US on 3 and 2 no longer counts toward the eight. Under those
+rules this payload reads: median 0.87 over 7 of 8 symbols, own noise 2.4, NOT
+a supported reading. See CRITERIA's probe evidence note.**
+
 ## What the same afternoon did to the other branch
 
 Running the collector's own intraday check across every published session, which
@@ -1007,14 +1031,82 @@ morning the estimate landed and said nothing about it, which is the failure
 this whole file exists to prevent, committed by the fix rather than by the
 defect.
 
+## The 2026-08-21 probe: one fork closed, the other still open
+
+It ran at 06:30 on a premarket tape, which is the tape the defect appears in
+and the reason it was armed for a morning rather than taken by hand again.
+Twenty eight minutes, eight cycles, one connection drop that cost arm A its
+first cycle. It spent no quota.
+
+**On the cap question it says nothing, and that is the finding.** The whole run
+carried 123 trade messages across eight symbols. IWM printed a B/A of 0.14 off
+49 messages against 9. UUP printed 0.00 off one against none. TLT printed 3.37
+off two against nine. Not one watched symbol reached 20 messages on both arms,
+so there is no ratio here to take a median of, and the run is refused as NO
+READING rather than reported as 0.58.
+
+That number, 0.58, is what the probe printed on the morning, under the sentence
+"a ratio well below 1 means it does, and the fix is to subscribe to fewer
+symbols". Beside 2026-08-19's 0.87 on 8,056 messages it would have read as the
+cap biting in premarket and not in the session. The entire difference between
+the two runs is that one had 65 times more tape.
+
+**What the premarket tape can and cannot support is itself worth recording.**
+This probe compares message RATES, and the premarket rate for eight liquid ETFs
+before 07:00 is a message every few seconds at best. Twenty eight minutes of it
+is not enough for a rate comparison, and no arrangement of cycles inside the
+window before the collector starts changes that by much. The question can be
+answered on a regular hours tape after 09:25, which is where 2026-08-19's
+answer came from, or not at all. Neither run has answered it on the tape the
+defect lives on.
+
+## The off exchange fork, answered
+
+The census did work, and it is the half of this run that pays for it.
+
+Every one of the 123 trade messages carried `c=[]`, an EMPTY condition list,
+and `dp=False`, an explicit not a dark pool print. Zero prints were flagged by
+the collector's own rule, on every symbol, in both arms. The keys the feed sent
+were s, p, v, t, dp, ms and c, and the only one the collector ignores is c,
+which was empty every time.
+
+So the fork this file has carried since 2026-08-19 closes on the structural
+side: **the trades stream does not mark off exchange prints, it omits them.**
+There is no condition code being dropped by the parser, because there is no
+condition code. dark_pool_volume is 0.0 in every bar the project has written
+because the feed never says otherwise, and no change to the collector reaches
+the missing volume.
+
+That makes the capture calibration the whole answer rather than a stopgap, and
+it is the answer already shipped: CRITERIA [Collector] premarket_capture_rate
+with the per symbol measurement from doc/research/collector-capture.json.
+
+**The honest size of this evidence.** 123 messages, one premarket window, eight
+ETFs. It is 123 out of 123, which is why it reads as an answer rather than a
+hint, but the census has never run on a rich tape: the 8,056 message run
+predates it. A census on a regular hours tape would cost nothing but socket
+time and would settle it past argument. Until then this is one clean sample,
+small, and unanimous.
+
+The probe also stopped naming a parser fix underneath that output. It used to
+print "a code under IGNORED that marks an off exchange print is the fixable
+case" beneath a census of c=[] and dp=False, which pointed its only reader at a
+change that does not exist. A value that says nothing is here is the feed
+answering, not a code being ignored, and the two now print differently.
+
 ## What is still open
 
-Whether to correct the numerator or fix it. The 2026-08-21 06:30 probe decides
-which is available: if an ignored condition code is dropping volume the feed
-delivered, the numerator can be made whole and no calibration is needed. If the
-stream structurally omits off exchange volume, the calibration above is the
-whole answer. **The capture measurement holds either way**, because it is a
-measurement of the ratio between the two tapes and not of the cause.
+Whether the socket cap starves delivery ON A PREMARKET TAPE. Both runs of the
+probe fail to answer it: 2026-08-19 on the rate median its own dispersion
+swallows, 2026-08-21 on a tape too thin to produce a median at all. What
+carries "the cap is innocent" today is the vendor comparison, 2.1 to 12.1
+percent at both subscription sizes, and the fact that fifty symbols at fourteen
+times the collector's rate lost no symbol. Both were measured at 09:35 on a
+regular hours tape. Neither has been repeated before 07:20.
+
+**The capture measurement holds regardless**, because it is a measurement of
+the ratio between the two tapes and not of the cause, and it is what the live
+screen now divides by.
 
 One caveat on the numbers, stated rather than buried. 2026-08-20 compared 29
 symbols against 49 carrying bars, because intraday had not fully published when

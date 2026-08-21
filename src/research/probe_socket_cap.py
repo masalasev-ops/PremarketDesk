@@ -82,6 +82,11 @@ COLLECTOR_READS = ("s", "p", "v", "t", "dp", "ms")
 # something else, and those are the two answers this census separates.
 COLLECTOR_OFF_EXCHANGE_KEY = "dp"
 
+# Values that mark NOTHING. An empty condition list and an explicit False are
+# the feed answering the off exchange question in the negative, and counting
+# them as codes the collector ignores turns an answer into a false lead.
+_SAYS_NOTHING = ("[]", "False", "None", "", "0", "0.0")
+
 # Keys whose values are small enough to tabulate in full. A condition code
 # list, an exchange id and a market status are all short; a price is not.
 CENSUS_KEYS = ("c", "cond", "conditions", "x", "e", "dp", "ms", "z", "trf", "trfi")
@@ -323,9 +328,170 @@ def _report_off_exchange(runs: list[dict[str, Any]], watch: list[str]) -> None:
             mark = "  <- read" if key in COLLECTOR_READS else "  <- IGNORED"
             print(f"  {value:<24} {count:>9,}{mark}")
         print("")
-        print("  A code under IGNORED that marks an off exchange print is the "
-              "fixable case: the feed carries the volume and the parser drops "
-              "it, which is why dark_pool_volume is empty in every bar.")
+        # A value that says nothing is here is the feed ANSWERING the off
+        # exchange question, not a code the parser is missing. c=[] is an empty
+        # condition list and dp=False is an explicit not a dark pool print. On
+        # 2026-08-21 all 123 messages carried both, and the line that used to
+        # print here named "a code under IGNORED" as the fixable case, which
+        # pointed the only reader this tool has at a parser change that does
+        # not exist. The census exists to separate a feed that sends nothing
+        # from a parser that drops something, so it must not blur the two in
+        # its own summary line.
+        carrying = [v for v in codes if v.split("=", 1)[-1] not in _SAYS_NOTHING]
+        droppable = sorted(v for v in carrying
+                           if v.split("=", 1)[0] not in COLLECTOR_READS)
+        if not carrying:
+            print("  NONE of those values marks anything. Every one is the "
+                  "feed saying there is no condition and no dark pool print, "
+                  "so a shortfall against vendor volume is STRUCTURAL: the "
+                  "trades stream is a subset of the consolidated tape and no "
+                  "change to the collector's parser reaches it.")
+        elif droppable:
+            print("  A code under IGNORED that marks an off exchange print is "
+                  "the fixable case: the feed carries the volume and the "
+                  "parser drops it, which is why dark_pool_volume is empty in "
+                  f"every bar. Candidates: {', '.join(droppable)}")
+        else:
+            print("  Every value that marks anything sits under a key the "
+                  "collector already reads, so there is no parser fix here.")
+
+
+def _report_delivery(runs: list[dict[str, Any]],
+                     watch: list[str]) -> dict[str, Any]:
+    """Message rate under the cap against message rate without it.
+
+    A function rather than a stretch of main() so the reading can be
+    re-derived from an archived payload with no socket, which is what
+    a claim needs and what re-reading the 2026-08-19 result under the
+    evidence floor needed. runs and watch are exactly the keys the
+    payload already stores, so any past result can be re-read under
+    any later rule.
+    """
+    # The RAW COUNTS are on the page beside the rates, because every ratio in
+    # this table is only as good as the smaller of the two numbers behind it
+    # and a rate per second hides that completely. On 2026-08-21 IWM printed
+    # 0.14 off 49 messages against 9, and UUP printed 0.00 off one against
+    # none, and the old table showed 0.14 and 0.00 with nothing to say so.
+    print("Per symbol messages per second, watch set only, A against B")
+    print(f"  {'symbol':<10} {'A msgs':>7} {'B msgs':>7} {'A msg/s':>10} "
+          f"{'B msg/s':>10} {'B/A':>8} {'A shares/s':>12} {'B shares/s':>12}")
+    min_messages = _CRIT.integer("collector", "min_probe_messages_per_arm")
+    verdict_ratios: list[float] = []
+    thin: list[tuple[int, str]] = []
+    for symbol in watch:
+        a = [r for r in runs if r["arm"] == "A" and not r.get("refused")]
+        b = [r for r in runs if r["arm"] == "B" and not r.get("refused")]
+        a_secs = sum(r["seconds"] for r in a) or 1.0
+        b_secs = sum(r["seconds"] for r in b) or 1.0
+        a_msgs = sum(r["counts"][symbol] for r in a)
+        b_msgs = sum(r["counts"][symbol] for r in b)
+        a_rate = a_msgs / a_secs
+        b_rate = b_msgs / b_secs
+        a_vol = sum(r["volume"][symbol] for r in a) / a_secs
+        b_vol = sum(r["volume"][symbol] for r in b) / b_secs
+        ratio = (b_rate / a_rate) if a_rate else float("nan")
+        enough = min(a_msgs, b_msgs) >= min_messages
+        if a_rate and enough:
+            verdict_ratios.append(ratio)
+        elif a_rate:
+            thin.append((min(a_msgs, b_msgs), symbol))
+        print(f"  {symbol:<10} {a_msgs:>7,} {b_msgs:>7,} {a_rate:>10.2f} "
+              f"{b_rate:>10.2f} {ratio:>8.2f} {a_vol:>12.1f} {b_vol:>12.1f}"
+              f"{'' if enough or not a_rate else '   <- too thin for a ratio'}")
+
+    # The instrument's OWN noise, measured from the cycles this run already
+    # collected rather than assumed. The two arms are SEQUENTIAL, never
+    # simultaneous, so a B/A ratio carries whatever the tape did between them
+    # as well as whatever the cap did. Each symbol's ratio is recomputed per
+    # cycle and the spread of those is how far the same measurement moves when
+    # nothing about the cap changed. A median that sits inside that spread is
+    # not a reading, and on 2026-08-19 the well measured symbols still moved by
+    # 1.4 to 2.4 times across four cycles, which is the same size as the effect
+    # the probe is asked to detect.
+    spreads: list[float] = []
+    for symbol in watch:
+        per_cycle: list[float] = []
+        for cycle in sorted({r["cycle"] for r in runs}):
+            paired = {r["arm"]: r for r in runs if r["cycle"] == cycle}
+            leg_a, leg_b = paired.get("A"), paired.get("B")
+            if not leg_a or not leg_b:
+                continue
+            count_a = leg_a["counts"][symbol]
+            count_b = leg_b["counts"][symbol]
+            if min(count_a, count_b) < min_messages:
+                continue
+            rate_a = count_a / (leg_a["seconds"] or 1.0)
+            rate_b = count_b / (leg_b["seconds"] or 1.0)
+            if rate_a:
+                per_cycle.append(rate_b / rate_a)
+        if len(per_cycle) >= 2 and min(per_cycle) > 0:
+            spreads.append(max(per_cycle) / min(per_cycle))
+    spreads.sort()
+    verdict_ratios.sort()
+    noise = spreads[len(spreads) // 2] if spreads else None
+    median = verdict_ratios[len(verdict_ratios) // 2] if verdict_ratios else None
+    supported = bool(median is not None and noise is not None
+                     and not (1.0 / noise) <= median <= noise)
+
+    print("")
+    # Sorted by the SMALLER arm, descending, so "the best being" is true of
+    # what follows it and the most informative symbol is the one a reader sees
+    # first. Watch set order put UUP's zero in the same breath as IWM's nine.
+    thin.sort(reverse=True)
+    named = ", ".join(f"{symbol} on {count}" for count, symbol in thin)
+    if median is None:
+        print(f"probe: NO READING. No watched symbol carried {min_messages:,} "
+              "messages on BOTH arms"
+              + (f", the best being {named}" if thin else "")
+              + ". A B/A ratio off a handful of messages measures when trades "
+              "happened, not whether the cap starved delivery, and the arms "
+              "ran one after the other rather than at once.")
+        print("probe: what would change that is a richer tape or more cycles, "
+              "not a different reading of these numbers. The premarket tape "
+              "this probe exists to measure may simply be too thin to carry "
+              "the question, which is itself an answer worth recording.")
+    else:
+        print(f"probe: median B/A message rate is {median:.2f}, over the "
+              f"{len(verdict_ratios)} of {len(watch)} watched symbols that "
+              f"carried {min_messages:,} messages on both arms"
+              + (f". Too thin to count: {named}" if thin else ""))
+        # Stated as a reading, not a verdict. What counts as starved is a
+        # judgement about the collector, and it belongs in DECISIONS.md with
+        # the numbers beside it rather than in a threshold here. What DOES
+        # belong here is refusing to state a reading the run cannot support,
+        # and the two ways it cannot are different and must not share a
+        # sentence: an unmeasured noise floor is not a median inside one.
+        if noise is None:
+            print("probe: NO NOISE FLOOR. Fewer than two cycles carried "
+                  "enough messages for any symbol, so how far this ratio "
+                  "moves on its own went unmeasured on this run.")
+            print("probe: the median above is therefore a number and not a "
+                  "reading. There is nothing to read it against, so this run "
+                  "is not evidence either way about the cap.")
+        elif not supported:
+            print(f"probe: those same symbols' own B/A moved by a factor of "
+                  f"{noise:.1f} across this run's cycles with nothing about "
+                  "the cap changing. That is the instrument's noise, measured "
+                  "here rather than assumed.")
+            print("probe: the median sits INSIDE that noise, so this run "
+                  "separates nothing. It is not evidence that the cap starves "
+                  "delivery and not evidence that it does not.")
+        else:
+            print(f"probe: those same symbols' own B/A moved by a factor of "
+                  f"{noise:.1f} across this run's cycles, and the median sits "
+                  "OUTSIDE that, so the run separates the two arms.")
+            print("probe: a ratio near 1 means the cap does not starve "
+                  "delivery and the volume gap has another cause. A ratio well "
+                  "below 1 means it does, and the fix is to subscribe to fewer "
+                  "symbols or to split the list across connections.")
+    return {
+        "min_messages_per_arm": min_messages,
+        "symbols_with_enough": len(verdict_ratios),
+        "symbols_watched": len(watch),
+        "median_b_over_a": median,
+        "own_noise_factor": noise,
+        "reading_supported": supported,
+    }
 
 
 def _flagged_over(legs: list[dict[str, Any]], symbol: str) -> tuple[int, bool]:
@@ -585,24 +751,7 @@ def main(argv: list[str] | None = None) -> int:
     print("")
     _report_off_exchange(runs, watch)
 
-    print("Per symbol messages per second, watch set only, A against B")
-    print(f"  {'symbol':<10} {'A msg/s':>10} {'B msg/s':>10} {'B/A':>8} "
-          f"{'A shares/s':>12} {'B shares/s':>12}")
-    verdict_ratios: list[float] = []
-    for symbol in watch:
-        a = [r for r in runs if r["arm"] == "A" and not r.get("refused")]
-        b = [r for r in runs if r["arm"] == "B" and not r.get("refused")]
-        a_secs = sum(r["seconds"] for r in a) or 1.0
-        b_secs = sum(r["seconds"] for r in b) or 1.0
-        a_rate = sum(r["counts"][symbol] for r in a) / a_secs
-        b_rate = sum(r["counts"][symbol] for r in b) / b_secs
-        a_vol = sum(r["volume"][symbol] for r in a) / a_secs
-        b_vol = sum(r["volume"][symbol] for r in b) / b_secs
-        ratio = (b_rate / a_rate) if a_rate else float("nan")
-        if a_rate:
-            verdict_ratios.append(ratio)
-        print(f"  {symbol:<10} {a_rate:>10.2f} {b_rate:>10.2f} {ratio:>8.2f} "
-              f"{a_vol:>12.1f} {b_vol:>12.1f}")
+    verdict = _report_delivery(runs, watch)
 
     payload = {
         "generated_at": ettime.stamp(ettime.now_et()),
@@ -620,23 +769,13 @@ def main(argv: list[str] | None = None) -> int:
         "seconds_per_arm": args.seconds,
         "cycles": args.cycles,
         "runs": runs,
+        # Written down so a later reader does not recompute the median from
+        # runs[] without the two refusals that decide what it means.
+        "verdict": verdict,
     }
     out = config.DATA_DIR / f"socket-cap-probe-{ettime.today_str()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    print("")
-    if verdict_ratios:
-        verdict_ratios.sort()
-        median = verdict_ratios[len(verdict_ratios) // 2]
-        print(f"probe: median B/A message rate across {len(verdict_ratios)} watched "
-              f"symbols is {median:.2f}")
-        # Stated as a reading, not a verdict. What counts as starved is a
-        # judgement about the collector, and it belongs in DECISIONS.md with
-        # the numbers beside it rather than in a threshold here.
-        print("probe: a ratio near 1 means the cap does not starve delivery and "
-              "the volume gap has another cause. A ratio well below 1 means it "
-              "does, and the fix is to subscribe to fewer symbols or to split "
-              "the list across connections.")
     print(f"probe: wrote {out}")
     print("probe: the vendor side of the off exchange question needs EODHD's own "
           "1m bars for these minutes, which are not published until the session "

@@ -99,7 +99,11 @@ at the root and is gitignored along with .env.
   06:30 that morning and touches nothing else. A plain run of the script never
   registers it, because a probe that is meant to be deleted must not come back
   every time the schedule is refreshed, and `-Unregister` now removes it if it
-  is there. It is armed today for 2026-08-21. job_probe_alpaca_live and
+  is there. It ran on 2026-08-21 and its task was removed the same day, so the
+  nine above are exactly what `Get-ScheduledTask -TaskPath \PremarketDesk\*`
+  returns. The .bat and the module stay: the census half of its answer landed
+  and the cap half did not, and re-running it on a regular hours tape after
+  09:25 is the one thing that would settle either. job_probe_alpaca_live and
   job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both
   questions were answered and recorded in DECISIONS.md; their modules stay
   under src/research/
@@ -113,7 +117,7 @@ at the root and is gitignored along with .env.
   morning, UNVERIFIED (the delivery gate marker). Beside those sit the research
   instruments' outputs, which no pipeline module reads but which two open items
   above rest on: socket-cap-probe-YYYY-MM-DD.json (item A's own instrument,
-  last run 2026-08-19 and next armed for 2026-08-21), purged-picks-YYYY-MM-DD.jsonl (the picks rows emptied
+  run 2026-08-19 and 2026-08-21, nothing armed after that), purged-picks-YYYY-MM-DD.jsonl (the picks rows emptied
   on 2026-08-19), addressable_sweep.json, alpaca_assets.json,
   vwap_gappers_trades.csv, the probe-alpaca-live and probe-live-v1 files, and
   backtest/
@@ -463,11 +467,22 @@ reconstruct it from the numbered items below:
      off_exchange_volume, census and keys_seen were all added to the probe
      after 2026-08-19, and until 2026-08-20 the comparison printed the missing
      off exchange counter as a measured zero, which is the reading that would
-     have closed the fork the wrong way. job_probe_socket_cap.bat is armed for
-     2026-08-21 at 06:30 and will record the census on a premarket tape, which
-     is the tape the defect appears in. Arm it with
-     `register_tasks.ps1 -Probe YYYY-MM-DD`. What to do with the answer is a
-     decision; taking it is no longer one.
+     have closed the fork the wrong way.
+     [2026-08-21: THE FORK IS CLOSED, on the structural side. The probe ran at
+     06:30 on a premarket tape and the census came back unanimous: all 123
+     trade messages carried c=[], an empty condition list, and dp=False. There
+     is no condition code for the parser to be missing, so no collector change
+     reaches the missing volume and the capture calibration already shipped in
+     CRITERIA [Collector] is the whole answer rather than a stopgap. 123
+     messages is a small sample and it is 123 of 123; a census on a regular
+     hours tape would settle it past argument and costs only socket time.
+     The same run also says NOTHING about the cap: no symbol reached 20
+     messages on both arms, so there is no median to take. It printed 0.58 on
+     the morning and that reading has been withdrawn. What still carries "the
+     cap is innocent" is the vendor comparison above, at both subscription
+     sizes, plus fifty symbols at fourteen times the collector's rate losing
+     none, and both were taken at 09:35 on a regular hours tape rather than
+     before 07:20. See COLLECTOR_VOLUME.md, last three sections.]
   B. The notable movers section, Layer 4, IS BUILT as of 2026-08-20 and all
      four [Notable] CRITERIA keys are now read. scan.notable_movers assembles
      it, the packet carries notable_movers, REPORT_TEMPLATE.md has the section,

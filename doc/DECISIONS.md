@@ -18,6 +18,71 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21, fourth: the probe answered one question and was found to have never answered the other
+
+The one off socket cap probe fired at 06:30, on the premarket tape it was armed
+for, and both halves of what it produced are worth recording. The half that
+worked closes a fork this project has carried since 2026-08-19. The half that
+did not had been reported as an answer twice.
+
+**The census: the feed omits off exchange volume, it does not mislabel it.**
+All 123 trade messages carried `c=[]`, an empty condition list, and `dp=False`,
+an explicit not a dark pool print. Zero prints were flagged, on every symbol,
+in both arms. The keys sent were s, p, v, t, dp, ms and c; the only one the
+collector ignores is c, and c was empty every time.
+
+That settles the fork BUILD_PLAN item A has been holding open: there is no
+condition code being dropped by the parser, so no collector change reaches the
+missing volume, and the capture calibration already shipped in CRITERIA
+[Collector] premarket_capture_rate is the whole answer rather than a stopgap.
+123 messages is a small sample and it is 123 of 123. The census has never run
+on a rich tape, because the 8,056 message run predates it.
+
+**The cap reading: neither run has ever supported one.** The probe compares
+message rates at 8 and 50 subscriptions and prints the median B/A, under a
+sentence reading anything well below 1 as the cap starving delivery. On
+2026-08-21 it printed 0.58. The tape behind that was 123 messages across eight
+symbols in 14 minutes of arm time: IWM's 0.14 was 49 messages against 9, UUP's
+0.00 was one against none, TLT's 3.37 was two against nine. Not one symbol
+reached 20 messages on both arms.
+
+Set beside 2026-08-19's 0.87 on 8,056 messages, that 0.58 reads as the cap
+biting in premarket and not in the session. The entire difference between the
+two runs is that one had 65 times more tape.
+
+**And the 2026-08-19 reading does not survive its own instrument either.**
+Recomputing each symbol's B/A per cycle on that payload, four cycles of both
+arms with nothing about the cap changing between them, the well measured
+symbols moved by a factor of 2.4. The effect the median is read for is the
+distance of 0.87 from 1.00, which is 1.15. A measurement whose repeat spread is
+twice the effect it is asked about separates nothing.
+
+**"The cap is innocent" still stands, and its support is now named correctly.**
+Two other legs carry it and neither is a ratio of rates: arm B held fifty
+symbols at fourteen times the collector's message rate and lost no symbol,
+which is an existence test; and the vendor comparison put the socket at 2.1 to
+12.1 percent of EODHD's consolidated bars at BOTH subscription sizes, which is
+a shortfall the cap cannot explain because it does not move with the cap. What
+is withdrawn is the median, not the conclusion.
+
+**What changed in the tool.** CRITERIA [Collector] min_probe_messages_per_arm
+at 20 keeps a symbol out of the median unless both arms carried that many, with
+the derivation in the probe evidence note: below about 20 a symbol's own ratio
+moved by 6.2 times and worse. The probe now also computes that spread from the
+cycles it already runs and prints it beside the median, and reports a median
+inside it as separating nothing. Both refusals are written into the payload, so
+a later reader cannot recompute the median from runs[] without them.
+_report_delivery was lifted out of main() to make that re-readable: a verdict
+that can only be produced while holding a live socket cannot be checked, and
+both archived payloads were re-read under the new rule to produce the numbers
+above.
+
+**Why this is the same defect as the double count, in a different place.** Both
+were a measurement stated more strongly than its evidence, in a document nobody
+was going to re-derive. The pattern that catches it is the one CRITERIA already
+uses for capture shares and float floors: floor the evidence, never cap the
+ratio, and print what the number rests on beside the number.
+
 ## 2026-08-21, third: the first live morning of the correction, and the four things it got wrong
 
 The correction shipped overnight and ran at 08:45. It produced six day eligible
