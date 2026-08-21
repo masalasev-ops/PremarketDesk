@@ -3437,8 +3437,19 @@ def notable_movers(
         "two_session": sessions.get("c1"),
     }
     rows: list[dict[str, Any]] = []
+    unmeasured = 0
     for leg, symbol in order:
-        move, sigma, sigma_reason, price_time = legs[leg][symbol]
+        # .get, not [.]. A list ranks one leg and stamps rows with the leg
+        # _LIST_LEG names, and if those two ever disagree the symbol picked
+        # from one leg is looked up in the other. That raised KeyError out of
+        # notable_movers, which notable_section then catches, so a one word
+        # mistake in a lookup table cost the whole section and reported itself
+        # as a generic raise. It costs the row now, counted and named.
+        entry = legs[leg].get(symbol)
+        if entry is None:
+            unmeasured += 1
+            continue
+        move, sigma, sigma_reason, price_time = entry
         candidate = by_symbol.get(symbol)
         catalyst, catalyst_state = _catalyst_of(candidate)
         rows.append({
@@ -3484,6 +3495,13 @@ def notable_movers(
         })
     block["rows"] = rows
     block["malformed_closes_rows"] = malformed
+    block["rows_without_a_measurement"] = unmeasured
+    if unmeasured:
+        packet.gap(f"notable movers: {unmeasured} selected row(s) name a symbol "
+                   "the leg they are stamped with holds no measurement for, "
+                   "which means a list ranked one leg and labelled another. The "
+                   "rows are dropped rather than published against a window "
+                   "nobody measured them over.")
     if malformed:
         packet.gap(f"notable movers: {malformed} row(s) in the closes sidecar "
                    "are not objects and were skipped. The examined counts come "
