@@ -24,8 +24,30 @@ that is running. The tables below measure the first of those and say nothing
 about the second. See DECISIONS.md 2026-08-17 on the free tier, whose own
 account of that morning was corrected the same day for reading the refusals
 as an empty feed. Written by hand rather than measured: probe_alpaca.py
-generates this file, and regenerating it needs a network run against a vendor
-this project no longer builds on, so a regeneration would drop this note.]**
+generates this file, and regenerating it needs a network run against Alpaca,
+so a regeneration would drop this note.]**
+
+**[corrected 2026-08-21: the sentence above said "a vendor this project no
+longer builds on". That was an overstatement of DECISIONS.md 2026-08-16 third,
+which stopped any migration to Alpaca for LIVE premarket discovery, and it is
+false about the project as a whole. No scheduled job touches Alpaca and no
+pipeline module imports probe_alpaca, both of which still hold. But
+research/float_rotation_study.py runs against Alpaca, and its output is the
+CRITERIA [Score premarket float rotation] band edges, which score a candidate
+every weekday morning. It was re-run twice on 2026-08-20 for 925 requests.
+
+So this file is not an artefact of an abandoned direction. It is the only
+record of what the free plan actually serves, and the rate limit it measured,
+200 requests a minute rather than a daily quota, is what made that re-fit three
+minutes of work rather than a purchase decision.
+
+Worth stating plainly for whoever reads BUILD_PLAN hard rule 1, "EODHD is the
+only data source": that rule holds for the pipeline, exactly and without
+exception. It does not describe the whole system. A threshold fitted on a
+second vendor's volume sits in CRITERIA and is applied every morning to the
+collector's, which DECISIONS.md 2026-08-17 seventh records as a known
+mismatch. Alpaca reaches the live product through the research path, and this
+file is the reason that path is trustworthy.]**
 
 ## 1. Does the free plan actually serve SIP
 

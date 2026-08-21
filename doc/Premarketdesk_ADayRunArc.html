@@ -210,7 +210,13 @@
     <li><strong>Collector volume is the open question.</strong> One session over
       reported by 3.8x in aggregate, two under reported by about 10x, replay is
       measured and too small to be either, and the off exchange census is the
-      next reading. doc/research/COLLECTOR_VOLUME.md is the whole diagnosis. The nightly's
+      next reading. A first reading was taken on 2026-08-19 and it clears the
+      subscription cap rather than the feed: the eight symbol arm delivered
+      4.68 percent of the vendor's own consolidated tape and the fifty symbol
+      arm 5.78, so the capped arm delivered marginally MORE and the cap is not
+      what is losing the volume. Nothing is yet known about off exchange prints
+      in that window, which is what the 2026-08-21 06:30 probe is for.
+      doc/research/COLLECTOR_VOLUME.md is the whole diagnosis. The nightly's
       verification had stopped running when picks was emptied, because it sat
       behind that table's early return; it was decoupled on 2026-08-20 and now
       sweeps sessions that were collected and never measured. The 07:00
@@ -226,7 +232,7 @@
       requires before the guard can be set to enforcing; the third is that the
       flags already logged have dispositions, and this one does not.</li>
   </ul>
-  <p class="asof">Read against commit ea167d5, tree clean, 16 scheduled steps recorded in data/job-status.jsonl.</p>
+  <p class="asof">Read against commit be8b378, tree clean, 16 scheduled steps recorded in data/job-status.jsonl. The four qualifications above were written against ea167d5 on 2026-08-20 and are re-checked as of 2026-08-21: no email has been sent, data/UNVERIFIED is still on disk, picks still holds the twelve rows of that one morning with nothing backfilled and no outcome filled, and the long goal is still at zero.</p>
 </div>
 
 <section>
@@ -342,6 +348,27 @@
     what it saw in the packet. And after deliver, a last step rebuilds
     <code>site/PremarketDesk.html</code>, the double click archive of every
     morning's report.</p>
+
+    <p><strong>One stage inside scan.py is worth separating out, because it is
+    the newest and it does not behave like the rest.</strong> Everything above
+    is a funnel: 2,754 names in the universe, a few hundred gapping, twelve
+    candidates, and of those twelve some number that clear the day or swing
+    screen and reach the watchlist. That funnel answers one question, which is
+    what might be worth trading. Layer 4, the notable movers section added on
+    2026-08-20, answers a different one: what MOVED, whether or not it is
+    tradeable. It reads the whole universe rather than the candidate list, over
+    four ranked lists of five, and it is explicitly not a watchlist. The
+    section states that in seven fixed sentences it is not allowed to reword,
+    and no row it produces can reach the picks table.</p>
+
+    <p>The reason it is separate is the reason it exists. A funnel that is
+    working correctly still throws away every name that is unusual but
+    untradeable, and on a morning where nothing clears the screens the report
+    would otherwise say almost nothing while the market was busy. The cost is
+    that a reader now sees two kinds of list in one document, so every notable
+    row carries the leg that produced it, the session it is as of, and whether
+    the name also reached the watchlist, and a name can appear more than once,
+    once per leg, because a row carries one window and one vintage.</p>
   </div>
 
   <figure>
@@ -759,9 +786,9 @@
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, pool_recall, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the three probe_ scripts and the two measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the twelve test_ modules, the newest being test_regressions, one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
+    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, pool_recall, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the three probe_ scripts and the two measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the thirteen test_ modules, the newest being test_notable, one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
     <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the ten fixed report sections, nine until Layer 4 added notable movers on 2026-08-20), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md and TEMPLATE_DERIVATIONS.md</td></tr>
-    <tr><td>tasks\</td><td>seven job .bat files registered as nine scheduled tasks (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. One more .bat file sits here and is not one of the nine: job_probe_socket_cap, the instrument for the open collector volume question. It is a one off, armed a morning at a time with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> and armed today for 2026-08-21 06:30. A plain run of the script never registers it, so a schedule refresh cannot resurrect a probe that has been answered and deleted, and <code>-Unregister</code> removes it if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both questions were answered and recorded in DECISIONS.md</td></tr>
+    <tr><td>tasks\</td><td>eight job .bat files, seven of which register_tasks.ps1 registers as nine scheduled tasks, and job_probe_socket_cap.bat which is armed one morning at a time and is registered for 2026-08-21, so ten tasks stand today (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. One more .bat file sits here and is not one of the nine: job_probe_socket_cap, the instrument for the open collector volume question. It is a one off, armed a morning at a time with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> and armed today for 2026-08-21 06:30. A plain run of the script never registers it, so a schedule refresh cannot resurrect a probe that has been answered and deleted, and <code>-Unregister</code> removes it if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both questions were answered and recorded in DECISIONS.md</td></tr>
     <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks and gap_stats tables), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>

@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty six claims, a count read off the file rather than remembered,
+carries sixty seven claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5026,6 +5026,80 @@ def claim_the_rotation_study_counts_no_warm_up_session(
           "first ten")
 
 
+def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
+    """Three documents count the same three things, and nothing was checking them.
+
+    On 2026-08-21 the arc page, the architecture page and BUILD_PLAN all said
+    "twelve test_ modules" against thirteen on disk, two of them said seven job
+    .bat files against eight, and BUILD_PLAN said two float rotation study
+    payloads against four. Every one of those numbers went stale the moment a
+    file was added, and the only thing that would have caught it is a reader
+    who happened to count.
+
+    That is a bad way to hold a fact. These counts are the first thing a new
+    reader uses to decide whether a document describes the tree in front of
+    them, so a document that miscounts is worse than one that omits: it reads
+    as authoritative and is wrong in the cheapest possible way to check.
+
+    So the counts are asserted here, in the words the documents use rather than
+    in digits, because the prose is written in words and a claim that matched
+    digits would pass over the sentence it is supposed to guard. When one of
+    these fails, the fix is the document, not this claim.
+    """
+    words = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six",
+             7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven",
+             12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen",
+             16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen",
+             20: "twenty"}
+
+    root = config.PROJECT_ROOT
+    suite = (root / "src" / "tests" / "run_tests.py").read_text(encoding="utf-8")
+    counts = {
+        "test_ modules": suite.count('"tests.test_'),
+        "job .bat files": len(list((root / "tasks").glob("job_*.bat"))),
+        "float rotation study": len(list(
+            (root / "doc" / "research").glob("float_rotation_study-*.json"))),
+    }
+    for what, number in counts.items():
+        if number not in words:
+            failures.append(f"there are {number} {what}, which is off the end of "
+                            "the word list this claim reads the documents with")
+            return
+
+    checks = [
+        ("doc/Premarketdesk_ADayRunArc.html", "test_ modules"),
+        ("doc/ArchitecturePremarketdesk.html", "test_ modules"),
+        ("doc/BUILD_PLAN.md", "test_ modules"),
+        ("doc/Premarketdesk_ADayRunArc.html", "job .bat files"),
+        ("doc/BUILD_PLAN.md", "job .bat files"),
+        ("doc/BUILD_PLAN.md", "float rotation study"),
+    ]
+    for rel, what in checks:
+        path = root / rel
+        if not path.is_file():
+            failures.append(f"{rel} is gone, and it is one of the documents a "
+                            "reader uses to decide whether the rest describes "
+                            "this tree")
+            continue
+        text = path.read_text(encoding="utf-8")
+        wanted = f"{words[counts[what]]} {what}"
+        if wanted in text:
+            continue
+        # Name the wrong number rather than only the right one, so the fix is
+        # a search rather than a hunt.
+        found = [w for n, w in words.items()
+                 if n != counts[what] and f"{w} {what}" in text]
+        failures.append(
+            f"{rel} does not say {wanted!r}"
+            + (f", it says {found[0]!r} {what}" if found else "")
+            + f". There are {counts[what]} on disk")
+
+    print(f"  documents    the three counted things are counted right in three "
+          f"documents: {counts['test_ modules']} test modules, "
+          f"{counts['job .bat files']} job batch files, "
+          f"{counts['float rotation study']} study payloads")
+
+
 def claim_the_day_screen_and_the_volume_score_agree_on_one_number(
         failures: list[str]) -> None:
     """[Day setup]'s volume floor and the volume score's first point are one number.
@@ -5524,6 +5598,7 @@ def main() -> int:
     claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(failures)
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
+    claim_the_documents_count_what_is_actually_here(failures)
 
     if failures:
         for failure in failures:
