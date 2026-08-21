@@ -82,6 +82,49 @@ REAL_LOGS = config.LOGS_DIR
 # The working tree, which is what the check guards.
 TREE_ROOT = config.PROJECT_ROOT
 
+
+# ---------------------------------------------------- isolation at IMPORT time
+
+def _redirect_config(root: Path) -> None:
+    """Point every writable config path inside `root`."""
+    config.DATA_DIR = root / "data"
+    config.PREMARKET_DIR = config.DATA_DIR / "premarket"
+    config.RUNS_DIR = root / "runs"
+    config.LOGS_DIR = root / "logs"
+    config.SITE_DIR = root / "site"
+    config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
+    config.UNIVERSE_PATH = config.DATA_DIR / "universe.json"
+    config.WATCHLIST_PATH = config.DATA_DIR / "watchlist.json"
+    config.CA_BUNDLE_PATH = config.DATA_DIR / "ca-bundle.pem"
+    for directory in (config.DATA_DIR, config.PREMARKET_DIR, config.RUNS_DIR,
+                      config.LOGS_DIR, config.SITE_DIR):
+        directory.mkdir(parents=True, exist_ok=True)
+
+
+# IMPORTING A TEST MODULE IS ITSELF THE ISOLATION. Until 2026-08-21 the
+# redirection happened when run_tests set up its sandbox, which meant a claim
+# invoked any other way ran against the live tree. Two incidents inside one
+# fortnight, both while the claims were being debugged by hand, which is the
+# normal thing to do with a claim:
+#
+#   claim 73 wrote fixture rows into the live picks table and overwrote a real
+#   session's truth columns. store.guard_live_database now refuses that.
+#
+#   a sweep that called every claim directly ran universe.main() against the
+#   REAL data root with the HTTP stub installed, and wrote 1,013 stub symbols
+#   over a 2,126 name universe.json and 990 bytes over a 420 KB watchlist.json.
+#   No quota was spent, because the stub caught the network, and the files were
+#   destroyed anyway. A guard that refuses the DATABASE does not refuse a JSON
+#   file, and there are a dozen writable paths.
+#
+# So the redirect happens HERE, at conftest import, before any test module has
+# had a chance to touch a path. run_tests still builds its own sandbox and
+# repoints everything at it a moment later; this is what covers every other way
+# a claim can be reached. The real roots are captured above, before this runs,
+# and the tree photograph still guards the real working tree.
+_IMPORT_SANDBOX = Path(tempfile.mkdtemp(prefix="pmd-import-"))
+_redirect_config(_IMPORT_SANDBOX)
+
 # The only paths a test run may touch. Directory names, matched against any
 # component of a path, so src/__pycache__/scan.cpython-313.pyc is allowed and
 # so is anything pytest would drop if it were ever added. Everything else in

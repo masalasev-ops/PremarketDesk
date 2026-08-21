@@ -44,6 +44,54 @@ def build_packet_text() -> str:
     return json.dumps(packet)
 
 
+# The names this module's assertions need the universe to contain. Written as
+# a fixture rather than read from whatever universe.json holds today.
+#
+# WHY. analyst.check_report validates every ticker claim against the union of
+# universe.json and the context list, so each assertion below depends on WHICH
+# NAMES that file carries. It carried 2,745 on 2026-08-15, 2,126 on 2026-08-20
+# and 1,013 on 2026-08-21, and the twenty one ONE LETTER listings that the F
+# and A checks exist to exercise vanished with the last of those. Three checks
+# in main() went red on 2026-08-21 against code nobody had touched, because the
+# file underneath them had moved.
+#
+# The twelve prose names are the ones the real 2026-08-14 report puts in bold
+# prose, which is the whole point of the vacuum check: they must be recognised
+# as listings before their absence from a ticker column can be reported.
+_FROZEN_UNIVERSE = (
+    # One letter listings. F is Ford and A is Agilent, and A is also the
+    # English article, which is why one is a prose stopword and both must
+    # still be checked inside a Ticker column.
+    "F", "A", "T",
+    # The twelve the 2026-08-14 report names in prose.
+    "ANGX", "ARX", "AVAH", "BSP", "CLBT", "LFTO",
+    "MH", "OMER", "REZI", "SECZ", "TPR", "WDAY",
+    # Enough ordinary names that pick_absent_universe_symbol has something to
+    # return that the test packet does not carry.
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOG",
+)
+
+
+def freeze_universe() -> None:
+    """Write the fixture universe over the sandbox copy.
+
+    config.UNIVERSE_PATH is the sandbox's under run_tests and, since
+    2026-08-21, under a direct import too: conftest redirects every writable
+    path the moment it is imported. So this overwrites a copy and never the
+    live file. The module that used to read the live universe here is the same
+    module whose live universe was destroyed by a claim run outside the
+    harness, which is the argument for both halves of that change.
+    """
+    config.UNIVERSE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    config.UNIVERSE_PATH.write_text(json.dumps({
+        "generated_at": "2026-08-21T00:00:00-04:00",
+        "count": len(_FROZEN_UNIVERSE),
+        "frozen_fixture": "tests/test_containment.py, see _FROZEN_UNIVERSE",
+        "symbols": [{"code": name, "symbol": f"{name}.US", "name": name,
+                     "exchange": "NASDAQ"} for name in _FROZEN_UNIVERSE],
+    }), encoding="utf-8")
+
+
 def pick_absent_universe_symbol(packet_text: str) -> str:
     """A real universe ticker that the packet does not carry."""
     universe = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
@@ -763,6 +811,9 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
 
 
 def main() -> int:
+    # Every check below reads the universe through analyst.check_report. It
+    # reads THIS fixture, not whatever the live file holds today.
+    freeze_universe()
     packet_text = build_packet_text()
     absent = pick_absent_universe_symbol(packet_text)
     failures: list[str] = []
