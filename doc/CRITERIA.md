@@ -198,7 +198,11 @@ floors below mirror the RVOL denominator floor note: a denominator too small
 to divide by yields a null with the reason recorded, never a substituted
 number and never a silent drop.
 
-list_size                     = 5          # names per leg, before deduplication
+list_size                     = 5          # symbols per LIST, before deduplication.
+                                           # Not per leg: the prior session leg
+                                           # carries two of the four lists, so it
+                                           # can publish up to ten rows and
+                                           # deduplicates within itself
 min_abs_gap_pct               = 1          # the floor for the market cap list only,
                                            # so a megacap barely moving does not
                                            # crowd out a real mover

@@ -18,6 +18,39 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-20: lists 1 and 4 rank the SIGNED sigma, so no faller reaches either
+
+Recorded rather than changed, because BUILD_PLAN 4.4 says what it says and this
+is the owner's to overrule.
+
+move_sigma carries the sign of the move: a symbol down 45 percent against a 1
+percent daily stdev reads minus 45. Lists 1 and 4 are specified as "move_sigma
+descending", with no absolute anywhere in the sentence, and list 3 is specified
+as "absolute two session move descending", with the word there. The contrast is
+deliberate enough in the spec's own wording that reading it as an oversight
+would be a guess.
+
+So the two sigma lists are risers only. A symbol down ten sigma on the prior
+session cannot appear on list 1 however unusual the move, and the same on list 4
+for the premarket leg.
+
+**Why this is defensible as it stands.** Fallers are not excluded from the
+section: list 3 ranks the SIZE of the two session move and puts the largest
+decliner first, which is how DOWN reaches the fixture's section at all. So the
+section sees both directions; what it does not do is rank a faller for
+unusualness.
+
+**What it costs, said plainly so nobody has to rediscover it.** The section's
+headline measure is unusualness, and half the unusual moves in any market are
+down. On a bad morning lists 1 and 4 will be the five least bad risers while the
+names actually worth briefing on are falling. That is the case to weigh.
+
+**To overrule** is one word in each of two lambdas in scan.notable_movers, plus
+a sentence in 4.4 and in CRITERIA [Notable], plus deciding what list 3 is then
+for. The last of those is the real question: if list 1 ranks the size of the
+sigma, list 3 becomes a raw move list beside a normalised one over the same
+window and the two will mostly agree.
+
 ## 2026-08-20: five calls made while building Layer 4, none of them by the owner
 
 BUILD_PLAN's Layer 4 says to record any point decided while building rather than

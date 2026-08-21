@@ -6,8 +6,8 @@ no quota: every input is synthetic, the closes sidecar is written into the
 sandbox, the gap statistics read is stubbed, and the exchange calendar is a
 plain weekday rule so the answer is the same on any machine.
 
-Twenty claims, and they are grouped by what they defend rather than by the
-order the code runs in.
+Twenty one claims, and they are grouped by what they defend rather than by
+the order the code runs in.
 
 The fence first, because it is the thing a later change is most likely to erode
 without noticing: the section is additive to the report only, it writes no
@@ -519,11 +519,26 @@ def claim_each_list_ranks_on_the_key_it_names(failures: list[str]) -> None:
     if set(expected_leg) != set(scan.NOTABLE_LISTS):
         failures.append(f"the section emits lists {sorted(scan.NOTABLE_LISTS)} "
                         f"and this claim knows {sorted(expected_leg)}")
+    # Checked through selected_by, not through membership. A symbol can hold a
+    # prior_session row because a DIFFERENT list put one there, so "it has a
+    # prior_session row" stays true when list 1 stamps its own picks
+    # two_session, which is the mutation that walked past the first version of
+    # this check.
     for name, leg in expected_leg.items():
         for symbol in lists.get(name, []):
-            if (leg, symbol) not in rows:
-                failures.append(f"{symbol} is on {name}, which must rank the "
-                                f"{leg} leg, and has no {leg} row")
+            owning = [row for row in block["rows"]
+                      if row["symbol"] == symbol and name in row["selected_by"]]
+            if not owning:
+                failures.append(f"{symbol} is on {name} and no row records that "
+                                f"{name} chose it")
+                continue
+            for row in owning:
+                if row["leg"] != leg:
+                    failures.append(
+                        f"{name} ranks the {leg} leg and the row it chose "
+                        f"{symbol} for is stamped {row['leg']}. A list that "
+                        "ranks one window and labels another is the exact thing "
+                        "the leg labels exist to prevent.")
 
     # 1. sigma descending on the prior session leg.
     sigma_list = lists["prior_session_by_sigma"]
@@ -1041,6 +1056,129 @@ def claim_a_defect_in_the_section_costs_the_section(failures: list[str]) -> None
           "section's own reason, and an interrupt still stops the run")
 
 
+def claim_a_malformed_input_costs_the_section_and_not_the_run(
+        failures: list[str]) -> None:
+    """Nothing the section reads can raise out of build_packet.
+
+    The section reads two files it does not own and the collector bars, and a
+    JSON file is whatever is on disk rather than whatever the writer meant. A
+    sessions block that is a list, a closes row that is a string, a collector
+    bar with no minute_epoch: each of those raised AttributeError, TypeError or
+    KeyError straight out of notable_movers, and build_packet is the morning
+    chain's first step. The chain stops on the first non-zero exit, so any one
+    of them cost the packet, the report and the email over a briefing table.
+
+    notable_section catches Exception, so none of them can reach build_packet
+    now. That wrapper is the backstop, not the answer: a section that silently
+    disappears whenever a file is odd tells the reader nothing about which file
+    or what was odd about it. So each shape below is checked to produce a NAMED
+    reason rather than a caught traceback, and the wrapper's own generic reason
+    is what the last two cases are allowed to fall back to.
+    """
+    path = config.DATA_DIR / f"universe-closes-{SESSION}.json"
+    base = {
+        "generated_at": f"{SESSION}T07:15:00-04:00",
+        "session_date": SESSION,
+        "sessions": {"c1": C1, "c2": C2, "c3": C3},
+        "closes": dict(CLOSES),
+        "universe_examined": len(UNIVERSE_ROWS),
+        "names_with_at_least_one_close": len(CLOSES),
+        "third_session_available": True,
+    }
+
+    shapes = (
+        ("closes is a list", {**base, "closes": [1, 2, 3]}, "closes map"),
+        ("sessions is a list", {**base, "sessions": ["a", "b"]}, "sessions block"),
+        ("sessions is absent", {k: v for k, v in base.items() if k != "sessions"},
+         "sessions block"),
+        ("a row is a string",
+         {**base, "closes": {**CLOSES, "ODD.US": "not a row"}}, None),
+        ("a row is a list",
+         {**base, "closes": {**CLOSES, "ODD.US": [1, 2]}}, None),
+        ("a close is zero",
+         {**base, "closes": {**CLOSES, "ZERO.US": {"c1": 10.0, "c2": 0.0,
+                                                   "c3": 0.0}}}, None),
+        ("the whole payload is a list", [1, 2, 3], "closes map"),
+    )
+    for label, payload, needle in shapes:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        packet = scan.Packet()
+        real_stats, real_clock = gap_stats.load_all, ettime.now_et
+        gap_stats.load_all = lambda as_of=None: dict(STATS)
+        ettime.now_et = lambda: dt.datetime(2026, 8, 20, 8, 45, tzinfo=ettime.ET)
+        try:
+            block = scan.notable_section(
+                SESSION, {"symbols": UNIVERSE_ROWS},
+                {"HEARD.US": [_bar("HEARD.US", "08:40", 103.0)]},
+                _candidates(), packet)
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"{label} raised {type(exc).__name__} past "
+                            f"notable_section: {exc}")
+            continue
+        finally:
+            gap_stats.load_all, ettime.now_et = real_stats, real_clock
+        if block.get("skipped") and "raised" in str(block["skipped"]):
+            failures.append(f"{label} was caught by the wrapper rather than "
+                            f"refused with a reason: {block['skipped']}")
+        if needle:
+            said = " ".join(str(note) for note in packet.gaps)
+            if needle not in said:
+                failures.append(f"{label} produced no gap naming {needle!r}: "
+                                f"{packet.gaps}")
+        if label.startswith("a row is") and block.get("malformed_closes_rows") != 1:
+            failures.append(
+                f"{label} left malformed_closes_rows at "
+                f"{block.get('malformed_closes_rows')!r} where the sidecar "
+                "carries one. The examined counts come from the file's own "
+                "denominators and still count that row, so a silent skip means "
+                "two numbers in the packet disagree and nothing says why.")
+
+    # A third session the vendor never answered for is not a quiet market.
+    _write_closes(closes={s: {"c1": r["c1"], "c2": r["c2"], "c3": None}
+                          for s, r in CLOSES.items()})
+    path.write_text(json.dumps({
+        **json.loads(path.read_text(encoding="utf-8")),
+        "third_session_available": False,
+    }, indent=2), encoding="utf-8")
+    block, _packet, _rows = _run()
+    two = block["legs"]["two_session"]
+    if two["available"]:
+        failures.append("the two_session leg reads available with c3 null on "
+                        "every row")
+    elif "never bought" not in (two["reason"] or ""):
+        failures.append(
+            "a third session the vendor never answered for is reported as "
+            f"{two['reason']!r}, which is what a session every symbol happened "
+            "to be missing from would say. discover records which it was in "
+            "third_session_available and the leg has to quote it.")
+
+    # Two shapes that are not the sidecar at all.
+    _write_closes()
+    packet = scan.Packet()
+    real_stats, real_clock = gap_stats.load_all, ettime.now_et
+    gap_stats.load_all = lambda as_of=None: dict(STATS)
+    ettime.now_et = lambda: dt.datetime(2026, 8, 20, 8, 45, tzinfo=ettime.ET)
+    try:
+        block = scan.notable_section(
+            SESSION, {},
+            {"HEARD.US": [{"symbol": "HEARD.US", "c": 103.0}]},
+            [{"price": 1.0}], packet)
+    except Exception as exc:  # noqa: BLE001
+        failures.append("a universe with no symbols key, a collector bar with "
+                        "no minute_epoch and a candidate with no symbol raised "
+                        f"{type(exc).__name__}: {exc}")
+        block = {}
+    finally:
+        gap_stats.load_all, ettime.now_et = real_stats, real_clock
+    if block.get("skipped") and "raised" in str(block["skipped"]):
+        failures.append("a bar with no minute_epoch fell through to the "
+                        f"wrapper: {block['skipped']}")
+
+    print(f"  malformed    {len(shapes) + 1} shapes the sidecar and the bars can "
+          "actually take, each refused with a reason rather than raising")
+
+
 def claim_a_missing_input_names_the_leg_it_lost(failures: list[str]) -> None:
     """A lost sidecar and a silent collector each say which leg went with them.
 
@@ -1389,8 +1527,15 @@ def claim_the_watchlist_mark_is_filled_after_the_screens_decide(
     ]
     marked = scan.mark_notable_watchlist(block, candidates)
     got = {row["symbol"]: row.get("also_on_watchlist") for row in block["rows"]}
+    # TINY is a candidate that cleared neither screen, which is a DIFFERENT
+    # answer from a symbol nothing screened: both used to come out as a bare
+    # null, and roughly 2,742 of the 2,754 symbols this section can reach were
+    # never screened at all, so reading that blank as "the screen looked and
+    # said no" is the wrong conclusion in nearly every case.
     for symbol, wanted in (("QUIET.US", "day"), ("LOUD.US", "swing"),
-                           ("MEGA.US", "day and swing"), ("TINY.US", None)):
+                           ("MEGA.US", "day and swing"),
+                           ("TINY.US", "screened, neither"),
+                           ("DOWN.US", None)):
         if symbol in got and got[symbol] != wanted:
             failures.append(f"{symbol} is marked {got[symbol]!r} where the "
                             f"screens make it {wanted!r}")
@@ -1493,6 +1638,7 @@ CLAIMS = (
     claim_the_section_widens_containment_only_by_its_own_rows,
     claim_the_section_examines_the_universe_and_not_the_survivors,
     claim_a_missing_input_names_the_leg_it_lost,
+    claim_a_malformed_input_costs_the_section_and_not_the_run,
     claim_a_defect_in_the_section_costs_the_section,
     claim_a_closes_file_from_another_session_is_refused,
     claim_an_undated_sidecar_costs_two_legs_and_not_the_morning,

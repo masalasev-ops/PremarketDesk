@@ -228,12 +228,16 @@ ticker columns by it:
 
 One row per packet row. Leg and As of are quoted from the row's leg and
 as_of_session and are never reworded. Sigma is move_sigma; where it is null
-write the word null and nothing else, because the reason is in the packet and
-belongs to the caveat line below rather than to the cell. On watchlist carries
-the row's also_on_watchlist value or a dash. Price time carries the row's
-price_time or a dash, and only the premarket leg has one at all. Catalyst is
-the headline where catalyst_state is fetched, the words not checked where it is
-not checked, and the words no catalyst found where it is that.
+write the word null in the cell and then, once for the whole table and not once
+per row, the row's move_sigma_reason as a sentence under it, because the reason
+is usually the same for the whole table and belongs in prose rather than in a
+column. On watchlist carries the row's also_on_watchlist value, and where that
+is null write the words not screened, which is what a null there means: the
+symbol was never put through the day or swing screen at all, rather than put
+through it and refused. Price time carries the row's price_time or a dash, and
+only the premarket leg has one at all. Catalyst is the headline where
+catalyst_state is fetched, the words not checked where it is not checked, and
+the words no catalyst found where it is that.
 
 If notable_movers.rows is empty the table is still written, header and
 separator and one row, exactly like this:

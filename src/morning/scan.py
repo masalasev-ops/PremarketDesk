@@ -83,7 +83,16 @@ def _collector_last(bars: list[dict[str, Any]]) -> tuple[float | None, str | Non
     """
     if not bars:
         return None, None
-    last = max(bars, key=lambda b: b["minute_epoch"])
+    # .get with a floor, not [.]. Every caller used to be the candidate path,
+    # where the bars come straight from read_bars_file and always carry the
+    # key. The notable movers section reads bars_by_symbol for every subscribed
+    # symbol, so one malformed line in the collector file would raise KeyError
+    # out of build_packet and stop the morning chain rather than costing one
+    # symbol its row.
+    dated = [b for b in bars if b.get("minute_epoch") is not None]
+    if not dated:
+        return None, None
+    last = max(dated, key=lambda b: b["minute_epoch"])
     return (
         _as_float(last.get("c")),
         ettime.stamp(ettime.from_epoch_s(last["minute_epoch"])),
@@ -2735,6 +2744,18 @@ def load_universe_closes(session_date: str, packet: Packet) -> dict[str, Any] | 
         packet.gap(f"{path.name} does not carry a closes map, so the notable "
                    "movers section lost both universe legs")
         return None
+    # The sessions block is read with .get in three places and the closes map is
+    # walked in three more, and a JSON file is whatever is on disk rather than
+    # whatever the writer meant. A list where a mapping belongs raised
+    # AttributeError out of build_packet, which stops the morning chain over a
+    # briefing table; the section refuses the file instead and says which shape
+    # was wrong.
+    if not isinstance(payload.get("sessions"), dict):
+        packet.gap(f"{path.name} carries a sessions block that is not a mapping "
+                   f"({type(payload.get('sessions')).__name__}), so the notable "
+                   "movers section could not date either universe leg and "
+                   "refused the file")
+        return None
     stamped = str(payload.get("session_date") or "")
     if stamped != session_date:
         packet.gap(
@@ -2848,10 +2869,35 @@ def attach_notable_candidate_fields(
     """
     for candidate in candidates:
         symbol = candidate.get("symbol")
-        row = (closes.get(symbol) or {}) if isinstance(closes, dict) else {}
+        row = closes.get(symbol) if isinstance(closes, dict) else None
+        if not isinstance(row, dict):
+            row = {}
         price = candidate.get("price")
+        # Null WITH a reason, like every other absent number in this packet. A
+        # bare null here reads the same whether the sidecar is missing, the
+        # session was never bought, or the candidate has no premarket price,
+        # and those are three different mornings.
         candidate["gap_2session"] = _pct_move(price, row.get("c2"))
         candidate["gap_3session"] = _pct_move(price, row.get("c3"))
+        for field, close_key, span in (("gap_2session", "c2", "two"),
+                                       ("gap_3session", "c3", "three")):
+            if candidate[field] is not None:
+                candidate[f"{field}_reason"] = None
+            elif price is None:
+                candidate[f"{field}_reason"] = (
+                    "no premarket price from the collector to measure the "
+                    f"{span} session move from")
+            elif not row:
+                candidate[f"{field}_reason"] = (
+                    "the universe closes sidecar carries no row for this symbol")
+            elif row.get(close_key) is None:
+                candidate[f"{field}_reason"] = (
+                    f"the sidecar carries no {close_key} close for this symbol, "
+                    f"so the {span} session baseline is missing")
+            else:
+                candidate[f"{field}_reason"] = (
+                    f"the {close_key} close is zero or negative, which is not a "
+                    "price to measure a move against")
         sigma, reason = move_sigma(candidate.get("gap_pct"), stats.get(symbol),
                                    _LEG_SPAN_SESSIONS["premarket"],
                                    table_unreadable)
@@ -2887,14 +2933,20 @@ def mark_notable_watchlist(notable: dict[str, Any],
 
 
 def _watchlist_mark(candidate: dict[str, Any] | None) -> str | None:
-    """Which watchlist a notable name is already on, or None.
+    """Which watchlist a notable symbol is already on, or how it missed.
 
-    A name on a watchlist appears in this section anyway and the row says so.
-    It is not suppressed: two sections selecting the same name on different
+    A symbol on a watchlist appears in this section anyway and the row says so.
+    It is not suppressed: two sections selecting one symbol on different
     grounds is information, and hiding it is not. Expect most premarket rows to
     carry a mark, since that leg draws from the pool the watchlist came from,
-    which is precisely why the premarket leg was given its own list rather than
+    which is precisely why the premarket leg was given its own list instead of
     being allowed to crowd the others.
+
+    FIVE answers, not three, because "screened and did not qualify" and "never
+    screened at all" are different facts about a symbol and were both coming
+    out as a bare null. Roughly 2,742 of the 2,754 symbols this section can
+    reach were never screened, and reading their blank cell as "the screen
+    looked and said no" is the wrong conclusion in nearly every case.
     """
     if not candidate:
         return None
@@ -2906,7 +2958,7 @@ def _watchlist_mark(candidate: dict[str, Any] | None) -> str | None:
         return "day"
     if swing:
         return "swing"
-    return None
+    return "screened, neither"
 
 
 def _catalyst_of(candidate: dict[str, Any] | None) -> tuple[str | None, str]:
@@ -3130,6 +3182,7 @@ def notable_movers(
     # ------------------------------------------------------------- the legs
     # Every value is (move_pct, sigma, sigma_reason, price_time).
     legs: dict[str, dict[str, tuple[Any, ...]]] = {name: {} for name in _LEG_SPAN_SESSIONS}
+    malformed = 0
 
     # Both universe legs are stamped with c1's SESSION, not with its value, and
     # a row that cannot be stamped is a row vintage check (e) refuses. enforce
@@ -3153,6 +3206,7 @@ def notable_movers(
     if closes_payload is not None and undated is None:
         for symbol, row in closes.items():
             if not isinstance(row, dict):
+                malformed += 1
                 continue
             c1, c2, c3 = row.get("c1"), row.get("c2"), row.get("c3")
             prior = _pct_move(c1, c2)
@@ -3169,12 +3223,24 @@ def notable_movers(
                 legs["two_session"][symbol] = (two, sigma, reason, None)
 
         per_leg = block["names_with_both_closes_for_leg"] or {}
+        # A third session the vendor never answered for and a third session
+        # every symbol happened to be missing from produce the same empty leg
+        # and are not the same fact. discover records which it was in
+        # third_session_available; the two_session leg quotes it rather than
+        # reporting a quiet market.
+        never_bought = block["third_session_available"] is False
         for leg in ("prior_session", "two_session"):
+            if legs[leg]:
+                reason = None
+            elif leg == "two_session" and never_bought:
+                reason = ("the third session was never bought: discover's third "
+                          "bulk call did not answer, so third_session_available "
+                          "is false and c3 is null on every row. This leg has no "
+                          "baseline rather than no movers.")
+            else:
+                reason = f"0 rows carried both of the closes the {leg} leg needs"
             block["legs"][leg] = _leg_report(
-                bool(legs[leg]),
-                None if legs[leg] else
-                (f"0 rows carried both of the closes the {leg} leg needs"),
-                per_leg.get(leg), 0)
+                bool(legs[leg]), reason, per_leg.get(leg), 0)
 
     context = {collect_premarket._full(s)
                for s in _CRIT.text_list("collector", "context_symbols")}
@@ -3339,12 +3405,27 @@ def notable_movers(
         candidate = by_symbol.get(symbol)
         catalyst, catalyst_state = _catalyst_of(candidate)
         rows.append({
-            # Keyed "symbol" and uppercase, deliberately. vintage accepts
-            # either spelling, and analyst._packet_uppercase_tokens builds the
-            # allowed set only from values under keys named symbol or label, so
-            # a row keyed "ticker" would pass the vintage gate and then be
-            # reported as an invented ticker by containment, which stops the
-            # chain before render, verify, deliver and archive.
+            # Keyed "symbol" and uppercase, deliberately, and the reason
+            # first written here was wrong.
+            #
+            # It said a row keyed "ticker" would pass vintage and then be
+            # reported as invented by containment. It would not.
+            # analyst._packet_uppercase_tokens starts with
+            # `set(_TOKEN_RE.findall(packet_text))`, the RAW text of the whole
+            # packet, before it walks the structure at all, and _TOKEN_RE stops
+            # at the dot, so "AAPL.US" under any key at all already puts AAPL in
+            # the allowed set. The structured walk over keys named symbol or
+            # label adds both spellings a second time and changes nothing here.
+            #
+            # The real reasons are duller and they hold. vintage.py reads
+            # `row.get("symbol") or row.get("ticker")`, so one spelling has to
+            # be chosen and every other structure in this packet uses "symbol".
+            # And the raw text scan is why the section's OTHER strings matter
+            # more than its keys: measured on the real 2026-08-20 packet, adding
+            # this block moved the allowed set from 139 tokens to 159, and all
+            # twenty were the ten published symbols in both spellings.
+            # claim_the_section_widens_containment_only_by_its_own_rows holds
+            # that, and it is the check worth having rather than this one.
             "symbol": symbol,
             "leg": leg,
             "as_of_session": stamp_for[leg],
@@ -3365,6 +3446,12 @@ def notable_movers(
             "selected_by": selected_by[(leg, symbol)],
         })
     block["rows"] = rows
+    block["malformed_closes_rows"] = malformed
+    if malformed:
+        packet.gap(f"notable movers: {malformed} row(s) in the closes sidecar "
+                   "are not objects and were skipped. The examined counts come "
+                   "from the file's own denominators, so they still count those "
+                   "rows and the two numbers will not reconcile.")
     for leg in _LEG_SPAN_SESSIONS:
         if leg in block["legs"]:
             block["legs"][leg]["selected"] = sum(1 for r in rows if r["leg"] == leg)

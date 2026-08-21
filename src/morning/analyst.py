@@ -466,11 +466,21 @@ def fallback_report(
         # cell early and python-markdown discards everything past the header
         # count without complaining. This is the fallback report, which is what
         # a reader gets on the mornings the narrative already failed.
-        catalyst = row.get("catalyst") or row.get("catalyst_state") or "not checked"
+        # The state's own words, not the state NAME. catalyst_state reads
+        # "fetched" when a headline was found, and dropping that string into
+        # the cell prints the word fetched where the headline belongs, which
+        # happens whenever the vendor row carried no title.
+        state = row.get("catalyst_state") or "not checked"
+        catalyst = row.get("catalyst")
+        if not catalyst:
+            catalyst = {"fetched": "no headline text on the article",
+                        "no catalyst found": "no catalyst found",
+                        "not checked": "not checked"}.get(state, state)
         add(f"| {_bare(row.get('symbol') or '')} | {_cell(row.get('leg'))} "
             f"| {_cell(row.get('as_of_session'))} | {_f(row.get('move_pct'))} "
             f"| {_f(row.get('move_sigma'), 2)} | {_cap(row.get('market_cap'))} "
-            f"| {_cell(catalyst)} | {_cell(row.get('also_on_watchlist') or '-')} "
+            f"| {_cell(catalyst)} "
+            f"| {_cell(row.get('also_on_watchlist') or 'not screened')} "
             f"| {_cell(row.get('price_time') or '-')} |")
     if not notable_rows:
         add("| none | | | | | | | | |")
