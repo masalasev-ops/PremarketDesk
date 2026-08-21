@@ -4818,9 +4818,20 @@ def claim_the_trust_store_is_never_served_half_written(
                 failures.append(f"a healthy merge left {leftover} behind")
 
             # A refused rename must not cost the bundle that was already there.
+            #
+            # The rebuild is triggered by pushing the BUNDLE's mtime into 1970
+            # rather than by touching the source. ca_bundle() returns the file
+            # unchanged when its mtime is >= the newest source, and a source
+            # rewritten in the same instant as the bundle was written compares
+            # equal on a filesystem whose timestamps are coarser than the two
+            # writes. This claim passed by luck for one run and then failed on
+            # the next with "a refused rename did not raise", because the
+            # rebuild never happened and the patched os.replace was never
+            # reached. An intermittent claim is worse than none: it teaches its
+            # reader that a red suite means nothing.
             good = body
             extra.write_text(_FAKE_CERT * 2, encoding="utf-8")
-            _os.utime(extra, None)
+            _os.utime(target, (0, 0))
 
             def refuse(src: Any, dst: Any) -> None:
                 raise PermissionError("Norton denied the rename")

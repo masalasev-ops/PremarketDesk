@@ -960,6 +960,18 @@ because 231.7 is 43 percent of it and that is room for another session like
 this one. One session is not a trend broken, and the rule above is the one to
 reapply if the next morning is slower again.
 
+**The premise of every sentence above changed on 2026-08-20.** All four of those
+readings were taken against a template of NINE sections. Layer 4 added a tenth,
+the notable movers section, on the evening of that day, and it is a table of up
+to fifteen rows with nine columns plus seven fixed sentences and one line per
+lost leg or short list. The trend the paragraph above is watching therefore has
+a step change in it that has nothing to do with the model getting wordier, and
+the first reading after 2026-08-21's 08:45 chain is the one to compare, not the
+one to be alarmed by. The timeout is not moved on a prediction: 537 leaves 305
+seconds of headroom over the last measurement, the section adds text rather than
+reasoning, and a number changed before the thing it measures has been measured
+is a guess wearing a derivation.
+
 ### The prose stopword note
 
 Containment reads ticker claims out of the report's prose as well as its

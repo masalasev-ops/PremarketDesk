@@ -588,9 +588,11 @@ tbody tr:hover{background:var(--ground)}
   date, and that every market snapshot row is either dated today or labelled
   <code>prior_session_only</code> and dated to that session, and that every notable movers row is
   stamped with the session its own leg declares. That last check asks a different question from the
-  other four, because that section mixes a premarket leg with completed session legs on purpose, and
-  it has nothing to read yet: the notable movers section is specified in BUILD_PLAN.md and not built,
-  no packet carries a <code>notable_movers</code> key, and the check passes vacuously. A violation rewrites
+  other four, because that section mixes a premarket leg with completed session legs on purpose.
+  It walked NO rows at all until 2026-08-20, and not because the section was unbuilt:
+  <code>vintage.enforce</code> is called on a hand built dict carrying candidates, market snapshot
+  and session date, so the key it looks for was never in what it was given. Layer 4 shipped on
+  2026-08-20 and passing <code>notable_movers</code> into that dict is what armed the check. A violation rewrites
   <code>data/UNVERIFIED</code> naming each failing row and the check that caught it, and the scan
   exits non-zero, so nothing is stamped, no packet is written, and the morning chain stops before the
   analyst call. There is deliberately no degrade path: a stale price is not thin evidence a report
