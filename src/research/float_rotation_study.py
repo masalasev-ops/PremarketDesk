@@ -605,6 +605,29 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         rederived_two = round_down(exact_two)
         rederived_one = round_down(exact_one)
 
+        # The ELIGIBILITY question, which is a different question from the
+        # bands and had never been measured. CRITERIA [Day setup] requires
+        # premarket_rvol > 1.5, and Rule.test(None) is false, so a name with no
+        # usable baseline cannot be day_eligible however busy it is. DECISIONS
+        # 2026-08-18 records AS.US as the dated instance: it cleared every
+        # other line and its entire day_failed list was the null RVOL.
+        #
+        # Whether a rotation floor belongs in that screen is the owner's, and
+        # it is a threshold, so it is measured here rather than decided. The
+        # method is the one the bands already use: find the share of the paired
+        # population the RVOL floor admits, and read the rotation value
+        # admitting the same share of the rescued names. A floor set any other
+        # way would make the screen mean something different depending on which
+        # measure a name happened to carry, which is the exact failure the band
+        # matching above exists to prevent.
+        day_floor = _CRIT.rule("day_setup", "premarket_rvol")
+        rvol_values = [p[0] for p in pair]
+        day_share = (sum(1 for v in rvol_values if day_floor.test(v))
+                     / len(rvol_values)) if rvol_values else 0.0
+        day_exact = edge_at(resc, day_share) if (resc and day_share) else None
+        day_edge = round_down(day_exact) if day_exact else None
+        day_admits = (sum(1 for v in resc if v > day_edge) if day_edge else 0)
+
         transfer[slice_name] = {
             "overlap_n": len(over),
             "rescued_n": len(resc),
@@ -616,6 +639,15 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
             if statistics.median(over) else None,
             "rvol_target": {"two_points": round(two_share, 4),
                             "one_point": round(one_share, 4)},
+            # Not a recommendation. The number the owner's yes or no is about.
+            "day_setup_eligibility": {
+                "rvol_floor": day_floor.describe(),
+                "share_of_paired_rvol_admitted": round(day_share, 4),
+                "rotation_edge_admitting_the_same_share": day_edge,
+                "rotation_edge_exact": round(day_exact, 8) if day_exact else None,
+                "rescued_names_it_would_admit": day_admits,
+                "of_rescued_names": len(resc),
+            },
             "current_edges": {"two_points": current_two, "one_point": current_one},
             "current_edge_percentile_in_overlap": {
                 "two_points": percentile_of(over, current_two),

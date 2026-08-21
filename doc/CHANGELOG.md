@@ -15,6 +15,35 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, second: the study measures the eligibility floor it was never asked to
+
+float_rotation_study now reports mapping_transfer.<slice>.day_setup_eligibility:
+the share of the paired population that CRITERIA [Day setup] premarket_rvol
+admits, and the rotation value admitting the same share of the rescued names.
+It reads both floors from CRITERIA rather than from constants, so it re-derives
+if either moves.
+
+Why it is there. The eligibility question has been open since 2026-08-16 and
+had a dated counterexample from 2026-08-18, AS.US, which cleared every other
+line of the day screen and failed on a null RVOL alone. It stayed open because
+it is a threshold and nobody had measured what the threshold would be. The
+answer on the top 12 by gap is 0.00014, which is the rotation one point scoring
+edge, because [Day setup]'s `> 1.5` and [Score premarket rvol]'s `>= 1.5` are
+one threshold written twice. Adopting the floor would introduce no new number.
+
+Nothing in the screens changed. Re-fitting the bands was applying a procedure
+CRITERIA names; adding a rotation line to [Day setup] is a new screen condition
+that changes which names a human is shown as tradeable, and that is the
+owner's. DECISIONS 2026-08-21 carries the measurement, what it would have
+admitted across the six archived packets, which is one name, and the one line
+that adopts it.
+
+Also recorded there: the section's defence of ranking the signed sigma on lists
+1 and 4 was that list 3 catches the fallers. Measured against the three closes
+sidecars on disk, list 3 catches the single most unusual faller on two of three
+days and two of fifteen top faller slots overall. That entry is corrected in
+place and carries a recommendation.
+
 ## 2026-08-21: the universe keeps the name the vendor sends, and the two implausible caps were real
 
 The universe build read Type off each exchange-symbol-list row to filter and

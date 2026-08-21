@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty five claims, a count read off the file rather than remembered,
+carries sixty six claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5026,6 +5026,91 @@ def claim_the_rotation_study_counts_no_warm_up_session(
           "first ten")
 
 
+def claim_the_day_screen_and_the_volume_score_agree_on_one_number(
+        failures: list[str]) -> None:
+    """[Day setup]'s volume floor and the volume score's first point are one number.
+
+    CRITERIA [Day setup] premarket_rvol is `> 1.5` and [Score premarket rvol]'s
+    one point band is `>= 1.5`. Written twice, they say the same thing: the day
+    screen already asks whether the volume slot scored at least one point, in
+    RVOL's units only.
+
+    That identity is load bearing and nothing was watching it. DECISIONS
+    2026-08-21 measures the rotation floor that would match the day screen for
+    a name with no baseline, gets 0.00014, and rests its whole argument on that
+    being the rotation ONE POINT edge rather than a coincidence to be
+    maintained by hand. If someone moves either 1.5 and not the other, the
+    argument silently stops holding and the two measures start meaning
+    different things in the same screen, which is the failure the band matching
+    in [Score premarket float rotation] exists to prevent.
+
+    So this asserts the identity itself, not either number. Both may move; they
+    may not move apart. It also refuses the operators drifting, because
+    `> 1.5` and `>= 1.5` differ on exactly the value they share, and a name
+    landing precisely on it would be scored a point and screened out.
+    """
+    from core import criteria as _criteria
+
+    crit = _criteria.load()
+    floor = crit.rule("day_setup", "premarket_rvol")
+    one_point = None
+    for band in crit.bands("score_premarket_rvol"):
+        if band.rule is not None and band.result.strip() == "1":
+            one_point = band.rule
+    if one_point is None:
+        failures.append("[Score premarket rvol] has no one point band, so the "
+                        "volume slot no longer has a first point for the day "
+                        "screen to agree with")
+        return
+
+    if floor.value != one_point.value:
+        failures.append(
+            f"[Day setup] premarket_rvol is {floor.describe()} where the volume "
+            f"score's first point is {one_point.describe()}. They were one "
+            "number, and DECISIONS 2026-08-21 derives the matching float "
+            "rotation floor from their being one number")
+    if (floor.op, one_point.op) != (">", ">="):
+        failures.append(
+            f"the operators are {floor.op!r} and {one_point.op!r} rather than "
+            "'>' and '>='. They differ on exactly the shared value, so a name "
+            "landing on it is scored a point and screened out, and any other "
+            "pairing changes which of those two happens")
+
+    # And the study reports the matched floor from CRITERIA rather than from a
+    # constant, which is what makes it re-derive when either of the two moves.
+    payload = (config.PROJECT_ROOT / "doc" / "research"
+               / "float_rotation_study-2026-08-21-eligibility.json")
+    if not payload.is_file():
+        failures.append(f"{payload.name} is gone, so the eligibility floor "
+                        "DECISIONS quotes can no longer be reproduced")
+        return
+    block = ((json.loads(payload.read_text(encoding="utf-8"))
+              .get("mapping_transfer") or {}).get("top_12_by_gap") or {})
+    eligibility = block.get("day_setup_eligibility") or {}
+    if eligibility.get("rvol_floor") != floor.describe():
+        failures.append(
+            f"the study measured against a floor of "
+            f"{eligibility.get('rvol_floor')!r} where CRITERIA now says "
+            f"{floor.describe()!r}, so the recorded rotation floor was matched "
+            "to a screen that has since changed")
+    rows = ((json.loads(payload.read_text(encoding="utf-8"))
+             .get("rescued_rotation_values") or {}).get("top_by_gap") or [])
+    share = eligibility.get("share_of_paired_rvol_admitted")
+    edge = eligibility.get("rotation_edge_admitting_the_same_share")
+    if rows and share and edge:
+        ordered = sorted(rows, reverse=True)
+        index = min(max(int(round(share * len(ordered))) - 1, 0), len(ordered) - 1)
+        if not (edge <= ordered[index] < edge * 10):
+            failures.append(
+                f"the recorded eligibility edge {edge!r} is not a rounded down "
+                f"form of the rescued value at the matched share, "
+                f"{ordered[index]!r}, so the two numbers in the payload "
+                "disagree with each other")
+
+    print("  criteria     the day screen's volume floor and the volume score's "
+          "first point are still one number, and the study matches against it")
+
+
 def claim_the_universe_keeps_the_name_the_vendor_sent(
         failures: list[str]) -> None:
     """The build reads Type off a row and threw the rest of that row away.
@@ -5438,6 +5523,7 @@ def main() -> int:
     claim_no_python_here_runs_a_git_fetch(failures)
     claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(failures)
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
+    claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
 
     if failures:
         for failure in failures:

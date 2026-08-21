@@ -18,6 +18,84 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21: the float rotation eligibility floor is measured, and it is a number this file already contains
+
+**The question, open since 2026-08-16 and given a dated instance on
+2026-08-18.** CRITERIA [Day setup] requires premarket_rvol > 1.5.
+Rule.test(None) is false, so a name with no usable baseline cannot be
+day_eligible however busy its premarket was. AS.US cleared the prior high, the
+gap floor, the price floor and the market cap floor, scored 8.0 green on a
+float rotation of 0.000264, and its entire day_failed list was the null RVOL.
+It was the only one of twelve candidates that cleared the prior high test, so
+on that morning the open question WAS the watchlist.
+
+**Why it stayed open, and what has changed.** It is a threshold, thresholds
+live in CRITERIA and are the owner's, and nobody had measured what the
+threshold would be. The second half of that is no longer true.
+
+**The floor, derived by the method the bands already use.** Take the share of
+the paired population that the RVOL floor admits, and read the rotation value
+admitting the same share of the rescued names. Setting it any other way makes
+the screen mean something different depending on which measure a name happened
+to carry, which is the exact failure the band matching exists to prevent.
+
+| | |
+| --- | ---: |
+| [Day setup] premarket_rvol | > 1.5 |
+| share of the paired top 12 by gap it admits | 66.57% |
+| rotation value admitting the same share | 0.00014266 |
+| rounded down, two figures | **0.00014** |
+
+**That is the same number as the rotation ONE POINT scoring edge, and it is not
+a coincidence.** [Day setup] premarket_rvol is `> 1.5` and [Score premarket
+rvol]'s one point band is `>= 1.5`. They are one threshold written twice, so
+the day screen already asks exactly "did the volume slot score at least one
+point", in RVOL's units only. The matched rotation floor is therefore the
+rotation one point edge by construction, and adopting it introduces NO new
+number into CRITERIA.
+
+**What it would admit, measured on real candidates rather than on the study
+population.** Across the six archived packets, four candidates carried a null
+RVOL together with a rotation, and each failed on that line alone:
+
+| session | symbol | rotation | clears 0.00014 |
+| --- | --- | ---: | :---: |
+| 2026-08-17 | HTHT | 0.0000176 | no |
+| 2026-08-18 | AS | 0.000264 | **yes** |
+| 2026-08-19 | EL | 0.0000102 | no |
+| 2026-08-20 | SCSC | 0.000111 | no |
+
+One name in six sessions, and it is the counterexample that reopened the
+question. The study's own figure, 125 of 184 rescued rows clearing the floor,
+is a different quantity and must not be read as an admission rate: those rows
+have not been asked about gap, price, market cap or the prior high, which is
+what removes almost all of them.
+
+**Deliberately not changed here, and this is where the line falls.** The
+rotation bands were re-fitted this week without asking, because CRITERIA names
+the script and the payload key as the source of those edges and they had
+drifted from their own fit, so applying the file's stated procedure is not a
+judgement. This is not that. [Day setup] carries no rotation line at all, so
+adding one is a new screen CONDITION, and it changes which names a human is
+shown as tradeable on a long only screen. That is the owner's, and no
+measurement makes it mine.
+
+**To adopt** is one line in CRITERIA [Day setup] and the alternative in the
+screen that reads it, phrased as the volume slot scoring at least one point
+rather than as a second number, so the identity above cannot drift apart.
+
+**Evidence.** doc/research/float_rotation_study-2026-08-21-eligibility.json,
+key mapping_transfer.top_12_by_gap.day_setup_eligibility. The study computes it
+from CRITERIA rather than from a constant, so it re-derives if either floor
+moves. 50 sessions tallied of 60 walked, 462 Alpaca requests, 0 EODHD calls.
+
+**One thing that run showed in passing.** It walked 60 sessions where the
+2026-08-20 run walked 61: 2026-06-10 was dropped because that run's vendor
+sweep came back incomplete, and the study continues without rolling on those.
+The re-derived edges came out at 0.00033 and 0.00014 in both runs regardless,
+which is the first evidence that they are stable against the sweep varying
+rather than fitted to one night of coverage.
+
 ## 2026-08-20, later: the rotation bands are re-fitted, the edges DO move, and the next re-fit costs nothing
 
 **This answers the entry further down**, "the float rotation bands were fitted
@@ -135,6 +213,35 @@ section: list 3 ranks the SIZE of the two session move and puts the largest
 decliner first, which is how DOWN reaches the fixture's section at all. So the
 section sees both directions; what it does not do is rank a faller for
 unusualness.
+
+**[corrected 2026-08-21: the paragraph above is a claim about coverage, it has
+now been measured against the three closes sidecars on disk, and it is mostly
+false. List 3 ranks the raw two session move, which correlates only loosely
+with unusualness over one session. It catches the single most unusual faller on
+two of three days and misses it entirely on the third, and across the fifteen
+slots the five most unusual fallers occupy over those days it catches two.
+
+| session | most unusual faller | on list 3 | of the top five fallers, caught |
+| --- | ---: | :---: | ---: |
+| 2026-08-18 | EYPT, -15.49 sigma | yes | 1 of 5 |
+| 2026-08-19 | KLAR, -6.78 sigma | yes | 1 of 5 |
+| 2026-08-20 | LZB, -8.64 sigma | NO | 0 of 5 |
+
+What stands is the OTHER half of this entry, the spec's own wording. What is
+now measured rather than anticipated is the cost paragraph below it. On
+2026-08-18, 1,810 of 2,731 names fell, the fifth riser on list 1 was plus 2.68
+sigma, and a minus 15.49 sigma decliner sat outside the section's ranking. Two
+of the five slots went to modestly unusual risers on two of the three days; on
+the third the two rankings are identical, 5 of 5, because the risers were more
+unusual than anything falling.
+
+Measured with the section's own thresholds, [Notable] min_return_stdev_pct at
+0.1 and list_size at 5, over the prior session leg, with the stdev computed
+from the cached EOD bars because every return_stdev_20d in the database is
+still null until the Sunday rebuild. Recommendation, stated because a menu is
+not an answer: rank the SIZE of the sigma on both lists. The cost paragraph
+below describes what the signed reading buys, and on this evidence it buys
+coverage that list 3 is not in fact delivering.]
 
 **What it costs, said plainly so nobody has to rediscover it.** The section's
 headline measure is unusualness, and half the unusual moves in any market are
