@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty eight claims, a count read off the file rather than remembered,
+carries seventy claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -822,8 +822,13 @@ def claim_the_volume_check_reaches_the_packet(failures: list[str]) -> None:
             (target / "verify_intraday.json").write_text(
                 json.dumps(payload), encoding="utf-8")
 
+        # Signed, because the sentence under test is the one the direction
+        # selects, and an unsigned summary takes a different branch.
         fresh = {"day": "2026-08-19", "compared": 73, "within_one_percent": 0,
-                 "median_abs_pct": 90.0, "unavailable": 0}
+                 "median_abs_pct": 90.0, "unavailable": 0,
+                 "median_signed_pct": -90.0, "direction": "under",
+                 "direction_phrase": "the collector recorded LESS than the vendor",
+                 "aggregate_ratio": 0.1, "sign_recorded": True}
         write("2026-08-19", fresh)
 
         read = collect_premarket.latest_volume_check("2026-08-20")
@@ -842,10 +847,22 @@ def claim_the_volume_check_reaches_the_packet(failures: list[str]) -> None:
             failures.append(
                 "the measured disagreement is not in gaps_to_fill, so the "
                 f"disclaimer cannot carry it: {sink.gaps}")
-        elif "LARGER than the window" not in stated[0]:
+        # It used to assert the opposite: that the gap says the feed
+        # shortfall is LARGER than the window shortfall, which was right while
+        # both sat uncorrected inside the ratio. Since 2026-08-21 the feed half
+        # is divided out per symbol and the window half is not, so a packet
+        # saying the feed error is still in the ratio double counts a nine
+        # times correction in the reader's head. The first live report did
+        # exactly that, twice.
+        elif "divides out" not in stated[0]:
             failures.append(
-                "the gap does not say the feed shortfall is the bigger of the "
-                f"two, which is the whole correction: {stated[0]}")
+                "the gap does not say the measured gap is what the capture "
+                "correction divides out, so the reader is told to apply it a "
+                f"second time: {stated[0]}")
+        elif "UNDERSTATED" in stated[0] or "LARGER than the window" in stated[0]:
+            failures.append(
+                "the gap still describes the feed shortfall as an error left "
+                f"inside the ratios, which it no longer is: {stated[0]}")
 
         # A check older than the CRITERIA limit is named as stale, not dropped.
         far = ettime.parse_date("2026-08-19") + dt.timedelta(days=40)
@@ -853,8 +870,14 @@ def claim_the_volume_check_reaches_the_packet(failures: list[str]) -> None:
         stale = scan.volume_check(far.isoformat(), sink)
         if not stale or not stale["stale"]:
             failures.append(f"a 40 day old check did not read as stale: {stale}")
-        if not any("days old" in g and "unmeasured" in g for g in sink.gaps):
+        if not any("days old" in g and "past the" in g for g in sink.gaps):
             failures.append(f"a stale check was not called stale: {sink.gaps}")
+        # And it says what a stale check COSTS now, which is not the same
+        # sentence: the shares the ratios are built on are that old too.
+        if not any("capture shares" in g for g in sink.gaps):
+            failures.append(
+                "a stale check does not say the per symbol capture shares are "
+                f"that stale, which is what it now costs: {sink.gaps}")
 
     print("  volume check the measured collector shortfall is read, quoted, and "
           "called stale or absent when it is")
@@ -991,9 +1014,22 @@ def claim_the_day_screen_names_what_rvol_alone_blocked(failures: list[str]) -> N
                         "that failed on nothing else")
     if not sink.gaps or "ONLY.US" not in sink.gaps[0]:
         failures.append(f"the blocked names are not in gaps_to_fill: {sink.gaps}")
-    elif "instrument reading" not in sink.gaps[0]:
-        failures.append("the gap does not tell the reader an empty day list may "
-                        f"be the instrument: {sink.gaps[0]}")
+    # It used to assert the gap calls an empty day list an instrument
+    # reading. That was right while the numerator was raw socket volume. Since
+    # 2026-08-21 the RVOL these names failed on already carries the capture
+    # correction, so blaming the feed for them is the double count the
+    # correction created: these are names the CORRECTED numerator could not
+    # lift, which is a fact about the names.
+    elif "already carries the capture correction" not in sink.gaps[0]:
+        failures.append(
+            "the gap does not say these names failed on a CORRECTED RVOL, so "
+            "it still reads as though the feed shortfall cost them: "
+            f"{sink.gaps[0]}")
+    elif "instrument reading" in sink.gaps[0]:
+        failures.append(
+            "the gap still calls an empty day list an instrument reading, "
+            "which invites the reader to discount a screen decision that was "
+            f"made on a corrected number: {sink.gaps[0]}")
 
     # Silent when nothing was blocked on RVOL alone, so the list stays readable.
     quiet = Sink()
@@ -5082,7 +5118,14 @@ def claim_both_volume_ratios_divide_the_same_tape(failures: list[str]) -> None:
         "aggregate_ratio": 0.09,
         # AAA's own share is deliberately NOT the default, so a lookup that
         # silently fell back would change the answer and be caught.
-        "volume_by_symbol": {"AAA.US": {"collector": 20.0, "vendor": 100.0}},
+        # Well over CRITERIA [Collector] min_capture_vendor_volume, because
+        # the point of this fixture is a symbol whose own share IS trusted.
+        # It was 20 against 100 until 2026-08-21 and the evidence floor
+        # correctly refused it, which is the floor working and the fixture
+        # being wrong.
+        "volume_by_symbol": {"AAA.US": {"collector": 20_000.0,
+                                        "vendor": 100_000.0}},
+        "minutes_compared_by_symbol": {"AAA.US": 90},
     }
     candidates = [
         {"symbol": "AAA.US", "pm_volume": 100_000.0, "collector_covered": True},
@@ -5217,6 +5260,229 @@ def claim_both_volume_ratios_divide_the_same_tape(failures: list[str]) -> None:
     print("  one tape     RVOL and float rotation both divide the consolidated "
           "estimate, pm_volume still holds what the socket saw, and the "
           "correction names what it moved")
+
+
+def claim_a_thin_capture_share_is_refused_rather_than_divided_by(
+        failures: list[str]) -> None:
+    """A capture share is a ratio of two volumes and inherits the smaller one.
+
+    The correction divides the socket's shares by the symbol's measured share
+    of the tape. That share is itself a measurement, and on 2026-08-20 three of
+    the forty eight the check carried rested on almost nothing: UUP was ten
+    vendor shares against ten collector shares over ONE minute, which produces
+    a share of 1.0000 and therefore no correction at all for a symbol that
+    ordinarily captures about a tenth. VNET on 2026-08-19 produced 1.1800,
+    which is impossible: a socket carrying a subset of the tape cannot report
+    more than all of it.
+
+    A share of 1.0 is the whole defect back again for that one row, arriving
+    through the fix. So the EVIDENCE is floored, never the ratio capped, which
+    is the argument [Baseline]'s denominator floor note already makes: a cap
+    turns a visible absurdity into an invisible one.
+
+    Three refusals, each with its own reason recorded, and the fallback in
+    every case is CRITERIA's measured default rather than a null, because a
+    symbol with a thin measurement is not a symbol with no evidence at all.
+    """
+    from core import criteria as _criteria
+    from morning import scan as _scan
+
+    crit = _criteria.load()
+    default = crit.number("collector", "premarket_capture_rate")
+    min_vendor = crit.number("collector", "min_capture_vendor_volume")
+    min_minutes = crit.integer("collector", "min_capture_minutes")
+
+    check = {
+        "day": "2026-08-20",
+        "volume_by_symbol": {
+            "GOOD.US": {"collector": 20_000.0, "vendor": 100_000.0},
+            "THIN.US": {"collector": 1.0, "vendor": min_vendor - 1},
+            "BRIEF.US": {"collector": 20_000.0, "vendor": 100_000.0},
+            "IMPOSSIBLE.US": {"collector": 118_000.0, "vendor": 100_000.0},
+        },
+        "minutes_compared_by_symbol": {
+            "GOOD.US": 90, "THIN.US": 90,
+            "BRIEF.US": min_minutes - 1, "IMPOSSIBLE.US": 90,
+        },
+    }
+    names = ["GOOD.US", "THIN.US", "BRIEF.US", "IMPOSSIBLE.US"]
+    candidates = [{"symbol": s, "pm_volume": 100_000.0} for s in names]
+    _scan.attach_capture_estimate(candidates, check, _scan.Packet())
+    got = {c["symbol"]: c for c in candidates}
+
+    if got["GOOD.US"]["pm_capture_share"] != 0.2:
+        failures.append(
+            f"a well measured share came back "
+            f"{got['GOOD.US']['pm_capture_share']!r} rather than 0.2, so the "
+            "floors are refusing measurements they should be admitting")
+    if got["GOOD.US"].get("pm_capture_minutes") != 90:
+        failures.append(
+            "a trusted share does not record how many common minutes backed "
+            f"it, it carries {got['GOOD.US'].get('pm_capture_minutes')!r}. A "
+            "share measured over two minutes and one over ninety are not the "
+            "same evidence and no reader can tell them apart without it")
+
+    for symbol, why in (("THIN.US", "vendor share"),
+                        ("BRIEF.US", "common minute"),
+                        ("IMPOSSIBLE.US", "cannot report all of it")):
+        row = got[symbol]
+        if row["pm_capture_share"] != round(default, 6):
+            failures.append(
+                f"{symbol} kept a share of {row['pm_capture_share']!r} where "
+                f"its measurement should have been refused and the default "
+                f"{default} used instead")
+        basis = str(row.get("pm_capture_basis") or "")
+        if "refused" not in basis or why not in basis:
+            failures.append(
+                f"{symbol} fell back without saying why: {basis!r}. A silent "
+                "fallback is indistinguishable from a symbol the check never "
+                "carried, and those are different facts")
+        if row.get("pm_capture_minutes") is not None:
+            failures.append(
+                f"{symbol} recorded {row['pm_capture_minutes']!r} common "
+                "minutes for a share that was refused, which reads as though "
+                "the refused measurement is the one in use")
+
+    # The impossible value is refused for being impossible, not for being thin,
+    # so it must still be refused when the volume behind it is ample.
+    if got["IMPOSSIBLE.US"]["pm_capture_share"] == 1.18:
+        failures.append(
+            "a share of 1.18 survived on 100,000 vendor shares. A socket "
+            "carrying a subset of the tape reporting more than all of it is a "
+            "broken measurement at any volume")
+
+    print("  thin share   a capture share on ten shares or one minute, or one "
+          "above unity, is refused for the measured default and says which")
+
+
+def claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(
+        failures: list[str]) -> None:
+    """The measured feed gap is the correction's INPUT, not a residual on top.
+
+    This is the defect the first live morning shipped. attach_capture_estimate
+    divides the collector versus vendor disagreement out per symbol, and
+    volume_check went on writing "Every RVOL and every float rotation in this
+    packet is UNDERSTATED by about that much again" into the same gaps_to_fill
+    list. The model narrates what the packet asserts, so runs/2026-08-21/report.md
+    published it twice, telling a reader that MSTR's 3.38 understates by 87
+    percent when 3.38 already carries that correction.
+
+    Applying a nine times correction a second time in the reader's head is the
+    same size of error as the defect the correction was built to fix, pointed
+    the other way, and it is worse in kind: the first was a number nobody could
+    see, this one is an instruction.
+
+    So the packet is asserted to carry the correct relationship and NOT to
+    carry the old one, in both the signed and unsigned branches, and the
+    fallback report is checked for the same contradiction it published.
+    """
+    from morning import analyst as _analyst
+    from morning import scan as _scan
+
+    class Sink:
+        def __init__(self):
+            self.gaps = []
+
+        def gap(self, text):
+            self.gaps.append(text)
+
+    def gaps_for(summary):
+        day = summary["day"]
+        target = config.run_dir(day)
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "verify_intraday.json").write_text(
+            json.dumps(summary), encoding="utf-8")
+        sink = Sink()
+        after = (ettime.parse_date(day) + dt.timedelta(days=1)).isoformat()
+        _scan.volume_check(after, sink)
+        return " ".join(sink.gaps)
+
+    signed = gaps_for({
+        "day": "2026-08-19", "compared": 73, "within_one_percent": 0,
+        "median_abs_pct": 90.0, "unavailable": 0, "median_signed_pct": -90.0,
+        "direction": "under", "aggregate_ratio": 0.1, "sign_recorded": True,
+        "direction_phrase": "the collector recorded LESS than the vendor"})
+
+    banned = ["UNDERSTATED by about that much again",
+              "OVERSTATED by about that much",
+              "passes straight into the ratios"]
+    for phrase in banned:
+        if phrase in signed:
+            failures.append(
+                f"the packet still tells the model {phrase!r}. The correction "
+                "already divided that out, so the report applies it twice")
+    if "divides out" not in signed:
+        failures.append(
+            "the packet does not say the measured gap is what the capture "
+            f"correction divides out: {signed}")
+    if "LOWER BOUND" not in signed or "window" not in signed:
+        failures.append(
+            "the packet no longer names the WINDOW as the remaining reason a "
+            "ratio is a lower bound. That one is still true and is the only "
+            f"one left: {signed}")
+
+    # The fallback report is the other place the contradiction lived, and it
+    # said both things inside one document.
+    packet = {
+        "session_date": "2026-08-20", "candidates": [],
+        "collector_volume_check": {
+            "day": "2026-08-19", "compared": 73, "within_one_percent": 0,
+            "median_abs_pct": 90.0, "direction": "under",
+            "direction_phrase": "the collector recorded LESS than the vendor",
+            "aggregate_ratio": 0.1},
+        "capture_correction": {
+            "candidates": 3, "clear_on_socket_volume": 0,
+            "clear_on_consolidated_estimate": 2,
+            "carried_across_the_floor": ["AAA.US", "BBB.US"],
+            "carried_onto_the_day_watchlist": ["AAA.US"], "floor": "> 1.5"},
+    }
+    text = _analyst.fallback_report(packet, "the claim asked for it")
+    if "divide a collector numerator" in text:
+        failures.append(
+            "the fallback still says the RVOL figures divide a collector "
+            "numerator, in the same document that says they are an estimate of "
+            "consolidated volume. One report, two answers")
+
+    # A floor is not a watchlist. BBB cleared the floor and is not on the list.
+    if "put BBB on this list" in text or "AAA, BBB on this list" in text:
+        failures.append(
+            "the fallback claims BBB reached the day watchlist. It cleared the "
+            "volume floor and failed another day condition, which is what the "
+            "two sets exist to keep apart")
+    if "BBB" not in text:
+        failures.append(
+            "the fallback drops BBB entirely. A name the correction carried "
+            "across the floor and no further is worth one clause, or the "
+            "correction's effect is understated")
+
+    # And the two sets through the REAL function, because building the packet
+    # dict by hand above tests this claim's own arithmetic. A mutation that
+    # collapsed carried_onto_the_day_watchlist back into carried_across_the_floor
+    # ran green until this was added.
+    floor_only = {"symbol": "FLOOR.US", "pm_rvol": 2.0,
+                  "pm_capture_share": 0.1, "day_eligible": False,
+                  "day_failed_conditions": ["above_prior_high"]}
+    made_it = {"symbol": "LIST.US", "pm_rvol": 2.0, "pm_capture_share": 0.1,
+               "day_eligible": True, "day_failed_conditions": []}
+    block = _scan.capture_correction_report([floor_only, made_it], Sink())
+    if not block:
+        failures.append("capture_correction_report returned nothing for two "
+                        "candidates carrying an RVOL and a share")
+        return
+    if sorted(block.get("carried_across_the_floor") or []) != ["FLOOR.US", "LIST.US"]:
+        failures.append(
+            f"the floor set is {block.get('carried_across_the_floor')!r}. Both "
+            "candidates went from 0.2 raw to 2.0 corrected, so both crossed it")
+    if (block.get("carried_onto_the_day_watchlist") or []) != ["LIST.US"]:
+        failures.append(
+            f"the watchlist set is {block.get('carried_onto_the_day_watchlist')!r} "
+            "rather than just LIST.US. FLOOR.US cleared the volume floor and "
+            "failed the prior high, and collapsing the two sets is what "
+            "published a false membership claim on 2026-08-21")
+
+    print("  no rebound   the packet calls the measured feed gap the "
+          "correction's input, keeps a floor apart from a watchlist, and "
+          "neither report applies the correction a second time")
 
 
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
@@ -5792,6 +6058,8 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_documents_count_what_is_actually_here(failures)
+    claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
+    claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:

@@ -969,17 +969,43 @@ of four sessions that was the only line left.
 
 ## What was and was not done with this
 
-`scan.rvol_capture_adjusted` publishes the adjusted number, the capture share
-used, and the names the correction would carry, into the packet and the gaps.
-**It changes no decision.** `day_eligible` is untouched and
-`claim_the_rvol_numerator_and_denominator_are_named_as_two_tapes` fails if a
-future edit makes it touch one, because whether to correct a live screen is a
-threshold question and belongs to the owner.
+**[corrected 2026-08-21: this section said the measurement changes no decision.
+That was true for about twenty five minutes. The owner read it and instructed
+the correction, and commit a62429b made day_eligible depend on it. Both
+identifiers it names are also gone: `scan.rvol_capture_adjusted` became
+`scan.capture_correction_report`, and the claim became
+`claim_both_volume_ratios_divide_the_same_tape`. The original text is kept
+below because the LINE it draws is the part worth rereading, and the entry
+under it records where that line actually fell.]**
 
-What this does is make the gate table say something. data/UNVERIFIED asks a
-human to watch one real morning before going live, and until now that table
-showed an RVOL column with no way to tell an instrument reading from a quiet
-market.
+`scan.capture_correction_report` publishes the raw ratio beside the corrected
+one, the capture share used and where it came from, the names the correction
+carried across the volume floor, and separately the names that then reached the
+day watchlist, into the packet and the gaps.
+
+**It changes decisions, on the owner's instruction.** Both volume ratios divide
+`pm_volume_consolidated`, so `day_eligible` depends on the capture share.
+`claim_both_volume_ratios_divide_the_same_tape` holds the arithmetic through
+the real functions, that `pm_volume` still carries the observation, and that a
+symbol the check measured uses its own share rather than the default.
+
+The original text, kept because the distinction it draws is right and only its
+verdict was overtaken:
+
+> `scan.rvol_capture_adjusted` publishes the adjusted number, the capture share
+> used, and the names the correction would carry, into the packet and the gaps.
+> **It changes no decision.** `day_eligible` is untouched, because whether to
+> correct a live screen is a threshold question and belongs to the owner.
+
+What this also does is make the gate table say something. data/UNVERIFIED asks
+a human to watch one real morning before going live, and until 2026-08-21 that
+table showed an RVOL column with no way to tell an instrument reading from a
+quiet market. It now prints the socket volume, the capture share, the estimate
+and the baseline median in that order, so both divisions can be done by hand on
+the page. That is a second correction: the table stopped reconciling on the
+morning the estimate landed and said nothing about it, which is the failure
+this whole file exists to prevent, committed by the fix rather than by the
+defect.
 
 ## What is still open
 

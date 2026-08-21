@@ -80,9 +80,25 @@ def print_table(packet_path: Path, count: int = 3) -> int:
     build = packet.get("build") or {}
     print(f"gate: build {build.get('commit') or 'unknown'}"
           f"{' (working tree dirty)' if build.get('dirty') else ''}")
+    # The columns are here so a human can DO THE DIVISION. That is the whole
+    # job of this table: data/UNVERIFIED names it as the thing to read before
+    # going live, and a reader who cannot reproduce the ratio cannot verify it.
+    #
+    # It used to reconcile and stopped on 2026-08-21, silently. Until then
+    # pm_rvol was pm_volume over the baseline median, exactly, and after the
+    # capture correction pm_rvol divides an ESTIMATE of consolidated volume
+    # instead. On the first live morning the table printed ASST as 14,960
+    # against 24,528.5 with an RVOL of 2.0555, which is 0.61, and nothing on
+    # the page said why. Three columns that used to divide and no longer do are
+    # worse than three columns that never did: the reader has a habit.
+    #
+    # So the two steps are both on the page. socket over capture gives est vol,
+    # est vol over baseline med gives pm_rvol, and the capture column says
+    # where its share came from.
     header = (
-        f"  {'ticker':<10} {'price':>9} {'priced at':>17} {'pm volume':>12} "
-        f"{'baseline med':>13} {'pm_rvol':>10} {'bars':>5}"
+        f"  {'ticker':<10} {'price':>9} {'priced at':>17} {'socket vol':>12} "
+        f"{'capture':>8} {'est vol':>14} {'baseline med':>13} {'pm_rvol':>10} "
+        f"{'bars':>5}"
     )
     print(header)
     job_status.produced("rows tabled", len(candidates))
@@ -90,16 +106,26 @@ def print_table(packet_path: Path, count: int = 3) -> int:
         baseline_row = candidate.get("baseline") or {}
         median = baseline_row.get("median_volume")
         pm_volume = candidate.get("pm_volume")
+        estimated = candidate.get("pm_volume_consolidated")
+        share = candidate.get("pm_capture_share")
         priced_at = str(candidate.get("price_time") or "null")
         print(
             f"  {candidate.get('symbol', ''):<10} "
             f"{candidate.get('price') if candidate.get('price') is not None else 'null':>9} "
             f"{priced_at[11:] if len(priced_at) > 11 else priced_at:>17} "
             f"{pm_volume if pm_volume is not None else 'null':>12} "
+            f"{share if share is not None else 'null':>8} "
+            f"{estimated if estimated is not None else 'null':>14} "
             f"{median if median is not None else 'null':>13} "
             f"{candidate.get('pm_rvol') if candidate.get('pm_rvol') is not None else 'null':>10} "
             f"{candidate.get('bars_collected', 0):>5}"
         )
+        # Where the share came from, because a symbol on the file wide default
+        # and a symbol on its own measurement are different evidence and the
+        # number alone cannot say which.
+        basis = candidate.get("pm_capture_basis")
+        if basis:
+            print(f"             capture share: {basis}")
         reason = candidate.get("pm_rvol_reason")
         if reason:
             print(f"             rvol null because: {reason}")

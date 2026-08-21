@@ -15,6 +15,39 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, fifth: the first live morning audited, and four defects in the correction closed
+
+The correction ran at 08:45 and produced six day eligible candidates where every
+previous morning produced none. A six reader audit of that run raised sixty four
+findings; ten survived three independent refutations each.
+
+The packet told the model to apply the correction a second time. volume_check,
+the packet key comment, rvol_only_day_failures, the fallback report and
+REPORT_TEMPLATE all still said the ratios understate by the feed gap that
+attach_capture_estimate divides out, and this morning's report published that
+twice beside a table of already corrected values. All five now describe the
+check as the correction's input, and name the residual as the share's session to
+session dispersion rather than its level.
+
+The gate table stopped reconciling. verify_morning printed pm_volume, baseline
+median and pm_rvol, which used to divide exactly and stopped when the numerator
+became an estimate. It prints socket volume, capture share, estimate and
+baseline median now, plus the basis for each share, so both divisions can be
+done by hand on the page.
+
+A capture share could rest on ten shares over one minute. CRITERIA gains
+[Collector] min_capture_vendor_volume at 2,000 and min_capture_minutes at 3, and
+a share at or above 1.0 is refused as impossible at any volume. Below a floor
+the symbol takes the measured default and records which refusal sent it there.
+
+carried_across_the_floor was reported as day watchlist membership; HOOD cleared
+the volume floor, failed the prior day high, and was named under the day table.
+There are two sets now and only the second is membership.
+
+Claims 69 and 70 hold the thin share refusals and the no double count property.
+Eleven mutations, eleven caught, after one ran green because the claim built the
+packet by hand instead of calling capture_correction_report. Suite 2,407 paths.
+
 ## 2026-08-21, fourth: both volume ratios are corrected onto one tape
 
 On the owner's instruction, after the measurement in the entry below.

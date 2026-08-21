@@ -158,10 +158,23 @@ of {capture_correction.candidates} would clear the volume floor on the raw
 socket numerator and {capture_correction.clear_on_consolidated_estimate} do on
 the estimate.
 
-Then, only if capture_correction.carried_across_the_floor is not empty, one
-more sentence naming those tickers and saying that the correction is what put
-them on this list. A correction that changes which names a reader is shown and
-does not say so is a worse defect than the one it fixes.
+Then, only if capture_correction.carried_onto_the_day_watchlist is not empty,
+one more sentence naming THOSE tickers and saying that the correction is what
+put them on this list.
+
+carried_across_the_floor is a different set and is NOT a membership claim: it
+holds the candidates whose corrected RVOL cleared the volume floor where their
+raw ratio did not, including ones that then failed another day condition and
+are not on this table. On 2026-08-21 the two sets differed by HOOD, which
+cleared the floor and failed the prior day high, and the report named it in a
+sentence under the day table as though the correction had put it on the list.
+Where a ticker is in carried_across_the_floor and not in
+carried_onto_the_day_watchlist, say it cleared the volume floor on the
+correction and is not on this list because it failed another day condition.
+
+A correction that changes which names a reader is shown and does not say so is
+a worse defect than the one it fixes, and one that says so inaccurately is the
+same defect wearing a disclosure.
 
 If none are eligible the table is still written, header and separator and one
 row, exactly like this:
@@ -333,24 +346,37 @@ on premarket_float_rotation because their pm_rvol is null: that ratio is a
 lower bound for the same arithmetic reason and must be called one wherever it
 is given.
 
-THERE ARE TWO REASONS THE RATIO IS WRONG AND ONLY ONE OF THEM HAS A KNOWN SIGN.
-The window shortfall above is arithmetic and can only understate. The packet's
-collector_volume_check block is the other: the numerator comes from the
-collector's socket and the denominator from the vendor's intraday feed, and
-that block is the measured disagreement between those two feeds on identical
-minutes. Where it is present and not stale, give its median_abs_pct, its
-compared count and the day it was taken, then quote its direction_phrase rather
-than composing one. direction is one of under, over, mixed and unknown, and
-only `under` permits the word understated. `over` means the collector recorded
-MORE than the vendor, so the ratio overstates and the window shortfall does not
-cancel it. `mixed` means the typical symbol and the aggregate tape fell on
-opposite sides of the vendor and neither direction may be assumed. `unknown`
-means the sign was not readable, either because the reading was written before
-the check recorded one or because the vendor reported no volume at all over the
-compared minutes; direction_phrase says which. Where the block
-is null or stale, say the feed is unmeasured this morning and do not describe
-an RVOL as merely a window effect. Where collector_silent is above zero, say
-how many subscribed symbols the check never reached, because compared and
+ONE REASON THE RATIO IS A LOWER BOUND, AND ONE MEASUREMENT THAT IS ALREADY IN
+IT. The window shortfall above is arithmetic, it can only understate, and it is
+the ONLY reason left to call an RVOL here a lower bound.
+
+The packet's collector_volume_check block is a different thing and must not be
+reported as a second error. It is the measured disagreement between the
+collector's socket and the vendor's intraday feed on identical minutes, and
+since 2026-08-21 that disagreement is what the capture correction DIVIDES OUT:
+it is pm_capture_share, applied per symbol, so it is the INPUT to every RVOL
+and float rotation in the packet rather than an error sitting inside them.
+
+Never write that the ratios understate by this block's percentage. That was
+true until 2026-08-21 and the report of that morning published it twice beside
+a table of already-corrected values, which tells a reader to apply a nine times
+correction that the arithmetic has already applied. Doing it again is the same
+size of error as the defect the correction was built to fix, pointed the other
+way.
+
+What to write instead. Where the block is present and not stale, give its
+median_abs_pct, its compared count and the day it was taken, and say that this
+is the measurement the RVOL numerator is corrected by rather than an error
+remaining in it. Say what survives: the share's session to session dispersion,
+which CRITERIA [Collector] premarket_capture_rate measures at about 1.5 times
+against a level of about nine, so a published ratio is an estimate with that
+much play. Quote direction_phrase as a description of the CHECK, never as a
+claim about the published ratios. `mixed` is worth naming because a session
+whose symbols disagree in sign is a session whose shares are less trustworthy
+than usual. Where the block is null or stale, say so and say what it costs:
+the per symbol shares are that old too, and a symbol the check does not carry
+falls back to the file default. Where collector_silent is above zero, say how
+many subscribed symbols the check never reached, because compared and
 unavailable do not partition the subscription on their own.
 
 A THIN WINDOW IS A STRONGER FACT THAN A LATE ONE AND GETS ITS OWN WORDS.

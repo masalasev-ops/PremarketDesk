@@ -18,6 +18,86 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21, third: the first live morning of the correction, and the four things it got wrong
+
+The correction shipped overnight and ran at 08:45. It produced six day eligible
+candidates, ASST, MSTR, CRCL, MARA, COIN and BEKE, where every previous morning
+produced none. A six reader audit of that run raised sixty four findings and ten
+survived three independent refutations. Four of the ten were one defect.
+
+**The defect: the packet told the model to apply the correction twice.**
+attach_capture_estimate divides the collector versus vendor disagreement out per
+symbol. volume_check went on writing "Every RVOL and every float rotation in
+this packet is UNDERSTATED by about that much again" into the same gaps_to_fill
+list, because it was written when that was true and the correction did not
+revisit it. So did the packet key comment, rvol_only_day_failures, the fallback
+report, and REPORT_TEMPLATE's "TWO REASONS THE RATIO IS WRONG" section.
+
+The model narrates what the packet asserts, so it reached the reader. This
+morning's report says under the day table that the RVOL column is an estimate
+that corrects for the feed gap, and then says twice more, in the Summary and in
+Technical signals, that every RVOL understates by 86.9 percent. A reader who
+believes the second pair multiplies MSTR's 3.38 by another nine.
+
+**That is worse in kind than the defect it followed.** The original error was a
+number nobody could see. This one is an instruction, it is the same nine times
+in the opposite direction, and it went out on the one morning the fix was new
+enough that somebody might have checked it. Both places now describe the check
+as the correction's INPUT, and what survives as a residual is named for what it
+is: the share's session to session dispersion, about 1.5 times, not the level.
+
+**Second: the gate table stopped reconciling and said nothing.** verify_morning
+prints the table data/UNVERIFIED names as the go live check. Its columns were
+pm_volume, baseline median, pm_rvol, and until 2026-08-21 the first divided by
+the second gave the third exactly. After the correction they did not: ASST
+printed 14,960 against 24,528.5 with an RVOL of 2.0555, which is 0.61. Three
+columns that USED to divide and quietly stopped are worse than three that never
+did, because the reader has a habit. The table now prints socket volume,
+capture share, the estimate and the baseline median in that order, so both
+divisions can be done by hand, and a line under each row says where that
+symbol's share came from.
+
+Worth recording that three independent skeptics refuted this one, on the fair
+ground that every column is individually correct and correctly labelled. They
+are right about that and it was still fixed, because the table's ONLY purpose
+is letting a human reproduce the arithmetic, and a correctly labelled column
+that breaks a reader's habit fails that purpose.
+
+**Third: a capture share can rest on almost nothing.** The share is a ratio of
+two volumes and inherits the frailty of the smaller. On 2026-08-20 UUP was ten
+vendor shares against ten collector shares over one minute, producing a share of
+1.0000 and therefore no correction at all for a symbol that ordinarily captures
+about a tenth. VNET produced 1.1800, which is impossible: a socket carrying a
+subset of the tape cannot report more than all of it. Every share above 0.9 in
+the 202 session population sat under a thousand vendor shares.
+
+CRITERIA gains min_capture_vendor_volume at 2,000 and min_capture_minutes at 3,
+and a share at or above 1.0 is refused regardless of volume. The evidence is
+floored and the ratio is never capped, which is the argument [Baseline]'s
+denominator floor note already makes: a cap turns a visible absurdity into an
+invisible one. Below a floor the symbol takes the measured default and the row
+records which refusal sent it there.
+
+**Fourth: clearing one condition was reported as reaching a watchlist.**
+carried_across_the_floor named every candidate whose corrected RVOL cleared the
+volume floor, and the template told the model to say the correction "put them on
+this list". HOOD cleared the floor and failed the prior day high, and this
+morning's report named it under the day watchlist table. There are two sets now,
+carried_across_the_floor and carried_onto_the_day_watchlist, and the second is
+the only one that may be called membership.
+
+**What the audit killed is worth as much as what it kept.** Fifty four of the
+sixty four findings were refuted, including a claim that the report's "1 of 11"
+was a model slip when it is a verbatim template fill, and a claim that
+BUILD_PLAN's suite counts were stale when they sit under a dated "STATE AS OF"
+stamp and were exact at that commit.
+
+**The pattern, because it repeated twice in one night.** Two mutations ran GREEN
+against claims I had just written, and both times the claim was checking
+arithmetic the test had performed itself rather than calling the function under
+test. A claim that reproduces the code's logic tests the reproduction. Both are
+now driven through attach_premarket_rvol and capture_correction_report.
+
 ## 2026-08-21, second: both volume ratios are put on one tape, on the owner's instruction
 
 **The decision, and whose it was.** Correcting a live screen is a threshold

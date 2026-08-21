@@ -431,11 +431,24 @@ def fallback_report(
             "the raw socket numerator and "
             f"{correction.get('clear_on_consolidated_estimate')} do on the "
             "estimate.")
-        carried = correction.get("carried_across_the_floor") or []
-        if carried:
+        # Two sets, because they answer different questions and conflating
+        # them published a false membership claim on the first live morning:
+        # HOOD cleared the volume floor on the correction and is NOT on this
+        # list, because it fails the prior day high.
+        onto = correction.get("carried_onto_the_day_watchlist") or []
+        floor_only = [s for s in (correction.get("carried_across_the_floor") or [])
+                      if s not in onto]
+        if onto:
             add("The correction is what put "
-                + ", ".join(_bare(s) for s in carried)
+                + ", ".join(_bare(s) for s in onto)
                 + " on this list.")
+        if floor_only:
+            add(", ".join(_bare(s) for s in floor_only)
+                + (" also cleared the volume floor on the correction and is "
+                   "not on this list, having failed another day condition."
+                   if len(floor_only) == 1 else
+                   " also cleared the volume floor on the correction and are "
+                   "not on this list, having failed another day condition."))
         add("")
     if not day:
         add(f"The day screen produced nothing this morning: 0 of {len(candidates)} "
@@ -653,8 +666,12 @@ def fallback_report(
             f"{check.get('compared')} symbol(s), "
             f"{check.get('within_one_percent')} within one percent{extra}"
             f"{'. STALE, ' + str(check.get('age_days')) + ' days old' if check.get('stale') else ''}"
-            ". The premarket RVOL figures above divide a collector numerator by "
-            "a vendor denominator, so "
+            ". That gap is the INPUT to the premarket RVOL figures above, not "
+            "an error inside them: it is divided out per symbol as "
+            "pm_capture_share, so the numerator above is an estimate of "
+            "consolidated volume. What survives is the share's session to "
+            "session dispersion, about 1.5 times against a level of about "
+            "nine. The vendor side of the check reads: "
             + (check.get("direction_phrase")
                or "the direction of that disagreement is unknown") + ".")
     else:

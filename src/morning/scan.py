@@ -1135,46 +1135,63 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
         detail += (f" and {zero} where the vendor reported no volume on the "
                    "common minutes")
 
+    # What this check MEANS changed on 2026-08-21 and this text did not follow
+    # it for one morning. Until commit a62429b the disagreement measured here
+    # passed straight into both ratios, so the honest consequence was that
+    # every RVOL was wrong by about this much. attach_capture_estimate now
+    # divides that exact disagreement out per symbol before either ratio is
+    # computed: this check is the SOURCE of the correction factor, not an error
+    # sitting on top of it.
+    #
+    # Saying otherwise is not a stale sentence, it is a double count in the
+    # reader's head, and the size of it is the size of the defect the
+    # correction was built to fix. runs/2026-08-21/report.md published it
+    # twice, telling a reader that MSTR's 3.38 understates by 87 percent when
+    # 3.38 already carries that correction.
+    #
+    # What actually survives the correction is the DISPERSION of the share, not
+    # its level: a symbol's share moves about 1.5 times across sessions where
+    # the level is about nine. See CRITERIA [Collector] premarket_capture_rate.
     direction = check.get("direction") or "unknown"
-    if direction == "under":
+    if direction in ("under", "over"):
         consequence = (
-            "Every RVOL and every float rotation in this packet is UNDERSTATED "
-            "by about that much again")
-    elif direction == "over":
-        consequence = (
-            "Every RVOL and every float rotation in this packet is OVERSTATED "
-            "by about that much, which is the opposite of the window shortfall "
-            "and does not cancel it")
+            "That gap is what the capture correction divides out: it IS "
+            "pm_capture_share, applied per symbol, so it is the input to every "
+            "RVOL and float rotation here rather than an error left inside "
+            "them. What survives is the share's session to session dispersion, "
+            "about 1.5 times against a level of about nine, so a ratio here is "
+            "an estimate with that much play in it")
     elif direction == "mixed":
         consequence = (
             "The disagreement ran in BOTH directions on that session, the "
             "typical symbol falling on one side of the vendor and the aggregate "
-            "tape on the other, so an RVOL here may be over or under and "
-            "neither may be assumed")
+            "tape on the other. The correction is applied per symbol, so each "
+            "row is divided by its own share and the mixed aggregate does not "
+            "describe any single row, but a session whose symbols disagree in "
+            "sign is a session whose shares are less trustworthy than usual")
     else:
         consequence = (
             "That reading carries no sign, having been written before the check "
-            "recorded one, so the DIRECTION of the error is unknown and must "
-            "not be described as understatement")
+            "recorded one, so the DIRECTION of the disagreement is unknown and "
+            "must not be described as understatement. The per symbol shares "
+            "are still read from it where it carries them, and a symbol it "
+            "does not carry falls back to the measured default")
     consequence += (
-        ", and a screen decided on RVOL this morning should be read as an "
-        "instrument reading rather than as a fact about the tape.")
+        ". The remaining reason a ratio here is a LOWER BOUND is the window, "
+        "not the feed: the numerator covers the collector window and the "
+        "denominator covers the whole premarket.")
 
     if check["stale"]:
         packet.gap(
             f"the collector volume check is {check['age_days']} days old, past "
             f"the {check['max_age_days']} day limit in CRITERIA.md [collector], "
-            f"so this morning's feed is effectively unmeasured. Last reading: "
+            f"so the per symbol capture shares this morning's ratios are built "
+            f"on are that old too, and a symbol it does not carry falls back to "
+            f"CRITERIA [Collector] premarket_capture_rate. Last reading: "
             f"{detail}."
         )
     else:
-        packet.gap(
-            f"premarket RVOL and premarket float rotation both divide a "
-            f"collector-sourced numerator by a vendor-sourced denominator, and "
-            f"{detail}. That disagreement passes straight into the ratios in "
-            "this packet and is LARGER than the window shortfall reported "
-            f"separately. {consequence}"
-        )
+        packet.gap(f"{detail}. {consequence}")
     return _packet_safe_volume_check(check)
 
 
@@ -1240,10 +1257,10 @@ def rvol_only_day_failures(candidates: list[dict[str, Any]], packet: Packet) -> 
             "screen on premarket RVOL alone, having cleared the other day "
             "conditions: "
             + ", ".join(blocked)
-            + ". Read that against the collector volume check in this packet: "
-            "if the numerator understates, these are the tickers it cost, and "
-            "an empty day watchlist is then an instrument reading rather than "
-            "a quiet market."
+            + ". Their RVOL already carries the capture correction, so these "
+            "are names the corrected numerator still could not lift over the "
+            "floor, NOT names the feed shortfall cost. capture_correction in "
+            "this packet names the ones the correction did carry."
         )
     return blocked
 
@@ -1312,29 +1329,68 @@ def attach_capture_estimate(
     what would retire it.
     """
     default = _CRIT.number("collector", "premarket_capture_rate")
+    min_vendor = _CRIT.number("collector", "min_capture_vendor_volume")
+    min_minutes = _CRIT.integer("collector", "min_capture_minutes")
     per_symbol = (check or {}).get("volume_by_symbol") or {}
+    minutes_by = (check or {}).get("minutes_compared_by_symbol") or {}
     measured_day = (check or {}).get("day")
 
     for candidate in candidates:
         candidate["pm_volume_consolidated"] = None
         candidate["pm_capture_share"] = None
         candidate["pm_capture_basis"] = None
+        candidate["pm_capture_minutes"] = None
 
         volume = _as_float(candidate.get("pm_volume"))
         row = per_symbol.get(candidate["symbol"])
+        minutes = minutes_by.get(candidate["symbol"])
         share = None
         basis = None
         if isinstance(row, dict):
             vendor = _as_float(row.get("vendor"))
             mine = _as_float(row.get("collector"))
-            if vendor is not None and vendor > 0 and mine is not None:
+            # A share is a RATIO OF TWO VOLUMES and it inherits the frailty of
+            # the smaller one. Measured across 202 symbol sessions: UUP was ten
+            # vendor shares against ten collector shares over one minute, which
+            # produced a share of 1.0 and therefore no correction at all for a
+            # symbol that ordinarily captures about a tenth; VNET produced
+            # 1.18, which is impossible for a venue subset. Every share above
+            # 0.9 in that population sat under a thousand vendor shares.
+            #
+            # This is the same guard, and the same argument, as [Baseline]
+            # min_baseline_premarket_volume: floor the EVIDENCE, never cap the
+            # ratio, because a cap turns a visible absurdity into an invisible
+            # one. Below the floor the symbol takes the measured default, which
+            # is a worse estimate than a good measurement and a far better one
+            # than a bad measurement.
+            thin = None
+            if vendor is None or mine is None or vendor <= 0:
+                thin = "the check carries no usable volume pair for this symbol"
+            elif vendor < min_vendor:
+                thin = (f"it rested on {vendor:,.0f} vendor share(s), under the "
+                        f"{min_vendor:,.0f} floor")
+            elif minutes is not None and minutes < min_minutes:
+                thin = (f"it rested on {minutes} common minute(s), under the "
+                        f"{min_minutes} floor")
+            elif mine / vendor >= 1.0:
+                thin = (f"it came out at {mine / vendor:.2f}, and a socket that "
+                        "carries a subset of the tape cannot report all of it")
+            if thin is None:
                 share = mine / vendor
+                candidate["pm_capture_minutes"] = minutes
                 basis = (f"this symbol's own collector over vendor share on "
-                         f"{measured_day}")
+                         f"{measured_day}, over "
+                         f"{minutes if minutes is not None else 'an unrecorded number of'} "
+                         f"common minute(s)")
+            else:
+                basis = ("CRITERIA [Collector] premarket_capture_rate, because "
+                         f"this symbol's measured share was refused: {thin}")
         if share is None or share <= 0:
+            if basis is None:
+                basis = ("CRITERIA [Collector] premarket_capture_rate, because "
+                         "the newest volume check carries no share for this "
+                         "symbol")
             share = default
-            basis = ("CRITERIA [Collector] premarket_capture_rate, because the "
-                     "newest volume check carries no share for this symbol")
 
         candidate["pm_capture_share"] = round(share, 6)
         candidate["pm_capture_basis"] = basis
@@ -1355,6 +1411,7 @@ def capture_correction_report(
     floor = _CRIT.rule("day_setup", "premarket_rvol")
     rows: list[dict[str, Any]] = []
     carried: list[str] = []
+    onto: list[str] = []
     for candidate in candidates:
         corrected = _as_float(candidate.get("pm_rvol"))
         share = _as_float(candidate.get("pm_capture_share"))
@@ -1364,9 +1421,17 @@ def capture_correction_report(
         rows.append({"symbol": candidate["symbol"], "pm_rvol": corrected,
                      "on_socket_volume": raw,
                      "capture_share": candidate.get("pm_capture_share"),
+                     "capture_minutes": candidate.get("pm_capture_minutes"),
                      "capture_basis": candidate.get("pm_capture_basis")})
         if floor.test(corrected) and not floor.test(raw):
             carried.append(candidate["symbol"])
+            # Clearing ONE condition is not reaching a watchlist. On the first
+            # live morning HOOD cleared this floor on the correction and failed
+            # the prior day high, and the report named it as though the
+            # correction had put it on the day list. Two sets, because they
+            # answer two questions.
+            if candidate.get("day_eligible"):
+                onto.append(candidate["symbol"])
 
     if not rows:
         return None
@@ -1378,6 +1443,9 @@ def capture_correction_report(
         "clear_on_consolidated_estimate": sum(
             1 for r in rows if floor.test(r["pm_rvol"])),
         "carried_across_the_floor": carried,
+        "carried_onto_the_day_watchlist": onto,
+        "shares_from_this_symbols_own_measurement": sum(
+            1 for r in rows if str(r["capture_basis"] or "").startswith("this symbol")),
         "rows": rows,
     }
     packet.gap(
@@ -1388,10 +1456,15 @@ def capture_correction_report(
         f"numerator {block['clear_on_socket_volume']} of {len(rows)} "
         f"candidates would clear the day screen's {floor.describe()}; on the "
         f"estimate {block['clear_on_consolidated_estimate']} do"
-        + (", and the correction carried " + ", ".join(carried) if carried
-           else ", and the correction carried none of them")
-        + ". Every row states the share used and where it came from. See "
-          "CRITERIA [Collector] premarket_capture_rate.")
+        + (", and the correction carried " + ", ".join(carried)
+           + " across that floor" if carried
+           else ", and the correction carried none of them across that floor")
+        + (", of which " + ", ".join(onto) + " reached the day watchlist"
+           if onto else ", and none of them reached the day watchlist")
+        + ". Clearing the volume floor is one condition, not membership. Every "
+          "row states the share used, how many common minutes backed it, and "
+          "where it came from. See CRITERIA [Collector] "
+          "premarket_capture_rate.")
     return block
 
 
@@ -4099,9 +4172,12 @@ def build_packet() -> dict[str, Any]:
         # The names that cost. Empty on a morning where RVOL was not the
         # deciding condition for anyone.
         "day_blocked_on_rvol_alone": rvol_only,
-        # Evidence, not a decision. See rvol_capture_adjusted. The rows
-        # carry only symbols that are candidates this morning, so this
-        # widens the containment allow set by nothing.
+        # See capture_correction_report. The rows carry only symbols that
+        # are candidates this morning, so this widens the containment allow
+        # set by nothing. It stopped being "evidence, not a decision" on
+        # 2026-08-21: the owner instructed the correction and both ratios
+        # divide the estimate now, so this block is the audit trail for a
+        # decision rather than a preview of one.
         "capture_correction": capture_adjusted,
         "gaps_to_fill": packet.gaps,
         "api_calls": eodhd.call_count(),

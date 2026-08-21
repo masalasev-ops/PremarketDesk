@@ -525,6 +525,8 @@ verify_window_minutes         = 15
 volume_check_agreement_pct    = 1.0        # SEED, not measured. How close either reading has to sit to the vendor to count as agreement. See the volume check note
 volume_check_max_age_days     = 5          # how far back the 08:45 scan will read a written verify_intraday.json. See the volume check note
 premarket_capture_rate        = 0.1172     # the share of the consolidated tape the socket carries for a symbol nothing has been measured for. MEASURED, see the capture rate note
+min_capture_vendor_volume     = 2000       # shares; a per symbol capture share measured on less vendor volume than this is refused and the default is used instead. SEED, see the capture evidence note
+min_capture_minutes           = 3          # common minutes; the same refusal on a share backed by fewer. SEED, see the capture evidence note
 
 ### The capture rate note
 
@@ -588,6 +590,59 @@ structurally omits off exchange volume, this is the permanent answer and this
 number should be re-derived whenever the collector, its window, or its
 subscription list changes materially. Re-derive by re-running the capture
 backfill and reading the per symbol median.
+
+### The capture evidence note
+
+A capture share is a ratio of two volumes and it inherits the frailty of the
+smaller one. These two floors decide when a measured share is trusted over the
+file wide default, and they are SEEDS in the sense [Baseline]'s denominator
+floor note uses: chosen to exclude degenerate measurements, with the effect
+measured but the exact edge not read off an empty stretch, because the vendor
+volume distribution has no empty stretch to read.
+
+What they exclude, measured over the 202 symbol sessions on the four clean
+sessions in doc/research/collector-capture.json:
+
+| | |
+| --- | ---: |
+| UUP on 2026-08-20 | 10 vendor shares, 1 minute, share 1.0000 |
+| MH on 2026-08-17 | 2 vendor shares, share 1.0000 |
+| VNET on 2026-08-19 | 50 vendor shares, share 1.1800 |
+| NBTX on 2026-08-18 | 931 vendor shares, share 0.9635 |
+
+A share of 1.0 means no correction at all for a symbol that ordinarily
+captures about a tenth, which is the whole defect back again for that one row.
+A share of 1.18 is impossible: a socket carrying a subset of the tape cannot
+report more than all of it. Every share above 0.9 in that population sat under
+a thousand vendor shares, which is the corroboration that this is a thin
+evidence problem rather than a real spread.
+
+The effect of the volume floor on the surviving population, as the p95 over p05
+ratio of the share:
+
+| floor | excluded | kept | kept p95/p05 |
+| ---: | ---: | ---: | ---: |
+| none | 0 | 202 | 9.6 |
+| 500 | 11 | 191 | 9.2 |
+| 1,000 | 15 | 187 | 9.0 |
+| **2,000** | **24** | **178** | **6.8** |
+| 5,000 | 35 | 167 | 6.2 |
+| 20,000 | 66 | 136 | 5.9 |
+
+Most of the available improvement arrives by 2,000 and the curve flattens after
+it, while the cost of a higher floor rises steadily: every excluded symbol falls
+back to a file wide default instead of its own measurement. 3 common minutes
+selects the same rows on this population, so it catches nothing extra today and
+exists for the case where a symbol trades a large block in one minute and looks
+well measured on volume alone.
+
+The impossible value is refused separately from the floors and regardless of
+volume, on the same reasoning as [Float rotation] max_float_to_shares_outstanding:
+a value that cannot occur is refused for being impossible, not for being thin.
+
+Below any of these the symbol uses premarket_capture_rate and the row records
+which refusal sent it there, so a thin measurement is visible rather than
+silently averaged in.
 
 ### The volume check note
 
