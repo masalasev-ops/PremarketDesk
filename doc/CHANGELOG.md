@@ -108,7 +108,13 @@ full inventory of enforce calls in the suite found none exercising a check (e)
 violation at all. Worse, and this is the part nobody would have noticed:
 vintage.enforce runs in build_packet against a HAND BUILT dict carrying
 candidates, market_snapshot and session_date, so check (e) walked ZERO ROWS on
-every run this project has ever made. The whole check was dead. Adding
+every run this project has ever made. The whole check was dead.
+
+Doubly so, and the second reason is the one that would have outlived the first:
+no packet carried a notable_movers key either, because the section did not
+exist. Building the section fixes that half on its own. It does NOT fix the
+hand built dict, which would have gone on hiding the rows from the gate however
+full the packet was, and which is the half nothing would have noticed. Adding
 notable_movers to that dict is the line that armed it, and
 claim_a_mis_stamped_notable_row_stops_the_run now exercises enforce raising,
 rewriting data/UNVERIFIED and re-gating delivery, over a mis-stamped leg, a
