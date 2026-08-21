@@ -2,6 +2,16 @@
 # Run from any directory: powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
 # Remove everything again with: -Unregister
 #
+# Arm the one off socket cap probe for a chosen morning with:
+#   ... -File tasks\register_tasks.ps1 -Probe 2026-08-21
+# That registers ONE task with ONE trigger and touches nothing else, which is
+# the whole reason it exists. The 2026-08-19 re-arm recorded in CHANGELOG.md
+# improvised with `schtasks /Change` against a task that had never been
+# created, so it failed silently, and the only probe data that exists was
+# taken by hand hours later on a regular hours tape instead of the premarket
+# one it was meant to measure. A probe that is meant to be deleted still needs
+# a supported way to be created, or it gets created wrong.
+#
 # This uses the ScheduledTasks module, not schtasks /Create, because this
 # project's path contains spaces and schtasks string quoting stored the /TR
 # value unquoted, which made every task die at fire time with 0x80070002,
@@ -11,7 +21,7 @@
 # All times are local machine time and the machine is expected to keep US
 # Eastern. If this machine ever changes time zone, re-derive these triggers
 # from the clocks in doc\CRITERIA.md before re-registering.
-param([switch]$Unregister)
+param([switch]$Unregister, [string]$Probe)
 
 $root = Split-Path -Parent $PSScriptRoot
 $weekdays = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
@@ -61,11 +71,70 @@ $jobs = @(
     @{ Name = "meter-sampler"; Bat = "job_meter_sampler.bat"; Days = @("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"); Start = "00:00"; RepeatMin = 30; RepeatHours = 24 }
 )
 
-# One time cleanup: the first registrations used flat root level names.
-foreach ($legacy in "PremarketDesk-discover", "PremarketDesk-collector",
-                    "PremarketDesk-morning-chain", "PremarketDesk-nightly",
-                    "PremarketDesk-universe") {
-    schtasks /Delete /TN $legacy /F 2>$null | Out-Null
+# The one off probe. NOT in $jobs, because everything in $jobs is registered
+# by every plain run of this script and this task is meant to be deleted the
+# moment it has answered doc/research/COLLECTOR_VOLUME.md. A plain run must
+# never resurrect it.
+#
+# 06:30 is derived, not chosen. job_probe_socket_cap.bat runs 4 cycles of two
+# arms at 120s with 90s to settle, which is 28 minutes, and the probe adds a
+# 60s buffer before checking itself against CRITERIA [Collector] start_time,
+# 07:20. It refuses any run that would still be holding socket slots when the
+# collector wants them, because the fifty symbol pool is account wide. 06:30
+# finishes at 06:59 and leaves 21 minutes of slack, and the execution time
+# limit below is set so Task Scheduler's own kill also lands before 07:20 if
+# the probe hangs rather than exits.
+$probeName = "probe-socket-cap"
+$probeStart = "06:30"
+if ($Probe) {
+    $bat = Join-Path (Join-Path $root "tasks") "job_probe_socket_cap.bat"
+    if (-not (Test-Path $bat)) {
+        Write-Output "MISSING   $bat. The probe was deleted, which is what was"
+        Write-Output "          meant to happen once the question was answered."
+        exit 1
+    }
+    try {
+        $day = [datetime]::ParseExact($Probe, "yyyy-MM-dd", $null)
+    } catch {
+        Write-Output "FAILED    -Probe wants a date as yyyy-MM-dd, got '$Probe'"
+        exit 1
+    }
+    $at = $day.Date.Add([timespan]::Parse($probeStart))
+    if ($at -le (Get-Date)) {
+        Write-Output "FAILED    $Probe $probeStart is in the past. A one time trigger"
+        Write-Output "          already behind the clock never fires."
+        exit 1
+    }
+    if ($day.DayOfWeek -eq "Saturday" -or $day.DayOfWeek -eq "Sunday") {
+        Write-Output "FAILED    $Probe is a $($day.DayOfWeek). The probe measures a"
+        Write-Output "          premarket tape, and there is not one at the weekend."
+        exit 1
+    }
+    # StartWhenAvailable is deliberate even though it can fire the probe onto a
+    # denser tape than the premarket one wanted: the probe stamps the window it
+    # actually saw into its own output and refuses the only harmful case, which
+    # is overlapping the collector. A late reading that says which tape it read
+    # beats no reading and no log at all.
+    $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
+    $trigger = New-ScheduledTaskTrigger -Once -At $at
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 45)
+    try {
+        Register-ScheduledTask -TaskName $probeName -TaskPath "\PremarketDesk\" `
+            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Write-Output "registered PremarketDesk\$probeName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
+        Write-Output "           it writes logs\probe-socket-cap-$Probe.log and spends no EODHD quota"
+        Write-Output "           read it back the NEXT session, which DOES spend one intraday call per watched symbol."
+        Write-Output "           From cmd in the project root, because -m needs src on the path:"
+        Write-Output "             set PYTHONPATH=%CD%\src"
+        Write-Output "             .venv\Scripts\python.exe -m research.probe_socket_cap --compare socket-cap-probe-$Probe.json"
+        Write-Output "           delete it when the question is answered:"
+        Write-Output "             schtasks /Delete /TN ""\PremarketDesk\$probeName"" /F"
+    } catch {
+        Write-Output "FAILED    PremarketDesk\$($probeName): $($_.Exception.Message)"
+        exit 1
+    }
+    exit 0
 }
 
 foreach ($job in $jobs) {
@@ -115,6 +184,19 @@ foreach ($job in $jobs) {
         Write-Output "registered PremarketDesk\$($job.Name) at $($job.Start) ($($job.Days -join ','))$repeat"
     } catch {
         Write-Output "FAILED    PremarketDesk\$($job.Name): $($_.Exception.Message)"
+    }
+}
+
+if ($Unregister) {
+    # The probe is not in $jobs, so the loop above cannot have reached it. A
+    # removal that leaves one task behind is worse than no removal, because
+    # the folder then looks empty in the GUI listing people actually read.
+    try {
+        Unregister-ScheduledTask -TaskName $probeName -TaskPath "\PremarketDesk\" `
+            -Confirm:$false -ErrorAction Stop
+        Write-Output "removed   PremarketDesk\$probeName"
+    } catch {
+        Write-Output "not found PremarketDesk\$probeName"
     }
 }
 

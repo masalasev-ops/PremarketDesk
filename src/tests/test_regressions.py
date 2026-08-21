@@ -4,11 +4,15 @@ An adversarial read of the whole scheduled path raised forty findings and
 twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
-rest, and it now carries forty four claims. They have nothing in common except
-how they were found, which is why they are grouped by that rather than
-scattered across the themed suites: a reader asking "what did those reads
-actually catch" gets one file, and a reader asking "is it still caught" runs
-it.
+rest, and arming the socket cap probe for 2026-08-21 added the last. It now
+carries fifty nine claims, a count read off the file rather than remembered,
+because it said forty four for a while after it held fifty seven and a suite
+that miscounts itself is the first thing a reader stops trusting.
+
+They have nothing in common except how they were found, which is why they are
+grouped by that rather than scattered across the themed suites: a reader asking
+"what did those reads actually catch" gets one file, and a reader asking "is it
+still caught" runs it.
 
 The pattern across them, worth naming because it will recur. Almost none was a
 wrong algorithm. They were seams: a UTC clock relabelled instead of converted,
@@ -4642,6 +4646,120 @@ _EM_DASH = chr(0x2014)
 _EM_DASH_ENTITIES = ("&" + "mdash;", "&" + "#8212;", "&" + "#x2014;")
 
 
+# ------------------------------ the 2026-08-21 arming: the instrument itself
+
+def claim_a_flag_the_run_never_recorded_is_not_a_zero(
+        failures: list[str]) -> None:
+    """The probe's off exchange column says nothing rather than saying none.
+
+    compare_to_vendor read the flagged count as
+    run.get("off_exchange", {}).get(symbol, 0), which returns 0 for a run that
+    HAD the counter and saw nothing and for a run that never had the counter
+    at all. Those are opposite facts, and the whole off exchange question
+    forks on which one it is: a small socket share with no flagged prints and
+    no ignored condition code means the trades stream omits off exchange
+    volume, which no collector change reaches, while the same share WITH
+    flagged prints means the parser is dropping volume the feed delivered.
+
+    data/socket-cap-probe-2026-08-19.json is the only probe result that
+    exists and it predates the counter: its runs carry arm, counts, cycle,
+    messages_total, refused, replayed, seconds, started_at, status, subscribed
+    and volume, and nothing else. Read through the old expression it printed a
+    flagged column of zero for every symbol in both arms. The comparison run
+    on 2026-08-20 published that column, and the absence would have been read
+    as the measurement that closes the fork.
+    """
+    from research import probe_socket_cap as probe
+
+    absent = probe._flagged_over([{"counts": {}}, {"counts": {}}], "SPY.US")
+    if absent != (0, False):
+        failures.append("a run that never carried off_exchange reported "
+                        f"{absent!r} rather than (0, False), so an absence is "
+                        "still indistinguishable from a measured zero")
+
+    measured = probe._flagged_over([{"off_exchange": {"SPY.US": 0}}], "SPY.US")
+    if measured != (0, True):
+        failures.append("a run that carried off_exchange and saw nothing "
+                        f"reported {measured!r} rather than (0, True)")
+
+    # One leg recording is enough to make the column meaningful, and the count
+    # must be the sum over the legs that did.
+    mixed = probe._flagged_over(
+        [{"counts": {}}, {"off_exchange": {"SPY.US": 4}},
+         {"off_exchange": {"SPY.US": 3}}], "SPY.US")
+    if mixed != (7, True):
+        failures.append(f"a partly recorded arm reported {mixed!r} rather "
+                        "than (7, True)")
+
+    print("  flagged      an off exchange count the run never took prints as "
+          "not recorded, and a real zero still prints as zero")
+
+
+def claim_a_partial_minute_counts_only_the_seconds_it_covered(
+        failures: list[str]) -> None:
+    """The socket cap probe charges the tape for the arm, not for whole bars.
+
+    probe_socket_cap.compare_to_vendor produces the third number behind
+    doc/research/COLLECTOR_VOLUME.md, which is the open question the delivery
+    gate waits on: what EODHD's own one minute bars say the minutes an arm
+    listened to actually traded. It summed every bar that overlapped the arm
+    AT ALL and took each one whole. An arm is 120 seconds, and a 120 second
+    arm that does not begin on a minute boundary overlaps three one minute
+    bars, so 180 seconds of tape were charged against 120 seconds of socket.
+    The published socket share was two thirds of the truth, decided by nothing
+    but where the clock happened to fall when the arm started.
+
+    That number is the whole output of the tool, and the guidance printed
+    under it reads "far below 100%" as evidence the feed omits volume. A feed
+    delivering every share would have been published at 67 percent, which is
+    the reading that would have been acted on.
+
+    The task was registered for 2026-08-21 before this was found, so this
+    claim exists to keep the reading it takes and the reading it reports the
+    same one.
+    """
+    from research import probe_socket_cap as probe
+
+    # A 120 second arm starting 30 seconds into a minute, over four bars of
+    # 600 shares each. Bars are keyed by the epoch second their minute starts,
+    # which is the shape api.intraday returns.
+    start = dt.datetime(2026, 8, 21, 6, 30, 30, tzinfo=ettime.ET)
+    lo = ettime.epoch_s(start)
+    bars = {lo - 30: 600.0, lo + 30: 600.0, lo + 90: 600.0, lo + 150: 600.0}
+
+    measured = probe._vendor_shares_over(bars, start, 120.0)
+    if abs(measured - 1200.0) > 0.001:
+        failures.append(
+            f"a misaligned 120 second arm charged {measured:,.0f} vendor shares "
+            "against a tape carrying 600 a minute, where 1,200 is the whole of "
+            "the two minutes it heard and 1,800 is the old whole bar sum")
+
+    # The consequence in the terms the table prints: a socket that delivered
+    # every share is 100 percent, and used to be published as 67.
+    share = (1200.0 / measured * 100.0) if measured else float("nan")
+    if abs(share - 100.0) > 0.1:
+        failures.append("a socket that missed nothing would be published at "
+                        f"{share:.1f} percent of the tape")
+
+    # Alignment must not change the answer, or the fix has only moved the bias
+    # rather than removed it.
+    aligned = dt.datetime(2026, 8, 21, 6, 30, 0, tzinfo=ettime.ET)
+    lo2 = ettime.epoch_s(aligned)
+    bars2 = {lo2: 600.0, lo2 + 60: 600.0, lo2 + 120: 600.0}
+    measured2 = probe._vendor_shares_over(bars2, aligned, 120.0)
+    if abs(measured2 - 1200.0) > 0.001:
+        failures.append(f"a minute aligned arm read {measured2:,.0f} rather than "
+                        "1,200, so pro rating introduced a bias of its own")
+
+    # And a bar the arm never reached contributes nothing at all.
+    outside = probe._vendor_shares_over({lo + 600: 600.0}, start, 120.0)
+    if outside != 0.0:
+        failures.append(f"a bar ten minutes past the arm contributed {outside}")
+
+    print("  denominator  the vendor side covers the seconds the arm listened, "
+          "aligned or not, so the socket share is the socket's")
+
+
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     """Hard rule 4 is guarded by something other than good intentions.
 
@@ -4785,6 +4903,8 @@ def main() -> int:
     claim_the_watchlist_comment_matches_what_the_watchdog_does(failures)
     claim_a_partly_refused_sweep_is_reported_as_one(failures)
     claim_no_em_dash_survives_anywhere(failures)
+    claim_a_partial_minute_counts_only_the_seconds_it_covered(failures)
+    claim_a_flag_the_run_never_recorded_is_not_a_zero(failures)
 
     if failures:
         for failure in failures:

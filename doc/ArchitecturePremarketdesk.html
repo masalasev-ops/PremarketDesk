@@ -994,10 +994,12 @@ tbody tr:hover{background:var(--ground)}
 
     <dt>tasks\</dt>
     <dd>the seven job batch files, register_tasks.ps1, and scheduling notes. One more .bat file
-    sits here and is deliberately absent from register_tasks.ps1: job_probe_socket_cap, the
-    instrument for the open collector volume question, with no task registered for it today. It
-    survives <code>register_tasks.ps1 -Unregister</code>, which only knows the nine, so removing it
-    is a manual step. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
+    sits here and is deliberately absent from register_tasks.ps1's schedule: job_probe_socket_cap,
+    the instrument for the open collector volume question. It is a one off, armed a morning at a
+    time with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> and armed today for 2026-08-21
+    06:30. A plain run of the script never registers it, so refreshing the schedule cannot
+    resurrect a probe that has been answered and deleted, and <code>-Unregister</code> removes it
+    if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
     2026-08-20, once both questions were answered and recorded in DECISIONS.md; the modules they
     wrapped stay in the research package
     <span style="color:var(--ink-3)">(C02-C06, C46, C48)</span></dd>

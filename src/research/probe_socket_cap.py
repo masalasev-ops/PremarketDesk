@@ -328,6 +328,60 @@ def _report_off_exchange(runs: list[dict[str, Any]], watch: list[str]) -> None:
               "it, which is why dark_pool_volume is empty in every bar.")
 
 
+def _flagged_over(legs: list[dict[str, Any]], symbol: str) -> tuple[int, bool]:
+    """Off exchange prints for one symbol, and whether any run recorded them.
+
+    Returns (count, recorded). run.get("off_exchange", {}).get(symbol, 0)
+    returned 0 for a run that HAD the field and saw nothing and for a run that
+    never had the field at all, and those are opposite facts. The 2026-08-19
+    payload, the only probe result that exists, predates off_exchange entirely:
+    its runs carry arm, counts, cycle, messages_total, refused, replayed,
+    seconds, started_at, status, subscribed and volume, and nothing else. Read
+    through the old expression it printed a flagged column of zero for every
+    symbol in both arms, which is the reading the whole off exchange question
+    turns on, and it was an absence dressed as a measurement.
+    """
+    count = 0
+    recorded = False
+    for run in legs:
+        if "off_exchange" not in run:
+            continue
+        recorded = True
+        count += run["off_exchange"].get(symbol, 0)
+    return count, recorded
+
+
+def _vendor_shares_over(bars: dict[int, float], start: dt.datetime,
+                        seconds: float) -> float:
+    """Vendor shares for exactly the seconds an arm listened, not for whole bars.
+
+    A 120 second arm that does not start on a minute boundary overlaps three
+    one minute bars, and summing all three charged 180 seconds of tape against
+    120 seconds of socket. That inflated the denominator by half for no reason
+    but where the clock happened to fall, and it inflated it silently: the
+    socket share printed below is the number this probe exists to produce, and
+    a reading of 40 percent would have been published for a feed delivering 60.
+    Each bar now contributes only the fraction of itself the arm covered, so
+    the weights sum to seconds/60 whatever the alignment.
+
+    Pro rating spreads a bar's volume evenly across its minute, which is an
+    assumption rather than a measurement: EODHD publishes nothing finer than a
+    minute, so the partial minutes at each end of an arm cannot be read any
+    other way. Only the two end bars are ever partial, so at 120 seconds the
+    assumption carries at most one minute of the three and the whole middle
+    bar is exact. Starting each arm on a minute boundary would remove it
+    entirely and is worth doing if this probe is ever run again.
+    """
+    lo = float(ettime.epoch_s(start))
+    hi = lo + float(seconds)
+    total = 0.0
+    for ts, volume in bars.items():
+        overlap = min(float(ts) + 60.0, hi) - max(float(ts), lo)
+        if overlap > 0.0:
+            total += volume * overlap / 60.0
+    return total
+
+
 def compare_to_vendor(path: pathlib.Path) -> int:
     """The third number: what EODHD's own bars say those minutes traded.
 
@@ -351,33 +405,60 @@ def compare_to_vendor(path: pathlib.Path) -> int:
           f"{ettime.hhmm(min(starts))} to {ettime.hhmm(max(ends))} ET")
     print("probe: the vendor bar carries no trade count, only volume, so the "
           "third number is vendor SHARES for the same minutes. The substitution "
-          "is the vendor's, not this tool's.")
+          "is the vendor's, not this tool's. A bar the arm only partly covered "
+          "contributes only that fraction of itself, which is this tool's "
+          "assumption and is described in _vendor_shares_over.")
+    print("probe: split by arm, because a single blended percentage cannot "
+          "answer an A/B. The arms listened to the same symbols minutes apart, "
+          "so read A against B first.")
     print("")
-    print(f"  {'symbol':<10} {'socket msgs':>12} {'flagged':>9} "
+    print(f"  {'symbol':<8} {'arm':>3} {'socket msgs':>12} {'flagged':>9} "
           f"{'socket shares':>14} {'vendor shares':>14} {'socket %':>10}")
+    unrecorded = False
     for symbol in payload["watch"]:
         rows, error = api.intraday(symbol, min(starts) - dt.timedelta(minutes=2),
                                    max(ends) + dt.timedelta(minutes=2), "1m")
         if error or not rows:
-            print(f"  {symbol:<10} vendor bars unavailable ({error or 'no rows'}). "
+            print(f"  {symbol:<8} {'':>3} vendor bars unavailable "
+                  f"({error or 'no rows'}). "
                   "EODHD publishes a session after it closes.")
             continue
         bars = {int(r["timestamp"]): float(r.get("volume") or 0.0)
                 for r in rows if r.get("timestamp") is not None}
-        msgs = flag = 0
-        socket_shares = vendor_shares = 0.0
-        for run, start, end in zip(runs, starts, ends):
-            msgs += run["counts"].get(symbol, 0)
-            flag += run.get("off_exchange", {}).get(symbol, 0)
-            socket_shares += run["volume"].get(symbol, 0.0)
-            lo, hi = ettime.epoch_s(start), ettime.epoch_s(end)
-            # A minute bar counts when its minute overlaps the arm at all, and
-            # the arm's seconds are what the socket figure covers, so both
-            # sides are totals over the same clock.
-            vendor_shares += sum(v for ts, v in bars.items() if lo - 60 < ts < hi)
-        share = (socket_shares / vendor_shares * 100.0) if vendor_shares else float("nan")
-        print(f"  {symbol:<10} {msgs:>12,} {flag:>9,} {socket_shares:>14,.0f} "
-              f"{vendor_shares:>14,.0f} {share:>9.2f}%")
+        for arm in ("A", "B"):
+            legs = [(run, start) for run, start in zip(runs, starts)
+                    if run.get("arm") == arm]
+            if not legs:
+                print(f"  {symbol:<8} {arm:>3} every arm was refused or none ran, "
+                      "nothing to compare")
+                continue
+            msgs = 0
+            socket_shares = vendor_shares = 0.0
+            for run, start in legs:
+                msgs += run["counts"].get(symbol, 0)
+                socket_shares += run["volume"].get(symbol, 0.0)
+                vendor_shares += _vendor_shares_over(bars, start, run["seconds"])
+            flag, flag_recorded = _flagged_over([run for run, _ in legs], symbol)
+            if not flag_recorded:
+                unrecorded = True
+            shown = f"{flag:,}" if flag_recorded else "not rec"
+            share = (socket_shares / vendor_shares * 100.0) if vendor_shares else float("nan")
+            print(f"  {symbol:<8} {arm:>3} {msgs:>12,} {shown:>9} "
+                  f"{socket_shares:>14,.0f} {vendor_shares:>14,.0f} {share:>9.2f}%")
+    print("")
+    if unrecorded:
+        print("probe: flagged reads 'not rec' where the run predates the "
+              "off_exchange counter. That is an ABSENCE of evidence about off "
+              "exchange prints, not evidence that there were none, and the "
+              "paragraph below forks on exactly that. A run taken after "
+              "2026-08-20 records off_exchange, off_exchange_volume, census "
+              "and keys_seen, and can answer it.")
+        print("")
+    print("probe: A against B is the first read. A near 100% beside a B far "
+          "below it is the cap starving the feed, which the collector can act "
+          "on by subscribing to fewer names. Two arms alike says the "
+          "subscription size is not the cause, and the rest of this paragraph "
+          "then applies to both.")
     print("")
     print("probe: a socket share near 100% with no flagged prints means the feed "
           "and the tape agree and there was never anything to find. A socket "

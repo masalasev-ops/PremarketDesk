@@ -93,10 +93,13 @@ at the root and is gitignored along with .env.
   register as nine scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
   repeating weekday trigger and once more at 22:45. One further .bat file
-  sits here and is NOT in register_tasks.ps1: job_probe_socket_cap, the
-  instrument for the open collector volume question, with NO task currently
-  registered for it. It survives `register_tasks.ps1 -Unregister`, which only
-  knows the nine, so removing it is a manual step. job_probe_alpaca_live and
+  sits here and is not one of those nine: job_probe_socket_cap, the instrument
+  for the open collector volume question. It is a one off, and it is armed by
+  `register_tasks.ps1 -Probe YYYY-MM-DD`, which registers a single trigger at
+  06:30 that morning and touches nothing else. A plain run of the script never
+  registers it, because a probe that is meant to be deleted must not come back
+  every time the schedule is refreshed, and `-Unregister` now removes it if it
+  is there. It is armed today for 2026-08-21. job_probe_alpaca_live and
   job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both
   questions were answered and recorded in DECISIONS.md; their modules stay
   under src/research/
@@ -110,7 +113,7 @@ at the root and is gitignored along with .env.
   morning, UNVERIFIED (the delivery gate marker). Beside those sit the research
   instruments' outputs, which no pipeline module reads but which two open items
   above rest on: socket-cap-probe-YYYY-MM-DD.json (item A's own instrument,
-  last run 2026-08-19), purged-picks-YYYY-MM-DD.jsonl (the picks rows emptied
+  last run 2026-08-19 and next armed for 2026-08-21), purged-picks-YYYY-MM-DD.jsonl (the picks rows emptied
   on 2026-08-19), addressable_sweep.json, alpaca_assets.json,
   vwap_gappers_trades.csv, the probe-alpaca-live and probe-live-v1 files, and
   backtest/
@@ -446,16 +449,25 @@ the tree photograph clean.
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:
 
-  A. Collector premarket volume disagrees with the vendor and nobody knows why
-     (item 1). This is the delivery gate. The check now reports its SIGN, both
-     missing side counts and an aggregate ratio, so the next reading will say
-     which direction it is wrong in rather than only how far. The instrument
-     that would answer WHY is job_probe_socket_cap.bat and NO SCHEDULED TASK
-     EXISTS FOR IT: the re-arm recorded in CHANGELOG for 2026-08-19 used
-     `schtasks /Change` against a task that does not exist, so it failed
-     silently and the probe has not run since. Register it by hand for a
-     premarket morning. This is the top open item and it is a purchasing and
-     scheduling decision, not a code one.
+  A. Collector premarket volume disagrees with the vendor, and as of
+     2026-08-20 the likeliest reason is measured rather than guessed (item 1).
+     This is still the delivery gate. The vendor comparison that
+     COLLECTOR_VOLUME.md called "the one clean reading nobody has taken" has
+     now been taken: over the 2026-08-19 probe window the socket delivered
+     between 2.1 and 12.1 percent of EODHD's own consolidated bars for the
+     same minutes, at BOTH subscription sizes. Subscribing to fewer names buys
+     nothing. The remaining fork is whether the trades stream simply omits off
+     exchange volume, which no collector change reaches, or whether it marks
+     those prints with a condition code the parser does not read, which is a
+     fixable bug. That file answers NEITHER side: off_exchange,
+     off_exchange_volume, census and keys_seen were all added to the probe
+     after 2026-08-19, and until 2026-08-20 the comparison printed the missing
+     off exchange counter as a measured zero, which is the reading that would
+     have closed the fork the wrong way. job_probe_socket_cap.bat is armed for
+     2026-08-21 at 06:30 and will record the census on a premarket tape, which
+     is the tape the defect appears in. Arm it with
+     `register_tasks.ps1 -Probe YYYY-MM-DD`. What to do with the answer is a
+     decision; taking it is no longer one.
   B. The notable movers section, Layer 4, is specified below and NOT BUILT
      (item 4). Everything it rests on is built, tested and committed, including
      the vintage gate for its legs. Three of the four [Notable] CRITERIA keys
@@ -468,10 +480,14 @@ reconstruct it from the numbered items below:
   D. Nine lower severity findings from the same review were filed at high
      severity and never adversarially verified, because the review verified
      only the top 26 of 186. Three bear on numbers already relied on and are
-     the natural next unit of work: probe_socket_cap.compare_to_vendor sums
-     whole vendor minute bars against 120 second arms, which would inflate the
-     denominator by about 1.5x and is item A's own instrument;
-     float_rotation_study's ten session cold start would put roughly a third of
+     the natural next unit of work. The first is CLOSED on 2026-08-20 and
+     was real: probe_socket_cap.compare_to_vendor summed whole vendor minute
+     bars against 120 second arms, and all eight arms of the only run that
+     exists started between one and thirty four seconds into a minute, so the
+     inflation was not "about 1.5x", it was exactly 1.5x on every arm. Each
+     bar now contributes only the fraction of itself the arm covered, and
+     claim_a_partial_minute_counts_only_the_seconds_it_covered holds it there.
+     Two remain: float_rotation_study's ten session cold start would put roughly a third of
      the population the shipped float rotation bands were fitted on inside a
      warm-up artifact; and config.ca_bundle() writes the merged trust store
      with a plain write_text and re-serves it on mtime alone, with the Norton

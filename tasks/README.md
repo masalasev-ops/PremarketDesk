@@ -1,7 +1,9 @@
 # Scheduled jobs
 
 Nine Windows Task Scheduler tasks run PremarketDesk, from seven .bat files:
-job_nightly registers twice and job_monitor registers twice. Each .bat here
+job_nightly registers twice and job_monitor registers twice. A tenth task may
+be present and is not part of the schedule: see One off probes at the foot of
+this file. Each .bat here
 changes to the project root, runs its scripts with the project venv, and
 appends stdout and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped
 by the project's own ET clock so a locale change cannot mangle the file name.
@@ -48,9 +50,9 @@ reason it was noticed is that a test happened to read it.
 
     powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
 
-Remove them all again with `-Unregister`. The times come from the clocks in
-`doc\CRITERIA.md`. If a clock there changes, change the register script to
-match and re-register.
+Remove them all again with `-Unregister`, which also removes the one off
+probe if it is armed. The times come from the clocks in `doc\CRITERIA.md`. If a
+clock there changes, change the register script to match and re-register.
 
 In the Task Scheduler GUI the jobs live in their own folder: Task Scheduler
 Library > PremarketDesk. Press F5 if the console was already open when they
@@ -118,12 +120,42 @@ existing does not belong in a list of steps the watchdog expects.
   which proves the collector's premarket volume disagrees with EODHD's own 1m
   bars and that the check is sound, without saying why. It must not overlap
   the collector's 07:20 to 09:25 window, and it refuses any run that would.
-  NO TASK IS CURRENTLY REGISTERED FOR IT. The re-arm recorded in CHANGELOG.md
-  on 2026-08-19 used `schtasks /Change` against a task that does not exist, so
-  it failed and the probe has not run since. Register it by hand for a
-  premarket morning when the reading is wanted.
 
-Read it back with `--report`, and delete the task when done:
+  Arm it for a chosen morning with:
+
+      powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1 -Probe 2026-08-21
+
+  That registers exactly one task, `\PremarketDesk\probe-socket-cap`, with one
+  trigger at 06:30 on the date given, and touches nothing else. 06:30 is
+  derived, not chosen: four cycles of two arms at 120s with 90s to settle is
+  28 minutes, the probe adds a 60s buffer before checking itself against
+  CRITERIA [Collector] start_time, and 06:30 finishes at 06:59 with 21 minutes
+  of slack. The task's execution time limit is 45 minutes so that Task
+  Scheduler's own kill also lands before 07:20 if the probe hangs rather than
+  exits. It wakes the machine, because the 2026-08-19 run was lost to a power
+  outage at 06:20.
+
+  A plain run of register_tasks.ps1 never registers it. Everything in the $jobs
+  array comes back on every refresh of the schedule, and this task is meant to
+  stop existing. `-Unregister` does remove it, because a removal that leaves
+  one task behind in a folder people read as empty is worse than none.
+
+  Armed on 2026-08-20 for 2026-08-21 06:30. Before that it had no task at all:
+  the re-arm recorded in CHANGELOG.md on 2026-08-19 used `schtasks /Change`
+  against a task that had never been created, so it failed silently. A probe
+  meant to be deleted still needs a supported way to be created, or it gets
+  created wrong, which is why `-Probe` exists rather than another hand
+  improvisation.
+
+Read the socket side back from the run's own printed report. The vendor side is
+a separate command the NEXT session, because EODHD does not publish a session
+until it is over, and it DOES spend one intraday call per watched symbol, eight
+at present. From cmd in the project root:
+
+    set PYTHONPATH=%CD%\src
+    .venv\Scripts\python.exe -m research.probe_socket_cap --compare socket-cap-probe-2026-08-21.json
+
+Delete the task when the question is answered:
 
     schtasks /Delete /TN "\PremarketDesk\probe-socket-cap" /F
 

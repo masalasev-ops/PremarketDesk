@@ -15,6 +15,115 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, ninth: the socket cap probe is armed, and the number it prints was wrong by half
+
+The probe that answers the delivery gate had no scheduled task and no supported
+way to get one. It has both now, and reading its existing output first turned up
+an arithmetic error in the instrument itself.
+
+**Registered: `\PremarketDesk\probe-socket-cap`, once, 2026-08-21 06:30.** That
+brings the folder to nine scheduled steps plus one one off. 06:30 is derived
+rather than chosen: four cycles of two arms at 120s with 90s to settle is 28
+minutes, the probe adds a 60s buffer before checking itself against CRITERIA
+[Collector] start_time, and 06:30 finishes at 06:59 with 21 minutes of slack.
+The task's execution time limit is 45 minutes so Task Scheduler's own kill also
+lands before 07:20 if the probe hangs rather than exits, because the fifty
+symbol pool is account wide and a probe still holding slots would starve the
+morning it is meant to explain. WakeToRun is set: the 2026-08-19 run was lost to
+a power outage at 06:20.
+
+**register_tasks.ps1 gained `-Probe YYYY-MM-DD` and this is the point of the
+entry.** The 2026-08-19 re-arm improvised with `schtasks /Change` against a task
+that had never been created, so it failed silently and the document that waits
+on the probe went on saying it was armed. A probe that is meant to be deleted
+still needs a supported way to be created, or it gets created wrong. `-Probe`
+registers exactly one task with one trigger and exits; it refuses a date in the
+past, a weekend and anything that is not yyyy-MM-dd, all three verified. It is
+deliberately NOT in the $jobs array, because everything there comes back on
+every refresh of the schedule and this task must not outlive its question, and
+`-Unregister` now removes it, because a removal that leaves one task behind in a
+folder people read as empty is worse than none. The one time cleanup loop that
+deleted five flat root level task names from the first week is gone; those names
+have not existed for a fortnight and a full sweep of the machine's task list
+confirms it.
+
+**Nothing else in Task Scheduler was removed, because nothing else is
+redundant.** All nine registered tasks map one to one onto register_tasks.ps1
+and every one of them is a live step. A sweep of every task on the machine whose
+action or arguments name this project found those nine and nothing else: no
+orphan from the flat naming, no leftover from job_probe_alpaca_live or
+job_probe_live_v1, whose .bat files were deleted on 2026-08-20.
+
+**The instrument was inflating its denominator by exactly half.** The 2026-08-20
+review filed this at high severity and never verified it; it was real and worse
+than "about 1.5x". compare_to_vendor selected every one minute bar that
+overlapped an arm at all and counted each one whole, so a 120 second arm that
+did not start on a minute boundary charged 180 seconds of tape against 120
+seconds of socket. All eight arms in the only run that exists started between
+one and thirty four seconds into a minute, so it was exactly 1.5x on every one
+of them. Each bar now contributes only the fraction of itself the arm covered.
+The table is also split by arm, because the probe is an A/B and a single blended
+percentage cannot answer one. Pro rating spreads a bar's volume evenly across
+its minute, which is an assumption and is written down as one; only the two end
+bars of an arm are ever partial, and starting the arms on a minute boundary
+would remove it.
+
+**Then the reading nobody had taken was taken.** Eight intraday calls against
+data/socket-cap-probe-2026-08-19.json, 09:35 to 10:01 ET, no collector in the
+path. Both arms delivered a few percent of EODHD's own consolidated bars for the
+same minutes: weighted 4.68 percent at eight subscriptions and 5.78 percent at
+fifty, median per symbol 3.33 and 3.39, all sixteen readings between 2.06 and
+12.05 percent, and the per symbol B/A ratio has a median of 1.05. The capped arm
+delivered marginally MORE of the tape than the small one. The cap is innocent
+against the vendor's own bars and not merely against itself, and "subscribe to
+fewer names" is closed as a fix. Every one of those percentages would have read
+two thirds of itself before the denominator was corrected, under a printed
+guidance that reads "far below 100%" as evidence of a defect.
+
+**And the reading turned up a second defect, of the family this project keeps
+finding: a fact and an absence written identically.** The flagged column was
+read as `run.get("off_exchange", {}).get(symbol, 0)`, which returns 0 for a run
+that HAD the off exchange counter and saw nothing and for a run that never had
+it. The 2026-08-19 runs never had it. They carry arm, counts, cycle,
+messages_total, refused, replayed, seconds, started_at, status, subscribed and
+volume, and nothing else: `off_exchange`, `off_exchange_volume`, `census` and
+`keys_seen` were all added to the probe afterwards. So the comparison printed a
+flagged column of zero for every symbol in both arms, and zero flagged prints is
+exactly the reading that would close the question below. It prints `not rec`
+now, with a paragraph under the table saying that an absence of evidence about
+off exchange prints is not evidence that there were none.
+
+What the reading does NOT settle is that fork: a small share with no flagged
+prints and no IGNORED condition code means the trades stream omits off exchange
+volume, which no collector change reaches, while the same share with an ignored
+code means the parser is dropping volume the feed delivered. This payload holds
+no evidence on either side. The fork is open on the evidence rather than closed
+by it, and the 2026-08-21 firing records off_exchange, off_exchange_volume,
+census and keys_seen on a PREMARKET tape, which is the tape the defect appears
+in rather than the regular hours tape all of the above was taken on. Both open
+questions land on that one run.
+
+**59 claims.** claim_a_partial_minute_counts_only_the_seconds_it_covered holds
+the denominator: a misaligned arm and an aligned one both charge exactly the
+seconds they listened, and a bar the arm never reached contributes nothing.
+claim_a_flag_the_run_never_recorded_is_not_a_zero holds the other half, over a
+run with no counter, a run with a counter reading zero, and an arm where only
+some legs recorded it. The
+file's own header said it carried forty four when it held fifty seven, which is
+corrected and read off the file from here on, because a suite that miscounts
+itself is the first thing a reader stops trusting.
+
+Documents: BUILD_PLAN's open item A said NO SCHEDULED TASK EXISTS FOR IT in
+capitals and is rewritten around the measurement; its item D loses the finding
+that is now closed. tasks/README told the reader to read the probe back with
+`--report`, a flag the tool has never had, and gives the two real commands
+instead. Both architecture pages and the day arc page said no task was
+registered for it today. COLLECTOR_VOLUME.md's own new section had the flagged
+column as sixteen zeroes for the two hours between the comparison and the fix,
+which is written down here rather than quietly overwritten. COLLECTOR_VOLUME.md keeps "The one clean reading nobody
+has taken" as its section title, because that was true when it was written, and
+carries the reading as its last section with a forward pointer from the old one.
+
 ## 2026-08-20, eighth: what the nineteen fixes broke, and 173 corrections to the documents
 
 Two passes over the entry above. An adversarial review of commit ea167d5 itself

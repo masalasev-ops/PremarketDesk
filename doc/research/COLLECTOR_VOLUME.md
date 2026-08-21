@@ -361,6 +361,12 @@ after 09:25 when the socket was free, which is why the answer below was taken
 at 09:35.]
 
 Registered as a one time task for 06:20 on 2026-08-19. It spends no quota.
+[corrected 2026-08-20: it was registered for 06:20 and lost to a power outage,
+then re-armed with `schtasks /Change` against a task that had never been
+created, which failed silently, and the run that produced everything below was
+taken by hand at 09:35. There is now a supported way to arm it,
+`register_tasks.ps1 -Probe YYYY-MM-DD`, which registers one trigger at 06:30
+and wakes the machine. It is armed for 2026-08-21.]
 
 ## What the answer decides
 
@@ -482,6 +488,9 @@ rows at 10:05, while the same clock window on 2026-08-18 and 2026-08-17 returns
 comparison is a fetch of eight symbols tomorrow against
 data/socket-cap-probe-2026-08-19.json, which already holds per symbol share
 counts per arm.
+[corrected 2026-08-20: it has been taken. The section title is left as it was
+written because it was true then. The reading, and the arithmetic error it went
+through first, are the last section of this file.]
 
 Until that lands, note the order of magnitude it is likely to show. The probe's
 arm A carried SPY at about 3,888 shares a minute and arm B at about 4,984, while
@@ -744,3 +753,131 @@ observation.
 Null on all of it means a file written before the tag existed, which is not
 zero: the sessions in the tables above folded their replay into ordinary bars,
 and it is not recoverable from the file alone.
+# The clean reading, taken 2026-08-20
+
+The comparison the section above said was owed is done. Eight intraday calls
+against data/socket-cap-probe-2026-08-19.json, covering 09:35 to 10:01 ET, with
+no collector anywhere in the path: a known subscription size, a known symbol
+list and a known clock window against EODHD's own consolidated bars for the same
+minutes.
+
+## The denominator was wrong until the moment before it was read
+
+The 2026-08-20 review filed this at high severity without verifying it, and it
+was real. compare_to_vendor selected every one minute bar that overlapped an arm
+AT ALL and then counted each of them WHOLE. An arm is 120 seconds. An arm that
+does not begin on a minute boundary overlaps three bars, so 180 seconds of tape
+were charged against 120 seconds of socket.
+
+It is not "about 1.5x". Every one of the eight arms in this file started between
+one and thirty four seconds into a minute:
+
+| arm | started | seconds into the minute | whole bars charged |
+| --- | --- | ---: | ---: |
+| A1 | 09:35:01 | 1 | 3 |
+| B1 | 09:38:32 | 32 | 3 |
+| A2 | 09:42:02 | 2 | 3 |
+| B2 | 09:45:33 | 33 | 3 |
+| A3 | 09:49:03 | 3 | 3 |
+| B3 | 09:52:33 | 33 | 3 |
+| A4 | 09:56:04 | 4 | 3 |
+| B4 | 09:59:34 | 34 | 3 |
+
+Twenty four bar minutes charged where sixteen were listened to, on every arm,
+exactly 1.5x. Each bar now contributes only the fraction of itself the arm
+covered, which sums to seconds/60 whatever the alignment. Pro rating spreads a
+bar's volume evenly across its minute, which is this tool's assumption and not a
+measurement, and only the two end bars of an arm are ever partial. Every
+percentage below would have read two thirds of itself yesterday, and the
+guidance printed under the table reads "far below 100%" as evidence of a defect.
+
+## The reading
+
+Split by arm, because a single blended percentage cannot answer an A/B. The
+flagged column reads `not rec` for a reason given under the table, and the
+comparison was run before that column was fixed: it printed a measured looking
+zero in all sixteen rows.
+
+| symbol | arm | socket msgs | flagged | socket shares | vendor shares | socket % |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| SPY | A | 580 | not rec | 28,543 | 914,854 | 3.12% |
+| SPY | B | 544 | not rec | 27,554 | 807,986 | 3.41% |
+| QQQ | A | 2,342 | not rec | 130,849 | 1,766,454 | 7.41% |
+| QQQ | B | 2,863 | not rec | 172,133 | 1,557,379 | 11.05% |
+| IWM | A | 413 | not rec | 23,796 | 543,265 | 4.38% |
+| IWM | B | 307 | not rec | 13,960 | 483,844 | 2.89% |
+| DIA | A | 223 | not rec | 10,869 | 373,985 | 2.91% |
+| DIA | B | 164 | not rec | 8,522 | 196,012 | 4.35% |
+| TLT | A | 223 | not rec | 54,767 | 1,635,123 | 3.35% |
+| TLT | B | 164 | not rec | 44,098 | 1,432,395 | 3.08% |
+| USO | A | 32 | not rec | 3,057 | 113,016 | 2.70% |
+| USO | B | 41 | not rec | 2,643 | 128,190 | 2.06% |
+| UUP | A | 3 | not rec | 3,265 | 62,424 | 5.23% |
+| UUP | B | 2 | not rec | 1,994 | 16,550 | 12.05% |
+| VIXY | A | 83 | not rec | 5,471 | 164,678 | 3.32% |
+| VIXY | B | 72 | not rec | 5,454 | 161,805 | 3.37% |
+
+Arm A subscribed to 8 symbols, arm B to 50. Weighted across all eight symbols,
+arm A delivered 4.68 percent of the consolidated tape and arm B 5.78 percent.
+The median per symbol share is 3.33 percent for A and 3.39 percent for B. The
+per symbol B/A ratio has a median of 1.05, a minimum of 0.66 and a maximum of
+2.30, and the vendor totals differ between the arms only because each arm B leg
+sits three and a half minutes later in a decaying tape than its arm A partner.
+
+## What it settles
+
+**The cap is innocent, now against the vendor's own bars rather than against
+itself.** The internal A/B on 2026-08-19 already said the capped arm was not
+starved. This is the independent confirmation, and it is stronger: the capped
+arm delivered marginally MORE of the tape than the small one, on the symbols
+with enough messages to mean anything. Subscribing to fewer names buys nothing.
+That fix is closed as a candidate.
+
+**The socket delivers a few percent of the consolidated tape at any
+subscription size.** All sixteen readings fall between 2.06 and 12.05 percent.
+This is the order of magnitude the section above pre registered as likely, and
+it is the same order as the roughly tenfold under count the whole document is
+about. A collector that hears three percent of the tape and reports it as
+premarket volume is not broken; it is reporting a venue subset as though it were
+the market.
+
+**Nothing at all is known about off exchange prints in this window, and the
+tool said otherwise.** The flagged column was read as
+`run.get("off_exchange", {}).get(symbol, 0)`, which returns 0 for a run that
+HAD the counter and saw nothing and for a run that never had the counter, and
+these runs never had it. The comparison published a flagged column of zero for
+every symbol in both arms, and zero flagged prints is precisely the reading
+that would close the fork below. It now prints `not rec` and says why. What IS
+known, from a different source, is that dark_pool_volume is 0.0 in every bar
+row of every session this project has written; that is the collector's own
+files, not this probe's arms.
+
+## What it does not settle, and what will
+
+The printed guidance forks on whether an IGNORED condition code marks those
+prints. A share far below 100 percent with no flagged prints AND no ignored code
+means the trades stream simply omits off exchange volume, which no collector
+change reaches and which would make the shortfall a property to calibrate
+against. The same share WITH an ignored code means the parser is dropping volume
+the feed delivered, which is a bug and is fixable.
+
+**This file cannot answer either side of it.** Its runs carry arm, counts,
+cycle, messages_total, refused, replayed, seconds, started_at, status,
+subscribed and volume, and nothing else. `off_exchange`, `off_exchange_volume`,
+`census` and `keys_seen` were all added to the probe AFTER 2026-08-19, so the
+payload holds no condition code evidence and no `dp` evidence either. The fork
+is open on the evidence, not closed by it, and until 2026-08-20 the tool
+reported it as closed.
+
+The 2026-08-21 firing records the census, and it records it on a PREMARKET tape,
+which is the tape the defect appears in rather than the 09:35 regular hours tape
+everything above was measured on. Both of the open questions therefore land on
+the same run.
+
+## What is still blocked
+
+The rotation bands stay blocked. data/UNVERIFIED stays where it is. What has
+changed since the section above is that the shortfall now has a measured size at
+both subscription sizes, taken with no collector in the path, and one of the two
+remaining mechanisms is scheduled to be tested rather than argued about.
+
