@@ -78,6 +78,11 @@ at the root and is gitignored along with .env.
              addressable_sweep, vwap_gappers, probe_live_v1, probe_alpaca_live,
              probe_socket_cap, the two measure_ scripts.
              Instruments, not pipeline. Nothing downstream reads their output.
+  - probe_alpaca.py sits at the TOP of src/, not under research/, and is the
+             one exception to the line above: night/true_volume.py imports its
+             Probe and build_session, so it is the Alpaca transport for a
+             scheduled step as well as the instrument that wrote
+             doc/ALPACA_PROBE.md. Deleting it stops the nightly truth pass.
   - tests/   conftest, run_tests and the thirteen test_ modules. test_regressions
              holds one claim per defect confirmed by the 2026-08-20 audit;
              they are grouped by how they were found because that is the

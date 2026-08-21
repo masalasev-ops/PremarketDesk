@@ -1,10 +1,33 @@
-"""Measure what Alpaca's market data API actually serves, before anything is designed around it.
+"""Measure what Alpaca's market data API actually serves, and BE the client that uses it.
 
-Standalone by construction. Nothing imports this module, and it imports no data
-client of its own, because its whole job is to replace assumptions about a
-vendor with observed numbers. Every answer below is a measurement taken against
-the most recent completed trading day, so it needs no live premarket session and
-can be run and rerun on a weekend.
+**[corrected 2026-08-21: this file opened with "Standalone by construction.
+Nothing imports this module." That was true when it was written and is now
+false four times over, and the correction matters more than most because of
+WHO imports it. night/true_volume.py is a scheduled nightly step, and its
+Probe and build_session are how the record's premarket volume is fetched. A
+reader who took the old sentence at face value would feel free to delete this
+file, or to restructure Probe.get, and would break the only measurement that
+says how wrong the morning's estimate was.
+
+The four importers, so they can be found rather than guessed at:
+
+  night/true_volume.py            PRODUCTION. The 22:15 truth pass.
+  research/float_rotation_study.py  the Alpaca volume the shipped rotation
+                                    bands were fitted on
+  research/vwap_gappers.py        a closed study, kept because the code that
+                                    produced a recorded result is part of it
+  tests/conftest.py               swaps build_session for a blocked one, so
+                                    the hermetic suite cannot reach Alpaca
+
+What is still true: this imports no data client of its own, and main() writes
+nothing except doc/ALPACA_PROBE.md. The module is now two things, a probe and
+a transport, and only the first half is optional.]**
+
+The measurement half runs against the most recent completed trading day, so it
+needs no live premarket session and can be run and rerun on a weekend. Its
+answers are in doc/ALPACA_PROBE.md, which CRITERIA [Truth] now rests on for the
+one fact the truth pass depends on: the free plan serves the sip feed for a
+session that is over and refuses it for one that is running.
 
 It reads ALPACA_KEY_ID and ALPACA_SECRET_KEY from .env through config, so the
 keys are never typed into a shell and never printed. It writes nothing except
