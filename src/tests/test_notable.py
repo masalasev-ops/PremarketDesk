@@ -6,7 +6,7 @@ no quota: every input is synthetic, the closes sidecar is written into the
 sandbox, the gap statistics read is stubbed, and the exchange calendar is a
 plain weekday rule so the answer is the same on any machine.
 
-Twelve claims, and they are grouped by what they defend rather than by the
+Sixteen claims, and they are grouped by what they defend rather than by the
 order the code runs in.
 
 The fence first, because it is the thing a later change is most likely to erode
@@ -38,6 +38,8 @@ from typing import Any
 
 from core import config
 from core import criteria
+from core import ettime
+from morning import analyst
 from morning import scan
 from morning import verify_morning
 from morning import vintage
@@ -93,9 +95,23 @@ STATS = {
 
 
 def _bar(symbol: str, minute: str, close: float) -> dict[str, Any]:
-    return {"symbol": symbol, "minute_et": f"{SESSION}T{minute}:00-04:00",
-            "minute_epoch": 0, "o": close, "h": close, "l": close, "c": close,
-            "v": 1000}
+    """One collector minute bar, stamped at the minute it opens.
+
+    minute_epoch is DERIVED from the session and the minute, not left at zero.
+    It was zero at first, and _collector_last turns that epoch into the row's
+    price_time, so every premarket row in this fixture carried a price_time of
+    1969-12-31. Twelve claims ran against that and none of them noticed, because
+    none put a premarket row through vintage.check_packet. The thirteenth did,
+    and check (e) caught it: "declares leg premarket as of 2026-08-20 but its
+    price_time is dated 1969-12-31". A fixture whose rows could never pass the
+    gate the production rows must pass is a fixture testing something else.
+    """
+    hour, minutes = (int(part) for part in minute.split(":"))
+    when = dt.datetime(*(int(part) for part in SESSION.split("-")),
+                       hour, minutes, tzinfo=ettime.ET)
+    return {"symbol": symbol, "minute_et": ettime.stamp(when),
+            "minute_epoch": ettime.epoch_s(when),
+            "o": close, "h": close, "l": close, "c": close, "v": 1000}
 
 
 def _write_closes(session: str = SESSION, stamped: str | None = None,
@@ -607,6 +623,72 @@ def claim_the_context_tickers_stay_out_of_the_premarket_leg(
 
 # ------------------------------------------------------------ the degrades
 
+def claim_the_section_widens_containment_only_by_its_own_rows(
+        failures: list[str]) -> None:
+    """Putting the section in the packet does not make other names claimable.
+
+    This is the defect class that bit the project on 2026-08-20, three commits
+    before this section existed. analyst._packet_uppercase_tokens builds the
+    allowed set from the packet's RAW TEXT first, `set(_TOKEN_RE.findall(...))`,
+    and only then walks the structure. So EVERY uppercase run of one to six
+    characters anywhere in packet.json becomes a ticker the report may claim. A
+    fix that put the collector's per symbol roster into the packet widened that
+    set by 73 names in one line, and the suite was green: AMAT, AVGO, DE, HOOD,
+    MU, NOK, RIOT, SAP, TLT and TSM went from invented to allowed on the real
+    packet, which is exactly the set a model reaches for in a market context
+    sentence.
+
+    This section is universe wide, so it is the largest new body of text the
+    packet has gained since. The rule it has to hold is not "widen nothing", it
+    is "widen by the names it publishes and by nothing else": the report is
+    meant to name those and containment should let it. Anything ELSE the block
+    contributes, a reason string, a list name, a leg label, a counter source, a
+    headline, is text that must carry no claimable token.
+
+    Measured on the real 2026-08-20 packet while this was written: 139 tokens
+    to 159, twenty added, and all twenty were the ten published symbols in both
+    spellings.
+    """
+    _write_closes()
+    block, _packet, _rows = _run()
+
+    base = {
+        "session_date": SESSION,
+        "candidates": _candidates(),
+        "market_snapshot": [{"label": "spy", "symbol": "SPY.US", "last": 700.0}],
+        "gaps_to_fill": [],
+    }
+    before = analyst._packet_uppercase_tokens(json.dumps(base))
+    base["notable_movers"] = block
+    after = analyst._packet_uppercase_tokens(json.dumps(base))
+
+    published: set[str] = set()
+    for row in block["rows"]:
+        symbol = str(row["symbol"])
+        published.add(symbol.upper())
+        published.add(symbol.upper().split(".")[0])
+
+    added = after - before
+    stray = sorted(added - published)
+    if stray:
+        failures.append(
+            f"the section made {stray} claimable, and none of them is a symbol "
+            "it publishes. Every uppercase run of one to six characters in the "
+            "packet text is a ticker the report may then claim, so a reason "
+            "string or a label carrying one hands the model a name it holds no "
+            "evidence about.")
+    if not block["rows"]:
+        failures.append("the fixture produced no rows, so this measured nothing")
+    elif not (added & published):
+        failures.append("the section published rows and widened the allowed set "
+                        "by none of their symbols, so containment would report "
+                        "its own section's tickers as invented and stop the "
+                        "chain before render, verify, deliver and archive")
+
+    print(f"  containment  {len(before)} tokens to {len(after)}, "
+          f"{len(added)} added and all of them symbols the section publishes")
+
+
 def claim_the_section_examines_the_universe_and_not_the_survivors(
         failures: list[str]) -> None:
     """The denominator is the universe, and zero examined is not zero selected.
@@ -643,6 +725,106 @@ def claim_the_section_examines_the_universe_and_not_the_survivors(
     print(f"  universe     {block['universe_examined']} examined, "
           + ", ".join(f"{leg} {block['legs'][leg]['selected']} selected"
                       for leg in sorted(block["legs"])))
+
+
+def claim_a_defect_in_the_section_costs_the_section(failures: list[str]) -> None:
+    """The morning survives a raise inside the briefing table.
+
+    build_packet calls notable_section, which wraps notable_movers. If it called
+    notable_movers directly, any defect that raised would take build_packet down
+    with it; the morning chain stops on the first non-zero exit, so a bug in a
+    briefing table would cost the packet, the report and the email. The section
+    is additive: nothing downstream reads it, no score depends on it, and no
+    picks row comes from it.
+
+    Nothing is swallowed. The exception type and message reach both the packet's
+    gaps and the section's own skipped reason, and every leg and list carries
+    it, so the report says what raised in the same place it says what was lost.
+
+    A KeyboardInterrupt is NOT caught, because that is somebody stopping the run
+    rather than a defect here, and an interrupt turned into a thin briefing is
+    worse than useless.
+    """
+    import ast
+    import pathlib as _pathlib
+
+    real = scan.notable_movers
+    packet = scan.Packet()
+
+    def explode(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise ZeroDivisionError("a denominator nobody guarded")
+
+    try:
+        scan.notable_movers = explode
+        block = scan.notable_section(SESSION, {"symbols": UNIVERSE_ROWS}, {}, [],
+                                     packet)
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"notable_section let {type(exc).__name__} out, so a "
+                        "defect in a briefing table would end the morning: "
+                        f"{exc}")
+        scan.notable_movers = real
+        return
+    finally:
+        scan.notable_movers = real
+
+    if block.get("rows"):
+        failures.append("a section that raised still published rows")
+    skipped = block.get("skipped") or ""
+    if "ZeroDivisionError" not in skipped or "denominator nobody guarded" not in skipped:
+        failures.append(f"the section's skipped reason is {skipped!r} and does "
+                        "not name what raised, so the report cannot say why the "
+                        "table is missing")
+    if not any("ZeroDivisionError" in note for note in packet.gaps):
+        failures.append(f"no packet gap names the raise: {packet.gaps}")
+    legs = block.get("legs") or {}
+    if set(legs) != {"premarket", "prior_session", "two_session"}:
+        failures.append(f"the empty block reports on legs {sorted(legs)} rather "
+                        "than the three the section emits")
+    if any(report.get("available") or not report.get("reason")
+           for report in legs.values()):
+        failures.append("a leg in the empty block reads available, or carries no "
+                        "reason, so a raise is indistinguishable from a quiet "
+                        "market")
+    if set(block.get("list_reasons") or {}) != set(scan.NOTABLE_LISTS):
+        failures.append("the empty block does not carry a reason for each of "
+                        f"the four lists: {block.get('list_reasons')}")
+
+    # An interrupt is not a defect and must still stop the run.
+    def interrupt(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise KeyboardInterrupt
+
+    try:
+        scan.notable_movers = interrupt
+        scan.notable_section(SESSION, {"symbols": UNIVERSE_ROWS}, {}, [],
+                             scan.Packet())
+        failures.append("notable_section swallowed a KeyboardInterrupt, so "
+                        "stopping the run by hand would produce a thin briefing "
+                        "instead of stopping")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        scan.notable_movers = real
+
+    # And build_packet must actually go through the wrapper.
+    source = _pathlib.Path(scan.__file__).read_bytes().decode("utf-8")
+    tree = ast.parse(source)
+    build = next((n for n in tree.body
+                  if isinstance(n, ast.FunctionDef) and n.name == "build_packet"),
+                 None)
+    if build is None:
+        failures.append("scan.build_packet is gone")
+    else:
+        called = {n.func.id for n in ast.walk(build)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+        if "notable_section" not in called:
+            failures.append("build_packet does not call notable_section, so the "
+                            "wrapper guards nothing")
+        if "notable_movers" in called:
+            failures.append("build_packet calls notable_movers directly, so a "
+                            "raise inside it reaches build_packet after all")
+
+    print("  survives     a raise inside the section is published as the "
+          "section's own reason, and an interrupt still stops the run")
 
 
 def claim_a_missing_input_names_the_leg_it_lost(failures: list[str]) -> None:
@@ -689,6 +871,91 @@ def claim_a_missing_input_names_the_leg_it_lost(failures: list[str]) -> None:
 
     print("  degrade      a lost sidecar names all three legs and nulls the "
           "examined count, and a silent collector loses only its own")
+
+
+def claim_an_undated_sidecar_costs_two_legs_and_not_the_morning(
+        failures: list[str]) -> None:
+    """A closes file with no session for c1 does not take the report down.
+
+    Both universe legs are stamped with c1's SESSION, not with its value. A
+    sidecar whose sessions.c1 is null therefore produced rows carrying
+    as_of_session None, vintage check (e) refused them, enforce RAISED, and the
+    morning chain stopped before the analyst with data/UNVERIFIED rewritten. A
+    briefing section had taken the whole report down. Reproduced before the fix:
+    two rows, two violations, "declares leg prior_session with no
+    as_of_session".
+
+    The writer does not produce that shape today, because discover returns
+    before writing when the calendar cannot name the prior session. But it does
+    write a null into that block legitimately, for c3, so a null inside sessions
+    is a shape the file genuinely has, and the cost of being wrong is the entire
+    morning rather than a thin table.
+
+    The premarket leg is unaffected on purpose: it stamps today and reads c1 as
+    a NUMBER, so an undated c1 costs the two legs that need it to be a date and
+    nothing else.
+    """
+    closes = {"QUIET.US": {"c1": 104.04, "c2": 102.0, "c3": 100.0}}
+    path = config.DATA_DIR / f"universe-closes-{SESSION}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "generated_at": f"{SESSION}T07:15:00-04:00",
+        "session_date": SESSION,
+        "sessions": {"c1": None, "c2": C2, "c3": C3},
+        "closes": closes,
+        "universe_examined": 1,
+        "names_with_at_least_one_close": 1,
+        "third_session_available": True,
+    }, indent=2), encoding="utf-8")
+
+    bars = {"QUIET.US": [_bar("QUIET.US", "08:40", 110.0)]}
+    block, packet, _rows = _run(bars=bars, candidates=[])
+
+    if block["rows"]:
+        undated = [r["symbol"] for r in block["rows"] if not r["as_of_session"]]
+        if undated:
+            failures.append(
+                f"{undated} were published with no as_of_session. vintage check "
+                "(e) refuses those, enforce raises, and the morning chain stops "
+                "before the analyst over a briefing table.")
+    for leg in ("prior_session", "two_session"):
+        report = block["legs"][leg]
+        if report["available"] or "sessions.c1" not in (report["reason"] or ""):
+            failures.append(f"with an undated c1 the {leg} leg reports "
+                            f"available={report['available']} reason="
+                            f"{report['reason']!r}, which does not name the "
+                            "field that could not be read")
+    if not any("sessions.c1" in note for note in packet.gaps):
+        failures.append(f"no packet gap names the undated c1: {packet.gaps}")
+
+    # The premarket leg reads c1 as a number and stamps today, so it survives.
+    premarket = [r for r in block["rows"] if r["leg"] == "premarket"]
+    if not premarket:
+        failures.append("the premarket leg was lost with the universe legs, and "
+                        "it neither needs c1 to be a date nor stamps itself with "
+                        f"one: {block['legs']['premarket']}")
+    elif premarket[0]["as_of_session"] != SESSION:
+        failures.append(f"a premarket row is stamped "
+                        f"{premarket[0]['as_of_session']!r} rather than today")
+
+    # And the whole thing passes the gate it used to fail.
+    stubbed = market_today.decide
+    market_today.decide = lambda details, day: (day.weekday() < 5, "stubbed")
+    try:
+        violations = vintage.check_packet({
+            "session_date": SESSION, "candidates": [], "market_snapshot": [],
+            "notable_movers": block,
+        })
+    finally:
+        market_today.decide = stubbed
+    if violations:
+        failures.append(f"the section built off an undated sidecar still fails "
+                        f"the vintage gate, so enforce would still stop the "
+                        f"chain: {violations}")
+
+    print(f"  undated c1   the two legs that need a date are lost and named, "
+          f"the premarket leg survives with {len(premarket)} row(s), and the "
+          "gate passes")
 
 
 def claim_a_closes_file_from_another_session_is_refused(
@@ -807,9 +1074,12 @@ CLAIMS = (
     claim_no_ranked_list_mixes_two_legs,
     claim_a_mis_stamped_notable_row_stops_the_run,
     claim_the_context_tickers_stay_out_of_the_premarket_leg,
+    claim_the_section_widens_containment_only_by_its_own_rows,
     claim_the_section_examines_the_universe_and_not_the_survivors,
     claim_a_missing_input_names_the_leg_it_lost,
+    claim_a_defect_in_the_section_costs_the_section,
     claim_a_closes_file_from_another_session_is_refused,
+    claim_an_undated_sidecar_costs_two_legs_and_not_the_morning,
     claim_the_counters_say_whether_they_were_read_or_derived,
     claim_a_name_off_the_watchlist_is_marked_and_not_hidden,
 )

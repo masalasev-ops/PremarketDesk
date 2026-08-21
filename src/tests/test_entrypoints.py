@@ -1265,6 +1265,45 @@ def claim_scan_survives_an_empty_pool(failures: list[str]) -> None:
             if not payload.get("gaps_to_fill"):
                 failures.append(f"an {label} watchlist wrote no gaps_to_fill, so "
                                 "the report would not say why it is empty")
+
+            # Layer 4 rides the same total degrade path, and it is the one
+            # section that reads files nothing else in build_packet reads. A
+            # KeyError or a raise here would take the whole chain down on the
+            # morning the chain is already thinnest, which is the failure this
+            # claim exists for.
+            notable = payload.get("notable_movers")
+            if not isinstance(notable, dict):
+                failures.append(f"an {label} watchlist produced notable_movers "
+                                f"{notable!r}, so the section is absent from a "
+                                "packet the report still ships")
+            else:
+                # Rows are EXPECTED even here, and that is the point of the
+                # section: both universe legs read the closes sidecar and the
+                # universe file, neither of which the watchlist touches. A
+                # morning that screened nobody still gets a briefing. What is
+                # checked is that every row it does publish is one the vintage
+                # gate would accept, because a row it would not takes the whole
+                # chain down rather than thinning the table.
+                for row in notable.get("rows") or []:
+                    missing = [key for key in ("symbol", "leg", "as_of_session")
+                               if not row.get(key)]
+                    if missing:
+                        failures.append(
+                            f"an {label} watchlist published a notable row "
+                            f"missing {missing}: {row}. vintage check (e) "
+                            "refuses those and enforce raises, so the morning "
+                            "chain would stop over a briefing table.")
+                legs = notable.get("legs") or {}
+                undated = [leg for leg, report in legs.items()
+                           if not report.get("available") and not report.get("reason")]
+                if undated:
+                    failures.append(f"an {label} watchlist left {undated} "
+                                    "unavailable with no reason recorded, which "
+                                    "reads exactly like a quiet market")
+                if set(legs) != {"premarket", "prior_session", "two_session"}:
+                    failures.append("the section reported on legs "
+                                    f"{sorted(legs)} rather than the three it "
+                                    "emits")
             written = scan.write_packet(payload)
             if not written.is_file():
                 failures.append(f"an {label} watchlist wrote no packet to disk")

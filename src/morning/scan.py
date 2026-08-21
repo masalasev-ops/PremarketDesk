@@ -2747,6 +2747,22 @@ def closes_denominators(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _readable_date(value: Any) -> dt.date | None:
+    """The session a stamp names, or None when it names nothing readable.
+
+    Used to decide whether the universe legs can be dated at all. ettime is the
+    only clock in this project and parse_date is its reader; this wraps it so a
+    null, an empty string and a malformed date all come back as one answer,
+    which is the only answer the caller acts on.
+    """
+    if not value:
+        return None
+    try:
+        return ettime.parse_date(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _pct_move(newer: Any, older: Any) -> float | None:
     """The percent move from older to newer, or None when either is unusable."""
     a, b = _as_float(newer), _as_float(older)
@@ -2849,6 +2865,34 @@ def leg_of_list_key(name: str) -> str:
     return _LIST_LEG[name]
 
 
+def empty_notable_block(reason: str) -> dict[str, Any]:
+    """The section, present and saying why it holds nothing.
+
+    An ABSENT notable_movers key and an EMPTY one are different facts and the
+    packet must not write them the same way: absent says the packet predates the
+    section, empty says today's section could not be built. Every leg and every
+    list carries the same reason, because whatever stopped the assembly stopped
+    all of them.
+    """
+    return {
+        "rows": [],
+        "lists": {name: [] for name in NOTABLE_LISTS},
+        "list_reasons": {name: reason for name in NOTABLE_LISTS},
+        "list_size": NOTABLE_LIST_SIZE,
+        "legs": {leg: _leg_report(False, reason, None, 0)
+                 for leg in _LEG_SPAN_SESSIONS},
+        "sessions": None,
+        "universe_examined": None,
+        "counter_source": None,
+        "names_with_close": None,
+        "names_with_both_closes_for_leg": None,
+        "third_session_available": None,
+        "context_symbols_excluded": 0,
+        "names_without_market_cap": 0,
+        "skipped": reason,
+    }
+
+
 def _leg_report(available: bool, reason: str | None, examined: Any,
                 selected: int) -> dict[str, Any]:
     """One leg's line in the section's own accounting.
@@ -2860,6 +2904,48 @@ def _leg_report(available: bool, reason: str | None, examined: Any,
     """
     return {"available": available, "reason": reason,
             "examined": examined, "selected": selected}
+
+
+def notable_section(
+    session_date: str,
+    universe_payload: dict[str, Any],
+    bars_by_symbol: dict[str, list[dict[str, Any]]],
+    candidates: list[dict[str, Any]],
+    packet: Packet,
+) -> dict[str, Any]:
+    """notable_movers, and the morning surviving a defect inside it.
+
+    This section is ADDITIVE. Nothing downstream reads it, no score depends on
+    it, no eligibility or conviction touches it, and no picks row comes from
+    it. A defect in it that raised would take build_packet down with it, and
+    the morning chain stops on the first non-zero exit, so there would be no
+    packet, no report and no email over a briefing table. That trade is not
+    close, and the alternative to catching here is a section that can end the
+    morning it is only a section of.
+
+    Nothing is swallowed: the exception type and message go into the packet's
+    gaps and into the section's own skipped reason, so the report says what
+    raised in the same place it says what was lost.
+
+    BaseException is deliberately not caught. A KeyboardInterrupt or a
+    SystemExit is somebody stopping the run, not a defect in this section, and
+    turning one of those into a thin briefing would be worse than useless.
+
+    A separate function rather than a try around the call site, because a guard
+    written inline in build_packet is a guard no claim can reach, and this
+    project decided on 2026-08-20 that a guard nobody has watched fail is not
+    known to be a guard.
+    """
+    try:
+        return notable_movers(session_date, universe_payload, bars_by_symbol,
+                              candidates, packet)
+    except Exception as exc:  # noqa: BLE001
+        reason = (f"the notable movers section raised {type(exc).__name__}: "
+                  f"{exc}. It is additive to the report, so the morning went on "
+                  "without it rather than stopping over it.")
+        packet.gap(reason)
+        print(f"scan: {reason}")
+        return empty_notable_block(reason)
 
 
 def notable_movers(
@@ -2959,7 +3045,26 @@ def notable_movers(
     # Every value is (move_pct, sigma, sigma_reason, price_time).
     legs: dict[str, dict[str, tuple[Any, ...]]] = {name: {} for name in _LEG_SPAN_SESSIONS}
 
-    if closes_payload is not None:
+    # Both universe legs are stamped with c1's SESSION, not with its value, and
+    # a row that cannot be stamped is a row vintage check (e) refuses. enforce
+    # raises on that, so the packet is never written and the whole morning chain
+    # stops before the analyst. A briefing section must not be able to do that
+    # to the report it is only a section of, so an undated c1 costs the two
+    # universe legs and nothing else. The premarket leg stamps today and reads
+    # c1 as a NUMBER, so it is unaffected and keeps running.
+    undated: str | None = None
+    if closes_payload is not None and _readable_date(sessions.get("c1")) is None:
+        undated = (f"the closes sidecar carries sessions.c1 "
+                   f"{sessions.get('c1')!r}, which is not a session this section "
+                   "can date a row with, so both universe legs were lost rather "
+                   "than emitting rows the vintage gate would refuse")
+        packet.gap(f"notable movers: {undated}")
+        for leg in ("prior_session", "two_session"):
+            block["legs"][leg] = _leg_report(
+                False, undated,
+                (block["names_with_both_closes_for_leg"] or {}).get(leg), 0)
+
+    if closes_payload is not None and undated is None:
         for symbol, row in closes.items():
             if not isinstance(row, dict):
                 continue
@@ -2989,6 +3094,8 @@ def notable_movers(
     block["context_symbols_excluded"] = len(
         [s for s in bars_by_symbol if s in context])
     if closes_payload is not None:
+        # Reads c1 as a NUMBER and stamps today, so an undated sessions.c1 does
+        # not reach it.
         for symbol in heard:
             price, price_time = _collector_last(bars_by_symbol.get(symbol) or [])
             baseline_close = (closes.get(symbol) or {}).get("c1")
@@ -3352,8 +3459,8 @@ def build_packet() -> dict[str, Any]:
     # It also attaches 4.2's three report fields to every candidate, off the
     # same closes file and gap statistics read, so the section and the candidate
     # rows cannot disagree about a name's sigma.
-    notable = notable_movers(session_date, universe_payload, bars_by_symbol,
-                             candidates, packet)
+    notable = notable_section(session_date, universe_payload, bars_by_symbol,
+                              candidates, packet)
 
     # After pricing, before scoring. A violation ends the run here: nothing is
     # stamped, no packet is written, and the chain stops before the analyst.
