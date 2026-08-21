@@ -6,7 +6,7 @@ no quota: every input is synthetic, the closes sidecar is written into the
 sandbox, the gap statistics read is stubbed, and the exchange calendar is a
 plain weekday rule so the answer is the same on any machine.
 
-Twenty two claims, and they are grouped by what they defend rather than by
+Twenty three claims, and they are grouped by what they defend rather than by
 the order the code runs in.
 
 The fence first, because it is the thing a later change is most likely to erode
@@ -93,6 +93,16 @@ CLOSES = {
     "HEARD.US": {"c3": 100.0, "c2": 100.5, "c1": 101.0},
     "DOWN.US": {"c3": 100.0, "c2": 100.0, "c1": 55.0},
     "BIGMOVE.US": {"c3": 100.0, "c2": 100.0, "c1": 100.0},
+    # In the sidecar and NOT in the universe, which is what a symbol delisted
+    # between the Sunday rebuild and this morning looks like. 4.4 says a symbol
+    # with no market cap on file is not a pass and not a fail: it was never
+    # examined against the floor, it is counted separately, and it cannot
+    # appear on list 2. Every other symbol here carries a cap, so without this
+    # one that whole rule was asserted by nothing.
+    # Its moves are small on purpose: 1.5 percent on the prior session, which
+    # clears min_abs_gap_pct so it is counted against that floor, and 0.5
+    # percent over two sessions so it displaces nobody on the size list.
+    "NOCAP.US": {"c3": 101.0, "c2": 100.0, "c1": 101.5},
 }
 
 STATS = {
@@ -108,6 +118,7 @@ STATS = {
     "FLAT.US": {"return_stdev_20d": 0.001},
     "DOWN.US": {"return_stdev_20d": 1.0},
     "BIGMOVE.US": {"return_stdev_20d": 20.0},
+    "NOCAP.US": {"return_stdev_20d": 1.0},
 }
 
 
@@ -574,6 +585,26 @@ def claim_each_list_ranks_on_the_key_it_names(failures: list[str]) -> None:
         failures.append("HEARD moved 0.4975 percent, under "
                         f"{_CRIT.number('notable', 'min_abs_gap_pct')}, and is "
                         "on the market cap list anyway")
+    if "NOCAP.US" in cap_list:
+        failures.append("NOCAP has no market cap on file and is on the list "
+                        "that ranks by market cap")
+    if block.get("names_without_market_cap") != 1:
+        failures.append(
+            "the section counted "
+            f"{block.get('names_without_market_cap')!r} symbol(s) over the move "
+            "floor with no market cap where the fixture carries one. 4.4 says "
+            "that is not a pass and not a fail: it was never examined against "
+            "the floor and is counted separately.")
+    capless = [r for r in block["rows"] if r["symbol"] == "NOCAP.US"]
+    if not capless:
+        failures.append("the symbol with no market cap reached no list at all, "
+                        "so its row reason is untested")
+    for row in capless:
+        if row["market_cap"] is not None:
+            failures.append(f"NOCAP carries market_cap {row['market_cap']!r}")
+        if "never examined" not in (row["market_cap_reason"] or ""):
+            failures.append("NOCAP's row does not say its cap was never "
+                            f"examined: {row['market_cap_reason']!r}")
 
     # 3. the SIZE of the two session move, so the faller leads.
     size_list = lists["two_session_by_move"]
@@ -1229,6 +1260,19 @@ def claim_a_missing_input_names_the_leg_it_lost(failures: list[str]) -> None:
                         f"available={report['available']} reason={report['reason']!r}")
     if block["lists"]["premarket_by_sigma"]:
         failures.append("list 4 published names with no collector bars behind them")
+    # And a short list says why. This is the field the section leans on hardest
+    # on the first real morning: every return_stdev_20d in the database is null,
+    # so both sigma lists come back empty while their legs are available, and a
+    # null here would read as a quiet market.
+    reasons = block.get("list_reasons") or {}
+    if set(reasons) != set(scan.NOTABLE_LISTS):
+        failures.append(f"list_reasons covers {sorted(reasons)} rather than the "
+                        f"four lists {sorted(scan.NOTABLE_LISTS)}")
+    for name, chosen in block["lists"].items():
+        if len(chosen) < block["list_size"] and not reasons.get(name):
+            failures.append(f"{name} came back with {len(chosen)} of "
+                            f"{block['list_size']} and no reason recorded, which "
+                            "reads exactly like a quiet market")
 
     print("  degrade      a lost sidecar names all three legs and nulls the "
           "examined count, and a silent collector loses only its own")
@@ -1393,6 +1437,80 @@ def claim_a_close_from_another_session_is_not_stamped_with_this_one(
 
     print("  vendor dates a leg the vendor contradicts is refused and named, an "
           "agreeing one is published, and a file too old to say reads unknown")
+
+
+def claim_a_notable_only_symbol_never_reaches_the_picks_table(
+        failures: list[str]) -> None:
+    """The fence is checked by RUNNING write_picks, not by reading it.
+
+    claim_nothing_in_the_section_reaches_picks walks two function bodies looking
+    for a token, and a token check has an obvious hole: move the row gathering
+    into a module level helper and write_picks no longer mentions
+    notable_movers, so every briefing name reaches the picks table and the
+    suite stays green. Mutation testing found exactly that.
+
+    So this one writes a packet through and looks at the table. picks is the
+    record of what the trading SCREEN claimed, pool_recall measures the morning
+    against it, and there is no column that says which rows were briefing names,
+    so a briefing name written here corrupts the recall measurement permanently
+    and silently.
+
+    force_test keeps the rows out of the live measurement: they are written with
+    source 'test', which is what every other suite write to this table uses.
+    conftest has redirected the database into the sandbox anyway.
+    """
+    from core import store
+
+    packet = {
+        "session_date": SESSION,
+        "generated_at": f"{SESSION}T08:45:00-04:00",
+        "candidates": [
+            {"symbol": "HEARD.US", "price": 103.0, "gap_pct": 1.98,
+             "day_eligible": True, "swing_eligible": False, "score": 7.0,
+             "conviction": "green", "prior_close": 101.0},
+        ],
+        "notable_movers": {
+            "rows": [
+                {"symbol": "QUIET.US", "leg": "prior_session",
+                 "as_of_session": C1, "move_pct": 2.0, "move_sigma": 2.0,
+                 "market_cap": 900_000_000.0, "selected_by": ["x"]},
+                {"symbol": "DOWN.US", "leg": "two_session",
+                 "as_of_session": C1, "move_pct": -45.0, "move_sigma": -31.8,
+                 "market_cap": 2_000_000_000.0, "selected_by": ["y"]},
+            ],
+        },
+    }
+    try:
+        written = scan.write_picks(packet, force_test=True)
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"write_picks raised on a packet carrying a notable "
+                        f"section: {type(exc).__name__}: {exc}")
+        return
+
+    with store.session() as connection:
+        store.init(connection)
+        rows = connection.execute(
+            "SELECT ticker FROM picks WHERE date=?", (SESSION,)
+        ).fetchall()
+    tickers = {str(row[0]).upper() for row in rows}
+
+    for symbol in ("QUIET.US", "DOWN.US", "QUIET", "DOWN"):
+        if symbol in tickers:
+            failures.append(
+                f"{symbol} appears only in the notable movers section and has a "
+                "picks row. picks is the record of what the SCREEN claimed and "
+                "pool_recall measures the morning against it, with no column "
+                "that says which rows were briefing names.")
+    if not tickers:
+        failures.append("write_picks wrote nothing at all, so this claim did "
+                        "not exercise the table and proved nothing")
+    elif written < 1:
+        failures.append(f"write_picks reported {written} row(s) written while "
+                        f"the table holds {len(tickers)}")
+
+    print(f"  picks fence  a packet carrying two briefing rows wrote "
+          f"{len(tickers)} picks row(s), and neither briefing symbol is among "
+          "them")
 
 
 def claim_a_closes_file_from_another_session_is_refused(
@@ -1712,6 +1830,7 @@ def claim_a_name_off_the_watchlist_is_marked_and_not_hidden(
 CLAIMS = (
     claim_nothing_in_the_section_reaches_picks,
     claim_the_section_never_imports_pool_recall,
+    claim_a_notable_only_symbol_never_reaches_the_picks_table,
     claim_a_two_session_move_is_scaled_by_the_root_of_its_span,
     claim_a_move_sigma_is_null_with_its_reason_and_never_substituted,
     claim_a_quiet_name_under_the_discovery_floor_can_still_appear,

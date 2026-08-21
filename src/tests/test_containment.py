@@ -641,6 +641,59 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
             "earnings": {"skipped": "the calendar call failed"},
         },
     }
+    # Every shape above is given a notable movers block as well, because the
+    # fallback writes that section too and none of these packets carried one:
+    # the block ran its empty branch, emitted one blank row and no reason lines,
+    # and produced zero flags whatever the section's own words said. Five of
+    # those words were "no name on the ... leg", which is a forward quantifier
+    # one word from a set word, so this claim passed on an input that could not
+    # have failed it while the real thing would have failed every morning both
+    # sigma lists were short.
+    section = {
+        "rows": [
+            {"symbol": "ARX.US", "leg": "prior_session",
+             "as_of_session": "2026-01-01", "move_pct": 4.2, "move_sigma": None,
+             "move_sigma_reason": "return_stdev_20d is null and this row covers "
+                                  "250 sessions, which is enough for it, so the "
+                                  "column was written before it was computed.",
+             "market_cap": None,
+             "market_cap_reason": "this symbol has no market cap on file, so it "
+                                  "was never examined against the floor",
+             "catalyst": None, "catalyst_state": "not checked",
+             "also_on_watchlist": None, "price_time": None,
+             "selected_by": ["prior_session_by_sigma"]},
+        ],
+        "lists": {"prior_session_by_sigma": ["ARX.US"],
+                  "prior_session_by_market_cap": [],
+                  "two_session_by_move": [], "premarket_by_sigma": []},
+        "list_reasons": {
+            "prior_session_by_sigma": None,
+            "prior_session_by_market_cap":
+                "0 of 2,753 on the prior_session leg both moved at least 1 "
+                "percent, which is CRITERIA.md [Notable] min_abs_gap_pct, and "
+                "carried a market cap on file",
+            "two_session_by_move":
+                "0 rows on the two_session leg carried a move over this window",
+            "premarket_by_sigma":
+                "0 of 39 on the premarket leg carry a move_sigma, so this list "
+                "has no ranking key at all.",
+        },
+        "list_size": 5,
+        "legs": {
+            "premarket": {"available": False, "examined": 39, "selected": 0,
+                          "reason": "0 subscribed symbols outside the context "
+                                    "tickers carried both a collector price and "
+                                    "a c1 close"},
+            "prior_session": {"available": True, "examined": 2753,
+                              "selected": 1, "reason": None},
+            "two_session": {"available": False, "examined": 2753, "selected": 0,
+                            "reason": "the third session was never bought"},
+        },
+        "universe_examined": 2754,
+    }
+    for packet in shapes.values():
+        packet["notable_movers"] = section
+
     for label, packet in shapes.items():
         prose = analyst.fallback_report(packet, "the model timed out")
         for hit in analyst.quantifier_violations(prose):
