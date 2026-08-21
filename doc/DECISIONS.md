@@ -18,6 +18,98 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21, second: both volume ratios are put on one tape, on the owner's instruction
+
+**The decision, and whose it was.** Correcting a live screen is a threshold
+question and I said so and left it. The owner read the measurement and said
+correct it now. This entry records what that means in arithmetic, what it moves,
+and the three things it deliberately does not do.
+
+**The defect.** premarket RVOL divided COLLECTOR socket volume by a baseline
+collect/baseline.py builds from the vendor's 1m intraday bars. Float rotation
+divided the same socket numerator by a company share count, against bands
+research/float_rotation_study.py fitted on Alpaca volume. Both denominators
+measure the whole tape. The numerator measured a fraction of it, 8.6 to 10.3
+percent across the four sessions from 2026-08-17. So both ratios understated by
+about nine times, and [Day setup] premarket_rvol > 1.5 was being applied to a
+number that could not reach it. Six mornings, 62 candidates, ZERO day eligible
+ever, 19 of them failing on that line alone.
+
+**The correction.** pm_volume_consolidated is the socket's shares divided by
+the symbol's measured share of the tape, and both ratios divide THAT.
+pm_volume is untouched and still holds what the collector saw, because a
+project rule older than this correction says inferred evidence is never
+substituted for an observation under its own name.
+
+**What makes it legitimate rather than a fudge.** The share is a property of a
+symbol, not noise. Over the four clean sessions the median symbol varies by 1.48
+times across sessions while the error being corrected is about nine, and 18 of
+25 symbols vary by less than two. A 1.5 dispersion inside a 9 correction is a
+different order of error from the one being removed. The measurement is
+doc/research/collector-capture.json and the derivation is in CRITERIA's capture
+rate note.
+
+**What it moves, replayed on the archived packets.**
+
+| session | clear the floor raw | clear it corrected | day eligible now | corrected |
+| --- | ---: | ---: | ---: | ---: |
+| 2026-08-17 | 0 | 0 | 0 | 0 |
+| 2026-08-18 | 2 | 5 | 0 | 5 |
+| 2026-08-19 | 0 | 1 | 0 | 0 |
+| 2026-08-20 | 2 | 9 | 0 | 6 |
+
+2026-08-20 produces FUTU, MSTR, ASST, BLSH, COIN and MARA; 2026-08-18 produces
+KLAR, FN, HSAI, BIDU and VNET. On 2026-08-19 the one corrected name still fails
+another line, which is the shape to expect: this unblocks one condition rather
+than manufacturing a watchlist.
+
+**It answers 2026-08-17 seventh rather than leaving it.** That entry recorded
+that the rotation bands were fitted on Alpaca volume and applied to collector
+volume, and called it a known miscalibration. The numerator is now a
+consolidated estimate over the same 07:20 to 08:45 window the study restricted
+Alpaca to, so the live values sit in the distribution the bands were read off
+for the first time. That entry is answered here.
+
+**One residual, stated rather than assumed away.** The capture rate is measured
+against EODHD intraday and the rotation bands were fitted against Alpaca. Both
+describe themselves as consolidated and they are not the same vendor, so any
+disagreement between them is a second order error left inside the corrected
+rotation. It is smaller than the nine times error just removed and it is not
+zero, and nothing on disk measures it.
+
+**Three things this deliberately does not do.**
+
+It does not change a threshold. [Day setup] premarket_rvol stays > 1.5 and the
+rotation bands stay 0.00033 and 0.00014. What changed is the units the
+numerator is expressed in, which is a defect fix, not a calibration.
+
+It does not hide itself. The packet carries capture_correction with the raw
+ratio beside the corrected one for every candidate and the names the correction
+carried across the floor, the template puts one sentence under the day table
+saying the column is an estimate, and the fallback report says it too because
+that runs on the morning nobody reads closely. A correction that changes which
+names a reader is shown and does not say so is a worse defect than the one it
+fixes.
+
+It does not assume the two tapes agree when nothing has measured them. A
+volume check with no per symbol share falls back to CRITERIA's measured
+default, never to 1.0, and each candidate records which of the two it used.
+
+**What would retire it.** The 2026-08-21 06:30 census. If an ignored condition
+code is dropping volume the feed delivered, the numerator can be made whole and
+this correction becomes unnecessary rather than merely smaller. If the stream
+structurally omits off exchange volume, this is the permanent answer.
+
+**Guarded.** claim_both_volume_ratios_divide_the_same_tape asserts the
+arithmetic through the real functions rather than reproducing it, that
+pm_volume still holds the observation, that a measured symbol uses its own
+share, that a caller skipping the attach step gets the default rather than the
+old broken arithmetic, and that the default in CRITERIA re-derives from the
+capture table rather than from itself. Seven mutations, seven caught, after two
+ran GREEN against the first version: the RVOL half was checking arithmetic the
+test had written itself, and the default was being validated against the file
+it lives in.
+
 ## 2026-08-21: the float rotation eligibility floor is measured, and it is a number this file already contains
 
 **The question, open since 2026-08-16 and given a dated instance on

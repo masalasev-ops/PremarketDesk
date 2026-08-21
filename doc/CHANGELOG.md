@@ -15,6 +15,40 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, fourth: both volume ratios are corrected onto one tape
+
+On the owner's instruction, after the measurement in the entry below.
+
+premarket RVOL and premarket float rotation now divide pm_volume_consolidated,
+the socket's shares divided by the symbol's measured share of the consolidated
+tape, rather than the socket's shares themselves. Both denominators are whole
+tape measurements, so both ratios were understating by about nine times and
+[Day setup] premarket_rvol > 1.5 was being applied to a number that could not
+reach it.
+
+pm_volume is unchanged and still holds what the collector saw. The estimate is
+a separate field and every candidate records the share used and whether it came
+from its own measurement or from CRITERIA [Collector] premarket_capture_rate,
+a new key at 0.1172 with its derivation in the capture rate note.
+
+Replayed on the archived packets: 2026-08-20 produces six day eligible
+candidates where it published none, FUTU, MSTR, ASST, BLSH, COIN and MARA, and
+2026-08-18 produces five, KLAR, FN, HSAI, BIDU and VNET.
+
+No threshold moved. The floor is still 1.5 and the rotation bands are still
+0.00033 and 0.00014. What changed is the units of the numerator.
+
+This answers DECISIONS 2026-08-17 seventh, which recorded the rotation bands
+being fitted on Alpaca volume and applied to collector volume: the numerator is
+consolidated now, over the same window the study used.
+
+The packet carries capture_correction with the raw ratio beside the corrected
+one and the names the correction carried across the floor, the template puts a
+sentence under the day table saying the column is an estimate, and the fallback
+report says it too. Seven mutations, seven caught, after two ran green against
+the first version of the claim: one checked arithmetic the test had written
+itself, and one validated CRITERIA against CRITERIA. Suite 2,374 paths.
+
 ## 2026-08-21, third: the per symbol capture rate is kept, and the RVOL numerator is named as a second tape
 
 verify_against_intraday computed a per symbol collector volume and vendor

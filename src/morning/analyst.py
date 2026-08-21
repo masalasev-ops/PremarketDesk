@@ -417,6 +417,26 @@ def fallback_report(
     else:
         add("| none | | | | | | | |")
     add("")
+    # The RVOL column is an ESTIMATE, and the fallback says so for the same
+    # reason the template does: this runs on the morning the narrative already
+    # failed, which is exactly the morning nobody reads closely.
+    correction = packet.get("capture_correction") or {}
+    if correction:
+        add("Premarket RVOL and float rotation are computed on an estimate of "
+            "consolidated premarket volume rather than on the shares the "
+            "collector recorded, because the socket carries a measured "
+            "fraction of the tape while both denominators measure all of it. "
+            f"On this morning's rows {correction.get('clear_on_socket_volume')} "
+            f"of {correction.get('candidates')} would clear the volume floor on "
+            "the raw socket numerator and "
+            f"{correction.get('clear_on_consolidated_estimate')} do on the "
+            "estimate.")
+        carried = correction.get("carried_across_the_floor") or []
+        if carried:
+            add("The correction is what put "
+                + ", ".join(_bare(s) for s in carried)
+                + " on this list.")
+        add("")
     if not day:
         add(f"The day screen produced nothing this morning: 0 of {len(candidates)} "
             "candidates are day eligible.")

@@ -145,6 +145,24 @@ A candidate whose score is null gets the word unscored in the conviction
 column, never a bucket color. Membership is decided by the day_eligible
 boolean alone.
 
+The Premarket RVOL column is an ESTIMATE and the report says so once, in one
+sentence directly under the table, whenever the packet carries a
+capture_correction block. Write exactly this, filling the two numbers from
+capture_correction:
+
+Premarket RVOL and float rotation are computed on an estimate of consolidated
+premarket volume rather than on the shares the collector recorded, because the
+socket carries a measured fraction of the tape while both denominators measure
+all of it. On this morning's rows {capture_correction.clear_on_socket_volume}
+of {capture_correction.candidates} would clear the volume floor on the raw
+socket numerator and {capture_correction.clear_on_consolidated_estimate} do on
+the estimate.
+
+Then, only if capture_correction.carried_across_the_floor is not empty, one
+more sentence naming those tickers and saying that the correction is what put
+them on this list. A correction that changes which names a reader is shown and
+does not say so is a worse defect than the one it fixes.
+
 If none are eligible the table is still written, header and separator and one
 row, exactly like this:
 

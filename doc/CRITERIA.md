@@ -524,6 +524,70 @@ verify_warmup_minutes         = 25         # see the verification note below
 verify_window_minutes         = 15
 volume_check_agreement_pct    = 1.0        # SEED, not measured. How close either reading has to sit to the vendor to count as agreement. See the volume check note
 volume_check_max_age_days     = 5          # how far back the 08:45 scan will read a written verify_intraday.json. See the volume check note
+premarket_capture_rate        = 0.1172     # the share of the consolidated tape the socket carries for a symbol nothing has been measured for. MEASURED, see the capture rate note
+
+### The capture rate note
+
+This is the only number in this file that exists to correct another
+measurement rather than to threshold one, so it is worth being exact about what
+it is and is not.
+
+**What it corrects.** premarket RVOL divides collector socket volume by a
+baseline collect/baseline.py builds from the vendor's 1m intraday bars. Those
+are two different tapes: the socket carries a fraction of the consolidated
+volume. Premarket float rotation divides the same socket numerator by a float,
+against bands fitted on Alpaca volume, which is consolidated. Both ratios
+therefore understate by about the reciprocal of this number, and the day
+screen's premarket_rvol floor of 1.5 was being applied to a value that could
+not reach it: six mornings, 62 candidates, zero day eligible, 19 of them
+failing on that line alone.
+
+**How it was measured.** verify_against_intraday compares collector volume
+against vendor intraday volume over identical minutes and now keeps the pair
+per symbol. All six collected sessions were re-measured on 2026-08-21 for 297
+intraday calls: doc/research/collector-capture.json.
+
+    session aggregate, collector over vendor
+      2026-08-13   1.4926      a different regime, see below
+      2026-08-14   3.8257      a different regime, see below
+      2026-08-17   0.1028
+      2026-08-18   0.0938
+      2026-08-19   0.0862
+      2026-08-20   0.0908
+
+The first two sessions over report and are excluded: 2026-08-14 carried the
+known vintage defect, and doc/research/COLLECTOR_VOLUME.md holds the replay
+measurement. Everything from 2026-08-17 sits inside two percentage points.
+
+**Why a single number is allowed to stand for a symbol.** Because the share is
+a property of the symbol rather than noise, which is the whole reason this
+correction is possible. Over symbols measured on three or more of the four
+clean sessions, the median max/min spread is 1.48 times and 18 of 25 vary by
+less than two. The liquid names are tighter: AXTI 1.2, TLT 1.2, NBIS 1.2,
+MU 1.4, SPY 1.5. A 1.5 times dispersion inside a nine times correction is a
+different order of error from the one being fixed.
+
+**Why 0.1172 rather than 0.0923.** 0.0923 is the median of the session
+aggregates, which are volume weighted and answer "what share of the total tape
+did the socket hear". This number answers a different question, "what share
+should be assumed for ONE symbol nothing has been measured for", and the right
+estimator for that is the median of the per symbol rates, which is 0.1172 over
+110 symbols. It is also the safer of the two: a higher assumed capture produces
+a lower corrected ratio, and the safe direction on a long only screen is to
+withhold rather than admit.
+
+**It is a fallback, not the usual path.** scan prefers the symbol's OWN
+collector over vendor ratio from the newest verify_intraday.json, and reaches
+this number only for a symbol that check does not carry. Each candidate records
+which of the two it used.
+
+**What would retire it.** If the 2026-08-21 06:30 census shows the parser is
+dropping volume the feed delivered, the numerator can be made whole and this
+correction becomes unnecessary rather than merely smaller. If the stream
+structurally omits off exchange volume, this is the permanent answer and this
+number should be re-derived whenever the collector, its window, or its
+subscription list changes materially. Re-derive by re-running the capture
+backfill and reading the per symbol median.
 
 ### The volume check note
 

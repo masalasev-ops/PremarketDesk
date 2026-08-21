@@ -5026,131 +5026,197 @@ def claim_the_rotation_study_counts_no_warm_up_session(
           "first ten")
 
 
-def claim_the_rvol_numerator_and_denominator_are_named_as_two_tapes(
-        failures: list[str]) -> None:
-    """The measurement that says whether the day screen means anything.
+def claim_both_volume_ratios_divide_the_same_tape(failures: list[str]) -> None:
+    """Both volume measures divide a whole tape estimate, not the socket's share.
 
-    pm_rvol divides COLLECTOR socket volume by a baseline collect/baseline.py
-    builds from EODHD 1m intraday bars. Two tapes. The nightly has measured the
-    gap between them on every collected session and, until 2026-08-21, kept
-    only the summary: verify_against_intraday computed a per symbol collector
-    and vendor volume and persisted neither.
+    The defect. premarket RVOL divided COLLECTOR socket volume by a baseline
+    collect/baseline.py builds from the vendor's 1m intraday bars, and float
+    rotation divided the same socket numerator by a company share count against
+    bands fitted on Alpaca volume. Both denominators are whole tape
+    measurements and the numerator was a fraction of one, so both ratios
+    understated by about the reciprocal of that fraction. The [Day setup]
+    premarket_rvol floor of 1.5 was being applied to a value that could not
+    reach it: six mornings, 62 candidates, zero day eligible ever, 19 of them
+    failing on that line alone.
 
-    That discard is what made the question unanswerable. A session aggregate
-    says how much of the tape the socket heard on average; it cannot say
-    whether the share is a stable property of a symbol, and only a stable share
-    can be divided back out of a numerator. Measured across the four sessions
-    from 2026-08-17 once the rows were kept: aggregate 0.086 to 0.103, per
-    symbol median spread 1.48 times, 18 of 25 symbols inside two times.
+    The correction, and what makes it legitimate rather than a fudge. The share
+    is a stable property of a symbol: over the four sessions from 2026-08-17
+    the median symbol varies by 1.48 times across sessions while the error
+    being corrected is about nine. So the socket's shares are divided by the
+    share to estimate what the consolidated tape would have shown, and both
+    ratios divide THAT.
 
-    What it costs is not theoretical. Six mornings, 62 candidates, ZERO day
-    eligible, 19 failing on the RVOL line alone. Correct 2026-08-20 for the
-    measured capture and six names clear every line of the day screen.
+    Four things are asserted, and the last two are the ones that would let this
+    go wrong quietly.
 
-    So two things are asserted. The rows survive the summary, because without
-    them nobody can ask the question again. And rvol_capture_adjusted reports
-    rather than decides: it must not change day_eligible, because whether to
-    correct a numerator is the owner's, and a function that quietly moved a
-    name onto a watchlist would be making that decision by accident.
+    That the arithmetic is the arithmetic, on both measures, so a future edit
+    cannot put one of them back on the raw numerator while the other moves.
+
+    That pm_volume still holds the shares the collector actually saw. It is an
+    observation and the estimate is a separate field, because a project rule
+    older than this correction says missing or inferred evidence is never
+    substituted for the real thing under the same name.
+
+    That a symbol the newest volume check measured uses its OWN share rather
+    than the file default, since the default exists for symbols nothing has
+    been measured for and silently preferring it would throw away the better
+    number.
+
+    And that a caller who skips attach_capture_estimate does not get the old
+    broken arithmetic back. That was a real seam: attach_float_rotation is
+    called directly in two other suites, and the first version of this
+    correction returned a null rotation for them rather than a corrected one.
+    A hard ordering dependency between two attach functions is exactly the kind
+    of seam this file exists to catch, so the fallback computes the default
+    estimate and records that it did.
     """
-    from collect import collect_premarket
+    from core import criteria as _criteria
     from morning import scan as _scan
 
-    source = pathlib.Path(collect_premarket.__file__).read_bytes().decode("utf-8")
-    if '"volume_by_symbol"' not in source:
-        failures.append(
-            "verify_against_intraday no longer keeps volume_by_symbol, so the "
-            "per symbol collector and vendor volumes are computed and thrown "
-            "away again and the capture rate cannot be re-derived from any "
-            "session measured after this")
+    crit = _criteria.load()
+    default = crit.number("collector", "premarket_capture_rate")
+    floor = crit.rule("day_setup", "premarket_rvol")
 
-    # The whitelist has to stay a whitelist, or the per symbol roster reaches
-    # the packet and widens the containment allow set with last session's
-    # collector list.
-    if "volume_by_symbol" in _scan._PACKET_VOLUME_CHECK_KEYS:
-        failures.append(
-            "volume_by_symbol was added to _PACKET_VOLUME_CHECK_KEYS, which "
-            "puts the previous session's collector roster into the packet and "
-            "makes every one of those symbols a claimable ticker")
-
-    from core import criteria as _criteria
-
-    floor = _criteria.load().rule("day_setup", "premarket_rvol")
     check = {
         "day": "2026-08-20",
-        "aggregate_ratio": 0.1,
-        # AAA's own share is 0.2 and the aggregate is 0.1, DELIBERATELY
-        # different. With both at a tenth the fixture cannot tell a symbol
-        # using its own measurement from one falling back to the session
-        # average, and a mutation that deleted the per symbol lookup ran
-        # green against the first version of this claim.
+        "aggregate_ratio": 0.09,
+        # AAA's own share is deliberately NOT the default, so a lookup that
+        # silently fell back would change the answer and be caught.
         "volume_by_symbol": {"AAA.US": {"collector": 20.0, "vendor": 100.0}},
     }
-    # AAA sits below the floor as published and above it at a tenth capture,
-    # and it has cleared every other line. BBB has no measured share and takes
-    # the aggregate. CCC also fails price, so the correction must not claim it.
     candidates = [
-        {"symbol": "AAA.US", "pm_rvol": 0.5, "day_eligible": False,
-         "day_failed_conditions": ["premarket_rvol"]},
-        {"symbol": "BBB.US", "pm_rvol": 0.4, "day_eligible": False,
-         "day_failed_conditions": ["premarket_rvol"]},
-        {"symbol": "CCC.US", "pm_rvol": 0.9, "day_eligible": False,
-         "day_failed_conditions": ["premarket_rvol", "price"]},
+        {"symbol": "AAA.US", "pm_volume": 100_000.0, "collector_covered": True},
+        {"symbol": "BBB.US", "pm_volume": 100_000.0, "collector_covered": True},
+        {"symbol": "CCC.US", "pm_volume": None, "collector_covered": True},
     ]
-    packet = _scan.Packet()
-    block = _scan.rvol_capture_adjusted(candidates, check, packet)
-    if not block:
-        failures.append("rvol_capture_adjusted returned nothing against a check "
-                        "that carries both a per symbol share and an aggregate")
-        return
+    _scan.attach_capture_estimate(candidates, check, _scan.Packet())
 
-    if candidates[0].get("pm_rvol_capture_adjusted") != 2.5:
+    if candidates[0].get("pm_capture_share") != 0.2:
         failures.append(
-            f"AAA adjusted to {candidates[0].get('pm_rvol_capture_adjusted')!r} "
-            "where a 0.5 RVOL at a fifth of the tape is 2.5. That factor is "
-            "the whole finding, and 5.0 here would mean it took the session "
-            "aggregate over the symbol's own measurement")
-    if candidates[0].get("pm_rvol_capture_share") != 0.2:
-        failures.append("AAA did not use its OWN measured share, so a symbol "
-                        "the check measured is being given the session average")
-    if candidates[1].get("pm_rvol_capture_share") != 0.1:
-        failures.append("BBB carries no per symbol row and did not fall back to "
-                        "the session aggregate")
+            f"AAA used a capture share of {candidates[0].get('pm_capture_share')!r} "
+            "where the check measured it at 0.2. A symbol the check carries must "
+            "use its own share, not the file default")
+    if candidates[0].get("pm_volume_consolidated") != 500_000.0:
+        failures.append(
+            f"AAA estimates {candidates[0].get('pm_volume_consolidated')!r} "
+            "consolidated shares where 100,000 socket shares at a fifth of the "
+            "tape is 500,000")
+    if candidates[1].get("pm_capture_share") != round(default, 6):
+        failures.append(
+            f"BBB, which the check does not carry, used "
+            f"{candidates[1].get('pm_capture_share')!r} rather than CRITERIA's "
+            f"{default}")
+    if candidates[0].get("pm_volume") != 100_000.0:
+        failures.append(
+            "pm_volume was overwritten with the estimate. It is what the "
+            "collector saw, and an observation does not get replaced by an "
+            "inference under its own name")
+    if candidates[2].get("pm_volume_consolidated") is not None:
+        failures.append(
+            "a candidate with no collector volume was given an estimate "
+            f"anyway, {candidates[2].get('pm_volume_consolidated')!r}")
 
-    for candidate in candidates:
-        if candidate.get("day_eligible"):
-            failures.append(
-                f"{candidate['symbol']} came back day_eligible. This function "
-                "reports what the screen WOULD have said; a screen change is a "
-                "threshold decision and is not one to make by side effect")
-    # AAA on its own measured share and BBB on the session aggregate. Both
-    # cleared every other line, so both count; the BASIS differs and the
-    # outcome does not, which is why the basis is recorded per candidate.
-    # CCC fails price as well, and counting it would overstate the finding in
-    # the direction that flatters it.
-    if block["would_become_day_eligible"] != ["AAA.US", "BBB.US"]:
-        failures.append(
-            f"the names the correction would carry are "
-            f"{block['would_become_day_eligible']!r} rather than AAA and BBB. "
-            "CCC fails price as well and must not be counted")
-    if (block["clear_the_floor_as_published"], block["clear_the_floor_adjusted"]) != (0, 3):
-        failures.append(
-            f"the floor {floor.describe()} is cleared by "
-            f"{block['clear_the_floor_as_published']} as published and "
-            f"{block['clear_the_floor_adjusted']} adjusted, where none of the "
-            "three clear it as published and all three do at a tenth")
+    # RVOL through the REAL function, with a baseline row written for it.
+    # Computing the ratio here instead was a hole: a mutation putting scan's
+    # own line back on the raw socket numerator ran green against the first
+    # version of this claim, because the test was checking its own arithmetic.
+    from collect import baseline as _baseline
+    from core import store as _store
 
-    # A check with neither number must not silently assume the tapes agree.
-    blank = _scan.rvol_capture_adjusted(
-        [dict(c) for c in candidates], {"day": "2026-08-19"}, _scan.Packet())
-    if blank is not None:
-        failures.append(
-            "a volume check carrying no capture evidence still produced an "
-            f"adjustment, {blank!r}. An unmeasured capture rate and a capture "
-            "rate of one are opposite claims")
+    cutoff = "08:45"
+    with _store.session() as connection:
+        _store.init(connection)
+        connection.execute(
+            "INSERT OR REPLACE INTO baseline "
+            "(ticker, cutoff_hhmm, median_volume, sessions_used, computed_at) "
+            "VALUES (?,?,?,?,?)",
+            ("AAA.US", _baseline.normalize_cutoff(cutoff), 250_000.0, 20,
+             ettime.now_et().isoformat()))
+        connection.commit()
 
-    print("  rvol tapes   the per symbol capture rate survives the summary, and "
-          "the adjustment reports what the day screen would say without saying it")
+    live = dict(candidates[0])
+    _scan.attach_premarket_rvol([live], _scan.Packet(), cutoff)
+    if live.get("pm_rvol") != 2.0:
+        failures.append(
+            f"attach_premarket_rvol gives {live.get('pm_rvol')!r} for 100,000 "
+            "socket shares at a fifth of the tape against a 250,000 baseline, "
+            "where 500,000 over 250,000 is 2.0. A value near 0.4 means the "
+            f"numerator is back on the raw socket volume ({live.get('pm_rvol_reason')})")
+    if not floor.test(live.get("pm_rvol")):
+        failures.append(
+            f"a name at {live.get('pm_rvol')!r} does not clear "
+            f"{floor.describe()}, which is the whole thing this correction was "
+            "made for")
+    basis = live.get("pm_rvol_basis") or {}
+    if basis.get("numerator_socket_shares") != 100_000.0:
+        failures.append(
+            "the RVOL basis does not publish the socket shares behind its "
+            f"estimated numerator, it carries {basis.get('numerator_socket_shares')!r}. "
+            "A corrected number whose raw input cannot be recovered is not "
+            "auditable")
+
+    # The default itself, against the measurement it came from rather than
+    # against the file it is written in. Reading CRITERIA and comparing it to
+    # CRITERIA was the second hole: setting the rate to 1.0, which asserts the
+    # two tapes agree, moved both sides of that comparison together.
+    payload = (config.PROJECT_ROOT / "doc" / "research" / "collector-capture.json")
+    if not payload.is_file():
+        failures.append(f"{payload.name} is gone, so the capture rate in "
+                        "CRITERIA can no longer be traced to a measurement")
+    else:
+        import statistics as _stats
+
+        clean = {"2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20"}
+        table = json.loads(payload.read_text(encoding="utf-8"))
+        medians = []
+        for rates in (table.get("per_symbol") or {}).values():
+            kept = [v for k, v in rates.items() if k in clean]
+            if kept:
+                medians.append(_stats.median(kept))
+        if not medians:
+            failures.append("the capture table holds no rates on the four clean "
+                            "sessions, so the default cannot be re-derived")
+        else:
+            wanted = round(_stats.median(medians), 4)
+            if default != wanted:
+                failures.append(
+                    f"CRITERIA [Collector] premarket_capture_rate is {default} "
+                    f"where the measurement it cites re-derives {wanted} over "
+                    f"{len(medians)} symbols. A rate of 1.0 in particular "
+                    "asserts the socket and the vendor see the same tape, "
+                    "which is the claim this whole correction refutes")
+
+    # The seam: attach_float_rotation called on its own, as two other suites do.
+    alone = {"symbol": "DDD.US", "collector_covered": True,
+             "pm_volume": 100_000.0,
+             "quote": {"sharesFloat": 20_000_000.0,
+                       "sharesOutstanding": 25_000_000.0, "marketCap": 3e9}}
+    _scan.attach_float_rotation([alone], _scan.Packet())
+    wanted = round(round(100_000.0 / default, 2) / 20_000_000.0, 8)
+    if alone.get("pm_float_rotation") != wanted:
+        failures.append(
+            f"float rotation without attach_capture_estimate came back "
+            f"{alone.get('pm_float_rotation')!r} rather than {wanted}. A caller "
+            "that skips the attach step must get the default estimate, never "
+            "the raw socket numerator and never a null")
+    if not alone.get("pm_capture_basis"):
+        failures.append(
+            "the fallback estimate records no basis, so a reader cannot tell a "
+            "per symbol measurement from a file wide default")
+
+    # And the report that makes the correction auditable.
+    priced = [dict(candidates[0], pm_rvol=2.0)]
+    block = _scan.capture_correction_report(priced, _scan.Packet())
+    if not block or block.get("carried_across_the_floor") != ["AAA.US"]:
+        failures.append(
+            f"the correction report does not name AAA as carried across "
+            f"{floor.describe()}: {block!r}. Its raw ratio is 0.4 and its "
+            "corrected one is 2.0, and a correction that moves a name onto a "
+            "watchlist without saying so is worse than the defect it fixes")
+
+    print("  one tape     RVOL and float rotation both divide the consolidated "
+          "estimate, pm_volume still holds what the socket saw, and the "
+          "correction names what it moved")
 
 
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
@@ -5726,7 +5792,7 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_documents_count_what_is_actually_here(failures)
-    claim_the_rvol_numerator_and_denominator_are_named_as_two_tapes(failures)
+    claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:
         for failure in failures:

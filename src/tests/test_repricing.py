@@ -414,8 +414,14 @@ def claim_nine(failures: list[str]) -> None:
     scan.attach_float_rotation([candidate], packet)
     scan.score_candidate(candidate)
 
-    expected = 250_000.0 / 20_000_000.0
-    if candidate["pm_float_rotation"] != round(expected, 8):
+    # The numerator is the CONSOLIDATED estimate now, not the shares the
+    # socket saw: both volume ratios divide a whole tape denominator, so the
+    # collector's share of the tape is divided back out first. Derived from
+    # CRITERIA rather than written here, so the expectation cannot drift from
+    # the rate the code reads. See CRITERIA [Collector] premarket_capture_rate.
+    _share = criteria.load().number("collector", "premarket_capture_rate")
+    expected = round(round(250_000.0 / _share, 2) / 20_000_000.0, 8)
+    if candidate["pm_float_rotation"] != expected:
         failures.append(f"float rotation is {candidate['pm_float_rotation']}, "
                         f"expected {round(expected, 8)}")
     if candidate["score"] is None:
@@ -529,7 +535,13 @@ def claim_ten(failures: list[str]) -> None:
     fabricated = floor / 100
     ordinary_float = 20_000_000.0
     pm_volume = 250_000.0
-    expected = round(pm_volume / ordinary_float, 8)
+    # The numerator is the CONSOLIDATED estimate now, not the shares the
+    # socket saw: both volume ratios divide a whole tape denominator, so the
+    # collector's share of the tape is divided back out first. Derived from
+    # CRITERIA rather than written here, so the expectation cannot drift from
+    # the rate the code reads. See CRITERIA [Collector] premarket_capture_rate.
+    _share = criteria.load().number("collector", "premarket_capture_rate")
+    expected = round(round(pm_volume / _share, 2) / ordinary_float, 8)
 
     def newcomer(**quote_fields) -> dict:
         quote = {"sharesFloat": ordinary_float, "sharesOutstanding": 25_000_000.0,
