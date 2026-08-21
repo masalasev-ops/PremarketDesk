@@ -461,12 +461,17 @@ def fallback_report(
     add("|---|---|---|---|---|---|---|---|---|")
     notable_rows = notable.get("rows") or []
     for row in notable_rows:
+        # _cell, not the raw value. The catalyst is a vendor headline and
+        # feeds put pipes in headlines constantly; an unescaped one ends the
+        # cell early and python-markdown discards everything past the header
+        # count without complaining. This is the fallback report, which is what
+        # a reader gets on the mornings the narrative already failed.
         catalyst = row.get("catalyst") or row.get("catalyst_state") or "not checked"
-        add(f"| {_bare(row.get('symbol') or '')} | {row.get('leg') or ''} "
-            f"| {row.get('as_of_session') or ''} | {_f(row.get('move_pct'))} "
+        add(f"| {_bare(row.get('symbol') or '')} | {_cell(row.get('leg'))} "
+            f"| {_cell(row.get('as_of_session'))} | {_f(row.get('move_pct'))} "
             f"| {_f(row.get('move_sigma'), 2)} | {_cap(row.get('market_cap'))} "
-            f"| {catalyst} | {row.get('also_on_watchlist') or '-'} "
-            f"| {row.get('price_time') or '-'} |")
+            f"| {_cell(catalyst)} | {_cell(row.get('also_on_watchlist') or '-')} "
+            f"| {_cell(row.get('price_time') or '-')} |")
     if not notable_rows:
         add("| none | | | | | | | | |")
     add("")
@@ -478,7 +483,12 @@ def fallback_report(
             add(f"The {name} list is short: {reason}")
     examined = notable.get("universe_examined")
     counted = f"{examined:,}" if isinstance(examined, int) else "an unknown number of"
-    add(f"The section examined {counted} universe names.")
+    add(f"The section examined {counted} universe symbols.")
+    for leg, report in sorted((notable.get("legs") or {}).items()):
+        looked = report.get("examined")
+        looked_text = f"{looked:,}" if isinstance(looked, int) else "an unknown number"
+        add(f"The {leg} leg examined {looked_text} and selected "
+            f"{report.get('selected', 0)}.")
     add("")
     add("## Market trends")
     add("")

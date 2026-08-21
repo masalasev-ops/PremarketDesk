@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty two claims, a count read off the file rather than remembered,
+carries sixty three claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -146,6 +146,71 @@ def claim_economic_events_are_converted_not_relabelled(failures: list[str]) -> N
 
 
 # ------------------------------------------------- the rerun that knew less
+
+def claim_a_briefing_gain_does_not_cancel_a_screen_loss(
+        failures: list[str]) -> None:
+    """A rerun that fills the briefing while the screen empties still stands down.
+
+    thinner_than returns early on ANY axis where the rerun gained, on the
+    reasoning that a rerun which knows more somewhere is a different and better
+    morning rather than a degraded copy. That reasoning held while every axis
+    was candidate derived: a rerun that priced more names also scored more of
+    them, so a gain on one really was evidence the whole morning improved.
+
+    Layer 4 added notable_rows on 2026-08-20 and broke the premise without
+    touching the function. The section reads the closes sidecar and the
+    universe file, neither of which the watchlist touches, so it can fill while
+    every candidate axis collapses. Measured against the real 2026-08-20
+    packet: a rerun that lost every price, every RVOL and every score and
+    published ten notable rows came back NOT THINNER, so it would have
+    overwritten the 08:45 packet and then upserted nulls over live picks rows
+    as source='live'. The guard's own docstring names that as the harm it
+    exists to prevent.
+
+    The axis is kept, because a rerun that LOSES the whole section must still
+    be seen as thinner. It is excluded from the cancelling set instead.
+    """
+    from morning import scan
+
+    prior = {"candidates": 12, "priced": 12, "with_rvol": 10, "scored": 12,
+             "notable_rows": 0}
+
+    gutted = {"candidates": 12, "priced": 0, "with_rvol": 0, "scored": 0,
+              "notable_rows": 10}
+    thin = scan.thinner_than(gutted, prior)
+    for axis in ("priced", "with_rvol", "scored"):
+        if axis not in thin:
+            failures.append(
+                f"a rerun that lost every {axis} and gained ten notable rows is "
+                f"not reported as thinner on {axis}: {thin}. It would overwrite "
+                "the packet and upsert nulls over live picks rows.")
+
+    # A genuine improvement is still not thinner, or the guard refuses good work.
+    better = {"candidates": 14, "priced": 14, "with_rvol": 12, "scored": 14,
+              "notable_rows": 0}
+    if scan.thinner_than(better, prior):
+        failures.append("a rerun that priced and scored more names is being "
+                        f"called thinner: {scan.thinner_than(better, prior)}")
+
+    # And losing the section is still a loss, which is why the axis exists.
+    was_full = dict(prior, notable_rows=10)
+    lost = dict(prior, notable_rows=0)
+    if "notable_rows" not in scan.thinner_than(lost, was_full):
+        failures.append("a rerun that lost the whole notable section is not "
+                        "thinner on notable_rows, so the axis buys nothing")
+
+    # The mixed case the early return is actually for: a candidate gain does
+    # cancel, because those axes move together.
+    mixed = {"candidates": 13, "priced": 11, "with_rvol": 10, "scored": 12,
+             "notable_rows": 0}
+    if scan.thinner_than(mixed, prior):
+        failures.append("a rerun carrying one more candidate and one fewer "
+                        "priced is being called thinner, so the early return "
+                        "no longer works for the axes it was written for")
+
+    print("  cancelling   a briefing gain cancels no screen loss, a candidate "
+          "gain still cancels, and losing the section is still a loss")
+
 
 def claim_a_thinner_rerun_stands_down(failures: list[str]) -> None:
     """A rerun that knows less does not replace what knows more.
@@ -5123,6 +5188,7 @@ def main() -> int:
     claim_the_november_transition(failures)
     claim_economic_events_are_converted_not_relabelled(failures)
     claim_a_thinner_rerun_stands_down(failures)
+    claim_a_briefing_gain_does_not_cancel_a_screen_loss(failures)
     claim_an_empty_packet_is_not_a_failed_step(failures)
     claim_delivery_happens_once(failures)
     claim_replay_is_counted_once(failures)

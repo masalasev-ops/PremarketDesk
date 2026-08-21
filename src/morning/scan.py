@@ -2598,9 +2598,34 @@ NOTABLE_LISTS = (
 )
 
 
+# ------------------------------------------------- a note on how these read
+#
+# Every reason string below is quoted into the report WORD FOR WORD, because
+# REPORT_TEMPLATE.md tells the model to quote them rather than paraphrase, and
+# the model's output is then scanned by analyst.quantifier_violations. That
+# guard flags a quantifier near a set word: "every", "all", "none", "each",
+# "most", "majority" within six words either side of "candidate", "name" or
+# "watchlist", and "no" within six words AFTER one. It is in warn mode today
+# and CRITERIA.md says what has to be true before it flips to enforcing; on the
+# day it flips, a reason reading "no name on this leg carries a move_sigma"
+# would be quoted into the report, flagged, regenerated twice and then fall
+# back to the Python report. The section's own words would have cost the
+# narrative.
+#
+# So these are written in COUNTS rather than quantifiers, which is the same
+# rule fallback_report's prose already follows. Note that "no" is forward only:
+# "this symbol has no gap statistics row" is fine and "no gap statistics row
+# for this name" is not, because the set word has to come after.
+#
+# claim_the_sections_own_words_pass_the_quantifier_guard walks every string the
+# section can produce and holds this, so a new reason cannot quietly reintroduce
+# one.
+
+
 def move_sigma(move_pct: float | None,
                stats_row: dict[str, Any] | None,
-               span_sessions: int) -> tuple[float | None, str | None]:
+               span_sessions: int,
+               table_unreadable: str | None = None) -> tuple[float | None, str | None]:
     """The move in units of the name's own daily volatility, or null and why.
 
     THE SCALING ASSUMES DAILY RETURNS ARE INDEPENDENT, and they are not. The
@@ -2631,13 +2656,41 @@ def move_sigma(move_pct: float | None,
     if move_pct is None:
         return None, "no move on this leg to scale"
     if stats_row is None:
-        return None, ("no gap statistics row for this name, so its daily "
+        # A table nobody could open and a name the table does not carry are
+        # different facts with different fixes, and the first was being written
+        # as the second on every row at once. "This symbol was never measured"
+        # sends a reader to look up one name; "the table could not be read"
+        # sends them to the database.
+        return None, (table_unreadable or
+                      "this symbol has no gap statistics row, so its daily "
                       "volatility was never measured")
     stdev = _as_float(stats_row.get("return_stdev_20d"))
     if stdev is None:
-        return None, (f"return_stdev_20d is null, which is fewer than "
-                      f"{NOTABLE_MIN_SESSIONS_FOR_SIGMA} sessions of returns "
-                      "behind the name")
+        # A null column has TWO causes and the reason has to say which. Every
+        # one of the 10,997 rows in the database is null today, and not one of
+        # them is null for the reason this used to give: return_stdev_20d was
+        # added to gap_stats.py on 2026-08-17 and the last rebuild ran on
+        # 2026-08-16, so the column exists and has never been computed. Telling
+        # a reader that 10,997 names each have fewer than twenty sessions of
+        # history is not a smaller mistake for being repeated.
+        #
+        # sessions_used is what separates them. It is the bar list's count
+        # rather than the close only list's, so it is evidence and not proof,
+        # and the wording says so.
+        covered = _as_float(stats_row.get("sessions_used"))
+        if covered is None:
+            return None, ("return_stdev_20d is null and this row records no "
+                          "session count, so it cannot say whether the column "
+                          "was never computed or the history is too short")
+        if covered < NOTABLE_MIN_SESSIONS_FOR_SIGMA:
+            return None, (f"return_stdev_20d is null and this row covers "
+                          f"{covered:,.0f} sessions, fewer than the "
+                          f"{NOTABLE_MIN_SESSIONS_FOR_SIGMA} the denominator "
+                          "needs")
+        return None, (f"return_stdev_20d is null on a row covering "
+                      f"{covered:,.0f} sessions, which is enough for it, so the "
+                      "column was written before it was computed. The Sunday "
+                      "21:00 universe rebuild fills it.")
     if stdev < NOTABLE_MIN_RETURN_STDEV_PCT:
         return None, (f"daily return stdev {stdev:.4f} percent is below "
                       f"{NOTABLE_MIN_RETURN_STDEV_PCT} in CRITERIA.md [Notable] "
@@ -2775,6 +2828,7 @@ def attach_notable_candidate_fields(
     candidates: list[dict[str, Any]],
     closes: dict[str, Any],
     stats: dict[str, dict[str, Any]],
+    table_unreadable: str | None = None,
 ) -> None:
     """4.2's three report fields, beside gap_pct on every candidate.
 
@@ -2799,9 +2853,37 @@ def attach_notable_candidate_fields(
         candidate["gap_2session"] = _pct_move(price, row.get("c2"))
         candidate["gap_3session"] = _pct_move(price, row.get("c3"))
         sigma, reason = move_sigma(candidate.get("gap_pct"), stats.get(symbol),
-                                   _LEG_SPAN_SESSIONS["premarket"])
+                                   _LEG_SPAN_SESSIONS["premarket"],
+                                   table_unreadable)
         candidate["move_sigma"] = sigma
         candidate["move_sigma_reason"] = reason
+
+
+def mark_notable_watchlist(notable: dict[str, Any],
+                          candidates: list[dict[str, Any]]) -> int:
+    """Fill in each row's also_on_watchlist, AFTER the screens have decided.
+
+    This is a second pass because of an ordering nothing in the spec mentions
+    and nothing in the section could see. day_eligible and swing_eligible are
+    set by evaluate_eligibility inside stamp_all, and stamp_all runs AFTER
+    vintage.enforce, which is where the section has to be assembled because
+    enforce is handed a dict built by hand and check (e) reads it. So at
+    assembly time those keys do not exist on any candidate yet, and the mark
+    4.4 asks for came out null on every row of every run.
+
+    The mark is presentational: it is not a leg, not a vintage and not
+    something check (e) reads, so filling it after the gate costs nothing the
+    gate was protecting. Returns how many rows were marked, so the caller can
+    say the pass ran rather than assuming it.
+    """
+    by_symbol = {str(c.get("symbol") or "").upper(): c for c in candidates}
+    marked = 0
+    for row in notable.get("rows") or []:
+        mark = _watchlist_mark(by_symbol.get(str(row.get("symbol") or "").upper()))
+        row["also_on_watchlist"] = mark
+        if mark:
+            marked += 1
+    return marked
 
 
 def _watchlist_mark(candidate: dict[str, Any] | None) -> str | None:
@@ -3010,18 +3092,22 @@ def notable_movers(
     # return_stdev_20d. Local import on discover.load_metrics's precedent, and
     # it opens the database rather than the network: no EODHD call is made
     # anywhere in this section.
+    stats_unreadable: str | None = None
     try:
         stats = gap_stats.load_all()
     except Exception as exc:  # a missing table is a lost sigma, not a lost run
         stats = {}
-        packet.gap(f"the gap statistics table could not be read "
-                   f"({type(exc).__name__}), so every notable move_sigma is null "
-                   "with that reason and lists 1 and 4 have no ranking key")
+        stats_unreadable = (f"the gap statistics table could not be read "
+                            f"({type(exc).__name__}: {exc}), so no name has a "
+                            "volatility denominator this morning")
+        packet.gap(f"notable movers: {stats_unreadable}. Lists 1 and 4 have no "
+                   "ranking key as a result, and this is a database fault rather "
+                   "than a fact about any one symbol.")
 
     closes_payload = load_universe_closes(session_date, packet)
     closes = (closes_payload or {}).get("closes") or {}
     sessions = (closes_payload or {}).get("sessions") or {}
-    attach_notable_candidate_fields(candidates, closes, stats)
+    attach_notable_candidate_fields(candidates, closes, stats, stats_unreadable)
 
     by_symbol = {str(c.get("symbol") or "").upper(): c for c in candidates}
 
@@ -3072,12 +3158,14 @@ def notable_movers(
             prior = _pct_move(c1, c2)
             if prior is not None:
                 sigma, reason = move_sigma(prior, stats.get(symbol),
-                                           _LEG_SPAN_SESSIONS["prior_session"])
+                                           _LEG_SPAN_SESSIONS["prior_session"],
+                                           stats_unreadable)
                 legs["prior_session"][symbol] = (prior, sigma, reason, None)
             two = _pct_move(c1, c3)
             if two is not None:
                 sigma, reason = move_sigma(two, stats.get(symbol),
-                                           _LEG_SPAN_SESSIONS["two_session"])
+                                           _LEG_SPAN_SESSIONS["two_session"],
+                                           stats_unreadable)
                 legs["two_session"][symbol] = (two, sigma, reason, None)
 
         per_leg = block["names_with_both_closes_for_leg"] or {}
@@ -3085,7 +3173,7 @@ def notable_movers(
             block["legs"][leg] = _leg_report(
                 bool(legs[leg]),
                 None if legs[leg] else
-                (f"no name carried both of the closes the {leg} leg needs"),
+                (f"0 rows carried both of the closes the {leg} leg needs"),
                 per_leg.get(leg), 0)
 
     context = {collect_premarket._full(s)
@@ -3093,18 +3181,40 @@ def notable_movers(
     heard = [s for s in bars_by_symbol if s not in context]
     block["context_symbols_excluded"] = len(
         [s for s in bars_by_symbol if s in context])
+    # The SAME floor the candidate path applies in drop_stale_prices, and for
+    # the same reason. A print from 07:22 is genuinely inside today's premarket
+    # window, so the vintage gate passes it, and it is still not this morning's
+    # price at 08:45. The candidate path drops those names; this leg was
+    # publishing them as notable premarket moves, off exactly the bars that had
+    # already been rejected two hundred lines up. One rule, one clock, both
+    # readers.
+    price_age_limit = _CRIT.number("price_age", "max_price_age_seconds")
+    scan_clock = ettime.now_et()
+    stale = 0
     if closes_payload is not None:
         # Reads c1 as a NUMBER and stamps today, so an undated sessions.c1 does
         # not reach it.
         for symbol in heard:
             price, price_time = _collector_last(bars_by_symbol.get(symbol) or [])
+            age = _price_age_seconds(price_time, scan_clock)
+            if age is not None and age > price_age_limit:
+                stale += 1
+                continue
             baseline_close = (closes.get(symbol) or {}).get("c1")
             move = _pct_move(price, baseline_close)
             if move is None:
                 continue
             sigma, reason = move_sigma(move, stats.get(symbol),
-                                       _LEG_SPAN_SESSIONS["premarket"])
+                                       _LEG_SPAN_SESSIONS["premarket"],
+                                       stats_unreadable)
             legs["premarket"][symbol] = (move, sigma, reason, price_time)
+    block["premarket_prices_too_old"] = stale
+    if stale:
+        packet.gap(
+            f"notable movers: {stale} subscribed symbol(s) were left off the "
+            f"premarket leg because their last collector print is older than "
+            f"the {price_age_limit:,.0f}s limit in {config.CRITERIA_PATH.name} "
+            "[price age]. The same floor drops them from the candidate path.")
 
     if not bars_by_symbol:
         premarket_reason = ("the collector file carried no bars, so the "
@@ -3113,12 +3223,19 @@ def notable_movers(
         premarket_reason = ("the closes sidecar is unreadable, so the premarket "
                             "leg had no c1 baseline to measure against")
     elif not legs["premarket"]:
-        premarket_reason = ("no subscribed name outside the context tickers "
-                            "carried both a collector price and a c1 close")
+        premarket_reason = ("0 subscribed symbols outside the context "
+                            "tickers carried both a collector price and a c1 "
+                            "close")
     else:
         premarket_reason = None
+    # examined is what the leg actually looked at. With no sidecar it looked
+    # at nothing, whatever the collector heard, because there is no baseline to
+    # measure a move against; reporting the collector count there would say the
+    # leg examined 39 symbols and selected none, which is the reading 4.9 is
+    # written to prevent.
     block["legs"]["premarket"] = _leg_report(
-        bool(legs["premarket"]), premarket_reason, len(heard), 0)
+        bool(legs["premarket"]), premarket_reason,
+        len(heard) if closes_payload is not None else None, 0)
 
     # ------------------------------------------------------------ the lists
     def top(leg: str, key, population=None) -> list[str]:
@@ -3173,20 +3290,22 @@ def notable_movers(
         if not report.get("available"):
             return report.get("reason") or f"the {leg} leg is unavailable"
         population = populations[name]
+        examined = len(legs[leg])
         if population:
-            return (f"only {len(population)} name(s) on the {leg} leg qualified "
+            return (f"{len(population)} of {examined} on the {leg} leg qualified "
                     f"for this list, fewer than the {NOTABLE_LIST_SIZE} it holds")
         if name.endswith("_by_sigma"):
-            return (f"no name on the {leg} leg carries a move_sigma, so this "
-                    "list has no ranking key at all. The reason is on every "
-                    "row's move_sigma_reason and is the same one for all of "
-                    "them when the gap statistics column is empty.")
+            return (f"0 of {examined} on the {leg} leg carry a move_sigma, so "
+                    "this list has no ranking key at all. The "
+                    "move_sigma_reason on the rows says why, and it is the "
+                    "same reason throughout when the gap statistics column is "
+                    "empty.")
         if name == "prior_session_by_market_cap":
-            return (f"no name on the {leg} leg both moved at least "
+            return (f"0 of {examined} on the {leg} leg both moved at least "
                     f"{NOTABLE_MIN_ABS_GAP_PCT} percent, which is "
                     "CRITERIA.md [Notable] min_abs_gap_pct, and carried a "
                     "market cap on file")
-        return f"no name on the {leg} leg carried a move over this window"
+        return f"0 rows on the {leg} leg carried a move over this window"
 
     block["list_reasons"] = {
         name: shortfall(name, leg_of_list_key(name)) for name in NOTABLE_LISTS}
@@ -3234,7 +3353,7 @@ def notable_movers(
             "move_sigma_reason": sigma_reason,
             "market_cap": caps.get(symbol),
             "market_cap_reason": None if symbol in caps else
-                                 "no market cap on file for this name, so it "
+                                 "this symbol has no market cap on file, so it "
                                  "was never examined against the floor",
             "catalyst": catalyst,
             "catalyst_state": catalyst_state,
@@ -3474,6 +3593,16 @@ def build_packet() -> dict[str, Any]:
     if candidates:
         stamp_all(candidates, earnings_block)
 
+    # AFTER stamp_all, because evaluate_eligibility runs inside it and the
+    # section is assembled before vintage.enforce. See mark_notable_watchlist.
+    notable_marked = mark_notable_watchlist(notable, candidates)
+    if notable_marked:
+        packet.gap(
+            f"notable movers: {notable_marked} row(s) name a symbol that is also "
+            "on a watchlist this morning, and the row says so rather than being "
+            "suppressed. Two sections selecting one symbol on different grounds "
+            "is information.")
+
     # Read, never computed: see volume_check's docstring. Placed after the
     # screens have run so rvol_only_day_failures has decisions to read, and
     # before the packet is assembled so both land in gaps_to_fill in the order
@@ -3636,23 +3765,57 @@ def evidence_width(payload: dict[str, Any]) -> dict[str, int]:
         "scored": sum(1 for c in candidates if c.get("score") is not None),
         # Layer 4's axis. Without it a rerun that produced the full watchlist
         # and lost the whole notable section is thinner on nothing, and
-        # thin_rerun_stands_down lets it overwrite a fuller packet. A packet
+        # thin_rerun_stands_down lets it overwrite a fuller packet.
+        #
+        # [corrected 2026-08-20: the second half of this note said "a packet
         # written before the section existed carries no such key, and
         # thinner_than iterates the PRIOR packet's keys, so an old one on disk
-        # is compared on the axes it actually has.
+        # is compared on the axes it actually has". That is wrong in a way that
+        # mattered. prior is evidence_width(prior_payload), computed by THIS
+        # function, so an old packet yields notable_rows 0 rather than a missing
+        # axis, and the axis was live on both sides from the first rerun. It is
+        # excluded from _CANCELLING_AXES instead, which is the fix that was
+        # actually needed.]
         "notable_rows": len((payload.get("notable_movers") or {}).get("rows") or []),
     }
+
+
+# The axes on which a GAIN means "a different, better morning" rather than "a
+# degraded copy". All four are candidate derived and move together: a rerun
+# that priced more names also scored more of them, so a gain on one is evidence
+# the whole morning improved.
+#
+# notable_rows is deliberately NOT here, and leaving it out is the whole point.
+# It is universe derived and independent of the candidate path: the section
+# reads the closes sidecar and the universe file, neither of which the watchlist
+# touches, so it can gain while every candidate axis collapses. With it in the
+# cancelling set, a rerun that lost every price, every RVOL and every score and
+# published ten notable rows was judged "not thinner" and overwrote the 08:45
+# packet, then upserted nulls over live picks rows as source='live'. Measured
+# against the real 2026-08-20 packet: prior {'candidates': 12, 'priced': 12,
+# 'with_rvol': 10, 'scored': 12, 'notable_rows': 0} against fresh
+# {'candidates': 12, 'priced': 0, 'with_rvol': 0, 'scored': 0,
+# 'notable_rows': 10} returned [], meaning not thinner.
+#
+# A LOSS on notable_rows still counts, which is why the axis was added at all.
+_CANCELLING_AXES = ("candidates", "priced", "with_rvol", "scored")
 
 
 def thinner_than(fresh: dict[str, int], prior: dict[str, int]) -> list[str]:
     """The axes on which fresh knows strictly less, empty unless it knows no more.
 
-    A rerun that gains on any axis is not a thinner rerun even if it loses on
-    another, because that is a different morning rather than a degraded copy of
-    this one, and standing down on it would be the guard refusing an
-    improvement.
+    A rerun that gains on a CANDIDATE axis is not a thinner rerun even if it
+    loses on another, because that is a different morning rather than a
+    degraded copy of this one, and standing down on it would be the guard
+    refusing an improvement.
+
+    A gain on an axis outside _CANCELLING_AXES cancels nothing. See the note
+    above that constant: a briefing section that filled while the screen
+    emptied is not an improved morning, and reading it as one let a gutted
+    rerun replace a full packet.
     """
-    if any(fresh[key] > prior[key] for key in prior):
+    if any(fresh[key] > prior[key]
+           for key in prior if key in _CANCELLING_AXES):
         return []
     return sorted(key for key in prior if fresh[key] < prior[key])
 

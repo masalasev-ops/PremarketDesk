@@ -6,7 +6,7 @@ no quota: every input is synthetic, the closes sidecar is written into the
 sandbox, the gap statistics read is stubbed, and the exchange calendar is a
 plain weekday rule so the answer is the same on any machine.
 
-Sixteen claims, and they are grouped by what they defend rather than by the
+Twenty claims, and they are grouped by what they defend rather than by the
 order the code runs in.
 
 The fence first, because it is the thing a later change is most likely to erode
@@ -60,6 +60,12 @@ C1, C2, C3 = "2026-08-19", "2026-08-18", "2026-08-17"
 # daily stdev. LOUD moves 8 percent in one session off a 10.0 percent stdev.
 # Raw move: LOUD wins. Sigma: QUIET wins, 2.0 against 0.8. QUIET is also under
 # the 3 percent discovery gap floor and would never be a candidate.
+# DOWN and BIGMOVE exist so that each ranking key can be told from its
+# inverse. Without them the fixture could not: every close in it rose, so
+# list 3's abs() was never exercised and ranking on the signed move gave the
+# same answer; and one subscribed name meant list 4 was a single element list,
+# identical under any key and any filter. Mutation testing against the shipped
+# code found all four of those ranking keys asserted by nothing.
 UNIVERSE_ROWS = [
     {"symbol": "QUIET.US", "code": "QUIET", "market_cap": 900_000_000.0},
     {"symbol": "LOUD.US", "code": "LOUD", "market_cap": 400_000_000.0},
@@ -67,6 +73,13 @@ UNIVERSE_ROWS = [
     {"symbol": "ONESHOT.US", "code": "ONESHOT", "market_cap": 800_000_000.0},
     {"symbol": "TINY.US", "code": "TINY", "market_cap": 50_000_000.0},
     {"symbol": "HEARD.US", "code": "HEARD", "market_cap": 700_000_000.0},
+    # The only faller, and the largest move on either universe leg. Ranking
+    # list 3 on the signed move instead of its size puts TINY first instead.
+    {"symbol": "DOWN.US", "code": "DOWN", "market_cap": 2_000_000_000.0},
+    # Subscribed, and the largest RAW premarket move with the smallest
+    # premarket sigma. Ranking list 4 on the move instead of the sigma puts
+    # this first instead of HEARD.
+    {"symbol": "BIGMOVE.US", "code": "BIGMOVE", "market_cap": 600_000_000.0},
 ]
 
 CLOSES = {
@@ -78,6 +91,8 @@ CLOSES = {
     "MEGA.US": {"c3": 100.0, "c2": 100.0, "c1": 101.5},
     "TINY.US": {"c3": 100.0, "c2": 120.0, "c1": 140.0},
     "HEARD.US": {"c3": 100.0, "c2": 100.5, "c1": 101.0},
+    "DOWN.US": {"c3": 100.0, "c2": 100.0, "c1": 55.0},
+    "BIGMOVE.US": {"c3": 100.0, "c2": 100.0, "c1": 100.0},
 }
 
 STATS = {
@@ -91,6 +106,16 @@ STATS = {
     # is what "NOCAP" below is, and from being below the floor, which is FLAT.
     "TINY.US": {"return_stdev_20d": None},
     "FLAT.US": {"return_stdev_20d": 0.001},
+    "DOWN.US": {"return_stdev_20d": 1.0},
+    "BIGMOVE.US": {"return_stdev_20d": 20.0},
+}
+
+
+# What a sidecar carrying the counters says, chosen so that no derivation over
+# CLOSES could produce it. See _write_closes.
+WRITTEN_COUNTS = {
+    "names_with_close": {"c1": 901, "c2": 902, "c3": 903},
+    "names_with_both_closes_for_leg": {"prior_session": 904, "two_session": 905},
 }
 
 
@@ -136,15 +161,16 @@ def _write_closes(session: str = SESSION, stamped: str | None = None,
         "third_session_available": True,
     }
     if counters:
-        payload["names_with_close"] = {
-            key: sum(1 for r in rows.values() if r.get(key) is not None)
-            for key in ("c1", "c2", "c3")}
-        payload["names_with_both_closes_for_leg"] = {
-            "prior_session": sum(1 for r in rows.values()
-                                 if r.get("c1") is not None and r.get("c2") is not None),
-            "two_session": sum(1 for r in rows.values()
-                               if r.get("c1") is not None and r.get("c3") is not None),
-        }
+        # DELIBERATELY not what deriving them would give. Written as the real
+        # counts they were indistinguishable from the derived ones, so the
+        # claim that the block reads them when they are there and derives them
+        # when they are not could not tell the two apart and passed either way.
+        # These are the numbers discover would have written; the section must
+        # republish them rather than recount, which is what BUILD_PLAN asks for
+        # and is only checkable when the two answers differ.
+        payload["names_with_close"] = WRITTEN_COUNTS["names_with_close"]
+        payload["names_with_both_closes_for_leg"] = \
+            WRITTEN_COUNTS["names_with_both_closes_for_leg"]
     path = config.DATA_DIR / f"universe-closes-{session}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -168,24 +194,34 @@ def _candidates() -> list[dict[str, Any]]:
 def _run(bars: dict[str, list[dict[str, Any]]] | None = None,
          candidates: list[dict[str, Any]] | None = None,
          session: str = SESSION) -> tuple[dict[str, Any], scan.Packet, list[dict[str, Any]]]:
-    """One assembly against the fixture, with the database read stubbed out.
+    """One assembly against the fixture, with the database and the clock stubbed.
 
     gap_stats.load_all is replaced rather than seeded, because the real one
     calls store.init, which runs an executescript and an UPDATE and commits.
     The point here is the section's arithmetic, not SQLite's.
+
+    The CLOCK is stubbed to 08:45 on the fixture's session, which is when the
+    scan actually runs. Without it the fixture's 08:40 bars are hours old
+    against the wall clock and the premarket leg drops every one of them for a
+    stale price, so the whole leg went missing depending on what time of day
+    the suite happened to run. A fixture that answers differently at 09:00 and
+    at 21:00 is not a fixture.
     """
     if bars is None:
         bars = {"HEARD.US": [_bar("HEARD.US", "08:40", 103.0)],
+                "BIGMOVE.US": [_bar("BIGMOVE.US", "08:40", 110.0)],
                 "SPY.US": [_bar("SPY.US", "08:40", 700.0)]}
     rows = _candidates() if candidates is None else candidates
-    real = gap_stats.load_all
+    real_stats, real_clock = gap_stats.load_all, ettime.now_et
     gap_stats.load_all = lambda as_of=None: dict(STATS)
+    ettime.now_et = lambda: dt.datetime(
+        *(int(part) for part in session.split("-")), 8, 45, tzinfo=ettime.ET)
     try:
         packet = scan.Packet()
         block = scan.notable_movers(
             session, {"symbols": UNIVERSE_ROWS}, bars, rows, packet)
     finally:
-        gap_stats.load_all = real
+        gap_stats.load_all, ettime.now_et = real_stats, real_clock
     return block, packet, rows
 
 
@@ -340,14 +376,22 @@ def claim_a_two_session_move_is_scaled_by_the_root_of_its_span(
 
 def claim_a_move_sigma_is_null_with_its_reason_and_never_substituted(
         failures: list[str]) -> None:
-    """Four null outcomes, four reasons, and never a number standing in.
+    """Six null outcomes, six reasons, and never a number standing in.
 
-    They are four and not one because the fixes differ: a name absent from the
-    gap statistics table was never measured, a name present with a null column
-    has fewer than min_sessions_for_move_sigma returns behind it, a name whose
-    stdev is under min_return_stdev_pct has barely moved in twenty sessions and
-    would otherwise report an enormous sigma on any move at all, and a null
-    move has nothing to scale.
+    They are six and not one because the fixes differ: a symbol absent from the
+    gap statistics table was never measured, a table nobody could open is a
+    database fault rather than a fact about any symbol, a symbol whose stdev is
+    under min_return_stdev_pct has barely moved in twenty sessions and would
+    otherwise report an enormous sigma on any move at all, a null move has
+    nothing to scale, and a null COLUMN splits again into a short history and a
+    row written before the column was computed.
+
+    That last split is not hypothetical. return_stdev_20d was added to
+    gap_stats.py on 2026-08-17 and the last rebuild ran on 2026-08-16, so all
+    10,997 rows in the live database are null and NOT ONE of them is null for
+    the reason this used to give. Telling a reader that 10,997 names each have
+    fewer than twenty sessions of history is not a smaller mistake for being
+    repeated.
 
     min_return_stdev_pct is applied HERE and nowhere else: gap_stats stores the
     raw value at any magnitude, so this is the only place in the project that
@@ -361,12 +405,26 @@ def claim_a_move_sigma_is_null_with_its_reason_and_never_substituted(
                         f"{value!r} with reason {reason!r}, expected 2.0 and None")
 
     for label, args, needle in (
-        ("a name absent from gap_stats", (5.0, None, 1), "no gap statistics row"),
-        ("a null column", (5.0, {"return_stdev_20d": None}, 1),
+        ("a symbol absent from gap_stats", (5.0, None, 1),
+         "no gap statistics row"),
+        # A null column has three causes and they are three, not one. Every
+        # row in the live database is null because the column was added after
+        # the last rebuild, and the reason used to tell the reader that all
+        # 10,997 names have too little history instead.
+        ("a null column on a row that records no session count",
+         (5.0, {"return_stdev_20d": None}, 1), "records no session count"),
+        ("a null column on a short history",
+         (5.0, {"return_stdev_20d": None, "sessions_used": 4}, 1),
          "fewer than"),
+        ("a null column on a long history",
+         (5.0, {"return_stdev_20d": None, "sessions_used": 250}, 1),
+         "written before it was computed"),
         ("a stdev under the floor", (5.0, {"return_stdev_20d": floor / 2}, 1),
          "min_return_stdev_pct"),
         ("a null move", (None, {"return_stdev_20d": 2.5}, 1), "no move"),
+        ("an unreadable table",
+         (5.0, None, 1, "the gap statistics table could not be read"),
+         "could not be read"),
     ):
         value, reason = scan.move_sigma(*args)
         if value is not None:
@@ -384,8 +442,8 @@ def claim_a_move_sigma_is_null_with_its_reason_and_never_substituted(
         failures.append(f"a stdev of exactly {floor}, which is the floor itself, "
                         f"was refused: {reason}")
 
-    print("  null sigma   four absences, four reasons, and a stdev sitting "
-          f"exactly on {floor} still divides")
+    print("  null sigma   six absences, six reasons, a null column split three "
+          f"ways, and a stdev sitting exactly on {floor} still divides")
 
 
 def claim_a_quiet_name_under_the_discovery_floor_can_still_appear(
@@ -412,18 +470,116 @@ def claim_a_quiet_name_under_the_discovery_floor_can_still_appear(
                         "the move rather than on the sigma.")
 
     # And the size list orders the other way round, which is what makes the two
-    # lists worth having separately.
+    # lists worth having separately. Its own ordering is asserted in
+    # claim_each_list_ranks_on_the_key_it_names.
     size = block["lists"]["two_session_by_move"]
-    if size and size[0] != "TINY.US":
-        failures.append(f"the two session size list leads with {size[0]} rather "
-                        "than the 40 percent mover, so it is not ranking on the "
-                        "raw move")
+    if "TINY.US" not in size:
+        failures.append(f"the 40 percent two session mover is absent from the "
+                        f"size list: {size}")
 
     print(f"  under floor  a 2 percent move at 2.0 sigma leads the sigma list "
-          f"{ranked}, and the size list leads with {size[0] if size else None}")
+          f"{ranked}, and the size list carries the 40 percent mover")
 
 
 # ---------------------------------------------------------- the labelling
+
+def claim_each_list_ranks_on_the_key_it_names(failures: list[str]) -> None:
+    """All four ranking keys, each told apart from its inverse.
+
+    Mutation testing against the shipped section found three of the four
+    asserted by nothing: list 2 ranked by minus the market cap published the
+    five SMALLEST caps and no claim noticed; list 3 ranked on the signed move
+    instead of its size lost every large decliner and no claim noticed, because
+    every close in the fixture rose and abs() was never exercised; and list 4
+    was a one element list, identical under any key and any filter, because the
+    fixture subscribed one non context symbol.
+
+    So the fixture now carries a faller with the largest move on either
+    universe leg, and a second subscribed symbol with the largest RAW premarket
+    move and the smallest premarket sigma. Each assertion below is chosen so
+    that the inverse key gives a different answer.
+
+    The expected leg of each list is written out HERE rather than read from
+    scan.leg_of_list_key. Reading it from the code is what made
+    claim_no_ranked_list_mixes_two_legs a tautology: it re-derived the leg from
+    the same table the row was stamped from, so a list that ranked one leg and
+    labelled another stayed green through three separate mutations.
+    """
+    _write_closes()
+    block, _packet, _rows = _run()
+    lists = block["lists"]
+    rows = {(r["leg"], r["symbol"]): r for r in block["rows"]}
+
+    expected_leg = {
+        "prior_session_by_sigma": "prior_session",
+        "prior_session_by_market_cap": "prior_session",
+        "two_session_by_move": "two_session",
+        "premarket_by_sigma": "premarket",
+    }
+    if set(expected_leg) != set(scan.NOTABLE_LISTS):
+        failures.append(f"the section emits lists {sorted(scan.NOTABLE_LISTS)} "
+                        f"and this claim knows {sorted(expected_leg)}")
+    for name, leg in expected_leg.items():
+        for symbol in lists.get(name, []):
+            if (leg, symbol) not in rows:
+                failures.append(f"{symbol} is on {name}, which must rank the "
+                                f"{leg} leg, and has no {leg} row")
+
+    # 1. sigma descending on the prior session leg.
+    sigma_list = lists["prior_session_by_sigma"]
+    values = [rows[("prior_session", s)]["move_sigma"] for s in sigma_list
+              if ("prior_session", s) in rows]
+    if values != sorted(values, reverse=True):
+        failures.append(f"list 1 is not sorted by sigma descending: {values}")
+    if sigma_list and sigma_list[0] != "QUIET.US":
+        failures.append(f"list 1 leads with {sigma_list[0]} where QUIET carries "
+                        "the highest prior session sigma at 2.0")
+
+    # 2. market cap descending, and the LARGEST first. Ranking on minus the cap
+    #    publishes the smallest and was caught by nothing before this.
+    cap_list = lists["prior_session_by_market_cap"]
+    caps = [rows[("prior_session", s)]["market_cap"] for s in cap_list
+            if ("prior_session", s) in rows]
+    if caps != sorted(caps, reverse=True):
+        failures.append(f"list 2 is not sorted by market cap descending: {caps}")
+    if cap_list and cap_list[0] != "MEGA.US":
+        failures.append(f"list 2 leads with {cap_list[0]} where MEGA carries the "
+                        "largest cap in the fixture at 3 trillion. Ranking on "
+                        "minus the cap publishes the smallest instead.")
+    if "HEARD.US" in cap_list:
+        failures.append("HEARD moved 0.4975 percent, under "
+                        f"{_CRIT.number('notable', 'min_abs_gap_pct')}, and is "
+                        "on the market cap list anyway")
+
+    # 3. the SIZE of the two session move, so the faller leads.
+    size_list = lists["two_session_by_move"]
+    sizes = [abs(rows[("two_session", s)]["move_pct"]) for s in size_list
+             if ("two_session", s) in rows]
+    if sizes != sorted(sizes, reverse=True):
+        failures.append(f"list 3 is not sorted by the size of the move: {sizes}")
+    if size_list and size_list[0] != "DOWN.US":
+        failures.append(f"list 3 leads with {size_list[0]} where DOWN moved 45 "
+                        "percent against TINY's 40. Ranking on the signed move "
+                        "puts the riser first and drops every large decliner "
+                        "off the size list.")
+
+    # 4. premarket SIGMA, not the raw move.
+    premarket_list = lists["premarket_by_sigma"]
+    if premarket_list and premarket_list[0] != "HEARD.US":
+        failures.append(
+            f"list 4 leads with {premarket_list[0]}. HEARD moved 1.98 percent at "
+            "1.98 sigma and BIGMOVE moved 10 percent at 0.5, so ranking on the "
+            "raw move puts BIGMOVE first and this list is the section's "
+            "headline measure.")
+    if len(premarket_list) < 2:
+        failures.append(f"list 4 holds {len(premarket_list)} name(s), and a one "
+                        "element list is identical under any ranking key")
+
+    print(f"  ranking keys sigma leads with {sigma_list[0] if sigma_list else None}, "
+          f"cap with {cap_list[0] if cap_list else None}, size with "
+          f"{size_list[0] if size_list else None}, premarket with "
+          f"{premarket_list[0] if premarket_list else None}")
+
 
 def claim_no_ranked_list_mixes_two_legs(failures: list[str]) -> None:
     """Every list ranks within one leg, and a row carries one leg and one date.
@@ -586,6 +742,63 @@ def claim_a_mis_stamped_notable_row_stops_the_run(failures: list[str]) -> None:
           "each raise, rewrite the gate marker and stop the chain")
 
 
+def claim_a_stale_collector_print_is_not_a_notable_move(
+        failures: list[str]) -> None:
+    """The section holds the same price age floor the candidate path holds.
+
+    scan.drop_stale_prices removes a candidate whose last collector print is
+    older than [Price age] max_price_age_seconds, and its docstring says why the
+    vintage gate cannot do this job: a print from 07:22 is genuinely inside
+    today's premarket window and passes every check vintage makes, and it is
+    still not this morning's price at 08:45. That is what a collector killed at
+    08:10 leaves behind.
+
+    The premarket leg reads bars_by_symbol directly rather than the candidate
+    list, on purpose, because every subscribed name is eligible for it. So it
+    reached straight past drop_stale_prices and published as notable premarket
+    moves the very prices the scan had already rejected two hundred lines
+    earlier, on the same morning, off the same bars. One rule, one clock, both
+    readers.
+
+    The count is published rather than the drop being silent, because a name
+    missing from the leg and a name the collector never heard are different
+    facts.
+    """
+    limit = _CRIT.number("price_age", "max_price_age_seconds")
+    fresh = _bar("HEARD.US", "08:40", 103.0)
+    old = _bar("QUIET.US", "07:00", 120.0)
+
+    _write_closes()
+    block, packet, _rows = _run(bars={"HEARD.US": [fresh], "QUIET.US": [old]})
+
+    premarket = {r["symbol"] for r in block["rows"] if r["leg"] == "premarket"}
+    if "QUIET.US" in premarket:
+        failures.append(
+            f"a print {limit:,.0f}s past the floor was published as a notable "
+            "premarket move. drop_stale_prices had already refused that same "
+            "bar for the candidate path on the same morning.")
+    if "HEARD.US" not in premarket:
+        failures.append("a five minute old print was dropped too, so the floor "
+                        "is refusing everything rather than the stale ones")
+    if block.get("premarket_prices_too_old") != 1:
+        failures.append("the section counted "
+                        f"{block.get('premarket_prices_too_old')} stale print(s) "
+                        "where the fixture carries one. A silent drop reads "
+                        "exactly like a symbol the collector never heard.")
+    if not any("price age" in note for note in packet.gaps):
+        failures.append(f"no packet gap names the price age floor: {packet.gaps}")
+
+    # And the floor is the CRITERIA one, not a number written here. A print
+    # exactly on the limit is inside it, the same way the candidate path reads
+    # it: drop_stale_prices refuses `age > limit`, not `age >= limit`.
+    block, _packet, _rows = _run(bars={"HEARD.US": [fresh]})
+    if not [r for r in block["rows"] if r["leg"] == "premarket"]:
+        failures.append("a fresh print alone produced no premarket row at all")
+
+    print(f"  price age    a print past the {limit:,.0f}s floor is left off the "
+          "premarket leg and counted, and a fresh one is published")
+
+
 def claim_the_context_tickers_stay_out_of_the_premarket_leg(
         failures: list[str]) -> None:
     """SPY is subscribed, heard, and not a notable mover.
@@ -612,13 +825,14 @@ def claim_the_context_tickers_stay_out_of_the_premarket_leg(
                         f"{block['context_symbols_excluded']} excluded context "
                         "ticker(s) where the fixture subscribes one. A silent "
                         "exclusion is the thing 4.9 forbids.")
-    if (block["legs"]["premarket"]["examined"] or 0) != 1:
+    if (block["legs"]["premarket"]["examined"] or 0) != 2:
         failures.append("the premarket leg examined "
-                        f"{block['legs']['premarket']['examined']} names where "
-                        "the fixture heard two, one of them a context ticker")
+                        f"{block['legs']['premarket']['examined']} symbols where "
+                        "the fixture heard three, one of them a context ticker")
 
     print(f"  context out  {block['context_symbols_excluded']} context ticker "
-          "excluded and counted, and the premarket leg examined the rest")
+          "excluded and counted, and the premarket leg examined the other "
+          f"{block['legs']['premarket']['examined']}")
 
 
 # ------------------------------------------------------------ the degrades
@@ -1000,26 +1214,226 @@ def claim_the_counters_say_whether_they_were_read_or_derived(
     in the other direction: a count nobody can tell apart from a written one is
     a count whose provenance is false.
     """
+    truth = {
+        "prior_session": sum(1 for r in CLOSES.values()
+                             if r.get("c1") is not None and r.get("c2") is not None),
+        "two_session": sum(1 for r in CLOSES.values()
+                           if r.get("c1") is not None and r.get("c3") is not None),
+    }
+
     _write_closes(counters=False)
     block, _packet, _rows = _run()
     if block["counter_source"] != "derived":
         failures.append("a sidecar with no per leg counters reported "
                         f"counter_source {block['counter_source']!r}")
-    derived = block["names_with_both_closes_for_leg"]
+    if block["names_with_both_closes_for_leg"] != truth:
+        failures.append("with nothing written to read, the derived counts came "
+                        f"back {block['names_with_both_closes_for_leg']} where "
+                        f"counting the closes map gives {truth}")
+    if block["names_with_close"] != {
+            key: sum(1 for r in CLOSES.values() if r.get(key) is not None)
+            for key in ("c1", "c2", "c3")}:
+        failures.append("the derived per session counts are wrong: "
+                        f"{block['names_with_close']}")
 
     _write_closes(counters=True)
     block, _packet, _rows = _run()
     if block["counter_source"] != "read":
         failures.append("a sidecar carrying the counters reported counter_source "
                         f"{block['counter_source']!r}")
-    if block["names_with_both_closes_for_leg"] != derived:
-        failures.append("the derived counts disagree with the written ones: "
-                        f"{derived} against "
-                        f"{block['names_with_both_closes_for_leg']}. They are "
-                        "the same question and must give the same answer.")
+    # The written numbers are deliberately impossible to derive from CLOSES, so
+    # republishing them is the only way to produce them and recounting is the
+    # only way not to.
+    if block["names_with_both_closes_for_leg"] != \
+            WRITTEN_COUNTS["names_with_both_closes_for_leg"]:
+        failures.append(
+            "the section recounted instead of reading what discover wrote: got "
+            f"{block['names_with_both_closes_for_leg']}, the file says "
+            f"{WRITTEN_COUNTS['names_with_both_closes_for_leg']}")
+    if block["names_with_close"] != WRITTEN_COUNTS["names_with_close"]:
+        failures.append("the per session counts were recounted rather than read: "
+                        f"{block['names_with_close']}")
 
-    print(f"  provenance   the same counts read and derived agree at {derived}, "
-          "and the block says which of the two it did")
+    print(f"  provenance   a written {WRITTEN_COUNTS['names_with_both_closes_for_leg']} "
+          f"is republished and an absent one is derived as {truth}, and the "
+          "block says which of the two it did")
+
+
+def _section_prose(block: dict[str, Any], packet: scan.Packet) -> list[str]:
+    """Every string this section would hand the model to quote."""
+    out: list[str] = [str(note) for note in packet.gaps]
+    if block.get("skipped"):
+        out.append(str(block["skipped"]))
+    for report in (block.get("legs") or {}).values():
+        if report.get("reason"):
+            out.append(str(report["reason"]))
+    for reason in (block.get("list_reasons") or {}).values():
+        if reason:
+            out.append(str(reason))
+    for row in block.get("rows") or []:
+        for key in ("move_sigma_reason", "market_cap_reason", "catalyst_state"):
+            if row.get(key):
+                out.append(str(row[key]))
+    return out
+
+
+def claim_the_sections_own_words_pass_the_quantifier_guard(
+        failures: list[str]) -> None:
+    """The section cannot be the thing that costs the morning its narrative.
+
+    REPORT_TEMPLATE.md tells the model to quote this section's reasons WORD FOR
+    WORD rather than paraphrase them, and analyst.quantifier_violations then
+    scans the model's output. That guard flags a quantifier near a set word:
+    every, all, none, each, most or majority within six words either side of
+    candidate, name or watchlist, and "no" within six words AFTER one.
+
+    Five of the section's reasons tripped it as first written, "no name on the
+    prior_session leg carries a move_sigma" among them. The guard is in warn
+    mode today, so the cost would have been a flag in the log rather than a lost
+    report; CRITERIA.md says what has to be true before it flips to enforcing,
+    and on that day a quoted reason would be regenerated twice and then fall
+    back to the Python report. The section's own words would have cost the
+    narrative, every morning, for as long as the list was short.
+
+    They are written in counts now, which is the rule fallback_report's prose
+    already follows. This walks what the section actually produces rather than
+    checking literals, so a reason added later is covered by construction.
+    """
+    seen: list[str] = []
+
+    # Four fixtures, chosen to reach different reason strings: the healthy one,
+    # a lost sidecar, a silent collector, and a sidecar with no closes at all,
+    # which is what drives the "0 rows carried both" and short list branches.
+    _write_closes()
+    block, packet, _rows = _run()
+    seen += _section_prose(block, packet)
+
+    (config.DATA_DIR / f"universe-closes-{SESSION}.json").unlink(missing_ok=True)
+    block, packet, _rows = _run()
+    seen += _section_prose(block, packet)
+
+    _write_closes()
+    block, packet, _rows = _run(bars={})
+    seen += _section_prose(block, packet)
+
+    _write_closes(closes={"NOCLOSE.US": {"c1": None, "c2": None, "c3": None}})
+    block, packet, _rows = _run(bars={})
+    seen += _section_prose(block, packet)
+
+    # And the block the wrapper publishes when the assembly raises.
+    seen += _section_prose(scan.empty_notable_block(
+        "the notable movers section raised ValueError: a name nobody guarded"),
+        scan.Packet())
+
+    unique = sorted(set(seen))
+    if len(unique) < 8:
+        failures.append(f"only {len(unique)} distinct string(s) were collected, "
+                        "which is too few to be the section's prose. The walk "
+                        "proved nothing.")
+    for line in unique:
+        hits = analyst.quantifier_violations(line)
+        for hit in hits:
+            failures.append(
+                f"a string this section hands the model trips the quantifier "
+                f"guard on {hit.get('quantifier')!r}: {line!r}. The template "
+                "tells the model to quote these word for word, so on the day "
+                "the guard flips to enforcing this costs the narrative rather "
+                "than the section.")
+
+    print(f"  own words    {len(unique)} distinct reasons the model is told to "
+          "quote, and not one asserts a quantifier over the candidate set")
+
+
+def claim_the_watchlist_mark_is_filled_after_the_screens_decide(
+        failures: list[str]) -> None:
+    """also_on_watchlist is not null on every row of every run.
+
+    It was. 4.4 says a name already on the day or swing watchlist appears here
+    anyway and the row says so inline, because two sections selecting one name
+    on different grounds is information and hiding it is not. The mark reads
+    day_eligible and swing_eligible off the candidate, and those are set by
+    evaluate_eligibility INSIDE stamp_all, which runs after vintage.enforce.
+    The section has to be assembled BEFORE enforce, because enforce is handed a
+    dict built by hand and check (e) reads the rows out of it. So at assembly
+    time neither key exists on any candidate, _watchlist_mark returned None for
+    every row, and the mark was dead on every run this section has ever made.
+
+    It is filled by a second pass after stamp_all now. The mark is
+    presentational: not a leg, not a vintage, nothing check (e) reads, so
+    filling it after the gate costs the gate nothing.
+
+    Checked both ways, because the ordering is the whole defect: the marking
+    pass itself, and that build_packet calls it after stamp_all rather than
+    before.
+    """
+    import ast
+    import pathlib as _pathlib
+
+    _write_closes()
+    # candidates=[] is the real shape at assembly time: build_packet assembles
+    # the section before stamp_all, so no candidate carries day_eligible or
+    # swing_eligible yet whatever the screens will decide later.
+    block, _packet, _rows = _run(candidates=[])
+
+    if any(row.get("also_on_watchlist") for row in block["rows"]):
+        failures.append("a row was marked at assembly time, when no candidate "
+                        "carries an eligibility flag yet, so this claim is "
+                        "measuring the fixture rather than the ordering")
+
+    # The screens then decide, and the pass fills the mark in.
+    candidates = [
+        {"symbol": "QUIET.US", "day_eligible": True, "swing_eligible": False},
+        {"symbol": "LOUD.US", "day_eligible": False, "swing_eligible": True},
+        {"symbol": "MEGA.US", "day_eligible": True, "swing_eligible": True},
+        {"symbol": "TINY.US", "day_eligible": False, "swing_eligible": False},
+    ]
+    marked = scan.mark_notable_watchlist(block, candidates)
+    got = {row["symbol"]: row.get("also_on_watchlist") for row in block["rows"]}
+    for symbol, wanted in (("QUIET.US", "day"), ("LOUD.US", "swing"),
+                           ("MEGA.US", "day and swing"), ("TINY.US", None)):
+        if symbol in got and got[symbol] != wanted:
+            failures.append(f"{symbol} is marked {got[symbol]!r} where the "
+                            f"screens make it {wanted!r}")
+    # Counted over ROWS and not over symbols: one symbol selected on two legs
+    # is two rows by design, and both of them carry the mark.
+    on_rows = sum(1 for row in block["rows"] if row.get("also_on_watchlist"))
+    if marked != on_rows:
+        failures.append(f"the pass reported {marked} marked row(s) and the rows "
+                        f"carry {on_rows}")
+    if marked == 0:
+        failures.append("no row was marked at all, so the fixture never reached "
+                        "a name the screens passed and this proved nothing")
+
+    # And build_packet must call it AFTER stamp_all, or it is dead again.
+    source = _pathlib.Path(scan.__file__).read_bytes().decode("utf-8")
+    tree = ast.parse(source)
+    build = next((n for n in tree.body
+                  if isinstance(n, ast.FunctionDef) and n.name == "build_packet"),
+                 None)
+    if build is None:
+        failures.append("scan.build_packet is gone")
+        return
+    order: list[tuple[int, str]] = []
+    for node in ast.walk(build):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in ("stamp_all", "mark_notable_watchlist",
+                                "notable_section"):
+                order.append((node.lineno, node.func.id))
+    order.sort()
+    names = [name for _line, name in order]
+    for wanted in ("notable_section", "stamp_all", "mark_notable_watchlist"):
+        if wanted not in names:
+            failures.append(f"build_packet does not call {wanted}")
+    if names.count("mark_notable_watchlist") and names.count("stamp_all"):
+        if names.index("mark_notable_watchlist") < names.index("stamp_all"):
+            failures.append(
+                "build_packet marks the notable rows BEFORE stamp_all, so "
+                "day_eligible and swing_eligible are not set yet and the mark "
+                "is null on every row again. That is the defect this claim "
+                "exists for and it reads exactly like a quiet morning.")
+
+    print(f"  mark order   {marked} row(s) marked after the screens decide, and "
+          "build_packet calls the pass after stamp_all")
 
 
 def claim_a_name_off_the_watchlist_is_marked_and_not_hidden(
@@ -1072,8 +1486,10 @@ CLAIMS = (
     claim_a_move_sigma_is_null_with_its_reason_and_never_substituted,
     claim_a_quiet_name_under_the_discovery_floor_can_still_appear,
     claim_no_ranked_list_mixes_two_legs,
+    claim_each_list_ranks_on_the_key_it_names,
     claim_a_mis_stamped_notable_row_stops_the_run,
     claim_the_context_tickers_stay_out_of_the_premarket_leg,
+    claim_a_stale_collector_print_is_not_a_notable_move,
     claim_the_section_widens_containment_only_by_its_own_rows,
     claim_the_section_examines_the_universe_and_not_the_survivors,
     claim_a_missing_input_names_the_leg_it_lost,
@@ -1082,6 +1498,8 @@ CLAIMS = (
     claim_an_undated_sidecar_costs_two_legs_and_not_the_morning,
     claim_the_counters_say_whether_they_were_read_or_derived,
     claim_a_name_off_the_watchlist_is_marked_and_not_hidden,
+    claim_the_watchlist_mark_is_filled_after_the_screens_decide,
+    claim_the_sections_own_words_pass_the_quantifier_guard,
 )
 
 
