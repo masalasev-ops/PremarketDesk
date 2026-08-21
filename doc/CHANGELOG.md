@@ -15,6 +15,39 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21: the universe keeps the name the vendor sends, and the two implausible caps were real
+
+The universe build read Type off each exchange-symbol-list row to filter and
+Exchange to keep, and discarded the rest of the row. Name and Isin are kept
+now, the notable section puts the name on each row, and the report identifies
+each ticker in one paragraph under the table.
+
+Why. DECISIONS recorded SPCX at 1.85 trillion and SKHY at 1.18 as implausible
+caps wanting a plausibility floor. Three discriminators were measured against
+them and all three failed to separate the pair from real megacaps: implied
+share count, where SPCX's 13.24 billion sits under NVDA's real 24.18; vendor
+self consistency, where cap and sharesOutstanding agree to half a percent; and
+realised volatility against cap, where SPCX at 6.58 percent sits beside MU at
+6.57. The project's own cached bars corroborate the volume as well. One
+exchange-symbol-list call returned Space Exploration Technologies Corp. Class A
+Common Stock and SK Hynix Inc. American Depositary Shares. Both caps are right
+and the finding was wrong. That entry is corrected in place with the original
+argument kept beneath it.
+
+No filter was added, and now for a better reason: a plausibility floor would
+have dropped SpaceX and SK Hynix from a list whose job is to surface the
+largest names that moved.
+
+Not visible until Sunday. The universe file is rebuilt at 21:00 on 2026-08-23,
+so it is the first one carrying names. Until then the section reports that the
+file predates the field, once for the table rather than once per row, which is
+the distinction instrument_name_reason exists to keep.
+
+Three claims hold it, one per seam: the vendor index, the row assembly, and the
+reader. The middle one earned its place. With the other two in place, mutating
+the row literal so the name never reached the file left every suite green.
+Seven mutations, seven caught. Suite at 2,316 paths.
+
 ## 2026-08-20, thirteenth: the rotation bands are re-fitted on the clean population and the edges move
 
 CRITERIA [Score premarket float rotation] goes from 0.0004 and 0.0002 to

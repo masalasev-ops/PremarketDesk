@@ -158,12 +158,30 @@ def universe_symbols(payload: dict[str, Any]) -> list[str]:
 
 # ------------------------------------------------------------------- build
 
-def _common_stock_index(api: eodhd.EodhdClient, notes: list[str]) -> dict[str, str]:
-    """Bare ticker to exchange, common stock only.
+def _common_stock_index(
+        api: eodhd.EodhdClient,
+        notes: list[str]) -> dict[str, dict[str, str | None]]:
+    """Bare ticker to what the vendor listed it AS, common stock only.
 
     Everything that is not Type == Common Stock is dropped here, which is what
     removes ETFs, funds, preferreds, warrants, units, rights and notes in one
     move rather than by maintaining a suffix blacklist.
+
+    This kept the exchange and threw the rest of the row away until 2026-08-20,
+    and the Name is the field that mattered. Layer 4's second list ranks by
+    market cap, so the largest caps in the file are read by a human every
+    morning, and a bare ticker cannot tell that reader whether a very large one
+    is a real company or a vendor error. SPCX at 1.85 trillion and SKHY at 1.18
+    were written up in DECISIONS.md as implausible on exactly that reasoning,
+    and settling it took a vendor call that returned "Space Exploration
+    Technologies Corp. Class A Common Stock" and "SK Hynix Inc. American
+    Depositary Shares". Both caps were right and the finding was wrong. The
+    name was in the response that built the file, in the same row as the Type
+    this function already reads, and was discarded.
+
+    Isin comes along for nothing and is the identifier a human can look up,
+    which a ticker is not: tickers are reused and an ADR does not share one
+    with its ordinary shares.
     """
     wanted_type = _CRIT.text("universe", "allowed_security_type")
     exchanges = _CRIT.text_list("universe", "exchanges")
@@ -183,7 +201,15 @@ def _common_stock_index(api: eodhd.EodhdClient, notes: list[str]) -> dict[str, s
             code = _norm_code(row.get("Code", ""))
             if not code:
                 continue
-            index.setdefault(code, row.get("Exchange") or exchange)
+            def _text(field: str) -> str | None:
+                value = str(row.get(field) or "").strip()
+                return value or None
+
+            index.setdefault(code, {
+                "exchange": row.get("Exchange") or exchange,
+                "name": _text("Name"),
+                "isin": _text("Isin"),
+            })
             kept += 1
         print(f"universe: {exchange} listed {len(rows)}, kept {kept} as {wanted_type}")
 
@@ -491,8 +517,10 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
           f"20 day average dollar volume {dollar_volume_rule.describe()}, "
           f"market cap {market_cap_rule.describe()}, sessions >= {min_sessions}")
 
-    exchange_of = _common_stock_index(api, notes)
-    print(f"universe: {len(exchange_of)} common stocks across the listed exchanges")
+    listed_as = _common_stock_index(api, notes)
+    print(f"universe: {len(listed_as)} common stocks across the listed exchanges")
+    named = sum(1 for row in listed_as.values() if row.get("name"))
+    print(f"universe: {named} of {len(listed_as)} carry a vendor instrument name")
 
     session_dates = _session_dates(api, lookback, notes)
     print(f"universe: {len(session_dates)} sessions, "
@@ -516,7 +544,7 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
                 f"of about {prior_staged:,} names (sized from the previous build)")
     eodhd.require_quota("universe", need, what)
 
-    series = _collect_bars(api, session_dates, set(exchange_of), notes)
+    series = _collect_bars(api, session_dates, set(listed_as), notes)
     print(f"universe: {len(series)} symbols had at least one session")
 
     # Stage one, everything that costs no extra calls.
@@ -535,7 +563,12 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
             {
                 "code": code,
                 "symbol": f"{code}.US",
-                "exchange": exchange_of.get(code, "UNKNOWN"),
+                "exchange": (listed_as.get(code) or {}).get("exchange") or "UNKNOWN",
+                # Null rather than a placeholder, because "the vendor sent no
+                # name for this listing" and "the name is UNKNOWN" are different
+                # facts and only one of them is about the instrument.
+                "name": (listed_as.get(code) or {}).get("name"),
+                "isin": (listed_as.get(code) or {}).get("isin"),
                 "price": round(price, 4),
                 "avg_dollar_volume_20d": round(dollar_volume, 2),
                 "sessions": sessions,
@@ -590,7 +623,7 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
         # market that moved from a rebuild that was cut short, which the count
         # alone cannot distinguish.
         "previous_count": _previous_count(),
-        "listed_common_stocks": len(exchange_of),
+        "listed_common_stocks": len(listed_as),
         "cleared_price_and_liquidity": len(staged),
         # Why each examined name is or is not in this file, by name and not
         # only by count. check_admissible reads it to answer "is this whole",

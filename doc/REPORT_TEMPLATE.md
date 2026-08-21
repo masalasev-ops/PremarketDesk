@@ -239,6 +239,23 @@ only the premarket leg has one at all. Catalyst is the headline where
 catalyst_state is fetched, the words not checked where it is not checked, and
 the words no catalyst found where it is that.
 
+Then, once for the whole table rather than once per row, one paragraph
+identifying the distinct tickers in it, in the order the rows first mention
+them, as `TICKER is NAME.` sentences run together, taking NAME from the row's
+name field and skipping a row whose name field is null. Where
+notable_movers.instrument_name_reason is not null, write that reason as one
+sentence in place of the paragraph, because a file predating the field carries
+nothing there for a single row and a per row absence would print one fact once
+per line.
+
+That paragraph is here because the table ranks one of its lists by market cap,
+so the largest values in it are read by a human every morning, and a bare
+ticker cannot tell that reader whether a very large one is a real company or a
+vendor error. DECISIONS.md 2026-08-20 records the case that settled it: SPCX at
+1.85 trillion and SKHY at 1.18 were written up as implausible, and a vendor
+call returned Space Exploration Technologies and SK Hynix. Both figures were
+right and the finding was wrong.
+
 If notable_movers.rows is empty the table is still written, header and
 separator and one row, exactly like this:
 

@@ -821,6 +821,22 @@ def claim_universe(failures: list[str]) -> None:
         failures.append("with no previous universe on disk the first quota gate "
                         "should say it can only size the bulk sweep, and it did not")
 
+    # The row ASSEMBLY, which no other claim reaches. _common_stock_index
+    # keeping the vendor's Name is worth nothing if build() then drops it on
+    # the way to the row it writes, and that seam is invisible to the index
+    # claim in test_regressions: mutating the row literal there left every
+    # suite green. Layer 4's second list ranks market cap descending and is
+    # read by a human who cannot otherwise tell a real company from a vendor
+    # error. See DECISIONS.md 2026-08-20 on SPCX and SKHY.
+    written = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
+    rows = written.get("symbols") or []
+    nameless = [row.get("symbol") for row in rows if not row.get("name")]
+    if nameless:
+        failures.append(
+            f"{len(nameless)} of {len(rows)} rebuilt universe rows carry no "
+            f"instrument name, first {nameless[:3]}. The vendor sends it in the "
+            "same row as the Type this build already filters on")
+
 
 def claim_universe_force(failures: list[str]) -> None:
     """The gate refuses by default, and --force writes while recording the verdict.

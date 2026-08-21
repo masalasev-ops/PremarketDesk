@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty four claims, a count read off the file rather than remembered,
+carries sixty five claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5026,6 +5026,81 @@ def claim_the_rotation_study_counts_no_warm_up_session(
           "first ten")
 
 
+def claim_the_universe_keeps_the_name_the_vendor_sent(
+        failures: list[str]) -> None:
+    """The build reads Type off a row and threw the rest of that row away.
+
+    exchange-symbol-list answers Code, Name, Country, Exchange, Currency, Isin
+    and Type in ONE row. _common_stock_index read Type to filter and Exchange
+    to keep, and discarded the Name, which is the only field in the whole
+    project that says what an instrument IS rather than what it did.
+
+    That absence had a cost and it is dated. Layer 4's second list ranks market
+    cap descending, so the largest caps on file are read by a human every
+    morning. SPCX at 1.85 trillion and SKHY at 1.18 were written up in
+    DECISIONS.md as implausible caps wanting a plausibility floor nobody had
+    measured. Three offline discriminators were then measured against them,
+    implied share count, vendor self consistency, and realised volatility
+    against cap, and all three failed to separate the pair from real megacaps.
+    A vendor call settled it in one response: Space Exploration Technologies
+    Corp. Class A Common Stock, and SK Hynix Inc. American Depositary Shares.
+    Both caps were right, the finding was wrong, and a plausibility floor would
+    have quietly dropped SpaceX and SK Hynix from a list whose entire job is to
+    surface the largest names that moved.
+
+    This is the writer half. src/tests/test_notable.py holds the reader half.
+    Without this one, deleting the field here would leave that reader reporting
+    "the file predates the field" forever, with every claim green.
+    """
+    from selection import universe
+
+    class _Vendor:
+        def exchange_symbol_list(self, exchange):
+            return [
+                {"Code": "AAA", "Type": "Common Stock", "Exchange": exchange,
+                 "Name": "Alpha Alpha Alpha Inc.", "Isin": "US0000000001"},
+                # Sent with no Name at all, which has to read as absent rather
+                # than as the empty string a template would print as a name.
+                {"Code": "BBB", "Type": "Common Stock", "Exchange": exchange,
+                 "Name": "   ", "Isin": ""},
+                # Filtered out by Type, so its name must not reach the file.
+                {"Code": "CCC", "Type": "ETF", "Exchange": exchange,
+                 "Name": "Cee Cee Cee Fund", "Isin": "US0000000003"},
+            ], None
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        index = universe._common_stock_index(_Vendor(), [])
+
+    if "CCC" in index:
+        failures.append("a row the Type filter refused reached the index, so "
+                        "the filter this function exists for has stopped")
+    row = index.get("AAA")
+    if not isinstance(row, dict):
+        failures.append(f"the index maps AAA to {row!r} rather than to the row "
+                        "the vendor sent, so the name is being thrown away "
+                        "again and list 2 is back to bare tickers")
+        return
+    if row.get("name") != "Alpha Alpha Alpha Inc.":
+        failures.append(f"AAA carries name {row.get('name')!r}, not the one the "
+                        "vendor sent in the same row as its Type")
+    if row.get("isin") != "US0000000001":
+        failures.append(f"AAA carries isin {row.get('isin')!r}. It costs nothing "
+                        "and it is the identifier a human can look up, which a "
+                        "reused ticker is not")
+    if row.get("exchange") is None:
+        failures.append("the exchange was lost while the name was gained, and "
+                        "the row shape is the whole point of carrying a dict")
+    blank = index.get("BBB") or {}
+    if blank.get("name") is not None or blank.get("isin") is not None:
+        failures.append(f"a vendor row carrying whitespace produced "
+                        f"{blank.get('name')!r} and {blank.get('isin')!r} rather "
+                        "than nulls, so the report prints an empty name as a "
+                        "name and a reader cannot tell it from a real one")
+
+    print("  universe     the instrument name and isin the vendor sends in the "
+          "same row as Type are kept rather than discarded")
+
+
 def claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(
         failures: list[str]) -> None:
     """A band edge in CRITERIA is the number a fit produced, or it is a guess.
@@ -5362,6 +5437,7 @@ def main() -> int:
     claim_the_rotation_study_counts_no_warm_up_session(failures)
     claim_no_python_here_runs_a_git_fetch(failures)
     claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(failures)
+    claim_the_universe_keeps_the_name_the_vendor_sent(failures)
 
     if failures:
         for failure in failures:

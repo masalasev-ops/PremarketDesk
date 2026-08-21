@@ -205,7 +205,68 @@ and every file before it has neither. Deriving them silently would violate 4.9
 in the other direction: a count nobody can tell apart from a written one is a
 count whose provenance is false. counter_source reads "read" or "derived".
 
-## 2026-08-20: list 2 is the first thing in this project that RANKS by market cap, and universe.json carries at least two it should not
+## 2026-08-20: list 2 is the first thing in this project that RANKS by market cap, and the two caps I called implausible are real
+
+**[corrected 2026-08-21: the title of this entry was "and universe.json carries
+at least two it should not", and its conclusion was wrong. SPCX is Space
+Exploration Technologies Corp. Class A Common Stock and SKHY is SK Hynix Inc.
+American Depositary Shares, per exchange-symbol-list, ISINs US84615Q1031 and
+US78392B2060. Both market caps are correct. The correction is written first
+because the original argument is kept in full beneath it, and a reader who met
+the argument before the answer would spend the same evening I did.]**
+
+**What actually settled it, and why nothing on disk could.** Three
+discriminators were measured against the pair before anything was bought, and
+all three failed:
+
+| test | result |
+| --- | --- |
+| implied share count, cap over price | SPCX 13.24bn, under NVDA's real 24.18bn |
+| vendor self consistency, cap against sharesOutstanding | agrees to 0.5 percent for both |
+| realised 20 day volatility against cap | SPCX 6.58 percent, MU 6.57 at a similar cap |
+
+The project's own cached EOD bars corroborate the volume too: SPCX really did
+trade 13.9 billion dollars a day over the 20 sessions to 2026-08-13, against a
+vendor figure of 14.08. Nothing in the numbers was wrong, so no arithmetic over
+them could find anything.
+
+**One vendor call answered it, and the field it returned was one the build
+already had.** exchange-symbol-list carries Code, Name, Country, Exchange,
+Currency, Isin and Type in a single row. _common_stock_index read Type to
+filter and Exchange to keep, and dropped the rest. The Name is the only field
+in this project that says what an instrument IS rather than what it did, and it
+was being fetched and discarded every Sunday.
+
+**What was changed, and what deliberately was not.** No filter, still, and now
+for a stronger reason than the original one. A plausibility floor would have
+quietly dropped SpaceX and SK Hynix from a list whose entire job is to surface
+the largest names that moved, which is the failure mode the original entry
+worried about pointed the other way round. What changed is legibility: the
+universe row carries the vendor's name and isin, the section puts the name on
+each row, and the report identifies each ticker in one paragraph under the
+table rather than in a tenth column, because NOTABLE_HEADER is fixed and the
+containment guard locates ticker columns by it.
+claim_the_universe_keeps_the_name_the_vendor_sent holds the writer,
+claim_a_row_says_what_the_instrument_is_or_why_it_cannot holds the reader, and
+claim_universe holds the row assembly between them, which is the seam that
+stayed green when the other two were in place. Seven mutations, seven caught.
+
+**The universe file on disk predates the field.** It is rebuilt Sundays at
+21:00, so the first file carrying names is 2026-08-23's, and until then the
+section reports that the file predates the field, once for the table rather
+than once for each row.
+
+**What I would take from this rather than from the original entry.** A finding
+that a vendor number is implausible is a claim about the world, and this
+project has no instrument in it that measures the world. Every discriminator
+available was another view of the same vendor's arithmetic, so they agreed with
+each other and told me nothing. The cost of being wrong here was a filter that
+would have hidden the two largest genuine movers in the file, and the thing
+that prevented it was declining to set a threshold nobody had measured. That
+caution was worth more than the analysis it was attached to.
+
+**The original entry follows, kept because the reasoning about ranking versus
+flooring is right and is the part worth rereading.**
 
 Not a decision so much as a finding that needs one, recorded here because it
 arrived with Layer 4 and belongs to the owner.
@@ -234,6 +295,12 @@ fix belongs in universe.market_cap_funnel, where it would serve the whole
 project, or in the vendor row that produced it. Layer 4 publishes what
 universe.json gives it, which is what 4.4 says to do, and this entry is the
 record of what that currently costs.
+
+[corrected 2026-08-21: the paragraph above is the right call reached through
+the wrong reasoning, which is the most dangerous combination in this file. The
+floor was not merely unmeasured. It was unmeasurable from anything on disk, and
+had it been measured it would have been measured against two real companies.
+See the correction at the head of this entry.]
 
 ## 2026-08-20: the float rotation bands were fitted on a population that is 36 percent warm up
 

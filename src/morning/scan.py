@@ -3023,6 +3023,8 @@ def empty_notable_block(reason: str) -> dict[str, Any]:
         "third_session_available": None,
         "context_symbols_excluded": 0,
         "names_without_market_cap": 0,
+        "instrument_names_on_file": 0,
+        "instrument_name_reason": reason,
         "skipped": reason,
     }
 
@@ -3130,15 +3132,37 @@ def notable_movers(
         "third_session_available": None,
         "context_symbols_excluded": 0,
         "names_without_market_cap": 0,
+        "instrument_names_on_file": 0,
+        "instrument_name_reason": None,
         "skipped": None,
     }
 
     caps: dict[str, float] = {}
+    # The vendor's own name for the instrument, which the universe build kept
+    # from 2026-08-20. It is here for one reason: this section's second list
+    # ranks by market cap, so the largest caps on file are read by a human every
+    # morning, and a bare ticker cannot tell that reader whether a very large
+    # one is a real company or a vendor error. It took a vendor call to
+    # establish that SPCX and SKHY, both written up as implausible, are SpaceX
+    # and SK Hynix and that both caps were right. See DECISIONS.md 2026-08-20.
+    names: dict[str, str] = {}
     for row in (universe_payload.get("symbols") or []):
         symbol = str(row.get("symbol") or "").upper()
         cap = _as_float(row.get("market_cap"))
         if symbol and cap is not None:
             caps[symbol] = cap
+        label = str(row.get("name") or "").strip()
+        if symbol and label:
+            names[symbol] = label
+
+    block["instrument_names_on_file"] = len(names)
+    # A file with no names at all is a file that predates the field, which is a
+    # different fact from a name missing for one symbol, and the template needs
+    # to be able to tell them apart or it prints a per row absence for a whole
+    # file's worth of them.
+    block["instrument_name_reason"] = None if names else (
+        "the universe file was built before the vendor's instrument name began "
+        "to be kept, so it carries nothing in that field for any symbol")
 
     # SELECT * over the newest as_of, so every row already carries
     # return_stdev_20d. Local import on discover.load_metrics's precedent, and
@@ -3481,6 +3505,10 @@ def notable_movers(
             "move_sigma": sigma,
             "move_sigma_reason": sigma_reason,
             "market_cap": caps.get(symbol),
+            "name": names.get(symbol),
+            "name_reason": None if symbol in names or not names else
+                           "the universe file carries this field but has "
+                           "nothing in it for this symbol",
             "market_cap_reason": None if symbol in caps else
                                  "this symbol has no market cap on file, so it "
                                  "was never examined against the floor",

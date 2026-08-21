@@ -213,7 +213,9 @@ def _candidates() -> list[dict[str, Any]]:
 
 def _run(bars: dict[str, list[dict[str, Any]]] | None = None,
          candidates: list[dict[str, Any]] | None = None,
-         session: str = SESSION) -> tuple[dict[str, Any], scan.Packet, list[dict[str, Any]]]:
+         session: str = SESSION,
+         universe: list[dict[str, Any]] | None = None,
+         ) -> tuple[dict[str, Any], scan.Packet, list[dict[str, Any]]]:
     """One assembly against the fixture, with the database and the clock stubbed.
 
     gap_stats.load_all is replaced rather than seeded, because the real one
@@ -239,7 +241,8 @@ def _run(bars: dict[str, list[dict[str, Any]]] | None = None,
     try:
         packet = scan.Packet()
         block = scan.notable_movers(
-            session, {"symbols": UNIVERSE_ROWS}, bars, rows, packet)
+            session, {"symbols": UNIVERSE_ROWS if universe is None else universe},
+            bars, rows, packet)
     finally:
         gap_stats.load_all, ettime.now_et = real_stats, real_clock
     return block, packet, rows
@@ -1621,6 +1624,93 @@ def _section_prose(block: dict[str, Any], packet: scan.Packet) -> list[str]:
     return out
 
 
+def claim_a_row_says_what_the_instrument_is_or_why_it_cannot(
+        failures: list[str]) -> None:
+    """A list that RANKS by market cap has to say what it is ranking.
+
+    The section's second list ranks market cap descending, so the largest
+    values in the universe are read by a human every morning, and a bare ticker
+    cannot tell that reader whether a very large one is a real company or a
+    vendor error. It is not hypothetical: SPCX at 1.85 trillion and SKHY at
+    1.18 were both written up in DECISIONS.md as implausible caps needing a
+    plausibility floor. Three offline discriminators were measured against them
+    and all three failed, and a vendor call then returned "Space Exploration
+    Technologies Corp. Class A Common Stock" and "SK Hynix Inc. American
+    Depositary Shares". The caps were right and the finding was wrong. The name
+    that settles it in one glance was in the response that BUILT the universe
+    file, in the same row as the Type the build already reads, and was thrown
+    away.
+
+    Two states have to stay distinguishable, because the fix arrived on
+    2026-08-20 and the file is rebuilt on Sundays. A universe file that
+    predates the field carries nothing for any row, which is ONE fact about the
+    file; a file that has the field but nothing for one symbol is a fact about
+    that symbol. Printing the second twenty times is how one absence would read
+    as twenty.
+    """
+    named = [dict(row, name=f"{row['code']} Holdings Inc") for row in UNIVERSE_ROWS]
+    named[0] = {k: v for k, v in named[0].items() if k != "name"}
+
+    block, _packet, _rows = _run(universe=named)
+    if block.get("instrument_name_reason") is not None:
+        failures.append("a universe file carrying instrument names still reports "
+                        f"{block['instrument_name_reason']!r}, which says the "
+                        "whole file predates the field")
+    if block.get("instrument_names_on_file") != len(named) - 1:
+        failures.append(f"the block counts {block.get('instrument_names_on_file')!r} "
+                        f"names on file where {len(named) - 1} rows carry one")
+    unnamed = [r for r in block["rows"] if r.get("name") is None]
+    for row in unnamed:
+        if not row.get("name_reason"):
+            failures.append(f"{row['symbol']} carries no name and no reason for "
+                            "it, so a reader cannot tell an absent instrument "
+                            "from an absent field")
+    for row in block["rows"]:
+        if row.get("name") and row.get("name_reason"):
+            failures.append(f"{row['symbol']} carries both a name and a reason "
+                            "it has none, and only one of those can be true")
+
+    # And the state every file on disk is in until the next Sunday rebuild.
+    block, _packet, _rows = _run()
+    reason = block.get("instrument_name_reason")
+    if not reason:
+        failures.append("a universe file with no instrument name anywhere reports "
+                        f"{reason!r}, so the section is silently missing a field "
+                        "rather than saying the file predates it")
+    if any(r.get("name_reason") for r in block["rows"]):
+        failures.append("a file that predates the field still puts a per row "
+                        "reason on every row, which prints one fact about the "
+                        "file once for each row of the table")
+
+    # The fallback report is where a reader actually meets this, and it is the
+    # report that runs on the morning the narrative call already failed.
+    packet = {"notable_movers": block, "candidates": [], "session_date": SESSION}
+    text = analyst.fallback_report(packet, "the claim asked for it")
+    # The report capitalises the sentence, so the tail is what to look for.
+    if reason and reason[1:] not in text:
+        failures.append("the fallback report drops the reason the names are "
+                        "missing, so the section looks like it never had them")
+
+    block, _packet, _rows = _run(universe=named)
+    packet = {"notable_movers": block, "candidates": [], "session_date": SESSION}
+    text = analyst.fallback_report(packet, "the claim asked for it")
+    for row in block["rows"]:
+        if row.get("name") and f"{row['name']}." not in text:
+            failures.append(f"the fallback report names {row['symbol']} in the "
+                            "table and never says what it is")
+            break
+    for row in block["rows"]:
+        bare = row["symbol"].split(".")[0]
+        if text.count(f"{bare} is ") > 1:
+            failures.append(f"{bare} is identified {text.count(f'{bare} is ')} "
+                            "times, where the paragraph is one sentence per "
+                            "distinct ticker rather than one per row")
+            break
+
+    print("  claim 24        a row says what the instrument IS, and a file that "
+          "predates the field says so once rather than once per row")
+
+
 def claim_the_sections_own_words_pass_the_quantifier_guard(
         failures: list[str]) -> None:
     """The section cannot be the thing that costs the morning its narrative.
@@ -1854,6 +1944,7 @@ CLAIMS = (
     claim_a_name_off_the_watchlist_is_marked_and_not_hidden,
     claim_the_watchlist_mark_is_filled_after_the_screens_decide,
     claim_the_sections_own_words_pass_the_quantifier_guard,
+    claim_a_row_says_what_the_instrument_is_or_why_it_cannot,
 )
 
 

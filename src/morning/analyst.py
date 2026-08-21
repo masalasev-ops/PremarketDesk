@@ -484,6 +484,26 @@ def fallback_report(
             f"| {_cell(row.get('price_time') or '-')} |")
     if not notable_rows:
         add("| none | | | | | | | | |")
+    # One paragraph for the whole table rather than a tenth column, because
+    # NOTABLE_HEADER is fixed and _ticker_claims locates ticker columns by it.
+    # The names are carried at all because list 2 ranks by market cap and a
+    # ticker alone cannot tell a reader whether a very large one is a real
+    # company or a vendor error. See DECISIONS.md 2026-08-20.
+    name_reason = notable.get("instrument_name_reason")
+    if name_reason:
+        text = str(name_reason)
+        add(text[:1].upper() + text[1:] + ".")
+    else:
+        said: list[str] = []
+        sentences: list[str] = []
+        for row in notable_rows:
+            label = row.get("name")
+            ticker = _bare(row.get("symbol") or "")
+            if label and ticker and ticker not in said:
+                said.append(ticker)
+                sentences.append(f"{ticker} is {_cell(label)}.")
+        if sentences:
+            add(" ".join(sentences))
     add("")
     for leg, report in sorted((notable.get("legs") or {}).items()):
         if not report.get("available") and report.get("reason"):
