@@ -60,6 +60,25 @@ sessions before the float screen is consulted at all. Anything re-run here will
 therefore reproduce the EDGES and not the surrounding percentages. See
 DECISIONS.md 2026-08-17 sixth for both sets and the attribution.
 
+[corrected 2026-08-20: the sentence directly above is no longer a safe thing to
+expect, and it was written before the reason was known. Both fits above were
+read off a `rescued` population that was 36 percent this script's own cold
+start, because `history` begins empty and nothing can carry an RVOL until it
+has warmed up, so every addressable name landed in `rescued` for the first
+[Baseline] min_sessions_for_rvol sessions. run() now walks those sessions
+without tallying them, and on that corrected population the edges DO move:
+0.0004 and 0.0002 become 0.00033 and 0.00014. The two paragraphs above stay as
+written because their own claim is still true. The screen fix did not move the
+edges. The warm up did.
+
+Two further things changed with that fit. round_down answers two significant
+figures rather than one, because at 0.00014266 a single figure costs 30 percent
+and three points of payout accuracy. And the payload now carries
+`rescued_rotation_values`, the rows behind the quantiles, so the next re-fit is
+arithmetic on a file rather than another 463 requests: their absence is exactly
+why this correction needed a vendor run to answer a question about numbers that
+had already been measured twice.]
+
 Run:
 
     PYTHONPATH=src .venv/Scripts/python.exe -m research.float_rotation_study
@@ -491,17 +510,35 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
                 "zero": round((len(values) - two - one) / len(values), 4)}
 
     def round_down(value: float) -> float:
-        """To one significant figure, so a band edge is a number a human can
+        """To two significant figures, so a band edge is a number a human can
         hold, and downward so the rounding never makes a band stricter than
-        the share it was matched to."""
+        the share it was matched to.
+
+        It was ONE significant figure until 2026-08-20, and that is lossy in
+        proportion to where the value sits inside its decade. At 0.00033763 a
+        single figure costs 2 percent; at 0.00014266 it costs 30 percent,
+        because the value sits at the start of its decade and the next figure
+        down is a third of it. The rounding is not free either way: the edges
+        exist to make the rotation bands pay what the RVOL bands pay, and at
+        one figure the re-derived pair missed that target by 4.94 points
+        against 1.77 at two. Rounding a threshold is allowed to cost a little
+        readability. It is not allowed to cost more accuracy than the
+        re-derivation it is rounding was performed to gain.
+        """
         if value <= 0:
             return 0.0
         import math
-        power = math.floor(math.log10(value))
-        # round() after the scaling, because 6 * 1e-4 in binary floating point
+        power = math.floor(math.log10(value)) - 1
+        # round() BEFORE the floor as well as after, and both for the same
+        # reason. 0.0006 scaled by 1e5 is 59.999999999999993, so a bare floor
+        # answers 0.00059: a rounding rule that exists to make an edge readable
+        # would have moved it by a sixtieth. The pre-round is to nine places,
+        # far finer than any edge and far coarser than the noise. The post
+        # round is the original one, because 6 * 1e-4 in binary floating point
         # is 0.0006000000000000001 and a band edge written into CRITERIA with
         # a tail like that is unreadable.
-        return round(math.floor(value / (10 ** power)) * (10 ** power), -power + 1)
+        scaled = math.floor(round(value / (10 ** power), 9))
+        return round(scaled * (10 ** power), -power + 1)
 
     def edge_at(values: list[float], share: float) -> float:
         """The value that this share of the population exceeds."""
@@ -664,6 +701,19 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
                              "top_by_gap": rvol_points_share(rvol_top)},
         "rotation_share_above_edge": {"all_addressable": share_above(rot_all),
                                       "top_by_gap": share_above(rot_top)},
+        # The rows behind the percentiles, for the slice the bands are
+        # fitted on. Their absence had a measured cost: when the warm up
+        # contamination was found on 2026-08-20, which way the edges would
+        # move could not be computed from either payload on disk, because
+        # both carried quantiles and a quantile of a contaminated set does
+        # not yield the quantile of the clean one. The whole study had to
+        # be re-run against the vendor to answer a question about numbers
+        # already measured. With these and rvol_band_payout, which holds
+        # the target share, a re-fit is arithmetic on a file.
+        "rescued_rotation_values": {
+            "all_addressable": sorted(rescued_rot_all),
+            "top_by_gap": sorted(rescued_rot_top),
+        },
         "rescue_examples": rescue_examples,
         "per_session": per_session,
         "alpaca_requests": probe.request_count,

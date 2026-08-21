@@ -1528,6 +1528,52 @@ is reached. Expect a re-run to reproduce the EDGES, which is what this section
 sets, and not the surrounding percentages, which describe the population of the
 day they were measured. See DECISIONS.md 2026-08-17 sixth.
 
+**Re-fitted 2026-08-20, and this time the edges DID move: 0.0004 and 0.0002
+became 0.00033 and 0.00014.** Everything above is kept as written, because it
+was true when it was written. What changed is the population, not the method.
+
+The `rescued` set both earlier fits were read off was 36 percent the script's
+own cold start. For the first [Baseline] min_sessions_for_rvol sessions the
+rolling history is too short for ANY name to carry an RVOL, so every
+addressable name fell into `rescued` whether or not it had a baseline. Those
+894 rows are ordinary established gappers, and this section's whole argument is
+that such names sit materially higher than a genuine rescue, so they dragged
+the fitted quantiles up and took the shipped edges with them. The study now
+walks the warm up sessions to build the history and refuses to tally them.
+
+Measured on the 190 rescued names among the top candidate_count by gap, over
+the 51 tallied sessions of 61 walked:
+
+| edges | two points | one point | miss against target |
+| --- | ---: | ---: | ---: |
+| the RVOL target | 53.72% | 12.40% | |
+| 0.0004 / 0.0002, as shipped | 47.89% | 14.74% | 8.17 points |
+| 0.00033 / 0.00014, re-derived | 54.21% | 13.68% | 1.77 points |
+
+The direction is the one the 2026-08-16 correction found, for the same reason
+in a second disguise: a rotation band fitted on names that carry an RVOL will
+under-pay the names that do not. It was the overlap contaminating the fit the
+first time and the script's own cold start the second.
+
+**Two significant figures, not one.** The re-derivation is rounded DOWN, so the
+rounding never makes a band stricter than the share it was matched to, and it
+was rounded to one significant figure until this fit. One figure is lossy in
+proportion to where a value sits inside its decade: it costs 2 percent at
+0.00033763 and 30 percent at 0.00014266, where the next figure down is a third
+of the value. At one figure the re-derived pair reads 0.0003 and 0.0001 and
+pays 54.74 and 16.32, missing the target by 4.94 points against 1.77. A
+rounding rule may cost a little readability. It may not cost more accuracy than
+the re-derivation it is rounding was performed to gain.
+
+**The next re-fit needs no vendor call.** The payload now carries
+`rescued_rotation_values`, the rows behind the quantiles, for both slices.
+Their absence is what made this correction expensive: when the contamination
+was found, which way the edges would move could not be computed from either
+archived payload, because a quantile of a contaminated set does not yield the
+quantile of the clean one, so the study had to be re-run against Alpaca to
+answer a question about numbers already measured. With those rows and
+`rvol_band_payout`, a re-fit is arithmetic on a file.
+
 **These edges are conditional on [Scan] candidate_count.** The scored
 population is the top N by gap, and rotation rises with gap size, so changing
 candidate_count changes the population these were fitted to and they must be
@@ -1536,12 +1582,12 @@ PYTHONPATH and read
 `mapping_transfer.top_<candidate_count>_by_gap.rederived_on_rescued`, which is
 `top_12_by_gap` at today's candidate_count.
 
-Read these as small numbers because the window is small: 0.0004 is four
+Read these as small numbers because the window is small: 0.00033 is three
 hundredths of one percent of the float changing hands between 07:20 and 08:45,
 not over the whole premarket.
 
-band = > 0.0004 : 2
-band = >= 0.0002 : 1
+band = > 0.00033 : 2
+band = >= 0.00014 : 1
 band = else : 0
 
 ## Score gap

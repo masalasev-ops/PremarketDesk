@@ -18,6 +18,102 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-20, later: the rotation bands are re-fitted, the edges DO move, and the next re-fit costs nothing
+
+**This answers the entry further down**, "the float rotation bands were fitted
+on a population that is 36 percent warm up", which measured the contamination
+and then stopped at: "Which way the edges move is NOT known from what is on
+disk. The payload carries percentiles, not the rows behind them, so the
+corrected distribution cannot be computed from it. Re-fitting needs the study
+re-run, which spends Alpaca requests rather than EODHD quota. That is a
+decision for the owner and not a patch."
+
+**Every sentence of that is factually true and the framing around it was
+wrong,** which is worth separating because the framing is the reusable part.
+The measurement and the threshold are not one decision. Which way the edges
+move is a fact about 190 rows. It cost 463 requests against a limit of 200 a
+MINUTE, with no monthly quota behind it and no EODHD call at all: three minutes
+of an idle machine. What is genuinely the owner's is whether to ship the
+answer, and that question cannot even be put until the answer exists. Deferring
+the measurement to the decision left the shipped edges resting on a set known
+to be contaminated, which is the single outcome that entry says it wanted to
+avoid. The rule worth keeping: an owner decision that is waiting on a
+measurement is not waiting on the owner.
+
+**The answer, on the 190 rescued names among the top candidate_count by gap,
+over the 51 tallied sessions of 61 walked.**
+
+| edges | two points | one point | miss against target |
+| --- | ---: | ---: | ---: |
+| the RVOL target | 53.72% | 12.40% | |
+| 0.0004 / 0.0002, as shipped | 47.89% | 14.74% | 8.17 points |
+| 0.00033 / 0.00014, re-derived | 54.21% | 13.68% | 1.77 points |
+
+The direction is the one the 2026-08-16 correction found, in a second disguise.
+That entry moved the edges DOWN because they had been fitted on the overlap,
+the names that carry an RVOL and never see these bands. The contaminating warm
+up rows are the same animal wearing a different label: they are established
+gappers that would carry an RVOL in the live path and were counted as rescues
+only because the script's rolling history had not filled yet. Both times, a
+rotation band fitted on names that carry an RVOL under-paid the names that do
+not, which is precisely the failure this band set exists to prevent.
+
+**The change can only move a score UP, and that is a real risk direction, not a
+reassurance.** Both edges fall, so a rotation scored name gains a point or two
+or stays where it is, and none loses one. Nothing drops out of the watchlist
+and something may enter it. The justification is not that the direction is
+safe. It is that the measured payout says the shipped edges under-paid the
+population the fallback exists for, by 5.83 points on the band worth two.
+
+**AS.US, the 2026-08-18 counterexample, is unchanged.** Its rotation was
+0.000264, which earned one point against 0.0002 and misses two against 0.0004.
+Against 0.00014 and 0.00033 it still earns one and still misses two. The
+eligibility question that entry raised is untouched by this and stays open;
+this was never going to answer it.
+
+**Not a fix for the numerator mismatch, and the two must not be conflated.**
+2026-08-17 seventh records that live rotation divides COLLECTOR volume by float
+while these bands are fitted on ALPACA volume, so live values land below the
+fitted distribution. Lowering the edges happens to move in the same direction
+as that bias, which makes it tempting to call it a partial correction. It is
+not one. The mismatch is a fixed error in the numerator and this is a re-fit of
+the distribution; treating an accidental alignment as a repair would leave a
+known defect looking addressed. That entry stays open exactly as written.
+
+**Two calls made here rather than by the owner, both cheap to overrule.**
+
+*Two significant figures instead of one.* The re-derivation is rounded DOWN so
+the rounding never makes a band stricter than the share it was matched to, and
+it was rounded to one figure. One figure is lossy in proportion to where a
+value sits inside its decade: 2 percent at 0.00033763, 30 percent at
+0.00014266, where the next figure down is a third of the value. The one figure
+answer is 0.0003 and 0.0001 and misses the target by 4.94 points against 1.77.
+A rounding rule may cost a little readability; it may not cost more accuracy
+than the re-derivation it is rounding was performed to gain. To overrule: two
+numbers in CRITERIA and one integer in round_down.
+
+*The rounding guard came with it.* 0.0006 scaled by 1e5 is 59.999999999999993,
+so at two figures a bare floor answers 0.00059, and the rule written for
+readability would have moved an edge by a sixtieth. That is the same class of
+bug the original one figure comment was written to dodge, one decade further
+down, and it was introduced and caught within the same hour. round_down rounds
+to nine places before the floor as well as after.
+
+**The payload now carries the rows, and that is the durable part.** Their
+absence is what made this expensive: the correction needed a vendor run to
+answer a question about numbers already measured twice, because a quantile of a
+contaminated set does not yield the quantile of the clean one.
+`rescued_rotation_values` holds both slices, and with `rvol_band_payout` beside
+it a re-fit is arithmetic on a file.
+`claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted` re-derives the
+shipped pair from those rows with its own arithmetic, refuses any drift between
+CRITERIA and the archived fit, and checks that one significant figure is the
+worse of the two. Six mutations against it, six caught.
+
+**Evidence.** doc/research/float_rotation_study-2026-08-20-warmup-fixed.json,
+51 sessions tallied of 61 walked, 463 Alpaca requests, 0 EODHD calls. The two
+earlier payloads stay on disk and are still what the entries above quote.
+
 ## 2026-08-20: lists 1 and 4 rank the SIGNED sigma, so no faller reaches either
 
 Recorded rather than changed, because BUILD_PLAN 4.4 says what it says and this

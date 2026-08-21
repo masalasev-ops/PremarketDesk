@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty three claims, a count read off the file rather than remembered,
+carries sixty four claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5026,6 +5026,118 @@ def claim_the_rotation_study_counts_no_warm_up_session(
           "first ten")
 
 
+def claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(
+        failures: list[str]) -> None:
+    """A band edge in CRITERIA is the number a fit produced, or it is a guess.
+
+    CRITERIA [Score premarket float rotation] says in its own text that its
+    edges are read off the rescued distribution at the quantiles reproducing
+    what the RVOL bands pay, and it names the script and the payload key to
+    read them back from. That makes the two numbers checkable against each
+    other, and until 2026-08-20 nothing checked them. The shipped pair had been
+    fitted on a population 36 percent of which was the study's own cold start,
+    and the file went on describing itself as measured for a fortnight.
+
+    So: read the edges out of CRITERIA, read the archived payload, and refuse
+    any disagreement. Then re-derive the pair from the ROWS the payload now
+    carries, with arithmetic written out here rather than imported, because
+    checking the script against itself would pass whatever the script did.
+
+    The rounding is asserted with them, and so is its cost. Rounding DOWN to
+    one significant figure was harmless while the edges sat mid decade and
+    costs 30 percent at 0.00014266, where the next figure down is a third of
+    the value. The rule is two figures now, and the one figure answer is
+    checked to be the WORSE of the two against the RVOL target, because a
+    rounding rule nobody has watched go wrong is not known to be a rule.
+    """
+    import math as _math
+
+    from core import criteria as _criteria
+
+    payload_path = (config.PROJECT_ROOT / "doc" / "research"
+                    / "float_rotation_study-2026-08-20-warmup-fixed.json")
+    if not payload_path.is_file():
+        failures.append(f"{payload_path.name} is gone, so the edges in CRITERIA "
+                        "[Score premarket float rotation] can no longer be "
+                        "traced to the fit they are supposed to come from")
+        return
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
+    block = (payload.get("mapping_transfer") or {}).get("top_12_by_gap") or {}
+    fitted = block.get("rederived_on_rescued") or {}
+    rows = (payload.get("rescued_rotation_values") or {}).get("top_by_gap") or []
+    target = block.get("rvol_target") or {}
+
+    if len(rows) != block.get("rescued_n"):
+        failures.append(
+            f"the payload carries {len(rows)} rescued rows against a stated "
+            f"rescued_n of {block.get('rescued_n')}. The rows exist so a re-fit "
+            "needs no vendor call, which is worth nothing if they are not the "
+            "rows the quantiles were taken from")
+        return
+
+    bands = _criteria.load().bands("score_premarket_float_rotation")
+    shipped = {"2": None, "1": None}
+    for band in bands:
+        if band.rule is not None and band.result in shipped:
+            shipped[band.result] = band.rule.value
+    for result, key in (("2", "two_points"), ("1", "one_point")):
+        if shipped[result] != fitted.get(key):
+            failures.append(
+                f"CRITERIA scores {result} above {shipped[result]!r} where the "
+                f"archived fit re-derived {fitted.get(key)!r}. An edge that has "
+                "drifted from its own measurement is a seeded threshold wearing "
+                "a measured one's paperwork")
+
+    def edge_at(values: list[float], share: float) -> float:
+        ordered = sorted(values, reverse=True)
+        index = min(max(int(round(share * len(ordered))) - 1, 0), len(ordered) - 1)
+        return ordered[index]
+
+    def round_down(value: float, figures: int) -> float:
+        power = _math.floor(_math.log10(value)) - (figures - 1)
+        return round(_math.floor(round(value / (10 ** power), 9)) * (10 ** power),
+                     -power + 1)
+
+    def miss(two: float, one: float) -> float:
+        """How far a pair of edges lands from what the RVOL bands pay, in points."""
+        count = len(rows)
+        hi = sum(1 for v in rows if v > two) / count
+        mid = sum(1 for v in rows if one <= v <= two) / count
+        return 100 * (abs(hi - target["two_points"])
+                      + abs(mid - target["one_point"]))
+
+    exact_two = edge_at(rows, target["two_points"])
+    exact_one = edge_at(rows, target["two_points"] + target["one_point"])
+    for figures, wanted in ((2, fitted),):
+        got = {"two_points": round_down(exact_two, figures),
+               "one_point": round_down(exact_one, figures)}
+        if got != {k: wanted.get(k) for k in got}:
+            failures.append(
+                f"re-deriving the edges from the carried rows gives {got}, "
+                f"where the payload recorded {dict(wanted)}. Either the rows are "
+                "not the ones fitted or the rounding has moved")
+
+    two_figures, one_figure = miss(*[round_down(v, 2) for v in (exact_two, exact_one)]),         miss(*[round_down(v, 1) for v in (exact_two, exact_one)])
+    if not two_figures < one_figure:
+        failures.append(
+            f"two significant figures miss the RVOL payout by {two_figures:.2f} "
+            f"points and one figure by {one_figure:.2f}, so the reason CRITERIA "
+            "gives for rounding to two is no longer true of this distribution")
+
+    # The noise case that made this rule wrong the first time it was written.
+    # 0.0006 scaled by 1e5 is 59.999999999999993, and a bare floor answers
+    # 0.00059: a rounding rule for readability moving an edge by a sixtieth.
+    for value, wanted in ((0.0006, 0.0006), (0.0003, 0.0003), (0.007, 0.007),
+                          (0.00033763, 0.00033), (0.00014266, 0.00014)):
+        if round_down(value, 2) != wanted:
+            failures.append(f"round_down({value}) is {round_down(value, 2)} "
+                            f"rather than {wanted}, which is binary floating "
+                            "point eating a whole significant unit")
+
+    print("  claim 64        the shipped rotation edges are the ones the fit "
+          "produced, re-derivable from the rows the payload carries")
+
+
 def claim_no_python_here_runs_a_git_fetch(failures: list[str]) -> None:
     """The one path the tree photograph exempts is still one nothing here writes.
 
@@ -5249,6 +5361,7 @@ def main() -> int:
     claim_the_trust_store_is_never_served_half_written(failures)
     claim_the_rotation_study_counts_no_warm_up_session(failures)
     claim_no_python_here_runs_a_git_fetch(failures)
+    claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(failures)
 
     if failures:
         for failure in failures:

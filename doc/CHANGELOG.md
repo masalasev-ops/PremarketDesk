@@ -15,6 +15,40 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, thirteenth: the rotation bands are re-fitted on the clean population and the edges move
+
+CRITERIA [Score premarket float rotation] goes from 0.0004 and 0.0002 to
+0.00033 and 0.00014. The bands are read from that file at runtime, so this is
+the whole behaviour change.
+
+Why now. The entry above records that the population both earlier fits were
+read off was 36 percent the study's own cold start, and it left the direction
+unknown because the archived payloads carry quantiles rather than rows. It
+called the re-fit a decision for the owner. That conflated the measurement with
+the threshold: the measurement is 463 Alpaca requests against a limit of 200 a
+minute, no EODHD quota, three minutes. It was run, and the answer is that the
+shipped edges pay two points to 47.89 percent of the rescued names against a
+target of 53.72, while the re-derived pair pays 54.21.
+
+What this does to a score. Both edges fall, so a rotation scored name gains a
+point or keeps the one it had, and none loses one. The watchlist can grow and
+cannot shrink from this.
+
+What else changed with it. round_down answers two significant figures rather
+than one, because at 0.00014266 the next figure down is a third of the value
+and one figure costs three points of payout accuracy; it also rounds to nine
+places before the floor, because 0.0006 scaled by 1e5 is 59.999999999999993 and
+a bare floor answered 0.00059. The payload carries rescued_rotation_values, the
+rows behind the quantiles, so the next re-fit needs no vendor call at all.
+claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted holds the lot:
+it re-derives the pair from those rows with its own arithmetic and refuses any
+drift between CRITERIA and the archived fit. Suite at 2,302 paths.
+
+Not fixed by this, and named so it is not assumed: DECISIONS 2026-08-17 seventh,
+the live numerator being collector volume where the bands are fitted on Alpaca
+volume. Lowering the edges moves the same way that bias does. It is not a
+correction for it.
+
 ## 2026-08-20, twelfth: the closes sidecar records what the vendor sent, and my reason for it was wrong
 
 [corrected 2026-08-20: this entry was titled "check (e) was comparing the
