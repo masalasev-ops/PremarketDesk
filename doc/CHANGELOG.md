@@ -15,7 +15,69 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
-## 2026-08-20, twelfth: check (e) was comparing the calendar against itself, and now reads a datum
+## 2026-08-20, twelfth: the closes sidecar records what the vendor sent, and my reason for it was wrong
+
+[corrected 2026-08-20: this entry was titled "check (e) was comparing the
+calendar against itself, and now reads a datum" and the whole of its first half
+argued that. It is FALSE, it was refuted the same evening by a reviewer whose
+grounds I then checked myself, and the text below is rewritten rather than
+marked up because almost every sentence of it rested on the error. The change
+to the code is kept and is described honestly at the foot of the entry. What I
+got wrong is recorded first, because a wrong reason for a right change is how
+the next reader talks themselves into the wrong follow up.]
+
+**What I claimed.** That both sides of check (e)'s comparison for the two
+universe legs are the same calendar: discover writes sessions.c1 as
+previous_trading_session(today), vintage computes sessions_back(today, 1), so no
+packet the scan builds could ever fail it.
+
+**Why that is wrong.** They are not the same cached calendar.
+ops/market_today.ALLOW_NETWORK is True by default and the only place in the
+repository that turns it off is scan.build_packet. Both tasks/job_discover.bat
+at 07:15 and tasks/job_morning_chain.bat at 08:45 run `python -m
+ops.market_today` as their own network allowed process BEFORE the Python that
+matters, and get_details refetches and rewrites data/exchange-details.json
+whenever the cache is older than [Calendar] refresh_after_days. So between the
+stamp being written and the gate reading it there are two independent refresh
+points in two processes ninety minutes apart. Check (e) is a live cross process
+comparison.
+
+It kills the trigger twice over. The scenario needed a calendar "a few weeks
+old", which is exactly the condition that makes those two guard runs fetch; for
+the mis-stamped sidecar to exist at all the 07:15 refresh must have failed, and
+if the 08:45 one then succeeds, check (e) fires on every universe row and
+enforce stops the chain. That is the opposite of certification. And check (c)
+would refuse the same packet in the same call anyway, off prior_session_date,
+which the entry never noticed.
+
+**What the change is actually worth, stated without the story.** discover threw
+the vendor's own date away and kept only the number, so nothing anywhere in the
+chain could say which session the vendor believed it was sending. The sidecar
+now records it: vendor_dates, the distinct session dates the ROWS carried, per
+session and as a list rather than one value, because a bulk response carrying
+two dates is itself the finding. The section refuses to stamp a leg the vendor
+contradicts and names both dates. A sidecar written before today carries no such
+field and reads as UNKNOWN rather than as agreement.
+
+That is a cross check on the DATA, not on the calendar, and it is narrower than
+the entry originally sold. The repository's own observed record is that
+eod-bulk-last-day answers a session the calendar says was open with an EMPTY
+ARRAY rather than with another session's bars, and discover already returns
+before writing on that branch. So this guard may never fire. It is kept because
+it costs a set comprehension over rows already in memory, because it also
+catches a response mixing two session dates, which nothing else would see, and
+because both halves are claimed and mutation tested:
+claim_a_close_from_another_session_is_not_stamped_with_this_one holds the reader
+and claim_seventeen in test_pool holds the writer. It is not kept because check
+(e) needed rescuing. It did not.
+
+## 2026-08-20, twelfth, as originally written, with its first argument now known to be wrong
+
+Kept whole rather than deleted, because the reasoning that turned out to be
+wrong is the part worth keeping and because only its FIRST argument is. From
+"Everything else in this pass" onward every sentence still stands and is the
+record of what the three passes closed; the entry above replaces the paragraphs
+before it.
 
 Six adversarial reviewers attacked the Layer 4 build across disjoint
 dimensions. This entry is the one finding among their forty five that is about

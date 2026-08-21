@@ -1365,28 +1365,31 @@ def claim_an_undated_sidecar_costs_two_legs_and_not_the_morning(
 
 def claim_a_close_from_another_session_is_not_stamped_with_this_one(
         failures: list[str]) -> None:
-    """The gate is given a datum to read instead of asking the calendar twice.
+    """The sidecar records the session the vendor believed it was sending.
 
-    Both universe legs are stamped with sessions.c1, which discover wrote as
-    previous_trading_session(today). vintage check (e) then compares that stamp
-    against sessions_back(today, 1), which is the same walk over the same cached
-    calendar in the same process. Both sides ARE the calendar, so check (e)
-    could not fail a packet this scan built, whatever the vendor had actually
-    sent.
+    discover threw the vendor's own date away and kept only the close, so
+    nothing anywhere in the chain could say which session the rows came from.
+    It records vendor_dates now, and the section refuses to stamp a leg the
+    vendor contradicts.
 
-    The trigger is ordinary rather than exotic. data/exchange-details.json is a
-    cache the nightly refreshes and the morning never fetches, so it can be
-    weeks old and missing a newly announced closure. On the morning after one:
-    the calendar names Monday, discover buys the end of day bulk for Monday, the
-    vendor returns Friday's bars, close_of keeps the number and threw the date
-    away, and the sidecar records Friday's closes under sessions.c1 = Monday. At
-    08:45 the section publishes both universe legs stamped Monday and every gate
-    is satisfied.
+    WHAT THIS IS NOT. It was written on the belief that vintage check (e) was
+    comparing the calendar against itself for the two universe legs, and that
+    belief is wrong. ops/market_today.ALLOW_NETWORK is true by default and only
+    scan.build_packet turns it off, so both job_discover.bat at 07:15 and
+    job_morning_chain.bat at 08:45 refresh the exchange calendar in their own
+    processes before the Python that matters. Check (e) is a live cross process
+    comparison across a ninety minute gap, not a tautology. CHANGELOG.md's
+    twelfth entry carries the correction and the reasoning that was wrong.
 
-    discover records the vendor's own date per session now, and the section
-    refuses to stamp a leg the vendor contradicts. A sidecar written before
-    2026-08-20 carries no such field and reads as UNKNOWN, which is the honest
-    answer for a file that never recorded it, rather than as agreement.
+    WHAT IT IS. A cross check on the DATA rather than on the calendar, and a
+    narrow one. The repository's own record is that eod-bulk-last-day answers a
+    session the calendar says was open with an EMPTY ARRAY rather than with
+    another session's bars, and discover returns before writing on that branch,
+    so this may never fire in production. It is kept because it costs a set
+    comprehension over rows already in memory, because it also catches a
+    response mixing two session dates, which nothing else would see, and
+    because a datum thrown away is worth less than a guard that is claimed and
+    watched to fail.
     """
     # 1. The vendor sent a different session than the one asked for.
     _write_closes(vendor_dates={"c1": ["2026-08-14"], "c2": [C2], "c3": [C3]})
