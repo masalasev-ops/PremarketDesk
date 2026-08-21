@@ -1087,6 +1087,82 @@ def claim_sixteen(failures: list[str]) -> None:
           "prior session leg whole")
 
 
+def claim_seventeen(failures: list[str]) -> None:
+    """The closes sidecar records what the VENDOR said, not only what was asked.
+
+    Both universe legs of the notable movers section are stamped with
+    sessions.c1, which this function writes as previous_trading_session(today).
+    vintage check (e) then validates that stamp by walking the same cached
+    calendar again, so both sides of the comparison were the calendar's opinion
+    and no packet the scan built could ever fail it.
+
+    close_of kept the vendor's number and threw the vendor's own date away, and
+    that date is the only datum in the whole chain that can contradict the
+    calendar. The trigger is ordinary: exchange-details.json is a cache the
+    nightly refreshes and the morning never fetches, so on the morning after a
+    closure it did not know about, the bulk call for Monday returns Friday's
+    bars and Friday's closes are recorded under sessions.c1 = Monday.
+
+    So this is the WRITER half. src/tests/test_notable.py holds the reader half,
+    which refuses a leg the vendor contradicts; without this one, deleting the
+    field here would leave that reader reading "unknown" forever and every
+    claim green.
+    """
+    class Api:
+        def eod_bulk_last_day(self, market, day=None):
+            return ([{"code": "AAA", "close": 8.0, "date": "2026-08-17"}], None)
+
+    prior = ettime.parse_date("2026-08-19")
+    before = ettime.parse_date("2026-08-18")
+    today = ettime.parse_date("2026-08-20")
+    prior_by = {"AAA.US": {"close": 10.0, "date": "2026-08-19"}}
+    before_by = {"AAA.US": {"close": 9.0, "date": "2026-08-18"}}
+
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        payload = discover.write_universe_closes(
+            Api(), {"AAA.US"}, prior_by, before_by, prior, before, today)
+
+    dates = payload.get("vendor_dates")
+    if not isinstance(dates, dict):
+        failures.append(
+            f"the sidecar carries vendor_dates {dates!r}. Without it, the two "
+            "universe legs are stamped from the calendar and validated against "
+            "the calendar, and nothing in the chain can contradict either.")
+        return
+    for key, wanted in (("c1", ["2026-08-19"]), ("c2", ["2026-08-18"]),
+                        ("c3", ["2026-08-17"])):
+        if dates.get(key) != wanted:
+            failures.append(f"vendor_dates[{key!r}] is {dates.get(key)!r} where "
+                            f"the rows carried {wanted}")
+
+    # A LIST, not one value, because a bulk response carrying two dates is
+    # itself the finding and folding it to one would hide exactly that.
+    mixed_by = {"AAA.US": {"close": 10.0, "date": "2026-08-19"},
+                "BBB.US": {"close": 11.0, "date": "2026-08-18"}}
+    with contextlib.redirect_stdout(buffer):
+        payload = discover.write_universe_closes(
+            Api(), {"AAA.US", "BBB.US"}, mixed_by, before_by, prior, before, today)
+    if sorted(payload["vendor_dates"]["c1"] or []) != ["2026-08-18", "2026-08-19"]:
+        failures.append("a bulk response carrying two session dates was folded "
+                        f"to {payload['vendor_dates']['c1']!r}, which hides the "
+                        "one thing worth seeing about it")
+
+    # And a vendor that sent no dates at all reads as empty rather than raising,
+    # which is what a stubbed feed and an older payload both look like.
+    with contextlib.redirect_stdout(buffer):
+        payload = discover.write_universe_closes(
+            Api(), {"AAA.US"}, {"AAA.US": {"close": 10.0}}, before_by,
+            prior, before, today)
+    if payload["vendor_dates"]["c1"] != []:
+        failures.append("rows carrying no date at all produced "
+                        f"{payload['vendor_dates']['c1']!r} rather than an empty "
+                        "list, and the reader treats empty as unknown")
+
+    print("  claim 17        the sidecar records the session date the VENDOR "
+          "stamped on its rows, as a list, beside the one the calendar asked for")
+
+
 def main() -> int:
     failures: list[str] = []
     claim_one(failures)
@@ -1104,6 +1180,7 @@ def main() -> int:
     claim_fourteen(failures)
     claim_fifteen(failures)
     claim_sixteen(failures)
+    claim_seventeen(failures)
 
     if failures:
         for failure in failures:
