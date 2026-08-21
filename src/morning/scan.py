@@ -1234,6 +1234,116 @@ def rvol_only_day_failures(candidates: list[dict[str, Any]], packet: Packet) -> 
     return blocked
 
 
+def rvol_capture_adjusted(
+        candidates: list[dict[str, Any]],
+        check: dict[str, Any] | None,
+        packet: Packet) -> dict[str, Any] | None:
+    """What the day screen would admit if RVOL's two halves came from one tape.
+
+    pm_rvol divides COLLECTOR socket volume by a baseline built from EODHD 1m
+    intraday bars. Those are two different tapes. Measured on the four sessions
+    from 2026-08-17, the socket carries 8.6 to 10.3 percent of the vendor's
+    volume over identical minutes, and per symbol that share is stable: the
+    median symbol varies by 1.48 times across the sessions it was measured on,
+    and 18 of 25 vary by less than two. A stable share can be divided back out.
+
+        RVOL_true = V_consolidated_today / median(V_consolidated_typical)
+                  = (V_socket_today / f) / median(V_consolidated_typical)
+                  = RVOL_measured / f
+
+    So the published RVOL is understated by about 1/f, roughly nine times, and
+    the day screen's floor of 1.5 is being applied to a number that cannot
+    reach it. Six mornings, 62 candidates, ZERO day eligible, and 19 of those
+    62 failed on the RVOL line alone.
+
+    This function does NOT change a decision. It states what the decision would
+    have been, because the thing data/UNVERIFIED asks a human to do is watch one
+    real morning's gate table, and until now that table has been silent about
+    the one measurement that decides whether it means anything. Whether to
+    correct the numerator, or to fix it so no correction is needed, is a
+    threshold and a screen question and belongs to the owner.
+
+    f comes from the newest volume check: the symbol's own collector over
+    vendor ratio where the check carries volume_by_symbol, and the session
+    aggregate where it does not. A check written before 2026-08-21 carries
+    neither, and then this returns None rather than assuming a number, because
+    an unmeasured capture rate and a capture rate of one are opposite claims.
+    """
+    if not check:
+        return None
+    floor = _CRIT.rule("day_setup", "premarket_rvol")
+    per_symbol = check.get("volume_by_symbol") or {}
+    aggregate = check.get("aggregate_ratio")
+
+    def capture_for(symbol: str) -> tuple[float | None, str]:
+        row = per_symbol.get(symbol)
+        if isinstance(row, dict):
+            vendor = _as_float(row.get("vendor"))
+            mine = _as_float(row.get("collector"))
+            if vendor and mine is not None and vendor > 0:
+                return mine / vendor, "this symbol's own measured share"
+        if aggregate and aggregate > 0:
+            return aggregate, "the session aggregate, this symbol unmeasured"
+        return None, "no capture rate has been measured"
+
+    rows: list[dict[str, Any]] = []
+    would_clear: list[str] = []
+    for candidate in candidates:
+        rvol = _as_float(candidate.get("pm_rvol"))
+        if rvol is None:
+            continue
+        share, basis = capture_for(candidate["symbol"])
+        if share is None:
+            continue
+        adjusted = round(rvol / share, 4)
+        candidate["pm_rvol_capture_adjusted"] = adjusted
+        candidate["pm_rvol_capture_share"] = round(share, 6)
+        candidate["pm_rvol_capture_basis"] = basis
+        rows.append({"symbol": candidate["symbol"], "pm_rvol": rvol,
+                     "adjusted": adjusted, "capture_share": round(share, 6)})
+        if floor.test(adjusted) and not floor.test(rvol):
+            would_clear.append(candidate["symbol"])
+
+    if not rows:
+        return None
+
+    # The names the correction would carry all the way, not just past the one
+    # line. A candidate failing price as well is not a name this measurement
+    # cost, and saying otherwise would overstate the finding in the direction
+    # that flatters it.
+    would_be_eligible = [
+        c["symbol"] for c in candidates
+        if c["symbol"] in would_clear
+        and (c.get("day_failed_conditions") or []) == ["premarket_rvol"]
+    ]
+
+    block = {
+        "measured_on": check.get("day"),
+        "candidates_with_an_rvol": len(rows),
+        "clear_the_floor_as_published": sum(
+            1 for r in rows if floor.test(r["pm_rvol"])),
+        "clear_the_floor_adjusted": sum(
+            1 for r in rows if floor.test(r["adjusted"])),
+        "would_become_day_eligible": would_be_eligible,
+        "floor": floor.describe(),
+        "rows": rows,
+    }
+    packet.gap(
+        f"premarket RVOL divides collector socket volume by a baseline built "
+        f"from the vendor's intraday bars, which are two different tapes. "
+        f"Against the capture rate measured for {check.get('day')}, "
+        f"{block['clear_the_floor_adjusted']} of {len(rows)} candidates would "
+        f"clear the day screen's {floor.describe()} where "
+        f"{block['clear_the_floor_as_published']} do as published"
+        + (", and "
+           + ", ".join(would_be_eligible)
+           + " would become day eligible, having already cleared every other "
+             "line" if would_be_eligible else "")
+        + ". Nothing here changed a decision. It is the gate table evidence "
+          "data/UNVERIFIED asks a human to read.")
+    return block
+
+
 def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> None:
     """Collector premarket volume divided by shares float.
 
@@ -3779,6 +3889,10 @@ def build_packet() -> dict[str, Any]:
     # a reader needs them, the measurement first and then what it cost.
     volume_measurement = volume_check(session_date, packet)
     rvol_only = rvol_only_day_failures(candidates, packet)
+    # Read from the same check, after the screens, because it reports what the
+    # decisions WOULD have been and there have to be decisions to report on.
+    capture_adjusted = rvol_capture_adjusted(
+        candidates, collect_premarket.latest_volume_check(session_date), packet)
 
     late_window = [c["symbol"] for c in candidates if c.get("pm_window_starts_late")]
     if late_window:
@@ -3916,6 +4030,10 @@ def build_packet() -> dict[str, Any]:
         # The names that cost. Empty on a morning where RVOL was not the
         # deciding condition for anyone.
         "day_blocked_on_rvol_alone": rvol_only,
+        # Evidence, not a decision. See rvol_capture_adjusted. The rows
+        # carry only symbols that are candidates this morning, so this
+        # widens the containment allow set by nothing.
+        "rvol_capture_adjusted": capture_adjusted,
         "gaps_to_fill": packet.gaps,
         "api_calls": eodhd.call_count(),
     }

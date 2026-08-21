@@ -15,6 +15,39 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, third: the per symbol capture rate is kept, and the RVOL numerator is named as a second tape
+
+verify_against_intraday computed a per symbol collector volume and vendor
+volume on every session it ever ran and persisted neither. It keeps
+volume_by_symbol now, at no vendor cost, and the six collected sessions were
+re-measured to backfill it: 297 intraday calls, doc/research/collector-capture.json.
+
+What that answers, which no reading before it could. Not why the socket
+disagrees with the vendor, but whether it disagrees by a STABLE amount, because
+only a stable share can be divided back out of a numerator. Over the four
+sessions from 2026-08-17 the aggregate sits between 0.086 and 0.103, and per
+symbol the median spread across sessions is 1.48 times with 18 of 25 symbols
+inside two. The two earlier sessions are a different regime, 1.49 and 3.83
+times the vendor, and averaging them with the rest is what made the instrument
+look chaotic.
+
+What it costs. pm_rvol divides collector socket volume by a baseline built from
+the vendor's intraday bars. Six mornings, 62 candidates, zero day eligible ever,
+19 failing on the RVOL line alone. Corrected per symbol, 2026-08-20 produces six
+names that clear every line of the day screen: FUTU, MSTR, ASST, BLSH, COIN,
+MARA.
+
+scan.rvol_capture_adjusted publishes the adjusted number and those names into
+the packet and the gaps and CHANGES NO DECISION. day_eligible is untouched, and
+claim 68 fails if an edit makes it touch one: correcting a live screen is a
+threshold question and is the owner's. What this changes is that the gate table
+data/UNVERIFIED asks a human to read now says whether an empty day watchlist is
+an instrument reading or a quiet market.
+
+Six mutations against claim 68, six caught, after the first fixture gave a
+symbol the same capture rate as the session aggregate and could not tell the
+two code paths apart. Suite 2,359 paths.
+
 ## 2026-08-21, second: the study measures the eligibility floor it was never asked to
 
 float_rotation_study now reports mapping_transfer.<slice>.day_setup_eligibility:

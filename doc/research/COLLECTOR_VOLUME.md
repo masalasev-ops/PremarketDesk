@@ -881,3 +881,116 @@ changed since the section above is that the shortfall now has a measured size at
 both subscription sizes, taken with no collector in the path, and one of the two
 remaining mechanisms is scheduled to be tested rather than argued about.
 
+# The capture rate, per symbol, 2026-08-21
+
+The four sections above chase one question: why does the socket disagree with
+the vendor's own bars. This section asks a different one that nobody had asked,
+and it is the one that decides whether the project can move.
+
+**Not "why is the numerator small" but "is it small by a STABLE amount".** A
+shortfall that is a stable property of a symbol can be divided back out of an
+RVOL numerator. A shortfall that is noise cannot, whatever its cause. Those
+have opposite consequences and no reading above separates them.
+
+Nothing on disk could answer it. verify_against_intraday computed a per symbol
+collector volume and vendor volume on every session it ran and persisted
+neither, keeping the session summary. A session aggregate says how much of the
+tape the socket heard on average and is silent about dispersion. The function
+keeps `volume_by_symbol` now, and the six collected sessions were re-measured
+against the vendor to backfill it: 297 intraday calls, no collector change,
+`doc/research/collector-capture.json`.
+
+## There are two regimes, and averaging them is what made this look chaotic
+
+| session | collector over vendor | symbols |
+| --- | ---: | ---: |
+| 2026-08-13 | 1.4926 | 38 |
+| 2026-08-14 | 3.8257 | 37 |
+| 2026-08-17 | 0.1028 | 50 |
+| 2026-08-18 | 0.0938 | 50 |
+| 2026-08-19 | 0.0862 | 73 |
+| 2026-08-20 | 0.0908 | 29 |
+
+The document's own verdict rests on the collector being "wrong in BOTH
+directions", and it cites 2026-08-14 at 3.83 times against 2026-08-17 at minus
+88 percent as though they were two readings of one phenomenon. They are not.
+The first two sessions over report and every session from 2026-08-17 sits in a
+band of 0.086 to 0.103. Four consecutive sessions inside two percentage points
+is not a confused instrument.
+
+That does not explain the early over count, and this section does not try to:
+2026-08-14 carried the known vintage defect and the replay measurement is in
+the section above. What it does is stop the early sessions contaminating every
+statistic computed over "all sessions", which is what they had been doing.
+
+## The share is stable per symbol, which is the finding
+
+Restricted to the four sessions from 2026-08-17, over symbols measured on three
+or more of them:
+
+| | all six sessions | the four clean sessions |
+| --- | ---: | ---: |
+| symbols measured 3+ times | 32 | 25 |
+| median per symbol max/min spread | 3.53 | **1.48** |
+| p75 spread | 88.08 | 2.22 |
+| symbols varying by less than 2x | 11 of 32 | **18 of 25** |
+
+The liquid names are tighter still: AXTI 1.2, TLT 1.2, NBIS 1.2, MU 1.4,
+BABA 1.4, QQQ 1.4, INTC 1.4, SPY 1.5, IWM 1.5, LITE 1.5. The wide ones are thin
+names where a session turns on a handful of prints.
+
+**So the shortfall is calibratable.** That is a conclusion the readings above
+could not reach, not because they were wrong but because the rows they needed
+were being thrown away.
+
+## What it costs, in names
+
+pm_rvol divides collector volume by a baseline `collect/baseline.py` builds
+from the vendor's 1m intraday bars. Two tapes. The published RVOL is therefore
+understated by about 1/f, roughly nine times, and the [Day setup] floor of 1.5
+is applied to a number that cannot reach it.
+
+Six mornings, 62 candidates, **zero day eligible, ever**, and 19 of the 62
+failed on the RVOL line alone. Correcting each candidate by the capture rate
+measured for its own symbol:
+
+| session | candidates with an RVOL | clear 1.5 as published | clear 1.5 adjusted | day eligible now | day eligible adjusted |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2026-08-17 | 1 | 0 | 0 | 0 | 0 |
+| 2026-08-18 | 11 | 2 | 5 | 0 | 0 |
+| 2026-08-19 | 10 | 0 | 1 | 0 | 0 |
+| 2026-08-20 | 10 | 2 | 9 | 0 | **6** |
+
+The six on 2026-08-20 are FUTU, MSTR, ASST, BLSH, COIN and MARA, each of which
+had already cleared price, gap, market cap and the prior session high. On
+2026-08-18 and 2026-08-19 the corrected names still fail other lines, so the
+correction does not manufacture a watchlist. It unblocks one line, and on one
+of four sessions that was the only line left.
+
+## What was and was not done with this
+
+`scan.rvol_capture_adjusted` publishes the adjusted number, the capture share
+used, and the names the correction would carry, into the packet and the gaps.
+**It changes no decision.** `day_eligible` is untouched and
+`claim_the_rvol_numerator_and_denominator_are_named_as_two_tapes` fails if a
+future edit makes it touch one, because whether to correct a live screen is a
+threshold question and belongs to the owner.
+
+What this does is make the gate table say something. data/UNVERIFIED asks a
+human to watch one real morning before going live, and until now that table
+showed an RVOL column with no way to tell an instrument reading from a quiet
+market.
+
+## What is still open
+
+Whether to correct the numerator or fix it. The 2026-08-21 06:30 probe decides
+which is available: if an ignored condition code is dropping volume the feed
+delivered, the numerator can be made whole and no calibration is needed. If the
+stream structurally omits off exchange volume, the calibration above is the
+whole answer. **The capture measurement holds either way**, because it is a
+measurement of the ratio between the two tapes and not of the cause.
+
+One caveat on the numbers, stated rather than buried. 2026-08-20 compared 29
+symbols against 49 carrying bars, because intraday had not fully published when
+this ran. The other twenty are unmeasured for that session, not measured and
+agreeing.

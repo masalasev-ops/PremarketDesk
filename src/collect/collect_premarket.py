@@ -1233,6 +1233,31 @@ def verify_against_intraday(day: str, quiet: bool = False) -> dict[str, Any] | N
         "aggregate_ratio": ratio,
         "minutes_compared_by_symbol": {r[0]: r[1] for r in results},
         "minutes_compared_total": sum(r[1] for r in results),
+        # The two volumes behind every number above, per symbol, added
+        # 2026-08-21. They were computed and discarded on every run before
+        # that, and they are the only thing that can answer whether this
+        # shortfall is CALIBRATABLE.
+        #
+        # The reasoning, because the key looks redundant beside aggregate_ratio
+        # and is not. A single ratio for the session says how much of the tape
+        # the socket heard on average. It cannot say whether the share is a
+        # stable property of a symbol or noise that happens to average out, and
+        # only the first of those can be divided back out of a numerator. The
+        # 2026-08-19 socket probe measured per symbol shares from 2.06 to 12.05
+        # percent with a B/A ratio ranging 0.66 to 2.30, which is exactly the
+        # dispersion that decides it, and nothing on disk let anyone check it
+        # across sessions.
+        #
+        # Raw volumes rather than a derived rate, deliberately. A rate stored
+        # beside the numbers it comes from is a second representation that will
+        # eventually disagree with the first, which this repository has already
+        # paid for once with prior_close and prior_high.
+        #
+        # Safe to add: _PACKET_VOLUME_CHECK_KEYS in scan.py is a whitelist, so
+        # this stays in the file and never widens the containment allow set
+        # with a roster of symbols the morning holds no evidence about.
+        "volume_by_symbol": {
+            r[0]: {"collector": r[2], "vendor": r[3]} for r in results},
         "unavailable": len(unavailable),
         "unavailable_symbols": unavailable,
         "vendor_zero_volume": len(vendor_zero),

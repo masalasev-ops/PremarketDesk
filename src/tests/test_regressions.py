@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries sixty seven claims, a count read off the file rather than remembered,
+carries sixty eight claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5026,6 +5026,133 @@ def claim_the_rotation_study_counts_no_warm_up_session(
           "first ten")
 
 
+def claim_the_rvol_numerator_and_denominator_are_named_as_two_tapes(
+        failures: list[str]) -> None:
+    """The measurement that says whether the day screen means anything.
+
+    pm_rvol divides COLLECTOR socket volume by a baseline collect/baseline.py
+    builds from EODHD 1m intraday bars. Two tapes. The nightly has measured the
+    gap between them on every collected session and, until 2026-08-21, kept
+    only the summary: verify_against_intraday computed a per symbol collector
+    and vendor volume and persisted neither.
+
+    That discard is what made the question unanswerable. A session aggregate
+    says how much of the tape the socket heard on average; it cannot say
+    whether the share is a stable property of a symbol, and only a stable share
+    can be divided back out of a numerator. Measured across the four sessions
+    from 2026-08-17 once the rows were kept: aggregate 0.086 to 0.103, per
+    symbol median spread 1.48 times, 18 of 25 symbols inside two times.
+
+    What it costs is not theoretical. Six mornings, 62 candidates, ZERO day
+    eligible, 19 failing on the RVOL line alone. Correct 2026-08-20 for the
+    measured capture and six names clear every line of the day screen.
+
+    So two things are asserted. The rows survive the summary, because without
+    them nobody can ask the question again. And rvol_capture_adjusted reports
+    rather than decides: it must not change day_eligible, because whether to
+    correct a numerator is the owner's, and a function that quietly moved a
+    name onto a watchlist would be making that decision by accident.
+    """
+    from collect import collect_premarket
+    from morning import scan as _scan
+
+    source = pathlib.Path(collect_premarket.__file__).read_bytes().decode("utf-8")
+    if '"volume_by_symbol"' not in source:
+        failures.append(
+            "verify_against_intraday no longer keeps volume_by_symbol, so the "
+            "per symbol collector and vendor volumes are computed and thrown "
+            "away again and the capture rate cannot be re-derived from any "
+            "session measured after this")
+
+    # The whitelist has to stay a whitelist, or the per symbol roster reaches
+    # the packet and widens the containment allow set with last session's
+    # collector list.
+    if "volume_by_symbol" in _scan._PACKET_VOLUME_CHECK_KEYS:
+        failures.append(
+            "volume_by_symbol was added to _PACKET_VOLUME_CHECK_KEYS, which "
+            "puts the previous session's collector roster into the packet and "
+            "makes every one of those symbols a claimable ticker")
+
+    from core import criteria as _criteria
+
+    floor = _criteria.load().rule("day_setup", "premarket_rvol")
+    check = {
+        "day": "2026-08-20",
+        "aggregate_ratio": 0.1,
+        # AAA's own share is 0.2 and the aggregate is 0.1, DELIBERATELY
+        # different. With both at a tenth the fixture cannot tell a symbol
+        # using its own measurement from one falling back to the session
+        # average, and a mutation that deleted the per symbol lookup ran
+        # green against the first version of this claim.
+        "volume_by_symbol": {"AAA.US": {"collector": 20.0, "vendor": 100.0}},
+    }
+    # AAA sits below the floor as published and above it at a tenth capture,
+    # and it has cleared every other line. BBB has no measured share and takes
+    # the aggregate. CCC also fails price, so the correction must not claim it.
+    candidates = [
+        {"symbol": "AAA.US", "pm_rvol": 0.5, "day_eligible": False,
+         "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "BBB.US", "pm_rvol": 0.4, "day_eligible": False,
+         "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "CCC.US", "pm_rvol": 0.9, "day_eligible": False,
+         "day_failed_conditions": ["premarket_rvol", "price"]},
+    ]
+    packet = _scan.Packet()
+    block = _scan.rvol_capture_adjusted(candidates, check, packet)
+    if not block:
+        failures.append("rvol_capture_adjusted returned nothing against a check "
+                        "that carries both a per symbol share and an aggregate")
+        return
+
+    if candidates[0].get("pm_rvol_capture_adjusted") != 2.5:
+        failures.append(
+            f"AAA adjusted to {candidates[0].get('pm_rvol_capture_adjusted')!r} "
+            "where a 0.5 RVOL at a fifth of the tape is 2.5. That factor is "
+            "the whole finding, and 5.0 here would mean it took the session "
+            "aggregate over the symbol's own measurement")
+    if candidates[0].get("pm_rvol_capture_share") != 0.2:
+        failures.append("AAA did not use its OWN measured share, so a symbol "
+                        "the check measured is being given the session average")
+    if candidates[1].get("pm_rvol_capture_share") != 0.1:
+        failures.append("BBB carries no per symbol row and did not fall back to "
+                        "the session aggregate")
+
+    for candidate in candidates:
+        if candidate.get("day_eligible"):
+            failures.append(
+                f"{candidate['symbol']} came back day_eligible. This function "
+                "reports what the screen WOULD have said; a screen change is a "
+                "threshold decision and is not one to make by side effect")
+    # AAA on its own measured share and BBB on the session aggregate. Both
+    # cleared every other line, so both count; the BASIS differs and the
+    # outcome does not, which is why the basis is recorded per candidate.
+    # CCC fails price as well, and counting it would overstate the finding in
+    # the direction that flatters it.
+    if block["would_become_day_eligible"] != ["AAA.US", "BBB.US"]:
+        failures.append(
+            f"the names the correction would carry are "
+            f"{block['would_become_day_eligible']!r} rather than AAA and BBB. "
+            "CCC fails price as well and must not be counted")
+    if (block["clear_the_floor_as_published"], block["clear_the_floor_adjusted"]) != (0, 3):
+        failures.append(
+            f"the floor {floor.describe()} is cleared by "
+            f"{block['clear_the_floor_as_published']} as published and "
+            f"{block['clear_the_floor_adjusted']} adjusted, where none of the "
+            "three clear it as published and all three do at a tenth")
+
+    # A check with neither number must not silently assume the tapes agree.
+    blank = _scan.rvol_capture_adjusted(
+        [dict(c) for c in candidates], {"day": "2026-08-19"}, _scan.Packet())
+    if blank is not None:
+        failures.append(
+            "a volume check carrying no capture evidence still produced an "
+            f"adjustment, {blank!r}. An unmeasured capture rate and a capture "
+            "rate of one are opposite claims")
+
+    print("  rvol tapes   the per symbol capture rate survives the summary, and "
+          "the adjustment reports what the day screen would say without saying it")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -5599,6 +5726,7 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_documents_count_what_is_actually_here(failures)
+    claim_the_rvol_numerator_and_denominator_are_named_as_two_tapes(failures)
 
     if failures:
         for failure in failures:
