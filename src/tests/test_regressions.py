@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries fifty nine claims, a count read off the file rather than remembered,
+carries sixty two claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -4760,6 +4760,270 @@ def claim_a_partial_minute_counts_only_the_seconds_it_covered(
           "aligned or not, so the socket share is the socket's")
 
 
+# ------------------- the 2026-08-20 review's two remaining research findings
+
+_FAKE_CERT = ("-----BEGIN CERTIFICATE-----\n"
+              "ZmFrZSwgYW5kIG5ldmVyIHRydXN0ZWQgYnkgYW55dGhpbmcu\n"
+              "-----END CERTIFICATE-----\n")
+
+
+def claim_the_trust_store_is_never_served_half_written(
+        failures: list[str]) -> None:
+    """A denied write leaves the old CA bundle, not a truncated one.
+
+    config.ca_bundle() merges certifi with any local TLS inspection root and
+    hands the result to requests as verify=. It wrote that file with a plain
+    write_text and re-serves it on MTIME alone, so a truncated write carried a
+    fresh mtime and was then served until certifi itself changed. The local
+    root is appended LAST, which is the part that makes this specific: a
+    truncation loses exactly the root that makes an intercepted connection
+    verify, so every EODHD call fails TLS afterwards, at 07:15 on a weekday,
+    for a reason nothing in the trace would name. tasks/README.md records that
+    Norton on this machine occasionally denies the first write of a file, so
+    the interruption is not hypothetical.
+
+    Three properties, because the first two are the fix and the third is the
+    hole beside it: a healthy merge lands whole and leaves no sibling behind, a
+    refused rename leaves the PREVIOUS bundle exactly as it was, and a source
+    that came back carrying no certificate refuses the merge rather than
+    serving a trust store missing the root it exists to add. read_text with
+    errors="replace" turns an unreadable byte into a character rather than
+    raising, so that third case looks healthy at every size check.
+    """
+    import os as _os
+
+    real_path = config.CA_BUNDLE_PATH
+    real_extras = config._extra_ca_files
+    real_replace = _os.replace
+    with tempfile.TemporaryDirectory() as raw_box:
+        box = pathlib.Path(raw_box)
+        extra = box / "wscert.pem"
+        extra.write_text(_FAKE_CERT, encoding="utf-8")
+        target = box / "ca-bundle.pem"
+        try:
+            config.CA_BUNDLE_PATH = target
+            config._extra_ca_files = lambda: [extra]
+
+            served = config.ca_bundle()
+            if served != str(target):
+                failures.append(f"a healthy merge served {served!r} rather than "
+                                "the merged bundle")
+            body = target.read_text(encoding="utf-8") if target.is_file() else ""
+            if body.count("BEGIN CERTIFICATE") < 2:
+                failures.append("the merged bundle carries "
+                                f"{body.count('BEGIN CERTIFICATE')} certificates, "
+                                "so certifi and the local root are not both in it")
+            leftover = [p.name for p in box.glob("*.partial")]
+            if leftover:
+                failures.append(f"a healthy merge left {leftover} behind")
+
+            # A refused rename must not cost the bundle that was already there.
+            good = body
+            extra.write_text(_FAKE_CERT * 2, encoding="utf-8")
+            _os.utime(extra, None)
+
+            def refuse(src: Any, dst: Any) -> None:
+                raise PermissionError("Norton denied the rename")
+
+            _os.replace = refuse
+            try:
+                config.ca_bundle()
+                failures.append("a refused rename did not raise, so the caller "
+                                "would go on believing the bundle was rebuilt")
+            except PermissionError:
+                pass
+            finally:
+                _os.replace = real_replace
+            after = target.read_text(encoding="utf-8") if target.is_file() else ""
+            if after != good:
+                failures.append("a refused rename changed the bundle on disk, "
+                                f"so the served file is neither the old one nor "
+                                f"a whole new one ({len(after)} bytes against "
+                                f"{len(good)})")
+            leftover = [p.name for p in box.glob("*.partial")]
+            if leftover:
+                failures.append(f"a refused rename left {leftover} behind")
+
+            # A source with no certificate in it refuses the merge outright.
+            target.unlink(missing_ok=True)
+            extra.write_text("# this file lost its contents\n", encoding="utf-8")
+            served = config.ca_bundle()
+            if served is not True:
+                failures.append("a source carrying no certificate still produced "
+                                f"a bundle ({served!r}), so a trust store missing "
+                                "the inspection root would be handed to requests")
+            if target.exists():
+                failures.append("a source carrying no certificate was written to "
+                                "the bundle anyway")
+        finally:
+            config.CA_BUNDLE_PATH = real_path
+            config._extra_ca_files = real_extras
+            _os.replace = real_replace
+
+    print("  trust store  a denied rename keeps the whole previous bundle, and "
+          "a source with no certificate refuses the merge")
+
+
+def claim_the_rotation_study_counts_no_warm_up_session(
+        failures: list[str]) -> None:
+    """The float rotation bands are not fitted on the script's own cold start.
+
+    float_rotation_study builds its RVOL baseline from a `history` dict that
+    starts EMPTY and is filled by the same loop that tallies. For the first
+    [Baseline] min_sessions_for_rvol sessions nothing can clear the floor, so
+    rvol is None for every name, so every addressable name with a usable float
+    lands in `rescued`, which is the population the CRITERIA [Float rotation]
+    band edges are read off. Not because the name has no baseline. Because the
+    script has not warmed up.
+
+    Measured on the archived payload DECISIONS.md quotes: 894 of 2,464 rescued
+    rows, 36.3 percent, from the first ten sessions, at a rescue rate of 84 to
+    93 percent against 7 to 22 percent from the eleventh onward. This replays
+    that measurement so the decision entry stays reproducible from the file
+    rather than from a number somebody wrote down, and it checks the gate that
+    stops it recurring.
+    """
+    import ast as _ast
+
+    from research import float_rotation_study as study
+
+    floor = 10
+    for rolled, wanted in ((0, False), (floor - 1, False),
+                           (floor, True), (floor + 1, True)):
+        got = study.warmup_over(rolled, floor)
+        if got is not wanted:
+            failures.append(f"warmup_over({rolled}, {floor}) is {got}, so the "
+                            "boundary the whole correction turns on has moved")
+
+    # The gate has to be IN run(), and the warm up branch has to roll the
+    # history it declines to tally, or the boundary simply slides.
+    source = pathlib.Path(study.__file__).read_bytes().decode("utf-8")
+    tree = _ast.parse(source)
+    run_def = next((node for node in tree.body
+                    if isinstance(node, _ast.FunctionDef) and node.name == "run"),
+                   None)
+    if run_def is None:
+        failures.append("float_rotation_study.run is gone, so nothing below "
+                        "describes the module that exists")
+        return
+    called = [n.func.id for n in _ast.walk(run_def)
+              if isinstance(n, _ast.Call) and isinstance(n.func, _ast.Name)]
+    if "warmup_over" not in called:
+        failures.append("run() no longer calls warmup_over, so the warm up "
+                        "sessions are being tallied again")
+    if called.count("roll_forward") < 2:
+        failures.append("run() calls roll_forward "
+                        f"{called.count('roll_forward')} time(s). The warm up "
+                        "branch must roll the history it refuses to count, or "
+                        "the baseline never warms up at all")
+
+    payload = (config.PROJECT_ROOT / "doc" / "research"
+               / "float_rotation_study-2026-08-17-postfix.json")
+    if not payload.is_file():
+        failures.append(f"{payload.name} is gone, so the 2026-08-20 decision "
+                        "entry can no longer be reproduced from the evidence")
+        return
+    rows = json.loads(payload.read_text(encoding="utf-8")).get("per_session") or []
+    if len(rows) != 61:
+        failures.append(f"the archived payload holds {len(rows)} sessions rather "
+                        "than the 61 the decision entry was measured over")
+        return
+    total = sum(r["rescued_by_rotation"] for r in rows)
+    warm = sum(r["rescued_by_rotation"] for r in rows[:floor])
+    if total != 2464 or warm != 894:
+        failures.append(f"the archived payload now reads {warm} of {total} "
+                        "rescued rows from the first ten sessions, where the "
+                        "decision entry says 894 of 2,464")
+    rates = [r["rescued_by_rotation"] / r["addressable"]
+             for r in rows if r.get("addressable")]
+    if min(rates[:floor]) < 0.80:
+        failures.append(f"the warm up sessions rescue as little as "
+                        f"{min(rates[:floor]):.0%}, so the discontinuity the "
+                        "entry rests on is not in the file")
+    if max(rates[floor:floor + 10]) > 0.30:
+        failures.append(f"the ten sessions after the warm up rescue up to "
+                        f"{max(rates[floor:floor + 10]):.0%}, so there is no "
+                        "discontinuity at the boundary after all")
+
+    print(f"  warm up      the study refuses to tally a session it cannot score, "
+          f"and the archive still shows {warm} of {total} rescued rows in the "
+          "first ten")
+
+
+def claim_no_python_here_runs_a_git_fetch(failures: list[str]) -> None:
+    """The one path the tree photograph exempts is still one nothing here writes.
+
+    conftest exempts .git/FETCH_HEAD, because VSCode's git extension autofetches
+    every 180 seconds on this machine and roughly one suite run in six straddled
+    a fetch and failed on a file no test touches. That exemption is only safe
+    while nothing in this project fetches, and an exemption whose precondition
+    nobody rechecks is how a real write gets hidden.
+
+    So this walks every tracked Python file for git invocations and holds two
+    things about each: it is not a fetch or a pull, and it carries
+    --no-optional-locks. The second is the 2026-08-14 lesson written down as a
+    check rather than as a comment: `git status` without that flag refreshes and
+    rewrites .git/index, and the suite then failed on a file the check itself
+    had caused to change, which cost a day and was blamed on a virus scanner
+    first.
+    """
+    import ast as _ast
+    import subprocess
+
+    root = config.PROJECT_ROOT
+    listing = subprocess.run(["git", "--no-optional-locks", "ls-files", "*.py"],
+                             cwd=str(root), capture_output=True, text=True)
+    if listing.returncode != 0:
+        failures.append("git ls-files failed, so no Python file was examined: "
+                        f"{listing.stderr.strip()[:200]}")
+        return
+    tracked = [name for name in listing.stdout.splitlines() if name.strip()]
+    if len(tracked) < 20:
+        failures.append(f"git ls-files returned {len(tracked)} Python files, "
+                        "which is too few to be this tree")
+        return
+
+    fetching = ("fetch", "pull", "remote", "clone", "submodule")
+    seen = 0
+    for name in tracked:
+        try:
+            tree = _ast.parse((root / name).read_bytes().decode("utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ast.List) or not node.elts:
+                continue
+            head = node.elts[0]
+            if not (isinstance(head, _ast.Constant) and head.value == "git"):
+                continue
+            words = [e.value for e in node.elts
+                     if isinstance(e, _ast.Constant) and isinstance(e.value, str)]
+            seen += 1
+            line = getattr(node, "lineno", 0)
+            for word in words[1:]:
+                if word in fetching:
+                    failures.append(
+                        f"{name}:{line} runs `git {word}`. conftest exempts "
+                        ".git/FETCH_HEAD from the tree photograph on the grounds "
+                        "that nothing here fetches, so that exemption is now "
+                        "hiding a write this project makes. Remove the "
+                        "invocation or remove the exemption.")
+            if "--no-optional-locks" not in words:
+                failures.append(
+                    f"{name}:{line} runs git without --no-optional-locks. An "
+                    "ordinary read refreshes and rewrites .git/index, and the "
+                    "suite then fails on a file it caused to change itself. "
+                    "This cost a day on 2026-08-14.")
+
+    if seen < 3:
+        failures.append(f"only {seen} git invocation(s) were found, where this "
+                        "tree carries three. The walk did not reach them, so it "
+                        "proved nothing.")
+
+    print(f"  fetch guard  {seen} git invocations, none of them a fetch, all of "
+          "them holding .git/index still")
+
+
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     """Hard rule 4 is guarded by something other than good intentions.
 
@@ -4905,6 +5169,9 @@ def main() -> int:
     claim_no_em_dash_survives_anywhere(failures)
     claim_a_partial_minute_counts_only_the_seconds_it_covered(failures)
     claim_a_flag_the_run_never_recorded_is_not_a_zero(failures)
+    claim_the_trust_store_is_never_served_half_written(failures)
+    claim_the_rotation_study_counts_no_warm_up_session(failures)
+    claim_no_python_here_runs_a_git_fetch(failures)
 
     if failures:
         for failure in failures:

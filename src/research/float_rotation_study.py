@@ -166,6 +166,18 @@ def _show(label: str, dist: dict[str, Any], places: int = 5) -> None:
           f"p90 {dist['p90']:{fmt}}  p95 {dist['p95']:{fmt}}  max {dist['max']:.4f}")
 
 
+def warmup_over(rolled: int, min_sessions: int) -> bool:
+    """Whether enough sessions are in `history` for ANY name to carry an RVOL.
+
+    A module level function rather than a comparison written inline, so that
+    the boundary this whole correction turns on is something a claim can call.
+    `rolled` is sessions actually folded into the rolling history, not the loop
+    index: an incomplete vendor sweep continues without rolling, and gating on
+    the index would let the first short session shift the boundary by one.
+    """
+    return rolled >= min_sessions
+
+
 def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     payload = json.loads((config.DATA_DIR / "universe.json").read_text(encoding="utf-8"))
     universe_rows = {str(r.get("symbol", "")).upper(): r for r in payload["symbols"]}
@@ -264,6 +276,20 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     names_float_tiny_vs_outstanding: set[str] = set()
     names_float_below_absolute_floor: set[str] = set()
     per_session: list[dict[str, Any]] = []
+    # Sessions folded into `history` so far, and the ones walked for history
+    # alone. See the warm up note below for why the second number exists.
+    rolled = 0
+    warmup_sessions = 0
+
+    def roll_forward(volumes: dict[str, float]) -> None:
+        """Fold one session's baseline window volumes into the rolling history.
+
+        Extracted because the warm up branch has to roll a session it does not
+        count, and a second copy of this loop is exactly how the two would
+        drift apart.
+        """
+        for code in all_codes:
+            history.setdefault(code, []).append(volumes.get(code, 0.0))
 
     print(f"measuring {len(pairs)} sessions. numerator window "
           f"{_CRIT.clock_text('collector', 'start_time')} to "
@@ -295,6 +321,34 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         ranked = sorted(addressable.items(),
                         key=lambda kv: abs(kv[1].get("gap_at_open_pct") or 0), reverse=True)
         top_symbols = {s for s, _ in ranked[:candidate_count]}
+
+        # THE WARM UP. `history` starts empty and is built by this loop, so
+        # for the first min_sessions_for_rvol sessions `past` is shorter than
+        # the floor for EVERY name and rvol is None for every name. A name with
+        # a usable float therefore lands in `rescued`, the population the
+        # CRITERIA [Float rotation] bands are fitted on, purely because this
+        # script has not warmed up yet. In the live path those names carry a
+        # real RVOL off the baseline cache and are never rescued at all.
+        #
+        # Measured on doc/research/float_rotation_study-2026-08-17-postfix.json,
+        # the payload DECISIONS.md quotes: 894 of 2,464 rescued rows, 36.3
+        # percent, came from the first ten sessions, and the rescue rate runs 84
+        # to 93 percent across those ten and 7 to 22 percent from the eleventh
+        # onward. That discontinuity is this loop, not the market.
+        #
+        # Gated on `rolled` rather than on the enumerate index, because an
+        # incomplete sweep above `continue`s without rolling and the two counts
+        # part company the first time the vendor is short a session.
+        if not warmup_over(rolled, min_sessions):
+            warmup_sessions += 1
+            per_session.append({"date": today, "addressable": len(addressable),
+                                "rescued_by_rotation": None, "counted": False,
+                                "reason": "history shorter than "
+                                          f"min_sessions_for_rvol ({min_sessions}), "
+                                          "so no name here could carry an RVOL"})
+            roll_forward(base_vol)
+            rolled += 1
+            continue
 
         session_scored = 0
         for symbol in addressable:
@@ -414,11 +468,10 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
                     })
 
         per_session.append({"date": today, "addressable": len(addressable),
-                            "rescued_by_rotation": session_scored})
+                            "rescued_by_rotation": session_scored, "counted": True})
 
-        # Roll the history forward with today's baseline window volumes.
-        for code in all_codes:
-            history.setdefault(code, []).append(base_vol.get(code, 0.0))
+        roll_forward(base_vol)
+        rolled += 1
         if (index + 1) % 20 == 0:
             print(f"  ... {index + 1}/{len(pairs)} sessions, {probe.request_count} requests")
 
@@ -565,7 +618,13 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
                                 f"{_CRIT.clock_text('scan', 'run_time')} ET, "
                                 f"median of {lookback} prior sessions",
         },
-        "sessions": len(per_session),
+        # Sessions the distributions below were actually built from. NOT
+        # len(per_session): that counts the warm up sessions this walks for
+        # history and refuses to tally, and reporting them as measured is how
+        # the cold start hid in plain sight for a fortnight.
+        "sessions": sum(1 for row in per_session if row.get("counted")),
+        "sessions_walked": len(per_session),
+        "warmup_sessions_excluded": warmup_sessions,
         "candidate_count": candidate_count,
         "float_rotation": {"all_addressable": _percentiles(rot_all),
                            "top_by_gap": _percentiles(rot_top)},
@@ -610,7 +669,9 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         "alpaca_requests": probe.request_count,
     }
 
-    print(f"\nsessions measured {result['sessions']}")
+    print(f"\nsessions measured {result['sessions']} of "
+          f"{result['sessions_walked']} walked, "
+          f"{result['warmup_sessions_excluded']} excluded as warm up")
     _show("float rotation, all addressable", result["float_rotation"]["all_addressable"])
     _show(f"float rotation, top {candidate_count} by gap", result["float_rotation"]["top_by_gap"])
     _show("RVOL reconstructed, all addressable", result["rvol_reconstructed"]["all_addressable"], 3)

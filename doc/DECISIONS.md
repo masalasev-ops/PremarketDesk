@@ -18,6 +18,74 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-20: the float rotation bands were fitted on a population that is 36 percent warm up
+
+**Correcting the entry of 2026-08-16 second in the one place it is wrong, and
+not superseding it.** That entry's reasoning stands entirely: the bands must be
+fitted on the rescued names, because an overlap name is scored by RVOL and never
+reaches these bands. What is wrong is the composition of the set it called
+rescued.
+
+**The measurement.** float_rotation_study builds its RVOL baseline from a
+rolling `history` dict that starts EMPTY and is filled by the same loop that
+tallies. For the first [Baseline] min_sessions_for_rvol sessions, ten, `past` is
+shorter than the floor for every name, so rvol is None for every name, so every
+addressable name carrying a usable float lands in `rescued`. Not because the
+name has no baseline. Because the script has not warmed up.
+
+Read off doc/research/float_rotation_study-2026-08-17-postfix.json, the payload
+the entry above quotes:
+
+| | rescued rows |
+| --- | ---: |
+| first ten sessions, all warm up | 894 |
+| the remaining fifty one | 1,570 |
+| total, the population the bands were fitted on | 2,464 |
+
+**36.3 percent.** And the per session rescue rate makes it unmistakable that
+this is the loop and not the market:
+
+| session | addressable | rescued | rate |
+| --- | ---: | ---: | ---: |
+| 2026-05-18 | 76 | 66 | 87% |
+| 2026-05-22 | 75 | 68 | 91% |
+| 2026-05-28 | 73 | 68 | 93% |
+| 2026-06-01 | 170 | 145 | 85% |
+| **2026-06-02, the eleventh** | **161** | **26** | **16%** |
+| 2026-06-04 | 203 | 31 | 15% |
+| 2026-06-05 | 195 | 14 | 7% |
+
+Eighty four to ninety three percent across the first ten, seven to twenty two
+percent from the eleventh. Nothing about the market changed on 2026-06-02.
+
+**What it does to the bands, and what is not known.** The 894 contaminating rows
+are ordinary addressable gappers that would carry a real RVOL in the live path
+and would therefore be scored by RVOL and never see these bands at all. A
+genuine rescue is a different animal: a name with under ten sessions of history,
+which skews to the newly listed and the thinly covered. The entry above measured
+exactly that difference between the overlap and the rescued populations and
+found it material. So more than a third of the distribution the edges were read
+off is drawn from the wrong one of the two populations that entry took such care
+to separate.
+
+**Which way the edges move is NOT known from what is on disk.** The payload
+carries percentiles, not the rows behind them, so the corrected distribution
+cannot be computed from it. Re-fitting needs the study re-run, which spends
+Alpaca requests rather than EODHD quota. That is a decision for the owner and
+not a patch, and the shipped edges stay where they are until it is taken: a
+band edge changed on a guess about the direction of a bias is worse than one
+that is known to be fitted on a contaminated set and says so.
+
+**The code is fixed either way.** run() now walks the warm up sessions to build
+`history` and refuses to tally them, gated on how many sessions have actually
+been rolled rather than on the loop index, because an incomplete vendor sweep
+`continue`s without rolling and the two counts part company the first time that
+happens. The payload gains `sessions_walked` and `warmup_sessions_excluded`, and
+`sessions` now counts only the sessions the distributions were built from,
+because reporting sixty one measured sessions when ten of them were warm up is
+how this hid for a fortnight. claim_the_rotation_study_counts_no_warm_up_session
+holds it.
+
 ## 2026-08-20: an unmeasured condition is counted apart, and nothing else changes
 
 **The choice.** A screen condition failing on a null input could be counted with
@@ -987,6 +1055,14 @@ Top candidate_count by gap, the population a packet scores:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | overlap, scored by RVOL, never sees these bands | 362 | 0.00019 | 0.00086 | 0.00282 | 0.00802 | 0.01466 | 0.1000 |
 | rescued, the only names these bands touch | 303 | 0.00010 | 0.00054 | 0.00202 | 0.00743 | 0.01340 | 0.2382 |
+
+[corrected 2026-08-20: the rescued rows in both tables below include the
+study's own warm up. 894 of 2,464, 36.3 percent, come from the first ten
+sessions, where `history` is too short for ANY name to carry an RVOL and every
+name with a float is rescued by construction. The quantiles as measured are
+right; the label "the only names these bands touch" is not, because a third of
+those rows are names the live path scores by RVOL. See the 2026-08-20 entry on
+the warm up. The edges below are unchanged pending a re-run.]
 
 All addressable, the wider slice:
 

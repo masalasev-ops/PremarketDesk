@@ -15,6 +15,83 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, tenth: the three unverified findings were all real, and the suite stops failing on the editor
+
+The 2026-08-20 review filed 186 findings and adversarially verified only the
+top 26. Three of the unverified nine bore on numbers already relied on and were
+left standing as "filed, not confirmed". All three have now been verified and
+all three were real. That is worth recording plainly, because the six still
+unexamined inherit it: unverified is not a synonym for wrong.
+
+**The float rotation bands were fitted on a population that is 36 percent the
+study's own cold start.** float_rotation_study builds its RVOL baseline from a
+`history` dict that starts EMPTY and is filled by the same loop that tallies, so
+for the first [Baseline] min_sessions_for_rvol sessions, ten, nothing can clear
+the floor, rvol is None for every name, and every addressable name carrying a
+usable float lands in `rescued`. `rescued` is the population the CRITERIA
+[Float rotation] band edges are read off, and DECISIONS.md 2026-08-16 second
+went to considerable trouble to establish that it must be, because an overlap
+name is scored by RVOL and never reaches these bands at all. Measured on the
+archived payload that entry quotes: 894 of 2,464 rescued rows come from those
+first ten sessions, and the per session rescue rate runs 84 to 93 percent across
+them against 7 to 22 percent from the eleventh onward. Nothing about the market
+changed on 2026-06-02. run() now walks the warm up for history and refuses to
+tally it, gated on sessions actually rolled rather than on the loop index,
+because an incomplete vendor sweep continues without rolling and the two counts
+would part company the first time that happened. The payload gains
+sessions_walked and warmup_sessions_excluded and `sessions` now counts only what
+the distributions were built from, because reporting sixty one measured sessions
+when ten of them were warm up is how this hid for a fortnight. WHICH WAY THE
+EDGES MOVE IS NOT KNOWN and the shipped ones are unchanged: the payload holds
+percentiles rather than rows, so the corrected distribution cannot be computed
+from it, and a re-run spends Alpaca requests. A band edge changed on a guess
+about the direction of a bias is worse than one known to be fitted on a
+contaminated set and saying so.
+
+**The merged trust store could be served half written, forever.**
+config.ca_bundle() merges certifi with the local TLS inspection root and hands
+the result to requests as verify=. It wrote that file with a plain write_text
+and re-serves it on MTIME alone, so a truncated write carried a FRESH mtime and
+would then be served until certifi itself changed. The local root is appended
+LAST, which is what makes the consequence specific: a truncation loses exactly
+the root that makes an intercepted connection verify, so every EODHD call fails
+TLS afterwards, at 07:15 on a weekday, for a reason nothing in the trace would
+name. tasks/README.md already records that Norton here occasionally denies the
+first write of a file, so the interruption was never hypothetical. Now a temp
+sibling and os.replace on universe.write_atomically's precedent, which is not
+reused directly because it serialises a dict and because core must not import
+selection. A second hole beside it is closed at the same time: read_text with
+errors="replace" turns an unreadable byte into a character rather than raising,
+so a source that came back empty would have contributed a header comment and
+nothing else and the merged file would have looked healthy at every size check.
+A source carrying no certificate now refuses the merge and returns certifi
+alone, which fails verification loudly rather than serving a trust store missing
+the one root it exists to add.
+
+**And the suite was failing about one run in six on the editor.** The tree
+photograph reported .git/FETCH_HEAD modified, mtime only, size unchanged at 106
+bytes. The internal explanations were exhausted first, because the 2026-08-14
+correction on differences() is exactly the record of not doing that: every git
+invocation in this repository is `git --no-optional-locks status --porcelain` in
+core/config.py and `git --no-optional-locks ls-files` in tests, and none of them
+writes FETCH_HEAD. Only a fetch or a pull does. This machine carries
+"git.autofetch": true in its VSCode user settings and the default 180 second
+period, measured directly: FETCH_HEAD rewritten at 20:33:30 and again at
+20:36:31, 181 seconds apart. A suite run takes about thirty seconds. That one
+path is now exempt, narrowly, on the sampler exemption's model, and
+claim_no_python_here_runs_a_git_fetch keeps the exemption honest by failing the
+day anything here starts fetching, rather than the day somebody notices. It also
+checks every git invocation still carries --no-optional-locks, which is the
+2026-08-14 lesson written as a check rather than as a comment.
+
+**62 claims**, and the three new ones were each proved to fail with their fix
+removed rather than assumed to: reverting the atomic write produced "a refused
+rename did not raise" and "a refused rename changed the bundle on disk", and
+deleting the warm up gate produced "run() no longer calls warmup_over". A guard
+that has never been seen to fail is not known to be a guard, which this pass
+learned the hard way when conftest.redirect_captured_paths turned out to be
+asserted by nothing.
+
 ## 2026-08-20, ninth: the socket cap probe is armed, and the number it prints was wrong by half
 
 The probe that answers the delivery gate had no scheduled task and no supported

@@ -479,20 +479,41 @@ reconstruct it from the numbered items below:
      2b, with a second instance on 2026-08-20).
   D. Nine lower severity findings from the same review were filed at high
      severity and never adversarially verified, because the review verified
-     only the top 26 of 186. Three bear on numbers already relied on and are
-     the natural next unit of work. The first is CLOSED on 2026-08-20 and
-     was real: probe_socket_cap.compare_to_vendor summed whole vendor minute
-     bars against 120 second arms, and all eight arms of the only run that
-     exists started between one and thirty four seconds into a minute, so the
-     inflation was not "about 1.5x", it was exactly 1.5x on every arm. Each
-     bar now contributes only the fraction of itself the arm covered, and
-     claim_a_partial_minute_counts_only_the_seconds_it_covered holds it there.
-     Two remain: float_rotation_study's ten session cold start would put roughly a third of
-     the population the shipped float rotation bands were fitted on inside a
-     warm-up artifact; and config.ca_bundle() writes the merged trust store
-     with a plain write_text and re-serves it on mtime alone, with the Norton
-     root written last, so a truncation loses exactly the root that makes
-     intercepted TLS verify.
+     only the top 26 of 186. Three bore on numbers already relied on. ALL
+     THREE ARE NOW VERIFIED AND CLOSED, and all three were real, which is
+     worth carrying forward to the six that are still unexamined: a finding
+     filed without verification is not the same as a finding that is wrong.
+       - probe_socket_cap.compare_to_vendor summed whole vendor minute bars
+         against 120 second arms. All eight arms of the only run that exists
+         started between one and thirty four seconds into a minute, so the
+         inflation was not "about 1.5x", it was exactly 1.5x on every arm.
+         Each bar now contributes only the fraction of itself the arm covered.
+         claim_a_partial_minute_counts_only_the_seconds_it_covered.
+       - float_rotation_study's cold start. Measured, not estimated: 894 of
+         2,464 rescued rows, 36.3 percent of the population the shipped
+         CRITERIA [Float rotation] band edges were read off, came from the
+         first ten sessions, where `history` is too short for ANY name to
+         carry an RVOL and every name with a float is rescued by construction.
+         The rescue rate runs 84 to 93 percent across those ten and 7 to 22
+         percent from the eleventh. The study now walks the warm up for
+         history and refuses to tally it. RE-FITTING THE EDGES IS STILL OWED
+         and is an owner decision, because the archived payload holds
+         percentiles rather than rows, so the corrected distribution cannot be
+         computed from it and a re-run spends Alpaca requests. See DECISIONS.md
+         2026-08-20 on the warm up. claim_the_rotation_study_counts_no_warm_up_session.
+       - config.ca_bundle() wrote the merged trust store with a plain
+         write_text and re-serves it on mtime alone, so a truncated file
+         carried a fresh mtime and would be served until certifi changed, and
+         the local inspection root is appended LAST, so a truncation loses
+         exactly the root that makes an intercepted connection verify. Now a
+         temp sibling and os.replace, on universe.write_atomically's
+         precedent, plus a refusal to merge a source that came back carrying
+         no certificate at all. claim_the_trust_store_is_never_served_half_written.
+     One more, found while closing them rather than filed by the review: the
+     tree photograph failed about one run in six on .git/FETCH_HEAD, because
+     this machine carries "git.autofetch": true and VSCode fetches every 180
+     seconds. That one path is now exempt, narrowly, and
+     claim_no_python_here_runs_a_git_fetch keeps the exemption honest.
   E. data/UNVERIFIED is still in place and delivery is still gated. Nothing
      about the review changes that; item A is what it is waiting on.
 

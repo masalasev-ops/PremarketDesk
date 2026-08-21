@@ -336,6 +336,29 @@ def ca_bundle() -> str | bool:
     Returns True when certifi alone is enough, otherwise the path to a merged
     bundle of certifi plus any locally installed inspection roots. The merged
     file is rebuilt whenever one of its sources is newer than it.
+
+    The write is atomic and the merge is checked, and both are load bearing on
+    this machine rather than hygiene.
+
+    A plain write_text left a truncated file behind whenever it was
+    interrupted, and Norton is recorded in tasks/README.md as occasionally
+    denying the first write of a file here. The staleness test above is an
+    mtime comparison, so a truncated file carries a FRESH mtime and is then
+    served for as long as its sources stay unchanged, which is until certifi
+    is upgraded. The local inspection root is appended LAST, so a truncation
+    loses exactly the root that makes an intercepted connection verify, and
+    every EODHD call fails TLS afterwards. Loud, but at 07:15 on a weekday and
+    for a reason nothing in the trace would name. universe.write_atomically is
+    the precedent for the temp sibling and os.replace pair; it is not reused
+    because it serialises a dict and because core must not import selection.
+
+    The per source check covers the other half. read_text with
+    errors="replace" turns an unreadable byte into a character rather than
+    raising, so a source that came back empty or mangled would contribute a
+    header comment and nothing else, and the merged file would look healthy at
+    every size check. A source that carries no certificate at all means the
+    merge cannot be trusted, and this returns True and says so rather than
+    serving a trust store that is missing the one root it exists to add.
     """
     explicit = get("EODHD_CA_BUNDLE")
     if explicit and Path(explicit).is_file():
@@ -358,10 +381,24 @@ def ca_bundle() -> str | bool:
     CA_BUNDLE_PATH.parent.mkdir(parents=True, exist_ok=True)
     merged = []
     for source in sources:
+        body = source.read_text(encoding="utf-8", errors="replace").strip()
+        if "BEGIN CERTIFICATE" not in body:
+            print(f"config: {source} carried no certificate, so the merged CA "
+                  "bundle was NOT written and certifi alone is being used. An "
+                  "intercepted connection will fail to verify until this is "
+                  "fixed, which is the safe direction.", file=sys.stderr)
+            return True
         merged.append(f"# from {source}\n")
-        merged.append(source.read_text(encoding="utf-8", errors="replace").strip())
+        merged.append(body)
         merged.append("\n")
-    CA_BUNDLE_PATH.write_text("\n".join(merged), encoding="utf-8")
+    partial = CA_BUNDLE_PATH.with_name(CA_BUNDLE_PATH.name + ".partial")
+    try:
+        partial.write_text("\n".join(merged), encoding="utf-8")
+        os.replace(partial, CA_BUNDLE_PATH)
+    finally:
+        # A crash between the write and the replace leaves the sibling behind.
+        # Nothing reads it, but it should not accumulate.
+        partial.unlink(missing_ok=True)
     return str(CA_BUNDLE_PATH)
 
 

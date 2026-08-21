@@ -125,6 +125,40 @@ _SAMPLER_STDOUT_LINE_RE = re.compile(r"^(?:[ \t]|sampler: |EODHD call report$)")
 _SAMPLER_TRAIL_KEYS = frozenset({"at", "quota_day", "source", "step"})
 
 
+# ------------------------------------ the second behaviour exemption
+#
+# .git/FETCH_HEAD, that one path, and nothing else anywhere under .git/.
+#
+# VSCode's git extension runs `git fetch` on a timer. This machine carries
+# "git.autofetch": true in its user settings, and the default period is 180
+# seconds: measured on 2026-08-20, FETCH_HEAD was rewritten at 20:33:30 and
+# again at 20:36:31, 181 seconds apart, with the size unchanged at 106 bytes
+# because the fetch found nothing new. A suite run takes about thirty seconds,
+# so roughly one run in six straddles a fetch and fails on a path no test
+# touches. That is the same intermittent isolation failure the sampler
+# exemption above exists to remove, and the same argument applies: a gate that
+# fails at random teaches its reader to stop reading it.
+#
+# The 2026-08-14 correction on differences() is why this is written narrowly
+# and why the internal explanations were exhausted first. That session
+# attributed an mtime-only change to "a virus scanner or an indexer" when the
+# real cause was config.build_identifier() running `git status`, and reaching
+# for the external explanation before the internal ones let it survive a day.
+# So: every git invocation in this repository is
+# `git --no-optional-locks status --porcelain` in core/config.py and
+# `git --no-optional-locks ls-files` twice in tests/test_regressions.py. None
+# of the three writes FETCH_HEAD. Only a fetch or a pull does, and nothing
+# here runs either.
+#
+# claim_no_python_here_runs_a_git_fetch is what keeps that true. The day
+# something in this project starts fetching is the day this exemption begins
+# hiding a real write, and the claim fails on that day rather than on the one
+# somebody notices.
+def _external_fetch_marker(path: Path, root: Path | None = None) -> bool:
+    """True for the one path a git client rewrites and nothing here does."""
+    return path == (root or TREE_ROOT) / ".git" / "FETCH_HEAD"
+
+
 def _digest(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
@@ -297,6 +331,8 @@ def differences(before: dict[str, Any], after: dict[str, Any],
     for path in sorted(set(after) - set(before)):
         if sampler_append_allowed(Path(path), None, after[path], logs_root):
             continue  # 00:00 UTC, the sampler started the next day's trail
+        if _external_fetch_marker(Path(path)):
+            continue  # the editor's first autofetch of this clone
         out.append(f"created  {path}")
     for path in sorted(set(before) - set(after)):
         out.append(f"deleted  {path}")
@@ -306,6 +342,8 @@ def differences(before: dict[str, Any], after: dict[str, Any],
             continue
         if sampler_append_allowed(Path(path), was, now, logs_root):
             continue  # the scheduled sampler ticked mid run, appending only
+        if _external_fetch_marker(Path(path)):
+            continue  # the editor autofetched mid run, see the note above
         if was[:1] == ("file",) and now[:1] == ("file",) and was[2] == now[2]:
             out.append(f"modified {path}  mtime only, size unchanged at {now[2]} "
                        "bytes (an external toucher looks like this; so does a "
