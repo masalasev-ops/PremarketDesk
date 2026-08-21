@@ -6,7 +6,7 @@ no quota: every input is synthetic, the closes sidecar is written into the
 sandbox, the gap statistics read is stubbed, and the exchange calendar is a
 plain weekday rule so the answer is the same on any machine.
 
-Twenty one claims, and they are grouped by what they defend rather than by
+Twenty two claims, and they are grouped by what they defend rather than by
 the order the code runs in.
 
 The fence first, because it is the thing a later change is most likely to erode
@@ -141,7 +141,8 @@ def _bar(symbol: str, minute: str, close: float) -> dict[str, Any]:
 
 def _write_closes(session: str = SESSION, stamped: str | None = None,
                   closes: dict[str, Any] | None = None,
-                  counters: bool = False) -> None:
+                  counters: bool = False,
+                  vendor_dates: dict[str, Any] | None = None) -> None:
     """The sidecar discover writes at 07:15, into the sandbox.
 
     counters=False is today's shape on disk: universe_examined and
@@ -159,7 +160,15 @@ def _write_closes(session: str = SESSION, stamped: str | None = None,
         "universe_examined": len(UNIVERSE_ROWS),
         "names_with_at_least_one_close": len(rows),
         "third_session_available": True,
+        # What the VENDOR said these closes are from. discover writes it from
+        # 2026-08-20; the default here agrees with the calendar, which is the
+        # ordinary morning. Pass vendor_dates to make them disagree, or {} to
+        # write a sidecar old enough not to carry them at all.
+        "vendor_dates": ({"c1": [C1], "c2": [C2], "c3": [C3]}
+                         if vendor_dates is None else vendor_dates),
     }
+    if not payload["vendor_dates"]:
+        del payload["vendor_dates"]
     if counters:
         # DELIBERATELY not what deriving them would give. Written as the real
         # counts they were indistinguishable from the derived ones, so the
@@ -1310,6 +1319,82 @@ def claim_an_undated_sidecar_costs_two_legs_and_not_the_morning(
           "gate passes")
 
 
+def claim_a_close_from_another_session_is_not_stamped_with_this_one(
+        failures: list[str]) -> None:
+    """The gate is given a datum to read instead of asking the calendar twice.
+
+    Both universe legs are stamped with sessions.c1, which discover wrote as
+    previous_trading_session(today). vintage check (e) then compares that stamp
+    against sessions_back(today, 1), which is the same walk over the same cached
+    calendar in the same process. Both sides ARE the calendar, so check (e)
+    could not fail a packet this scan built, whatever the vendor had actually
+    sent.
+
+    The trigger is ordinary rather than exotic. data/exchange-details.json is a
+    cache the nightly refreshes and the morning never fetches, so it can be
+    weeks old and missing a newly announced closure. On the morning after one:
+    the calendar names Monday, discover buys the end of day bulk for Monday, the
+    vendor returns Friday's bars, close_of keeps the number and threw the date
+    away, and the sidecar records Friday's closes under sessions.c1 = Monday. At
+    08:45 the section publishes both universe legs stamped Monday and every gate
+    is satisfied.
+
+    discover records the vendor's own date per session now, and the section
+    refuses to stamp a leg the vendor contradicts. A sidecar written before
+    2026-08-20 carries no such field and reads as UNKNOWN, which is the honest
+    answer for a file that never recorded it, rather than as agreement.
+    """
+    # 1. The vendor sent a different session than the one asked for.
+    _write_closes(vendor_dates={"c1": ["2026-08-14"], "c2": [C2], "c3": [C3]})
+    block, packet, _rows = _run()
+    for leg in ("prior_session", "two_session"):
+        report = block["legs"][leg]
+        if report["available"]:
+            failures.append(f"the {leg} leg is published off closes the vendor "
+                            f"stamped 2026-08-14 under a {C1} label")
+        elif "2026-08-14" not in (report["reason"] or ""):
+            failures.append(f"the {leg} leg was lost without naming the date "
+                            f"the vendor actually sent: {report['reason']!r}")
+    if not any("2026-08-14" in note for note in packet.gaps):
+        failures.append(f"no packet gap names the mismatch: {packet.gaps}")
+    if not block.get("vendor_date_mismatch"):
+        failures.append("the block does not record the mismatch it acted on")
+
+    # 2. The ordinary morning, where they agree.
+    _write_closes()
+    block, _packet, _rows = _run()
+    if not block["legs"]["prior_session"]["available"]:
+        failures.append("agreeing vendor dates still lost the prior_session "
+                        f"leg: {block['legs']['prior_session']['reason']!r}")
+    if block.get("vendor_date_mismatch"):
+        failures.append("agreeing dates were recorded as a mismatch: "
+                        f"{block['vendor_date_mismatch']}")
+
+    # 3. A sidecar too old to carry them is unknown, not disagreement.
+    _write_closes(vendor_dates={})
+    block, _packet, _rows = _run()
+    if not block["legs"]["prior_session"]["available"]:
+        failures.append("a sidecar with no vendor_dates was treated as a "
+                        "mismatch rather than as unknown, so every file written "
+                        "before 2026-08-20 loses both universe legs")
+    if block.get("vendor_dates") is not None:
+        failures.append("a sidecar with no vendor_dates reports "
+                        f"{block['vendor_dates']!r} rather than null")
+
+    # 4. A wrong c2 costs the leg that reads it and not the other one.
+    _write_closes(vendor_dates={"c1": [C1], "c2": ["2026-08-11"], "c3": [C3]})
+    block, _packet, _rows = _run()
+    if block["legs"]["prior_session"]["available"]:
+        failures.append("the prior_session leg is published off a c2 the vendor "
+                        "stamped 2026-08-11, so its move measures the wrong end")
+    if not block["legs"]["two_session"]["available"]:
+        failures.append("a wrong c2 also cost the two_session leg, which reads "
+                        f"c3: {block['legs']['two_session']['reason']!r}")
+
+    print("  vendor dates a leg the vendor contradicts is refused and named, an "
+          "agreeing one is published, and a file too old to say reads unknown")
+
+
 def claim_a_closes_file_from_another_session_is_refused(
         failures: list[str]) -> None:
     """Yesterday's closes are not published under today's leg labels.
@@ -1641,6 +1726,7 @@ CLAIMS = (
     claim_a_malformed_input_costs_the_section_and_not_the_run,
     claim_a_defect_in_the_section_costs_the_section,
     claim_a_closes_file_from_another_session_is_refused,
+    claim_a_close_from_another_session_is_not_stamped_with_this_one,
     claim_an_undated_sidecar_costs_two_legs_and_not_the_morning,
     claim_the_counters_say_whether_they_were_read_or_derived,
     claim_a_name_off_the_watchlist_is_marked_and_not_hidden,

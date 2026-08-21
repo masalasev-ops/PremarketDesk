@@ -3191,8 +3191,38 @@ def notable_movers(
     # to the report it is only a section of, so an undated c1 costs the two
     # universe legs and nothing else. The premarket leg stamps today and reads
     # c1 as a NUMBER, so it is unaffected and keeps running.
+    # What the vendor said, against what the calendar asked for. Written by
+    # discover from 2026-08-20; a sidecar older than that carries no
+    # vendor_dates and this reads as unknown, which is the honest answer for a
+    # file that never recorded it.
+    vendor_dates = (closes_payload or {}).get("vendor_dates")
+    if not isinstance(vendor_dates, dict):
+        vendor_dates = {}
+    block["vendor_dates"] = dict(vendor_dates) if vendor_dates else None
+    mismatched = {
+        key: sorted(vendor_dates.get(key) or [])
+        for key in ("c1", "c2", "c3")
+        if (vendor_dates.get(key)
+            and sessions.get(key)
+            and str(sessions[key]) not in {str(d) for d in vendor_dates[key]})
+    }
+    block["vendor_date_mismatch"] = mismatched or None
+
     undated: str | None = None
-    if closes_payload is not None and _readable_date(sessions.get("c1")) is None:
+    if closes_payload is not None and "c1" in mismatched:
+        undated = (
+            f"the sidecar asked the vendor for {sessions.get('c1')} and the rows "
+            f"came back stamped {mismatched['c1']}. Both universe legs are dated "
+            "from c1's session, so publishing them would put one session's "
+            "closes under another session's label, which is the one thing the "
+            "leg labels exist to prevent. vintage check (e) cannot catch it: "
+            "the stamp and the expectation are the same calendar call.")
+        packet.gap(f"notable movers: {undated}")
+        for leg in ("prior_session", "two_session"):
+            block["legs"][leg] = _leg_report(
+                False, undated,
+                (block["names_with_both_closes_for_leg"] or {}).get(leg), 0)
+    elif closes_payload is not None and _readable_date(sessions.get("c1")) is None:
         undated = (f"the closes sidecar carries sessions.c1 "
                    f"{sessions.get('c1')!r}, which is not a session this section "
                    "can date a row with, so both universe legs were lost rather "
@@ -3209,6 +3239,13 @@ def notable_movers(
                 malformed += 1
                 continue
             c1, c2, c3 = row.get("c1"), row.get("c2"), row.get("c3")
+            # A c2 or c3 from a session nobody asked for makes the MOVE wrong
+            # even where the stamp is right, so the leg that reads it is lost
+            # rather than published against the wrong end.
+            if "c2" in mismatched:
+                c2 = None
+            if "c3" in mismatched:
+                c3 = None
             prior = _pct_move(c1, c2)
             if prior is not None:
                 sigma, reason = move_sigma(prior, stats.get(symbol),

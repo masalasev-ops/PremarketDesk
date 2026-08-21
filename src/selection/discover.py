@@ -476,6 +476,32 @@ def write_universe_closes(
         row = source.get(symbol)
         return _as_float(row.get("close")) if row else None
 
+    def dates_in(source: dict[str, dict[str, Any]]) -> list[str]:
+        """Every distinct session date the VENDOR stamped on these rows.
+
+        The sessions block below is the calendar's answer to "which session did
+        we ask for". This is the vendor's answer to "which session did you
+        send", and until 2026-08-20 the file recorded only the first.
+
+        That difference is the whole of vintage check (e) for the two universe
+        legs. The section stamps a row with sessions.c1, which is
+        previous_trading_session(today); check (e) then compares that stamp
+        against previous_trading_session(today). Both sides are the calendar, so
+        the check could not fail a packet the scan built, whatever the vendor
+        had actually sent. The trigger is an ordinary one: a stale
+        exchange-details.json missing a newly announced closure means the
+        calendar names Monday, the bulk call for Monday returns Friday's bars,
+        and Friday's closes are published under a Monday stamp with every gate
+        satisfied.
+
+        A list rather than one date, because a bulk response carrying two is
+        itself the finding. Empty when the vendor sent no dates at all, which
+        older payloads and a stubbed feed both look like, and the reader treats
+        empty as unknown rather than as disagreement.
+        """
+        return sorted({str(row.get("date")) for row in source.values()
+                       if row and row.get("date")})
+
     rows: dict[str, Any] = {}
     # Per session, and per leg, because "at least one close" cannot tell a file
     # whose c1 column is null on every row from a complete one. That is not
@@ -517,6 +543,14 @@ def write_universe_closes(
             # never an exception thrown out of a function whose stated contract
             # is that it always returns the payload.
             "c3": third.isoformat() if (third is not None and third_by) else None,
+        },
+        # What the VENDOR said these closes are from, beside what the calendar
+        # asked for. See dates_in: without it, the section's stamp and the gate
+        # that validates the stamp are the same function on the same calendar.
+        "vendor_dates": {
+            "c1": dates_in(prior_by),
+            "c2": dates_in(before_by),
+            "c3": dates_in(third_by) if third_by else [],
         },
         "universe_examined": len(universe_symbols),
         "names_with_at_least_one_close": len(rows),

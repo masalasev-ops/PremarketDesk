@@ -15,6 +15,71 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-20, twelfth: check (e) was comparing the calendar against itself, and now reads a datum
+
+Six adversarial reviewers attacked the Layer 4 build across disjoint
+dimensions. This entry is the one finding among their forty five that is about
+the GATE rather than about the section, and it is the one worth reading.
+
+**Both universe legs are stamped with sessions.c1, and sessions.c1 is the
+calendar.** discover writes it as previous_trading_session(today). vintage
+check (e) then validates the stamp by computing sessions_back(today, 1), which
+is the same walk over the same cached calendar in the same process. Both sides
+of the comparison are the calendar's opinion, so no packet this scan can build
+was ever able to fail check (e) on a universe leg, whatever the vendor had
+actually sent.
+
+The trigger is ordinary rather than exotic. data/exchange-details.json is a
+cache the nightly refreshes and the morning deliberately never fetches, so it
+can be weeks old and missing a closure announced since. On the morning after
+one: the calendar names Monday, discover buys the end of day bulk for Monday,
+the vendor returns Friday's bars, write_universe_closes' close_of kept the
+number and threw the row's own date away, and the sidecar recorded Friday's
+closes under sessions.c1 = Monday. At 08:45 the section publishes both universe
+legs stamped Monday, and every gate in the project is satisfied. vintage.py's
+own comment asserts the opposite: "reading the oldest from gap_stats would be
+free and wrong, its closes being five sessions old by Friday. Under this one it
+fails immediately." It would not have.
+
+**So the sidecar records what the vendor said, beside what the calendar asked
+for.** write_universe_closes gains vendor_dates, the distinct session dates the
+rows themselves carried, per session and as a list rather than one value,
+because a bulk response carrying two dates is itself the finding. The section
+refuses to stamp a leg the vendor contradicts, names both dates in the reason,
+and treats a sidecar written before today as UNKNOWN rather than as agreement,
+which is the honest reading of a file that never recorded it. A c2 or a c3 the
+vendor contradicts costs the leg that reads it and not the other one, because a
+wrong far end makes the MOVE wrong even where the stamp is right.
+
+It takes effect from the 2026-08-21 07:15 run. Every sidecar on disk today
+predates the field.
+
+**Everything else in this pass and the two before it.** Twenty of the forty five
+findings survived my own verification and are closed: the critical one, where
+the notable_rows evidence axis let a rerun that lost every price, every RVOL and
+every score overwrite a full packet because it had gained ten briefing rows;
+also_on_watchlist null on every row of every run, because the mark reads
+eligibility flags that stamp_all sets after the section is assembled; the
+premarket leg republishing collector prints drop_stale_prices had already
+refused; five reason strings that would have tripped the quantifier guard the
+template tells the model to quote them past; a null move_sigma reason that
+asserted "fewer than 20 sessions of returns" for 10,997 rows that are null
+because the column was added after the last rebuild; an unreadable gap
+statistics table written per row as a fact about each symbol; malformed sidecar
+and bar shapes that raised straight out of build_packet; a third session the
+vendor never answered for reported as a quiet market; a state name landing in
+the Catalyst column; and two comments that were the reason a reader would trust
+the code and were wrong.
+
+**And the claims themselves were weak in ways only mutation testing shows.**
+claim_no_ranked_list_mixes_two_legs re-derived each list's leg from the same
+table the code stamps rows with, so a list that ranked one leg and labelled
+another stayed green. Three of the four ranking keys were asserted by nothing,
+because every close in the fixture rose and one subscribed symbol made list 4 a
+one element list. The counter fixture wrote exactly what deriving would produce,
+so read and derived were indistinguishable. Eighteen mutations now run against
+the tree and eighteen are caught.
+
 ## 2026-08-20, eleventh: Layer 4 ships, and the spec was wrong in four places
 
 The notable movers section is built. Three legs, four ranked lists, universe

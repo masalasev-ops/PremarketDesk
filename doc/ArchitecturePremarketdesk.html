@@ -592,7 +592,12 @@ tbody tr:hover{background:var(--ground)}
   It walked NO rows at all until 2026-08-20, and not because the section was unbuilt:
   <code>vintage.enforce</code> is called on a hand built dict carrying candidates, market snapshot
   and session date, so the key it looks for was never in what it was given. Layer 4 shipped on
-  2026-08-20 and passing <code>notable_movers</code> into that dict is what armed the check. A violation rewrites
+  2026-08-20 and passing <code>notable_movers</code> into that dict is what armed the check. The
+  same day it was given something to read: both universe legs are stamped with the closes sidecar's
+  <code>sessions.c1</code>, which is the calendar's answer, and check (e) validated that stamp by
+  asking the calendar again, so no packet the scan built could fail it. The sidecar now records the
+  session date the VENDOR stamped on the rows it sent, and the section refuses to publish a leg the
+  vendor contradicts. A violation rewrites
   <code>data/UNVERIFIED</code> naming each failing row and the check that caught it, and the scan
   exits non-zero, so nothing is stamped, no packet is written, and the morning chain stops before the
   analyst call. There is deliberately no degrade path: a stale price is not thin evidence a report
