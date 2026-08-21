@@ -940,6 +940,79 @@ market_open                   = 09:30
 gap_report_sessions           = 20
 catchup_days                  = 5          # prior days with unfilled true columns retried each night, because the vendor usually publishes after the 22:15 run
 
+## Truth
+
+The nightly pass that measures what premarket volume ACTUALLY was, from
+Alpaca's full SIP tape, once the session is over. It writes beside the
+morning's numbers and never over them, on the [Backfill] precedent.
+
+**Why this exists.** The morning divides the collector's socket volume by
+[Collector] premarket_capture_rate, one number, 0.1172. The socket's real
+share of the consolidated tape was measured at 2.1 to 12.1 percent over the
+2026-08-19 probe window: a six fold spread. A single divisor cannot correct a
+quantity that varies six fold, and the error is not random. Thin names capture
+least and are therefore understated most, and thin names are exactly the
+population premarket float rotation exists to rescue, so the correction
+reinstates at a lower layer the bias the float rotation fallback was built to
+remove. See DECISIONS.md 2026-08-21 on the record.
+
+**Alpaca, not EODHD, and only after the close.** The free plan serves the sip
+feed for a session that is OVER and refuses it with HTTP 403 for one that is
+running, measured in doc/ALPACA_PROBE.md section 1 and its 2026-08-20
+correction. That is the whole reason this is a nightly pass and not a morning
+one, and it is why the morning still ships an estimate.
+
+**The numerator and the denominator come from the same tape.** pm_rvol_true
+divides an Alpaca window by an Alpaca baseline over the same window. Dividing
+an Alpaca numerator by the EODHD intraday baseline the morning uses would
+repeat the defect this whole section is correcting, one vendor down. Both are
+meant to be consolidated; this project has been wrong about "meant to be"
+several times, so the two sides are held to one source rather than to an
+intention.
+
+source                        = alpaca     # the vendor, named so a reader never assumes _true means one thing everywhere. [Backfill]'s pm_high_true comes from EODHD intraday and this does not
+feed                          = sip        # the full consolidated tape. iex returned 0 bars and 0 shares over the same premarket window while sip returned 1,410,664, measured in ALPACA_PROBE.md section 1
+baseline_sessions             = 20         # prior sessions the true baseline median is taken over. Matches [Backfill] gap_report_sessions and [Baseline] sessions so the three windows can be read against each other
+min_true_bars                 = 1          # bars inside the window before a true volume is recorded at all. A window with no bars is null with a reason, never zero
+symbols_per_request           = 100        # MEASURED: batch 100 returned 200 with a 444 character symbol list, ALPACA_PROBE.md section 3. Larger batches also worked and a morning's picks is about twelve names, so this is never the binding constraint
+max_pages_per_request         = 20         # pages of 10,000 bars before the fetch is called incomplete and refused rather than silently truncated
+max_calendar_days_back        = 40         # DERIVED: baseline_sessions of 20 trading days spans 28 calendar days at five a week, and the worst holiday stretch on this calendar adds two. 40 leaves a full week of margin and bounds the walk when a symbol simply has no history
+
+### The true window note
+
+The window is 04:00 to THE SAME CLOCK CUTOFF THE MORNING USED, which the scan
+records in the packet as rvol_cutoff_hhmm and which this pass copies onto every
+row it writes as true_window. Not market open, and not a fixed 08:45.
+
+A truth measured over a wider window than the estimate would make every
+capture_observed too small by whatever the extra minutes carried, and that
+error would look exactly like the socket missing more of the tape. The morning
+cutoff snaps to [Scan] run_time only inside rvol_cutoff_snap_minutes, so on a
+rerun it is a different clock, and a fixed window would silently mismeasure
+precisely the sessions that went wrong.
+
+If the packet for a session is unreadable the row is left null with the reason
+recorded. Guessing the window is the one thing this pass must not do.
+
+### The two ratios this writes note
+
+capture_observed = pm_volume / pm_volume_true. What the socket ACTUALLY carried
+of the consolidated tape, per symbol per session. This is the quantity
+[Collector] premarket_capture_rate asserts as 0.1172 for every name, and after
+baseline_sessions of it that key can be re-derived per symbol, re-derived as a
+distribution, or discarded on evidence.
+
+estimate_error = pm_volume_estimated / pm_volume_true. How well the MORNING'S
+correction did, where 1.0 is exactly right, above 1.0 overstated and below 1.0
+understated. It is a different question from the first and it is the one that
+says whether the shipped screen admitted the right names.
+
+Both are recorded because they answer different questions and neither can be
+derived from the other without pm_volume, which is why that column is now
+written to picks as well. The morning's own estimate is never overwritten: a
+row carries what was known at 08:45 and what was true that night, side by side,
+and which one a query used is then visible rather than assumed.
+
 ## Outcomes
 
 The nightly outcome fill for picks old enough to have them. Horizons are
@@ -1353,6 +1426,8 @@ backfill                      = 1
 outcomes                      = 1
 pool_recall                   = 1
 prune                         = 1
+truth                         = 1
+weekly                        = 1
 monitor                       = 1
 calendar                      = 1
 

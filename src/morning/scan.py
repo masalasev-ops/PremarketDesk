@@ -1459,6 +1459,11 @@ def capture_correction_report(
         "carried_onto_the_day_watchlist": onto,
         "shares_from_this_symbols_own_measurement": sum(
             1 for r in rows if str(r["capture_basis"] or "").startswith("this symbol")),
+        # The number every name without its own measurement was divided by,
+        # carried so the disclaimer can quote it rather than the model being
+        # asked to remember a CRITERIA value it cannot see.
+        "default_capture_share": _CRIT.number(
+            "collector", "premarket_capture_rate"),
         "rows": rows,
     }
     packet.gap(
@@ -4390,6 +4395,15 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 # Without it a null pm_rvol next to a real score looks like a
                 # bug, and calibration cannot separate the two populations.
                 "volume_measure_used": candidate.get("volume_measure_used"),
+                # The estimate's own inputs, so the nightly truth pass can
+                # compare like with like and CRITERIA's capture rate can be
+                # re-derived from rows rather than re-argued. pm_volume is what
+                # the socket saw; pm_volume_estimated is what both ratios above
+                # actually divided.
+                "pm_volume": candidate.get("pm_volume"),
+                "pm_volume_estimated": candidate.get("pm_volume_consolidated"),
+                "pm_capture_share": candidate.get("pm_capture_share"),
+                "pm_capture_basis": candidate.get("pm_capture_basis"),
                 "pm_high": candidate.get("pm_high"),
                 "pm_low": candidate.get("pm_low"),
                 "pm_vwap": candidate.get("pm_vwap"),

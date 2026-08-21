@@ -65,6 +65,14 @@ decide nothing.
    the symbols in dropped_no_coverage with the reason recorded against it.
    A dropped name had no collector coverage, so it has no premarket price and
    was left out rather than published at a stale prior session close.
+   It must ALSO state that premarket volume is an ESTIMATE, name the capture
+   share it was estimated with and whether that was the symbol's own measured
+   share or the file wide default, and say the true figure is written that
+   night by the truth pass beside the estimate. The share is one number
+   applied across the whole list and the real per symbol share has been measured
+   varying eleven fold in a single session, so a reader who takes the RVOL
+   column as measured is reading something that was out by up to nineteen
+   times.
 7. Never present a premarket high as a breakout trigger for a candidate whose
    pm_window_starts_late is true without
    labelling that level partial, because the collector did not see the whole

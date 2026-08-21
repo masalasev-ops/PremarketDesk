@@ -97,6 +97,52 @@ _PICKS_LATER_COLUMNS = (
     # the rows do not record which band they were scored under.
     ("pm_float_rotation", "REAL"),
     ("volume_measure_used", "TEXT"),
+    # WHAT THE MORNING ACTUALLY SAW, and what it turned that into. pm_rvol has
+    # divided an ESTIMATE since 2026-08-21, and until these columns existed the
+    # table recorded the ratio without either of its inputs, so no later pass
+    # could tell a symbol on its own measured capture share from one on the
+    # file wide default, or recover the observation the estimate was built on.
+    ("pm_volume", "REAL"),
+    ("pm_volume_estimated", "REAL"),
+    ("pm_capture_share", "REAL"),
+    ("pm_capture_basis", "TEXT"),
+    # WHAT IT ACTUALLY WAS, written by night/true_volume.py from Alpaca's full
+    # SIP tape once the session is over, beside the morning's numbers and never
+    # over them, on the pm_high_true precedent above.
+    #
+    # _true does NOT mean one source here. [Backfill]'s pm_high_true, pm_low_true
+    # and pm_vwap_true come from EODHD intraday; these four come from Alpaca. A
+    # column suffix is not a provenance, so truth_source carries the vendor and
+    # every query that mixes them has to look at it.
+    ("pm_volume_true", "REAL"),
+    ("pm_rvol_true", "REAL"),
+    ("pm_float_rotation_true", "REAL"),
+    ("true_baseline_median", "REAL"),
+    ("true_baseline_sessions", "INTEGER"),
+    ("true_bars", "INTEGER"),
+    # The window this was measured over, copied from the packet's
+    # rvol_cutoff_hhmm rather than assumed, so a row says what it compared.
+    ("true_window", "TEXT"),
+    ("truth_source", "TEXT"),
+    ("truth_at", "TEXT"),
+    # Why a true value is null. NULL reason with a NULL value means the pass
+    # has not reached this row; a reason means it reached it and could not.
+    ("truth_reason", "TEXT"),
+    # pm_volume / pm_volume_true, the share the socket ACTUALLY carried, which
+    # is what [Collector] premarket_capture_rate asserts as one number for
+    # every name. And pm_volume_estimated / pm_volume_true, how well the
+    # morning's correction did, where 1.0 is exactly right. Different
+    # questions; see CRITERIA [Truth] the two ratios this writes note.
+    ("capture_observed", "REAL"),
+    ("estimate_error", "REAL"),
+    # The true volume over the COLLECTOR'S OWN window, 07:20 to the cutoff,
+    # and that window's share of the whole premarket. capture_observed divides
+    # by the first of these and not by pm_volume_true, because the socket
+    # cannot see 04:00 to 07:20 at all: a share computed against the full
+    # window would fold the collector's late start into what is meant to be a
+    # measurement of the feed, and the two have different fixes.
+    ("true_volume_socket_window", "REAL"),
+    ("collector_window_share", "REAL"),
 )
 
 

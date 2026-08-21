@@ -15,6 +15,45 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, eighth: the true volume, the weekly page, and the freeze
+
+night/true_volume.py writes pm_volume_true, pm_rvol_true,
+pm_float_rotation_true, capture_observed, estimate_error and
+collector_window_share into picks from Alpaca full SIP, over the same window
+the morning used, beside the morning's numbers and never over them. Two
+sessions measured: the capture share ran 0.0288 to 0.4231, a spread of over ten
+fold in each session, against the single 0.1172 the morning divides by, and
+every 2026-08-21 row was understated by between 1.3 and 19 times. Ten of twelve
+candidates on 2026-08-20 cleared the day screen's volume floor on the true
+numbers against an empty published watchlist.
+
+capture_observed divides by the COLLECTOR'S window, not the premarket window:
+the first version folded the 07:20 start into a number meant to measure the
+feed. collector_window_share carries that second shortfall and measures it for
+the first time at a median 0.2887 to 0.5228 of the tape.
+
+The report now names the estimate as an estimate. REPORT_TEMPLATE,
+prompt_analyst rule 6 and fallback_report all require the disclaimer to give
+the capture share used, whether it was the symbol's own or the file wide
+default, and that the true figure lands that night.
+
+night/weekly_page.py renders site/Weekly.html from job-status.jsonl, the meter
+trail, quantifier-flags.jsonl, verify_intraday and picks. Four sections: did it
+run, is the data trustworthy, what did it publish, what did it cost. It reads
+and renders, takes no vendor call, adds no table and no measurement.
+
+CRITERIA gains a [Truth] section with six keys and three notes, plus truth and
+weekly under [Job status steps]. picks gains eighteen columns. Claims 73 and 74
+hold the truth pass and the page; claim 73 also rebinds DB_PATH after an
+earlier version, run outside run_tests, wrote fixture rows into the live table
+and nulled a real session's truth columns. Eleven mutations, eleven caught,
+after the harness itself was corrected for scoring a suite crash as a pass.
+
+DECISIONS carries the freeze: 42,949 lines of Python, 14,869 of documentation,
+4,533 in scan.py, 260 thresholds for a five condition screen. A change is in
+scope if it makes a published number wrong or the record readable. Everything
+else waits for the outcome rows.
+
 ## 2026-08-21, seventh: data/ is 35 MB instead of 145, and stops growing unwatched
 
 data/backtest/bars, vwap_gappers_trades.csv and alpaca_assets.json deleted on

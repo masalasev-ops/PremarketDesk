@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries seventy two claims, a count read off the file rather than remembered,
+carries seventy four claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -5857,6 +5857,352 @@ def claim_the_prune_deletes_only_what_its_whitelist_names(
           "survives")
 
 
+def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
+        failures: list[str]) -> None:
+    """The record's volume comes from Alpaca, not from a multiplier.
+
+    The morning divides socket volume by one number, 0.1172. The night measures
+    what the volume actually was. On the first session measured, 2026-08-21,
+    the real per symbol capture ran 0.0288 to 0.3187 over the collector's own
+    window: an eleven fold spread against a single divisor, with eight of the
+    twelve names below the shipped figure and therefore understated by it.
+
+    Four properties, each of which the first working version of this module got
+    wrong or nearly did.
+
+    THE WINDOW IS NOT GUESSED. It ends at the packet's rvol_cutoff_hhmm, which
+    the morning snaps to [Scan] run_time only inside a snap window, so a rerun
+    genuinely has a different clock. A truth measured over a wider window than
+    the estimate is too large by whatever the extra minutes carried, and that
+    error looks exactly like the socket missing more of the tape. With no
+    packet the pass writes nothing and says why.
+
+    CAPTURE IS MEASURED ON THE SOCKET'S OWN WINDOW. The collector starts at
+    07:20 and the premarket opens at 04:00, so dividing what the socket
+    recorded by the whole premarket folds its late start into a number meant to
+    measure the feed. The first run of this module did exactly that and put the
+    capture at 0.0254 for a symbol whose real same minutes capture was 0.0664.
+    Two shortfalls, two fixes: one is a subscription question, the other a
+    start time question, and collector_window_share measures the second for the
+    first time.
+
+    NOTHING THE MORNING WROTE IS TOUCHED. pm_rvol stays what was published at
+    08:45 whatever the night finds, on the pm_high_true precedent.
+
+    AND A MISSING MEASUREMENT IS NULL WITH A REASON, never zero. A window with
+    no bars and a window nobody asked about are different facts.
+    """
+    import shutil
+
+    from core import store
+    from night import true_volume as _truth
+
+    class Fake:
+        """One canned answer per (start, end), and a record of what was asked."""
+
+        def __init__(self, by_window):
+            self.by_window = by_window
+            self.asked: list[tuple[str, str]] = []
+            self.request_count = 0
+
+        def get(self, params):
+            self.request_count += 1
+            key = (params["start"][11:16], params["end"][11:16])
+            self.asked.append((params["start"][:10], *key))
+            bars = self.by_window.get(key, {})
+            return 200, {"bars": {s: [{"v": v}] for s, v in bars.items()}}, 0.0
+
+    day = "2026-08-21"
+    box = pathlib.Path(tempfile.mkdtemp())
+    original = (config.RUNS_DIR, config.DATA_DIR, config.DB_PATH)
+    try:
+        config.RUNS_DIR = box / "runs"
+        config.DATA_DIR = box / "data"
+        config.DATA_DIR.mkdir(parents=True)
+        # DB_PATH TOO, and not because the suite needs it. conftest already
+        # rebinds all three for every claim, so inside run_tests this line
+        # changes nothing. It is here because this claim WRITES picks rows, and
+        # rebinding DATA_DIR without DB_PATH left the writes pointing at the
+        # live database for anyone who called the claim directly. That is
+        # exactly what happened while this was being built: two fixture rows
+        # landed in the real table and a real session's truth columns were
+        # overwritten with the fixture's nulls. A claim that is only safe
+        # inside its harness is a trap for the next person who reaches for it.
+        config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
+
+        with store.session() as connection:
+            store.init(connection)
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": day, "ticker": "AAA.US", "source": "live",
+                "pm_volume": 1000.0, "pm_volume_estimated": 8532.0,
+                "pm_rvol": 2.5,
+            })
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": day, "ticker": "BBB.US", "source": "live",
+                "pm_volume": 40.0, "pm_volume_estimated": 341.0,
+                "pm_rvol": 0.9,
+            })
+            connection.commit()
+
+        # No packet yet. The window is unknown and must not be invented.
+        blind = _truth.measure(day, probe=Fake({}))
+        if blind["rows"] or not blind["skipped"]:
+            failures.append(
+                f"the truth pass ran without a packet: {blind!r}. The window "
+                "the morning used is in the packet and nowhere else, and a "
+                "guessed window mismeasures precisely the sessions that went "
+                "wrong")
+
+        run_dir = config.run_dir(day)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps({
+            "session_date": day,
+            # NOT 08:45. A pass that reads a constant passes on the usual
+            # morning and is wrong on exactly the reruns worth reading.
+            "rvol_cutoff_hhmm": "09:10",
+            "candidates": [
+                {"symbol": "AAA.US", "quote": {"sharesFloat": 1_000_000.0}},
+                {"symbol": "BBB.US", "quote": {"sharesFloat": None}},
+            ],
+        }), encoding="utf-8")
+
+        # 10,000 shares over the whole premarket, 4,000 of them after 07:20.
+        # A socket that saw 1,000 captured a QUARTER of the minutes it was
+        # listening to, not a tenth of the session it was mostly absent for.
+        probe = Fake({
+            ("04:00", "09:10"): {"AAA": 10000.0, "BBB": 500.0},
+            ("07:20", "09:10"): {"AAA": 4000.0, "BBB": 200.0},
+        })
+        result = _truth.measure(day, probe=probe)
+        rows = {row["ticker"]: row for row in result["rows"]}
+
+        if result["window"] != "04:00-09:10":
+            failures.append(
+                f"the measured window is {result['window']!r}, not the "
+                "04:00-09:10 the packet asked for. The cutoff is the morning's "
+                "own and reading a constant here mismeasures every rerun")
+        windows = {(start, end) for _day, start, end in probe.asked}
+        if ("07:20", "09:10") not in windows:
+            failures.append(
+                "the collector's own 07:20 window was never fetched, so "
+                "capture_observed can only be socket volume over a window the "
+                "socket was absent for most of, which is the late start and "
+                "the feed gap added together and called one number")
+
+        aaa = rows["AAA.US"]
+        if aaa["capture_observed"] != 0.25:
+            failures.append(
+                f"capture_observed is {aaa['capture_observed']!r}, not 0.25. "
+                "1,000 socket shares against the 4,000 that traded while the "
+                "socket was listening is a quarter; against the 10,000 of the "
+                "whole premarket it is a tenth, and only the first is "
+                "comparable to CRITERIA's premarket_capture_rate")
+        if aaa["collector_window_share"] != 0.4:
+            failures.append(
+                f"collector_window_share is {aaa['collector_window_share']!r}, "
+                "not 0.4. That is the OTHER lower bound, called arithmetic "
+                "since 2026-08-14 and unmeasured until this pass existed")
+        if aaa["pm_volume_true"] != 10000.0:
+            failures.append(
+                f"pm_volume_true is {aaa['pm_volume_true']!r}, not the 10,000 "
+                "of the true premarket window. The volume is the session's, "
+                "even though the capture share is the socket window's")
+        if aaa["estimate_error"] != round(8532.0 / 10000.0, 6):
+            failures.append(
+                f"estimate_error is {aaa['estimate_error']!r}. It is what the "
+                "morning PUBLISHED over what was true, which is the number "
+                "saying whether the screen admitted the right names")
+        if aaa["pm_float_rotation_true"] != 0.01:
+            failures.append(
+                f"pm_float_rotation_true is {aaa['pm_float_rotation_true']!r}, "
+                "not 10,000 over a million")
+        if not str(aaa["truth_source"]).startswith("alpaca"):
+            failures.append(
+                f"truth_source is {aaa['truth_source']!r}. _true does not mean "
+                "one vendor in this table: pm_high_true comes from EODHD and "
+                "these come from Alpaca, so the row has to carry which")
+
+        # BBB has no float. That nulls one column and must null no other.
+        bbb = rows["BBB.US"]
+        if bbb["pm_float_rotation_true"] is not None:
+            failures.append(
+                "a symbol with no sharesFloat got a float rotation anyway")
+        if bbb["pm_volume_true"] != 500.0 or bbb["capture_observed"] != 0.2:
+            failures.append(
+                f"a missing float took the volume with it: {bbb!r}")
+
+        _truth.write(result)
+        with store.session() as connection:
+            after = {row["ticker"]: row for row in connection.execute(
+                "SELECT * FROM picks WHERE date=?", (day,)).fetchall()}
+        if after["AAA.US"]["pm_rvol"] != 2.5:
+            failures.append(
+                f"the morning's pm_rvol became "
+                f"{after['AAA.US']['pm_rvol']!r}. The night writes BESIDE the "
+                "morning and never over it: a row carries what was known at "
+                "08:45 and what was true that night, and which one a query "
+                "used is then visible rather than assumed")
+        if after["AAA.US"]["pm_volume"] != 1000.0:
+            failures.append(
+                "the morning's socket volume was overwritten by the truth pass")
+        if after["AAA.US"]["pm_rvol_true"] is None:
+            failures.append("the true rvol never reached the table")
+
+        # A window with no bars is not a session with no volume.
+        empty = _truth.measure(day, probe=Fake({}))
+        blank = {row["ticker"]: row for row in empty["rows"]}["AAA.US"]
+        if blank["pm_volume_true"] is not None:
+            failures.append(
+                f"a window with no bars produced {blank['pm_volume_true']!r} "
+                "rather than null. Zero volume and no measurement are "
+                "different facts and a screen cannot tell them apart")
+        if not blank["truth_reason"]:
+            failures.append(
+                "a null true volume carries no reason, so a reader cannot tell "
+                "a row the pass could not measure from one it never reached")
+    finally:
+        config.RUNS_DIR, config.DATA_DIR, config.DB_PATH = original
+        shutil.rmtree(box, ignore_errors=True)
+
+    print("  truth        the night measures volume from Alpaca over the "
+          "morning's own window, divides capture by the socket's window, and "
+          "writes beside the morning rather than over it")
+
+
+def claim_the_weekly_page_reads_and_renders_and_nothing_else(
+        failures: list[str]) -> None:
+    """A reporting layer that fetches is a second pipeline to keep right.
+
+    Everything on the weekly page was already on disk and unread: job status,
+    the meter trail, the flag log, verify_intraday, picks. The constraint that
+    makes it worth having is that it adds nothing. No vendor call, no new
+    table, no measurement of its own. If a number is not already written down
+    it does not appear.
+
+    And it must not read the estimate where the measurement exists. pm_rvol is
+    what was known at 08:45 and pm_rvol_true is what was true that night; over
+    the two sessions measured so far the second ran between 1.4 and 19 times
+    the first. volume_ratio returns the label with the value so a page cannot
+    show the number without being able to say which one it is, and a mixed
+    column with nothing to tell the two apart is the exact defect the truth
+    pass was built to stop, one level up.
+
+    Also asserted: an empty window renders a page that SAYS it is empty. A
+    reporting page that renders blank sections on a week where nothing ran
+    reads the same as a quiet week, and those are opposite facts.
+    """
+    import shutil
+
+    from core import store
+    from night import true_volume as _truth
+    from night import weekly_page as _weekly
+
+    # 1. The preference, on rows rather than on a description of rows.
+    both = {"pm_rvol": 0.9, "pm_rvol_true": 7.3}
+    value, which = _truth.volume_ratio(both)
+    if value != 7.3 or which != "measured":
+        failures.append(
+            f"volume_ratio returned {value!r} as {which!r} for a row carrying "
+            "both. The estimate is never the answer when the measurement is "
+            "in the same row, and on 2026-08-20 that difference was ten names "
+            "on the day watchlist against none")
+    value, which = _truth.volume_ratio({"pm_rvol": 0.9, "pm_rvol_true": None})
+    if value != 0.9 or which != "estimated":
+        failures.append(
+            f"volume_ratio returned {value!r} as {which!r} where only the "
+            "estimate exists. A row the truth pass has not reached still has "
+            "the morning's number and withholding it helps nobody")
+    if _truth.volume_ratio({})[1] != "estimated":
+        failures.append(
+            "a row with neither number came back labelled as measured")
+
+    # 2. The page, driven for real against an empty world.
+    box = pathlib.Path(tempfile.mkdtemp())
+    original = (config.RUNS_DIR, config.DATA_DIR, config.DB_PATH,
+                _weekly.OUT_PATH)
+    try:
+        config.RUNS_DIR = box / "runs"
+        config.DATA_DIR = box / "data"
+        config.DATA_DIR.mkdir(parents=True)
+        config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
+        _weekly.OUT_PATH = box / "site" / "Weekly.html"
+
+        calls: list[str] = []
+        import requests
+
+        class Refuse:
+            def __getattr__(self, name):
+                def boom(*args, **kwargs):
+                    calls.append(name)
+                    raise AssertionError("the weekly page made a vendor call")
+                return boom
+
+        saved = requests.Session
+        requests.Session = Refuse
+        try:
+            out = _weekly.build(7)
+        finally:
+            requests.Session = saved
+
+        if calls:
+            failures.append(
+                f"the weekly page opened a session and called {calls!r}. It "
+                "reads and renders: a reporting layer that fetches is a second "
+                "pipeline to keep right and a second way for the record to be "
+                "wrong")
+        page = out.read_text(encoding="utf-8")
+
+        for heading in ("Did it run", "Is the data trustworthy",
+                        "What did it publish", "What did it cost"):
+            if heading not in page:
+                failures.append(
+                    f"the page is missing the {heading!r} section. Four "
+                    "sections and no more was the brief, and a page that "
+                    "quietly drops one answers a question nobody asked")
+        if "<title>" not in page:
+            failures.append("the page carries no title")
+
+        # An empty world has to look empty, not tidy.
+        for expected in ("no verify_intraday.json in this window",
+                         "no live picks rows in this window",
+                         "has not written a capture_observed yet"):
+            if expected not in page:
+                failures.append(
+                    f"a week with no data rendered without saying so: "
+                    f"{expected!r} is absent. A blank section on a week where "
+                    "nothing ran reads exactly like a quiet week")
+
+        # 3. And with data, the true value is what reaches the page.
+        with store.session() as connection:
+            store.init(connection)
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": ettime.today_str(), "ticker": "ZZZ.US",
+                "source": "live", "pm_rvol": 0.4, "pm_rvol_true": 9.9,
+                "capture_observed": 0.04, "estimate_error": 0.2,
+                "collector_window_share": 0.3, "day_eligible": 0,
+            })
+            connection.commit()
+        page = _weekly.build(7).read_text(encoding="utf-8")
+        if "0.0400" not in page:
+            failures.append(
+                "a measured capture share never reached the page, so the one "
+                "section that turns CRITERIA's assumption into evidence shows "
+                "nothing while the evidence sits in the table")
+        if ">1<" not in page.replace(" ", ""):
+            failures.append(
+                "a name the morning failed on volume and the night cleared was "
+                "not counted. That column is the cost of the estimate in "
+                "names, which is the only unit anybody reads it in")
+    finally:
+        (config.RUNS_DIR, config.DATA_DIR, config.DB_PATH,
+         _weekly.OUT_PATH) = original
+        shutil.rmtree(box, ignore_errors=True)
+
+    print("  weekly       four sections rendered from disk with no vendor "
+          "call, an empty week says it is empty, and the measurement is read "
+          "wherever it exists")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -6434,6 +6780,8 @@ def main() -> int:
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
     claim_the_prune_deletes_only_what_its_whitelist_names(failures)
+    claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(failures)
+    claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:

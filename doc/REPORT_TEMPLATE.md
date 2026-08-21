@@ -35,7 +35,28 @@ did record a price for them and it was too old to publish as this morning's.
 They are a different failure from the line above and the fixes differ, so do
 not fold the two lists into one. Name the candidates whose score is null
 as unscored, not low conviction: a score component input was never observed
-and unknown is not zero. If the packet's quota_preflight block has
+and unknown is not zero.
+
+THE DISCLAIMER MUST ALSO SAY THAT PREMARKET VOLUME IS AN ESTIMATE, and say
+what was estimated with. The premarket RVOL and float rotation columns divide
+pm_volume_consolidated, which is the collector's socket volume scaled up by a
+capture share. State the share used, reading
+capture_correction.shares_from_this_symbols_own_measurement against
+capture_correction.candidates: when the two match, say the whole list stood on
+its own measured share; when the first is zero, say the whole list stood on the
+file wide default and quote capture_correction.default_capture_share; when it
+is neither, give the count on their own share, the count on the default, and
+the default's value. Then say the true figure lands that night: the nightly
+truth pass writes pm_volume_true from a different vendor's full consolidated
+tape, beside the morning's estimate and never over it, so tomorrow's reader can
+see how far this morning's was out.
+
+That sentence is not decoration. The share is one number applied across the
+whole list, and on 2026-08-21 the first night of measurement put the real per
+symbol share between 0.0288 and 0.3187, an eleven fold spread, against the
+0.1172 the morning had used. A reader who takes the RVOL column as measured
+rather than estimated is reading something that was out by up to a factor of
+nineteen. If the packet's quota_preflight block has
 degraded true, the line must also state the reading in plain words: the
 shared API key had {remaining} of {daily_limit} daily calls remaining at
 preflight, so the skippable evidence in this report is thin for quota

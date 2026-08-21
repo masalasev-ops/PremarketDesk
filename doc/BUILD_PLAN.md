@@ -70,8 +70,10 @@ at the root and is gitignored along with .env.
              baseline its RVOL is measured against.
   - morning/ scan, vintage, analyst, render_report, verify_morning, deliver.
              The 08:45 chain in order.
-  - night/   backfill_premarket, fill_outcomes, pool_recall, build_archive.
-             What runs once the vendor has published the full day.
+  - night/   backfill_premarket, fill_outcomes, true_volume, pool_recall,
+             prune_data, weekly_page, build_archive. What runs once the vendor
+             has published the full day. true_volume is the only module in the
+             tree that talks to Alpaca in production: see CRITERIA [Truth].
   - research/ backtest_pool, float_cache, float_rotation_study,
              addressable_sweep, vwap_gappers, probe_live_v1, probe_alpaca_live,
              probe_socket_cap, the two measure_ scripts.
@@ -136,6 +138,13 @@ at the root and is gitignored along with .env.
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
   report.html, analyst_usage.json, and once the nightly job has run,
   verify_intraday.json and pool_recall.json
+- site/Weekly.html: one page saying whether the week worked, rendered by
+  night/weekly_page.py at the end of the 22:15 nightly. Four sections: did it
+  run, is the data trustworthy, what did it publish, what did it cost. It reads
+  job-status.jsonl, the meter trail, quantifier-flags.jsonl,
+  runs/<date>/verify_intraday.json and the picks table, and writes this file.
+  No vendor call, no new table, no measurement of its own. Gitignored with the
+  rest of site/
 - site/PremarketDesk.html: the single file report archive, rebuilt from
   runs/ at the end of every morning chain and at the end of the 22:15 nightly.
   The 07:00 nightly-catchup firing passes "catchup" and skips the rebuild along
@@ -461,6 +470,17 @@ and 6i below were MIS-DOCUMENTED here, describing work that had already
 shipped, and are corrected in place. The suite is 44 claims in
 test_regressions plus eleven other modules, green three consecutive runs, with
 the tree photograph clean.
+
+**[2026-08-21: THE CODE IS FROZEN except for defects that make published
+numbers wrong, or changes that make the record readable. The tree is 42,949
+lines of Python and 14,869 of documentation, scan.py is 4,533 lines, and
+CRITERIA carries 260 thresholds for a screen with five conditions. Every
+finding that produced that growth was real and the aggregate is still past what
+one person can audit. Before writing anything, answer: which published number
+is wrong today, and where would a reader see it. No answer means the change
+waits for the outcome rows. The items below are the record of what was built,
+not a queue. See DECISIONS.md 2026-08-21 seventh for the rule and its
+reasoning.]**
 
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:

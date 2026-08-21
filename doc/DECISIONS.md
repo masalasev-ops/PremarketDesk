@@ -18,6 +18,153 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-21, seventh: the code is frozen except for defects that make published numbers wrong
+
+**THE RULE.** From this entry forward a change is in scope if, and only if, it
+does one of two things:
+
+  1. It makes a number that gets PUBLISHED wrong, or stops one being wrong.
+     Published means it reaches the report, the archive, the weekly page or the
+     picks table.
+  2. It makes the RECORD READABLE. Not richer, not better instrumented:
+     readable, by a person who was not here when it was written.
+
+Everything else waits for the outcome rows. Not "is deferred", not "is lower
+priority": waits. There is no evidence yet that any of it is worth having,
+because the thing this project exists to test, whether the screen picks names
+that go on to do something, has zero settled outcomes behind it.
+
+**WHY, IN NUMBERS THAT WERE COUNTED RATHER THAN REMEMBERED.**
+
+| measured 2026-08-21, after this session's work | |
+| --- | ---: |
+| Python, src/ | 42,949 lines across 63 files |
+| Documentation, tracked markdown | 14,869 lines |
+| scan.py alone | 4,533 lines |
+| CRITERIA thresholds | 260 |
+| conditions in the day screen those thresholds serve | 5 |
+| claims in test_regressions.py | 74 |
+| test modules | 13 |
+
+260 thresholds for a screen with five conditions. 4,533 lines in one module to
+decide which of about twelve names to put on a list. Every finding that
+produced that growth was real, and several of them were serious: the RVOL
+numerator was measuring the wrong tape, the packet asked the model to apply a
+correction twice, the socket cap probe published a reading its own noise
+swallowed. Fixing each was right. The aggregate is still past what one person
+can audit, and an unauditable safeguard is a liability wearing a safeguard's
+clothes.
+
+**WHAT THE FREEZE IS NOT.** It is not a claim the code is finished, or correct.
+Today's own work found the shipped capture correction wrong by up to nineteen
+times on live rows, and that fix landed under rule 1 above. There will be more
+like it. The freeze says only that the ROUTE to more code now runs through a
+published number being wrong, rather than through something being improvable.
+
+**WHAT THE FREEZE IS PROTECTING.** Every hour spent making this tree larger is
+an hour not spent accumulating the twenty sessions of outcomes that would say
+whether any of it works. The project is nine days old and has 24 rows of true
+premarket volume and zero settled outcomes. The next real decision, whether the
+screen has any edge, cannot be brought forward by writing more of it.
+
+**THE TEST, STATED SO IT CAN BE APPLIED WITHOUT ME.** Before writing anything,
+answer: which published number is wrong today, and where would a reader see it?
+If there is no answer, the change waits. "It would be more accurate", "it would
+be more complete", "the docs should mention it" and "this ought to be measured"
+are all out of scope. "The report prints an estimate as if it were measured" is
+in scope, and is what today's truth pass was built under.
+
+Three things are explicitly still open and are NOT unfrozen by being named
+here. They wait for the same evidence as everything else: the float rotation
+eligibility floor at 0.00014 in [Day setup], absolute against signed sigma on
+notable lists 1 and 4, and whether premarket_capture_rate should become a per
+symbol table now that capture_observed is being measured. The third has a date
+attached: twenty sessions of truth rows, which at one a trading day is
+2026-09-18 at the earliest.
+
+## 2026-08-21, sixth: the record's volume comes from Alpaca, and the estimate is named as one
+
+The morning divides the collector's socket volume by [Collector]
+premarket_capture_rate, one number, 0.1172. The owner's objection was that a
+divisor cannot correct a quantity measured varying six fold, and that the error
+is not random: thin names capture least and are understated most, and thin
+names are the population float rotation exists to rescue, so the correction
+reinstates at a lower layer the bias the fallback removed.
+
+**The first night of measurement says the objection understated the problem.**
+night/true_volume.py fetches Alpaca full SIP one minute bars for every live
+picks row over the same window the morning used, once the session is over, and
+writes beside the morning's numbers on the pm_high_true precedent. Two sessions
+measured, 24 rows:
+
+| | 2026-08-20 | 2026-08-21 |
+| --- | ---: | ---: |
+| capture_observed, median | 0.1010 | 0.0928 |
+| capture_observed, range | 0.0403 to 0.4231 | 0.0288 to 0.3187 |
+| spread within the session | 10.5 fold | 11.1 fold |
+| rows below the shipped 0.1172 | 7 of 12 | 8 of 12 |
+| published volume over true volume | not applicable | 0.053 to 0.745 |
+
+**Every row on 2026-08-21 was understated, by between 1.3 and 19 times.** The
+morning published RVOL figures that had already been corrected once and were
+still an order of magnitude short.
+
+**The cost in names, which is the only unit that matters.** Against the day
+screen's premarket_rvol floor of 1.5: on 2026-08-20 the morning published an
+EMPTY day watchlist and ten of the twelve candidates cleared the floor on the
+true numbers. On 2026-08-21 it published six and four more cleared. BKE, whose
+RVOL the morning could not compute at all because its baseline median of 83
+shares sat under the denominator floor, came in at 27.1.
+
+**One thing the objection got wrong, stated because it was measured.** Thin
+names are not reliably the worst captured. On 2026-08-21 the thinnest tape of
+the twelve, BKE at 6,081 true shares, had the HIGHEST capture at 0.3187, and
+the worst captured was HUT at 0.0288. Twelve names in one session settles
+nothing either way, and the eleven fold spread disqualifies the single divisor
+regardless of which direction it runs in.
+
+**A defect in the first working version, found by running it.** capture_observed
+was computed as socket volume over the whole 04:00 premarket. The socket does
+not start until 07:20, so that number folded the collector's late start into a
+figure meant to measure the feed, and it put ASST at 0.0254 where its real same
+minutes capture was 0.0664. Two shortfalls with two different fixes, one a
+subscription question and one a start time question. capture_observed now
+divides by the socket's own window, and collector_window_share carries the
+other: the 07:20 start saw a median 0.5228 of the premarket tape on 2026-08-20
+and 0.2887 on 2026-08-21. **That is the lower bound this project has called
+arithmetic since 2026-08-14 and never once measured.**
+
+**A worse defect, in the claim rather than the code.** claim 73 rebound
+config.DATA_DIR and config.RUNS_DIR for its fixtures and did NOT rebind
+config.DB_PATH. Inside run_tests that changes nothing, because conftest rebinds
+all three. Run directly, which is how it was being checked while it was
+written, its two fixture rows landed in the LIVE picks table and its fake probe
+overwrote a real session's truth columns with nulls. The morning's own columns
+survived, which is the one property the claim asserts and the only reason this
+was recoverable. The claim now rebinds DB_PATH itself, and the reason is in the
+code: a claim that is only safe inside its harness is a trap for whoever
+reaches for it next.
+
+**What did not change.** The morning still ships the estimate, because Alpaca
+refuses the sip feed for a running session with HTTP 403 and there is nothing
+else to ship. What changed is that the report now has to SAY so: the disclaimer
+names the volume as an estimate, gives the share used and whether it was the
+symbol's own or the file wide default, and says the true figure lands that
+night. REPORT_TEMPLATE, prompt_analyst rule 6 and the fallback report all carry
+it, so which report a reader gets is no longer which caveat they get.
+
+**Both sides of every ratio come from one tape.** pm_rvol_true divides an
+Alpaca window by an Alpaca baseline over the same window across the prior
+twenty sessions. Dividing the Alpaca numerator into the morning's EODHD
+baseline would repeat this defect one vendor down. Both are meant to be
+consolidated, and this project has been wrong about "meant to be" several
+times.
+
+**The trading calendar comes from the data.** The baseline walks back day by
+day and a day the exchange was shut returns no bars for anybody, so it is
+skipped without a holiday table having to be right. Bounded by
+max_calendar_days_back so a symbol with no history cannot start a crawl.
+
 ## 2026-08-21, fifth: data/ gets a retention policy, and a closed study gives back 110 MB
 
 Two things, and the second is the one worth reading.

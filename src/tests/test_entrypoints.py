@@ -65,6 +65,8 @@ SCHEDULED = [
     ("backfill", "night.backfill_premarket", []),
     ("outcomes", "night.fill_outcomes", []),
     ("pool_recall", "night.pool_recall", []),
+    ("truth", "night.true_volume", []),
+    ("weekly", "night.weekly_page", []),
     ("prune", "night.prune_data", []),
     ("monitor", "ops.monitor_jobs", ["--dry-run"]),
 ]

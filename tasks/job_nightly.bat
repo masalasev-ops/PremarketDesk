@@ -64,6 +64,16 @@ if /i "%MODE%"=="catchup" (
     exit /b 0
 )
 
+rem What premarket volume actually was, from Alpaca's full SIP tape, written
+rem beside the morning's estimate and never over it. Alpaca serves sip for a
+rem session that is over and refuses it for one that is running, which is why
+rem this is here and not in the 08:45 chain. Never fails the chain: the record
+rem is better with it and the morning does not read it. It spends no EODHD
+rem quota. See CRITERIA.md [Truth].
+echo ===== truth started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m night.true_volume >> "%LOG%" 2>&1
+echo ===== truth finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
 rem What the morning's candidate pool missed, measured against every name in
 rem the universe that actually gapped at the open. Never fails the chain: a
 rem recall measurement is a diagnostic and nothing downstream reads it.
@@ -79,6 +89,14 @@ rem closes retention note for what is deliberately NOT in it.
 echo ===== prune started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.prune_data >> "%LOG%" 2>&1
 echo ===== prune finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
+rem One page saying whether the week worked, rendered from what the steps
+rem above have just finished writing. It reads and renders: no vendor call, no
+rem new table, no measurement of its own. Last of the reading steps so every
+rem source it reads is already current. Never fails the chain.
+echo ===== weekly started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m night.weekly_page >> "%LOG%" 2>&1
+echo ===== weekly finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
 rem The archive also rebuilds here so a morning that failed after the scan
 rem still gets archived the same evening.

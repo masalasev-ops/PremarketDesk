@@ -362,6 +362,31 @@ def fallback_report(
             f"; {', '.join(unscored)} are unscored, not low conviction: a score "
             "component input was never observed, and unknown is not zero"
         )
+    # The estimate has to be named as an estimate here too, or the fallback
+    # publishes the same tables as the model report with one fewer caveat, and
+    # which report a reader got is an accident of whether an API call worked.
+    correction = packet.get("capture_correction") or {}
+    if correction:
+        # A COUNT, not a list. scan.capture_correction_report sums the rows
+        # whose basis starts with "this symbol", and reading it as a list gave
+        # len() of an int one edit ago.
+        own = int(correction.get("shares_from_this_symbols_own_measurement") or 0)
+        default_share = correction.get("default_capture_share")
+        on_default = int(correction.get("candidates") or 0) - own
+        if own and not on_default:
+            how = "each name's own measured capture share"
+        elif not own:
+            how = f"the file wide default capture share of {default_share}"
+        else:
+            how = (f"{own} names on their own measured capture share and "
+                   f"{on_default} on the file wide default of {default_share}")
+        disclaimer += (
+            "; premarket volume here is an ESTIMATE, not a measurement: every "
+            "RVOL and float rotation divides the collector's socket volume "
+            f"scaled up by {how}. The true figure is written tonight by the "
+            "truth pass from a different vendor's full consolidated tape, "
+            "beside this estimate and never over it"
+        )
     quota = packet.get("quota_preflight") or {}
     if quota.get("degraded"):
         if quota.get("remaining") is not None:
