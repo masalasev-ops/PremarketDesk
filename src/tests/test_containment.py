@@ -21,6 +21,7 @@ prose are checked against.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 
@@ -72,8 +73,19 @@ _FROZEN_UNIVERSE = (
 )
 
 
-def freeze_universe() -> None:
-    """Write the fixture universe over the sandbox copy.
+@contextlib.contextmanager
+def freeze_universe():
+    """Write the fixture universe over the sandbox copy, then put it back.
+
+    RESTORES ON EXIT, and the first version did not. test_containment runs
+    third in run_tests.SUITE and test_backtest seventh, and backtest_pool sorts
+    its 42 name subscription cap on avg_dollar_volume_20d read from this file.
+    A twenty name fixture left in place changed the input of a later module in
+    the same interpreter. The suite stayed green, which is worse than failing:
+    it means claim_four was scored against a universe it never asked for.
+
+    A fixture that does not restore is not isolation, it is contamination with
+    a different owner.
 
     config.UNIVERSE_PATH is the sandbox's under run_tests and, since
     2026-08-21, under a direct import too: conftest redirects every writable
@@ -83,6 +95,8 @@ def freeze_universe() -> None:
     harness, which is the argument for both halves of that change.
     """
     config.UNIVERSE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    previous = (config.UNIVERSE_PATH.read_bytes()
+                if config.UNIVERSE_PATH.is_file() else None)
     config.UNIVERSE_PATH.write_text(json.dumps({
         "generated_at": "2026-08-21T00:00:00-04:00",
         "count": len(_FROZEN_UNIVERSE),
@@ -90,6 +104,13 @@ def freeze_universe() -> None:
         "symbols": [{"code": name, "symbol": f"{name}.US", "name": name,
                      "exchange": "NASDAQ"} for name in _FROZEN_UNIVERSE],
     }), encoding="utf-8")
+    try:
+        yield
+    finally:
+        if previous is None:
+            config.UNIVERSE_PATH.unlink(missing_ok=True)
+        else:
+            config.UNIVERSE_PATH.write_bytes(previous)
 
 
 def pick_absent_universe_symbol(packet_text: str) -> str:
@@ -812,8 +833,14 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
 
 def main() -> int:
     # Every check below reads the universe through analyst.check_report. It
-    # reads THIS fixture, not whatever the live file holds today.
-    freeze_universe()
+    # reads THIS fixture, not whatever the live file holds today, and the
+    # fixture is put back before any later module in the same interpreter
+    # reads the path.
+    with freeze_universe():
+        return _checks()
+
+
+def _checks() -> int:
     packet_text = build_packet_text()
     absent = pick_absent_universe_symbol(packet_text)
     failures: list[str] = []
