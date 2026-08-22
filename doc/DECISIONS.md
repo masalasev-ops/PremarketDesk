@@ -2684,6 +2684,32 @@ minutes apart from 07:30 have to end. Symbols requested read 2,745, which is
 the 2026-08-14 and 2026-08-16 figure; every 2026-08-17 row says 2,754, matching
 the universe.json rebuilt at 00:50 that morning.]
 
+[corrected 2026-08-22: the paragraph above is accurate about what was observed
+and wrong about what it measured, and the whole of the error is one line of
+code. sample() built the window's END from the wall clock, so all 46 of those
+requests asked the free tier for data inside the delay the vendor documents,
+and that request shape is refused on any day, by any key, whether or not a
+session is running. The control for that claim was already on disk when this
+entry was written. The 2026-08-16 run is two requests at 01:46 on a SUNDAY, no
+session, no trading, no data possible in the window at all, and both came back
+403. A rule that refuses a dead Sunday is not a rule about a live Monday.
+
+On 2026-08-22 the same key asked the same feed for the same universe over a
+window ending documented_lag_minutes behind the wall clock instead of at it.
+One request. It was ANSWERED: HTTP 200, body {"bars":{},"next_page_token":null},
+recorded whole in data/probe-alpaca-lagged-2026-08-22.jsonl. So the 403s are a
+RECENCY refusal, they are not evidence about what the free tier serves during a
+session, and the probe named for measuring that delay had never once asked a
+question the vendor was willing to answer.
+
+Three things changed with it. probe_alpaca_live.py subtracts the lag when it
+builds the window rather than ending it at the clock. The lag is CRITERIA
+[Truth] documented_lag_minutes and no longer a literal, because a number that
+decides what is fetched is a criterion. And the refusal BODY is kept: the old
+line recorded the string "status 403" and threw away the sentence saying which
+rule was hit, which is why 46 refusals could be read as one thing for five
+days.]
+
 **The conclusion stands, on firmer ground than the reasoning it was written
 on.** A blanket refusal of the sip feed for a window ending at the wall clock
 IS evidence that the free tier does not serve it live, and it is the narrower
@@ -2717,6 +2743,23 @@ deferred, not pending a better tier, closed on measurement. It remains what it
 already was, a historical reconstruction source for completed sessions, and the
 NOT ADOPTED entry above stands unchanged as the reasoning that was correct when
 it was written.
+
+[corrected 2026-08-22: WITHDRAWN, and deliberately not replaced by its
+opposite. "Closed on measurement" needs a measurement, and this one could not
+have come out any other way, so it closed nothing. What is established now is
+narrower than either reading: the free tier ANSWERS a sip request for a window
+ending documented_lag_minutes behind the wall clock and REFUSES one ending at
+it. Whether such a window carries a live premarket session's bars is UNTESTED.
+The one request that has ever been allowed was fired on Saturday 2026-08-22 at
+11:26, and the window it asked about held no trading at all, so a 200 with an
+empty bars object is the entitlement answering and not the feed. Alpaca's
+status as a live discovery source is therefore open and unmeasured, which is
+where it stood before 2026-08-17, and one trading morning settles it.
+
+What does not change: the 2026-08-16 stop. That rests on the VWAP result, four
+rules losing and gappers doing worse than decile matched controls at p = 0.0,
+and this entry was never an input to it. The paragraph below already says so
+and says it correctly.]
 
 **This corroborates the 2026-08-16 stop, it is not an input to it.** The order
 matters and is worth stating so the record cannot later be read backwards. The
@@ -4140,3 +4183,83 @@ query.
 The general rule, which this project already followed everywhere except here:
 `.replace(tzinfo=...)` is only ever correct on a value that is ALREADY in that
 zone and merely naive. On anything from a vendor it is a bug with no symptom.
+
+## 2026-08-22: the probe could not fail its own test, and 46 refusals were read as a result
+
+**What was wrong.** research/probe_alpaca_live.py exists to find out whether
+Alpaca's free tier serves premarket bars during a running session and, if so,
+how far behind the wall clock they arrive. It built the window's end from
+taken_at, the wall clock, on every request it has ever made. The free tier
+refuses a sip window that reaches into the delay it documents, so every one of
+those requests was refused before the feed's contents were ever consulted. The
+probe named for measuring DOCUMENTED_LAG_MINUTES had a request shape that
+guaranteed the vendor would decline to answer, and the constant it was named
+for was decorative: printed in a table column, never subtracted from anything.
+
+**Why the refusals looked like a finding.** They were consistent, they were
+plentiful, and they arrived on a live trading morning while this project's own
+collector was folding 33,489 trades into 3,102 bars. 46 requests, all 403, two
+hours, one key. The reading written on 2026-08-17 was that the vendor declines
+to serve a running session, which is a real thing a vendor can do and would
+have been established by exactly this evidence had the window been servable.
+
+The control that separates the two readings was already on disk, one file
+over, and nobody opened it. data/probe-alpaca-live-2026-08-16.jsonl is two
+requests at 01:46 on a SUNDAY. No session, no trading, no data possible inside
+the window, and both came back 403. A rule that refuses a dead Sunday is not a
+rule about a live Monday. The 403 follows the shape of the request and not the
+state of the market, and that was visible without spending anything.
+
+**What was fired.** One request, on 2026-08-22 at 11:26 ET, for the same feed
+and the same 2,000 symbol chunk, over a window ending 15 minutes behind the
+wall clock instead of at it. Zero EODHD credits, no premarket window spent, one
+HTTP call, asserted on the record rather than claimed in prose.
+
+    status   200
+    body     {"bars":{},"next_page_token":null}
+    window   2026-08-22T08:00:00Z to 2026-08-22T15:11:49Z
+
+data/probe-alpaca-lagged-2026-08-22.jsonl, status and body kept whole.
+
+**What that establishes, exactly.** The free tier answers a sip request whose
+window ends documented_lag_minutes behind the wall clock, and refuses one
+ending at it. The refusal is about RECENCY. It is not, and never was, evidence
+about what the feed carries during a session.
+
+**What it does not establish, and this half matters more.** Whether a servable
+window over a LIVE premarket returns bars is still untested. 2026-08-22 is a
+Saturday: the window held no trading, so an empty bars object is the
+entitlement answering and not the feed. Nobody has yet asked this vendor a
+question it would answer about a running session. The correct status of Alpaca
+as a live discovery source is open and unmeasured, not closed and not adopted,
+and one trading morning settles it.
+
+**What reopens if that morning comes back served,** stated here so the size of
+it is on the record before the result is known and cannot be argued down
+afterwards: the collector's 50 slot websocket as the discovery path, the
+premarket_capture_rate correction that exists because the socket sees a
+fraction of the tape, and the volume defect that correction was built to
+patch. All three rest on Alpaca being unavailable live. None of them should be
+touched on the strength of a Saturday 200.
+
+**What does not reopen.** The 2026-08-16 stop on premarket discovery rests on
+the VWAP result, four rules losing and gappers underperforming decile matched
+controls at p = 0.0 across 61 sessions. It was never an input to the Alpaca
+question and is not an output of it. A cheaper path to names that do not pay
+is still a path to names that do not pay.
+
+**The three fixes.** The window is built as taken_at minus the documented lag,
+so the request asks for what the delay allows. The lag is CRITERIA [Truth]
+documented_lag_minutes rather than a literal, because it now decides what is
+fetched and a number that decides what is fetched is a criterion. And the
+refusal BODY is kept beside the status: the old line recorded "status 403" and
+discarded the vendor's own sentence about which rule was hit, which is why 46
+refusals could be read as one thing for five days when the answer was in every
+one of them.
+
+**The general rule.** A probe whose request shape cannot produce the negative
+result is not an instrument, it is a generator of one answer. Before a probe's
+output is read as a measurement, the question to ask is what a DIFFERENT
+reading would have had to look like on the wire, and whether any request it
+made could have produced it. Here the answer was none, for two mornings, and
+the table it wrote was careful, corrected twice, and about nothing.

@@ -51,6 +51,10 @@ for the daily bars. Roughly 100 requests across the whole run.
   python -m research.probe_alpaca_live            run the sampling loop
   python -m research.probe_alpaca_live --once     take a single sample now
   python -m research.probe_alpaca_live --report   read the log back as a table
+  python -m research.probe_alpaca_live --lagged-once
+                                                  ONE request for the window the
+                                                  documented delay allows, status
+                                                  and body kept
 """
 
 from __future__ import annotations
@@ -85,6 +89,18 @@ TOP_N = 20
 # served and refused counts were not recorded at all, and that reconstruction
 # needs to know how many chunks a sweep of a given size was cut into.
 CHUNK_SIZE = 2000
+
+# The vendor's documented delay on a free tier SIP feed, from CRITERIA [Truth]
+# documented_lag_minutes. It was a literal here until 2026-08-22, on the
+# reasoning that it is the vendor's claim rather than a threshold this project
+# screens on and so did not belong in a thresholds file. That reasoning held
+# only while the number was decorative. It is now SUBTRACTED from the wall
+# clock to build the window every request asks for, so it decides what is
+# fetched, and a number that decides what is fetched is a criterion. Keeping
+# the subtracted value and the value the observed lag is printed against in
+# one place is the point: two literals could drift apart and the table would
+# still look right.
+DOCUMENTED_LAG_MINUTES = _CRIT.number("truth", "documented_lag_minutes")
 
 
 def log_path(day: str | None = None) -> Path:
@@ -144,8 +160,32 @@ def sample(
     session_start = _CRIT.clock("baseline", "session_start")
     window_open = dt.datetime(today.year, today.month, today.day,
                               session_start[0], session_start[1], tzinfo=ettime.ET)
+    # The window ends DOCUMENTED_LAG_MINUTES BEHIND the wall clock, not at it.
+    #
+    # Until 2026-08-22 it ended at taken_at, and that one line is why this
+    # probe has never once tested the thing it is named for. The free tier
+    # refuses the sip feed for any window reaching into the documented delay,
+    # so a window ending at the wall clock is refused before the feed's
+    # contents are ever consulted: all 46 requests of the 2026-08-17 run came
+    # back 403 without a single one of them asking a question the vendor was
+    # willing to answer. The probe cannot measure whether the delay is real
+    # while every request it makes is guaranteed to be turned away.
+    #
+    # Asking for the window the delay ALLOWS is what makes the answer
+    # informative in both directions. Served, and the free tier does reach
+    # into a running session at a known lag, which is a different world from
+    # the one DECISIONS 2026-08-17 recorded. Refused, and the refusal is now
+    # about the session rather than about the recency of the window, which is
+    # what that entry claimed and had not shown.
+    #
+    # The cost is that the observed lag can no longer fall below the
+    # subtracted minutes by construction. That is not hidden downstream: the
+    # subtraction is written onto every record as window_lag_minutes, and the
+    # table prints the distance from the WINDOW EDGE rather than from the wall
+    # clock, which is the part that is a reading of the feed.
+    window_close = taken_at - dt.timedelta(minutes=DOCUMENTED_LAG_MINUTES)
     start_utc = window_open.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    end_utc = taken_at.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    end_utc = window_close.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     last_price: dict[str, float] = {}
     last_epoch: dict[str, int] = {}
@@ -174,7 +214,15 @@ def sample(
             if status != 200:
                 requests_refused += 1
                 refusal_codes.add(int(status))
-                errors.append(f"chunk at {index}: status {status}")
+                # The BODY, not just the number. A 403 from this vendor says
+                # in prose which rule was hit, and for two days the only
+                # record of 46 of them was the string "status 403", which
+                # cannot distinguish a feed entitlement from a recency rule
+                # from an expired key. The reading that the free tier does
+                # not serve live premarket was made off a message nobody
+                # kept, and the message is one dict lookup away.
+                errors.append(f"chunk at {index}: status {status}: "
+                              f"{probe_alpaca._error_text(payload)}")
                 break
             requests_served += 1
             for symbol, bars in ((payload.get("bars") or {}).items()):
@@ -223,11 +271,27 @@ def sample(
     return {
         "taken_at_et": ettime.stamp(taken_at),
         "window": {"start": start_utc, "end": end_utc},
+        # What was subtracted from the wall clock to build that window's end,
+        # written onto the record rather than left to be inferred from the
+        # code that happened to be running. Records from before 2026-08-22 do
+        # not carry it and asked at the wall clock, which is a zero here, and
+        # every reader treats a missing key as exactly that.
+        "window_lag_minutes": DOCUMENTED_LAG_MINUTES,
+        "window_ends_et": ettime.stamp(window_close),
         "symbols_requested": len(codes),
         "symbols_with_bars": len(last_price),
         "bars_total": bars_total,
         "newest_bar_et": ettime.stamp(ettime.from_epoch_s(newest)) if newest else None,
         "lag_minutes_newest": lag_minutes,
+        # The lag above is measured from the WALL CLOCK and therefore cannot
+        # come in under window_lag_minutes however good the feed is: the
+        # request never asked for anything newer. This one is measured from
+        # the window's own edge, so it is the part that is a reading of the
+        # feed rather than of the request. Near zero means bars arrived right
+        # up to the edge of what was asked for.
+        "lag_minutes_past_window": (
+            round(lag_minutes - DOCUMENTED_LAG_MINUTES, 1)
+            if lag_minutes is not None else None),
         "lag_minutes_median": round(statistics.median(lags), 1) if lags else None,
         "gappers_over_3pct": sum(1 for g in gaps if abs(g["gap_pct"]) > 3.0),
         "top_gappers": gaps[:TOP_N],
@@ -239,6 +303,141 @@ def sample(
         "refusal_status_codes": sorted(refusal_codes),
         "errors": errors[:4],
     }
+
+
+LAGGED_PATH_STEM = "probe-alpaca-lagged"
+
+# How much of a response body is kept verbatim. A refusal body is a sentence
+# and fits many times over; a served body is the whole universe's minute bars
+# and would turn the log into the data. Truncation is recorded on the record
+# when it happens, because a body silently cut in half reads as a body that
+# ended there.
+BODY_CHARS = 4000
+
+
+def lagged_log_path(day: str | None = None) -> Path:
+    return config.DATA_DIR / f"{LAGGED_PATH_STEM}-{day or ettime.today_str()}.jsonl"
+
+
+def lagged_once(
+    probe: probe_alpaca.Probe,
+    codes: list[str],
+    today: dt.date,
+    as_of: dt.datetime | None = None,
+) -> dict[str, Any]:
+    """ONE request for the window the documented delay allows, kept whole.
+
+    This is an ENTITLEMENT test and not a contents test, and the difference is
+    the whole reason it exists as its own mode. Every request this file has
+    ever made asked for a window ending at the wall clock, which reaches into
+    the documented delay, so all 46 of them on 2026-08-17 were refused before
+    the feed's contents were consulted. What that measured is that the vendor
+    will not answer that question. It cannot distinguish a free tier that has
+    no live premarket data from one that has it and will not serve it inside
+    the delay, and DECISIONS 2026-08-17 chose the first reading.
+
+    One request settles which. Ask for the window the delay ALLOWS. Refused,
+    and the refusal is about the session rather than the recency, which is
+    what that entry claimed. Served, and the entry is wrong and the collector,
+    the capture correction and the volume defect all reopen together.
+
+    One request, and deliberately not a sweep: a sweep would spend the second
+    chunk on a question the first has already answered, and neither the status
+    nor the body would differ. It touches no EODHD endpoint, so it costs no
+    quota, and it needs no prior closes, since nothing here computes a gap.
+    """
+    taken_at = as_of or ettime.now_et()
+    session_start = _CRIT.clock("baseline", "session_start")
+    window_open = dt.datetime(today.year, today.month, today.day,
+                              session_start[0], session_start[1], tzinfo=ettime.ET)
+    window_close = taken_at - dt.timedelta(minutes=DOCUMENTED_LAG_MINUTES)
+    chunk = codes[:CHUNK_SIZE]
+    params = {
+        "symbols": ",".join(chunk), "timeframe": "1Min",
+        "start": window_open.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end": window_close.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "limit": 10000, "feed": "sip",
+    }
+
+    before = probe.request_count
+    status, payload, elapsed = probe.get(params)
+    # Asserted rather than assumed. Probe.get retries a 429 once, which would
+    # make this two requests, and the whole claim of this mode is that it is
+    # one. If it ever is not, the record says so instead of the prose.
+    requests_made = probe.request_count - before
+
+    body = json.dumps(payload, separators=(",", ":"), default=str)
+    bars = (payload or {}).get("bars") if isinstance(payload, dict) else None
+    bars = bars if isinstance(bars, dict) else {}
+    newest = 0
+    for rows in bars.values():
+        for bar in rows or []:
+            stamp = bar.get("t") or ""
+            try:
+                epoch = int(dt.datetime.fromisoformat(
+                    stamp.replace("Z", "+00:00")).timestamp())
+            except (ValueError, AttributeError):
+                continue
+            newest = max(newest, epoch)
+
+    return {
+        "kind": "lagged_entitlement_probe",
+        "taken_at_et": ettime.stamp(taken_at),
+        "window": {"start": params["start"], "end": params["end"]},
+        "window_lag_minutes": DOCUMENTED_LAG_MINUTES,
+        "window_lag_source": "CRITERIA [Truth] documented_lag_minutes",
+        "window_ends_et": ettime.stamp(window_close),
+        "feed": params["feed"],
+        "symbols_requested": len(chunk),
+        "requests_made": requests_made,
+        "status": int(status),
+        "elapsed_s": round(elapsed, 3),
+        # The body, which line 177 of the sweep path threw away for two days.
+        "body": body[:BODY_CHARS],
+        "body_chars": len(body),
+        "body_truncated": len(body) > BODY_CHARS,
+        "message": probe_alpaca._error_text(payload) if status != 200 else None,
+        "symbols_with_bars": sum(1 for rows in bars.values() if rows),
+        "bars_total": sum(len(rows or []) for rows in bars.values()),
+        "newest_bar_et": ettime.stamp(ettime.from_epoch_s(newest)) if newest else None,
+        "lag_minutes_newest": (
+            round((taken_at - ettime.from_epoch_s(newest)).total_seconds() / 60.0, 1)
+            if newest else None),
+        "has_next_page": bool((payload or {}).get("next_page_token")
+                              if isinstance(payload, dict) else False),
+    }
+
+
+def run_lagged_once(day: str | None = None) -> int:
+    """Fire the one request, write it, and say only what it establishes."""
+    today = ettime.parse_date(day) if day else ettime.today_et()
+    codes = universe_codes()
+    probe = probe_alpaca.Probe()
+    record = lagged_once(probe, codes, today)
+    path = lagged_log_path(today.isoformat())
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+    print(f"probe: ONE lagged request, {record['requests_made']} HTTP call(s) made")
+    print(f"  window   {record['window']['start']} to {record['window']['end']} "
+          f"({record['window_lag_minutes']:g} min behind the {record['taken_at_et']} clock)")
+    print(f"  feed     {record['feed']}, {record['symbols_requested']:,} symbols")
+    print(f"  status   {record['status']}")
+    print(f"  body     {record['body'][:600]}"
+          + (" ...TRUNCATED" if record["body_truncated"] else ""))
+    if record["status"] == 200:
+        print(f"  served   {record['symbols_with_bars']:,} symbols with bars, "
+              f"{record['bars_total']:,} bars, newest {record['newest_bar_et']}, "
+              f"lag {record['lag_minutes_newest']} minutes from the wall clock")
+        print("\n  SERVED. The window the documented delay allows is not refused. "
+              "Whether it carries a LIVE session's bars is a separate question and "
+              "is answered by the counts above only if this ran during one.")
+    else:
+        print(f"\n  REFUSED, status {record['status']}. The window the documented delay "
+              "ALLOWS was still not served, so the refusal is not about the recency of "
+              "the window. Read the body above for which rule the vendor says was hit.")
+    print(f"\nprobe: written to {path}")
+    return 0
 
 
 def _collector_check(record: dict[str, Any], day: str) -> dict[str, Any]:
@@ -280,12 +479,6 @@ def _collector_check(record: dict[str, Any], day: str) -> dict[str, Any]:
     }
 
 
-# The documented delay on a free tier SIP feed. Not a threshold anything acts
-# on, and deliberately not in CRITERIA for that reason: it is the vendor's
-# claim, and this probe exists to find out whether it holds. It is printed
-# beside the observed lag so the two can be compared without arithmetic.
-DOCUMENTED_LAG_MINUTES = 15.0
-
 TABLE_PATH_STEM = "probe-alpaca-live-table"
 
 
@@ -317,9 +510,17 @@ def sweep_requests(record: dict[str, Any]) -> dict[str, Any]:
     if codes is None:
         codes = []
         for text in errors:
+            # The error text carries the refusal BODY from 2026-08-22, so the
+            # status is no longer the tail of the string. Only the digits
+            # immediately after "status " are the code.
             head, _, tail = text.rpartition("status ")
-            if head and tail.strip().isdigit():
-                codes.append(int(tail.strip()))
+            digits = ""
+            for char in tail.strip():
+                if not char.isdigit():
+                    break
+                digits += char
+            if head and digits:
+                codes.append(int(digits))
         codes = sorted(set(codes))
 
     refused = record.get("requests_refused")
@@ -413,12 +614,22 @@ def _table_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         lag = record.get("lag_minutes_newest")
         active = record.get("symbols_with_bars", 0)
         requests = sweep_requests(record)
+        # Absent on every record written before 2026-08-22, and absent means
+        # zero: those sweeps asked for a window ending at the wall clock. The
+        # two shapes are not comparable and the column says which is which
+        # rather than averaging over them.
+        window_lag = float(record.get("window_lag_minutes") or 0.0)
         rows.append({
             "clock_et": record["taken_at_et"][11:19],
             "newest_bar_et": (str(record.get("newest_bar_et") or "")[11:19]) or None,
             "observed_lag_minutes": lag,
-            "vs_documented": (
-                round(lag - DOCUMENTED_LAG_MINUTES, 1) if lag is not None else None),
+            "window_lag_minutes": window_lag,
+            # The measurement of the feed. The lag above is bounded below by
+            # window_lag whatever the feed does, so it is the request shape
+            # showing through; this is the distance the newest bar sits
+            # behind the edge of what was actually asked for.
+            "past_window_minutes": (
+                round(lag - window_lag, 1) if lag is not None else None),
             "median_lag_minutes": record.get("lag_minutes_median"),
             "active_names": active,
             "new_since_last": (active - previous) if previous is not None else None,
@@ -533,16 +744,17 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
             "",
         ]
     lines += [
-        "| clock ET | newest bar ET | observed lag (min) | vs documented 15 | "
-        "median lag | active names | new since last | bars | gap > 3% | "
+        "| clock ET | window ends behind clock | newest bar ET | lag vs wall clock (min) | "
+        "lag past window edge | median lag | active names | new since last | bars | gap > 3% | "
         "requests served | requests refused | refusal codes |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['clock_et']} | {row['newest_bar_et'] or 'none'} | "
+            f"| {row['clock_et']} | {row['window_lag_minutes']:g} min | "
+            f"{row['newest_bar_et'] or 'none'} | "
             f"{row['observed_lag_minutes'] if row['observed_lag_minutes'] is not None else 'none'} | "
-            f"{row['vs_documented'] if row['vs_documented'] is not None else 'none'} | "
+            f"{row['past_window_minutes'] if row['past_window_minutes'] is not None else 'none'} | "
             f"{row['median_lag_minutes'] if row['median_lag_minutes'] is not None else 'none'} | "
             f"{row['active_names']:,} | "
             f"{row['new_since_last'] if row['new_since_last'] is not None else ''} | "
@@ -553,13 +765,34 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
         )
     lines.append("")
     if lags:
+        window_lags = sorted({r["window_lag_minutes"] for r in rows})
+        past = [r["past_window_minutes"] for r in rows
+                if r["past_window_minutes"] is not None]
         lines += [
             "## Observed lag",
             "",
-            f"- best {min(lags)} minutes, median {statistics.median(lags)}, worst {max(lags)}",
+            f"- measured from the WALL CLOCK: best {min(lags)} minutes, median "
+            f"{statistics.median(lags)}, worst {max(lags)}",
+            "",
+        ]
+        if any(window_lags):
+            lines += [
+                f"- these sweeps asked for a window ending "
+                f"{', '.join(f'{value:g}' for value in window_lags)} minutes behind the "
+                "wall clock, because the free tier refuses one that ends at it. So the "
+                "wall clock lag CANNOT come in under that however good the feed is, and "
+                "the figures above are bounded by the request and not only by the vendor.",
+                f"- measured from the WINDOW EDGE, which is the part that reads the feed: "
+                f"best {min(past)} minutes, median {statistics.median(past)}, worst "
+                f"{max(past)}. Near zero means bars arrived right up to the edge of what "
+                "was asked for and the only delay is the one that was subtracted.",
+                "",
+            ]
+        lines += [
             f"- the documented rule is {DOCUMENTED_LAG_MINUTES:g} minutes on a free tier "
-            "SIP feed, so a worst case materially above that changes what freeze time "
-            "is achievable and therefore what the report can contain",
+            "SIP feed, CRITERIA [Truth] documented_lag_minutes, so a wall clock lag "
+            "materially above that changes what freeze time is achievable and therefore "
+            "what the report can contain",
             "",
         ]
         if partly_refused:
@@ -634,13 +867,14 @@ def report(day: str | None = None) -> int:
     partly_refused = bool(refused_total) and bool(served_total)
 
     print(f"probe: Alpaca live premarket, {path.name}, {len(records)} sweeps\n")
-    print(f"{'clock ET':>9} {'newest bar':>11} {'lag min':>8} {'vs 15m':>7} "
+    print(f"{'clock ET':>9} {'win lag':>8} {'newest bar':>11} {'lag min':>8} {'past win':>9} "
           f"{'med lag':>8} {'active':>8} {'new':>6} {'bars':>9} {'gap>3%':>7} "
           f"{'served':>7} {'refused':>8} {'codes':>9}")
     for row in rows:
-        print(f"{row['clock_et']:>9} {str(row['newest_bar_et'] or '-'):>11} "
+        print(f"{row['clock_et']:>9} {row['window_lag_minutes']:>8g} "
+              f"{str(row['newest_bar_et'] or '-'):>11} "
               f"{str(row['observed_lag_minutes']):>8} "
-              f"{str(row['vs_documented']):>7} "
+              f"{str(row['past_window_minutes']):>9} "
               f"{str(row['median_lag_minutes']):>8} "
               f"{row['active_names']:>8,} "
               f"{str(row['new_since_last'] if row['new_since_last'] is not None else ''):>6} "
@@ -686,8 +920,18 @@ def report(day: str | None = None) -> int:
               f"DECISIONS.md 2026-08-16 does not stand. If it is in the thousands, it does, "
               f"and then the lag decides what freeze time is achievable.")
     if lags:
-        print(f"observed lag: best {min(lags)}m, median {statistics.median(lags)}m, "
-              f"worst {max(lags)}m, against a documented {DOCUMENTED_LAG_MINUTES:g}m")
+        window_lags = sorted({r["window_lag_minutes"] for r in rows})
+        past = [r["past_window_minutes"] for r in rows
+                if r["past_window_minutes"] is not None]
+        print(f"observed lag from the wall clock: best {min(lags)}m, median "
+              f"{statistics.median(lags)}m, worst {max(lags)}m, against a documented "
+              f"{DOCUMENTED_LAG_MINUTES:g}m")
+        if any(window_lags):
+            print(f"  the window was asked to end "
+                  f"{', '.join(f'{value:g}' for value in window_lags)}m behind the clock, "
+                  f"so that lag has a floor it cannot cross. Past the window edge, which "
+                  f"is the feed's own number: best {min(past)}m, median "
+                  f"{statistics.median(past)}m, worst {max(past)}m")
     else:
         print("observed lag: nothing to report, no sweep returned a bar")
     print(f"last sweep: {last['symbols_with_bars']:,} names with bars, newest "
@@ -744,6 +988,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--once", action="store_true", help="Take one sample and stop.")
     parser.add_argument("--report", action="store_true", help="Read the log back.")
     parser.add_argument("--date", default=None, help="Which day's log to report on.")
+    parser.add_argument("--lagged-once", action="store_true",
+                        help="Fire EXACTLY ONE request for the window the documented "
+                             "delay allows, and record its status and its body. An "
+                             "entitlement test, not a contents test: it costs no EODHD "
+                             "quota, spends no premarket window, and answers whether "
+                             "the 403s were about the session or about the recency.")
     parser.add_argument("--dry-run", metavar="YYYY-MM-DD", default=None,
                         help="Sweep a PAST session at several clock times, to prove "
                              "the table populates before the live morning. Writes to "
@@ -753,6 +1003,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.report:
         return report(args.date)
+
+    if args.lagged_once:
+        return run_lagged_once(args.date)
 
     if args.dry_run:
         return dry_run(args.dry_run)
