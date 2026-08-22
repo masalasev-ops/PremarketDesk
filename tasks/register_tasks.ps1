@@ -12,6 +12,13 @@
 # one it was meant to measure. A probe that is meant to be deleted still needs
 # a supported way to be created, or it gets created wrong.
 #
+# Arm the one off Alpaca capture test for a chosen morning with:
+#   ... -File tasks\register_tasks.ps1 -Capture 2026-08-24
+# Same shape as -Probe and for the same reason: ONE task, ONE trigger, nothing
+# else touched. It fires at 08:45 beside the morning chain, spends no EODHD
+# quota, and answers whether the free tier serves a running session and what
+# the socket captured of it. See tasks\job_probe_capture.bat.
+#
 # This uses the ScheduledTasks module, not schtasks /Create, because this
 # project's path contains spaces and schtasks string quoting stored the /TR
 # value unquoted, which made every task die at fire time with 0x80070002,
@@ -21,7 +28,7 @@
 # All times are local machine time and the machine is expected to keep US
 # Eastern. If this machine ever changes time zone, re-derive these triggers
 # from the clocks in doc\CRITERIA.md before re-registering.
-param([switch]$Unregister, [string]$Probe)
+param([switch]$Unregister, [string]$Probe, [string]$Capture)
 
 $root = Split-Path -Parent $PSScriptRoot
 $weekdays = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
@@ -137,6 +144,78 @@ if ($Probe) {
     exit 0
 }
 
+# The one off capture test. NOT in $jobs, for the same reason the probe above
+# is not: it is meant to be deleted once DECISIONS.md carries its answer, and a
+# plain run of this script must never resurrect it.
+#
+# 08:45 is not chosen, it is [Scan] run_time. The whole question is what the
+# vendor serves at the clock production asks it, so a run at any other time
+# answers a different one. It runs BESIDE the morning chain, which is safe
+# because it spends no EODHD quota and writes nothing the chain reads.
+$captureName = "probe-capture"
+$captureStart = "08:45"
+if ($Capture) {
+    $bat = Join-Path (Join-Path $root "tasks") "job_probe_capture.bat"
+    if (-not (Test-Path $bat)) {
+        Write-Output "MISSING   $bat. The capture test was deleted, which is what"
+        Write-Output "          was meant to happen once the question was answered."
+        exit 1
+    }
+    try {
+        $day = [datetime]::ParseExact($Capture, "yyyy-MM-dd", $null)
+    } catch {
+        Write-Output "FAILED    -Capture wants a date as yyyy-MM-dd, got '$Capture'"
+        exit 1
+    }
+    $at = $day.Date.Add([timespan]::Parse($captureStart))
+    if ($at -le (Get-Date)) {
+        Write-Output "FAILED    $Capture $captureStart is in the past. A one time trigger"
+        Write-Output "          already behind the clock never fires."
+        exit 1
+    }
+    if ($day.DayOfWeek -eq "Saturday" -or $day.DayOfWeek -eq "Sunday") {
+        Write-Output "FAILED    $Capture is a $($day.DayOfWeek). This test measures a live"
+        Write-Output "          premarket against a live collector, and there is neither"
+        Write-Output "          at the weekend. A market holiday is not caught here: the"
+        Write-Output "          .bat checks ops.market_today and stands down on one."
+        exit 1
+    }
+    # StartWhenAvailable is deliberately NOT set. A missed 08:45 that fires at
+    # 10:30 would sweep a window the vendor serves for a reason that has
+    # nothing to do with production, and record a 200 that reads as an answer.
+    # The probe itself refuses a run started more than twenty minutes early and
+    # labels a control fired late, so a late catch up run would be caught, but
+    # the cleanest outcome for a missed morning is no record rather than one
+    # that has to be read carefully.
+    $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
+    $trigger = New-ScheduledTaskTrigger -Once -At $at
+    # AllowStartIfOnBatteries is not a default and has to be asked for. The
+    # default REFUSES to start a task on battery power, so a laptop unplugged
+    # overnight wakes at 08:45, declines to run, and leaves no record at all.
+    # DontStopIfGoingOnBatteries is the same fact at the other end: without it
+    # a run that starts on mains and loses power mid sweep is killed.
+    $settings = New-ScheduledTaskSettingsSet -WakeToRun `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+    try {
+        Register-ScheduledTask -TaskName $captureName -TaskPath "\PremarketDesk\" `
+            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Write-Output "registered PremarketDesk\$captureName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
+        Write-Output "           waking works from sleep and not from a powered off machine"
+        Write-Output "           it writes logs\probe-capture-$Capture.log, spends no EODHD quota,"
+        Write-Output "           and needs the collector to have been running that morning"
+        Write-Output "           read it back with:"
+        Write-Output "             set PYTHONPATH=%CD%\src"
+        Write-Output "             .venv\Scripts\python.exe -m research.probe_capture_live --report --date $Capture"
+        Write-Output "           delete it when the question is answered:"
+        Write-Output "             schtasks /Delete /TN ""\PremarketDesk\$captureName"" /F"
+    } catch {
+        Write-Output "FAILED    PremarketDesk\$($captureName): $($_.Exception.Message)"
+        exit 1
+    }
+    exit 0
+}
+
 foreach ($job in $jobs) {
     $taskPath = "\PremarketDesk\"
     if ($Unregister) {
@@ -197,6 +276,13 @@ if ($Unregister) {
         Write-Output "removed   PremarketDesk\$probeName"
     } catch {
         Write-Output "not found PremarketDesk\$probeName"
+    }
+    try {
+        Unregister-ScheduledTask -TaskName $captureName -TaskPath "\PremarketDesk\" `
+            -Confirm:$false -ErrorAction Stop
+        Write-Output "removed   PremarketDesk\$captureName"
+    } catch {
+        Write-Output "not found PremarketDesk\$captureName"
     }
 }
 

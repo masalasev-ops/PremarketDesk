@@ -4263,3 +4263,80 @@ output is read as a measurement, the question to ask is what a DIFFERENT
 reading would have had to look like on the wire, and whether any request it
 made could have produced it. Here the answer was none, for two mornings, and
 the table it wrote was careful, corrected twice, and about nothing.
+
+## 2026-08-22, second: the Monday test, pre-registered before it fires
+
+**What is armed.** research/probe_capture_live.py, one task at 08:45 on
+2026-08-24, beside the morning chain. One Alpaca sweep of the universe over
+04:00 to 08:30, plus one request for the window production actually uses. Zero
+EODHD quota, nothing in the production path touched.
+
+**Why 08:30 and not 08:45, which is the first thing this found.** The morning
+does not compute premarket RVOL over 04:00 to 08:30. scan snaps
+rvol_cutoff_hhmm to [Scan] run_time inside rvol_cutoff_snap_minutes, so the
+window production uses is 04:00 to 08:45, ending AT the wall clock, which is
+exactly the shape refused 46 times. 08:30 is [Scan] run_time minus [Truth]
+documented_lag_minutes: the latest end the free tier will serve at that clock,
+and fifteen minutes short of what the morning uses. Those are the densest
+fifteen minutes of the premarket. One extra request asks for the production
+window at the production clock so the gap is measured on the morning rather
+than argued about after it.
+
+**What each outcome means, fixed now so it cannot be read loosely later.**
+
+The sweep is refused: the free tier does not serve a running session even
+inside the delay it documents, DECISIONS 2026-08-17's conclusion is right for
+a reason it did not give, and Alpaca closes as a live source on evidence this
+time. Nothing else follows and nothing reopens.
+
+The sweep is served and the control is refused: the feed is reachable at 08:45
+but only fifteen minutes behind. Every question below reopens, and a further
+one with it, which is whether a screen computed to 08:30 is worth having.
+
+Both served: the morning's own window is reachable as it stands, and the
+collector, the capture correction and the volume defect reopen together with
+nothing to work around.
+
+**The capture half, and what one session is allowed to do to 0.1172.**
+Nothing on its own. [Collector] premarket_capture_rate is the median of per
+symbol shares over 110 symbols on four sessions, measured against EODHD 1m
+intraday. Monday adds ONE session against a different vendor's tape. It is
+evidence about the number's size and cannot replace it, and the correction
+does not move on one morning whatever comes back. What it can settle, and
+what no reading so far has had, is whether the two tapes agree at all about
+what the socket is missing.
+
+**The shakedown, run today against a completed session.** 2026-08-20,
+2,778 symbols, 5 requests served, 1,881 with bars, 44 collector symbols
+compared and 40 passing the [Collector] capture floors. Median share 0.1256
+against the assumed 0.1172, a ratio of 1.07, running 0.0513 to 0.7290. That is
+a reconstruction and not the live measurement: it was taken on a Saturday
+against a session two days over, so it proves the arithmetic and not the
+entitlement. Its value is that the arithmetic is now proven before the one
+morning that cannot be repeated.
+
+**Two defects the shakedown found in the instrument, both of the same class.**
+universe.json does not carry the market snapshot proxies, SPY, QQQ, DIA, IWM,
+TLT, USO, UUP and VIXY, and the collector subscribes to all of them, so a
+sweep built from the universe never asked Alpaca about eleven of the symbols
+the capture share is measured over. They landed in a bucket reading "Alpaca
+had no overlapping minute", which is a claim about the vendor, when the truth
+was that this file never asked. The first fix added them under the collector's
+own .US names, which Alpaca cannot resolve, so they came back silent in
+exactly the way that is indistinguishable from never having been asked. Both
+are the project's recurring error in miniature: a measurement that cannot
+produce the negative result, and an absence with two causes reported as one.
+The bucket is now split, not_requested against alpaca_silent, and it is kept
+even though it should stay empty, so that if it ever fills the symbols are
+named rather than counted as vendor silence.
+
+**One more trap, closed before it could fire.** The window's end is a fixed
+clock while the vendor's refusal rule is relative to the wall clock at the
+moment of the request, so a task firing at 08:44:58 asks for a window fourteen
+minutes fifty eight seconds old and gets the 403 this whole test exists to
+step around. The probe waits thirty seconds past the production clock before
+firing. StartWhenAvailable is deliberately OFF for the same family of reason:
+a missed 08:45 catching up at 10:30 would sweep a window the vendor serves for
+reasons that have nothing to do with production and record a 200 that reads
+as an answer. A missed morning should leave no record rather than a record
+that has to be read carefully.

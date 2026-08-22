@@ -101,24 +101,30 @@ at the root and is gitignored along with .env.
   research/ holding the written up studies this file cites: COLLECTOR_VOLUME.md,
   VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and the four float rotation study
   payloads DECISIONS.md quotes
-- tasks/: eight job .bat files, register_tasks.ps1, README.md. Seven of them
+- tasks/: nine job .bat files, register_tasks.ps1, README.md. Seven of them
   register as nine scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
-  repeating weekday trigger and once more at 22:45. One further .bat file
-  sits here and is not one of those nine: job_probe_socket_cap, the instrument
-  for the open collector volume question. It is a one off, and it is armed by
-  `register_tasks.ps1 -Probe YYYY-MM-DD`, which registers a single trigger at
-  06:30 that morning and touches nothing else. A plain run of the script never
-  registers it, because a probe that is meant to be deleted must not come back
-  every time the schedule is refreshed, and `-Unregister` now removes it if it
-  is there. It ran on 2026-08-21 and its task was removed the same day, so the
-  nine above are exactly what `Get-ScheduledTask -TaskPath \PremarketDesk\*`
-  returns. The .bat and the module stay: the census half of its answer landed
-  and the cap half did not, and re-running it on a regular hours tape after
-  09:25 is the one thing that would settle either. job_probe_alpaca_live and
-  job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both
-  questions were answered and recorded in DECISIONS.md; their modules stay
-  under src/research/
+  repeating weekday trigger and once more at 22:45. Two further .bat files
+  sit here and are not among those nine, both of them one offs armed a morning
+  at a time and both meant to be deleted once their question is answered. A
+  plain run of the script registers neither, because a probe that is meant to
+  be deleted must not come back every time the schedule is refreshed, and
+  `-Unregister` removes them if they are there.
+  job_probe_socket_cap is the instrument for the open collector volume
+  question, armed by `register_tasks.ps1 -Probe YYYY-MM-DD` at 06:30. It ran
+  on 2026-08-21 and its task was removed the same day. The .bat and the module
+  stay: the census half of its answer landed and the cap half did not, and
+  re-running it on a regular hours tape after 09:25 is the one thing that would
+  settle either.
+  job_probe_capture is the Alpaca live capture test, armed by
+  `register_tasks.ps1 -Capture YYYY-MM-DD` at 08:45, which is [Scan] run_time
+  and not a chosen number: the question is what the free tier serves at the
+  clock production asks it. It is armed for 2026-08-24, so ten tasks stand
+  today and `Get-ScheduledTask -TaskPath \PremarketDesk\*` returns ten until
+  it is deleted. See DECISIONS.md 2026-08-22.
+  job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
+  2026-08-20 once both questions were answered and recorded in DECISIONS.md;
+  their modules stay under src/research/
 - data/: universe.json, watchlist.json, universe-closes-YYYY-MM-DD.json,
   premarket/YYYY-MM-DD.jsonl, premarket/YYYY-MM-DD-stats.jsonl,
   premarket/YYYY-MM-DD-subscriptions.json (what the collector asked the socket
