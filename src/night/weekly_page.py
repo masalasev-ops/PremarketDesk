@@ -104,7 +104,7 @@ def did_it_run(days: list[str]) -> dict[str, Any]:
                 + (f", exit {row['exit_code']}" if row.get("exit_code") not in (0, None) else "")
                 + ")")
     for day in days:
-        by_day[day]["report"] = (config.run_dir(day) / "report.md").is_file()
+        by_day[day]["report"] = (config.run_path(day) / "report.md").is_file()
     return {"by_day": by_day,
             "steps": sum(v["steps"] for v in by_day.values()),
             "failures": sum(len(v["failed"]) for v in by_day.values()),
@@ -114,7 +114,7 @@ def did_it_run(days: list[str]) -> dict[str, Any]:
 def is_it_trustworthy(days: list[str]) -> dict[str, Any]:
     series = []
     for day in days:
-        path = config.run_dir(day) / "verify_intraday.json"
+        path = config.run_path(day) / "verify_intraday.json"
         if not path.is_file():
             continue
         try:
@@ -187,7 +187,7 @@ def _volume_was_the_only_failure(day: str, ticker: str) -> bool:
     """
     if day not in _PACKET_FAILURES:
         found: dict[str, bool] = {}
-        path = config.run_dir(day) / "packet.json"
+        path = config.run_path(day) / "packet.json"
         if path.is_file():
             try:
                 packet = json.loads(path.read_text(encoding="utf-8"))
@@ -281,7 +281,7 @@ def what_did_it_cost(days: list[str]) -> dict[str, Any]:
     degrade = _CRIT.integer("quota", "degrade_below_remaining")
     refuse = _CRIT.integer("quota", "refuse_below_remaining")
     for day in days:
-        path = config.run_dir(day) / "packet.json"
+        path = config.run_path(day) / "packet.json"
         if not path.is_file():
             continue
         try:

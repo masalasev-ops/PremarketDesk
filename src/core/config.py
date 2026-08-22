@@ -462,10 +462,37 @@ def ensure_dirs() -> None:
 
 
 def run_dir(date_str: str) -> Path:
-    """runs/YYYY-MM-DD, created on demand."""
+    """runs/YYYY-MM-DD, created on demand. For a caller about to WRITE."""
     target = RUNS_DIR / date_str
     target.mkdir(parents=True, exist_ok=True)
     return target
+
+
+def run_path(date_str: str) -> Path:
+    """runs/YYYY-MM-DD, WITHOUT creating it. For a caller about to READ.
+
+    A directory under runs/ is evidence that a run happened. build_archive
+    treats runs/ as the record, CRITERIA's closes retention note keeps runs/
+    off the prunable whitelist because site/ is rebuilt from it, and a reader
+    asking which mornings exist reads the directory listing. So a read that
+    creates one destroys the meaning of the thing it is reading.
+
+    It had been doing exactly that. Thirteen call sites asked run_dir for a
+    path only to call .is_file() on something inside it and return when the
+    answer was no, and every one of them left a directory behind. The 22:15
+    weekly page walks a calendar week, weekends included, so runs/2026-08-15
+    and runs/2026-08-16 were a Saturday and a Sunday recreated every night
+    after being deleted on 2026-08-21, and the truth pass's --reread walk left
+    runs/2026-05-04, a date this project has never had a morning on.
+    backfill_premarket already worked around this locally, with the comment
+    "RUNS_DIR / day rather than config.run_dir(day): this is a read only", which
+    is the same fix made once where it was noticed.
+
+    Same shape as store.connect versus store.guard_live_database: the
+    distinction is in the function the caller chooses, so a reader who wants a
+    path cannot get a side effect by asking for one.
+    """
+    return RUNS_DIR / date_str
 
 
 def _self_check() -> int:

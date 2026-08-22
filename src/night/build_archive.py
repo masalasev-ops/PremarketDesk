@@ -98,6 +98,12 @@ _PAGE = """<!doctype html>
   .counts .g { color: var(--good); }
   .counts .y { color: var(--warn); }
   .counts .r { color: var(--bad); }
+  .fixture-note {
+    max-width: 760px; margin: 0 auto 20px; padding: 12px 16px;
+    border: 1px solid var(--bad); border-left-width: 4px; border-radius: 4px;
+    font-size: 0.85rem; line-height: 1.5; color: var(--bad);
+  }
+  .fixture-note strong { color: var(--bad); }
   .rail-note {
     padding: 10px 16px 4px; font-size: 0.7rem; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--muted);
@@ -193,6 +199,44 @@ __DAYS__
 """
 
 
+# What config.build_identifier() can legitimately put in a packet's commit
+# field: a resolved HEAD, which is forty hex characters. It writes null with a
+# commit_reason when it cannot resolve one, and it has no third answer. So a
+# commit that is neither of those did not come from this code, and the only
+# thing in the tree that writes one is the test fixture in
+# tests/test_entrypoints.py, whose "stub" landed on a real run directory on
+# 2026-08-21 and has been published as a morning ever since.
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _fixture_reason(packet: dict[str, Any]) -> str | None:
+    """Why this packet was not written by a scheduled run, or None.
+
+    Matched on the SHAPE of the commit rather than on the string "stub",
+    because the next fixture to reach a run directory will not be spelled the
+    same and a guard that names one value only ever catches that one.
+
+    THE TWO SILENCES ARE NOT THE SAME AS A WRONG ANSWER, and the first draft of
+    this got that wrong and accused two real mornings. A packet with no build
+    key at all predates 2026-08-14, when the field was added, and 2026-08-13
+    and 2026-08-14 are both on disk that way; a build dict whose commit is null
+    is a run on a machine that could not resolve HEAD, which
+    config.build_identifier writes deliberately with a commit_reason beside it.
+    Neither says anything about whether a market was involved, so neither is
+    reported. Only a commit that is PRESENT and is not a resolved HEAD is a
+    statement no version of this code makes.
+    """
+    build = packet.get("build")
+    if not isinstance(build, dict):
+        return None  # predates the field; the packet cannot be asked
+    commit = build.get("commit")
+    if commit is None:
+        return None  # a legitimate run on a machine that could not resolve HEAD
+    if not isinstance(commit, str) or not _COMMIT_RE.match(commit):
+        return f"its packet was built by {commit!r}, which is not a commit"
+    return None
+
+
 def _counts_from_packet(run_dir: Path) -> dict[str, Any] | None:
     packet_path = run_dir / "packet.json"
     if not packet_path.is_file():
@@ -213,17 +257,41 @@ def _counts_from_packet(run_dir: Path) -> dict[str, Any] | None:
         conviction = str(candidate.get("conviction") or "")
         if conviction in tally:
             tally[conviction] += 1
-    return {"candidates": len(candidates), **tally}
+    return {"candidates": len(candidates), "fixture": _fixture_reason(packet), **tally}
 
 
 def _counts_html(counts: dict[str, Any] | None) -> str:
     if counts is None:
         return '<span class="counts">no packet</span>'
+    if counts.get("fixture"):
+        return '<span class="counts">not a morning</span>'
     return (
         f'<span class="counts">{counts["candidates"]} &#183; '
         f'<em class="g">{counts["green"]}</em> '
         f'<em class="y">{counts["yellow"]}</em> '
         f'<em class="r">{counts["red"]}</em></span>'
+    )
+
+
+def _fixture_banner(date: str, counts: dict[str, Any] | None) -> str:
+    """The line an embedded fixture session opens with, or nothing.
+
+    Above the report rather than below it, because the numbers underneath are
+    the thing being disclaimed and a reader who stops after the tables must
+    have already passed this.
+
+    Kept rather than dropped from the archive. Removing the session would make
+    the loss invisible, and a gap in the rail reads as a day the market was
+    shut. This file is the record; a record that quietly omits what went wrong
+    is the failure it exists to prevent.
+    """
+    if not counts or not counts.get("fixture"):
+        return ""
+    return (
+        f'<p class="fixture-note"><strong>{date} is not a morning.</strong> '
+        f'{counts["fixture"]}. The numbers below are test fixture values that '
+        "were written over this session's real evidence, and the real evidence "
+        "is gone. Nothing here was measured from a market.</p>"
     )
 
 
@@ -268,7 +336,9 @@ def build(embed_sessions: int) -> Path:
             f'<span class="d">{date}</span>{_counts_html(entry["counts"])}</button>'
         )
         body = markdown.markdown(entry["markdown"], extensions=render_report._EXTENSIONS)
-        day_parts.append(f'<section class="day" id="day-{date}" hidden>\n{body}\n</section>')
+        banner = _fixture_banner(date, entry["counts"])
+        day_parts.append(f'<section class="day" id="day-{date}" hidden>\n'
+                         f'{banner}{body}\n</section>')
 
     if linked:
         rail_parts.append('    <div class="rail-note">Older, opens its own page</div>')
@@ -289,10 +359,16 @@ def build(embed_sessions: int) -> Path:
         day_parts.append('<p class="empty">No runs with a report.md were found. '
                          'The archive fills in as mornings run.</p>')
 
+    fixtures = [e["date"] for e in entries
+                if e["counts"] and e["counts"].get("fixture")]
     subtitle = (
         f"{len(entries)} session{'s' if len(entries) != 1 else ''}, "
         f"{len(embedded)} embedded, rebuilt {ettime.stamp(ettime.now_et())}"
+        + (f", {len(fixtures)} not a morning" if fixtures else "")
     )
+    for date in fixtures:
+        print(f"archive: {date} is carried but is NOT a morning, and the page "
+              "says so on the session and in the rail")
     page = (
         _PAGE
         .replace("__SUBTITLE__", subtitle)

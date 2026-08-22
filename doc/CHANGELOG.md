@@ -15,6 +15,91 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-22, second: six writes and reads that could undo a closed defect
+
+A full review of the tree. Six defects, and five of the six are one shape: a
+write that could not complete leaving the file it was protecting worse than it
+found it, in a tree that already has the fix written down twice, in
+universe.write_atomically and in config.ca_bundle, and applied where each was
+noticed rather than where the shape occurs. Every one is pinned by a claim, and
+every claim was checked against the pre-fix code before it was kept. The suite
+is 81 claims in test_regressions plus twelve other modules, green, tree
+photograph clean.
+
+**THE MORNING COULD BE EMAILED TWICE.** deliver.py writes delivered.json after
+the send, and already_delivered reads it to refuse a second copy. The write was
+a plain write_text, so a denial raised straight out of deliver(): the chain then
+stopped before build_archive wrote its finish marker, the watchdog read an
+unfinished chain and relaunched it, and the recipients got the morning again.
+Reproduced end to end, two POSTs from one report. That needs no exotic failure,
+because README already records this machine's antivirus intermittently denying a
+first file write. The write now goes through a temp sibling and os.replace,
+retries four times, and NEVER raises: it prints that the email went and the
+record did not, and declares the step failed so the status trail carries it. The
+exit code stays zero on purpose, because a nonzero one is what summons the
+second copy. claim_delivery_happens_once gained the case; it had covered a
+record present, absent and corrupt, and not a record that could not be written.
+
+**A HALF WRITTEN CALENDAR READS AS AN OPEN MARKET.** get_details' docstring
+promises "the old file now stands until a new one is actually in hand", which is
+what closed the 2026-08-20 defect where the nightly deleted the cache before
+fetching. The write beside it was still a plain write_text, which truncates
+before it writes, and _load_cache answers a truncated file and a missing one
+identically. So a refresh interrupted between the open and the flush reopened
+the closed defect by a shorter route: with no calendar, is_trading_day returns
+True for Christmas Day and every weekday job runs against a closed market.
+Measured both ways, before and after.
+claim_a_half_written_calendar_is_not_a_missing_one.
+
+**THE MORNING'S ONLY EVIDENCE COULD BE LOST TO ONE INTERRUPTED WRITE.**
+scan.write_packet wrote packet.json, one of the two files CRITERIA [Backup] says
+has no route back, with a plain write_text. An interrupted write left a packet
+that parses as nothing; every later step reads it, and thin_rerun_stands_down
+reads an unparsable one as "not thinner", so a rerun replaces the 08:45 evidence
+with a packet gathered off a different clock. The nightly backup answers this an
+hour too late. claim_an_interrupted_packet_write_leaves_no_half_packet.
+
+**A RELAUNCH THE STATE FILE REFUSED TOOK THE WATCHDOG DOWN WITH IT.**
+monitor_jobs._record_rerun runs AFTER launch_bat, so its write is the one thing
+in the watchdog that cannot be answered by running the pass again. _load_state
+already treats an unreadable state file as worth declaring the step failed, on
+the stated reasoning that a lost count stops max_reruns_per_job_per_day being
+enforced; a failed write left the same state while also raising through the rest
+of the pass. Now atomic, retried, reported, and the pass continues.
+claim_an_unrecorded_relaunch_is_reported_rather_than_raised.
+
+**THE ARCHIVE HAS BEEN PUBLISHING A FIXTURE AS A MORNING SINCE 2026-08-21.**
+site/PremarketDesk.html rendered 2026-08-21 as its seventh session, identical in
+the rail and in the pane to the six real ones: one candidate, AAPL at 100.00,
+gap +3.1 percent, RVOL 1.8, score 6.0 green, none of it measured from a market.
+That the session was destroyed is recorded in three documents; nothing stopped
+the page from presenting it. The packet already carried the tell.
+config.build_identifier writes a resolved HEAD or null with a commit_reason and
+has no third answer, so the "stub" the fixture wrote is a value no version of
+this code produces. build_archive now reports it, on the session, in the rail as
+"not a morning", in the subtitle count and in the step's log. Matched on the
+SHAPE of the commit rather than on the string, because the next fixture will not
+be spelled the same. The session is LABELLED, NOT DROPPED: a gap in the rail
+reads as a day the market was shut, and this file is the record. The first draft
+of the rule accused 2026-08-13 and 2026-08-14, both real mornings written before
+the build field existed, and the corrected rule leaves both silences alone.
+claim_the_archive_does_not_publish_a_fixture_as_a_morning.
+
+**READING A RUN DIRECTORY CREATED ONE.** config.run_dir mkdirs, which is right
+for a caller about to write and wrong for the thirteen that asked it for a path
+only to call .is_file() on something inside it. runs/2026-08-15 and
+runs/2026-08-16 are a Saturday and a Sunday, deleted on 2026-08-21 as sweep
+fixtures and back within hours carrying the 22:15 nightly's mtime, because
+weekly_page walks a calendar week and asks each day for its report. So was
+runs/2026-05-04, a date this project has never run a morning on. The archive
+logged a skip for each, every night, and the deletion looked like it had not
+held. A directory under runs/ is what build_archive walks to decide which
+mornings exist, so a read that creates one destroys the meaning of what it is
+reading. config.run_path is the read only accessor and twelve sites now use it;
+backfill_premarket had already worked around this locally, which is the same fix
+made once where it was noticed. The three empty directories are removed.
+claim_reading_a_run_directory_does_not_create_one.
+
 ## 2026-08-22, first: every ranked list says which empty it is, and a surviving price says how old it is
 
 Two changes to Layer 4, the notable movers section. Both are disclosures on

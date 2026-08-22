@@ -1760,7 +1760,7 @@ def main(argv: list[str] | None = None) -> int:
 
     packet_path = (
         Path(args.packet) if args.packet
-        else config.run_dir(ettime.today_et().isoformat()) / "packet.json"
+        else config.run_path(ettime.today_et().isoformat()) / "packet.json"
     )
     if not packet_path.is_file():
         print(f"analyst: there is no packet at {packet_path}. Run scan.py first.")

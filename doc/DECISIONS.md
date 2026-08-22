@@ -18,6 +18,68 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-22, second: a step that already acted reports instead of failing, and a lost session is labelled instead of dropped
+
+Three calls from the 2026-08-22 review that could reasonably have gone the other
+way. All three are about what to do AFTER something irreversible has already
+happened, which is a different question from what to do before it, and this tree
+had been answering both the same way.
+
+**A STEP THAT HAS ALREADY ACTED MUST NOT FAIL LOUDLY.** deliver.py sends the
+email and then writes delivered.json to stop a rerun sending it again. The
+obvious fix for a write that can be denied is to retry and then raise, which is
+what every other write in this tree does and is correct for every other write in
+this tree, because everywhere else the step can simply be run again.
+
+Here it is exactly backwards. The chain stops at the first nonzero exit, the
+finish marker is written by build_archive AFTER deliver, and the watchdog
+relaunches a chain with no finish marker. So raising is not "the step failed",
+it is "send the email a second time". Reproduced: two POSTs from one report.
+
+deliver now returns 0 on a denied record, prints that the email went and the
+record did not, and calls job_status.failed so the status trail carries the
+fact. That combination is deliberate and it is unusual: job_status.run turns a
+declared failure into STATUS_ERROR while still returning the code, so the chain
+continues to its finish marker and the watchdog leaves it alone, while the
+watchdog's own steps_ok check reports STEP FAILED for a human to read. A morning
+that sent one email and could not say so is better served by a line in the log
+than by a crash, and the crash was the thing summoning the duplicate.
+
+The alternative was to write the record BEFORE the POST and delete it if the
+send failed. Refused: that trades a duplicate email for a silently missing one,
+and of the two mistakes only the duplicate is visible to the person it happens
+to.
+
+**FOUR ATTEMPTS AND HALF A SECOND ARE NOT CRITERIA KEYS.** deliver's
+WRITE_ATTEMPTS and monitor_jobs' STATE_WRITE_ATTEMPTS are module constants, not
+CRITERIA.md thresholds, and the rule they are being held against says every
+SCREEN threshold lives in CRITERIA. These decide nothing about a market. Putting
+them there would say the file is where numbers live rather than where DECISIONS
+live, and the 263 keys already in it are hard enough to audit. Sized against the
+documented antivirus denial, which has cleared within a second every time it has
+been seen. If a real morning ever exhausts four attempts, that is evidence for a
+key rather than an argument for one now.
+
+**A LOST SESSION IS LABELLED, NOT DROPPED.** site/PremarketDesk.html has been
+rendering 2026-08-21 as its seventh session since the sweep destroyed it: one
+candidate, AAPL at 100.00, presented exactly like the six real mornings. The
+cheap fix is to skip a session whose packet no build wrote, and it is the wrong
+one. The rail is a list of dates, so a session removed from it leaves a gap, and
+a gap in that list reads as a day the market was shut. This file is the record
+of what this system did, and a record that quietly omits its worst day is the
+failure it exists to prevent. So the session stays, and the page says on it, in
+the rail, in the subtitle count and in the step's log that it is not a morning.
+
+Matched on the SHAPE of the commit rather than on the string "stub", because a
+guard that names one value catches that value and nothing else, and the next
+fixture to reach a run directory will not be spelled the same way. The first
+draft did the shape test and got the SILENCES wrong: it treated a packet with no
+build key as a fixture, and accused 2026-08-13 and 2026-08-14, both real
+mornings written before the field was added on 2026-08-14. A packet that cannot
+be asked and a packet that answers wrongly are not the same observation, which
+is the same distinction [Notable]'s four list states were drawn on this morning,
+and it is worth noticing that the same mistake was available twice in one day.
+
 ## 2026-08-22, first: four states for an empty ranked list, not one, and what "considered" counts
 
 Two calls inside the notable movers disclosure work that could have gone the

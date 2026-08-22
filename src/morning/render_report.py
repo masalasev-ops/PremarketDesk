@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
 
     report_path = (
         Path(args.report) if args.report
-        else config.run_dir(ettime.today_et().isoformat()) / "report.md"
+        else config.run_path(ettime.today_et().isoformat()) / "report.md"
     )
     if not report_path.is_file():
         print(f"render: there is no report at {report_path}. Run analyst.py first.")

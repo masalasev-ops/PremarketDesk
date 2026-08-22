@@ -261,7 +261,7 @@ def reread(day: str, probe: Any = None) -> dict[str, Any]:
     cannot move here. Reported anyway, because "unchanged" is the answer to a
     question a reader would otherwise have to work out for themselves.
     """
-    packet_path = config.run_dir(day) / "packet.json"
+    packet_path = config.run_path(day) / "packet.json"
     if not packet_path.is_file():
         return {"day": day, "skipped": f"no packet at {packet_path.name}"}
     try:
@@ -380,7 +380,7 @@ def reread_report(results: list[dict[str, Any]]) -> None:
 def measure(day: str, dry_run: bool = False, probe: Any = None,
             ) -> dict[str, Any]:
     """Everything this pass writes for one session, computed before it writes."""
-    packet_path = config.run_dir(day) / "packet.json"
+    packet_path = config.run_path(day) / "packet.json"
     if not packet_path.is_file():
         return {"day": day, "rows": [], "skipped":
                 f"{packet_path.name} is absent, so the window the morning used "

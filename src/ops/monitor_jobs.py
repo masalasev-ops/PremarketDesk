@@ -49,9 +49,11 @@ import csv
 import datetime as dt
 import io
 import json
+import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -281,6 +283,14 @@ def _exit_marker(job: str, day: str) -> str | None:
 
 # ------------------------------------------------------------- rerun state
 
+# How hard _record_rerun tries before it gives up and says so. Not CRITERIA
+# keys: this file's threshold rule covers decision thresholds, and these are the
+# retry shape of one write. Sized against the documented antivirus denial, which
+# has cleared within a second every time it has been seen.
+STATE_WRITE_ATTEMPTS = 4
+STATE_WRITE_RETRY_S = 0.5
+
+
 def _load_state(day: str) -> dict[str, int]:
     try:
         state = json.loads(STATE_PATH.read_text(encoding="utf-8-sig"))
@@ -301,13 +311,53 @@ def _load_state(day: str) -> dict[str, int]:
 
 
 def _record_rerun(day: str, job: str) -> None:
+    """Count one rerun against today's cap. Called AFTER the job was launched.
+
+    Which is what makes the write matter. _load_state above already treats an
+    unreadable state file as serious enough to declare the step failed, because
+    a lost count silently stops max_reruns_per_job_per_day being enforced and
+    lets a hard failure loop every thirty minutes. A FAILED WRITE leaves exactly
+    the same state, and until this it did so while also raising through the
+    pass: the .bat was already running, so the launch stood and only the record
+    of it was lost.
+
+    Written through a temp sibling and os.replace so a reader never meets half a
+    state file, retried because this machine's antivirus intermittently denies a
+    first write, and reported rather than raised for the same reason the read
+    path reports: the watchdog's remaining checks are worth more than its exit
+    code.
+    """
     try:
         state = json.loads(STATE_PATH.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         state = {}
     state = {day: state.get(day, {})}  # keep only today, the past is in the logs
     state[day][job] = state[day].get(job, 0) + 1
-    STATE_PATH.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+    body = json.dumps(state, indent=2)
+    temporary = STATE_PATH.with_name(STATE_PATH.name + ".partial")
+    last: Exception | None = None
+    for attempt in range(STATE_WRITE_ATTEMPTS):
+        try:
+            temporary.write_text(body, encoding="utf-8")
+            os.replace(temporary, STATE_PATH)
+            return
+        except OSError as exc:
+            last = exc
+            if attempt + 1 < STATE_WRITE_ATTEMPTS:
+                time.sleep(STATE_WRITE_RETRY_S)
+        finally:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    print(f"monitor: {job} was relaunched and the rerun could not be recorded "
+          f"after {STATE_WRITE_ATTEMPTS} attempts ({type(last).__name__}: {last}); "
+          "the per day rerun cap is not being enforced for it")
+    job_status.failed(f"{type(last).__name__}: {job} was relaunched and the "
+                      "rerun state file could not be written, so the per day "
+                      "rerun cap is not enforced for it")
 
 
 def launch_bat(bat_name: str, dry_run: bool) -> None:

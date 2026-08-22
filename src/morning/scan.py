@@ -25,6 +25,7 @@ import argparse
 import datetime as dt
 import json
 import math
+import os
 from typing import Any
 from urllib.parse import urlparse
 
@@ -4516,7 +4517,7 @@ def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
     thinner than what is on disk, on any axis, and better on none.
     """
     session_date = payload["session_date"]
-    existing_path = config.run_dir(session_date) / "packet.json"
+    existing_path = config.run_path(session_date) / "packet.json"
     if not existing_path.is_file():
         return False
     try:
@@ -4552,10 +4553,33 @@ def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
 
 
 def write_packet(payload: dict[str, Any]) -> Any:
-    """Every run gets its own dated directory. Nothing is overwritten across days."""
+    """Every run gets its own dated directory. Nothing is overwritten across days.
+
+    Through a temp sibling and os.replace, on universe.write_atomically's
+    precedent, because this is one of the two files CRITERIA [Backup] says has
+    no route back. Everything after this step reads it, every _true column is
+    later measured against the window it records, and a re-read of a past
+    session reads it rather than picks. A plain write_text truncates the
+    destination before it writes, so a run interrupted here left the morning
+    with a packet that parses as nothing, and the 08:45 evidence a rerun then
+    replaces was gathered off a different clock. That is the same loss the
+    nightly backup exists to answer, an hour before the backup runs.
+
+    Inline rather than through universe.write_atomically because that helper
+    serialises without sort_keys and this file's readers are diffed across
+    sessions.
+    """
     run_directory = config.run_dir(payload["session_date"])
     path = run_directory / "packet.json"
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    temporary = path.with_name(path.name + ".partial")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True),
+                             encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        # A crash between the write and the replace leaves the partial behind;
+        # nothing reads it, but it should not accumulate.
+        temporary.unlink(missing_ok=True)
     return path
 
 

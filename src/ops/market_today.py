@@ -26,7 +26,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Any
 
 from core import config
@@ -100,6 +102,33 @@ def cache_state(refresh_after_days: int) -> dict[str, Any]:
     }
 
 
+def _write_cache_atomically(payload: dict[str, Any]) -> None:
+    """Write the holiday cache through a temp sibling, then rename into place.
+
+    The docstring below promises "the old file now stands until a new one is
+    actually in hand", and a plain write_text does not keep that promise: it
+    truncates the destination BEFORE it writes, so a crash or a denied write
+    partway through leaves a file that parses as nothing. _load_cache cannot
+    tell a truncated cache from a missing one, both return None, and this
+    module's whole failure direction is that no calendar reads as open. The
+    delete-before-fetch that produced exactly that outcome was closed on
+    2026-08-20; the truncate-before-write beside it was not.
+
+    os.replace is atomic on Windows and on POSIX, and the temporary file is a
+    sibling because rename is only atomic within a filesystem. Same shape as
+    universe.write_atomically and config.ca_bundle, and inline here rather than
+    imported from selection/ because ops must not depend on a later package.
+    """
+    temporary = CACHE_PATH.with_name(CACHE_PATH.name + ".partial")
+    try:
+        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        os.replace(temporary, CACHE_PATH)
+    finally:
+        # A crash between the write and the replace leaves the partial behind;
+        # nothing reads it, but it should not accumulate.
+        Path(temporary).unlink(missing_ok=True)
+
+
 def get_details(refresh_after_days: int, force: bool = False) -> dict[str, Any] | None:
     """Cached exchange details, refreshed weekly, stale cache over nothing.
 
@@ -155,7 +184,7 @@ def get_details(refresh_after_days: int, force: bool = False) -> dict[str, Any] 
     payload = dict(details)
     payload["fetched_at"] = ettime.stamp(ettime.now_et())
     config.ensure_dirs()
-    CACHE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    _write_cache_atomically(payload)
     print(f"calendar: refreshed {CACHE_PATH.name} from exchange-details")
     _MEMO.update({"details": payload, "loaded": True, "refreshed": True})
     return payload

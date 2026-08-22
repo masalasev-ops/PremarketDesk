@@ -4,10 +4,14 @@ An adversarial read of the whole scheduled path raised forty findings and
 twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
-rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries seventy six claims, a count read off the file rather than remembered,
-because it said forty four for a while after it held fifty seven and a suite
-that miscounts itself is the first thing a reader stops trusting.
+rest, arming the socket cap probe for 2026-08-21 added another, and the
+2026-08-22 read added the three non atomic writes that could reopen a closed
+defect or lose a session, the archive publishing a fixture as a morning, and a
+read that created the directory it was reading. It now carries eighty one
+claims, a count read off the file rather
+than remembered, because it said forty four for a while after it held fifty
+seven and a suite that miscounts itself is the first thing a reader stops
+trusting.
 
 They have nothing in common except how they were found, which is why they are
 grouped by that rather than scattered across the themed suites: a reader asking
@@ -359,8 +363,480 @@ def claim_delivery_happens_once(failures: list[str]) -> None:
         if "already emailed" in printed.getvalue():
             failures.append("a corrupt delivery record suppressed the email; a "
                             "second copy is a cheaper mistake than no copy")
-    print("  send once    a delivered session is not re-sent, and a corrupt "
-          "record cannot suppress one")
+
+        # THE ROUTE THE THREE CASES ABOVE DO NOT COVER, and the one this
+        # machine actually produces. All three ask what happens with a record
+        # present, absent or corrupt. None asks what happens when WRITING it
+        # fails, and a plain write_text raised straight out of deliver(): the
+        # email had gone, the chain stopped before build_archive wrote its
+        # finish marker, the watchdog read an unfinished chain and relaunched
+        # it, and the recipients got the morning twice. README records the
+        # antivirus denying a first file write, so this needs no exotic fault.
+        record.unlink(missing_ok=True)
+        real_write = pathlib.Path.write_text
+
+        def deny_the_record(self, *args, **kwargs):
+            if self.name.startswith("delivered.json"):
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_write(self, *args, **kwargs)
+
+        posted: list[str] = []
+
+        class _Response:
+            status_code = 200
+            text = '{"id": "re_stub"}'
+
+            def json(self) -> dict[str, str]:
+                return {"id": "re_stub"}
+
+        class _Session:
+            def post(self, url: str, **kwargs: Any) -> "_Response":
+                posted.append(url)
+                return _Response()
+
+        from core import eodhd
+        from ops import job_status
+
+        real_session = eodhd.build_session
+        real_key, real_to = config.resend_api_key, config.email_to
+        real_failed = job_status.failed
+        declared: list[str] = []
+        eodhd.build_session = lambda *a, **k: _Session()
+        config.resend_api_key = lambda: "re_test_key"
+        config.email_to = lambda: ["someone@example.invalid"]
+        job_status.failed = lambda message: declared.append(message)
+        pathlib.Path.write_text = deny_the_record
+        try:
+            printed = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(printed):
+                    code = deliver.deliver(html)
+            except BaseException as exc:
+                code = None
+                failures.append(
+                    f"a denied send-once write raised {type(exc).__name__} out of "
+                    "deliver(); the chain then stops before its finish marker and "
+                    "the watchdog sends the morning a second time")
+            text = printed.getvalue()
+        finally:
+            pathlib.Path.write_text = real_write
+            eodhd.build_session = real_session
+            config.resend_api_key, config.email_to = real_key, real_to
+            job_status.failed = real_failed
+
+        if code is not None and code != 0:
+            failures.append(f"a denied send-once write returned {code}; a nonzero "
+                            "exit stops the chain short of its finish marker, "
+                            "which is what summons the second copy")
+        if len(posted) != 1:
+            failures.append(f"the denied-write case posted {len(posted)} emails, "
+                            "expected exactly 1")
+        if "WARNING the email WAS SENT" not in text:
+            failures.append("a send whose record could not be written said nothing "
+                            f"a reader would notice: {text.strip()[:160]!r}")
+        if not declared:
+            failures.append("a send whose record could not be written did not "
+                            "declare the step failed, so the status trail reads "
+                            "as an ordinary morning")
+        if list(html.parent.glob("delivered.json.partial")):
+            failures.append("a failed send-once write left its temporary sibling "
+                            "behind")
+    print("  send once    a delivered session is not re-sent, a corrupt record "
+          "cannot suppress one, and a record that cannot be written warns "
+          "instead of summoning a second copy")
+
+
+def claim_a_half_written_calendar_is_not_a_missing_one(failures: list[str]) -> None:
+    """An interrupted calendar refresh leaves the old holiday list standing.
+
+    get_details' own docstring promises it: "The refresh used to delete the
+    cache first and then fetch, which turned one 22:15 vendor outage into no
+    holiday list at all ... The old file now stands until a new one is actually
+    in hand." The delete-before-fetch was closed on 2026-08-20. The write beside
+    it was not, and Path.write_text truncates the destination BEFORE it writes,
+    so a refresh interrupted between the open and the flush leaves a file that
+    parses as nothing.
+
+    That is the same outcome the fix was for, by a shorter route. _load_cache
+    answers a truncated file and a missing one identically, both None, and this
+    module's whole failure direction is that no calendar reads as open: with the
+    cache gone, is_trading_day returns True for Christmas Day and every weekday
+    job runs the full pipeline against a closed market.
+
+    The fault is installed the way a reboot, a full disk or a denied write
+    produces it, by opening the destination and then dying, rather than by
+    making the write raise before it touches anything. A write that never opens
+    the file was never the shape of this failure.
+    """
+    from ops import market_today
+
+    calendar = {
+        "ExchangeHolidays": {"1": {"Date": "2026-12-25", "Holiday": "Christmas"}},
+        "TradingHours": {"WorkingDays": "Mon,Tue,Wed,Thu,Fri"},
+        "fetched_at": "2026-01-01T00:00:00-05:00",
+    }
+
+    def interrupted_write(target: pathlib.Path) -> None:
+        """Open for writing, which truncates, then die partway through."""
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write("{\"ExchangeHol")
+            raise OSError(28, "No space left on device", str(target))
+
+    with conftest_activate() as _sandbox:
+        market_today.CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        market_today.CACHE_PATH.write_text(json.dumps(calendar, indent=2),
+                                           encoding="utf-8")
+
+        # Drive the module's own writer, so the claim tracks the code rather
+        # than a copy of it: a future rewrite of _write_cache_atomically is
+        # caught here instead of passing against a re-implementation.
+        real_write = pathlib.Path.write_text
+
+        def die_on_the_cache(self, *args, **kwargs):
+            if self.name.startswith("exchange-details.json"):
+                return interrupted_write(self)
+            return real_write(self, *args, **kwargs)
+
+        pathlib.Path.write_text = die_on_the_cache
+        try:
+            market_today._write_cache_atomically(dict(calendar))
+        except OSError:
+            pass  # the caller sees it; what matters is what is left on disk
+        finally:
+            pathlib.Path.write_text = real_write
+
+        market_today._MEMO.update({"details": None, "loaded": False})
+        survived = market_today._load_cache()
+        if survived is None:
+            failures.append("an interrupted calendar refresh left no readable "
+                            "holiday list; a truncated cache and a missing one "
+                            "are the same thing to _load_cache, and a missing "
+                            "one reads as open")
+        elif not survived.get("ExchangeHolidays"):
+            failures.append("an interrupted calendar refresh left a file that "
+                            "parses and carries no holidays")
+
+        trades, why = market_today.decide(survived, dt.date(2026, 12, 25))
+        if trades is not False:
+            failures.append(f"after an interrupted refresh Christmas Day reads "
+                            f"as trades={trades} ({why}); every weekday job "
+                            "would run against a closed market")
+
+        leftover = sorted(p.name for p in market_today.CACHE_PATH.parent.glob(
+            "exchange-details.json.partial*"))
+        if leftover:
+            failures.append(f"an interrupted calendar refresh left {leftover} "
+                            "behind")
+    print("  half calendar an interrupted refresh keeps the previous holiday "
+          "list, and Christmas still reads as closed")
+
+
+def claim_an_unrecorded_relaunch_is_reported_rather_than_raised(failures: list[str]) -> None:
+    """A rerun the state file refused to record says so, and does not raise.
+
+    _record_rerun is called AFTER launch_bat has already started the .bat, so
+    its write is the one thing in the watchdog that cannot be answered by
+    running the pass again: the job is up either way and only the count of it
+    is at stake. _load_state already treats an unreadable state file as worth
+    declaring the step failed, on the stated reasoning that a lost count stops
+    max_reruns_per_job_per_day being enforced and lets a hard failure loop every
+    thirty minutes. A failed WRITE leaves that same state, and until this it did
+    so while raising through the rest of the pass, so the checks after it never
+    ran.
+
+    Both halves are asserted: the pass survives, and the reader is told the cap
+    is off for that job rather than left to infer it from a count that silently
+    stopped moving.
+    """
+    from ops import job_status
+    from ops import monitor_jobs
+
+    with conftest_activate() as _sandbox:
+        monitor_jobs.STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        monitor_jobs.STATE_PATH.unlink(missing_ok=True)
+
+        real_write = pathlib.Path.write_text
+
+        def deny_the_state(self, *args, **kwargs):
+            if self.name.startswith("monitor-reruns.json"):
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_write(self, *args, **kwargs)
+
+        real_failed = job_status.failed
+        declared: list[str] = []
+        job_status.failed = lambda message: declared.append(message)
+        pathlib.Path.write_text = deny_the_state
+        printed = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(printed):
+                monitor_jobs._record_rerun("2026-08-22", "chain")
+        except BaseException as exc:
+            failures.append(f"a denied rerun-state write raised "
+                            f"{type(exc).__name__} through the watchdog pass; "
+                            "the job it had already launched stands and every "
+                            "later check in that pass is skipped")
+        finally:
+            pathlib.Path.write_text = real_write
+            job_status.failed = real_failed
+
+        text = printed.getvalue()
+        if "rerun cap is not being enforced" not in text:
+            failures.append("a rerun that could not be recorded said nothing "
+                            f"about the cap it just stopped enforcing: "
+                            f"{text.strip()[:160]!r}")
+        if not declared:
+            failures.append("a rerun that could not be recorded did not declare "
+                            "the watchdog step failed, so the status trail reads "
+                            "as a clean pass")
+        if list(monitor_jobs.STATE_PATH.parent.glob("monitor-reruns.json.partial")):
+            failures.append("a failed rerun-state write left its temporary "
+                            "sibling behind")
+
+        # And the ordinary path still counts, so the guard above cannot be
+        # satisfied by a writer that never writes.
+        monitor_jobs._record_rerun("2026-08-22", "chain")
+        if monitor_jobs._load_state("2026-08-22").get("chain") != 1:
+            failures.append("an ordinary rerun was not counted, so the cap is "
+                            "not enforced on the path that works either")
+    print("  lost rerun   a rerun the state file refused is reported and the "
+          "pass survives, and an ordinary one still counts")
+
+
+def claim_an_interrupted_packet_write_leaves_no_half_packet(failures: list[str]) -> None:
+    """The morning's evidence is never left half written.
+
+    packet.json is one of the two files CRITERIA [Backup] says has no route
+    back, and write_packet wrote it with a plain write_text, which truncates
+    the destination before it writes. A run interrupted between the open and
+    the flush left a packet that parses as nothing: analyst, render_report,
+    verify_morning, the nightly backfill, the truth pass and pool_recall all
+    read it, and _stands_down_from reads a corrupt one as "not thinner", so a
+    later rerun overwrites the morning's evidence with a packet gathered off a
+    different clock. The nightly backup answers this an hour too late.
+
+    Installed the way a reboot, a full disk or a denied write produces it, by
+    opening the destination and then dying. A write that never opens the file
+    was never the shape of this failure.
+    """
+    from morning import scan
+
+    day = "2026-08-22"
+    good = {"session_date": day, "generated_at": "2026-08-22T08:45:00-04:00",
+            "candidates": [{"symbol": "AAA.US", "gap_pct": 4.0}]}
+
+    with conftest_activate() as _sandbox:
+        first = scan.write_packet(dict(good))
+        before = first.read_text(encoding="utf-8")
+
+        real_write = pathlib.Path.write_text
+
+        def die_partway(self, *args, **kwargs):
+            if self.name.startswith("packet.json"):
+                with open(self, "w", encoding="utf-8") as handle:
+                    handle.write('{"session_da')
+                    raise OSError(28, "No space left on device", str(self))
+            return real_write(self, *args, **kwargs)
+
+        pathlib.Path.write_text = die_partway
+        try:
+            scan.write_packet(dict(good, generated_at="2026-08-22T09:10:00-04:00"))
+        except OSError:
+            pass  # the caller sees it; what matters is what is left on disk
+        finally:
+            pathlib.Path.write_text = real_write
+
+        after = first.read_text(encoding="utf-8")
+        if after != before:
+            failures.append("an interrupted packet write changed packet.json; "
+                            "the morning's frozen evidence must survive a write "
+                            "that did not complete")
+        try:
+            json.loads(after)
+        except ValueError:
+            failures.append("an interrupted packet write left a packet.json "
+                            "that does not parse, which every later step reads "
+                            "and _stands_down_from treats as not thinner")
+
+        leftover = sorted(p.name for p in first.parent.glob("packet.json.partial*"))
+        if leftover:
+            failures.append(f"an interrupted packet write left {leftover} behind")
+
+        # And the ordinary write still lands, so the guard cannot be satisfied
+        # by a writer that never writes.
+        scan.write_packet(dict(good, generated_at="2026-08-22T09:20:00-04:00"))
+        landed = json.loads(first.read_text(encoding="utf-8"))
+        if landed.get("generated_at") != "2026-08-22T09:20:00-04:00":
+            failures.append("an ordinary packet write did not land, so the "
+                            "atomic pair is not writing at all")
+    print("  half packet  an interrupted packet write leaves the previous "
+          "evidence intact, and an ordinary one still lands")
+
+
+def claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures: list[str]) -> None:
+    """A session whose packet no build wrote is carried, and is labelled.
+
+    On 2026-08-21 at 15:46 a sweep that invoked every claim directly wrote
+    fixture data over that morning's packet, capture and report. The loss is
+    recorded in three documents. What no document could do is stop
+    site/PremarketDesk.html rendering the fixture as the seventh session,
+    identical in the rail and in the pane to the six real ones: one candidate,
+    AAPL at 100.00, gap +3.1 percent, RVOL 1.8, score 6.0 green, none of it
+    measured from a market.
+
+    The packet already carried the tell. config.build_identifier writes a
+    resolved HEAD or null with a commit_reason, and never a third thing, so the
+    "stub" that fixture wrote is a value no version of this code produces.
+    Nothing read it.
+
+    Labelled rather than dropped. A session removed from the archive leaves a
+    gap in the rail that reads as a day the market was shut, and this file is
+    the record: one that quietly omits what went wrong is the failure it exists
+    to prevent.
+
+    The two silences are asserted alongside, because the first draft of this
+    guard reported them and accused 2026-08-13 and 2026-08-14, both real
+    mornings written before the build field existed.
+    """
+    from night import build_archive
+
+    packets = {
+        "2026-08-21": {"build": {"commit": "stub", "dirty": False}},
+        "2026-08-13": {"build": None},
+        "2026-08-14": {},
+        "2026-08-20": {"build": {"commit": "c" * 40, "dirty": False}},
+        "2026-08-19": {"build": {"commit": None, "dirty": None,
+                                 "commit_reason": "could not resolve HEAD"}},
+    }
+    expected_flagged = {"2026-08-21"}
+
+    for date, packet in packets.items():
+        reason = build_archive._fixture_reason(packet)
+        if (reason is not None) != (date in expected_flagged):
+            failures.append(
+                f"{date} with build {packet.get('build')!r} was "
+                f"{'flagged' if reason else 'passed'} and should have been "
+                f"{'flagged' if date in expected_flagged else 'passed'}"
+                + (f": {reason}" if reason else ""))
+
+    with conftest_activate() as _sandbox:
+        for date, packet in packets.items():
+            run = config.run_dir(date)
+            run.mkdir(parents=True, exist_ok=True)
+            body = dict(packet)
+            body["session_date"] = date
+            body["candidates"] = [{"symbol": "AAA.US", "conviction": "green"}]
+            (run / "packet.json").write_text(json.dumps(body), encoding="utf-8")
+            (run / "report.md").write_text(f"# Premarket, {date}\n\nbody\n",
+                                           encoding="utf-8")
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            # Embed everything. The sandbox carries the real tree's run
+            # directories too, so a cap of len(packets) links the oldest of
+            # these out instead of embedding them and the section ids below
+            # would be missing for a reason that is not the one under test.
+            out = build_archive.build(1000)
+        page = out.read_text(encoding="utf-8")
+
+        if "2026-08-21 is not a morning" not in page:
+            failures.append("the archive rendered the destroyed session with no "
+                            "label; a reader cannot tell it from the real ones")
+        if page.count(">not a morning<") != 1:
+            failures.append(f"the rail marked {page.count('>not a morning<')} "
+                            "sessions, expected exactly 1")
+        if "1 not a morning" not in page:
+            failures.append("the archive subtitle did not count the labelled "
+                            "session, so the fact is only visible inside the "
+                            "day a reader happens to open")
+        for date in packets:
+            if f"day-{date}" not in page:
+                failures.append(f"{date} was dropped from the archive; a gap in "
+                                "the rail reads as a day the market was shut")
+        if "2026-08-21" not in printed.getvalue():
+            failures.append("the archive step said nothing in its log about "
+                            "carrying a session that is not a morning")
+    print("  not a morning a packet no build wrote is carried and labelled, and "
+          "a packet written before the build field is not accused")
+
+
+def claim_reading_a_run_directory_does_not_create_one(failures: list[str]) -> None:
+    """Asking whether a session has a packet does not invent the session.
+
+    config.run_dir mkdirs, which is right for a caller about to write and wrong
+    for the thirteen that asked it for a path only to call .is_file() on
+    something inside it. Every one of those left an empty directory behind, and
+    a directory under runs/ is the thing build_archive walks to decide which
+    mornings exist.
+
+    It was not theoretical. runs/2026-08-15 and runs/2026-08-16 are a Saturday
+    and a Sunday, deleted on 2026-08-21 as fixtures the claim sweep created, and
+    both were back within hours with the 22:15 nightly's mtime on them, because
+    weekly_page walks a calendar week and asks each day for its report. So did
+    runs/2026-05-04, a date this project has never run a morning on, from the
+    truth pass walking sessions. The archive logged a skip for each, every
+    night, and the deletion looked like it had not held.
+
+    Asserted as the property rather than as a list of call sites, because the
+    list is what went wrong: backfill_premarket had already worked around this
+    locally in 2026-08 with the comment "this is a read only", and the fix
+    stayed where it was noticed while twelve other sites kept doing it.
+    """
+    from night import backup_evidence, pool_recall, true_volume, weekly_page
+    from morning import scan
+
+    # A date this project cannot have a run for, so the claim is not competing
+    # with whatever the sandbox copied out of the real tree. runs/2026-05-04,
+    # the real leftover, was the obvious choice and was the wrong one: it is
+    # exactly the directory the bug leaves behind, so it was already there.
+    absent = "1999-01-04"
+
+    with conftest_activate() as _sandbox:
+        config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
+        before = {p.name for p in config.RUNS_DIR.iterdir() if p.is_dir()}
+        if absent in before:
+            failures.append(f"the fixture date {absent} already exists in the "
+                            "sandbox, so this claim proves nothing")
+
+        # run_path is the contract. It must answer and touch nothing.
+        path = config.run_path(absent)
+        if path.exists():
+            failures.append("config.run_path created the directory it was asked "
+                            "for the path of")
+        if path != config.RUNS_DIR / absent:
+            failures.append(f"config.run_path pointed at {path}, not at the "
+                            "sandbox's runs directory, so it captured a root "
+                            "instead of reading one")
+
+        # And every read path that walks dates goes through it. Each of these
+        # is driven with a date that has no run directory; none may leave one.
+        readers = [
+            ("weekly_page.did_it_run", lambda: weekly_page.did_it_run([absent])),
+            ("weekly_page.is_it_trustworthy", lambda: weekly_page.is_it_trustworthy([absent])),
+            ("pool_recall published", lambda: pool_recall.published_symbols(absent)),
+            ("true_volume.measure", lambda: true_volume.measure(absent, dry_run=True)),
+            ("backup_evidence artifacts", lambda: [f(absent) for _, f in backup_evidence._ARTIFACTS]),
+            ("scan stand down", lambda: scan.thin_rerun_stands_down({"session_date": absent})),
+        ]
+        for name, call in readers:
+            try:
+                printed = io.StringIO()
+                with contextlib.redirect_stdout(printed):
+                    call()
+            except BaseException as exc:
+                # A reader that cannot run on an absent date is not what this
+                # claim is about, as long as it did not create anything.
+                _ = exc
+            if (config.RUNS_DIR / absent).exists():
+                failures.append(f"{name} created runs/{absent} while reading it")
+                (config.RUNS_DIR / absent).rmdir()
+
+        after = {p.name for p in config.RUNS_DIR.iterdir() if p.is_dir()}
+        if after != before:
+            failures.append(f"reading created {sorted(after - before)} under "
+                            "runs/, which is the directory listing that says "
+                            "which mornings exist")
+    print("  read only    asking whether a session has a packet leaves no "
+          "directory behind, on six readers and on run_path itself")
 
 
 # ---------------------------------------------------------- the collector
@@ -6979,6 +7455,11 @@ def main() -> int:
     claim_the_volume_check_carries_its_sign(failures)
     claim_a_skipped_quote_is_not_a_missing_float(failures)
     claim_a_missing_calendar_stands_the_vintage_gate_down(failures)
+    claim_a_half_written_calendar_is_not_a_missing_one(failures)
+    claim_an_unrecorded_relaunch_is_reported_rather_than_raised(failures)
+    claim_an_interrupted_packet_write_leaves_no_half_packet(failures)
+    claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures)
+    claim_reading_a_run_directory_does_not_create_one(failures)
     claim_the_previous_session_helper_says_when_it_does_not_know(failures)
     claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
     claim_a_previous_session_watchlist_reruns_discover(failures)

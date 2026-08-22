@@ -65,7 +65,7 @@ _ARTIFACTS = (
     ("premarket", lambda day: config.PREMARKET_DIR / f"{day}.jsonl"),
     ("premarket-stats", lambda day: config.PREMARKET_DIR / f"{day}-stats.jsonl"),
     ("subscriptions", lambda day: config.PREMARKET_DIR / f"{day}-subscriptions.json"),
-    ("packet", lambda day: config.run_dir(day) / "packet.json"),
+    ("packet", lambda day: config.run_path(day) / "packet.json"),
 )
 
 

@@ -202,7 +202,7 @@ def published_symbols(session_date: str) -> tuple[set[str] | None, str | None]:
     runs/2026-08-20/pool_recall.json is what that cost: a morning that produced
     no packet at all was recorded as having published none of what gapped.
     """
-    path = config.run_dir(session_date) / "packet.json"
+    path = config.run_path(session_date) / "packet.json"
     if not path.is_file():
         return None, f"no packet.json for {session_date}, so nothing can be said about what was published"
     try:

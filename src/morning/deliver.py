@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 from typing import Any
@@ -28,6 +30,52 @@ from ops import job_status
 def delivery_record_path(html_path: Path) -> Path:
     """Where the send-once record for this session lives, beside its report."""
     return html_path.parent / "delivered.json"
+
+
+def write_delivery_record(html_path: Path, record: dict[str, Any]) -> str | None:
+    """Record the send so a rerun cannot repeat it. Returns a warning, or None.
+
+    THE EMAIL HAS ALREADY GONE by the time this is called, which makes this the
+    one write in the tree whose failure cannot be answered by trying the whole
+    step again. A plain write_text raised straight through deliver(), the chain
+    stopped before build_archive wrote its finish marker, the watchdog read an
+    unfinished chain and relaunched it, and the recipients got the morning
+    twice. That is the exact outcome already_delivered exists to prevent,
+    reached through the one path it does not cover, and it needs no exotic
+    failure: this machine's antivirus intermittently denies a first file write,
+    which README records under "When things go wrong".
+
+    So three layers, weakest consequence last. The write goes through a temp
+    sibling and os.replace, so a reader never sees half a record. It retries,
+    because every documented instance of that denial has cleared on a retry.
+    And it never raises: a morning that sent one email and could not say so is
+    worse served by a crash than by a loud line in the log, since the crash is
+    what summons the second copy.
+    """
+    path = delivery_record_path(html_path)
+    body = json.dumps(record, indent=2, sort_keys=True)
+    temporary = path.with_name(path.name + ".partial")
+    last: Exception | None = None
+    for attempt in range(WRITE_ATTEMPTS):
+        try:
+            temporary.write_text(body, encoding="utf-8")
+            os.replace(temporary, path)
+            return None
+        except OSError as exc:
+            last = exc
+            if attempt + 1 < WRITE_ATTEMPTS:
+                time.sleep(WRITE_RETRY_S)
+        finally:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+    return (
+        f"deliver: WARNING the email WAS SENT and the send-once record at {path} "
+        f"could not be written after {WRITE_ATTEMPTS} attempts ({last}). Nothing "
+        "now stops a rerun of the morning chain sending a second copy. Write that "
+        "file by hand, or accept the duplicate."
+    )
 
 
 def already_delivered(html_path: Path) -> dict[str, Any] | None:
@@ -133,8 +181,9 @@ def deliver(html_path: Path) -> int:
     except (ValueError, json.JSONDecodeError):
         message_id = None
     # Written before the step reports success, so a crash between the POST and
-    # here cannot leave a sent email with no record of it.
-    delivery_record_path(html_path).write_text(json.dumps({
+    # here cannot leave a sent email with no record of it. It cannot raise: see
+    # write_delivery_record on why a failure here must not end the step.
+    warning = write_delivery_record(html_path, {
         "sent_at": ettime.stamp(ettime.now_et()),
         "recipients": recipients,
         "message_id": message_id,
@@ -142,12 +191,23 @@ def deliver(html_path: Path) -> int:
         "note": ("the send-once record. deliver.py refuses to email this session "
                  "again while this file exists, so a watchdog rerun of the "
                  "morning chain does not send a second copy."),
-    }, indent=2, sort_keys=True), encoding="utf-8")
+    })
     print(f"deliver: sent to {', '.join(recipients)}"
           + (f", Resend id {message_id}" if message_id else ""))
+    if warning:
+        print(warning)
+        job_status.failed("the email was sent and the send-once record could "
+                          "not be written; a chain rerun would send it again")
     job_status.produced("recipients emailed", len(recipients))
     return 0
 
+
+# How hard write_delivery_record tries. Not CRITERIA keys: nothing here screens
+# a market, and this file's threshold rule covers decision thresholds rather
+# than the retry shape of one write. Sized against the documented antivirus
+# denial, which clears within a second every time it has been seen.
+WRITE_ATTEMPTS = 4
+WRITE_RETRY_S = 0.5
 
 # The exit codes that mean this step did its job. Declared at module level so
 # the __main__ line below and the entrypoint test harness read the same value:
@@ -164,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
 
     html_path = (
         Path(args.html) if args.html
-        else config.run_dir(ettime.today_et().isoformat()) / "report.html"
+        else config.run_path(ettime.today_et().isoformat()) / "report.html"
     )
     if not html_path.is_file():
         print(f"deliver: there is no rendered report at {html_path}. "
