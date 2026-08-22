@@ -86,8 +86,31 @@ _LATER_COLUMNS = (
 )
 
 
+# One row per sweep, so a later reader can ask how complete an as_of is without
+# counting rows and guessing what the denominator was that week. Kept in its own
+# table rather than as a column on gap_stats, because it is a property of the
+# RUN and repeating it on 2,745 rows would invite them to disagree.
+_SWEEP_SCHEMA = """
+CREATE TABLE IF NOT EXISTS gap_sweeps (
+    as_of       TEXT NOT NULL PRIMARY KEY,
+    attempted   INTEGER,
+    written     INTEGER,
+    failed      INTEGER,
+    computed_at TEXT
+);
+"""
+
+
+def sweep_coverage(connection, as_of: str) -> dict[str, Any] | None:
+    """What the sweep that wrote this as_of covered, or None if it predates the record."""
+    row = connection.execute(
+        "SELECT * FROM gap_sweeps WHERE as_of=?", (as_of,)).fetchone()
+    return dict(row) if row else None
+
+
 def init(connection) -> None:
     connection.executescript(_SCHEMA)
+    connection.executescript(_SWEEP_SCHEMA)
     added = store.ensure_columns(connection, "gap_stats", _LATER_COLUMNS)
     if added:
         print(f"gap_stats: widened the table with {', '.join(added)}")
@@ -290,22 +313,75 @@ def build(as_of_dates: list[dt.date], write: bool = True) -> dict[str, Any]:
             init(connection)
             for row in pending:
                 store.upsert(connection, "gap_stats", ["ticker", "as_of"], row)
+            # WHAT THIS SWEEP COVERED, beside what it measured. Without it a
+            # sweep that reached 200 of 2,745 names wrote a NEWER as_of holding
+            # 200 rows, exited 0 because `written` was not zero, and load_all's
+            # unconditional MAX(as_of) then served those 200 and hid the
+            # complete set behind them. discover ranks the whole pool on
+            # gap_propensity and could not see the seam. build()'s own docstring
+            # already called that "worse than not running".
+            for as_of in as_of_dates:
+                store.upsert(connection, "gap_sweeps", ["as_of"], {
+                    "as_of": as_of.isoformat(),
+                    "attempted": len(symbols),
+                    "written": len({row["ticker"] for row in pending}),
+                    "failed": len(failed),
+                    "computed_at": ettime.stamp(),
+                })
             connection.commit()
     written = len({row["ticker"] for row in pending})
 
+    unswept = (len(symbols) - written) / len(symbols) if symbols else 0.0
     print(f"gap_stats: wrote {written} symbols across {len(as_of_dates)} as_of dates, "
           f"{len(failed)} failed")
-    return {"written": written, "failed": failed, "as_of": [d.isoformat() for d in as_of_dates]}
+    return {"written": written, "failed": failed,
+            "attempted": len(symbols), "unswept_fraction": unswept,
+            "as_of": [d.isoformat() for d in as_of_dates]}
 
 
 def load_all(as_of: str | None = None) -> dict[str, dict[str, Any]]:
-    """Stats keyed by ticker for one as_of, defaulting to the newest present."""
+    """Stats keyed by ticker for one as_of, defaulting to the newest COMPLETE one.
+
+    Newest complete, not newest. A sweep that died partway writes a newer as_of
+    holding a fraction of the universe, and an unconditional MAX(as_of) then
+    serves that fraction and hides the complete set behind it. gap_propensity is
+    what discover ranks the whole pool by inside each tier, so the pool silently
+    changes shape for a reason that has nothing to do with the market, and
+    [Discovery] min_ranked_fraction_to_subscribe only catches it once the
+    shortfall is severe enough to cross a floor built for a different question.
+
+    An as_of written before gap_sweeps existed carries no record and is trusted,
+    because refusing every historical as_of would strand a reader for a reason
+    that is about this change rather than about the data. An explicit as_of is
+    always honoured: a caller naming one is answering the completeness question
+    themselves, and backtest_pool names one on purpose.
+    """
+    floor = _CRIT.number("gap_stats", "max_unswept_fraction")
     with store.session() as connection:
         store.init(connection)
         init(connection)
         if as_of is None:
-            row = connection.execute("SELECT MAX(as_of) FROM gap_stats").fetchone()
-            as_of = row[0] if row else None
+            candidates = [r[0] for r in connection.execute(
+                "SELECT DISTINCT as_of FROM gap_stats ORDER BY as_of DESC")]
+            skipped: list[str] = []
+            as_of = None
+            for candidate in candidates:
+                coverage = sweep_coverage(connection, candidate)
+                if coverage and coverage.get("attempted"):
+                    unswept = (1.0 - (coverage.get("written") or 0)
+                               / coverage["attempted"])
+                    if unswept > floor:
+                        skipped.append(
+                            f"{candidate} ({coverage.get('written')} of "
+                            f"{coverage['attempted']} swept)")
+                        continue
+                as_of = candidate
+                break
+            if skipped:
+                print(f"gap_stats: skipped {len(skipped)} partial sweep(s) and "
+                      f"read {as_of}: {', '.join(skipped)}. A sweep that missed "
+                      f"more than {floor:.0%} of the universe is not the "
+                      "propensity ranking discover should order a pool by.")
         if as_of is None:
             return {}
         rows = connection.execute(
@@ -376,6 +452,20 @@ def main(argv: list[str] | None = None) -> int:
         job_status.failed(
             f"nothing was written: all {len(result['failed'])} symbol(s) failed"
             + (f", first was {result['failed'][0]}" if result["failed"] else "")
+        )
+    elif result["unswept_fraction"] > _CRIT.number("gap_stats", "max_unswept_fraction"):
+        # A PARTIAL SWEEP EXITED 0 AND LOOKED CLEAN. Zero written was the only
+        # case this checked, and the interesting one is in between: a sweep that
+        # reached most of the universe writes a newer as_of that load_all then
+        # prefers. load_all now skips it; this is the other half, so the run
+        # that produced it is visible in the job trail rather than only in what
+        # the next reader declines to use.
+        job_status.failed(
+            f"a partial sweep: {result['written']} of {result['attempted']} "
+            f"universe names were written, {result['unswept_fraction']:.1%} "
+            f"unswept against a floor of "
+            f"{_CRIT.number('gap_stats', 'max_unswept_fraction'):.0%}. The rows "
+            "are kept and load_all will read the previous complete as_of instead."
         )
     eodhd.print_call_report()
     return 0

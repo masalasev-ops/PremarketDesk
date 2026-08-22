@@ -7,9 +7,9 @@ audit, the nine smaller findings and the nineteen of the full review, added the
 rest, arming the socket cap probe for 2026-08-21 added another, and the
 2026-08-22 read added the three non atomic writes that could reopen a closed
 defect or lose a session, the archive publishing a fixture as a morning, and a
-read that created the directory it was reading, and nine from a twelve reader
-review, three in the collector, three in the night and three in the scan. It
-now carries ninety claims, a count read off the file rather
+read that created the directory it was reading, and thirteen from a twelve
+reader review, spread across the collector, the night, the scan, the analyst
+and the two pages. It now carries ninety four claims, a count read off the file rather
 than remembered, because it said forty four for a while after it held fifty
 seven and a suite that miscounts itself is the first thing a reader stops
 trusting.
@@ -1480,6 +1480,237 @@ def claim_a_refused_name_is_not_an_overlap(failures: list[str]) -> None:
                         "again")
     print("  refused row  a notable name the screens refused for both lists is "
           "counted apart from the ones they passed")
+
+
+def claim_blanking_a_time_does_not_eat_the_next_word(failures: list[str]) -> None:
+    """The containment tokenizer does not manufacture a ticker out of a clock.
+
+    _TIME_RE's meridiem and zone groups had no trailing word boundary, so
+    `\s*(?:AM|PM|...)?` matched the first two letters of any capitalised word
+    after a time. "07:15 AMD" was blanked to "07:15 AM" and left the fragment
+    "D"; "16:00 ETSY" left "SY". AMD, ETSY, D and SY are all real symbols, so
+    ONE sentence did two things at once: it hid a genuine ticker claim from the
+    containment check, and it invented one the model never wrote. check_report
+    reports an invented ticker as invention, and analyst.py exits 2 on that,
+    which stops the morning chain before the report ships.
+
+    Asserted on the prose tokenizer rather than on the regex, because the regex
+    is an implementation detail and the tokens are the thing containment reads.
+    """
+    from morning import analyst
+
+    cases = [
+        ("the collector started at 07:15 AMD moved", {"AMD"}, {"D"}),
+        ("at 16:00 ETSY closed", {"ETSY"}, {"SY", "ET"}),
+        ("at 09:30 PLTR gapped", {"PLTR"}, set()),
+        ("from 07:20 ET the tape was thin", set(), {"ET"}),
+        ("at 08:45 AM the scan ran", set(), {"AM"}),
+        ("at 08:45 A.M. ET the scan ran", set(), {"AM", "ET"}),
+        ("ran 09:30:15 EDT to the open", set(), {"EDT"}),
+    ]
+    for text, wanted, unwanted in cases:
+        tokens = analyst._prose_tokens(text)
+        for token in wanted:
+            if token not in tokens:
+                failures.append(f"{token!r} was eaten out of {text!r}; a real "
+                                "ticker claim next to a time is invisible to "
+                                f"containment. Tokens: {sorted(tokens)}")
+        for token in unwanted:
+            if token in tokens:
+                failures.append(f"{token!r} was manufactured out of {text!r}; "
+                                "check_report reports that as an invented "
+                                "ticker and analyst.py exits 2 on it. Tokens: "
+                                f"{sorted(tokens)}")
+    print("  time blank   a clock next to a ticker blanks the clock and leaves "
+          "the ticker, on seven spellings")
+
+
+def claim_a_non_object_cli_answer_falls_back(failures: list[str]) -> None:
+    """JSON that is not an object degrades like any other unusable answer.
+
+    invoke_claude guarded json.JSONDecodeError and then called .get() on
+    whatever json.loads returned. A bare array, string, number or null parses
+    cleanly and raises AttributeError out of the module, with no retry and no
+    fallback report: the one shape that skipped both, on a step whose whole
+    design is that the morning ships even when the CLI does not. A CLI version
+    change is the likeliest way to meet it.
+    """
+    from morning import analyst
+
+    for body in ("[]", '"just a string"', "42", "null"):
+        class _Proc:
+            returncode = 0
+            stdout = body
+            stderr = ""
+
+        def fake_run(*args, **kwargs):
+            return _Proc()
+
+        real_run = analyst.subprocess.run
+        real_cli = analyst.resolve_cli
+        analyst.subprocess.run = fake_run
+        analyst.resolve_cli = lambda: "claude.exe"
+        printed = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(printed):
+                text, _record, error, kind = analyst.invoke_claude("packet", "prompt")
+        except BaseException as exc:
+            failures.append(f"a CLI answer of {body!r} raised "
+                            f"{type(exc).__name__} out of invoke_claude, so the "
+                            "morning gets no report at all rather than the "
+                            "fallback the design promises")
+            continue
+        finally:
+            analyst.subprocess.run = real_run
+            analyst.resolve_cli = real_cli
+        if text is not None:
+            failures.append(f"a CLI answer of {body!r} was accepted as a report")
+        if kind != "failed" or not error:
+            failures.append(f"a CLI answer of {body!r} reported kind {kind!r} "
+                            f"and error {error!r}, expected a recorded failure")
+        elif "not an object" not in error and "not JSON" not in error:
+            failures.append(f"a CLI answer of {body!r} was refused for the wrong "
+                            f"reason: {error!r}")
+    print("  cli shape    a CLI answer that parses but is not an object is a "
+          "recorded failure, not an exception")
+
+
+def claim_the_cost_table_reads_one_quota_day(failures: list[str]) -> None:
+    """What the counter moved is measured inside one counter, not across a reset.
+
+    meter-<day>.log is one file per QUOTA day and the counter resets at 00:00
+    UTC, so each file opens with pre-roll readings carrying the PREVIOUS
+    counter, flagged meter_day_is_stale, followed by a counter:rolled row.
+    what_did_it_cost filtered the file by ET DATE instead and subtracted the
+    first surviving api_requests from the last, straddling the reset. On the
+    real log for quota day 2026-08-21 that published 11,761 for a day whose own
+    counter moved 26,309 to 93,070, or 66,761; a narrower window published 7,608.
+    Both are wrong and both are wrong downward, on the one page whose subject is
+    what the shared key cost.
+    """
+    from night import weekly_page
+    from ops import job_status
+
+    trail = [
+        # The pre-roll reading, from the previous quota day's counter.
+        {"at": "2026-08-20T20:00:06-04:00", "api_requests": 81309,
+         "remaining": 18691, "meter_day_is_stale": True, "when": "tick"},
+        {"at": "2026-08-20T20:30:02-04:00", "api_requests": 26309,
+         "remaining": 73691, "meter_day_is_stale": False, "when": "rolled"},
+        {"at": "2026-08-21T07:15:00-04:00", "api_requests": 26509,
+         "remaining": 73491, "meter_day_is_stale": False, "when": "entry"},
+        {"at": "2026-08-21T19:45:03-04:00", "api_requests": 93070,
+         "remaining": 6930, "meter_day_is_stale": False, "when": "exit",
+         "delta_since_previous": 4977},
+    ]
+    real_read = job_status.read_trail
+    job_status.read_trail = lambda day=None: list(trail)
+    try:
+        out = weekly_page.what_did_it_cost(["2026-08-20", "2026-08-21"])
+    finally:
+        job_status.read_trail = real_read
+
+    row = out["per_day"].get("2026-08-21")
+    if row is None:
+        failures.append("the cost table published no row for the quota day")
+    else:
+        if row["total_moved"] != 93070 - 26309:
+            failures.append(f"total_moved is {row['total_moved']}, expected "
+                            f"{93070 - 26309}: the reading before the reset "
+                            "belongs to the previous counter and subtracting it "
+                            "understates the day")
+        if row["low_water_remaining"] != 6930:
+            failures.append(f"low_water_remaining is {row['low_water_remaining']}, "
+                            "expected the lowest reading of THIS counter")
+    print("  quota day    the cost table subtracts two readings of one counter, "
+          "not one from each side of the reset")
+
+
+def claim_a_partial_sweep_does_not_outrank_a_complete_one(failures: list[str]) -> None:
+    """A gap statistics sweep that died partway is not what discover ranks on.
+
+    build() writes every name it reached under a NEW as_of, main() only failed
+    the step when NOTHING was written, and load_all took MAX(as_of)
+    unconditionally. So a sweep that died 200 names into 2,745 exited 0 and the
+    next 07:15 read served those 200 while the complete set sat behind them.
+    gap_propensity is what discover orders the whole pool by inside each tier,
+    and build()'s own docstring already called a run that stops partway "worse
+    than not running".
+
+    [Discovery] min_ranked_fraction_to_subscribe is not this guard: it asks
+    whether enough of the universe carries ANY ranking key, and
+    within_tier_fallback means atr_pct_20d answers for a name propensity cannot
+    score, so most of the propensity column can vanish while that floor holds.
+    """
+    from core import store
+    from selection import gap_stats
+
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            gap_stats.init(connection)
+            # The sandbox copies the live database, which carries 10,997 real
+            # rows under a real as_of newer than any fixture here. Emptied so
+            # the claim measures its own two sweeps rather than the machine.
+            connection.execute("DELETE FROM gap_stats")
+            connection.execute("DELETE FROM gap_sweeps")
+            for ticker in ("AAA.US", "BBB.US", "CCC.US", "DDD.US"):
+                store.upsert(connection, "gap_stats", ["ticker", "as_of"], {
+                    "ticker": ticker, "as_of": "2026-08-16",
+                    "computed_at": "2026-08-16T21:00:00-04:00"})
+            store.upsert(connection, "gap_sweeps", ["as_of"], {
+                "as_of": "2026-08-16", "attempted": 4, "written": 4,
+                "failed": 0, "computed_at": "2026-08-16T21:00:00-04:00"})
+            # The newer, partial one.
+            store.upsert(connection, "gap_stats", ["ticker", "as_of"], {
+                "ticker": "AAA.US", "as_of": "2026-08-23",
+                "computed_at": "2026-08-23T21:00:00-04:00"})
+            store.upsert(connection, "gap_sweeps", ["as_of"], {
+                "as_of": "2026-08-23", "attempted": 4, "written": 1,
+                "failed": 3, "computed_at": "2026-08-23T21:00:00-04:00"})
+            connection.commit()
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            served = gap_stats.load_all()
+        if len(served) != 4:
+            failures.append(f"load_all served {len(served)} name(s); the newest "
+                            "as_of is a partial sweep and the complete one "
+                            "behind it holds 4")
+        if "skipped" not in printed.getvalue():
+            failures.append("load_all read past a partial sweep without saying "
+                            f"so: {printed.getvalue().strip()[:160]!r}")
+
+        # A complete newer sweep is served, or the guard is just refusing
+        # everything new.
+        with store.session() as connection:
+            for ticker in ("AAA.US", "BBB.US", "CCC.US", "DDD.US"):
+                store.upsert(connection, "gap_stats", ["ticker", "as_of"], {
+                    "ticker": ticker, "as_of": "2026-08-30",
+                    "computed_at": "2026-08-30T21:00:00-04:00"})
+            store.upsert(connection, "gap_sweeps", ["as_of"], {
+                "as_of": "2026-08-30", "attempted": 4, "written": 4,
+                "failed": 0, "computed_at": "2026-08-30T21:00:00-04:00"})
+            connection.commit()
+        with contextlib.redirect_stdout(io.StringIO()):
+            served = gap_stats.load_all()
+        if len(served) != 4:
+            failures.append("a complete newer sweep was not served")
+        if any(row["as_of"] != "2026-08-30" for row in served.values()):
+            failures.append("load_all did not move to the newest complete as_of")
+
+        # And an as_of with no sweep record is trusted, because refusing every
+        # historical one would strand a reader over a change about this table.
+        with store.session() as connection:
+            connection.execute("DELETE FROM gap_sweeps")
+            connection.commit()
+        with contextlib.redirect_stdout(io.StringIO()):
+            served = gap_stats.load_all()
+        if not served:
+            failures.append("an as_of written before gap_sweeps existed was "
+                            "refused, which strands every historical read")
+    print("  partial sweep a sweep that missed most of the universe is skipped "
+          "for the complete one behind it, and an unrecorded as_of is trusted")
 
 
 # ---------------------------------------------------------- the collector
@@ -8134,6 +8365,10 @@ def main() -> int:
     claim_an_unchecked_earnings_calendar_is_not_an_empty_one(failures)
     claim_an_empty_morning_still_carries_its_ranking_counts(failures)
     claim_a_refused_name_is_not_an_overlap(failures)
+    claim_blanking_a_time_does_not_eat_the_next_word(failures)
+    claim_a_non_object_cli_answer_falls_back(failures)
+    claim_the_cost_table_reads_one_quota_day(failures)
+    claim_a_partial_sweep_does_not_outrank_a_complete_one(failures)
     claim_the_previous_session_helper_says_when_it_does_not_know(failures)
     claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
     claim_a_previous_session_watchlist_reruns_discover(failures)

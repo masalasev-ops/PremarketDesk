@@ -213,6 +213,20 @@ def invoke_claude(
             print(f"analyst: {last_error}")
             continue
 
+        # VALID JSON IS NOT THE SAME AS THE SHAPE THIS EXPECTS. A bare array,
+        # string, number or null parses cleanly and then raises AttributeError
+        # on the .get() below, out of the module, with no report written at all.
+        # Every other unusable answer here degrades to the retry and then to the
+        # fallback report, which is the whole reason the fallback exists, and
+        # this was the one shape that skipped both. A CLI version change is the
+        # likeliest way to meet it.
+        if not isinstance(payload, dict):
+            last_error = (f"claude CLI output was JSON but not an object: "
+                          f"{type(payload).__name__}")
+            last_kind = "failed"
+            print(f"analyst: {last_error}")
+            continue
+
         if payload.get("is_error") or payload.get("subtype") != "success":
             last_error = (
                 f"claude CLI reported an error result: subtype "
@@ -618,8 +632,14 @@ def fallback_report(
     add("")
     economic = packet.get("economic") or {}
     events = economic.get("events", [])
-    if economic.get("skipped"):
-        add(f"The economic calendar was not checked this run: {economic['skipped']}. "
+    # `error` as well as `skipped`. scan.economic_events returns
+    # {"events": [], "error": error} on a failed call and sets `skipped` only on
+    # the quota degrade path, so a failed call fell through to the empty branch
+    # and this report published "No high importance events in the packet window"
+    # for a window nobody looked at.
+    if economic.get("skipped") or economic.get("error"):
+        why = economic.get("skipped") or economic.get("error")
+        add(f"The economic calendar was not checked this run: {why}. "
             "An unchecked calendar is not an empty one.")
     elif events:
         for event in events:
@@ -1149,8 +1169,24 @@ def _claimable_symbols() -> set[str] | None:
     return universe | context
 
 
-_TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|A\.M\.|P\.M\.)?\s*"
-                      r"(?:ET|EST|EDT|UTC|GMT)?", re.IGNORECASE)
+# The meridiem and the zone each end at a WORD BOUNDARY, and until 2026-08-22
+# neither did. `\s*(?:AM|PM|...)?` matched the first two letters of any
+# capitalised word after a time, so "07:15 AMD" was blanked to "07:15 AM" and
+# left the fragment "D", and "16:00 ETSY" left "SY". Both fragments are real
+# universe symbols. So a genuine claim about AMD vanished from the containment
+# check, AND an invented ticker appeared that the model never wrote, which
+# check_report reports as invention and analyst.py exits 2 on, stopping the
+# morning chain before the report ships.
+#
+# A.M. and P.M. are listed before AM and PM so the dotted forms win, and each
+# alternation carries its own lookahead rather than one at the end, because the
+# zone group is optional and a trailing lookahead would not constrain a match
+# that stopped at the meridiem.
+_TIME_RE = re.compile(
+    r"\b\d{1,2}:\d{2}(?::\d{2})?"
+    r"(?:\s*(?:A\.M\.|P\.M\.|AM|PM)(?![A-Za-z]))?"
+    r"(?:\s*(?:EDT|EST|GMT|UTC|ET)(?![A-Za-z]))?",
+    re.IGNORECASE)
 _ISO_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}(?:[T ][\d:.+-]+)?")
 
 # Capitals joined by a dot, an ampersand or a slash are ONE abbreviation, and

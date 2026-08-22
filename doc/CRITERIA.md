@@ -465,6 +465,41 @@ lookback_sessions             = 250        # about one trading year
 min_sessions                  = 100        # seed: below this the propensity is NULL, never a computed zero
 atr_sessions                  = 20         # sessions in the average true range
 return_stdev_sessions         = 20         # sessions in return_stdev_20d. See the stdev window note
+max_unswept_fraction          = 0.02       # SEED, not measured. See the partial sweep note
+
+### The partial sweep note
+
+This is [Universe] max_unswept_fraction asked of the other half of the same
+Sunday job, and it is set to the same number for the same reason rather than
+because the two were measured together.
+
+**What it protects against.** build() writes every name it reached under a NEW
+as_of and main() only failed the step when NOTHING was written, while load_all()
+took MAX(as_of) unconditionally. So a sweep that died 200 names into 2,745
+exited 0, and the next 07:15 read served those 200 and could not see the
+complete set behind them. gap_propensity is what discover ranks the whole pool
+by inside each tier, so the pool changes shape for a reason that has nothing to
+do with the market. build()'s own docstring already called a run that stops
+partway "worse than not running"; nothing enforced it.
+[Discovery] min_ranked_fraction_to_subscribe is not that enforcement. It asks
+whether enough of the universe carries ANY ranking key, and
+within_tier_fallback means atr_pct_20d answers for a name propensity cannot
+score, so a sweep can lose most of its propensity column and still clear that
+floor.
+
+**What now happens above it.** Nothing is deleted: the rows a partial sweep
+wrote are real measurements of the names they cover. load_all() skips that as_of
+and reads the newest one below the floor, saying which it skipped and why, and
+the step declares itself failed so the run is visible in the job trail rather
+than only in what the next reader declines to use. gap_sweeps is the record it
+reads, one row per as_of, and an as_of written before that table existed carries
+no row and is trusted.
+
+**Why 0.02 and not a measurement.** The same argument [Universe]
+max_unswept_fraction makes: it sits far above the handful of names the vendor
+structurally has no history for, and far below any run that ended early. On a
+2,745 name universe it is 54 names. It is a SEED and the header of this file
+applies.
 
 ### The stdev window note
 

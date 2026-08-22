@@ -251,11 +251,35 @@ def what_did_it_publish(days: list[str]) -> dict[str, Any]:
 
 
 def what_did_it_cost(days: list[str]) -> dict[str, Any]:
-    window = set(days)
+    """What the shared counter moved, per QUOTA day.
+
+    THE ROW LABELS ARE QUOTA DAYS AND NOT ET DAYS, and the difference is the
+    whole of the defect this replaces. meter-<day>.log is written one file per
+    quota day, the counter resets at 00:00 UTC, and CRITERIA [Quota] says in
+    terms that one ET weekday spans two of them: the morning jobs bill to the
+    quota day that opened the previous evening and the 22:15 nightly bills to
+    the next. So each file OPENS with pre-roll readings carrying the previous
+    counter, flagged meter_day_is_stale, followed by a counter:rolled row.
+
+    This used to filter the file by ET DATE and subtract the first surviving
+    api_requests from the last, which straddled the reset. Measured on the real
+    log for quota day 2026-08-21: 93,070 minus a pre-roll 81,309 published
+    11,761 for a day whose own counter moved 26,309 to 93,070, or 66,761. A
+    narrower window excluded the pre-roll rows and published 7,608 instead, from
+    a first reading taken most of the way through the day. Both are wrong and
+    both are wrong DOWNWARD, on the one page whose subject is what the key cost.
+
+    Fixed by reading the counter this file is about: the rows that are not
+    pre-roll. max(moved, 0) is kept, but it is now a guard against a truncated
+    file rather than the thing hiding the reset.
+    """
     per_day: dict[str, dict[str, Any]] = {}
     for day in days:
+        # NOT filtered by ET date. The file is already one quota day; what has
+        # to be excluded is the pre-roll readings inside it, which belong to
+        # the previous counter and are flagged as such by meter_sampler.
         trail = [r for r in job_status.read_trail(day)
-                 if str(r.get("at"))[:10] in window]
+                 if not r.get("meter_day_is_stale")]
         if not trail:
             continue
         # OURS is the movement across our own steps, entry to exit. It is an
