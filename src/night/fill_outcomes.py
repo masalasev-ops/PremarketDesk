@@ -185,7 +185,8 @@ def fill(day_limit: str | None = None) -> int:
         # who believes a refusal was wrong clears day5_refused_reason and the
         # row is picked up on the next run.
         candidates = [dict(row) for row in connection.execute(
-            "SELECT * FROM picks WHERE (next_day_close IS NULL "
+            "SELECT * FROM picks WHERE "
+            "((next_day_close IS NULL AND next_day_refused_reason IS NULL) "
             "OR (day5_close IS NULL AND day5_refused_reason IS NULL)) "
             "AND source='live' ORDER BY date, ticker"
         ).fetchall()]
@@ -270,8 +271,25 @@ def fill(day_limit: str | None = None) -> int:
                 units = _price_units_broke(pick_bar, next_bar, max_drift_pct,
                                            "the next session")
                 if units is not None:
+                    # RECORDED, not just skipped. The long leg has carried
+                    # day5_refused_reason since the same argument was made for
+                    # it; this branch did a bare continue, so the row kept a
+                    # null next_day_close with nothing beside it. The candidate
+                    # query selects on exactly that null, so the row came back
+                    # every night and spent one end of day call each time to be
+                    # refused again, forever, and the null was indistinguishable
+                    # from a leg that is merely not due yet. An operator who
+                    # believes a refusal was wrong clears the column and the row
+                    # is picked up on the next run.
+                    #
+                    # Both legs, because the comment above already says an ex
+                    # date between the pick and D+1 also sits between the pick
+                    # and D+5, and the continue below skips the long leg too.
+                    updates["next_day_refused_reason"] = units
+                    updates["day5_refused_reason"] = units
                     print(f"outcomes: {ticker} {date} left alone: {units}")
                     unavailable += 1
+                    writes.append((updates, date, ticker))
                     continue
 
                 if next_bar is None:
@@ -353,7 +371,9 @@ def fill(day_limit: str | None = None) -> int:
             # night its short leg filled, and overwriting that with tonight's
             # would make the column say the measurement was taken five sessions
             # after it actually was.
-            measured = [column for column in updates if column != "day5_refused_reason"]
+            measured = [column for column in updates
+                        if column not in ("day5_refused_reason",
+                                          "next_day_refused_reason")]
             if measured:
                 updates["outcomes_filled_at"] = now_stamp
                 filled += 1

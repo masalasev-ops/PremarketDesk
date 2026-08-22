@@ -144,10 +144,19 @@ is closed is exactly a day a drain would otherwise go unrecorded.
    .venv\Scripts\python.exe -m morning.verify_morning --arm
    ```
 
-5. **Build the first universe.** Normally the Sunday job's work:
+5. **Build the first universe, and the gap statistics that rank it.** Normally
+   the Sunday job's work, and it is both halves: `job_universe.bat` runs the
+   rebuild and then the propensity sweep over every name in it. Discovery ranks
+   the pool inside each tier by `gap_propensity`, so a universe with no gap
+   statistics behind it leaves discover with nothing to order by, and
+   `[Discovery] min_ranked_fraction_to_subscribe` makes it write no watchlist
+   and exit non zero rather than subscribe an arbitrary 42 names. The second
+   command is the larger of the two: one counted call per universe name,
+   measured at 2,745 calls and 421 seconds.
 
    ```
    .venv\Scripts\python.exe -m selection.universe
+   .venv\Scripts\python.exe -m selection.gap_stats
    ```
 
 6. **Register the scheduled jobs:**

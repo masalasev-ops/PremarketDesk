@@ -18,6 +18,75 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-22, third: a falsy value is not an answer, and what that costs to fix
+
+The twelve reader review's twenty nine confirmed findings sorted into two piles
+and the larger one is a single mistake made in four modules by four different
+routes. Naming it here because the list of fixes will not prevent the fifth.
+
+**THE RULE HELD FOR NUMBERS AND LEAKED EVERYWHERE ELSE.** Hard rule 4 is that
+missing evidence stays null with a recorded reason, and this tree enforces it
+with real discipline wherever the missing thing is a measurement: pm_rvol,
+move_sigma, capture_observed, day5_close, every one of them carries a reason
+column beside it and a claim asserting the reason is written. Every leak found
+by this review was somewhere the missing thing was a BOOLEAN, an EMPTY LIST or
+an ABSENT KEY, and those have a falsy value that reads as a legitimate answer
+with no null anywhere for a guard to notice.
+
+  earnings_block["candidates"] == []    a calendar that failed reads as a
+                                        calendar with nobody on it
+  _volume_was_the_only_failure -> False  an unreadable packet reads as a name
+                                        that failed something else
+  rank_stats == {}                      a morning that ranked nobody reads as a
+                                        morning with no ranking record
+  MAX(as_of) with 200 rows              a sweep that died reads as this week's
+                                        figures
+
+true_volume._only_failure_was_volume is the counter example and it is worth
+copying rather than admiring: it returns (only, resolvable), two values, and its
+docstring names the defect as AN ABSENCE DRESSED AS A MEASUREMENT. weekly_page
+then collapsed it back to one with `bool(only and resolvable)`, which is how a
+correct answer becomes a wrong one at a call site sixty lines away. The fix
+across all four was the same shape: return the third state, and make the caller
+count it apart rather than fold it in.
+
+**WHAT THAT COSTS, stated because it is not free.** Every one of these fixes
+adds a branch, a count or a column, on a tree whose own freeze note says the
+aggregate is already past what one person can audit. Four new packet fields,
+one new CRITERIA key, one new picks column, two new counters on the collector.
+The argument for spending it anyway is that each replaces a number a reader
+would ACT on with one they can, and the freeze rule's first clause is exactly
+that. The argument against is real and is recorded here rather than dismissed:
+if the next review finds this class again, the answer is probably a shared
+helper for "measured, refused, or unknown" rather than a fifth hand rolled
+tuple.
+
+**THE ONE THAT WAS NOT THAT.** The collector's partial batch is an ordinary
+bookkeeping bug and is the most severe thing here, because it is the only one
+that puts a WRONG NUMBER rather than a MISSING ONE into a published quantity. It
+also carried a comment asserting the opposite of what the code did, which is the
+signature the 2026-08-20 review already named: "a guard whose docstring
+described a stricter test than the code made". Two of this review's findings had
+that shape and both comments have been rewritten to describe the code.
+
+**GAP STATS GETS A REFUSAL AND NOT A DELETION.** A partial sweep's rows are real
+measurements of the names they cover, so nothing is deleted: load_all reads past
+that as_of to the newest complete one and says which it skipped, and the step
+declares itself failed so the run is visible in the job trail rather than only
+in what the next reader declines to use. The alternative, deleting the partial
+as_of, was refused on the same reasoning that keeps a stale universe over a
+truncated one: a usable input that is old beats no input, and a reader who wants
+the partial rows can still name that as_of explicitly.
+
+**AND POOL RECALL REFUSES RATHER THAN RECONSTRUCTS.** discover writes one
+undated data/watchlist.json, so a pool that has been overwritten cannot be
+recovered. The packet stamps the file the collector actually subscribed against,
+so that is what the pool is checked against, and a session that cannot be shown
+to match is NotMeasurable rather than published. The roadmap's alternative, a
+per session copy of the pool written by discover, is a better answer and is a
+feature rather than a fix: it would make the past measurable where this only
+makes it honest. It is not built here.
+
 ## 2026-08-22, second: a step that already acted reports instead of failing, and a lost session is labelled instead of dropped
 
 Three calls from the 2026-08-22 review that could reasonably have gone the other

@@ -19,16 +19,31 @@ still produce a report saying which endpoint it lost.
 The call counter prints at the end of every run whether or not the script
 remembers to ask for it.
 
-Endpoints wrapped, and only these:
-    bulk live OHLCV for US exchanges   /real-time/{any}.US?ex=US
-    delayed US quotes                  /us-quote-delayed?s=...
-    intraday 1 minute bars             /intraday/{symbol}?interval=1m
-    end of day historical              /eod/{symbol}
-    exchange symbol list               /exchange-symbol-list/{exchange}
-    financial news                     /news?s=...
-    economic events                    /economic-events
-    earnings calendar                  /calendar/earnings
-    the account meter                  /user
+Endpoints wrapped, and only these. The ledger name on the left is what the call
+counter and CRITERIA [Quota costs] price, so a call that is not in this list
+cannot be costed and credit_cost raises rather than treating it as free.
+
+    real-time-live          bulk live OHLCV for US   /real-time/{any}.US?ex=US
+    bulk-live-us            the same, one symbol     /real-time/{symbol}
+    eod-bulk-last-day       one session, whole US    /eod-bulk-last-day/{exchange}
+    us-quote-delayed        delayed US quotes        /us-quote-delayed?s=...
+    intraday-{interval}     1 minute bars            /intraday/{symbol}?interval=1m
+    eod                     end of day historical    /eod/{symbol}
+    exchange-symbol-list    the listing              /exchange-symbol-list/{exchange}
+    exchange-details        the holiday calendar     /exchange-details/{exchange}
+    news                    news for one symbol      /news?s=...
+    news-feed               the unfiltered feed      /news
+    economic-events         economic events          /economic-events
+    calendar-earnings       earnings calendar        /calendar/earnings
+    user                    the account meter        /user
+
+[corrected 2026-08-22: this list said "and only these" and named nine of the
+thirteen. The four it omitted were eod-bulk-last-day, which is the most
+expensive endpoint in the project at a measured 100 credits a call and the one
+the day's whole bulk spend is; exchange-details, which is the holiday calendar
+the trading day guard rests on; the unfiltered news feed; and the single symbol
+live quote. A closed list that is not closed is worse than no list, because it
+is the thing a reader checks a cost estimate against.]
 """
 
 from __future__ import annotations

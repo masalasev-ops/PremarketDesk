@@ -122,6 +122,14 @@ _PICKS_LATER_COLUMNS = (
     ("true_baseline_median", "REAL"),
     ("true_baseline_sessions", "INTEGER"),
     ("true_bars", "INTEGER"),
+    # Why the SHORT leg is null, on the day5_refused_reason precedent. Without
+    # it a row refused for a corporate action left next_day_close null with no
+    # reason, and the candidate query selects on exactly that null, so the row
+    # came back every night and spent one end of day call each time to be
+    # refused again. NULL here with a NULL close means the fill has not reached
+    # the row; a reason means it reached it and would not measure across the
+    # action.
+    ("next_day_refused_reason", "TEXT"),
     # The window this was measured over, copied from the packet's
     # rvol_cutoff_hhmm rather than assumed, so a row says what it compared.
     ("true_window", "TEXT"),

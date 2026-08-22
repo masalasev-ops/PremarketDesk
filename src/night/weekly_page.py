@@ -174,7 +174,7 @@ def is_it_trustworthy(days: list[str]) -> dict[str, Any]:
 _PACKET_FAILURES: dict[str, dict[str, bool]] = {}
 
 
-def _volume_was_the_only_failure(day: str, ticker: str) -> bool:
+def _volume_was_the_only_failure(day: str, ticker: str) -> bool | None:
     """Did this name fail the day screen on premarket_rvol and nothing else.
 
     Read from runs/<day>/packet.json, which is the only record of WHY a
@@ -184,9 +184,19 @@ def _volume_was_the_only_failure(day: str, ticker: str) -> bool:
     A name that also failed the prior day high does not join a watchlist
     however large its true volume turns out to be, and counting it would
     overstate the estimate's cost.
+
+    THREE ANSWERS, NOT TWO, and the third is the reason this was wrong.
+    true_volume._only_failure_was_volume already returns (only, resolvable) and
+    its docstring names the defect it exists to prevent as "AN ABSENCE DRESSED
+    AS A MEASUREMENT". This collapsed that back to a bare False with
+    bool(only and resolvable), and then answered False again for any symbol the
+    packet did not carry at all. On 2026-08-21 the packet was overwritten by a
+    fixture, so six live picks were being scored as "volume was not the only
+    failure" against a file that names one invented ticker. None returns for
+    both cases, and the caller counts them apart.
     """
     if day not in _PACKET_FAILURES:
-        found: dict[str, bool] = {}
+        found: dict[str, bool | None] = {}
         path = config.run_path(day) / "packet.json"
         if path.is_file():
             try:
@@ -195,9 +205,10 @@ def _volume_was_the_only_failure(day: str, ticker: str) -> bool:
                 packet = {}
             for candidate in packet.get("candidates") or []:
                 only, resolvable = true_volume._only_failure_was_volume(candidate)
-                found[candidate["symbol"]] = bool(only and resolvable)
+                found[candidate["symbol"]] = bool(only) if resolvable else None
         _PACKET_FAILURES[day] = found
-    return _PACKET_FAILURES[day].get(ticker, False)
+    # A symbol the packet does not carry is not a symbol the packet refused.
+    return _PACKET_FAILURES[day].get(ticker)
 
 
 def what_did_it_publish(days: list[str]) -> dict[str, Any]:
@@ -214,7 +225,7 @@ def what_did_it_publish(days: list[str]) -> dict[str, Any]:
     for row in rows:
         seen = by_day.setdefault(row["date"], {
             "candidates": 0, "day": 0, "swing": 0, "unscored": 0,
-            "rescued_by_truth": 0})
+            "rescued_by_truth": 0, "rescue_unknown": 0})
         seen["candidates"] += 1
         seen["day"] += int(bool(row["day_eligible"]))
         seen["swing"] += int(bool(row["swing_eligible"]))
@@ -242,10 +253,15 @@ def what_did_it_publish(days: list[str]) -> dict[str, Any]:
         # is the difference between the two.
         floor = _CRIT.rule("day_setup", "premarket_rvol")
         best, which = true_volume.volume_ratio(row)
-        if (which == "measured" and floor.test(best)
-                and not row["day_eligible"]
-                and _volume_was_the_only_failure(row["date"], row["ticker"])):
-            seen["rescued_by_truth"] += 1
+        if which == "measured" and floor.test(best) and not row["day_eligible"]:
+            only = _volume_was_the_only_failure(row["date"], row["ticker"])
+            if only is True:
+                seen["rescued_by_truth"] += 1
+            elif only is None:
+                # The packet cannot say. Counted apart so the column above is a
+                # measurement rather than a measurement plus however many rows
+                # nothing could be read for.
+                seen["rescue_unknown"] += 1
     return {"by_day": by_day, "reasons": reasons,
             "floor": _CRIT.rule("day_setup", "premarket_rvol").describe()}
 
@@ -481,12 +497,22 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
             "rather than a measurement.</span></div>")
 
     flags = [f for f in trust["flags"] if "_skipped" not in f]
+    # The count _read_jsonl records and this card used to throw away. Its own
+    # docstring promises "the count of what was skipped goes on the page so a
+    # silently shrinking series cannot look like a quiet week", and the single
+    # consumer filtered the sentinel row out and rendered nothing. A guard log
+    # that is quietly losing lines and a week in which the guard never fired
+    # were the same page.
+    skipped = sum(f.get("_skipped") or 0 for f in trust["flags"] if "_skipped" in f)
     add(f"<div class=card><div class=lab>Sentences the quantifier guard "
         f"stopped</div><div class=big>{_n(len(flags))}</div>"
         + ("".join(f"<div class=note>{_esc(f.get('session'))}: "
                    f"{_esc(str(f.get('sentence'))[:160])}</div>"
                    for f in flags[:5]) if flags else
            "<div class=note>No sentence in this window overstated a set.</div>")
+        + (f"<div class=note><span class=null>{_n(skipped)} line(s) of "
+           "quantifier-flags.jsonl could not be parsed and are NOT in this "
+           "count, so it is a floor.</span></div>" if skipped else "")
         + "</div>")
 
     # 3 -----------------------------------------------------------------
@@ -501,7 +527,10 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
         add(f"<tr><td>{day}</td><td>{_n(seen['candidates'])}</td>"
             f"<td>{_n(seen['day'])}</td><td>{_n(seen['swing'])}</td>"
             f"<td>{_n(seen['unscored'])}</td>"
-            f"<td>{_n(seen['rescued_by_truth'])}</td></tr>")
+            + f"<td>{_n(seen['rescued_by_truth'])}"
+            + (f" <span class=null>(+{_n(seen['rescue_unknown'])} unknown)</span>"
+               if seen.get("rescue_unknown") else "")
+            + "</td></tr>")
     if not published["by_day"]:
         add("<tr><td colspan=6><span class=null>no live picks rows in this "
             "window</span></td></tr>")

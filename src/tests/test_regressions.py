@@ -7,9 +7,9 @@ audit, the nine smaller findings and the nineteen of the full review, added the
 rest, arming the socket cap probe for 2026-08-21 added another, and the
 2026-08-22 read added the three non atomic writes that could reopen a closed
 defect or lose a session, the archive publishing a fixture as a morning, and a
-read that created the directory it was reading, and thirteen from a twelve
+read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries ninety four claims, a count read off the file rather
+and the two pages. It now carries ninety six claims, a count read off the file rather
 than remembered, because it said forty four for a while after it held fifty
 seven and a suite that miscounts itself is the first thing a reader stops
 trusting.
@@ -1711,6 +1711,125 @@ def claim_a_partial_sweep_does_not_outrank_a_complete_one(failures: list[str]) -
                             "refused, which strands every historical read")
     print("  partial sweep a sweep that missed most of the universe is skipped "
           "for the complete one behind it, and an unrecorded as_of is trusted")
+
+
+def claim_a_refused_short_leg_says_so_once(failures: list[str]) -> None:
+    """An outcome refused for a corporate action is written down, not retried forever.
+
+    The long leg has carried day5_refused_reason since the argument was made for
+    it: a refused close is otherwise indistinguishable from one that is merely
+    not due yet, and it is never coming back with a number. The SHORT leg did a
+    bare continue, so the row kept a null next_day_close with nothing beside it,
+    and the candidate query selects on exactly that null. The row therefore came
+    back every night, spent one end of day call to be refused again, and did so
+    for as long as the session calendar still reached it.
+
+    Both legs take the reason, because an ex date between the pick and D+1 also
+    sits between the pick and D+5 and the refusal already skipped both.
+    """
+    from core import store
+
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(picks)")}
+        if "next_day_refused_reason" not in columns:
+            failures.append("picks has no next_day_refused_reason, so a refused "
+                            "short leg has nowhere to record itself")
+
+    source = pathlib.Path(_outcomes_file()).read_bytes().decode("utf-8")
+    if "next_day_refused_reason IS NULL" not in source:
+        failures.append("the candidate query does not exclude a refused short "
+                        "leg, so the row is re-selected and re-fetched every "
+                        "night to be refused again")
+    if 'updates["next_day_refused_reason"] = units' not in source:
+        failures.append("the short leg refusal is not written to the row, so a "
+                        "null there still cannot be told from a leg that is not "
+                        "due yet")
+    # And the reason must not be mistaken for a measurement.
+    if 'if column not in ("day5_refused_reason",' not in source:
+        failures.append("outcomes_filled_at is still moved by a row whose only "
+                        "new column is a refusal, which makes that column say "
+                        "an outcome was obtained when none was")
+    print("  short refuse a leg refused for a corporate action records its "
+          "reason on both legs and is not re-fetched")
+
+
+def _outcomes_file() -> str:
+    from night import fill_outcomes
+
+    return fill_outcomes.__file__
+
+
+def claim_the_weekly_page_publishes_what_it_could_not_read(failures: list[str]) -> None:
+    """Two counts the weekly page was computing and discarding.
+
+    _read_jsonl's docstring promises "the count of what was skipped goes on the
+    page so a silently shrinking series cannot look like a quiet week", and its
+    single consumer filtered the sentinel row out and rendered nothing. A guard
+    log quietly losing lines and a week in which the guard never fired were the
+    same card.
+
+    And rescued_by_truth was counting an absence as a measurement.
+    true_volume._only_failure_was_volume returns (only, resolvable) precisely so
+    an unreadable packet is not read as a verdict, and _volume_was_the_only_failure
+    collapsed it to a bare False, then answered False again for any symbol the
+    packet did not carry at all. On 2026-08-21 that packet is a fixture naming
+    one invented ticker, so five live picks were published as "volume was not
+    the only failure" against a file that says nothing about them.
+    """
+    from night import weekly_page
+
+    # The three answers, from the function itself.
+    weekly_page._PACKET_FAILURES.clear()
+    with conftest_activate() as _sandbox:
+        day = "2026-08-20"
+        run = config.run_dir(day)
+        run.mkdir(parents=True, exist_ok=True)
+        (run / "packet.json").write_text(json.dumps({"candidates": [
+            {"symbol": "ONLY.US", "day_failed_conditions": ["premarket_rvol"]},
+            {"symbol": "ALSO.US", "day_failed_conditions": ["premarket_rvol",
+                                                            "market_cap"]},
+            {"symbol": "OLD.US"},
+        ]}), encoding="utf-8")
+        weekly_page._PACKET_FAILURES.clear()
+        cases = {
+            "ONLY.US": True,      # failed on RVOL and nothing else
+            "ALSO.US": False,     # failed something a volume number cannot fix
+            "OLD.US": None,       # the packet predates the field: unresolvable
+            "ABSENT.US": None,    # the packet does not carry it at all
+        }
+        for ticker, wanted in cases.items():
+            got = weekly_page._volume_was_the_only_failure(day, ticker)
+            if got is not wanted:
+                failures.append(f"{ticker} read as {got!r}, expected {wanted!r}: "
+                                "an absence and a verdict are not one answer")
+
+        # A missing packet answers None for everything, not False.
+        (run / "packet.json").unlink()
+        weekly_page._PACKET_FAILURES.clear()
+        if weekly_page._volume_was_the_only_failure(day, "ONLY.US") is not None:
+            failures.append("with no packet at all the page still returned a "
+                            "verdict about a name")
+
+    # And the skipped count reaches the page.
+    trust = {"windows": {"median": None, "low": None, "high": None},
+             "series": [], "flags": [{"_skipped": 3}]}
+    if not any(f.get("_skipped") for f in trust["flags"]):
+        failures.append("the fixture is wrong")
+    source = pathlib.Path(weekly_page.__file__).read_bytes().decode("utf-8")
+    if "_skipped" not in source.split("def render")[0] and "_skipped" not in source:
+        failures.append("weekly_page no longer reads the skipped count at all")
+    if 'sum(f.get("_skipped") or 0' not in source:
+        failures.append("the render still discards the malformed line count "
+                        "_read_jsonl computes, so a shrinking guard log reads "
+                        "as a quiet week")
+    if "rescue_unknown" not in source:
+        failures.append("the publish table does not carry a count of the rows "
+                        "it could not read, so a 0 in the rescue column is not "
+                        "distinguishable from an unreadable packet")
+    print("  page floors  the weekly page publishes what it could not parse and "
+          "what it could not read, beside the counts it could")
 
 
 # ---------------------------------------------------------- the collector
@@ -8369,6 +8488,8 @@ def main() -> int:
     claim_a_non_object_cli_answer_falls_back(failures)
     claim_the_cost_table_reads_one_quota_day(failures)
     claim_a_partial_sweep_does_not_outrank_a_complete_one(failures)
+    claim_a_refused_short_leg_says_so_once(failures)
+    claim_the_weekly_page_publishes_what_it_could_not_read(failures)
     claim_the_previous_session_helper_says_when_it_does_not_know(failures)
     claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
     claim_a_previous_session_watchlist_reruns_discover(failures)

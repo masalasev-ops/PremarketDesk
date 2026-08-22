@@ -1670,6 +1670,41 @@ def claim_a_close_from_another_session_is_not_stamped_with_this_one(
     if not block.get("vendor_date_mismatch"):
         failures.append("the block does not record the mismatch it acted on")
 
+    # 1b. THE FAR END, which until 2026-08-22 was a different sentence for the
+    # same fault. A c2 or c3 the vendor stamped with a session nobody asked for
+    # is nulled on every row, correctly, and the leg that reads it then came out
+    # empty with "0 rows carried both of the closes the prior_session leg
+    # needs". That says the file held nothing, and sends a reader to the vendor
+    # for data that arrived and was refused. c1 has named the fault since the
+    # section shipped because it costs both legs at once; these cost one each.
+    for close_key, lost, kept, sent in (("c2", "prior_session", "two_session", "2026-08-11"),
+                                        ("c3", "two_session", "prior_session", "2026-08-08")):
+        dates = {"c1": [C1], "c2": [C2], "c3": [C3]}
+        dates[close_key] = [sent]
+        _write_closes(vendor_dates=dates)
+        block, packet, _rows = _run()
+        report = block["legs"][lost]
+        if report["available"]:
+            failures.append(f"the {lost} leg is published off a {close_key} the "
+                            f"vendor stamped {sent}")
+        reason = str(report["reason"] or "")
+        if "0 rows carried both of the closes" in reason:
+            failures.append(f"a refused {close_key} left the {lost} leg reporting "
+                            "an empty sidecar rather than a refused close")
+        if sent not in reason:
+            failures.append(f"the {lost} leg does not name the session the vendor "
+                            f"actually sent for {close_key}: {reason[:160]!r}")
+        if report.get("input_present") is not False:
+            failures.append(f"a refused {close_key} left the {lost} leg reporting "
+                            "its input as present, so it reads as nothing to "
+                            "rank rather than as uncomputable")
+        if not any(sent in note for note in packet.gaps):
+            failures.append(f"a refused {close_key} raised no gap naming {sent}: "
+                            f"{packet.gaps}")
+        if not block["legs"][kept]["available"]:
+            failures.append(f"a refused {close_key} also lost the {kept} leg, "
+                            f"which does not read {close_key} at all")
+
     # 2. The ordinary morning, where they agree.
     _write_closes()
     block, _packet, _rows = _run()

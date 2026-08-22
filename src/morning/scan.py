@@ -3820,6 +3820,10 @@ def notable_movers(
         # third_session_available; the two_session leg quotes it rather than
         # reporting a quiet market.
         never_bought = block["third_session_available"] is False
+        # Which close each leg's FAR end comes from, so a mismatch on that
+        # close can be reported by the leg that lost it. c1 is the near end of
+        # both and is handled above, where it costs both legs together.
+        far_close = {"prior_session": "c2", "two_session": "c3"}
         for leg in ("prior_session", "two_session"):
             # input_present is the same fork the reason above already makes. A
             # third session nobody bought is a LOST INPUT and reads as
@@ -3829,6 +3833,25 @@ def notable_movers(
             present = True
             if legs[leg]:
                 reason = None
+            elif far_close[leg] in mismatched:
+                # THE SAME FACT c1 ALREADY REPORTS, one close along. A c2 or c3
+                # the vendor stamped with a session nobody asked for is nulled
+                # on every row above, correctly, because it would make the MOVE
+                # wrong even where the row's own stamp is right. The leg that
+                # reads it then came out empty with the generic sentence below,
+                # which says the file held nothing and sends a reader to the
+                # vendor for missing data when the data arrived and was refused.
+                key = far_close[leg]
+                reason = (
+                    f"the sidecar asked the vendor for {sessions.get(key)} as "
+                    f"{key} and the rows came back stamped {mismatched[key]}, so "
+                    f"{key} was refused on every row. The {leg} leg measures from "
+                    "it, so this leg has no far end rather than no movers. "
+                    "Publishing it would date one session's close with another "
+                    "session's label, which is what the leg labels exist to "
+                    "prevent.")
+                present = False
+                packet.gap(f"notable movers: {reason}")
             elif leg == "two_session" and never_bought:
                 reason = ("the third session was never bought: discover's third "
                           "bulk call did not answer, so third_session_available "

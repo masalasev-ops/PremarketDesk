@@ -15,6 +15,109 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-22, third: twenty three defects from a twelve reader review, and what they had in common
+
+A twelve reader adversarial review of the whole tree, every finding put to two
+independent verifiers, one arguing statically and one driving the code. Sixty
+seven filed, twenty nine survived both, twenty three are closed here and each
+carries a claim checked against the pre-fix code before it was kept. The suite
+is ninety six claims in test_regressions plus twelve other modules, green, tree
+photograph clean.
+
+**WHAT THEY HAD IN COMMON, because it is more useful than the list.** Almost
+none was a wrong calculation. Two thirds were a MISSING ANSWER PRESENTED AS A
+MEASURED ONE: a call that failed reported as a call that came back empty, an
+unreadable packet reported as a name that failed a screen, a refused close
+reported as a file with nothing in it, a partial sweep reported as this week's
+figures. This project's fourth hard rule is that missing evidence stays null
+with a recorded reason, and it holds everywhere the evidence is a NUMBER. It
+was leaking wherever the missing thing was a BOOLEAN or an EMPTY LIST, because
+those have a falsy value that reads as an answer. `earnings_symbols` empty,
+`_volume_was_the_only_failure` False, `capture_observed` absent, `rank_stats`
+{}: four different modules, one shape.
+
+The rest were writes and reads whose failure mode nobody had asked about, which
+is the same pattern the 2026-08-22 second entry closed six of.
+
+**The critical three.**
+
+The collector wrote a settle batch one line at a time and, on a fault partway,
+put the WHOLE batch back and said "nothing has been marked written". True of the
+bookkeeping, false of the disk. Reproduced at six minutes, nine lines, three
+doubled, and read_bars_file does not deduplicate on (symbol, minute), so a
+doubled minute doubles that minute in pm_volume, the numerator of both premarket
+RVOL and float rotation.
+
+classify_catalyst consults the earnings calendar first and treats it as a fact.
+stamp_all built the symbol set from a list that earnings() left empty when the
+CALL FAILED, so a name reporting this morning came out as a name not on the
+calendar: a different catalyst class, a different score, a different conviction,
+a different swing watchlist through require_catalyst.
+
+The truth pass nulled its own measurements. Every record carries the full column
+set with the true columns None when Alpaca errored, and store.upsert writes every
+key it is handed, so a second pass over a measured session replaced real SIP
+volume with NULL and left a truth_reason beside it, which store.py's convention
+reads back as "reached this row and could not measure it". A second pass is the
+ORDINARY case: the nightly sweeps unmeasured sessions, the catch-up runs the
+same step, and --reread walks every session on purpose.
+
+**The rest, in one line each.**
+
+- A restart after a run that died mid write glued the first new bar onto the
+  torn fragment, losing both. A newline is written first now.
+- One trade timestamp in the wrong unit raised OSError out of the message
+  handler into `except (ConnectionError, WebSocketException, OSError)`, so a
+  malformed message tore down a healthy socket and resubscribed into a 50 slot
+  pool the server is known to refuse.
+- _TIME_RE's meridiem and zone had no trailing word boundary: "07:15 AMD" left
+  "D" and "16:00 ETSY" left "SY". One sentence hid a real ticker claim from
+  containment AND invented one, which analyst.py exits 2 on, stopping the chain.
+- A CLI answer that is valid JSON but not an object raised AttributeError past
+  both the retry and the fallback report.
+- pool_recall measured a dated session against the single undated
+  data/watchlist.json. runs/2026-08-21/pool_recall.json is that: recall 0.0
+  against 92 addressable gappers, off a three symbol afternoon hand run.
+- actual_gappers counted every corporate action as the day's biggest gap,
+  inflating the denominators of discovery_recall.
+- A gap statistics sweep that died partway wrote a newer as_of that load_all
+  then preferred, so 200 names could become the propensity column discover
+  orders the whole pool by. [Gap stats] max_unswept_fraction is the new key.
+- The weekly cost table subtracted two readings from OPPOSITE SIDES of the
+  00:00 UTC quota reset: 11,761 published for a day whose counter moved 66,761.
+- rescued_by_truth counted an unreadable packet as a name that failed something
+  else. 2026-08-21 published 0 where five rows could not be read at all.
+- The malformed line count _read_jsonl computes was filtered out by its only
+  consumer, exactly as its docstring promised it would not be.
+- An outcome refused for a corporate action left next_day_close null with no
+  reason, and the candidate query selects on that null, so the row was
+  re-fetched every night forever. picks gains next_day_refused_reason.
+- day_blocked_on_rvol_alone asserted a capture correction over candidates whose
+  RVOL was never measured.
+- A c2 or c3 the vendor stamped with the wrong session lost its leg with the
+  sentence for an empty sidecar, sending a reader to the vendor for data that
+  arrived and was refused. c1 has named this since the section shipped.
+- candidate_provenance.ranking was {} on the zero candidate morning the degrade
+  path exists for, while the Summary quotes five of its keys by name.
+- mark_notable_watchlist counted "screened, neither", which means the screens
+  refused the name for both lists, as a name on a watchlist.
+- The stand-down replaced the snapshot the KEPT packet describes, because
+  build_packet copied it at the start and main decides at the end.
+- The economic block's fallback read only `skipped` while a failed call sets
+  `error`.
+
+**Six documents corrected.** .env.example named EODHD as the only provider and
+did not mention ALPACA_KEY_ID or ALPACA_SECRET_KEY, which a scheduled step
+requires. CRITERIA [Truth] gave capture_observed as pm_volume / pm_volume_true,
+which is neither what the code computes nor what should be computed, on the one
+number the whole volume floor rests on. README's setup step built the universe
+and not the gap statistics that rank it, leaving discovery unable to run.
+BUILD_PLAN said probe_alpaca.py is imported by no pipeline module nine lines
+after saying the nightly truth pass imports it. tasks/README listed the nightly
+as five steps where it runs nine, naming neither the backup nor the only
+scheduled deletion in the project. eodhd.py's docstring said "and only these"
+over nine of thirteen endpoints, omitting the most expensive one in the tree.
+
 ## 2026-08-22, second: six writes and reads that could undo a closed defect
 
 A full review of the tree. Six defects, and five of the six are one shape: a

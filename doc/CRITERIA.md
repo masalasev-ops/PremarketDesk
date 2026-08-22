@@ -1031,11 +1031,22 @@ recorded. Guessing the window is the one thing this pass must not do.
 
 ### The two ratios this writes note
 
-capture_observed = pm_volume / pm_volume_true. What the socket ACTUALLY carried
-of the consolidated tape, per symbol per session. This is the quantity
-[Collector] premarket_capture_rate asserts as 0.1172 for every name, and after
-baseline_sessions of it that key can be re-derived per symbol, re-derived as a
-distribution, or discarded on evidence.
+capture_observed = pm_volume / true_volume_socket_window. What the socket
+ACTUALLY carried of the consolidated tape over THE MINUTES IT WAS LISTENING TO,
+per symbol per session. This is the quantity [Collector] premarket_capture_rate
+asserts as 0.1172 for every name, and after baseline_sessions of it that key can
+be re-derived per symbol, re-derived as a distribution, or discarded on evidence.
+
+[corrected 2026-08-22: this said "pm_volume / pm_volume_true", which is not what
+true_volume.py computes and is not what should be computed. pm_volume_true
+covers 04:00 to the cutoff and the socket cannot see 04:00 to 07:20 at all, so
+dividing by it folds the collector's late start into a number meant to measure
+the FEED, and the two have different fixes. store.py's column comment has said
+so since the columns shipped and this file disagreed with it. The number this
+line tells a reader to re-derive premarket_capture_rate from was therefore the
+wrong one, and it is the correction the whole day screen's volume floor rests
+on. collector_window_share is the other half, true_volume_socket_window over
+pm_volume_true, and is the measurement of the late start.]
 
 estimate_error = pm_volume_estimated / pm_volume_true. How well the MORNING'S
 correction did, where 1.0 is exactly right, above 1.0 overstated and below 1.0
