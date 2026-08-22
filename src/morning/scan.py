@@ -26,6 +26,7 @@ import datetime as dt
 import json
 import math
 import os
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -421,6 +422,36 @@ def pool_candidates(
         )
     print(f"scan: {len(subscribed)} subscribed names from a pool of {len(rows)}")
     return candidates, provenance
+
+
+def _empty_ranking() -> dict[str, Any]:
+    """The ranking record for a morning with nothing to rank.
+
+    Same keys as rank_by_measured_gap returns, all zero, plus the one field it
+    has no need of: why the ranking never ran. A reader comparing this against a
+    real morning gets zeros where a real morning gets counts, rather than a
+    missing object they have to interpret.
+    """
+    price_rule = _CRIT.rule("discovery", "price")
+    gap_rule = _CRIT.rule("discovery", "gap_pct")
+    return {
+        "subscribed_considered": 0,
+        "cleared_floors": 0,
+        "kept": 0,
+        "below_floor": 0,
+        "unrankable": 0,
+        "cap": _CRIT.integer("scan", "candidate_count"),
+        "cap_source": "CRITERIA.md [Scan] candidate_count",
+        "capped_out": 0,
+        "capped_out_symbols": [],
+        "floors": {"price": price_rule.describe(),
+                   "gap_pct_absolute": gap_rule.describe()},
+        "ranked_on": "the premarket gap measured from the collector, not the pool tier",
+        "not_ranked_reason": (
+            "no subscribed name reached the ranking, so nothing was ordered and "
+            "every count here is a measured zero rather than an absence"
+        ),
+    }
 
 
 def rank_by_measured_gap(
@@ -1262,21 +1293,44 @@ def rvol_only_day_failures(candidates: list[dict[str, Any]], packet: Packet) -> 
     getting counts wrong in prose.
     """
     blocked = [
-        c["symbol"] for c in candidates
+        c for c in candidates
         if (c.get("day_failed_conditions") or []) == ["premarket_rvol"]
     ]
-    if blocked:
+    # A FAILED CONDITION AND AN UNMEASURED ONE ARE NOT THE SAME FACT, which is
+    # the distinction screen_tally was given a third count for on 2026-08-20 and
+    # this line then undid. A candidate whose pm_rvol is null failed the RVOL
+    # line because there was nothing to test, not because a corrected numerator
+    # fell short, and the sentence below asserted "their RVOL already carries
+    # the capture correction" over both. For a null RVOL that is a statement
+    # about a number that does not exist, and it points a reader at the feed
+    # shortfall as an answer where the answer is that nothing was measured.
+    measured = [c["symbol"] for c in blocked
+                if _as_float(c.get("pm_rvol")) is not None]
+    unmeasured = [c["symbol"] for c in blocked
+                  if _as_float(c.get("pm_rvol")) is None]
+    if measured:
         packet.gap(
-            f"{len(blocked)} of {len(candidates)} candidates failed the day "
-            "screen on premarket RVOL alone, having cleared the other day "
-            "conditions: "
-            + ", ".join(blocked)
+            f"{len(measured)} of {len(candidates)} candidates failed the day "
+            "screen on a MEASURED premarket RVOL alone, having cleared the "
+            "other day conditions: "
+            + ", ".join(measured)
             + ". Their RVOL already carries the capture correction, so these "
             "are names the corrected numerator still could not lift over the "
             "floor, NOT names the feed shortfall cost. capture_correction in "
             "this packet names the ones the correction did carry."
         )
-    return blocked
+    if unmeasured:
+        packet.gap(
+            f"{len(unmeasured)} of {len(candidates)} candidates failed the day "
+            "screen on premarket RVOL alone and have NO RVOL AT ALL: "
+            + ", ".join(unmeasured)
+            + ". Nothing was measured for them, so the capture correction "
+            "carries nothing here and the floor was not tested against a "
+            "number. This is a missing instrument, not a verdict about the "
+            "name, and it is counted apart from the names above for that "
+            "reason."
+        )
+    return measured + unmeasured
 
 
 def _consolidated_volume(candidate: dict[str, Any]) -> float | None:
@@ -2280,14 +2334,30 @@ def earnings(
     symbols = [c["symbol"] for c in candidates]
 
     out: dict[str, Any] = {"candidates": [], "notable_tomorrow": [], "window": [
-        today.isoformat(), end.isoformat()]}
+        today.isoformat(), end.isoformat()],
+        # WHETHER THE CALENDAR WAS ASKED, not what it answered. Empty means two
+        # different things and until 2026-08-22 the block could not tell them
+        # apart: a calendar that was read and held no candidate, and a call that
+        # failed. classify_catalyst reads "on the earnings calendar" as a fact
+        # rather than an interpretation and consults it FIRST, so an empty list
+        # off a failed call made every candidate not-on-the-calendar, changed
+        # catalyst_class, changed the score it is worth in
+        # [Score catalyst class], changed the conviction, and changed swing
+        # membership through require_catalyst. The report then read the same
+        # empty list as "no notable earnings".
+        "candidates_checked": None, "tomorrow_checked": None}
 
     if symbols:
         rows, error = api.earnings_calendar(
             today - dt.timedelta(days=1), end, symbols=symbols
         )
+        out["candidates_checked"] = not error
         if error:
-            packet.gap(f"earnings calendar for the candidates failed: {error}")
+            out["candidates_error"] = str(error)
+            packet.gap(
+                f"earnings calendar for the candidates failed: {error}. Every "
+                "candidate's catalyst class was decided WITHOUT it, so a name "
+                "reporting today reads as one that is not on the calendar")
         for row in rows or []:
             out["candidates"].append(
                 {
@@ -2300,7 +2370,15 @@ def earnings(
             )
 
     rows, error = api.earnings_calendar(end, end)
+    out["tomorrow_checked"] = not error
     if error:
+        # `skipped` is the field REPORT_TEMPLATE.md and analyst.fallback_report
+        # both branch on, and it was set only on the quota degrade path. A
+        # failed call returned here with notable_tomorrow empty and no marker at
+        # all, so both renderers published "No notable earnings in the packet
+        # window" for a window nobody looked at.
+        out["skipped"] = f"the earnings calendar call failed: {error}"
+        out["tomorrow_error"] = str(error)
         packet.gap(f"earnings calendar for tomorrow failed: {error}")
         return out
 
@@ -2814,13 +2892,33 @@ def score_candidate(candidate: dict[str, Any]) -> None:
 
 
 def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) -> None:
+    """Classify, screen and score every candidate against the earnings calendar.
+
+    THE CALENDAR IS CONSULTED FIRST AND IS TREATED AS A FACT, so a run that
+    could not read it must not let that read as a fact about the candidate.
+    candidates_checked is False when the call failed and None when it was never
+    made (no candidates, or the whole block skipped for quota); in both cases
+    the absence of a symbol from earnings_symbols says nothing, and every
+    candidate whose class was decided without the calendar carries that in
+    catalyst_why. The class itself is still whatever the news supports, because
+    inventing an earnings class for a name nothing puts on the calendar would be
+    the same defect pointing the other way.
+    """
     earnings_symbols = {
         str(row.get("symbol") or "").upper()
         for row in earnings_block.get("candidates", [])
         if row.get("symbol")
     }
+    unchecked = earnings_block.get("candidates_checked") is False
+    unchecked_why = (earnings_block.get("candidates_error")
+                     or earnings_block.get("skipped")
+                     or "the call failed")
     for candidate in candidates:
         catalyst_class, why = classify_catalyst(candidate, earnings_symbols)
+        if unchecked and candidate["symbol"] not in earnings_symbols:
+            why = (f"{why}. The earnings calendar was NOT checked this run "
+                   f"({unchecked_why}), so this class was decided without it and "
+                   "a name reporting today would not be recognised")
         candidate["catalyst_class"] = catalyst_class
         candidate["catalyst_why"] = why
         evaluate_eligibility(candidate)
@@ -3242,17 +3340,35 @@ def mark_notable_watchlist(notable: dict[str, Any],
 
     The mark is presentational: it is not a leg, not a vintage and not
     something check (e) reads, so filling it after the gate costs nothing the
-    gate was protecting. Returns how many rows were marked, so the caller can
-    say the pass ran rather than assuming it.
+    gate was protecting.
+
+    Returns (on_a_watchlist, screened_and_neither). TWO COUNTS, because the mark
+    has five states and only three of them mean the symbol is on a watchlist.
+    Counting every non-null mark made the packet's gap say "N row(s) name a
+    symbol that is also on a watchlist this morning" over rows whose mark is
+    exactly the opposite: the screens looked at that name and refused it for
+    both lists. That count is the one a reader uses to judge how much the two
+    sections overlap.
     """
     by_symbol = {str(c.get("symbol") or "").upper(): c for c in candidates}
-    marked = 0
+    on_watchlist = 0
+    screened_neither = 0
     for row in notable.get("rows") or []:
         mark = _watchlist_mark(by_symbol.get(str(row.get("symbol") or "").upper()))
         row["also_on_watchlist"] = mark
-        if mark:
-            marked += 1
-    return marked
+        if mark == SCREENED_NEITHER:
+            screened_neither += 1
+        elif mark:
+            on_watchlist += 1
+    return on_watchlist, screened_neither
+
+
+# The one mark of the five that does NOT mean the symbol is on a watchlist. A
+# module constant because the counter below and the reader of the mark have to
+# agree on it: counting it as a watchlist row is what made the packet say five
+# names were on a watchlist on a morning when two of them had been screened and
+# refused for both.
+SCREENED_NEITHER = "screened, neither"
 
 
 def _watchlist_mark(candidate: dict[str, Any] | None) -> str | None:
@@ -3281,7 +3397,7 @@ def _watchlist_mark(candidate: dict[str, Any] | None) -> str | None:
         return "day"
     if swing:
         return "swing"
-    return "screened, neither"
+    return SCREENED_NEITHER
 
 
 def _catalyst_of(candidate: dict[str, Any] | None) -> tuple[str | None, str]:
@@ -4091,10 +4207,25 @@ def build_packet() -> dict[str, Any]:
     # This moved ahead of the market snapshot because the market snapshot now
     # prices from these bars too. Everything downstream reads one frozen copy.
     session_date = now.date().isoformat()
-    snapshot_path = config.run_dir(session_date) / "premarket_snapshot.jsonl"
-    # overwrite=True: scan owns today's snapshot. The watchdog reruns the
-    # morning chain on purpose and that rerun must produce a fresh copy of the
-    # collector file, not a numbered sibling the packet then fails to name.
+    # WRITTEN BESIDE, AND PROMOTED ONLY IF THIS RUN'S PACKET IS KEPT.
+    #
+    # This used to copy straight over premarket_snapshot.jsonl, near the top of
+    # build_packet, while thin_rerun_stands_down decides at the END of main
+    # whether this run's packet is thinner than the one already on disk. A
+    # rerun that stood down had therefore already replaced the snapshot the
+    # KEPT packet describes: the packet's collector_stats counted one file and
+    # the file beside it was another, and the fuller morning's capture was
+    # gone. The stand-down exists to preserve the fuller evidence and was
+    # destroying half of it on the way to doing so.
+    #
+    # main promotes this into place with os.replace when it keeps the packet,
+    # and renames it to premarket_snapshot.superseded.jsonl when it stands
+    # down, which is the same shape as the packet_degraded.json the stand-down
+    # already writes: the thinner run is kept for the record and not over the
+    # record.
+    snapshot_path = config.run_dir(session_date) / "premarket_snapshot.pending.jsonl"
+    # overwrite=True: this is a name only this run writes, so there is nothing
+    # of an earlier morning's to spare here.
     bars_by_symbol, collector_stats = collect_premarket.snapshot_bars(
         session_date, snapshot_path, overwrite=True
     )
@@ -4123,7 +4254,16 @@ def build_packet() -> dict[str, Any]:
     # architecture pages describe, which cost the whole chain: no packet, no
     # report, no email, on the one morning the degrade path exists for.
     dropped_stale: list[dict[str, Any]] = []
-    rank_stats: dict[str, Any] = {}
+    # THE ZERO SHAPE, NOT AN EMPTY OBJECT. rank_by_measured_gap is only reached
+    # inside `if candidates`, so a watchlist that subscribed nobody left
+    # candidate_provenance["ranking"] as {} while REPORT_TEMPLATE.md's Summary
+    # quotes ranking.subscribed_considered, cleared_floors, kept, cap and
+    # capped_out by name and says in terms that the sentence is written the same
+    # way on a morning when nothing is eligible, "the numbers are then zeros".
+    # An absent key is not a zero: it leaves the model with nothing to quote on
+    # exactly the morning the degrade path exists for, and the instruction it
+    # cannot follow is the one that produces invented prose.
+    rank_stats: dict[str, Any] = _empty_ranking()
     if candidates:
         # All local: the premarket path, the price it implies, the drop, then
         # the ranking on that measured price. Not one API call has been spent
@@ -4225,7 +4365,10 @@ def build_packet() -> dict[str, Any]:
     if thin:
         packet.gap(f"economic events and the earnings calendar skipped: {quota_clause}")
         events = {"events": [], "skipped": quota_clause}
-        earnings_block = {"candidates": [], "notable_tomorrow": [], "skipped": quota_clause}
+        earnings_block = {"candidates": [], "notable_tomorrow": [],
+                          "skipped": quota_clause,
+                          "candidates_checked": False,
+                          "tomorrow_checked": False}
     else:
         events = economic_events(api, packet)
         earnings_block = earnings(api, candidates, packet)
@@ -4257,13 +4400,20 @@ def build_packet() -> dict[str, Any]:
 
     # AFTER stamp_all, because evaluate_eligibility runs inside it and the
     # section is assembled before vintage.enforce. See mark_notable_watchlist.
-    notable_marked = mark_notable_watchlist(notable, candidates)
+    notable_marked, notable_screened_neither = mark_notable_watchlist(
+        notable, candidates)
     if notable_marked:
         packet.gap(
             f"notable movers: {notable_marked} row(s) name a symbol that is also "
             "on a watchlist this morning, and the row says so rather than being "
             "suppressed. Two sections selecting one symbol on different grounds "
             "is information.")
+    if notable_screened_neither:
+        packet.gap(
+            f"notable movers: {notable_screened_neither} row(s) name a symbol "
+            "the screens looked at and refused for BOTH watchlists. That is not "
+            "an overlap between the two sections, it is the opposite, and it is "
+            "counted apart from the line above for that reason.")
 
     # Read, never computed: see volume_check's docstring. Placed after the
     # screens have run so rvol_only_day_failures has decisions to read, and
@@ -4319,7 +4469,10 @@ def build_packet() -> dict[str, Any]:
         "rvol_cutoff_hhmm": cutoff,
         "collector_file": collect_premarket.bar_path().name,
         "collector_snapshot": {
-            "file": snapshot_path.name,
+            # The name this copy is promoted to when the packet is kept, never
+            # the pending sibling it is written as: the packet is read long
+            # after the promotion and must name the file that is there.
+            "file": "premarket_snapshot.jsonl",
             "bars_total": collector_stats.get("bars_total"),
             "last_complete_bar_et": collector_stats.get("last_bar_et"),
             "partial_line_discarded": collector_stats.get("partial_line_discarded"),
@@ -4401,6 +4554,10 @@ def build_packet() -> dict[str, Any]:
         # Built here so the report neither enumerates a set it can miscount nor
         # ranks by a score that has no sign without saying so.
         "score_roll": score_roll(candidates),
+        # Transient. main pops this before write_packet, so it never reaches
+        # disk; the leading underscore is the convention true_volume uses for
+        # the same reason.
+        "_snapshot_pending": str(snapshot_path),
         # What the collector's premarket volume is actually worth, measured by
         # the nightly against the vendor on identical minutes. Every pm_rvol
         # and every pm_float_rotation in this packet divides by a number from
@@ -4490,6 +4647,35 @@ def thinner_than(fresh: dict[str, int], prior: dict[str, int]) -> list[str]:
            for key in prior if key in _CANCELLING_AXES):
         return []
     return sorted(key for key in prior if fresh[key] < prior[key])
+
+
+def _promote_snapshot(pending: str | None) -> None:
+    """Move this run's collector copy into the name the packet names."""
+    if not pending:
+        return
+    source = Path(pending)
+    if not source.is_file():
+        return
+    destination = source.with_name("premarket_snapshot.jsonl")
+    os.replace(source, destination)
+
+
+def _demote_snapshot(pending: str | None) -> None:
+    """Keep a stood-down run's collector copy beside the record, not over it.
+
+    Same shape as the packet_degraded.json the stand-down already writes: what
+    the thinner rerun saw is worth keeping and is not worth replacing the
+    fuller morning's copy with.
+    """
+    if not pending:
+        return
+    source = Path(pending)
+    if not source.is_file():
+        return
+    destination = source.with_name("premarket_snapshot.superseded.jsonl")
+    os.replace(source, destination)
+    print(f"scan: this rerun's collector copy was kept as {destination.name} "
+          "rather than replacing the one the packet on disk describes.")
 
 
 def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
@@ -4699,8 +4885,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.rescore:
-        from pathlib import Path
-
         payload = rescore(Path(args.rescore))
         print(json.dumps(
             [
@@ -4732,10 +4916,15 @@ def main(argv: list[str] | None = None) -> int:
         eodhd.print_call_report()
         return 1
 
+    # Leading underscore: a transient this run needs and the frozen packet must
+    # not carry. Same convention as true_volume's record keys.
+    pending = payload.pop("_snapshot_pending", None)
     if thin_rerun_stands_down(payload):
+        _demote_snapshot(pending)
         eodhd.print_call_report()
         return 0
 
+    _promote_snapshot(pending)
     path = write_packet(payload)
     write_picks(payload, force_test=args.test)
     job_status.produced("candidates", len(payload["candidates"]))

@@ -2105,7 +2105,7 @@ def claim_the_watchlist_mark_is_filled_after_the_screens_decide(
         {"symbol": "MEGA.US", "day_eligible": True, "swing_eligible": True},
         {"symbol": "TINY.US", "day_eligible": False, "swing_eligible": False},
     ]
-    marked = scan.mark_notable_watchlist(block, candidates)
+    marked, screened_neither = scan.mark_notable_watchlist(block, candidates)
     got = {row["symbol"]: row.get("also_on_watchlist") for row in block["rows"]}
     # TINY is a candidate that cleared neither screen, which is a DIFFERENT
     # answer from a symbol nothing screened: both used to come out as a bare
@@ -2121,13 +2121,29 @@ def claim_the_watchlist_mark_is_filled_after_the_screens_decide(
                             f"screens make it {wanted!r}")
     # Counted over ROWS and not over symbols: one symbol selected on two legs
     # is two rows by design, and both of them carry the mark.
-    on_rows = sum(1 for row in block["rows"] if row.get("also_on_watchlist"))
+    #
+    # And counted in TWO buckets, because only three of the five marks mean the
+    # symbol is on a watchlist. "screened, neither" means the screens looked and
+    # refused it for both, which is the opposite of an overlap, and counting it
+    # made build_packet's gap say five rows named a symbol that was also on a
+    # watchlist on a morning when two of them had been refused.
+    on_rows = sum(1 for row in block["rows"]
+                  if row.get("also_on_watchlist")
+                  and row["also_on_watchlist"] != scan.SCREENED_NEITHER)
+    neither_rows = sum(1 for row in block["rows"]
+                       if row.get("also_on_watchlist") == scan.SCREENED_NEITHER)
     if marked != on_rows:
-        failures.append(f"the pass reported {marked} marked row(s) and the rows "
-                        f"carry {on_rows}")
+        failures.append(f"the pass reported {marked} row(s) on a watchlist and "
+                        f"the rows carry {on_rows}")
+    if screened_neither != neither_rows:
+        failures.append(f"the pass reported {screened_neither} screened-neither "
+                        f"row(s) and the rows carry {neither_rows}")
     if marked == 0:
         failures.append("no row was marked at all, so the fixture never reached "
                         "a name the screens passed and this proved nothing")
+    if neither_rows and marked >= marked + neither_rows:
+        failures.append("the two counts overlap, so a refused name is still "
+                        "being reported as an overlap between the sections")
 
     # And build_packet must call it AFTER stamp_all, or it is dead again.
     source = _pathlib.Path(scan.__file__).read_bytes().decode("utf-8")

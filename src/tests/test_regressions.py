@@ -7,9 +7,9 @@ audit, the nine smaller findings and the nineteen of the full review, added the
 rest, arming the socket cap probe for 2026-08-21 added another, and the
 2026-08-22 read added the three non atomic writes that could reopen a closed
 defect or lose a session, the archive publishing a fixture as a morning, and a
-read that created the directory it was reading, and six from a twelve reader
-review, three in the collector and three in the night. It now carries eighty
-seven claims, a count read off the file rather
+read that created the directory it was reading, and nine from a twelve reader
+review, three in the collector, three in the night and three in the scan. It
+now carries ninety claims, a count read off the file rather
 than remembered, because it said forty four for a while after it held fifty
 seven and a suite that miscounts itself is the first thing a reader stops
 trusting.
@@ -1251,6 +1251,237 @@ def claim_a_split_is_not_a_gap(failures: list[str]) -> None:
           "its drift counted, and a row that cannot be checked says so")
 
 
+def claim_an_unchecked_earnings_calendar_is_not_an_empty_one(failures: list[str]) -> None:
+    """A calendar call that failed does not read as a calendar with nobody on it.
+
+    classify_catalyst consults the earnings calendar FIRST and treats it as a
+    fact rather than an interpretation, and stamp_all built earnings_symbols
+    from earnings_block["candidates"], which earnings() left EMPTY when the call
+    errored. So a name reporting this morning came out as a name that is not on
+    the calendar: a different catalyst_class, a different number of points from
+    [Score catalyst class], a different score, a different conviction, and a
+    different swing watchlist through require_catalyst.
+
+    The second half is the same absence one call further on. The tomorrow call
+    returned early with notable_tomorrow empty and no marker, while both
+    REPORT_TEMPLATE.md and analyst.fallback_report branch on `skipped`, so a
+    window nobody looked at was published as "No notable earnings in the packet
+    window". `skipped` was set only on the quota degrade path.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    class Api:
+        def __init__(self, candidate_error=None, tomorrow_error=None) -> None:
+            self.candidate_error = candidate_error
+            self.tomorrow_error = tomorrow_error
+            self.calls = 0
+
+        def earnings_calendar(self, start, end, symbols=None):
+            self.calls += 1
+            if symbols:
+                if self.candidate_error:
+                    return None, self.candidate_error
+                return [{"code": "AAA.US", "report_date": "2026-08-22",
+                         "before_after_market": "BeforeMarket"}], None
+            if self.tomorrow_error:
+                return None, self.tomorrow_error
+            return [], None
+
+    candidates = [{"symbol": "AAA.US"}]
+
+    # The call failed. The block must say so, and must not report the calendar
+    # as read and empty.
+    sink = Sink()
+    block = scan.earnings(Api(candidate_error="HTTP 502"), candidates, sink)
+    if block.get("candidates_checked") is not False:
+        failures.append(f"a failed candidate calendar call left "
+                        f"candidates_checked {block.get('candidates_checked')!r}, "
+                        "so an unread calendar is indistinguishable from an "
+                        "empty one")
+    if not any("decided WITHOUT it" in g for g in sink.gaps):
+        failures.append(f"a failed candidate calendar raised no gap saying the "
+                        f"classes were decided without it: {sink.gaps}")
+
+    # And stamp_all carries that onto every candidate whose class it decided.
+    rows = [{"symbol": "AAA.US", "catalyst_found": False, "headlines": []}]
+    scan.stamp_all(rows, block)
+    if "NOT checked" not in (rows[0].get("catalyst_why") or ""):
+        failures.append("a catalyst class decided without the calendar does not "
+                        f"say so: {rows[0].get('catalyst_why')!r}")
+
+    # A calendar that WAS read and held nothing is a different answer and must
+    # not carry the sentence, or the disclosure means nothing.
+    sink = Sink()
+    clean = scan.earnings(Api(), [{"symbol": "ZZZ.US"}], sink)
+    rows = [{"symbol": "ZZZ.US", "catalyst_found": False, "headlines": []}]
+    scan.stamp_all(rows, clean)
+    if clean.get("candidates_checked") is not True:
+        failures.append(f"a calendar that answered left candidates_checked "
+                        f"{clean.get('candidates_checked')!r}")
+    if "NOT checked" in (rows[0].get("catalyst_why") or ""):
+        failures.append("a calendar that was read and held nothing was reported "
+                        "as unchecked, so the disclosure fires every morning "
+                        "and stops meaning anything")
+
+    # A name the calendar DID name keeps its class, checked or not.
+    rows = [{"symbol": "AAA.US", "catalyst_found": False, "headlines": []}]
+    named = scan.earnings(Api(), [{"symbol": "AAA.US"}], Sink())
+    scan.stamp_all(rows, named)
+    if rows[0].get("catalyst_class") != "earnings":
+        failures.append(f"a name on the calendar came out class "
+                        f"{rows[0].get('catalyst_class')!r}")
+
+    # The tomorrow call failing must set the field both renderers branch on.
+    sink = Sink()
+    block = scan.earnings(Api(tomorrow_error="HTTP 500"), candidates, sink)
+    if not block.get("skipped"):
+        failures.append("a failed tomorrow earnings call left no `skipped` "
+                        "marker, so REPORT_TEMPLATE.md and fallback_report both "
+                        "publish 'No notable earnings in the packet window' for "
+                        "a window nobody looked at")
+    if block.get("tomorrow_checked") is not False:
+        failures.append(f"tomorrow_checked is {block.get('tomorrow_checked')!r} "
+                        "after a failed call")
+    print("  unread cal   a failed earnings call is reported as unread on the "
+          "block, on every class it did not decide, and to both renderers")
+
+
+def claim_an_empty_morning_still_carries_its_ranking_counts(failures: list[str]) -> None:
+    """The zero candidate morning publishes zeros, not a missing object.
+
+    rank_by_measured_gap is only reached inside `if candidates`, so a watchlist
+    that subscribed nobody left candidate_provenance["ranking"] as {}.
+    REPORT_TEMPLATE.md's Summary quotes ranking.subscribed_considered,
+    cleared_floors, kept, cap and capped_out BY NAME, and says in terms that the
+    sentence is written the same way on a morning when nothing is eligible and
+    "the numbers are then zeros". An absent key is not a zero: it leaves the
+    model with nothing to quote on exactly the morning the degrade path exists
+    for, and an instruction that cannot be followed is what produces invented
+    prose.
+    """
+    from morning import scan
+
+    empty = scan._empty_ranking()
+    for key in ("subscribed_considered", "cleared_floors", "kept", "cap",
+                "capped_out", "capped_out_symbols", "unrankable", "below_floor"):
+        if key not in empty:
+            failures.append(f"the empty ranking has no {key}, which "
+                            "REPORT_TEMPLATE.md quotes by name")
+    for key in ("subscribed_considered", "cleared_floors", "kept", "capped_out",
+                "unrankable", "below_floor"):
+        if empty.get(key) != 0:
+            failures.append(f"the empty ranking reports {key}={empty.get(key)!r}, "
+                            "expected a measured zero")
+    if not empty.get("not_ranked_reason"):
+        failures.append("the empty ranking records no reason, so a reader "
+                        "cannot tell a quiet morning from a lost input")
+    if empty.get("cap") != _CRIT_CANDIDATE_COUNT():
+        failures.append(f"the empty ranking reports cap {empty.get('cap')!r}, "
+                        "which is not CRITERIA [Scan] candidate_count")
+
+    # The shapes must match, or the report reads two different objects.
+    from core import criteria as _criteria
+
+    class Sink:
+        def gap(self, note: str) -> None:
+            pass
+
+    _kept, real = scan.rank_by_measured_gap([], Sink(), keep=empty["cap"])
+    missing = sorted(set(real) - set(empty))
+    if missing:
+        failures.append(f"a real ranking carries {missing} and the empty one "
+                        "does not, so the two are not the same record")
+    # AND THE WIRING, not just the shape. A correct _empty_ranking that
+    # build_packet never reaches is the defect unchanged, and the two are only
+    # connected by one assignment. Read off the source the way test_notable
+    # reads the stamp_all ordering.
+    import ast as _ast
+
+    source = pathlib.Path(scan.__file__).read_bytes().decode("utf-8")
+    tree = _ast.parse(source)
+    build = next((n for n in tree.body
+                  if isinstance(n, _ast.FunctionDef) and n.name == "build_packet"), None)
+    if build is None:
+        failures.append("build_packet is not a module level function any more, "
+                        "so this claim cannot read how it seeds the ranking")
+    else:
+        seeded = False
+        for node in _ast.walk(build):
+            if not isinstance(node, (_ast.Assign, _ast.AnnAssign)):
+                continue
+            targets = node.targets if isinstance(node, _ast.Assign) else [node.target]
+            names = [t.id for t in targets if isinstance(t, _ast.Name)]
+            if "rank_stats" not in names or node.value is None:
+                continue
+            if (isinstance(node.value, _ast.Call)
+                    and isinstance(node.value.func, _ast.Name)
+                    and node.value.func.id == "_empty_ranking"):
+                seeded = True
+            elif isinstance(node.value, _ast.Dict) and not node.value.keys:
+                failures.append("build_packet still seeds rank_stats with {}, so "
+                                "a morning that ranked nobody publishes a missing "
+                                "object where REPORT_TEMPLATE.md quotes five keys")
+        if not seeded:
+            failures.append("build_packet does not seed rank_stats from "
+                            "_empty_ranking, so the zero shape is unreachable")
+    print("  empty rank   a morning that ranked nobody publishes the same keys "
+          "with measured zeros, says why, and build_packet seeds it")
+
+
+def _CRIT_CANDIDATE_COUNT() -> int:
+    from core import criteria
+
+    return criteria.load().integer("scan", "candidate_count")
+
+
+def claim_a_refused_name_is_not_an_overlap(failures: list[str]) -> None:
+    """A notable row the screens refused is not counted as one on a watchlist.
+
+    _watchlist_mark has FIVE answers and only three of them mean the symbol is
+    on a watchlist. mark_notable_watchlist counted every non-null mark, so
+    "screened, neither", which means the screens looked at that name and refused
+    it for BOTH lists, was counted into the gap that reads "N row(s) name a
+    symbol that is also on a watchlist this morning". That count is what a
+    reader uses to judge how much the briefing and the screen overlap, and it
+    was reporting the opposite of an overlap as one.
+    """
+    from morning import scan
+
+    block = {"rows": [
+        {"symbol": "DAY.US"}, {"symbol": "SWING.US"}, {"symbol": "BOTH.US"},
+        {"symbol": "REFUSED.US"}, {"symbol": "UNSEEN.US"},
+    ]}
+    candidates = [
+        {"symbol": "DAY.US", "day_eligible": True, "swing_eligible": False},
+        {"symbol": "SWING.US", "day_eligible": False, "swing_eligible": True},
+        {"symbol": "BOTH.US", "day_eligible": True, "swing_eligible": True},
+        {"symbol": "REFUSED.US", "day_eligible": False, "swing_eligible": False},
+    ]
+    on_watchlist, screened_neither = scan.mark_notable_watchlist(block, candidates)
+    if on_watchlist != 3:
+        failures.append(f"{on_watchlist} rows were counted as on a watchlist, "
+                        "expected the 3 the screens actually passed")
+    if screened_neither != 1:
+        failures.append(f"{screened_neither} rows were counted as screened and "
+                        "refused, expected 1")
+    marks = {row["symbol"]: row.get("also_on_watchlist") for row in block["rows"]}
+    if marks.get("REFUSED.US") != scan.SCREENED_NEITHER:
+        failures.append(f"a refused name is marked {marks.get('REFUSED.US')!r}")
+    if marks.get("UNSEEN.US") is not None:
+        failures.append("a name nothing screened carries a mark, so 'never "
+                        "looked at' and 'looked at and refused' are one answer "
+                        "again")
+    print("  refused row  a notable name the screens refused for both lists is "
+          "counted apart from the ones they passed")
+
+
 # ---------------------------------------------------------- the collector
 
 def claim_replay_is_counted_once(failures: list[str]) -> None:
@@ -1888,19 +2119,41 @@ def claim_the_day_screen_names_what_rvol_alone_blocked(failures: list[str]) -> N
         def gap(self, note: str) -> None:
             self.gaps.append(note)
 
+    # pm_rvol is carried on purpose. A candidate that failed the RVOL line
+    # because its RVOL was NEVER MEASURED did not fail on a corrected
+    # numerator, and folding the two together is the same defect screen_tally
+    # was given a third count for on 2026-08-20. NONE.US is that case.
     candidates = [
-        {"symbol": "ONLY.US", "day_failed_conditions": ["premarket_rvol"]},
-        {"symbol": "ALSO.US", "day_failed_conditions": ["premarket_rvol"]},
-        {"symbol": "BOTH.US", "day_failed_conditions": ["premarket_rvol",
-                                                        "market_cap"]},
-        {"symbol": "OTHER.US", "day_failed_conditions": ["market_cap"]},
-        {"symbol": "CLEAN.US", "day_failed_conditions": []},
+        {"symbol": "ONLY.US", "pm_rvol": 0.9,
+         "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "ALSO.US", "pm_rvol": 1.2,
+         "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "NONE.US", "pm_rvol": None,
+         "day_failed_conditions": ["premarket_rvol"]},
+        {"symbol": "BOTH.US", "pm_rvol": 0.4,
+         "day_failed_conditions": ["premarket_rvol", "market_cap"]},
+        {"symbol": "OTHER.US", "pm_rvol": 3.0,
+         "day_failed_conditions": ["market_cap"]},
+        {"symbol": "CLEAN.US", "pm_rvol": 3.0, "day_failed_conditions": []},
     ]
     sink = Sink()
     blocked = scan.rvol_only_day_failures(candidates, sink)
-    if blocked != ["ONLY.US", "ALSO.US"]:
-        failures.append(f"rvol-only blocking named {blocked}, expected the two "
+    if blocked != ["ONLY.US", "ALSO.US", "NONE.US"]:
+        failures.append(f"rvol-only blocking named {blocked}, expected the three "
                         "that failed on nothing else")
+    measured_gap = next((g for g in sink.gaps if "MEASURED premarket RVOL" in g), None)
+    unmeasured_gap = next((g for g in sink.gaps if "NO RVOL AT ALL" in g), None)
+    if measured_gap is None:
+        failures.append(f"no gap named the measured RVOL failures: {sink.gaps}")
+    elif "NONE.US" in measured_gap:
+        failures.append("a candidate with no RVOL at all was named among the "
+                        "ones a corrected numerator could not lift, which "
+                        "asserts a correction over a number that does not exist")
+    if unmeasured_gap is None:
+        failures.append("a candidate that failed the RVOL line with no RVOL at "
+                        f"all was not reported apart from the rest: {sink.gaps}")
+    elif "ONLY.US" in unmeasured_gap:
+        failures.append("a measured RVOL failure was counted as an unmeasured one")
     if not sink.gaps or "ONLY.US" not in sink.gaps[0]:
         failures.append(f"the blocked names are not in gaps_to_fill: {sink.gaps}")
     # It used to assert the gap calls an empty day list an instrument
@@ -7878,6 +8131,9 @@ def main() -> int:
     claim_a_failed_truth_pass_erases_no_measurement(failures)
     claim_recall_refuses_a_pool_the_morning_did_not_read(failures)
     claim_a_split_is_not_a_gap(failures)
+    claim_an_unchecked_earnings_calendar_is_not_an_empty_one(failures)
+    claim_an_empty_morning_still_carries_its_ranking_counts(failures)
+    claim_a_refused_name_is_not_an_overlap(failures)
     claim_the_previous_session_helper_says_when_it_does_not_know(failures)
     claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
     claim_a_previous_session_watchlist_reruns_discover(failures)
