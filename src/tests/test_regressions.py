@@ -5,7 +5,7 @@ twenty survived independent verification, which is what this file started as:
 sixteen claims. Three further reads of the same tree that same day, the report
 audit, the nine smaller findings and the nineteen of the full review, added the
 rest, and arming the socket cap probe for 2026-08-21 added the last. It now
-carries seventy five claims, a count read off the file rather than remembered,
+carries seventy six claims, a count read off the file rather than remembered,
 because it said forty four for a while after it held fifty seven and a suite
 that miscounts itself is the first thing a reader stops trusting.
 
@@ -6284,6 +6284,160 @@ def claim_a_claim_cannot_reach_the_live_database(failures: list[str]) -> None:
           "fixture restores every name it rebound")
 
 
+def claim_the_two_unrebuildable_artifacts_are_held_twice(
+        failures: list[str]) -> None:
+    """A backup that anything reads is a second input, not a backup.
+
+    Two artifacts here have no route back. The premarket capture is a recording
+    of a tape that no longer exists, and the packet is the frozen evidence a
+    morning was judged on. Both live under gitignored directories, and on
+    2026-08-21 at 15:46 one mistake wrote 258 fixture bars over roughly 3,200
+    real ones and 762 bytes over a 125 KB packet. That session is gone.
+
+    Four properties, and the last two matter more than the first two.
+
+    IT COPIES. Given a capture and a packet it puts them under the backup root,
+    dated, byte for byte.
+
+    IT RESTORES WITHOUT A VENDOR. A deleted working copy comes back from the
+    held copy, which is the entire point: the two things it holds cannot be
+    asked for again at any price.
+
+    IT NEVER OVERWRITES A DATED BACKUP, and reports a disagreement instead. A
+    stale backup and a corrupted working copy are the same observation from
+    inside the module, and resolving it automatically destroys the evidence
+    needed to tell them apart. Copying the working file over the backup on
+    2026-08-21 would have erased the last good capture.
+
+    AND NOTHING IN THE PIPELINE READS IT. If any morning or nightly module
+    reached into the backup root it would stop being a copy and become a second
+    input, with a second way to be wrong and no guard on it.
+    """
+    import shutil
+
+    from night import backup_evidence as _backup
+
+    # OUTSIDE THE WORKING TREE, asserted against the real function before it
+    # is stubbed for the rest of this claim. This is the property the whole
+    # module rests on and it was the one thing unasserted: a mutation moving
+    # the root to config.DATA_DIR/evidence left the suite green, and a copy
+    # inside the directory that gets deleted is not a copy. The 15:46 sweep
+    # wrote to nine paths under data/ and runs/; a backup living there would
+    # have been the tenth.
+    real_root = _backup.backup_root().resolve()
+    tree = config.PROJECT_ROOT.resolve()
+    if real_root == tree or tree in real_root.parents:
+        failures.append(
+            f"the backup root {real_root} is inside the working tree at "
+            f"{tree}. Whatever deletes or overwrites the tree takes the copy "
+            "with it, which is the one failure a backup exists to survive")
+
+    # INDEPENDENT OF config.DATA_DIR, which is the check that bites. Testing
+    # only "not under PROJECT_ROOT" passes for a root derived from DATA_DIR,
+    # because under run_tests DATA_DIR is already the sandbox and the sandbox
+    # is not under the tree. A root that follows DATA_DIR follows it into the
+    # live data directory in production, which is exactly where the copy must
+    # not be.
+    moved = config.DATA_DIR
+    try:
+        config.DATA_DIR = pathlib.Path(tempfile.gettempdir()) / "pmd-not-here"
+        if _backup.backup_root().resolve() != real_root:
+            failures.append(
+                "the backup root moved when config.DATA_DIR moved, so it is "
+                "derived from the data directory. In production that puts the "
+                "copy inside data/, alongside the nine paths the 2026-08-21 "
+                "sweep overwrote")
+    finally:
+        config.DATA_DIR = moved
+
+    box = pathlib.Path(tempfile.mkdtemp())
+    saved_root = _backup.backup_root
+    with conftest.isolated_store():
+        try:
+            _backup.backup_root = lambda: box / "evidence"
+            day = "2026-08-20"
+            capture = config.PREMARKET_DIR / f"{day}.jsonl"
+            packet = config.run_dir(day) / "packet.json"
+            capture.parent.mkdir(parents=True, exist_ok=True)
+            packet.parent.mkdir(parents=True, exist_ok=True)
+            capture.write_text('{"symbol":"AAA.US","v":1}\n', encoding="utf-8")
+            packet.write_text('{"session_date":"2026-08-20"}', encoding="utf-8")
+
+            first = _backup.run([day])
+            if first["written"] != 2:
+                failures.append(
+                    f"the backup copied {first['written']} artifact(s), not the "
+                    f"capture and the packet: {first['copy']!r}")
+
+            # 1. It restores what the working tree lost, with no vendor call.
+            original = capture.read_bytes()
+            capture.unlink()
+            outcome = _backup.restore(day)
+            if "premarket" not in outcome["restored"]:
+                failures.append(
+                    f"a deleted capture was not restored: {outcome!r}. The "
+                    "capture cannot be refetched at any price, so a backup "
+                    "that cannot put it back is decoration")
+            if capture.read_bytes() != original:
+                failures.append("the restored capture is not byte identical")
+
+            # 2. A second run copies nothing and leaves the held file alone.
+            again = _backup.run([day])
+            if again["written"] or len(again["held"]) != 2:
+                failures.append(
+                    f"a second backup of an unchanged session did work: "
+                    f"{again['written']} written, held {again['held']!r}")
+
+            # 3. A changed working copy is a DISAGREEMENT, not an update. This
+            #    is the case that would have caught 2026-08-21 the same night.
+            held_before = (box / "evidence" / day / "premarket.jsonl").read_bytes()
+            capture.write_text('{"symbol":"AAPL.US","v":5000}\n', encoding="utf-8")
+            third = _backup.run([day])
+            if not third["disagree"]:
+                failures.append(
+                    "a working copy that no longer matches the backup was not "
+                    "reported as a disagreement. That silence is what let a "
+                    "destroyed capture go unnoticed for a day")
+            if third["written"]:
+                failures.append(
+                    "the backup was overwritten by the changed working copy. A "
+                    "stale backup and a corrupted working copy look identical "
+                    "from here, and this direction erases the only good one")
+            if (box / "evidence" / day / "premarket.jsonl").read_bytes() != held_before:
+                failures.append("the held copy changed on disk")
+
+            # 4. And restore refuses to resolve that disagreement by itself.
+            refusal = _backup.restore(day)
+            if "premarket" in refusal["restored"]:
+                failures.append(
+                    "restore overwrote a differing working copy without being "
+                    "forced. Overwriting the newer of two disagreeing files is "
+                    "the mistake this module exists to undo")
+        finally:
+            _backup.backup_root = saved_root
+            shutil.rmtree(box, ignore_errors=True)
+
+    # 5. Nothing in the pipeline reads it. Checked over the source rather than
+    #    asserted, because this is the property that keeps it a copy.
+    root_key = 'text("backup", "root")'
+    readers = []
+    for path in sorted((config.PROJECT_ROOT / "src").rglob("*.py")):
+        if path.name == "backup_evidence.py" or "tests" in path.parts:
+            continue
+        body = path.read_text(encoding="utf-8", errors="replace")
+        if root_key in body or "backup_evidence" in body or "backup_root" in body:
+            readers.append(path.name)
+    if readers:
+        failures.append(
+            f"{', '.join(readers)} reaches into the backup. It is a copy, and "
+            "a copy anything reads is a second input with a second way to be "
+            "wrong and no guard on it")
+
+    print("  backup       the capture and the packet are held outside the "
+          "tree, restore needs no vendor, a dated copy is never overwritten, "
+          "and no pipeline module reads it")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -6864,6 +7018,7 @@ def main() -> int:
     claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_a_claim_cannot_reach_the_live_database(failures)
+    claim_the_two_unrebuildable_artifacts_are_held_twice(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
 
     if failures:

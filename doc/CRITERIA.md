@@ -1370,6 +1370,56 @@ report.
 exchange                      = US
 refresh_after_days            = 7
 
+## Backup
+
+A copy of the two artifacts that cannot be rebuilt, taken by the nightly and
+read by nothing. night/backup_evidence.py.
+
+**Why only two.** Everything else in this system has a route back. The universe
+rebuilds weekly. The closes re-fetch. Reports render from packets. The database
+refuses test code through store.guard_live_database. Two things have no route:
+
+  data/premarket/<date>.jsonl   the collector's socket capture, a recording of
+                                a tape that no longer exists
+  runs/<date>/packet.json       the frozen evidence a morning was judged on
+
+Both live under gitignored directories, and on 2026-08-21 at 15:46 a sweep that
+invoked every claim directly wrote 258 fixture bars over roughly 3,200 real ones
+and 762 bytes over a 125 KB packet. That session is gone. A list that grows past
+these two without remaking the argument above is a backup of everything, which
+is a weaker promise that nobody checks.
+
+root                          = %LOCALAPPDATA%\PremarketDesk\evidence   # expanded through the environment. OUTSIDE the working tree on purpose: a copy inside the directory that gets deleted is not a copy
+catchup_sessions              = 10         # recent sessions checked each night, so a night the machine was off is caught up rather than lost. Ten covers a fortnight of weekdays
+
+### The write once note
+
+A dated backup is NEVER overwritten. When the working copy no longer matches a
+backup already held, the run reports a DISAGREEMENT and changes neither file.
+
+That is not caution for its own sake. A stale backup and a corrupted working
+copy are the same observation from inside this module, and resolving it either
+way automatically destroys the evidence needed to tell them apart. Copying the
+working file over the backup would have erased the last good capture on
+2026-08-21; copying the backup over the working file would silently discard a
+legitimate re-run.
+
+The tripwire is the second reason this exists. Had it been running, the 22:15
+pass on 2026-08-21 would have said the morning's capture no longer matched the
+copy taken the night before, on the same night rather than by inference from
+three failing checks a day later.
+
+### Restoring
+
+    python -m night.backup_evidence --list
+    python -m night.backup_evidence --restore YYYY-MM-DD
+
+Restore refuses a working copy that already matches, and refuses one that
+DIFFERS unless --force, because overwriting the newer of two disagreeing files
+is the mistake this whole section exists to undo. It spends no vendor call: the
+capture and the packet are files, and the point of holding them is that neither
+can be asked for again.
+
 ## Job status
 
 Every scheduled step appends one line to data/job-status.jsonl as it exits,
@@ -1428,6 +1478,7 @@ pool_recall                   = 1
 prune                         = 1
 truth                         = 1
 weekly                        = 1
+backup                        = 1
 monitor                       = 1
 calendar                      = 1
 

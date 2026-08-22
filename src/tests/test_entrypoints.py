@@ -62,6 +62,7 @@ SCHEDULED = [
     ("verify", "morning.verify_morning", []),
     ("deliver", "morning.deliver", []),
     ("archive", "night.build_archive", []),
+    ("backup", "night.backup_evidence", ["--dry-run"]),
     ("backfill", "night.backfill_premarket", []),
     ("outcomes", "night.fill_outcomes", []),
     ("pool_recall", "night.pool_recall", []),

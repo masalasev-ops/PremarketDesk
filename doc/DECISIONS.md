@@ -190,6 +190,38 @@ measured, 24 rows:
 morning published RVOL figures that had already been corrected once and were
 still an order of magnitude short.
 
+**[corrected 2026-08-21: THE TWO SESSIONS ABOVE ARE NOT EQUALLY SUPPORTED, and
+this entry presented them as though they were.**
+
+capture_observed is the collector's socket volume over what the tape actually
+carried in the same minutes. The vendor side can be re-fetched from Alpaca for
+either session. The SOCKET side comes from data/premarket/<date>.jsonl and the
+packet, and for one of the two those files no longer exist: at 15:46 that day a
+sweep invoking every claim directly wrote 258 fixture bars over roughly 3,200
+real ones, and 762 bytes over a 125 KB packet.
+
+| | raw inputs | status |
+| --- | --- | --- |
+| 2026-08-20 | capture 3,249 lines and packet 125,575 bytes, both intact | REPRODUCIBLE: every figure can be recomputed from disk |
+| 2026-08-21 | capture and packet both overwritten with fixtures | RECORDED ONLY: the numbers stand and cannot be re-derived |
+
+pm_volume is null in picks for both sessions, because those rows predate the
+column, so the socket volume for 2026-08-21 survives nowhere at all. Its
+capture_observed values are not wrong and they are not checkable, and those are
+different things.
+
+**What this does to the finding.** The eleven fold spread within a single
+session is measured on 2026-08-20 alone and stands unaided: 0.0403 to 0.4231
+over twelve names, all re-derivable. The claim that the spread REPEATS across
+sessions rests on one reproducible session plus one recorded value, which is
+weaker than the table above reads, and no later work should treat the pair as
+equally checkable. The next session measured restores a second reproducible
+one; until then the repeat is a single corroboration, not a replication.
+
+night/backup_evidence.py now copies both artifacts outside the working tree on
+every nightly, so a session cannot be ended this way again. It began on
+2026-08-21 and holds 2026-08-13 through 2026-08-20 intact.]**
+
 **The cost in names, which is the only unit that matters.** Against the day
 screen's premarket_rvol floor of 1.5: on 2026-08-20 the morning published an
 EMPTY day watchlist and ten of the twelve candidates cleared the floor on the

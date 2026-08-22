@@ -47,6 +47,15 @@ echo ===== calendar refresh started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m ops.market_today --refresh >> "%LOG%" 2>&1
 echo ===== calendar refresh finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
+rem FIRST, before anything else touches the tree. It copies the day's premarket
+rem capture and packet outside the working tree, and those are the only two
+rem artifacts here that cannot be rebuilt. Never fails the chain: an unmade
+rem copy is not a reason to skip a night's work, and the step reports a
+rem disagreement rather than resolving one. See CRITERIA.md [Backup].
+echo ===== backup started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m night.backup_evidence >> "%LOG%" 2>&1
+echo ===== backup finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
 echo ===== backfill started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.backfill_premarket >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%

@@ -15,6 +15,41 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-21, ninth: the two artifacts that cannot be rebuilt are held twice
+
+night/backup_evidence.py copies data/premarket/<date>.jsonl and
+runs/<date>/packet.json to CRITERIA [Backup] root, outside the working tree,
+dated and write once. It runs FIRST in the nightly, before anything else
+touches the tree. It computes nothing, and claim 76 asserts that no module
+outside itself reads the backup root: a copy anything depends on is a second
+input with a second way to be wrong.
+
+A dated backup is never overwritten. A working copy that no longer matches is
+reported as a DISAGREEMENT and neither file is touched, because a stale backup
+and a corrupted working copy are the same observation from inside the module.
+Had it been running, the 22:15 pass on 2026-08-21 would have named that
+morning's destroyed capture the same night rather than it surfacing a day later
+through three unrelated failing checks.
+
+**WHICH SESSIONS ARE HELD, so the gap is a known range rather than a
+discovery.**
+
+| sessions | held | note |
+| --- | --- | --- |
+| before 2026-08-13 | NO | predates the project's own history; no capture exists |
+| 2026-08-13 to 2026-08-20 | YES | six sessions, captures and packets intact, first copy taken 2026-08-21 |
+| 2026-08-21 | copy held, CONTENTS DESTROYED | the capture is 258 fixture bars over roughly 3,200 real ones and the packet is 762 bytes over 125 KB. Backed up because it is what exists, not because it is the tape |
+| 2026-08-22 onward | YES, automatically | the nightly takes it |
+
+So the gap is exactly one session, 2026-08-21, and it is not a gap in coverage
+but a loss that predates coverage by one day. catchup_sessions is 10, so a
+night the machine is off is caught up rather than lost.
+
+Restore is `python -m night.backup_evidence --restore YYYY-MM-DD`. It refuses a
+working copy that already matches and refuses one that differs unless forced,
+and it spends no vendor call. Verified by deleting a working file and restoring
+it byte identical.
+
 ## 2026-08-21, eighth: the true volume, the weekly page, and the freeze
 
 night/true_volume.py writes pm_volume_true, pm_rvol_true,
