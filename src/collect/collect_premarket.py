@@ -273,11 +273,51 @@ class BarBuilder:
         # defeats the measurement it exists to make.
         self.duplicate_replay_skipped = 0
         # Minutes that could not be appended. Counted rather than lost: see
-        # flush() for why they go back into open_bars instead of being marked
-        # written.
+        # flush() for why the UNWRITTEN ones go back into open_bars instead of
+        # being marked written, and why the ones that landed must not.
         self.write_failures = 0
         self.last_write_error: str | None = None
+        # Times this run found the file ending mid line and closed it before
+        # appending. Non zero means a previous run died between a write and its
+        # flush; see _terminate_torn_tail.
+        self.torn_tails_terminated = 0
+        # Trades whose own fields this parser could not place on a clock. See
+        # _handle_message: non zero means the feed sent something this code
+        # does not understand, which is a different fact from a quiet tape and
+        # from a dropped connection.
+        self.unparseable_trades = 0
         self._load_existing()
+
+    def _terminate_torn_tail(self, handle: Any) -> None:
+        """Close an unterminated final line before appending after it.
+
+        read_bars_file trusts only lines that end in a newline, and discards an
+        unterminated final one as the writer caught mid append. That is right
+        for a READER. For this writer it was a trap: the file is opened in
+        append mode, so the first bar of a restarted run was written straight
+        onto the fragment, producing one unparseable line out of two real
+        records and losing the new minute as well as the torn one.
+
+        A fragment can only be the tail, so one newline repairs it. The
+        fragment itself stays where it is and is counted as a bad line by
+        every reader, which is the honest outcome: something was lost, and it
+        is visible rather than glued to something that was not.
+        """
+        if handle.tell() == 0:
+            return
+        try:
+            with self.path.open("rb") as probe:
+                probe.seek(-1, 2)
+                if probe.read(1) == b"\n":
+                    return
+        except OSError:
+            return  # cannot tell; the append is no worse than it was
+        handle.write("\n")
+        handle.flush()
+        self.torn_tails_terminated += 1
+        print(f"collector: {self.path.name} ended mid line, so a newline was "
+              "written before this batch. The fragment stays as an unreadable "
+              "line rather than being glued to the first bar after it.")
 
     def _load_existing(self) -> None:
         """Read back what a previous run already wrote. This is the restart safety."""
@@ -473,6 +513,10 @@ class BarBuilder:
         if not lines:
             return 0
 
+        # How many of this batch's lines are known to be on disk. Counted
+        # rather than assumed, because the batch is written one line at a time
+        # and a fault can land in the middle of it.
+        landed = 0
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # One write and one flush per bar, so the file never holds a
@@ -480,26 +524,41 @@ class BarBuilder:
             # handle is opened per settle batch and closed again, which also
             # flushes through to the OS on every batch.
             with self.path.open("a", encoding="utf-8") as handle:
+                self._terminate_torn_tail(handle)
                 for line in lines:
                     handle.write(line + "\n")
                     handle.flush()
+                    landed += 1
         except OSError as exc:
-            # Put every bar back where it came from and DO NOT raise. Raising
-            # would reach run_websocket's `except (..., OSError)`, which would
-            # report a disk fault as a lost connection, count a reconnect and
+            # Put back ONLY WHAT DID NOT LAND, and DO NOT raise. Raising would
+            # reach run_websocket's `except (..., OSError)`, which would report
+            # a disk fault as a lost connection, count a reconnect and
             # resubscribe into a 50 slot pool that is known to refuse. Instead
-            # the minutes stay open, the next flush retries them, and a fault
-            # that persists shows up as a bar file that stops growing with the
-            # reason counted beside it rather than as a phantom socket drop.
-            for key, bar, is_replay in pending:
+            # the unwritten minutes stay open, the next flush retries them, and
+            # a fault that persists shows up as a bar file that stops growing
+            # with the reason counted beside it rather than as a phantom socket
+            # drop.
+            #
+            # THE SPLIT IS THE FIX. This used to restore the whole batch and
+            # say "nothing has been marked written", which was true of the
+            # bookkeeping and false of the disk: each line is flushed
+            # individually, so a fault on line five of ten leaves four on disk
+            # and re-queues them. The next settle wrote them a second time,
+            # read_bars_file does not deduplicate on (symbol, minute), and the
+            # duplicate minute is counted twice in pm_volume, which is the
+            # numerator of premarket RVOL and of float rotation.
+            for key, bar, is_replay in pending[landed:]:
                 (self.replay_bars if is_replay else self.open_bars).setdefault(key, bar)
             self.write_failures += 1
             self.last_write_error = f"{type(exc).__name__}: {exc}"
-            print(f"collector: FAILED to append {len(lines)} minute(s) to "
-                  f"{self.path.name}: {self.last_write_error}. They are held and "
-                  "will be retried on the next settle; nothing has been marked "
-                  "written.")
-            return 0
+            print(f"collector: FAILED partway through appending {len(lines)} "
+                  f"minute(s) to {self.path.name}: {self.last_write_error}. "
+                  f"{landed} reached disk and are marked written; "
+                  f"{len(lines) - landed} are held for the next settle.")
+            # The landed ones are on disk and must be marked, or they are
+            # written again below. Fall through to the same bookkeeping the
+            # success path uses, over the prefix that actually landed.
+            pending = pending[:landed]
 
         real = 0
         for key, _bar, is_replay in pending:
@@ -891,14 +950,37 @@ def _handle_message(
     if epoch_s <= 0 or price <= 0:
         return
 
-    builder.add_trade(
-        symbol=_full(str(message["s"])),
-        price=price,
-        volume=volume,
-        epoch_s=epoch_s,
-        dark_pool=bool(message.get("dp")),
-        market_status=message.get("ms"),
-    )
+    try:
+        builder.add_trade(
+            symbol=_full(str(message["s"])),
+            price=price,
+            volume=volume,
+            epoch_s=epoch_s,
+            dark_pool=bool(message.get("dp")),
+            market_status=message.get("ms"),
+        )
+    except (OSError, OverflowError, ValueError) as exc:
+        # A MALFORMED MESSAGE IS NOT A LOST CONNECTION, and until this it was
+        # indistinguishable from one. The `t` field is milliseconds; a value in
+        # microseconds, in nanoseconds, or simply corrupt divides to an epoch
+        # outside datetime's range, and ettime.from_epoch_s raises OSError
+        # [Errno 22] on Windows for exactly that. This function is called
+        # inside run_websocket's message loop, whose handler is
+        # `except (ConnectionError, WebSocketException, OSError)`, so ONE bad
+        # trade tore down a healthy socket, counted a reconnect, and
+        # resubscribed into a 50 slot pool the server is known to refuse while
+        # it still holds the slots this run just dropped. The guard on
+        # epoch_s bounds it only from below.
+        #
+        # Counted, not silent. A feed that starts sending a different unit
+        # would otherwise look like a quiet tape, and this counter is what
+        # tells the two apart.
+        builder.unparseable_trades += 1
+        if builder.unparseable_trades <= 3:
+            print(f"collector: discarded a trade this parser cannot place: "
+                  f"{type(exc).__name__}: {exc}. Message keys "
+                  f"{sorted(message)}, t={message.get('t')!r}. It is NOT a "
+                  "connection fault and the socket is left alone.")
 
 
 # -------------------------------------------------------------- poll fallback

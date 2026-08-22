@@ -7,8 +7,8 @@ audit, the nine smaller findings and the nineteen of the full review, added the
 rest, arming the socket cap probe for 2026-08-21 added another, and the
 2026-08-22 read added the three non atomic writes that could reopen a closed
 defect or lose a session, the archive publishing a fixture as a morning, and a
-read that created the directory it was reading. It now carries eighty one
-claims, a count read off the file rather
+read that created the directory it was reading, and three in the collector
+found by a twelve reader review. It now carries eighty four claims, a count read off the file rather
 than remembered, because it said forty four for a while after it held fifty
 seven and a suite that miscounts itself is the first thing a reader stops
 trusting.
@@ -837,6 +837,182 @@ def claim_reading_a_run_directory_does_not_create_one(failures: list[str]) -> No
                             "which mornings exist")
     print("  read only    asking whether a session has a packet leaves no "
           "directory behind, on six readers and on run_path itself")
+
+
+def claim_a_partial_batch_writes_each_minute_once(failures: list[str]) -> None:
+    """A settle batch that dies partway does not write its landed minutes twice.
+
+    BarBuilder.flush writes its batch one line at a time and flushes each one,
+    so the file never holds a buffered partial line while scan reads it at
+    08:45. The OSError handler then restored EVERY bar in `pending` and printed
+    "nothing has been marked written", which was true of the bookkeeping and
+    false of the disk: a fault on line five of ten leaves four on disk and
+    re-queues them, the next settle appends them again, and read_bars_file does
+    not deduplicate on (symbol, minute). A duplicated minute is counted twice in
+    pm_volume, which is the numerator of premarket RVOL and of premarket float
+    rotation, so it reaches the day screen and the report.
+
+    The fault is installed as production produces it, by failing the handle
+    partway through the batch rather than before it. A write that never starts
+    was never the shape of this failure.
+    """
+    from collect.collect_premarket import BarBuilder, read_bars_file
+
+    base = 1_756_000_000
+    with tempfile.TemporaryDirectory(prefix="pmd-partial-") as raw:
+        path = pathlib.Path(raw) / "bars.jsonl"
+        builder = BarBuilder(path, source="socket")
+        for index in range(6):
+            builder.add_trade(symbol=f"S{index}.US", price=10.0, volume=100.0,
+                              epoch_s=base + index, dark_pool=False,
+                              market_status="premarket")
+
+        real_open = pathlib.Path.open
+        seen = {"lines": 0}
+
+        def fail_after_three(self, *args, **kwargs):
+            handle = real_open(self, *args, **kwargs)
+            mode = str(args[0] if args else kwargs.get("mode", ""))
+            if "a" not in mode:
+                return handle
+            real_write = handle.write
+
+            def counted(text):
+                if text.strip():
+                    seen["lines"] += 1
+                    if seen["lines"] > 3:
+                        raise OSError(28, "No space left on device", str(self))
+                return real_write(text)
+
+            handle.write = counted
+            return handle
+
+        pathlib.Path.open = fail_after_three
+        try:
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                builder.flush(base + 400)
+        finally:
+            pathlib.Path.open = real_open
+        first = printed.getvalue()
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            builder.flush(base + 800)
+
+        bars, _stats = read_bars_file(path)
+        counts = {symbol: len(rows) for symbol, rows in bars.items()}
+        duplicated = {s: n for s, n in counts.items() if n > 1}
+        if duplicated:
+            failures.append(f"a partial batch wrote {duplicated} twice; a "
+                            "duplicated minute doubles that minute in pm_volume")
+        if sum(counts.values()) != 6:
+            failures.append(f"{sum(counts.values())} minutes reached disk over "
+                            "two settles, expected all 6 exactly once")
+        if "reached disk and are marked written" not in first:
+            failures.append("the partial write said nothing about how much of "
+                            f"the batch landed: {first.strip()[:160]!r}")
+    print("  partial batch a settle that dies partway writes each landed minute "
+          "once and says how many landed")
+
+
+def claim_a_torn_tail_is_closed_before_the_next_bar(failures: list[str]) -> None:
+    """A restart after a torn final line does not destroy the first new minute.
+
+    read_bars_file trusts only lines ending in a newline and discards an
+    unterminated final one as the writer caught mid append, which is right for
+    a reader. flush opens the file in APPEND mode, so the first bar of a
+    restarted run was written straight onto that fragment: one unparseable line
+    out of two real records, losing the new minute as well as the torn one, and
+    the new minute is one nothing can refetch.
+    """
+    from collect.collect_premarket import BarBuilder, read_bars_file
+
+    base = 1_756_000_000
+    with tempfile.TemporaryDirectory(prefix="pmd-torn-") as raw:
+        path = pathlib.Path(raw) / "bars.jsonl"
+        path.write_text('{"symbol": "AAA.US", "minute_epoch": 1, "v": 1}\n'
+                        '{"symbol": "BB', encoding="utf-8")
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            builder = BarBuilder(path, source="socket")
+            builder.add_trade(symbol="CCC.US", price=10.0, volume=500.0,
+                              epoch_s=base, dark_pool=False,
+                              market_status="premarket")
+            builder.flush(base + 400)
+
+        bars, stats = read_bars_file(path)
+        if "CCC.US" not in bars:
+            failures.append("the first minute written after a torn tail was "
+                            "glued to the fragment and lost")
+        if "AAA.US" not in bars:
+            failures.append("the complete line before the torn one did not "
+                            "survive")
+        if stats["bad_lines_skipped"] != 1:
+            failures.append(f"{stats['bad_lines_skipped']} bad lines after the "
+                            "repair, expected exactly the one torn fragment")
+        if not builder.torn_tails_terminated:
+            failures.append("the torn tail was not counted, so a run that died "
+                            "mid write leaves no trace of having done so")
+    print("  torn tail    a restart onto an unterminated line keeps the new "
+          "minute and leaves the fragment as the only bad line")
+
+
+def claim_an_unplaceable_trade_is_not_a_lost_connection(failures: list[str]) -> None:
+    """A trade this parser cannot place leaves the socket alone.
+
+    The `t` field is milliseconds and _handle_message bounds the divided value
+    only from BELOW. A value in microseconds or nanoseconds, or simply corrupt,
+    reaches ettime.from_epoch_s, which raises OSError [Errno 22] on this
+    platform. _handle_message is called inside run_websocket's message loop,
+    whose handler is `except (ConnectionError, WebSocketException, OSError)`, so
+    ONE bad message tore down a healthy connection, counted a reconnect and
+    resubscribed into a 50 symbol pool the server is known to refuse while it
+    still holds the slots this run just dropped. On a two hour window that is
+    the difference between a thin morning and no tape at all.
+
+    Driven with a window set, because the conversion that raises is the one
+    recording an out of window example and a builder with no window never
+    reaches it.
+    """
+    from collect.collect_premarket import BarBuilder, _handle_message
+
+    base = 1_756_000_000
+    for label, stamp in (("nanoseconds", 1_756_000_000_000_000_000),
+                         ("microseconds", 1_756_000_000_000_000),
+                         ("negative", -8_640_000_000_000_000)):
+        with tempfile.TemporaryDirectory(prefix="pmd-stamp-") as raw:
+            builder = BarBuilder(pathlib.Path(raw) / "bars.jsonl", source="socket",
+                                 window=(base, base + 7200))
+            message = json.dumps({"s": "AAA", "p": 10.0, "v": 100, "t": stamp})
+            printed = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(printed):
+                    _handle_message(message, builder, [])
+            except BaseException as exc:
+                failures.append(
+                    f"a {label} trade timestamp raised {type(exc).__name__} out "
+                    "of _handle_message; run_websocket reads that as a lost "
+                    "connection and resubscribes into a pool that refuses")
+                continue
+            if stamp > 0 and not builder.unparseable_trades:
+                failures.append(f"a {label} trade timestamp was discarded "
+                                "silently; a feed that changed units would look "
+                                "like a quiet tape")
+
+    # And an ordinary trade still lands, so the guard cannot be satisfied by a
+    # handler that drops everything.
+    with tempfile.TemporaryDirectory(prefix="pmd-stamp-ok-") as raw:
+        builder = BarBuilder(pathlib.Path(raw) / "bars.jsonl", source="socket",
+                             window=(base, base + 7200))
+        _handle_message(json.dumps({"s": "AAA", "p": 10.0, "v": 100,
+                                    "t": (base + 10) * 1000}), builder, [])
+        if builder.trades_seen != 1 or builder.unparseable_trades:
+            failures.append(f"an ordinary trade did not fold: seen "
+                            f"{builder.trades_seen}, unparseable "
+                            f"{builder.unparseable_trades}")
+    print("  bad stamp    a trade the parser cannot place is counted and "
+          "discarded, and the connection is left alone")
 
 
 # ---------------------------------------------------------- the collector
@@ -7460,6 +7636,9 @@ def main() -> int:
     claim_an_interrupted_packet_write_leaves_no_half_packet(failures)
     claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures)
     claim_reading_a_run_directory_does_not_create_one(failures)
+    claim_a_partial_batch_writes_each_minute_once(failures)
+    claim_a_torn_tail_is_closed_before_the_next_bar(failures)
+    claim_an_unplaceable_trade_is_not_a_lost_connection(failures)
     claim_the_previous_session_helper_says_when_it_does_not_know(failures)
     claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
     claim_a_previous_session_watchlist_reruns_discover(failures)
