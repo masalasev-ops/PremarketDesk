@@ -7,8 +7,9 @@ audit, the nine smaller findings and the nineteen of the full review, added the
 rest, arming the socket cap probe for 2026-08-21 added another, and the
 2026-08-22 read added the three non atomic writes that could reopen a closed
 defect or lose a session, the archive publishing a fixture as a morning, and a
-read that created the directory it was reading, and three in the collector
-found by a twelve reader review. It now carries eighty four claims, a count read off the file rather
+read that created the directory it was reading, and six from a twelve reader
+review, three in the collector and three in the night. It now carries eighty
+seven claims, a count read off the file rather
 than remembered, because it said forty four for a while after it held fifty
 seven and a suite that miscounts itself is the first thing a reader stops
 trusting.
@@ -1013,6 +1014,241 @@ def claim_an_unplaceable_trade_is_not_a_lost_connection(failures: list[str]) -> 
                             f"{builder.unparseable_trades}")
     print("  bad stamp    a trade the parser cannot place is counted and "
           "discarded, and the connection is left alone")
+
+
+def claim_a_failed_truth_pass_erases_no_measurement(failures: list[str]) -> None:
+    """A night the feed is down does not null the night it was up.
+
+    Every record measure() returns carries the full column set, with the true
+    columns left None when the Alpaca fetch errored or came back below
+    min_true_bars, and store.upsert writes every key it is handed. So a second
+    pass over a session already measured replaced real SIP volume with NULL on
+    every row and left a truth_reason beside it, which store.py's own convention
+    then reads back as "the pass reached this row and could not measure it".
+    That is not what happened: it WAS measured, and the record is gone.
+
+    A second pass is the ordinary case rather than an unusual one. The nightly
+    sweeps unmeasured sessions, the 07:00 catch-up runs the same step, and
+    --reread walks every session on purpose.
+
+    The row is held back WHOLE rather than merged column by column, and that is
+    asserted: the true columns are one measurement over one window, so keeping
+    pm_volume_true from one pass beside a capture_observed from another would
+    publish a ratio whose halves came from different nights.
+    """
+    from core import store
+    from night import true_volume
+
+    day = "2026-08-20"
+    measured = {
+        "_socket": 1000.0, "_estimated": 8532.0, "ticker": "AAA.US",
+        "true_window": "04:00-08:45", "truth_source": "alpaca-sip",
+        "truth_at": "2026-08-20T22:15:00-04:00", "true_bars": 120,
+        "true_baseline_sessions": 20, "pm_volume_true": 9000.0,
+        "pm_rvol_true": 2.5, "pm_float_rotation_true": 0.01,
+        "true_baseline_median": 3600.0, "capture_observed": 0.11,
+        "estimate_error": 0.95, "true_volume_socket_window": 9000.0,
+        "collector_window_share": 0.52, "truth_reason": None,
+    }
+    empty = dict(measured, **{
+        "true_bars": None, "true_baseline_sessions": None,
+        "pm_volume_true": None, "pm_rvol_true": None,
+        "pm_float_rotation_true": None, "true_baseline_median": None,
+        "capture_observed": None, "estimate_error": None,
+        "true_volume_socket_window": None, "collector_window_share": None,
+        "truth_reason": "alpaca: HTTP 503 fetching the window",
+    })
+
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            store.upsert(connection, "picks", ["date", "ticker"],
+                         {"date": day, "ticker": "AAA.US", "source": "live",
+                          "pm_volume": 1000.0})
+            connection.commit()
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            true_volume.write({"day": day, "rows": [dict(measured)],
+                               "skipped": None, "dry_run": False})
+            failed = {"day": day, "rows": [dict(empty)], "skipped": None,
+                      "dry_run": False}
+            wrote = true_volume.write(failed)
+
+        with store.session() as connection:
+            row = connection.execute(
+                "SELECT pm_volume_true, pm_rvol_true, capture_observed, "
+                "true_baseline_median FROM picks WHERE date=? AND ticker=?",
+                (day, "AAA.US")).fetchone()
+
+        if row["pm_volume_true"] != 9000.0:
+            failures.append(f"a failed truth pass overwrote pm_volume_true with "
+                            f"{row['pm_volume_true']!r}; the measurement is gone "
+                            "and the row now reads as one that could not be taken")
+        for column, expected in (("pm_rvol_true", 2.5),
+                                 ("capture_observed", 0.11),
+                                 ("true_baseline_median", 3600.0)):
+            if row[column] != expected:
+                failures.append(f"a failed truth pass overwrote {column} with "
+                                f"{row[column]!r}, expected {expected}")
+        if wrote:
+            failures.append(f"the failed pass reported writing {wrote} row(s); a "
+                            "row it declined to touch is not a row it wrote")
+        if "left as they stand" not in printed.getvalue():
+            failures.append("the failed pass said nothing about the rows it held "
+                            f"back: {printed.getvalue().strip()[:160]!r}")
+        if failed.get("held") != ["AAA.US"]:
+            failures.append(f"the result records held {failed.get('held')!r}, so "
+                            "a caller cannot tell which rows were not retaken")
+
+        # And a row with NO measurement yet still takes the reason, or a
+        # session the feed refused would never record that it refused.
+        with store.session() as connection:
+            store.upsert(connection, "picks", ["date", "ticker"],
+                         {"date": day, "ticker": "BBB.US", "source": "live"})
+            connection.commit()
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            true_volume.write({"day": day, "rows": [dict(empty, ticker="BBB.US")],
+                               "skipped": None, "dry_run": False})
+        with store.session() as connection:
+            fresh = connection.execute(
+                "SELECT truth_reason FROM picks WHERE date=? AND ticker=?",
+                (day, "BBB.US")).fetchone()
+        if not fresh["truth_reason"]:
+            failures.append("a row with no measurement yet did not record why "
+                            "the pass could not take one")
+    print("  truth held   a pass that could not measure leaves a measurement "
+          "standing, names the rows it held, and still records a first refusal")
+
+
+def claim_recall_refuses_a_pool_the_morning_did_not_read(failures: list[str]) -> None:
+    """Recall is not measured against a watchlist that has since been rewritten.
+
+    discover writes ONE undated data/watchlist.json and load_watchlist reads it
+    unconditionally, so pool_recall.build(session_date=...) measured whatever
+    that file held at 22:15 rather than at 07:15. Two of the seven recall
+    artifacts on disk are that: runs/2026-08-21/pool_recall.json publishes
+    discovery_recall_addressable 0.0 against 92 addressable gappers off a three
+    symbol afternoon hand run, and runs/2026-08-13's names a watchlist generated
+    the NEXT DAY. Both read as a morning that caught nothing and neither says so,
+    while DECISIONS quotes recall as evidence for the tier ordering and for the
+    subscription cap.
+
+    The packet settles it, because scan stamps the file the collector actually
+    subscribed against. Refused rather than corrected: an overwritten pool cannot
+    be reconstructed.
+    """
+    from night import pool_recall
+
+    with conftest_activate() as _sandbox:
+        day = "2026-08-13"
+        run = config.run_dir(day)
+        run.mkdir(parents=True, exist_ok=True)
+
+        def write_packet(stamp):
+            body = {"session_date": day, "candidates": []}
+            if stamp is not None:
+                body["watchlist_generated_at"] = stamp
+            (run / "packet.json").write_text(json.dumps(body), encoding="utf-8")
+
+        write_packet("2026-08-13T07:15:00-04:00")
+        stamp, why = pool_recall.watchlist_the_morning_read(day)
+        if stamp != "2026-08-13T07:15:00-04:00" or why:
+            failures.append(f"the packet's stamp read back as {stamp!r} ({why})")
+
+        write_packet(None)
+        stamp, why = pool_recall.watchlist_the_morning_read(day)
+        if stamp is not None or "records no watchlist_generated_at" not in (why or ""):
+            failures.append("a packet with no watchlist stamp did not say so: "
+                            f"{stamp!r}, {why!r}")
+
+        (run / "packet.json").unlink()
+        stamp, why = pool_recall.watchlist_the_morning_read(day)
+        if stamp is not None or "no packet.json" not in (why or ""):
+            failures.append(f"a missing packet did not say so: {stamp!r}, {why!r}")
+
+        # A packet under a nested candidate_provenance still answers, because
+        # scan writes the stamp in both places and only one is guaranteed.
+        (run / "packet.json").write_text(json.dumps({
+            "session_date": day,
+            "candidate_provenance": {"watchlist_generated_at": "2026-08-13T08:21:00-04:00"},
+        }), encoding="utf-8")
+        stamp, _why = pool_recall.watchlist_the_morning_read(day)
+        if stamp != "2026-08-13T08:21:00-04:00":
+            failures.append("the stamp under candidate_provenance was not read, "
+                            "so a watchdog rerun of discover would refuse a "
+                            "session it should measure")
+    print("  wrong pool   the packet says which watchlist the morning read, and "
+          "a missing stamp is told apart from a missing packet")
+
+
+def claim_a_split_is_not_a_gap(failures: list[str]) -> None:
+    """A corporate action does not enter the gapper set as the day's biggest move.
+
+    actual_gappers divided raw open by raw prior close with no adjustment test,
+    so a 4-for-1 forward split with its ex date on the measured session enters at
+    -75 percent and a 1-for-10 reverse split at +900. Each one inflates `gapped`
+    and `addressable`, which are the DENOMINATORS of discovery_recall, so the
+    pool is charged with missing a name that never moved. CRITERIA's price units
+    note makes the same argument for the outcome fill and calls a reverse split
+    candidate "not an exotic case", the screen's price floor being only "> 3".
+
+    Refused with the reason counted rather than rescaled, and a payload that
+    cannot answer is reported as unchecked rather than as clean.
+    """
+    from night import pool_recall
+    from core import criteria
+
+    crit = criteria.load()
+    gap_rule = crit.rule("discovery", "gap_pct")
+    universe_symbols = {"SPLIT.US", "REAL.US", "QUIET.US", "NOADJ.US"}
+
+    # close/adjusted_close is flat between actions and steps at one. SPLIT goes
+    # 4-for-1 on the measured session; REAL just gapped; QUIET did neither.
+    prior = {
+        "SPLIT.US": {"code": "SPLIT", "close": 40.0, "adjusted_close": 40.0},
+        "REAL.US": {"code": "REAL", "close": 10.0, "adjusted_close": 10.0},
+        "QUIET.US": {"code": "QUIET", "close": 10.0, "adjusted_close": 10.0},
+        "NOADJ.US": {"code": "NOADJ", "close": 10.0, "adjusted_close": None},
+    }
+    today = [
+        {"code": "SPLIT", "open": 10.0, "close": 10.0, "adjusted_close": 40.0,
+         "volume": 100.0},
+        {"code": "REAL", "open": 12.0, "close": 12.0, "adjusted_close": 12.0,
+         "volume": 100.0},
+        {"code": "QUIET", "open": 10.0, "close": 10.0, "adjusted_close": 10.0,
+         "volume": 100.0},
+        {"code": "NOADJ", "open": 12.0, "close": 12.0, "volume": 100.0},
+    ]
+    closes = {s: r["close"] for s, r in prior.items()}
+
+    gappers, census = pool_recall.actual_gappers(
+        today, closes, universe_symbols, gap_rule, prior_rows_by_symbol=prior)
+
+    if "SPLIT.US" in gappers:
+        failures.append("a 4-for-1 split entered the gapper set at "
+                        f"{gappers['SPLIT.US']['gap_at_open_pct']} percent, "
+                        "inflating the denominator of discovery_recall")
+    if "REAL.US" not in gappers:
+        failures.append("a real 20 percent gap was refused, so the guard is "
+                        "removing measurements rather than corporate actions")
+    if "QUIET.US" in gappers:
+        failures.append("a name that did not move entered the gapper set")
+    refused = [r["symbol"] for r in census["refused_corporate_action"]]
+    if refused != ["SPLIT.US"]:
+        failures.append(f"the census names {refused} as corporate actions, "
+                        "expected exactly SPLIT.US")
+    if census["unchecked_for_corporate_action"] != 1:
+        failures.append(f"{census['unchecked_for_corporate_action']} rows were "
+                        "reported unchecked, expected the one carrying no "
+                        "adjusted_close; a payload that cannot answer must not "
+                        "read as clean")
+    if "NOADJ.US" not in gappers:
+        failures.append("a row that could not be checked was dropped; unchecked "
+                        "is not the same as refused")
+    print("  split guard  a corporate action is refused from the gapper set with "
+          "its drift counted, and a row that cannot be checked says so")
 
 
 # ---------------------------------------------------------- the collector
@@ -7639,6 +7875,9 @@ def main() -> int:
     claim_a_partial_batch_writes_each_minute_once(failures)
     claim_a_torn_tail_is_closed_before_the_next_bar(failures)
     claim_an_unplaceable_trade_is_not_a_lost_connection(failures)
+    claim_a_failed_truth_pass_erases_no_measurement(failures)
+    claim_recall_refuses_a_pool_the_morning_did_not_read(failures)
+    claim_a_split_is_not_a_gap(failures)
     claim_the_previous_session_helper_says_when_it_does_not_know(failures)
     claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
     claim_a_previous_session_watchlist_reruns_discover(failures)

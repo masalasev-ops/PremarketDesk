@@ -47,18 +47,57 @@ def _as_float(value: Any) -> float | None:
     return out if out == out else None
 
 
+def _adjustment_ratio(row: dict[str, Any]) -> float | None:
+    """close / adjusted_close for one end of day row, or None if it cannot be had.
+
+    Flat between corporate actions and stepping at each one, which is the
+    vendor's own record of an action and the same test
+    fill_outcomes._price_units_broke uses on the outcome legs.
+    """
+    close = _as_float(row.get("close"))
+    adjusted = _as_float(row.get("adjusted_close"))
+    if close is None or not adjusted:
+        return None
+    return close / adjusted
+
+
 def actual_gappers(
     rows: list[dict[str, Any]],
     prior_closes: dict[str, float],
     universe_symbols: set[str],
     gap_rule: Any,
-) -> dict[str, dict[str, Any]]:
+    prior_rows_by_symbol: dict[str, dict[str, Any]] | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any]]:
     """Universe names whose open gapped beyond the floor against the prior close.
 
     The open, not the close. A name that opened up nine percent and gave it all
     back by four o'clock was a premarket gapper and belongs in this set; judging
     it on its close would quietly redefine the thing being measured.
+
+    A SPLIT IS NOT A GAP, and until 2026-08-22 this counted every one as the
+    largest gap of the session. The ratio is raw open over raw prior close with
+    no adjustment test, so a 4-for-1 forward split with its ex date on the
+    measured session enters the set at -75 percent and a 1-for-10 reverse split
+    at +900. Every one of those inflates `gapped` and `addressable`, which are
+    the DENOMINATORS of discovery_recall, so the pool is charged with missing a
+    name that never moved. CRITERIA's price units note makes the same argument
+    for the outcome fill and calls a reverse split candidate "not an exotic
+    case", since the screen's price floor is only "> 3".
+
+    Detected the way the vendor's own record answers it, from close over
+    adjusted_close moving between the two sessions, and REFUSED with the reason
+    counted rather than rescaled: the gap being measured is between two raw
+    prices and a rescaled one would be a computed number in a set meant to hold
+    measured ones.
+
+    Where the payload does not carry adjusted_close the check cannot be applied,
+    and that is reported as unchecked rather than as clean. Returns
+    (gappers, census).
     """
+    prior_rows_by_symbol = prior_rows_by_symbol or {}
+    drift_limit = _CRIT.number("outcomes", "max_adjustment_drift_pct")
+    census = {"refused_corporate_action": [], "unchecked_for_corporate_action": 0,
+              "drift_limit_pct": drift_limit}
     out: dict[str, dict[str, Any]] = {}
     for row in rows or []:
         code = str(row.get("code") or "").strip().upper()
@@ -74,6 +113,20 @@ def actual_gappers(
         gap = (open_price - prior_close) / prior_close * 100.0
         if not gap_rule.test(abs(gap)):
             continue
+
+        today_ratio = _adjustment_ratio(row)
+        prior_ratio = _adjustment_ratio(prior_rows_by_symbol.get(symbol) or {})
+        if today_ratio is None or prior_ratio is None:
+            census["unchecked_for_corporate_action"] += 1
+        elif abs(today_ratio - prior_ratio) / prior_ratio * 100.0 > drift_limit:
+            census["refused_corporate_action"].append({
+                "symbol": symbol,
+                "gap_at_open_pct": round(gap, 4),
+                "adjustment_drift_pct": round(
+                    abs(today_ratio - prior_ratio) / prior_ratio * 100.0, 4),
+            })
+            continue
+
         out[symbol] = {
             "symbol": symbol,
             "gap_at_open_pct": round(gap, 4),
@@ -81,7 +134,8 @@ def actual_gappers(
             "prior_close": prior_close,
             "volume": _as_float(row.get("volume")),
         }
-    return out
+    census["refused_corporate_action"].sort(key=lambda r: r["symbol"])
+    return out, census
 
 
 # The day_setup lines that can be evaluated without the premarket tape, and the
@@ -347,6 +401,33 @@ def measure(
     }
 
 
+def watchlist_the_morning_read(session_date: str) -> tuple[str | None, str | None]:
+    """(the generated_at the packet recorded, why it could not be read).
+
+    The packet is the frozen record of which pool the morning ACTUALLY used,
+    stamped by scan from the file the collector had subscribed against, and it
+    is the only thing that can identify that pool afterwards. data/watchlist.json
+    is a single undated file that discover rewrites, so it answers "what is the
+    pool now", which is a different question on any day somebody re-ran
+    discovery.
+    """
+    path = config.run_path(session_date) / "packet.json"
+    if not path.is_file():
+        return None, f"there is no packet.json for {session_date}"
+    try:
+        packet = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return None, (f"packet.json for {session_date} is unreadable: "
+                      f"{type(exc).__name__}")
+    stamp = (packet.get("watchlist_generated_at")
+             or (packet.get("candidate_provenance") or {}).get("watchlist_generated_at"))
+    if not stamp:
+        return None, (f"the packet for {session_date} records no "
+                      "watchlist_generated_at, so the pool it read cannot be "
+                      "identified")
+    return str(stamp), None
+
+
 class NotMeasurable(RuntimeError):
     """There is nothing to measure yet, which is not the same as a failure.
 
@@ -380,6 +461,21 @@ def build(session_date: str | None = None, write: bool = True,
     universe_payload = universe.load_universe(require_fresh=False)
     universe_symbols = set(universe.universe_symbols(universe_payload))
 
+    # THE POOL ON DISK IS NOT NECESSARILY THE POOL THAT MORNING USED.
+    # discover writes one undated data/watchlist.json and load_watchlist reads
+    # it unconditionally, so every count below was measured against whatever
+    # that file held at 22:15 rather than at 07:15. It is not hypothetical:
+    # runs/2026-08-21/pool_recall.json publishes discovery_recall_addressable
+    # 0.0 against 92 addressable gappers off a three symbol afternoon hand run,
+    # and runs/2026-08-13's file names a watchlist generated the NEXT DAY. Both
+    # are on disk, both read as a morning that caught nothing, and neither says
+    # so.
+    #
+    # The packet is what settles it, because scan stamps the file the collector
+    # actually subscribed against. Refused rather than corrected: the morning's
+    # pool cannot be reconstructed from a file that has been overwritten, and a
+    # recall number measured against the wrong pool is quoted in DECISIONS as
+    # evidence for the tier ordering and for the subscription cap.
     watchlist = discover.load_watchlist()
     pool_rows = watchlist.get("symbols", []) or []
 
@@ -447,7 +543,29 @@ def build(session_date: str | None = None, write: bool = True,
         if code and close:
             prior_closes[code if "." in code else f"{code}.US"] = close
 
-    gappers = actual_gappers(today_rows, prior_closes, universe_symbols, gap_rule)
+    morning_stamp, stamp_reason = watchlist_the_morning_read(today.isoformat())
+    on_disk = watchlist.get("generated_at")
+    if stamp_reason:
+        raise NotMeasurable(
+            f"{stamp_reason}, so the pool this measurement would be taken "
+            f"against cannot be shown to be the one the morning used. "
+            f"data/watchlist.json currently reports generated_at {on_disk!r}.")
+    if str(on_disk) != morning_stamp:
+        raise NotMeasurable(
+            f"data/watchlist.json was generated at {on_disk!r} and the "
+            f"{today.isoformat()} packet records the morning reading one "
+            f"generated at {morning_stamp!r}. The pool has been rewritten since, "
+            "so recall measured now would be a measurement of a different pool. "
+            "Nothing is published for this session.")
+
+    prior_rows_by_symbol: dict[str, dict[str, Any]] = {}
+    for row in prior_rows or []:
+        code = str(row.get("code") or "").strip().upper()
+        if code:
+            prior_rows_by_symbol[code if "." in code else f"{code}.US"] = row
+    gappers, gapper_census = actual_gappers(
+        today_rows, prior_closes, universe_symbols, gap_rule,
+        prior_rows_by_symbol=prior_rows_by_symbol)
 
     universe_rows = {
         str(row.get("symbol", "")).upper(): row
@@ -472,6 +590,9 @@ def build(session_date: str | None = None, write: bool = True,
             "for every name in universe.json"
         ),
         "universe_size": len(universe_symbols),
+        "corporate_actions_refused": gapper_census["refused_corporate_action"],
+        "gappers_unchecked_for_corporate_action":
+            gapper_census["unchecked_for_corporate_action"],
         "pool_size": len(pool_rows),
         "watchlist_generated_at": watchlist.get("generated_at"),
         **result,

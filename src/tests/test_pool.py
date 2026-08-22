@@ -317,6 +317,19 @@ def claim_eight(failures: list[str]) -> None:
         "symbols": [{"symbol": "QUIET.US", "pool_tier": 2, "pool_rank": 1,
                      "subscribed": True, "pool_source": ["news"]}],
     }
+    # The packet the morning froze, carrying the stamp of the pool it read.
+    # build() refuses to measure recall against a watchlist it cannot show is
+    # that one, because data/watchlist.json is a single undated file discover
+    # rewrites: runs/2026-08-21/pool_recall.json was measured against a three
+    # symbol afternoon hand run and published 0.0 recall against 92 addressable
+    # gappers. The stamp here matches the stub above, which is what an
+    # undisturbed session looks like.
+    (sandbox / "2026-08-13").mkdir(parents=True, exist_ok=True)
+    (sandbox / "2026-08-13" / "packet.json").write_text(json.dumps({
+        "session_date": "2026-08-13",
+        "watchlist_generated_at": "2026-08-13T07:15:00-04:00",
+        "candidates": [],
+    }), encoding="utf-8")
     try:
         payload = pool_recall.build(session_date="2026-08-13", write=True)
     except Exception as exc:

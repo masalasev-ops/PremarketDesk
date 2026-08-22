@@ -324,7 +324,9 @@ def population(today: str, prior: str, universe: dict[str, dict[str, Any]],
     prior_closes = {s: b["c"] for s, b in prior_cache.items() if b.get("c")}
     rows = [{"code": s, "open": b.get("o"), "volume": b.get("v")}
             for s, b in today_cache.items()]
-    gappers = pool_recall.actual_gappers(
+    # (gappers, census) since 2026-08-22; the cached bars carry no
+    # adjusted_close, so the census reports every row unchecked.
+    gappers, _census = pool_recall.actual_gappers(
         rows, prior_closes, set(universe), _CRIT.rule("discovery", "gap_pct"))
 
     # Eligible controls: barely moved at all. A name that gapped down eight

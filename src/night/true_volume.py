@@ -527,12 +527,45 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
 
 
 def write(result: dict[str, Any]) -> int:
+    """Write the measured rows, and never over a measurement already held.
+
+    A FAILED PASS MUST NOT ERASE A SUCCESSFUL ONE. Every record carries the
+    full column set, with the true columns left None when the Alpaca fetch
+    errored or came back below min_true_bars, and store.upsert writes every key
+    it is given. So a second run over a session already measured, on a night
+    Alpaca was down, replaced real SIP volume with NULL for every row and left
+    a truth_reason beside it. store.py's own convention then reads that back as
+    "the pass reached this row and could not measure it", which is exactly what
+    it now looks like and is not what happened: it WAS measured, and the record
+    of it is gone.
+
+    The nightly sweeps unmeasured sessions and the 07:00 catch-up runs the same
+    step, so a second pass over a measured session is the ordinary case rather
+    than an unusual one, and --reread walks every session on purpose.
+
+    A row is held back whole rather than merged column by column. The true
+    columns are one measurement taken over one window: keeping pm_volume_true
+    from Tuesday beside a capture_observed from Wednesday's failed attempt would
+    publish a ratio whose halves came from different passes, which is the defect
+    this project has already fixed twice under other names.
+    """
     if result.get("dry_run") or not result["rows"]:
         return 0
     written = 0
+    held: list[str] = []
     with store.session() as connection:
         store.init(connection)
+        existing = {
+            row["ticker"]: row["pm_volume_true"]
+            for row in connection.execute(
+                "SELECT ticker, pm_volume_true FROM picks WHERE date = ?",
+                (result["day"],))
+        }
         for record in result["rows"]:
+            if (record.get("pm_volume_true") is None
+                    and existing.get(record["ticker"]) is not None):
+                held.append(record["ticker"])
+                continue
             # Leading underscore keys are the morning's own columns, carried
             # for the printout. Writing them back would be an overwrite, and
             # this pass writes BESIDE the morning and never over it.
@@ -541,6 +574,12 @@ def write(result: dict[str, Any]) -> int:
                          {**payload, "date": result["day"]})
             written += 1
         connection.commit()
+    if held:
+        print(f"truth: {len(held)} row(s) of {result['day']} already carry a "
+              f"measurement and this pass could not take one, so they were left "
+              f"as they stand rather than nulled: {', '.join(sorted(held))}. "
+              "Re-run when the feed is back.")
+        result["held"] = sorted(held)
     return written
 
 

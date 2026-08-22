@@ -120,7 +120,11 @@ def run(write: bool = True) -> dict[str, Any]:
             for symbol, bar in prior_cache.items()
             if bar.get("c")
         }
-        gappers = pool_recall.actual_gappers(
+        # actual_gappers returns (gappers, census) since 2026-08-22. These
+        # cached bars carry no adjusted_close, so the census reports every row
+        # unchecked for a corporate action, which is the honest reading of a
+        # payload that cannot answer. Research only; nothing downstream reads it.
+        gappers, _census = pool_recall.actual_gappers(
             _as_rows(today_cache), prior_closes, universe_symbols, gap_rule
         )
         target = pool_recall.addressable_target(gappers, universe_rows)

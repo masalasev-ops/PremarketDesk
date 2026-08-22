@@ -334,7 +334,10 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         prior_closes = {s: b["c"] for s, b in prior_cache.items() if b.get("c")}
         rows = [{"code": s, "open": b.get("o"), "volume": b.get("v")}
                 for s, b in today_cache.items()]
-        gappers = pool_recall.actual_gappers(rows, prior_closes, universe_symbols, gap_rule)
+        # (gappers, census) since 2026-08-22; the cached bars carry no
+        # adjusted_close, so the census reports every row unchecked.
+        gappers, _census = pool_recall.actual_gappers(
+            rows, prior_closes, universe_symbols, gap_rule)
         addressable = pool_recall.addressable_target(gappers, universe_rows)["addressable"]
 
         ranked = sorted(addressable.items(),
