@@ -2876,6 +2876,58 @@ NOTABLE_LISTS = (
     "premarket_by_sigma",
 )
 
+# The four states a ranked list can end a morning in, and they are four rather
+# than one empty list because the FIXES differ.
+#
+# UNCOMPUTABLE is an input this project has not produced. Either the leg's own
+# file was lost, or the column the list ranks on is null for every row the leg
+# carries, and the answer in both cases is to go and compute the input.
+# NOTHING_TO_RANK is an input that arrived and carried nothing for this leg to
+# measure, which is a fact about the file rather than about the market.
+# BELOW_THE_FLOOR is a quiet window: the leg measured rows, the ranking key
+# exists, and not one row passed this list's own floor. RANKED is a list
+# holding at least one name, whether or not it filled to list_size.
+#
+# Until 2026-08-22 all four came out as an empty list plus one sentence about
+# being "short", and two of the four have been empty every morning since the
+# section shipped, because return_stdev_20d is null across the whole database.
+# A reader could not tell that from a quiet market, which is precisely the
+# distinction 4.9 already publishes one level up for the legs.
+#
+# The words are chosen to be quantifier free. They are quoted into the report
+# and then scanned by analyst.quantifier_violations, so a state spelled "none
+# cleared the floor" would put a set quantifier into the model's mouth every
+# morning the list was empty. See the note on how these read, below.
+LIST_RANKED = "ranked"
+LIST_UNCOMPUTABLE = "uncomputable"
+LIST_NOTHING_TO_RANK = "nothing to rank"
+LIST_BELOW_THE_FLOOR = "below the floor"
+NOTABLE_LIST_STATES = (LIST_RANKED, LIST_UNCOMPUTABLE, LIST_NOTHING_TO_RANK,
+                       LIST_BELOW_THE_FLOOR)
+
+# What each list RANKS ON, in the words its reason uses when the column is
+# null. A list whose ranking key is null across its leg has not found a quiet
+# market, it has found an input nobody has computed, and the state says which.
+_LIST_RANKING_KEY = {
+    "prior_session_by_sigma": "a move_sigma",
+    "prior_session_by_market_cap": "a market cap on file",
+    "two_session_by_move": "a move over this window",
+    "premarket_by_sigma": "a move_sigma",
+}
+
+# The floor each list applies BEFORE it asks for the ranking key. Three of the
+# four apply none at all: every row the leg measured is a candidate for them,
+# so they come back empty only when the leg does, and BELOW_THE_FLOOR is
+# unreachable for them by construction rather than by accident.
+_LIST_FLOOR_TEXT = {
+    "prior_session_by_sigma": None,
+    "prior_session_by_market_cap": (
+        f"a move of at least {NOTABLE_MIN_ABS_GAP_PCT} percent, which is "
+        f"CRITERIA.md [Notable] min_abs_gap_pct"),
+    "two_session_by_move": None,
+    "premarket_by_sigma": None,
+}
+
 
 # ------------------------------------------------- a note on how these read
 #
@@ -3278,12 +3330,25 @@ def empty_notable_block(reason: str) -> dict[str, Any]:
     list carries the same reason, because whatever stopped the assembly stopped
     all of them.
     """
+    reports: dict[str, Any] = {}
+    for name in NOTABLE_LISTS:
+        # UNCOMPUTABLE and not one of the other three: nothing was read, so
+        # nothing was measured, cleared or ranked. considered is 0 because the
+        # section counted 0, which is a different statement from the null the
+        # legs carry for a denominator nobody could look up.
+        report = {"state": LIST_UNCOMPUTABLE, "reason": reason,
+                  "leg": leg_of_list_key(name),
+                  "ranks_on": _LIST_RANKING_KEY[name],
+                  "considered": 0, "qualified": 0, "selected": 0}
+        report["text"] = _list_report_text(name, report)
+        reports[name] = report
     return {
         "rows": [],
         "lists": {name: [] for name in NOTABLE_LISTS},
+        "list_reports": reports,
         "list_reasons": {name: reason for name in NOTABLE_LISTS},
         "list_size": NOTABLE_LIST_SIZE,
-        "legs": {leg: _leg_report(False, reason, None, 0)
+        "legs": {leg: _leg_report(False, reason, None, 0, False)
                  for leg in _LEG_SPAN_SESSIONS},
         "sessions": None,
         "universe_examined": None,
@@ -3300,16 +3365,81 @@ def empty_notable_block(reason: str) -> dict[str, Any]:
 
 
 def _leg_report(available: bool, reason: str | None, examined: Any,
-                selected: int) -> dict[str, Any]:
+                selected: int, input_present: bool) -> dict[str, Any]:
     """One leg's line in the section's own accounting.
 
     examined and selected are both reported because 4.9 says zero examined is a
     different outcome from zero selected. A leg that looked at 2,754 names and
     picked none is a quiet market; a leg that looked at none is a lost input,
     and a section that published one number could not tell you which it had.
+
+    input_present splits the second of those in half, which is what the ranked
+    lists read. A leg comes back unavailable for two different reasons: the
+    file it reads was missing or unusable, or the file was read and carried
+    nothing this leg could measure. Both leave available false, and the fixes
+    are a lost input against a quiet window, so a list reporting one as the
+    other sends its reader to the wrong place. It is a required argument rather
+    than a defaulted one, so that a new call site has to decide.
     """
     return {"available": available, "reason": reason,
-            "examined": examined, "selected": selected}
+            "examined": examined, "selected": selected,
+            "input_present": input_present}
+
+
+def _list_report_text(name: str, report: dict[str, Any]) -> str:
+    """One ranked list's whole outcome, as the one sentence the report quotes.
+
+    Built HERE rather than once in REPORT_TEMPLATE.md and again in
+    fallback_report, because a sentence assembled in two renderers says two
+    different things the first time one of them is edited, and this project has
+    already paid for that with the table headers. Both quote this string.
+
+    The counts come first and the state names them: selected of qualified of
+    considered, then the state, then the reason. A list that filled says so in
+    the same shape as a list that could not be computed, so a reader comparing
+    four lines is comparing four of the same thing.
+    """
+    text = (f"The {name} list is {report['state']}: {report['selected']} "
+            f"selected of {report['qualified']} qualified of "
+            f"{report['considered']} considered on the {report['leg']} leg.")
+    reason = str(report.get("reason") or "").strip()
+    if reason:
+        said = f"{reason[:1].upper()}{reason[1:]}"
+        text += " " + (said if said.endswith(".") else said + ".")
+    return text
+
+
+def _key_absence(name: str, leg_rows: dict[str, tuple[Any, ...]],
+                 block: dict[str, Any]) -> str:
+    """Why the key a list ranks on is null, in the section's own count.
+
+    A list reporting UNCOMPUTABLE has said that its ranking key is absent; this
+    says what made it absent, which is the whole difference between "the Sunday
+    rebuild has not run" and "these particular names are too young to measure".
+    move_sigma already produces four distinct reasons and puts one on every leg
+    row, so this tallies those rather than inventing a fifth.
+
+    The tally is quoted rather than summarised: the count that carries a reason
+    is given beside the leg's own size, so a leg where one cause dominates and a
+    leg where four causes split evenly read differently. Ties break on the text,
+    so the sentence is the same on two runs over the same input.
+
+    Written in counts, never in quantifiers, like every other string this
+    section hands the model. See the note on how these read.
+    """
+    if name == "prior_session_by_market_cap":
+        missing = block.get("names_without_market_cap") or 0
+        return (f"{missing} cleared the floor and carry nothing in the "
+                "universe file's market cap field, so 0 of them could be "
+                "ranked by it.")
+    tally: dict[str, int] = {}
+    for value in leg_rows.values():
+        if value[1] is None and value[2]:
+            tally[str(value[2])] = tally.get(str(value[2]), 0) + 1
+    if not tally:
+        return ""
+    said, hits = max(tally.items(), key=lambda item: (item[1], item[0]))
+    return f"{hits} of {len(leg_rows)} report: {said}"
 
 
 def notable_section(
@@ -3392,6 +3522,7 @@ def notable_movers(
     block: dict[str, Any] = {
         "rows": [],
         "lists": {name: [] for name in NOTABLE_LISTS},
+        "list_reports": {},
         "list_size": NOTABLE_LIST_SIZE,
         "legs": {},
         "sessions": None,
@@ -3461,8 +3592,8 @@ def notable_movers(
         lost = ("data/universe-closes-<date>.json is not readable for this "
                 "session, so both universe legs were lost")
         block["skipped"] = lost
-        block["legs"]["prior_session"] = _leg_report(False, lost, None, 0)
-        block["legs"]["two_session"] = _leg_report(False, lost, None, 0)
+        block["legs"]["prior_session"] = _leg_report(False, lost, None, 0, False)
+        block["legs"]["two_session"] = _leg_report(False, lost, None, 0, False)
     else:
         counters = closes_denominators(closes_payload)
         block["universe_examined"] = counters["universe_examined"]
@@ -3474,7 +3605,15 @@ def notable_movers(
         block["sessions"] = {key: sessions.get(key) for key in ("c1", "c2", "c3")}
 
     # ------------------------------------------------------------- the legs
-    # Every value is (move_pct, sigma, sigma_reason, price_time).
+    # Every value is (move_pct, sigma, sigma_reason, price_time, price_age_s).
+    #
+    # The age is carried rather than discarded because the premarket gate below
+    # computes it, drops the rows past the limit and then throws the number
+    # away, so a row that SURVIVED the gate published a bare timestamp and left
+    # the reader to subtract it from a scan clock the report does not print. A
+    # print 400 seconds old is inside the limit and is still not the price the
+    # reader is looking at. Null on both universe legs, where a close has no
+    # intraday age at all.
     legs: dict[str, dict[str, tuple[Any, ...]]] = {name: {} for name in _LEG_SPAN_SESSIONS}
     malformed = 0
 
@@ -3515,7 +3654,8 @@ def notable_movers(
         for leg in ("prior_session", "two_session"):
             block["legs"][leg] = _leg_report(
                 False, undated,
-                (block["names_with_both_closes_for_leg"] or {}).get(leg), 0)
+                (block["names_with_both_closes_for_leg"] or {}).get(leg), 0,
+                False)
     elif closes_payload is not None and _readable_date(sessions.get("c1")) is None:
         undated = (f"the closes sidecar carries sessions.c1 "
                    f"{sessions.get('c1')!r}, which is not a session this section "
@@ -3525,7 +3665,8 @@ def notable_movers(
         for leg in ("prior_session", "two_session"):
             block["legs"][leg] = _leg_report(
                 False, undated,
-                (block["names_with_both_closes_for_leg"] or {}).get(leg), 0)
+                (block["names_with_both_closes_for_leg"] or {}).get(leg), 0,
+                False)
 
     if closes_payload is not None and undated is None:
         for symbol, row in closes.items():
@@ -3545,13 +3686,15 @@ def notable_movers(
                 sigma, reason = move_sigma(prior, stats.get(symbol),
                                            _LEG_SPAN_SESSIONS["prior_session"],
                                            stats_unreadable)
-                legs["prior_session"][symbol] = (prior, sigma, reason, None)
+                legs["prior_session"][symbol] = (prior, sigma, reason,
+                                                 None, None)
             two = _pct_move(c1, c3)
             if two is not None:
                 sigma, reason = move_sigma(two, stats.get(symbol),
                                            _LEG_SPAN_SESSIONS["two_session"],
                                            stats_unreadable)
-                legs["two_session"][symbol] = (two, sigma, reason, None)
+                legs["two_session"][symbol] = (two, sigma, reason,
+                                               None, None)
 
         per_leg = block["names_with_both_closes_for_leg"] or {}
         # A third session the vendor never answered for and a third session
@@ -3561,6 +3704,12 @@ def notable_movers(
         # reporting a quiet market.
         never_bought = block["third_session_available"] is False
         for leg in ("prior_session", "two_session"):
+            # input_present is the same fork the reason above already makes. A
+            # third session nobody bought is a LOST INPUT and reads as
+            # uncomputable one level down; a sidecar that was read and carried
+            # no pair of closes for this leg is a file with nothing in it, and
+            # reads as nothing to rank.
+            present = True
             if legs[leg]:
                 reason = None
             elif leg == "two_session" and never_bought:
@@ -3568,10 +3717,11 @@ def notable_movers(
                           "bulk call did not answer, so third_session_available "
                           "is false and c3 is null on every row. This leg has no "
                           "baseline rather than no movers.")
+                present = False
             else:
                 reason = f"0 rows carried both of the closes the {leg} leg needs"
             block["legs"][leg] = _leg_report(
-                bool(legs[leg]), reason, per_leg.get(leg), 0)
+                bool(legs[leg]), reason, per_leg.get(leg), 0, present)
 
     context = {collect_premarket._full(s)
                for s in _CRIT.text_list("collector", "context_symbols")}
@@ -3604,7 +3754,7 @@ def notable_movers(
             sigma, reason = move_sigma(move, stats.get(symbol),
                                        _LEG_SPAN_SESSIONS["premarket"],
                                        stats_unreadable)
-            legs["premarket"][symbol] = (move, sigma, reason, price_time)
+            legs["premarket"][symbol] = (move, sigma, reason, price_time, age)
     block["premarket_prices_too_old"] = stale
     if stale:
         packet.gap(
@@ -3613,12 +3763,19 @@ def notable_movers(
             f"the {price_age_limit:,.0f}s limit in {config.CRITERIA_PATH.name} "
             "[price age]. The same floor drops them from the candidate path.")
 
+    # premarket_input is the same fork again. A collector file with no bars and
+    # an unreadable sidecar are both inputs this leg never got; a collector that
+    # was heard and a sidecar that was read, with no symbol carrying both, is a
+    # leg with nothing in it.
+    premarket_input = True
     if not bars_by_symbol:
         premarket_reason = ("the collector file carried no bars, so the "
                             "premarket leg had nothing to measure")
+        premarket_input = False
     elif closes_payload is None:
         premarket_reason = ("the closes sidecar is unreadable, so the premarket "
                             "leg had no c1 baseline to measure against")
+        premarket_input = False
     elif not legs["premarket"]:
         premarket_reason = ("0 subscribed symbols outside the context "
                             "tickers carried both a collector price and a c1 "
@@ -3632,7 +3789,7 @@ def notable_movers(
     # written to prevent.
     block["legs"]["premarket"] = _leg_report(
         bool(legs["premarket"]), premarket_reason,
-        len(heard) if closes_payload is not None else None, 0)
+        len(heard) if closes_payload is not None else None, 0, premarket_input)
 
     # ------------------------------------------------------------ the lists
     def top(leg: str, key, population=None) -> list[str]:
@@ -3642,30 +3799,41 @@ def notable_movers(
 
     picks: dict[str, list[str]] = {name: [] for name in NOTABLE_LISTS}
     populations: dict[str, dict[str, tuple[Any, ...]]] = {}
+    # What cleared each list's own FLOOR, before its ranking key is asked for.
+    # Two stages rather than one, because "0 cleared the floor" and "0 carry
+    # the key" are two different empties with two different fixes, and a single
+    # population count collapses them into one number nobody can read. Three of
+    # the four lists apply no floor, so cleared is the whole leg for them.
+    cleared: dict[str, dict[str, tuple[Any, ...]]] = {}
 
     def with_sigma(leg: str) -> dict[str, tuple[Any, ...]]:
         return {s: v for s, v in legs[leg].items() if v[1] is not None}
 
+    cleared["prior_session_by_sigma"] = dict(legs["prior_session"])
     populations["prior_session_by_sigma"] = with_sigma("prior_session")
     picks["prior_session_by_sigma"] = top(
         "prior_session", lambda s: legs["prior_session"][s][1],
         populations["prior_session_by_sigma"])
 
     # See call TWO in the docstring: at least, not more than.
-    populations["prior_session_by_market_cap"] = {
+    cleared["prior_session_by_market_cap"] = {
         s: v for s, v in legs["prior_session"].items()
-        if abs(v[0]) >= NOTABLE_MIN_ABS_GAP_PCT and s in caps}
+        if abs(v[0]) >= NOTABLE_MIN_ABS_GAP_PCT}
+    populations["prior_session_by_market_cap"] = {
+        s: v for s, v in cleared["prior_session_by_market_cap"].items()
+        if s in caps}
     block["names_without_market_cap"] = len(
-        [s for s, v in legs["prior_session"].items()
-         if abs(v[0]) >= NOTABLE_MIN_ABS_GAP_PCT and s not in caps])
+        [s for s in cleared["prior_session_by_market_cap"] if s not in caps])
     picks["prior_session_by_market_cap"] = top(
         "prior_session", lambda s: caps[s],
         populations["prior_session_by_market_cap"])
 
+    cleared["two_session_by_move"] = dict(legs["two_session"])
     populations["two_session_by_move"] = dict(legs["two_session"])
     picks["two_session_by_move"] = top(
         "two_session", lambda s: abs(legs["two_session"][s][0]))
 
+    cleared["premarket_by_sigma"] = dict(legs["premarket"])
     populations["premarket_by_sigma"] = with_sigma("premarket")
     picks["premarket_by_sigma"] = top(
         "premarket", lambda s: legs["premarket"][s][1],
@@ -3673,39 +3841,81 @@ def notable_movers(
 
     block["lists"] = dict(picks)
 
-    # 4.9's rule applied one level down. A list holding fewer than list_size
-    # names says why, because "the ranking key is null for every name on this
-    # leg" and "the market was quiet" are different facts and an empty list
-    # cannot tell them apart. This is not hypothetical on the first shipped
-    # section: every return_stdev_20d in the database is null until the Sunday
-    # 21:00 rebuild, so lists 1 and 4 come back empty on their ranking key
-    # while their legs are perfectly available.
-    def shortfall(name: str, leg: str) -> str | None:
-        if len(picks[name]) >= NOTABLE_LIST_SIZE:
-            return None
-        report = block["legs"].get(leg) or {}
-        if not report.get("available"):
-            return report.get("reason") or f"the {leg} leg is unavailable"
-        population = populations[name]
-        examined = len(legs[leg])
-        if population:
-            return (f"{len(population)} of {examined} on the {leg} leg qualified "
-                    f"for this list, fewer than the {NOTABLE_LIST_SIZE} it holds")
-        if name.endswith("_by_sigma"):
-            return (f"0 of {examined} on the {leg} leg carry a move_sigma, so "
-                    "this list has no ranking key at all. The "
-                    "move_sigma_reason on the rows says why, and it is the "
-                    "same reason throughout when the gap statistics column is "
-                    "empty.")
-        if name == "prior_session_by_market_cap":
-            return (f"0 of {examined} on the {leg} leg both moved at least "
-                    f"{NOTABLE_MIN_ABS_GAP_PCT} percent, which is "
-                    "CRITERIA.md [Notable] min_abs_gap_pct, and carried a "
-                    "market cap on file")
-        return f"0 rows on the {leg} leg carried a move over this window"
+    # 4.9's rule applied one level down, and it is the part of this section
+    # that was still missing. A list that comes back with nothing has to say
+    # WHICH nothing it is, in one of four fixed states, beside the count it
+    # considered, because "the column this ranks on does not exist yet" and
+    # "the market was quiet" are different facts and a bare empty list cannot
+    # tell them apart. It has not been hypothetical for one morning: every
+    # return_stdev_20d in the database is null until the Sunday 21:00 rebuild,
+    # so lists 1 and 4 have come back empty on their ranking key on every run
+    # the section has ever made while their legs were perfectly available, and
+    # the report said only that they were "short".
+    #
+    # The denominator travels with the state for the same reason the Summary
+    # quotes "day eligible 3 of 12" rather than "day eligible 3": a count with
+    # nothing under it cannot be read. considered is what the leg MEASURED,
+    # qualified is what cleared this list's floor and carried its ranking key,
+    # and selected is what it published. Three stages, and each pair of them
+    # names a different failure.
+    def list_report(name: str, leg: str) -> dict[str, Any]:
+        leg_report = block["legs"].get(leg) or {}
+        considered = len(legs[leg])
+        qualified = len(populations[name])
+        selected = len(picks[name])
+        key = _LIST_RANKING_KEY[name]
 
+        if not leg_report.get("available"):
+            lost = leg_report.get("reason") or f"the {leg} leg is unavailable"
+            if leg_report.get("input_present"):
+                state = LIST_NOTHING_TO_RANK
+                reason = (f"the {leg} leg's input was read and carried 0 rows "
+                          f"this list could rank: {lost}")
+            else:
+                state = LIST_UNCOMPUTABLE
+                reason = (f"the {leg} leg's input is missing, so this list "
+                          f"could not be computed at all: {lost}")
+        elif not cleared[name]:
+            # Reachable only for a list that HAS a floor, which is list 2
+            # alone. The other three rank whatever the leg measured, so an
+            # empty cleared set means an empty leg, and the branch above has
+            # already taken it.
+            state = LIST_BELOW_THE_FLOOR
+            reason = (f"0 of {considered} on the {leg} leg cleared this list's "
+                      f"floor, {_LIST_FLOOR_TEXT[name]}. The leg was measured "
+                      "and nothing in it reached that line.")
+        elif qualified == 0:
+            state = LIST_UNCOMPUTABLE
+            reason = (f"0 of {considered} on the {leg} leg carry {key}, which "
+                      f"is the key this list ranks on, so it could not be "
+                      "computed.")
+            absence = _key_absence(name, legs[leg], block)
+            if absence:
+                reason = f"{reason} {absence}"
+        elif selected < NOTABLE_LIST_SIZE:
+            state = LIST_RANKED
+            reason = (f"{qualified} of {considered} on the {leg} leg qualified "
+                      f"for this list, fewer than the {NOTABLE_LIST_SIZE} it "
+                      "holds")
+        else:
+            state = LIST_RANKED
+            reason = None
+
+        report = {"state": state, "reason": reason, "leg": leg,
+                  "ranks_on": key, "considered": considered,
+                  "qualified": qualified, "selected": selected}
+        report["text"] = _list_report_text(name, report)
+        return report
+
+    block["list_reports"] = {
+        name: list_report(name, leg_of_list_key(name)) for name in NOTABLE_LISTS}
+    # The reason strings on their own, because REPORT_TEMPLATE.md and
+    # fallback_report have quoted list_reasons since the section shipped and
+    # the archive holds packets carrying it. DERIVED from the reports above and
+    # never written a second time, so the two cannot drift apart.
     block["list_reasons"] = {
-        name: shortfall(name, leg_of_list_key(name)) for name in NOTABLE_LISTS}
+        name: report["reason"]
+        for name, report in block["list_reports"].items()}
 
     # ------------------------------------------------------------- the rows
     # Deduplication is WITHIN a leg and never across legs. A name selected by
@@ -3743,7 +3953,7 @@ def notable_movers(
         if entry is None:
             unmeasured += 1
             continue
-        move, sigma, sigma_reason, price_time = entry
+        move, sigma, sigma_reason, price_time, price_age = entry
         candidate = by_symbol.get(symbol)
         catalyst, catalyst_state = _catalyst_of(candidate)
         rows.append({
@@ -3789,6 +3999,12 @@ def notable_movers(
             # vintage holds that one to the premarket window as well as to the
             # session. Null elsewhere means not applicable, not missing.
             "price_time": price_time,
+            # The same print's age against the scan clock, in seconds, which
+            # the gate above already computed to decide whether to keep this
+            # row at all. A name that SURVIVES the gate can still be materially
+            # old, and a reader given a bare timestamp has to subtract it from
+            # a clock the report never prints. Null wherever price_time is.
+            "price_age_seconds": price_age,
             "selected_by": selected_by[(leg, symbol)],
         })
     block["rows"] = rows

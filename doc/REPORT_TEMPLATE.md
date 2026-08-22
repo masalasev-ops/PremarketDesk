@@ -276,7 +276,7 @@ the packet gives them. The header row is fixed and is reproduced exactly as
 this line, character for character, because the containment guard locates
 ticker columns by it:
 
-| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | On watchlist | Price time |
+| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | On watchlist | Price time | Price age s |
 
 One row per packet row. Leg and As of are quoted from the row's leg and
 as_of_session and are never reworded. Sigma is move_sigma; where it is null
@@ -287,9 +287,16 @@ column. On watchlist carries the row's also_on_watchlist value, and where that
 is null write the words not screened, which is what a null there means: the
 symbol was never put through the day or swing screen at all, rather than put
 through it and refused. Price time carries the row's price_time or a dash, and
-only the premarket leg has one at all. Catalyst is the headline where
-catalyst_state is fetched, the words not checked where it is not checked, and
-the words no catalyst found where it is that.
+only the premarket leg has one at all. Price age s carries the row's
+price_age_seconds rounded to a whole number of seconds, or a dash where the row
+has none, and it is the age of that same print against the scan clock. Write it
+from the packet and never subtract one timestamp from another to get it: the
+scan clock is not in the report, so a reader cannot check that subtraction and
+neither can you. A row is in this table because its print passed the [price age]
+limit, which is a ceiling and not a freshness claim, so a surviving row may
+still be several hundred seconds old and the column is how a reader sees that.
+Catalyst is the headline where catalyst_state is fetched, the words not checked
+where it is not checked, and the words no catalyst found where it is that.
 
 Then, once for the whole table rather than once per row, one paragraph
 identifying the distinct tickers in it, in the order the rows first mention
@@ -311,13 +318,36 @@ right and the finding was wrong.
 If notable_movers.rows is empty the table is still written, header and
 separator and one row, exactly like this:
 
-| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | On watchlist | Price time |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| none | | | | | | | | |
+| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | On watchlist | Price time | Price age s |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| none | | | | | | | | | |
 
 Then one sentence per leg in notable_movers.legs whose available is false,
-quoting its reason word for word, and one sentence per entry in
-notable_movers.list_reasons that is not null, quoting that the same way.
+quoting its reason word for word.
+
+THEN ONE SENTENCE PER RANKED LIST, ALL FOUR OF THEM, QUOTING
+notable_movers.list_reports[name].text WORD FOR WORD. Not only the lists that
+came back short, and not a sentence of your own: that string already carries the
+list's state, the three counts behind it and the reason, in fixed wording, and it
+is written so a reader can compare four lines that are four of the same thing.
+
+The state is one of four words and they are not interchangeable. `ranked` means
+the list holds at least one name. `uncomputable` means an input this project has
+not produced: either the leg's file was lost, or the column the list ranks on is
+null on every row the leg carries, and the reason says which. `nothing to rank`
+means the input arrived and carried nothing for that leg to measure. `below the
+floor` means the leg measured rows, the ranking key exists, and not one row
+reached that list's own floor. An empty list is NOT evidence of a quiet market
+unless the state is `below the floor`; the other two empties are facts about the
+inputs. Do not paraphrase one as the other, and do not write that a list found
+nothing without giving its state and its considered count in the same sentence.
+
+This is not hypothetical. return_stdev_20d is null across the whole gap
+statistics database until the Sunday 21:00 rebuild fills it, so
+prior_session_by_sigma and premarket_by_sigma come back `uncomputable` on those
+mornings while their legs are perfectly available, and a report that renders
+them as merely empty has told its reader the market was quiet.
+
 Finish by stating what the section examined, using
 notable_movers.universe_examined and the per leg examined counts, so a reader
 can tell a leg that examined the whole universe and selected nothing apart from

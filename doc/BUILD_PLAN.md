@@ -524,11 +524,20 @@ reconstruct it from the numbered items below:
      four [Notable] CRITERIA keys are now read. scan.notable_movers assembles
      it, the packet carries notable_movers, REPORT_TEMPLATE.md has the section,
      prompt_analyst.md has rule 15, fallback_report emits it too, and
-     tests/test_notable.py holds thirteen claims wired into run_tests.SUITE.
+     tests/test_notable.py holds twenty six claims wired into run_tests.SUITE.
+     [corrected 2026-08-22: this said thirteen, which was the count on the day
+     the section shipped and had not moved since. It was twenty four before
+     today's two were added. The number is CLAIMS at the foot of that file and
+     main() prints it; count it there rather than trusting this line.]
      What it produces on the first shipped morning is thin and correctly so:
      every return_stdev_20d in the database is null until the Sunday 21:00
      rebuild, so lists 1 and 4 come back empty on their ranking key while their
-     legs are perfectly available, and list_reasons says exactly that. Two
+     legs are perfectly available, and list_reasons says exactly that.
+     [2026-08-22: "says exactly that" was too generous. It said the lists were
+     "short" and gave a reason with no state and no denominator beside it, so a
+     reader could not tell a null column from a quiet market. Every ranked list
+     now publishes one of four fixed states with the count it considered: see
+     4.4 and 4.9 below.] Two
      things it surfaced belong to the owner and are in DECISIONS.md: universe.json
      carries at least two implausible market caps and list 2 is the first thing
      in this project that RANKS by that column, and a close to close move over
@@ -820,11 +829,19 @@ because what a fix WAS is the useful part.
        it. standalone() rebinds those constants now and prints which ones it
        moved.
 
-## Layer 4: the notable movers section, specified
+## Layer 4: the notable movers section, BUILT 2026-08-20
+
+STATUS IS RECORDED IN "What remains" ITEM B ABOVE, and that is the line to read
+first: the section shipped on 2026-08-20 and this heading said "specified" until
+2026-08-22, which sent at least one reader looking for unbuilt work in a section
+the same file records as done.
 
 Ordered by the owner on 2026-08-16, settled over the two days after, and
 amended on 2026-08-17 by three rulings recorded in DECISIONS.md. This is the
-whole design. Where a point was decided while writing this down rather than by
+whole design, and it is now also the record of what was built from it: where the
+shipped section has moved past a paragraph below, the paragraph carries a dated
+note rather than being rewritten, so the original call and the change to it are
+both readable. Where a point was decided while writing this down rather than by
 the owner, it says so, so it can be overruled cheaply.
 
 ### Already built, do not rebuild
@@ -887,7 +904,11 @@ had no axis for the section, so a rerun that lost it was thinner on nothing;
 fallback_report writes its own headings and would have dropped the section on
 any morning the model call failed; and the suite's only notable header was a
 seven column hand written literal pinned by nothing, against the nine the
-section publishes.
+section publishes. [2026-08-22: ten. A price age column was added beside price
+time, because the premarket leg computed the age to apply the [price age] floor
+and then discarded it, so a row that CLEARED a 900 second ceiling published a
+bare timestamp and left the reader to subtract it from a scan clock the report
+does not print.]
 
 ### 4.1 Scope fence
 
@@ -1031,12 +1052,43 @@ to carry the mark, since that list draws from the pool the watchlist came
 from, and that is precisely why the premarket leg was given its own list
 instead of being allowed to crowd the others.
 
+[2026-08-22: EVERY LIST STATES ITS OWN OUTCOME, in one of four fixed states,
+with the count it considered beside it. This was 4.9's rule and it had been
+applied only to the legs. Lists 1 and 4 have come back empty on every run the
+section has ever made, because return_stdev_20d is null across the gap
+statistics database until the Sunday rebuild, and the report said only that
+they were "short".
+
+  - `ranked`: the list holds at least one name.
+  - `uncomputable`: an input nobody has produced. Either the leg's own file was
+    lost, or the column the list ranks on is null on every row the leg carries.
+  - `nothing to rank`: the input arrived and carried nothing for that leg to
+    measure.
+  - `below the floor`: the leg measured rows, the ranking key exists, and not
+    one row reached this list's own floor. The only one of the three empties
+    that means the market was quiet.
+
+Three counts travel with the state, as scan.list_report writes them: considered
+is what the leg measured, qualified is what cleared this list's floor and
+carried its ranking key, and selected is what it published. The whole sentence
+is assembled once in scan._list_report_text and quoted word for word by
+REPORT_TEMPLATE.md and by fallback_report, so the two renderers cannot drift.
+Held by claim_an_empty_list_says_which_empty_it_is.]
+
 ### 4.5 Row fields
 
 ticker, leg, as_of_session, the move on that leg, move_sigma, market cap, the
 catalyst headline where one was fetched, and the also on watchlist mark.
 price_time where the leg has one, which is the premarket leg alone, and
 vintage holds that one to the premarket window as well as to the session.
+
+[2026-08-22: price_age_seconds beside it, on the same rows and null on the same
+ones. The [price age] floor is a CEILING of 900 seconds, so a row that survives
+it can still be fifteen minutes behind the scan clock, and the scan clock is not
+in the report: a reader given the stamp alone could not compute the one number
+that says how stale the published price is. The premarket leg already computed
+the age to apply the floor and was discarding it. Held by
+claim_a_premarket_row_carries_the_age_of_its_price.]
 
 ### 4.6 Catalysts
 
@@ -1092,6 +1144,12 @@ universe_examined from the closes file as what it examined, alongside, per
 leg, how many names carried both of the closes that leg needs. Zero examined
 is a different outcome from zero selected and the section reports both
 numbers.
+
+[2026-08-22: the same rule now applies one level down, to the four ranked
+lists, which had been exempt from it since the section shipped. Each publishes
+a state and a considered count, and _leg_report gained input_present so a list
+can tell a leg whose file was lost from a leg whose file was read and carried
+nothing. See the note at the end of 4.4 for the four states.]
 
 ### 4.10 Done when
 

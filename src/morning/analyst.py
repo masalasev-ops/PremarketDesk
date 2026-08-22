@@ -516,7 +516,7 @@ def fallback_report(
         "a very large one may be an action rather than a move.")
     add("")
     add(NOTABLE_HEADER)
-    add("|---|---|---|---|---|---|---|---|---|")
+    add("|---|---|---|---|---|---|---|---|---|---|")
     notable_rows = notable.get("rows") or []
     for row in notable_rows:
         # _cell, not the raw value. The catalyst is a vendor headline and
@@ -534,14 +534,20 @@ def fallback_report(
             catalyst = {"fetched": "no headline text on the article",
                         "no catalyst found": "no catalyst found",
                         "not checked": "not checked"}.get(state, state)
+        # The age beside the stamp, not instead of it. A timestamp says WHEN
+        # the print was and an age says how far behind the scan clock it is,
+        # and the reader cannot get the second from the first without a clock
+        # the report does not print. Only the premarket leg carries either.
+        age = row.get("price_age_seconds")
         add(f"| {_bare(row.get('symbol') or '')} | {_cell(row.get('leg'))} "
             f"| {_cell(row.get('as_of_session'))} | {_f(row.get('move_pct'))} "
             f"| {_f(row.get('move_sigma'), 2)} | {_cap(row.get('market_cap'))} "
             f"| {_cell(catalyst)} "
             f"| {_cell(row.get('also_on_watchlist') or 'not screened')} "
-            f"| {_cell(row.get('price_time') or '-')} |")
+            f"| {_cell(row.get('price_time') or '-')} "
+            f"| {_f(age, 0) if age is not None else '-'} |")
     if not notable_rows:
-        add("| none | | | | | | | | |")
+        add("| none | | | | | | | | | |")
     # One paragraph for the whole table rather than a tenth column, because
     # NOTABLE_HEADER is fixed and _ticker_claims locates ticker columns by it.
     # The names are carried at all because list 2 ranks by market cap and a
@@ -566,9 +572,16 @@ def fallback_report(
     for leg, report in sorted((notable.get("legs") or {}).items()):
         if not report.get("available") and report.get("reason"):
             add(f"The {leg} leg was lost: {report['reason']}")
-    for name, reason in sorted((notable.get("list_reasons") or {}).items()):
-        if reason:
-            add(f"The {name} list is short: {reason}")
+    # EVERY list, not only the short ones, and the sentence comes from the
+    # packet rather than being assembled here. A list that returned nothing has
+    # to say which nothing it is and how many it considered, and until
+    # 2026-08-22 the two sigma lists came back empty every single morning with
+    # one word, "short", standing in for "the column this ranks on has never
+    # been computed".
+    for name, report in sorted((notable.get("list_reports") or {}).items()):
+        text = (report or {}).get("text")
+        if text:
+            add(str(text))
     examined = notable.get("universe_examined")
     counted = f"{examined:,}" if isinstance(examined, int) else "an unknown number of"
     add(f"The section examined {counted} universe symbols.")
@@ -1260,7 +1273,7 @@ def _prose_tokens(report_text: str) -> set[str]:
 # what keeps the section honest about the tickers it publishes.
 NOTABLE_HEADER = (
     "| Ticker | Leg | As of | Move % | Sigma | Market cap | Catalyst | "
-    "On watchlist | Price time |"
+    "On watchlist | Price time | Price age s |"
 )
 
 _REQUIRED_TABLES = {

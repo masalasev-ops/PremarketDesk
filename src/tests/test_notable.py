@@ -6,8 +6,10 @@ no quota: every input is synthetic, the closes sidecar is written into the
 sandbox, the gap statistics read is stubbed, and the exchange calendar is a
 plain weekday rule so the answer is the same on any machine.
 
-Twenty three claims, and they are grouped by what they defend rather than by
-the order the code runs in.
+Twenty six claims, and they are grouped by what they defend rather than by the
+order the code runs in. The count is in CLAIMS at the foot of the file and is
+printed by main(), so this line is the one that goes stale; BUILD_PLAN.md
+"Layer 4" carries it too.
 
 The fence first, because it is the thing a later change is most likely to erode
 without noticing: the section is additive to the report only, it writes no
@@ -26,7 +28,17 @@ nothing anywhere exercised enforce raising on a check (e) violation, writing
 the marker, or re-gating delivery. It does now.
 
 Then the degrades of 4.9: a missing sidecar, a sidecar from another session, a
-collector that heard nothing, and counters the file is too old to carry.
+collector that heard nothing, and counters the file is too old to carry. 4.9
+applied to the ranked lists is the newest of them, added 2026-08-22: an empty
+list has to name WHICH empty it is and how many it considered, because the two
+sigma lists have come back empty on every run the section has ever made while
+return_stdev_20d sits null across the database, and "short" was the only word
+the report had for it.
+
+And the disclosures a surviving row owes, which is the other half of the same
+morning: the price age floor keeps a stale print off the premarket leg, and the
+age of a print that CLEARS the floor is published beside its stamp rather than
+left for the reader to derive from a scan clock the report does not print.
 """
 
 from __future__ import annotations
@@ -215,12 +227,15 @@ def _run(bars: dict[str, list[dict[str, Any]]] | None = None,
          candidates: list[dict[str, Any]] | None = None,
          session: str = SESSION,
          universe: list[dict[str, Any]] | None = None,
+         stats: dict[str, dict[str, Any]] | None = None,
          ) -> tuple[dict[str, Any], scan.Packet, list[dict[str, Any]]]:
     """One assembly against the fixture, with the database and the clock stubbed.
 
     gap_stats.load_all is replaced rather than seeded, because the real one
     calls store.init, which runs an executescript and an UPDATE and commits.
-    The point here is the section's arithmetic, not SQLite's.
+    The point here is the section's arithmetic, not SQLite's. Pass stats to
+    replace the whole table, which is how the shipped morning is reproduced: a
+    database whose return_stdev_20d is null on every row.
 
     The CLOCK is stubbed to 08:45 on the fixture's session, which is when the
     scan actually runs. Without it the fixture's 08:40 bars are hours old
@@ -234,8 +249,9 @@ def _run(bars: dict[str, list[dict[str, Any]]] | None = None,
                 "BIGMOVE.US": [_bar("BIGMOVE.US", "08:40", 110.0)],
                 "SPY.US": [_bar("SPY.US", "08:40", 700.0)]}
     rows = _candidates() if candidates is None else candidates
+    table = STATS if stats is None else stats
     real_stats, real_clock = gap_stats.load_all, ettime.now_et
-    gap_stats.load_all = lambda as_of=None: dict(STATS)
+    gap_stats.load_all = lambda as_of=None: dict(table)
     ettime.now_et = lambda: dt.datetime(
         *(int(part) for part in session.split("-")), 8, 45, tzinfo=ettime.ET)
     try:
@@ -857,6 +873,80 @@ def claim_a_stale_collector_print_is_not_a_notable_move(
           "premarket leg and counted, and a fresh one is published")
 
 
+def claim_a_premarket_row_carries_the_age_of_its_price(
+        failures: list[str]) -> None:
+    """The row publishes how old its print is, not only when it was.
+
+    The claim above holds the FLOOR: a print past [Price age]
+    max_price_age_seconds is left off the leg. This holds the DISCLOSURE for
+    everything that survives it. The floor is a ceiling of 900 seconds, so a
+    row inside it can be fifteen minutes behind the scan clock and still be
+    published, and the row used to carry the bare stamp of the minute the print
+    opened. Turning that into an age needs the scan clock, and the report does
+    not print the scan clock, so the one number that says how stale a published
+    price is was the one number no reader could compute.
+
+    The section already had it. The premarket leg computes the age to apply the
+    floor and then dropped it on the floor, so this carries the number that was
+    already in hand rather than measuring anything new.
+
+    Null on both universe legs, which is not a gap: a close has no intraday age,
+    and the leg's own as_of_session is the whole vintage of the row.
+    """
+    _write_closes()
+    block, _packet, _rows = _run()
+
+    premarket = [r for r in block["rows"] if r["leg"] == "premarket"]
+    if not premarket:
+        failures.append("the fixture produced no premarket row, so this claim "
+                        "checked nothing")
+        return
+    for row in premarket:
+        age = row.get("price_age_seconds")
+        # The clock is stubbed to 08:45 and the bars are stamped 08:40.
+        if age != 300.0:
+            failures.append(
+                f"{row['symbol']} carries price_age_seconds {age!r} against a "
+                "print at 08:40 and a scan clock at 08:45, which is 300 "
+                "seconds. The age is the gate's own number and must not be "
+                "recomputed from a different clock.")
+        if not row.get("price_time"):
+            failures.append(f"{row['symbol']} carries an age and no price_time, "
+                            "so the two disclosures have come apart")
+
+    for row in block["rows"]:
+        if row["leg"] == "premarket":
+            continue
+        if row.get("price_age_seconds") is not None:
+            failures.append(
+                f"a {row['leg']} row carries price_age_seconds "
+                f"{row['price_age_seconds']!r}. A close has no intraday age, "
+                "and a number there would read as one.")
+
+    # And it reaches the reader. The column is in the header the template pins
+    # and the fallback emits, and the value is in the row's line. A field that
+    # is in the packet and not in the report is not a disclosure.
+    if "Price age" not in analyst.NOTABLE_HEADER:
+        failures.append("analyst.NOTABLE_HEADER carries no price age column, so "
+                        "the number is in the packet and not in the report")
+    text = analyst.fallback_report(
+        {"session_date": SESSION, "candidates": [], "notable_movers": block},
+        "the narrative pass was stubbed out by this claim")
+    for row in premarket:
+        ticker = row["symbol"].split(".")[0]
+        line = next((r for r in text.splitlines()
+                     if r.startswith(f"| {ticker} |") and "premarket" in r), None)
+        if line is None:
+            failures.append(f"the fallback wrote no premarket row for {ticker}")
+        elif not line.rstrip().endswith("| 300 |"):
+            failures.append(f"the fallback's {ticker} row does not end in the "
+                            f"age the packet carries: {line!r}")
+
+    print(f"  price age s  {len(premarket)} premarket row(s) publish a 300s age "
+          "beside the stamp, both universe legs carry none, and the fallback "
+          "prints the column")
+
+
 def claim_the_context_tickers_stay_out_of_the_premarket_leg(
         failures: list[str]) -> None:
     """SPY is subscribed, heard, and not a notable mover.
@@ -1097,6 +1187,176 @@ def claim_a_defect_in_the_section_costs_the_section(failures: list[str]) -> None
 
     print("  survives     a raise inside the section is published as the "
           "section's own reason, and an interrupt still stops the run")
+
+
+def claim_an_empty_list_says_which_empty_it_is(failures: list[str]) -> None:
+    """A list that returns nothing states WHICH nothing, and its denominator.
+
+    4.9 makes the legs tell a quiet market apart from a lost input. Until
+    2026-08-22 the four ranked lists did not, one level down: an empty list got
+    one sentence saying it was "short" and no state and no count, and the two
+    sigma lists have been empty on every run the section has ever made, because
+    return_stdev_20d is null on all 10,997 rows of the gap statistics database
+    until the Sunday 21:00 rebuild fills it. A reader could not tell that from a
+    morning on which nothing moved.
+
+    Four states and they are four because the fixes differ. UNCOMPUTABLE is an
+    input nobody has produced, whether the leg's whole file or the one column
+    the list ranks on, and the fix is to go and compute it. NOTHING TO RANK is a
+    file that arrived carrying nothing for that leg. BELOW THE FLOOR is the only
+    one of the three that means the market was quiet. RANKED is a list holding
+    names.
+
+    Every state carries the count it considered beside it, the way the Summary
+    writes "day eligible 3 of 12" rather than "day eligible 3". A zero with
+    nothing under it cannot be read.
+    """
+    # 1. The shipped morning: the column exists and has never been computed.
+    #    Both sigma lists must read uncomputable, and both must say so against
+    #    a leg that is perfectly available.
+    seen: set[str] = set()
+
+    def note(block: dict[str, Any]) -> dict[str, Any]:
+        """Tally the states one fixture reached, and hand back its reports."""
+        reports = block.get("list_reports") or {}
+        seen.update(str((r or {}).get("state")) for r in reports.values())
+        return reports
+
+    null_column = {symbol: {"return_stdev_20d": None, "sessions_used": 250}
+                   for symbol in STATS}
+    _write_closes()
+    block, _packet, _rows = _run(stats=null_column)
+    reports = note(block)
+    for name in ("prior_session_by_sigma", "premarket_by_sigma"):
+        report = reports.get(name) or {}
+        if report.get("state") != scan.LIST_UNCOMPUTABLE:
+            failures.append(
+                f"with return_stdev_20d null across the database the {name} "
+                f"list reads {report.get('state')!r}. It is the state every "
+                "morning since the section shipped has actually been in, and "
+                "an empty list that does not say so reads as a quiet market.")
+        if not report.get("considered"):
+            failures.append(f"the {name} list reports considered "
+                            f"{report.get('considered')!r} on a leg that "
+                            "measured names. An empty list with no denominator "
+                            "cannot be read.")
+        if "return_stdev_20d" not in str(report.get("reason") or ""):
+            failures.append(f"the {name} list does not name the null column in "
+                            f"its reason: {report.get('reason')!r}")
+        leg = (block["legs"] or {}).get(report.get("leg")) or {}
+        if not leg.get("available"):
+            failures.append(f"the {name} list reported uncomputable off a leg "
+                            "that was itself unavailable, so this fixture is "
+                            "not testing the null column at all")
+    # The other two rank on keys the null column does not touch, so they are
+    # unaffected. Without this the claim would pass on a fixture that had simply
+    # emptied the section.
+    for name in ("prior_session_by_market_cap", "two_session_by_move"):
+        if (reports.get(name) or {}).get("state") != scan.LIST_RANKED:
+            failures.append(
+                f"the {name} list reads "
+                f"{(reports.get(name) or {}).get('state')!r} with only the "
+                "sigma column nulled. It does not rank on that column.")
+
+    # 2. The input was never there: no sidecar at all. Both universe legs, and
+    #    the premarket leg with them, lost the file rather than the market.
+    (config.DATA_DIR / f"universe-closes-{SESSION}.json").unlink(missing_ok=True)
+    block, _packet, _rows = _run()
+    for name, report in note(block).items():
+        if report.get("state") != scan.LIST_UNCOMPUTABLE:
+            failures.append(f"with no closes sidecar the {name} list reads "
+                            f"{report.get('state')!r} rather than uncomputable")
+
+    # 3. The input arrived and carried nothing this leg could measure. Same
+    #    empty list, different fact, different fix, and the state says so.
+    _write_closes(closes={"NOCLOSE.US": {"c1": None, "c2": None, "c3": None}})
+    block, _packet, _rows = _run()
+    for name in ("prior_session_by_sigma", "prior_session_by_market_cap",
+                 "two_session_by_move"):
+        report = note(block).get(name) or {}
+        if report.get("state") != scan.LIST_NOTHING_TO_RANK:
+            failures.append(
+                f"a sidecar that was read and carried no usable close left the "
+                f"{name} list reading {report.get('state')!r}. That is a file "
+                "with nothing in it, not a file nobody could open.")
+
+    # 4. The leg measured names, the key exists, and the floor refused them
+    #    all. The one empty of the three that IS a quiet market.
+    under = {symbol: {"c3": 100.0, "c2": 100.0, "c1": 100.4}
+             for symbol in ("QUIET.US", "LOUD.US", "MEGA.US")}
+    _write_closes(closes=under)
+    block, _packet, _rows = _run()
+    report = note(block).get("prior_session_by_market_cap") or {}
+    if report.get("state") != scan.LIST_BELOW_THE_FLOOR:
+        failures.append(
+            "0.4 percent moves on every name left prior_session_by_market_cap "
+            f"reading {report.get('state')!r}. The leg was measured and the "
+            "floor refused it, which is the only empty here that means the "
+            "market was quiet.")
+    if str(scan.NOTABLE_MIN_ABS_GAP_PCT) not in str(report.get("reason") or ""):
+        failures.append("the below the floor reason does not quote the floor "
+                        f"it applied: {report.get('reason')!r}")
+
+    # 5. The floor cleared and the RANKING KEY is what is missing. A name with
+    #    no market cap on file was never examined against anything, so this is
+    #    uncomputable rather than a quiet market, and the two share a branch
+    #    everywhere except here.
+    _write_closes(closes={"NOCAP.US": {"c3": 100.0, "c2": 100.0, "c1": 108.0}})
+    block, _packet, _rows = _run(universe=[])
+    report = note(block).get("prior_session_by_market_cap") or {}
+    if report.get("state") != scan.LIST_UNCOMPUTABLE:
+        failures.append(
+            "an 8 percent move on a symbol with no market cap on file left "
+            f"prior_session_by_market_cap reading {report.get('state')!r}. It "
+            "cleared the floor; the column it ranks on is what is absent.")
+
+    # 6. And the shape holds on every list of every fixture above: a state from
+    #    the fixed four, three integer counts, and a reason wherever the list
+    #    came back with nothing.
+    for label, produced in (("healthy", None), ("raised", "raised")):
+        if produced is None:
+            _write_closes()
+            block, _packet, _rows = _run()
+        else:
+            block = scan.empty_notable_block(
+                "the notable movers section raised ValueError: a name nobody "
+                "guarded")
+        for name, report in note(block).items():
+            if report.get("state") not in scan.NOTABLE_LIST_STATES:
+                failures.append(f"the {label} {name} list reports a state "
+                                f"{report.get('state')!r} that is not one of "
+                                f"{scan.NOTABLE_LIST_STATES}")
+            for field in ("considered", "qualified", "selected"):
+                if not isinstance(report.get(field), int):
+                    failures.append(f"the {label} {name} list reports {field} "
+                                    f"{report.get(field)!r}, which is not a "
+                                    "count a reader can divide by")
+            if not report.get("selected") and not report.get("reason"):
+                failures.append(f"the {label} {name} list returned nothing and "
+                                "states no reason, which is the whole defect "
+                                "this claim exists for")
+            if report.get("text") != scan._list_report_text(name, report):
+                failures.append(f"the {label} {name} list's text is not what "
+                                "_list_report_text builds from its own fields, "
+                                "so the sentence and the numbers have come "
+                                "apart")
+    # list_reasons is derived and must stay derived, because the template and
+    # fallback_report have quoted it since the section shipped.
+    if block.get("list_reasons") != {name: report.get("reason") for name, report
+                                     in (block.get("list_reports") or {}).items()}:
+        failures.append("list_reasons is not the reasons in list_reports, so "
+                        "the section now carries two copies of one sentence")
+
+    # Every one of the four, or the claim is asserting three of them and
+    # leaving the fourth to whatever a later change makes of it.
+    missed = sorted(set(scan.NOTABLE_LIST_STATES) - seen)
+    if missed:
+        failures.append(f"no fixture here reached the {missed} state(s), so "
+                        "they are declared and unexercised")
+
+    print(f"  list state   all {len(scan.NOTABLE_LIST_STATES)} states reached "
+          "across 6 fixtures, and an empty list names its own denominator "
+          "rather than reading as a quiet market")
 
 
 def claim_a_malformed_input_costs_the_section_and_not_the_run(
@@ -1617,6 +1877,14 @@ def _section_prose(block: dict[str, Any], packet: scan.Packet) -> list[str]:
     for reason in (block.get("list_reasons") or {}).values():
         if reason:
             out.append(str(reason))
+    # The list outcome sentences, which are the section's LOUDEST fixed text:
+    # four of them, on every run, quoted word for word by the template. They
+    # carry the reason above inside them, so the guard sees the assembled
+    # sentence rather than only its parts, which is where a wording that is
+    # clean alone and dirty in context would show up.
+    for report in (block.get("list_reports") or {}).values():
+        if (report or {}).get("text"):
+            out.append(str(report["text"]))
     for row in block.get("rows") or []:
         for key in ("move_sigma_reason", "market_cap_reason", "catalyst_state"):
             if row.get(key):
@@ -1752,6 +2020,22 @@ def claim_the_sections_own_words_pass_the_quantifier_guard(
 
     _write_closes(closes={"NOCLOSE.US": {"c1": None, "c2": None, "c3": None}})
     block, packet, _rows = _run(bars={})
+    seen += _section_prose(block, packet)
+
+    # Two more since 2026-08-22, so that all four of the ranked list states
+    # reach this walk rather than the two an ordinary morning produces. The
+    # sentences a list writes when it is uncomputable or below its floor are
+    # the ones a reader sees on the mornings the section has least to say, and
+    # they are the ones nothing else here would have scanned.
+    _write_closes()
+    block, packet, _rows = _run(
+        stats={symbol: {"return_stdev_20d": None, "sessions_used": 250}
+               for symbol in STATS})
+    seen += _section_prose(block, packet)
+
+    _write_closes(closes={symbol: {"c3": 100.0, "c2": 100.0, "c1": 100.4}
+                          for symbol in ("QUIET.US", "LOUD.US", "MEGA.US")})
+    block, packet, _rows = _run()
     seen += _section_prose(block, packet)
 
     # And the block the wrapper publishes when the assembly raises.
@@ -1932,9 +2216,11 @@ CLAIMS = (
     claim_a_mis_stamped_notable_row_stops_the_run,
     claim_the_context_tickers_stay_out_of_the_premarket_leg,
     claim_a_stale_collector_print_is_not_a_notable_move,
+    claim_a_premarket_row_carries_the_age_of_its_price,
     claim_the_section_widens_containment_only_by_its_own_rows,
     claim_the_section_examines_the_universe_and_not_the_survivors,
     claim_a_missing_input_names_the_leg_it_lost,
+    claim_an_empty_list_says_which_empty_it_is,
     claim_a_malformed_input_costs_the_section_and_not_the_run,
     claim_a_defect_in_the_section_costs_the_section,
     claim_a_closes_file_from_another_session_is_refused,

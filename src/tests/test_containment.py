@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import json
 import sys
+from typing import Any
 
 from morning import analyst
 from tests import conftest
@@ -279,6 +280,58 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
           "one is pinned without being able to satisfy the vacuum detector, the "
           "fallback passes the structure gate, and no test module carries any of "
           "them as a literal")
+
+def _list_reports() -> dict[str, dict[str, Any]]:
+    """The four ranked lists' own outcome lines, as scan writes them.
+
+    Assembled through scan._list_report_text rather than as literals, on the
+    header precedent: this fixture exists to prove the fallback's prose passes
+    the guard the fallback lives beside, and a hand written copy of a sentence
+    production builds is a copy that stops being that sentence.
+
+    The four states are all four here on purpose. One list ranked and full, one
+    uncomputable because its ranking key is null across the leg, which is every
+    morning until the Sunday rebuild, one whose leg carried nothing to rank, and
+    one whose leg measured rows that stayed below its floor.
+    """
+    from morning import scan
+
+    shapes = {
+        "prior_session_by_sigma": {
+            "state": scan.LIST_RANKED, "reason": None,
+            "considered": 2753, "qualified": 41, "selected": 5},
+        "prior_session_by_market_cap": {
+            "state": scan.LIST_BELOW_THE_FLOOR,
+            "reason": ("0 of 2753 on the prior_session leg cleared this list's "
+                       "floor, a move of at least 1 percent, which is "
+                       "CRITERIA.md [Notable] min_abs_gap_pct, with a market cap "
+                       "on file. The leg was measured and nothing in it reached "
+                       "that line."),
+            "considered": 2753, "qualified": 0, "selected": 0},
+        "two_session_by_move": {
+            "state": scan.LIST_NOTHING_TO_RANK,
+            "reason": ("the two_session leg's input was read and carried 0 rows "
+                       "this list could rank: 0 rows carried both of the closes "
+                       "the two_session leg needs"),
+            "considered": 0, "qualified": 0, "selected": 0},
+        "premarket_by_sigma": {
+            "state": scan.LIST_UNCOMPUTABLE,
+            "reason": ("0 of 39 on the premarket leg carry a move_sigma, which "
+                       "is the key this list ranks on, so it could not be "
+                       "computed. 39 of 39 report: return_stdev_20d is null on a "
+                       "row covering 250 sessions, which is enough for it, so "
+                       "the column was written before it was computed. The "
+                       "Sunday 21:00 universe rebuild fills it."),
+            "considered": 39, "qualified": 0, "selected": 0},
+    }
+    out: dict[str, dict[str, Any]] = {}
+    for name, report in shapes.items():
+        report["leg"] = scan.leg_of_list_key(name)
+        report["ranks_on"] = scan._LIST_RANKING_KEY[name]
+        report["text"] = scan._list_report_text(name, report)
+        out[name] = report
+    return out
+
 
 def claim_quantifiers_over_the_set_are_rejected(failures: list[str]) -> None:
     """A quantifier about the candidate set fails, and the tally sentence passes.
@@ -744,18 +797,9 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
         "lists": {"prior_session_by_sigma": ["ARX.US"],
                   "prior_session_by_market_cap": [],
                   "two_session_by_move": [], "premarket_by_sigma": []},
-        "list_reasons": {
-            "prior_session_by_sigma": None,
-            "prior_session_by_market_cap":
-                "0 of 2,753 on the prior_session leg both moved at least 1 "
-                "percent, which is CRITERIA.md [Notable] min_abs_gap_pct, and "
-                "carried a market cap on file",
-            "two_session_by_move":
-                "0 rows on the two_session leg carried a move over this window",
-            "premarket_by_sigma":
-                "0 of 39 on the premarket leg carry a move_sigma, so this list "
-                "has no ranking key at all.",
-        },
+        "list_reports": _list_reports(),
+        "list_reasons": {name: report["reason"]
+                         for name, report in _list_reports().items()},
         "list_size": 5,
         "legs": {
             "premarket": {"available": False, "examined": 39, "selected": 0,
@@ -771,6 +815,19 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
     }
     for packet in shapes.values():
         packet["notable_movers"] = section
+
+    # The fixture is only worth walking if the fallback actually renders it.
+    # It stopped rendering once already, on 2026-08-22, when the section moved
+    # from list_reasons to list_reports and this hand written block still
+    # carried only the first: the four list sentences vanished from the prose
+    # and the walk below went on passing over the section's loudest strings.
+    rendered = analyst.fallback_report(shapes["empty"], "the model timed out")
+    for name, report in _list_reports().items():
+        if report["text"] not in rendered:
+            failures.append(
+                f"the fallback does not render the {name} list's own sentence, "
+                "so the walk below is not reading the strings this section "
+                "hands the model. Fixture and renderer have decoupled.")
 
     for label, packet in shapes.items():
         prose = analyst.fallback_report(packet, "the model timed out")

@@ -18,6 +18,62 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-22, first: four states for an empty ranked list, not one, and what "considered" counts
+
+Two calls inside the notable movers disclosure work that could have gone the
+other way. Both are cheap to overrule and are named here rather than buried.
+
+**FOUR STATES RATHER THAN A REASON STRING.** The section already had a reason on
+every empty list. What it did not have was a state, and the difference is
+whether a reader can compare four lists at a glance or has to parse four
+sentences. The owner asked for at minimum three distinctions: an input that was
+null so the list could not be computed, an input that was present with nothing
+clearing the floor, and a leg with no eligible population. Those map onto
+`uncomputable`, `below the floor` and `nothing to rank`, plus `ranked` for a list
+holding names.
+
+The fourth was not padding. `uncomputable` and `nothing to rank` both produce an
+empty list off an unavailable leg, and telling them apart needed
+`_leg_report` to carry `input_present`, because `available` alone cannot say
+whether the file was missing or the file was read and held nothing. A lost
+sidecar sends a reader to discover's 07:15 run; a sidecar that carried no pair
+of closes sends them to the vendor. Collapsing the two would have kept the code
+smaller and sent half of those readers to the wrong place.
+
+`below the floor` is deliberately reachable by ONE of the four lists, because
+only prior_session_by_market_cap applies a floor before it ranks. The other
+three rank whatever their leg measured, so they cannot be below a floor by
+construction rather than by accident, and the claim asserts the branch is
+reached rather than assuming it.
+
+**THE STATE WORDS ARE CHOSEN FOR THE QUANTIFIER GUARD, NOT FOR PROSE.** The
+natural spelling of the third state is "none cleared the floor". REPORT_TEMPLATE
+tells the model to quote these strings word for word, and
+analyst.quantifier_violations flags `none` within six words of `name`,
+`candidate` or `watchlist`. The guard is in warn mode today; on the day it flips
+to enforcing, a quoted state would be regenerated twice and then fall back to the
+Python report, every morning a list was empty, which today is every morning. So
+the words are "below the floor" and "nothing to rank". This is the T17 lesson
+applied before the fact rather than after it, and it is the second time the
+section's own vocabulary has had to be written around this guard.
+
+**CONSIDERED IS WHAT THE LEG MEASURED, NOT WHAT THE CLOSES FILE COUNTED.** The
+leg already reports `examined`, which is the closes file's own denominator, 2,754
+on an ordinary morning. A list's `considered` is a different number: the rows the
+leg actually produced a move for, which is what the list could have ranked. The
+alternative was to reuse `examined` and have one number mean one thing, and it
+was refused because a list that ranked over 2,741 measured rows out of a 2,754
+row file would have reported the 2,754, and the thirteen rows nobody could
+measure would have vanished into a denominator that looked complete. The two
+numbers are both published, one on the leg and one on the list, and they are
+allowed to disagree.
+
+`considered` is 0 and never null when a leg is lost, which is the opposite of the
+convention the legs use: a leg reports `examined` null when it cannot look the
+number up. Here the count is not unknown, it is zero, and the state beside it
+already says the input is missing. A null would have taken the denominator away
+from the exact case it was added for.
+
 ## 2026-08-21, eighth: the record re-read against true volume, and what it costs the watchlists
 
 Every session with a packet was re-measured against Alpaca full SIP over the

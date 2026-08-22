@@ -15,6 +15,88 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-22, first: every ranked list says which empty it is, and a surviving price says how old it is
+
+Two changes to Layer 4, the notable movers section. Both are disclosures on
+numbers the section already had in hand and was discarding.
+
+**THE RANKED LISTS.** 4.9 makes each LEG tell a quiet market apart from a lost
+input, and the four ranked lists inside those legs had been exempt from it since
+the section shipped on 2026-08-20. An empty list published one sentence saying
+it was "short", with no state and no denominator, and prior_session_by_sigma and
+premarket_by_sigma have been empty on every run the section has ever made,
+because return_stdev_20d is null on all 10,997 rows of the gap statistics
+database until the Sunday 21:00 rebuild computes it. Nothing in the report said
+whether that meant the market was quiet or the denominator does not exist yet.
+
+Every list now publishes one of four fixed states with three counts beside it.
+
+| state | what it means | the fix |
+| --- | --- | --- |
+| `ranked` | the list holds at least one name | none |
+| `uncomputable` | an input nobody has produced: the leg's own file was lost, or the column the list ranks on is null on every row the leg carries | compute the input |
+| `nothing to rank` | the input arrived and carried nothing for that leg to measure | look at the file |
+| `below the floor` | the leg measured rows, the ranking key exists, and not one row reached this list's own floor | none: this is the quiet market |
+
+considered is what the leg measured, qualified is what cleared the list's floor
+and carried its ranking key, and selected is what it published, so an empty list
+carries its own denominator the way the Summary counts do. On a morning with
+return_stdev_20d null the two sigma lists now read, word for word: "The
+premarket_by_sigma list is uncomputable: 0 selected of 0 qualified of 39
+considered on the premarket leg. 0 of 39 on the premarket leg carry a
+move_sigma, which is the key this list ranks on, so it could not be computed. 39
+of 39 report: return_stdev_20d is null on a row covering 250 sessions, which is
+enough for it, so the column was written before it was computed. The Sunday
+21:00 universe rebuild fills it."
+
+Three supporting changes made that possible. `_leg_report` gained
+`input_present`, because a leg comes back unavailable both when its file was
+missing and when its file was read and held nothing for it, and until now those
+two collapsed into one empty. Each list's funnel is measured in two stages
+rather than one, so "0 cleared the floor" and "0 carry the ranking key" are
+separate answers. And the whole sentence is assembled once, in
+`scan._list_report_text`, then quoted word for word by REPORT_TEMPLATE.md and by
+fallback_report, so the two renderers cannot say different things about one
+list. `list_reasons` stays in the packet and is DERIVED from the new reports,
+because the template and the archive have read it since the section shipped.
+
+**THE PRICE AGE.** The premarket leg computes each print's age against the scan
+clock to apply the [price age] floor, dropped the rows past it, and then threw
+the number away. That floor is a CEILING of 900 seconds, so a row that survives
+it can still be fifteen minutes behind the scan clock, and the scan clock is not
+printed anywhere in the report. A reader holding the bare `price_time` stamp
+could not compute the one number that says how stale the published price is.
+`price_age_seconds` now travels on the row beside `price_time` and renders as a
+`Price age s` column, null on both universe legs where a close has no intraday
+age. The notable table header is ten columns, was nine, and is pinned in
+REPORT_TEMPLATE.md and analyst.NOTABLE_HEADER as before.
+
+Every new string was run through the drift walk before it shipped, per the T17
+lesson: the template tells the model to quote these word for word and
+analyst.quantifier_violations then scans the model's output, so a state spelled
+"none cleared the floor" would have put a set quantifier into the model's mouth
+on every morning a list was empty. That is why the states read "below the floor"
+and "nothing to rank". claim_the_sections_own_words_pass_the_quantifier_guard
+gained two fixtures so all four states reach it, and now walks 48 distinct
+strings against the 18 it walked yesterday.
+
+Two claims added, so test_notable holds twenty six:
+claim_an_empty_list_says_which_empty_it_is reaches all four states across six
+fixtures and holds that list_reasons stays derived, and
+claim_a_premarket_row_carries_the_age_of_its_price holds the 300 second age on
+the row, the null on both universe legs, and the column in the rendered
+fallback. The hand written notable block in test_containment now builds its
+list reports through scan._list_report_text and asserts the fallback renders
+them, because that fixture carried only list_reasons and would have gone on
+walking a section whose loudest four sentences had silently stopped being
+emitted.
+
+BUILD_PLAN.md corrected in the same pass. Its Layer 4 heading read "specified"
+while "What remains" item B in the same file recorded the section as built on
+2026-08-20; it now reads BUILT 2026-08-20 and carries a pointer to that item.
+Item B said thirteen claims, which was the count on the day it shipped and had
+not moved since.
+
 ## 2026-08-21, ninth: the two artifacts that cannot be rebuilt are held twice
 
 night/backup_evidence.py copies data/premarket/<date>.jsonl and
