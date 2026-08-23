@@ -4340,3 +4340,114 @@ a missed 08:45 catching up at 10:30 would sweep a window the vendor serves for
 reasons that have nothing to do with production and record a 200 that reads
 as an answer. A missed morning should leave no record rather than a record
 that has to be read carefully.
+
+## 2026-08-22, third: the 08:30 question, answered before the morning that raised it
+
+**The count.** Across the four sessions whose packets can still be
+recomputed, 38 candidate name-sessions, moving the premarket window's end from
+08:45 to 08:30 changes ONE name's side of the day screen. It leaves, nothing
+enters, and it is DRD.US on 2026-08-19. On the three sessions where the
+collector was actually running before 08:30, 26 name-sessions, the count is
+zero in both directions under every denominator treatment and both
+arithmetics. research/cutoff_0830.py, data/cutoff-0830.json, no vendor call
+and no credit spent.
+
+**Why the one is not a cutoff finding.** DRD does not fail on RVOL at 08:30.
+It fails on gap_pct, price, premarket_rvol and require_above_prior_high at
+once, because on 2026-08-19 the collector started late and eight of that
+morning's twelve candidates have no bar at all before 08:30. At that clock
+there was no premarket for DRD to screen. The session's median 08:30 share of
+socket volume is 0.0, which is why the socket denominator is refused there
+rather than computed. That morning measures the collector's start time, which
+is already known and already recorded, and it cannot measure a cutoff.
+
+**The RVOL condition on its own, because the screen hides it.** day_eligible
+is an AND of five conditions and only one of them moves with the window, so a
+name already below its prior day high absorbs any amount of RVOL damage
+invisibly. Counted separately: 15 names clear `> 1.5` at 08:45 and 13 at
+08:30, both losses on 2026-08-19 and both DRD and TJX, both from having no
+bars. On the three sessions where the socket was listening, 13 and 13, nothing
+out and nothing in. On 2026-08-18 HSAI's RVOL falls from 3.91 to 1.76 and
+still clears the floor; that is the largest single move the healthy sessions
+produced and it changed no verdict.
+
+**What the survivors' margins look like,** because a zero built out of five
+names sitting one percent above a floor would be luck. 2026-08-20 is the only
+session with day eligible names: FUTU, MSTR, ASST, COIN and MARA clear 1.5 at
+08:30 with 5.74, 4.15, 1.95, 2.44 and 6.21 under the harshest denominator on
+offer. The tightest is ASST at thirty percent of headroom. Nothing was near
+enough to the floor for the fifteen minutes to decide it.
+
+**The pre-registration's own premise, measured.** "Those are the densest
+fifteen minutes of the premarket" is true and is not the same claim as the
+screen noticing. 08:30 to 08:45 is 5.3 percent of the 04:00 to 08:45 clock and
+carries 11.7 percent of the volume, 2.22 times an average premarket minute. It
+does not move the screen because RVOL divides the same fifteen minutes out of
+both halves of its ratio, and because the names that reach the day screen
+clear its floor by multiples rather than by margins.
+
+**Three denominators, and why the answer is a bracket.** The baseline cache
+holds 08:45 only, and warming an 08:30 one means twenty sessions of minute
+bars per name from the vendor, which is the one thing an offline answer may
+not do. So the recomputation runs three: the 08:45 denominator held unchanged,
+which overstates the loss and is also literally what an 08:30 screen would do
+against the cache as it stands; the session's own median socket share, which
+understates it because fifteen minutes are a larger slice of an 85 minute
+window than of a 285 minute one; and a tape scale of 0.8834 built from the
+2026-08-20 true-volume rows, where the Alpaca 04:00 to 08:45 total and the
+Alpaca 07:20 to 08:45 total are both recorded and the socket's own minute
+shape can be projected onto the difference. Held and socket bracket; tape sits
+between them. All three give the same count. The tape scale rests on 12 names
+on one session and on the assumption that the socket's shape inside 07:20 to
+08:45 matches the tape's inside the same minutes, which is a weaker claim than
+the capture correction already makes and is still an assumption.
+
+**The arithmetic that could not answer, and why it is reported anyway.** The
+packets on disk divide the raw socket count by a consolidated baseline, which
+is the defect the 2026-08-21 capture correction exists to fix, and under it
+NOTHING is day eligible at 08:45 on any of the four sessions. A screen that
+selects nobody cannot lose anybody, so its zero is about the arithmetic and
+not about the cutoff. It is printed with that sentence attached rather than
+dropped, because a row of zeros beside a row of zeros is exactly how a null
+instrument gets read as a result. The count above is under the arithmetic
+Monday's morning would actually use.
+
+**What the instrument had to prove first.** Every 08:45 pass reproduces its
+packet's own price, gap_pct, pm_volume, pm_rvol and day_eligible to the digit,
+on all four sessions, before the 08:30 pass is read as anything. That check
+caught 2026-08-14 immediately: 48 disagreements, because that packet priced
+from the delayed quote's ethVolume and gave ARX an RVOL of 882,728 off
+yesterday's post market. Recomputing a window inside it would have produced a
+tidy table about a program that no longer exists. It is now refused at
+selection, with the reason, and the reproduction check still runs behind the
+refusal so that the gate is proved rather than trusted.
+
+**The three sessions that are not in the count, named rather than dropped.**
+2026-08-13's packet has a 16:40 cutoff and was not a premarket. 2026-08-14
+predates price and premarket volume coming from the collector file.
+2026-08-21's surviving packet is a hand written stub carrying one invented
+candidate at a price of 100.0, and the collector file it would have been
+recomputed against was overwritten by a 15:46 hand run down to three symbols
+and 258 bars, so that morning's 3,200 written minutes are gone. Its
+true-volume rows survive in picks and are the only reason the tape scale could
+be checked for a second session; they could not be.
+
+**One fact about a limit, stated and not acted on.** [Price age]
+max_price_age_seconds is 900 and [Truth] documented_lag_minutes is 15. A
+window ending at 08:30 read at an 08:45 clock therefore produces a last print
+that is 900 seconds old or older BY CONSTRUCTION, and drop_stale_prices sits
+in front of the day screen. Every candidate on every session in this study is
+stale at 08:30 by that rule: 12 of 12, 12 of 12, 12 of 12 and 2 of 2. The
+recomputation above measures the screen and not the gate, so the count is what
+the screen would say to names the gate would not hand it. Recorded here so
+that it is on the record before Monday rather than discovered after it.
+
+**What this changes.** Nothing. It is a count and it proposes nothing. What it
+does is remove one reading of Monday's result in advance: if the sweep comes
+back served and the control refused, the fifteen minutes that would be given
+up did not decide a single name's side of the day screen on any session where
+the collector was running, so that outcome is not the start of an
+investigation into what an 08:30 screen costs. The other two questions the
+pre-registration lists, the collector's 50 slot websocket as the discovery
+path and the capture correction, are untouched by this and reopen or do not on
+their own evidence.
