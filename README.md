@@ -4,7 +4,7 @@ A single machine, single user premarket desk for US equities. Every weekday
 morning it builds a watchlist, listens to the live premarket tape, scores the
 candidates, has a language model write the narrative, and delivers one HTML
 report before the open. Every evening it goes back and checks itself against
-the vendor's published record.
+what the vendors published.
 
 The design has one brain and one voice: **Python decides, the model narrates.**
 Membership, scores, and conviction come from code reading explicit thresholds.
@@ -16,8 +16,15 @@ and a checker verifies the prose invented nothing.
 These are load bearing. The code enforces them; changing them means changing
 the design, not a config value.
 
-1. **One data source.** Every market number comes from EODHD All-In-One
-   (REST and the US trades websocket). Nothing is fetched from anywhere else.
+1. **One data source in the published path.** Every market number the morning
+   publishes comes from EODHD All-In-One (REST and the US trades websocket).
+   Exactly one scheduled step reads a second vendor, and it runs after the
+   session is over: `night/true_volume.py`, inside the 22:15 nightly, measures
+   what premarket volume actually was from Alpaca's full SIP tape. It writes
+   its own columns beside the morning's and never over them, nothing the
+   morning reads comes from it, and it spends no EODHD quota. See rule 5,
+   `doc/CRITERIA.md [Truth]`, and `doc/ALPACA_PROBE.md` for why that vendor and
+   why only at night.
 2. **Every threshold lives in `doc/CRITERIA.md`.** The strict reader in
    `src/core/criteria.py` raises on a missing key, and no decision literal is
    allowed in Python. To retune the system you edit a markdown file.
@@ -27,10 +34,15 @@ the design, not a config value.
 4. **Missing evidence stays missing.** A field the pipeline could not get is
    null with a recorded reason. It is never filled from another day, another
    source, or a guess.
-5. **Premarket high, low, and VWAP come from the project's own collector.**
-   The vendor's published intraday bars are used at night to audit the
-   collector, written into separate `_true` columns, never over the morning
-   values. Their disagreement is itself a recorded measurement.
+5. **Premarket high, low, VWAP and volume come from the project's own
+   collector.** The socket carries a fraction of the consolidated tape, so the
+   morning's premarket volume is an estimate: the socket's count divided by
+   `[Collector] premarket_capture_rate`. The night audits both halves and uses
+   a different vendor for each. EODHD's published intraday bars fill
+   `pm_high_true`, `pm_low_true` and `pm_vwap_true`; Alpaca's SIP tape fills
+   the volume truth columns. All of it is written beside the morning's values,
+   never over them, and `_true` is not a provenance: `truth_source` carries the
+   vendor on every row. Their disagreement is itself a recorded measurement.
 
 ## A day in the life
 
@@ -39,12 +51,12 @@ All times are US Eastern, which the machine is expected to keep locally.
 | Time | Job | What it does |
 | --- | --- | --- |
 | Sun 21:00 | universe | Weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, one counted call per name, measured at 2,745 calls and 421 seconds on the 2026-08-13 universe. That propensity is what discovery ranks the pool by inside each tier. 21:00 and not 20:00: 20:00 ET is the instant of the 00:00 UTC quota reset in daylight time, so the largest job in the schedule billed to whichever quota day it happened to land on |
-| 07:00 | nightly-catchup | The nightly's vendor lag half, the same .bat called with the argument "catchup": calendar refresh, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Pool recall and the archive rebuild are skipped, because pool_recall measures the session it is invoked on and at 07:00 that session has not opened |
+| 07:00 | nightly-catchup | The nightly's vendor lag half, the same .bat called with the argument "catchup": guard, calendar refresh, backup, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Everything after the outcome fill is skipped, because those steps measure a session that at 07:00 has not opened. pool_recall is the one that made the case: it measures the session it is invoked on, and until 2026-08-20 this firing wrote recall 0.0 over the evening's real measurement |
 | 07:15 | discover | Builds today's candidate pool from four priors, ranks it, subscribes the collector to the top of it, warms the volume baseline |
 | 07:20 to 09:25 | collector | Websocket trades to one minute bars on disk, one file per day |
 | 07:25, every 30 min | monitor | The watchdog: checks each job fired and finished, reruns what is safe |
 | 08:45 | morning chain | scan, analyst, render, verify, deliver, archive, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
-| 22:15 | nightly | Refreshes the cached exchange calendar so the 08:45 chain never fetches it, backfills the true premarket window, fills trade outcomes, measures what the morning's pool missed into `runs/YYYY-MM-DD/pool_recall.json`, rebuilds the archive |
+| 22:15 | nightly | Nine steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the two artifacts that cannot be rebuilt, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each |
 | 22:45 | monitor-night | The watchdog once more, over the nightly |
 | Every 30 min, all day, every day | meter-sampler | One reading of the shared EODHD quota counter into `logs/meter-<quota day>.log`, 48 a day, weekends included. Not a pipeline step: an instrument. The job trail says which step spent what and cannot say when, and nothing at all runs between 22:45 and 07:00, which is exactly where a sibling project draining the shared key would hide |
 
@@ -62,8 +74,10 @@ flowchart LR
     R --> V[deliver.py<br>email, gated]
     R --> W[build_archive.py<br>single file archive]
     S -. picks .-> B[(SQLite)]
-    N[backfill_premarket.py<br>+ fill_outcomes.py<br>nightly truth] --> B
+    N[backfill_premarket.py<br>+ fill_outcomes.py<br>EODHD intraday] --> B
+    T[true_volume.py<br>Alpaca SIP tape] --> B
     P[pool_recall.py<br>what the pool missed] -. reads .-> B
+    B -. reads .-> WK[weekly_page.py<br>did the week work]
     J[(job-status.jsonl)]
     S -. records .-> J
     C -. records .-> J
@@ -89,6 +103,13 @@ meter sampler does not either, because the counter it reads is shared with
 everything else using the token and rolls at midnight UTC, so a day this market
 is closed is exactly a day a drain would otherwise go unrecorded.
 
+That table is the whole recurring schedule. One off measurement tasks are
+registered separately and on purpose, by `tasks/register_tasks.ps1 -Probe` and
+`-Capture` with a date, because they are meant to be deleted once the question
+they were armed for has an answer in `doc/DECISIONS.md`. A plain run of the
+register script never resurrects them. `tasks/README.md` says what each one
+measures.
+
 ## What you need
 
 - **Windows 10 or 11.** Scheduling is Windows Task Scheduler plus the `.bat`
@@ -102,6 +123,12 @@ is closed is exactly a day a drain would otherwise go unrecorded.
   with `npm install -g @anthropic-ai/claude-code`, run `claude` once to log
   in. The analyst step shells out to it for exactly one completion per
   market day. No API key is used or wanted.
+- **Optional: an Alpaca account** for the free market data plan, if you want
+  the night to measure what premarket volume actually was rather than leave it
+  estimated. Without it the morning is unaffected and the nightly truth pass
+  records that it could not reach the vendor, leaving every column it owns null
+  with the reason. The research probes under `src/research/` read the same two
+  keys.
 - **Optional: a Resend account** if you want the report emailed. Without it,
   delivery skips cleanly and the report still lands on disk.
 - The machine must be **awake and on US Eastern time** during the premarket
@@ -124,8 +151,11 @@ is closed is exactly a day a drain would otherwise go unrecorded.
    ```
 
 2. **Configure.** Copy `.env.example` to `.env` and fill in
-   `EODHD_API_TOKEN`. Leave the Resend keys blank for now; you want the
-   verification gate (below) to pass before any email goes out.
+   `EODHD_API_TOKEN`, which is the only one the pipeline requires.
+   `ALPACA_KEY_ID` and `ALPACA_SECRET_KEY` are optional and read by one
+   scheduled step and the research probes; see the note in `.env.example` for
+   what leaving them blank costs. Leave the Resend keys blank for now; you want
+   the verification gate (below) to pass before any email goes out.
 
 3. **Self check.** This creates the working directories and prints the project
    root, whether `ANTHROPIC_API_KEY` is set anywhere (it must not be), the
@@ -189,7 +219,8 @@ is closed is exactly a day a drain would otherwise go unrecorded.
 
 ## Where things land
 
-Everything generated at runtime is git ignored and created on demand:
+Everything generated at runtime is git ignored and created on demand. One
+destination is not in the tree at all, and is the last row for that reason:
 
 | Path | What |
 | --- | --- |
@@ -200,6 +231,8 @@ Everything generated at runtime is git ignored and created on demand:
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
 | `site/PremarketDesk.html` | The whole report history as one self contained file, newest sessions embedded, older ones linked. Opens from disk, no server, no network |
+| `site/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own |
+| `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the only two artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, and the frozen 08:45 packet a morning was judged on. See `doc/CRITERIA.md [Backup]` |
 
 ## Configuration reference
 
@@ -221,6 +254,10 @@ Other documents:
   are the architecture pages; open them in a browser.
 - `doc/REPORT_TEMPLATE.md` and `doc/prompt_analyst.md` are the report shape
   and the narrative instructions piped to the CLI.
+- `doc/ALPACA_PROBE.md` is what the Alpaca free plan was measured to serve and
+  to refuse, which is what puts the truth pass at night rather than in the
+  morning. `doc/research/` holds the other measurement write ups and the raw
+  outputs behind them.
 - `doc/sample_report.html` is a hand built mock with invented data, kept
   because `runs/` and `site/` are gitignored and no real report is in the
   repository. It predates the settled template: its watchlist headers are the
@@ -242,23 +279,28 @@ Other documents:
   intraday call per stale name; the 08:45 scan spends a few dozen across
   quotes, history and news; the nightly spends one intraday call per pick
   plus two bulk end of day calls for the pool recall measurement, today's
-  session and the prior one. The weekly job
-  is the largest single spend: the universe rebuild plus one call per name
-  for gap propensity, measured at 2,745 on the 2026-08-13 universe. The jobs
-  that spend before the open read the shared counter once on entry and act on
+  session and the prior one. The Alpaca truth pass in the same nightly spends
+  none of it, and neither do the backup, the prune or the weekly page. The
+  weekly job is the largest single spend: the universe rebuild plus one call
+  per name for gap propensity, measured at 2,745 on the 2026-08-13 universe.
+  The jobs that spend before the open read the shared counter once on entry
+  and act on
   what it says rather than discovering the limit through 429s: discover, the
   baseline warm that follows it, the 08:45 scan, and the Sunday universe and
   gap propensity sweeps, which refuse outright rather than start a sweep they
   cannot afford. The nightly does not preflight. The counter is account wide
   across everything using your token and resets at midnight UTC.
 - **Claude:** one non agentic completion per market day (plus at most one
-  retry), on the subscription. Measured at 48.4, 98.5 and 178.9 seconds of CLI
-  time on the three scheduled mornings of 2026-08-17 to 2026-08-19, opus at
-  medium reasoning effort, which is where the 537 second timeout in
-  `doc/CRITERIA.md` comes from, three times the slowest. The rule has always
-  been three times the slowest run on record; on 2026-08-20 what counts as a
-  run on record moved from the five dry runs of 2026-08-14 to the scheduled
-  mornings that overtook them. If the CLI fails or times out, the morning still ships:
+  retry), on the subscription. Measured at 48.4, 98.5, 178.9 and 226.1 seconds
+  of CLI time on the four scheduled mornings of 2026-08-17 to 2026-08-20, opus
+  at medium reasoning effort. Nothing has timed out. The rule behind the 537
+  second timeout in `doc/CRITERIA.md` has always been three times the slowest
+  run on record, and on 2026-08-20 what counts as a run on record moved from
+  the five dry runs of 2026-08-14 to the scheduled mornings that overtook them.
+  537 is three times the 178.9s that was the slowest when it was set, and 2.4
+  times the 226.1s since; the timeout note there says why it stays rather
+  than chasing each new high. If the CLI fails or times out, the morning
+  still ships:
   `analyst.py` falls back to a plain table report built from the packet and
   says so in the report itself.
 

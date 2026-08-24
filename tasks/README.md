@@ -1,9 +1,9 @@
 # Scheduled jobs
 
 Nine Windows Task Scheduler tasks run PremarketDesk, from seven .bat files:
-job_nightly registers twice and job_monitor registers twice. A tenth task may
-be present and is not part of the schedule: see One off probes at the foot of
-this file. Each .bat here
+job_nightly registers twice and job_monitor registers twice. Up to two further
+tasks may be present and are not part of the schedule: see One off probes at
+the foot of this file. Each .bat here
 changes to the project root, runs its scripts with the project venv, and
 appends stdout and stderr to `logs\<job>-YYYY-MM-DD.log`, with the date stamped
 by the project's own ET clock so a locale change cannot mangle the file name.
@@ -107,11 +107,13 @@ were registered, the tree does not refresh itself.
 
 ## One off probes
 
-One task in this folder is NOT a scheduled step. It answers a single open
-question against a live morning and is meant to be deleted once it is
-answered. It does not set PMD_JOB, writes no status record, and does not
-appear in CRITERIA.md [job status steps], because a step that is meant to stop
-existing does not belong in a list of steps the watchdog expects.
+Two .bat files in this folder are NOT scheduled steps. Each answers a single
+open question against a live morning and is meant to be deleted once it is
+answered. Neither sets PMD_JOB, neither writes a status record, and neither
+appears in CRITERIA.md [job status steps], because a step that is meant to stop
+existing does not belong in a list of steps the watchdog expects. Neither is in
+the $jobs array, so a plain run of register_tasks.ps1 never resurrects one;
+each has its own dated flag, and `-Unregister` removes both.
 
 - `job_probe_socket_cap.bat`. A/B tests the EODHD trades websocket under a
   small subscription and under one at the documented 50 symbol cap,
@@ -159,9 +161,60 @@ Delete the task when the question is answered:
 
     schtasks /Delete /TN "\PremarketDesk\probe-socket-cap" /F
 
-Two further probes lived here and are gone, both answered and recorded in
-DECISIONS.md: `job_probe_live_v1.bat` on 2026-08-17, settling that EODHD
+- `job_probe_capture.bat`. Sweeps the universe from Alpaca over 04:00 to 08:30
+  and compares the per symbol volumes against what the collector recorded on
+  the same tape over the same minutes. One sweep answers both open questions:
+  whether the free tier serves a window during a RUNNING session, and what the
+  socket actually captured of the morning the 0.1172 correction in CRITERIA
+  [Collector] premarket_capture_rate is being applied to. It spends no EODHD
+  quota, writes nothing the chain reads, and about six Alpaca requests against
+  a 200 per minute limit.
+
+  Arm it for a chosen morning with:
+
+      powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1 -Capture 2026-08-24
+
+  That registers exactly one task, `\PremarketDesk\probe-capture`, at 08:45 on
+  the date given. 08:45 is not chosen either, it is CRITERIA [Scan] run_time:
+  the question is what the vendor serves at the clock production asks it, so a
+  run at any other time answers a different one. It therefore runs BESIDE the
+  morning chain, which is safe because it spends no shared counter and touches
+  nothing the chain does. The window's 08:30 end is [Scan] run_time minus
+  [Truth] documented_lag_minutes, the latest end the free tier will serve at
+  that clock, and one extra request asks for the production window at the
+  production clock as the control. The probe waits 30 seconds past 08:45 before
+  firing, because that end is fixed while the vendor's refusal rule is relative
+  to the wall clock.
+
+  StartWhenAvailable is deliberately NOT set here, where the socket cap probe
+  has it. A missed 08:45 catching up at 10:30 would record a 200 that means
+  nothing. AllowStartIfOnBatteries and DontStopIfGoingOnBatteries ARE set,
+  because the default refuses to start a task on battery power, so a laptop
+  unplugged overnight would wake at 08:45, decline, and leave no record at all.
+  A market holiday is not caught by the register script: the .bat runs
+  ops.market_today and stands down on one.
+
+  It needs the collector to have been running that morning, or half the
+  comparison is missing. Read it back with:
+
+      set PYTHONPATH=%CD%\src
+      .venv\Scripts\python.exe -m research.probe_capture_live --report --date 2026-08-24
+
+  Delete the task when the question is answered:
+
+      schtasks /Delete /TN "\PremarketDesk\probe-capture" /F
+
+  Armed on 2026-08-23 for 2026-08-24 08:45. DECISIONS.md pre-registers what
+  each outcome licenses, written before the answer existed.
+
+Two further probes lived here and are gone, and only one of them settled
+anything. `job_probe_live_v1.bat` went on 2026-08-17, settling that EODHD
 `real-time/{symbol}` serves the last completed session rather than today's
-premarket, and `job_probe_alpaca_live.bat` on the same date, closing Alpaca as
-a live discovery source. The modules they wrapped stay under src/research/,
-which is where the evidence behind both decisions is read back from.
+premarket. `job_probe_alpaca_live.bat` went the same date and was read as
+closing Alpaca as a live discovery source; that closure was WITHDRAWN on
+2026-08-22, because every request the probe had ever made was refused before
+the feed was consulted, so 46 refusals were evidence about recency and not
+about a live session. Alpaca's status as a live discovery source is open and
+unmeasured, which is what `job_probe_capture.bat` above is armed to settle.
+The modules both wrapped stay under src/research/, which is where the evidence
+is read back from. See DECISIONS.md 2026-08-22.
