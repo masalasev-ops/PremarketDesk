@@ -15,6 +15,38 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-24, second: five test fixtures were being counted as measurements
+
+data/quantifier-flags.jsonl held seven rows. Five of them were written by the
+2026-08-21 15:46 sweep that invoked every claim directly, the same sweep already
+on record here for putting 258 fixture bars over roughly 3,200 real ones and 762
+bytes over a 125 KB packet. All five carry recorded_at 2026-08-21T15:46:33-04:00,
+all five say "Every candidate missed the prior day high.", one carries
+disposition_note "test disposition", and one is id 90001 back dated to
+2026-08-12, before this project raised its first flag.
+
+**What they cost, which is more than tidiness.** [Monitor]
+flag_backlog_after_days is 7 and id 90001 could never age out of it, so the
+watchdog reported BACKLOG and exited 1 on EVERY pass, for ever. monitor-night
+rc=1 on 2026-08-21 is that, and so is every weekday pass since. A permanent red
+is how a real one stops being read.
+
+The second cost is worse in kind. The false positive rate printed "100.0% of 1
+judged", and that one judged row was the fixture whose note says it is a test.
+A fabricated measurement was being published on the one number the guard's word
+list is meant to be tuned on, which is the exact failure the 2026-08-22 review
+closed twenty three of.
+
+The five rows were moved to data/purged-quantifier-flags-2026-08-24.jsonl
+first, the way the 2026-08-19 picks purge was, and the live file rewritten with
+the two real flags: 2026-08-20 08:49:13 and 2026-08-21 08:49:36, both raised by
+a scheduled morning chain. The watchdog now reports PENDING with 0 problems, and
+the rate line reads "NOT MEASURABLE, nothing judged yet", which is true.
+
+Both surviving flags are still unjudged and the 7 day window puts them past
+patience on 2026-08-27. Judging them is a reading of the morning's own prose
+against its packet and is deliberately left to a human.
+
 ## 2026-08-24: a collector that looked healthy and was listening to the wrong session
 
 A power cut ran 01:00 to 07:49 ET. Nothing was lost to it: every weekday task
