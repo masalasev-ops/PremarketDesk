@@ -1467,6 +1467,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="Allow --snapshot to replace an existing artifact under "
                              "runs/. Without it the original is spared and the copy is "
                              "written beside it.")
+    parser.add_argument("--stale-watchlist-ok", action="store_true",
+                        help="Subscribe even when watchlist.json was not written "
+                             "today. For ONE caller: the monitor's last-resort "
+                             "branch, past the last pass that could rerun discover "
+                             "inside the collector window. See CRITERIA [Monitor], "
+                             "the stale watchlist note. Not for hand runs.")
     args = parser.parse_args(argv)
 
     if args.snapshot:
@@ -1498,6 +1504,76 @@ def main(argv: list[str] | None = None) -> int:
     if watchlist.get("missing"):
         print(f"collector: {config.WATCHLIST_PATH} is missing. Run discover.py first.")
         return 1
+
+    # And it has to be TODAY'S. A watchlist from another session is refused
+    # rather than used, with no degrade path and no override flag, for the
+    # reason morning/vintage.py gives for having neither: it is not thin
+    # evidence this run can hedge around, it is the wrong pool wearing the
+    # costume of the right one.
+    #
+    # 2026-08-24 is the morning that paid for this. A power cut ran from 01:00
+    # to 07:49 ET. Every weekday task carries -StartWhenAvailable, so Task
+    # Scheduler caught the whole set up at one instant, 07:54:58, which
+    # collapsed the 07:15 to 07:20 gap between discover and this process to
+    # nothing. This process read watchlist.json in the same second discover was
+    # replacing it, got the file from the session before, and select_symbols
+    # found no row in it marked subscribed. An empty list is not an error, so
+    # the run carried on and subscribed to the context tickers and nothing
+    # else. It then ran healthy for fourteen minutes, and the watchdog read it
+    # as alive because it was: monitor_jobs restarts a collector that is DEAD,
+    # and this one was listening perfectly to the wrong thing. Every one of the
+    # day's 42 candidates would have reached the 08:45 scan with no coverage,
+    # which the report says as "on the watchlist but the collector recorded no
+    # bars for it" -- a sentence that reads like a quiet tape rather than like
+    # a collector that was never asked.
+    #
+    # This is the fourth hard rule applied to an empty list, which is where the
+    # 2026-08-22 review found two thirds of its twenty three defects: a missing
+    # answer presented as a measured one, leaking wherever the missing thing
+    # had a falsy value rather than a null. An unsubscribed pool is one more.
+    #
+    # Refusing is also what repairs it, and that machinery already exists. A
+    # refusal writes no subscription list, and monitor_jobs reruns discover
+    # while none has been written today and restarts a collector that is not
+    # alive inside the window, so the next pass rebuilds the file and starts
+    # this process on it. The atomic write in selection/discover.py keeps a
+    # TORN watchlist from reaching here; this keeps a whole stale one from
+    # getting past. Neither --snapshot nor --verify-intraday is affected: both
+    # return well above this line and never subscribe to anything.
+    generated_at = watchlist.get("generated_at")
+    try:
+        generated_on = ettime.parse_date(str(generated_at))
+    except (TypeError, ValueError):
+        generated_on = None
+
+    today = ettime.today_et()
+    if generated_on != today:
+        said = generated_on.isoformat() if generated_on else "no date this can read"
+        if not args.stale_watchlist_ok:
+            print(f"collector: REFUSED, the watchlist is not today's. "
+                  f"{config.WATCHLIST_PATH.name} carries generated_at "
+                  f"{generated_at!r}, which is {said}, and today is "
+                  f"{today.isoformat()}.")
+            print("collector: subscribing on it would listen to another session's "
+                  "pool, or to the context tickers alone, and the 08:45 scan would "
+                  "report that silence as a quiet tape rather than as a collector "
+                  "that never listened. Run discover first. The watchdog does this "
+                  "by itself on its next pass.")
+            return 1
+        # The one caller that may say this is the monitor's last-resort branch,
+        # past the last pass that could rerun discover inside the window. There
+        # the choice is no longer between right names now and right names in
+        # half an hour, it is between possibly wrong names and no tape at all,
+        # and CRITERIA [Monitor] decides for the tape. Loud rather than silent:
+        # the whole defect this refusal exists for was a run that looked
+        # healthy, and scan raises its own gap on the same fact from the packet.
+        print(f"collector: the watchlist is NOT today's, it is {said} against "
+              f"{today.isoformat()}, and --stale-watchlist-ok was given, so this "
+              "run subscribes on it anyway.")
+        print("collector: the names below may belong to another session. Only "
+              "the monitor's last-resort branch passes this flag; if a human "
+              "did, that was a mistake and the morning will screen names this "
+              "tape does not cover.")
 
     symbols, dropped = select_symbols(watchlist)
     print(f"collector: watchlist generated at {watchlist.get('generated_at')}")

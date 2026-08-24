@@ -15,6 +15,62 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-24: a collector that looked healthy and was listening to the wrong session
+
+A power cut ran 01:00 to 07:49 ET. Nothing was lost to it: every weekday task
+carries -StartWhenAvailable and Task Scheduler caught the whole set up at
+07:54:58, discover finished clean on 871 pool rows, the 07:00 catch-up ran, and
+Sunday's universe rebuild had already succeeded. The morning chain returned 0.
+
+What the catch-up did do is fire discover and the collector in the SAME SECOND,
+collapsing the 07:15 to 07:20 gap that normally separates them. The collector
+reads the watchlist once, at subscribe time. It read the file discover was in
+the middle of replacing, got the previous session's, and select_symbols found
+no row in it marked subscribed. An empty list is not an error, so it subscribed
+to the eight context tickers and nothing else and ran healthy for fourteen
+minutes: `requested_count: 11`, zero of the day's 42 candidates.
+
+**Nothing in the system could see it.** The watchdog restarts a collector that
+is DEAD, and this one was alive. `_collector_has_subscribed` read the
+subscription list it had written as proof discovery was settled, which closed
+the discover rerun gate. Every candidate would have reached the 08:45 scan with
+no coverage and been printed as "on the watchlist but the collector recorded no
+bars for it", a sentence that reads like a quiet tape. It was caught by hand
+and the collector was restarted at 08:09:32 onto the right 50 names, so the
+published morning is sound; the sixteen minutes 07:53 to 08:09 are proxies
+only, and there is no candidate bar before 08:00.
+
+**Three changes, in three places, because they answer three different
+questions.**
+
+`collect_premarket` refuses a watchlist that is not today's and exits
+non-zero. This is the fourth hard rule applied to an empty list, which is the
+shape two thirds of the 2026-08-22 review turned out to have. The refusal is
+also the repair: it writes no subscription list, and that absence is what holds
+the watchdog's rerun gate open, so the next pass rebuilds the file and starts
+the collector on it. `--snapshot` and `--verify-intraday` return well above the
+check and are untouched.
+
+`monitor_jobs` may overrule it, in exactly one branch. Past the last pass that
+could rerun discover inside the collector window, CRITERIA already decided that
+possibly wrong names beat no tape at all, and an unconditional refusal would
+have stranded that window the way the 2026-08-20 hold once did. `launch_bat`
+and `maybe_rerun` gained an args passthrough and the branch passes
+`stale-watchlist-ok` through `job_collector.bat`. Nothing else passes it, and a
+claim holds that the 07:25 pass does not.
+
+`scan` raises a gap when the watchlist is not today's. CRITERIA rested on the
+sentence "scan records watchlist_generated_at, so the wrong names case stays
+visible in the packet rather than becoming a silent hole". The field was
+written at two places in scan.py and read by nothing. Recorded is not visible.
+It now goes into gaps_to_fill, which the analyst reads and the report prints,
+and it says the part that matters: a candidate with no collector bars is NOT
+evidence the tape was quiet.
+
+One claim covers all three and fails against each pre-fix file separately.
+CRITERIA gains the stale watchlist note, and the withdrawn sentence is quoted
+there rather than deleted.
+
 ## 2026-08-22, third: twenty three defects from a twelve reader review, and what they had in common
 
 A twelve reader adversarial review of the whole tree, every finding put to two

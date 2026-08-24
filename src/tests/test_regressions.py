@@ -3894,7 +3894,7 @@ def claim_a_live_job_is_not_rerun_on_top_of_itself(failures: list[str]) -> None:
         launched: list[str] = []
         real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
         monitor_jobs.query_task = lambda name: dict(answer)
-        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        monitor_jobs.launch_bat = lambda bat, dry, args=(): launched.append(bat)
         printed = io.StringIO()
         try:
             with contextlib.redirect_stdout(printed):
@@ -3995,8 +3995,15 @@ def claim_a_previous_session_watchlist_reruns_discover(failures: list[str]) -> N
     satisfies that, and register_tasks makes the monitor's earliest weekday
     firing 07:25 anyway, so the safety net CRITERIA and tasks/README both
     describe could never engage. Nothing else notices a stale watchlist
-    either: the collector checks only that the file exists, load_watchlist
-    applies no date test, and vintage never mentions it. The sharpest case is
+    either: the collector checked only that the file exists, load_watchlist
+    applies no date test, and vintage never mentions it.
+    [corrected 2026-08-24: the collector clause was true when written and is
+    now false. It refuses a watchlist that is not today's, which is what
+    claim_a_watchlist_from_another_session_never_reaches_the_socket holds. The
+    watchdog half below is unchanged: that claim exists because the collector
+    could subscribe on another session's file, and this one because it could
+    do it while looking alive.]
+    The sharpest case is
     the morning that missed both jobs, where the same 07:25 pass restarted the
     dead collector onto yesterday's names while declining to refresh them.
     """
@@ -4006,7 +4013,7 @@ def claim_a_previous_session_watchlist_reruns_discover(failures: list[str]) -> N
         launched: list[str] = []
         real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
         monitor_jobs.query_task = lambda name: dict(answer)
-        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        monitor_jobs.launch_bat = lambda bat, dry, args=(): launched.append(bat)
         printed = io.StringIO()
         try:
             with contextlib.redirect_stdout(printed):
@@ -4777,7 +4784,7 @@ def claim_a_finish_marker_outranks_a_fresh_log(failures: list[str]) -> None:
         launched: list[str] = []
         real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
         monitor_jobs.query_task = lambda name: dict(answer)
-        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        monitor_jobs.launch_bat = lambda bat, dry, args=(): launched.append(bat)
         printed = io.StringIO()
         try:
             with contextlib.redirect_stdout(printed):
@@ -4908,7 +4915,7 @@ def claim_a_hold_needs_a_pass_that_can_act(failures: list[str]) -> None:
         launched: list[str] = []
         real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
         monitor_jobs.query_task = lambda name: dict(answer)
-        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        monitor_jobs.launch_bat = lambda bat, dry, args=(): launched.append(bat)
         printed = io.StringIO()
         try:
             with contextlib.redirect_stdout(printed):
@@ -5000,7 +5007,7 @@ def claim_the_last_pass_counts_what_it_cannot_resolve(failures: list[str]) -> No
         launched: list[str] = []
         real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
         monitor_jobs.query_task = lambda name: dict(answer)
-        monitor_jobs.launch_bat = lambda bat, dry: launched.append(bat)
+        monitor_jobs.launch_bat = lambda bat, dry, args=(): launched.append(bat)
         printed = io.StringIO()
         try:
             with contextlib.redirect_stdout(printed):
@@ -8424,6 +8431,198 @@ def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
           f"anywhere in {len(tracked)} tracked files")
 
 
+def claim_a_watchlist_from_another_session_never_reaches_the_socket(
+    failures: list[str]
+) -> None:
+    """The collector refuses a watchlist that is not today's, and writes nothing.
+
+    claim_a_previous_session_watchlist_reruns_discover closed the watchdog half
+    of this on 2026-08-20 and its docstring recorded what was still open, in a
+    sentence that was true when it was written: the collector checks only that
+    the file exists, and load_watchlist applies no date test. 2026-08-24 is the
+    morning that cost.
+
+    A power cut ran 01:00 to 07:49 ET. Every weekday task carries
+    -StartWhenAvailable, so Task Scheduler caught the whole set up at one
+    instant, 07:54:58, collapsing the 07:15 to 07:20 gap between discover and
+    the collector to nothing. The collector read watchlist.json in the same
+    second discover was replacing it, got the previous session's file, and
+    select_symbols found no row in it marked subscribed. An empty list is not
+    an error, so it subscribed to the eight context tickers and nothing else,
+    then ran healthy for fourteen minutes. The watchdog cannot see it: it
+    restarts a collector that is DEAD, and this one was listening perfectly to
+    the wrong thing, and _collector_has_subscribed reads the subscription list
+    it wrote as proof discovery is settled. All 42 candidates would have
+    reached the 08:45 scan with no coverage, which the report renders as "on
+    the watchlist but the collector recorded no bars for it": a sentence that
+    reads like a quiet tape rather than like a collector nobody asked.
+
+    Both halves are checked. The refusal has to fire on another session's file
+    AND has to write no subscription list, because that file is what closes the
+    watchdog's rerun gate; a refusal that still wrote one would leave the
+    morning exactly as stuck. And a watchlist that IS today's has to get past,
+    or the fix costs every morning instead of saving them.
+    """
+    from collect import collect_premarket
+
+    with conftest_activate():
+        day = ettime.today_et()
+        previous = (day - dt.timedelta(days=1)).isoformat()
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        subscriptions = collect_premarket.subscriptions_path(day.isoformat())
+        subscriptions.unlink(missing_ok=True)
+
+        # Shaped like a real watchlist, and deliberately NOT empty: the defect
+        # is not that the file had no names, it is that it had another
+        # session's. An empty one from today is a legitimate quiet morning.
+        config.WATCHLIST_PATH.write_text(json.dumps({
+            "generated_at": f"{previous}T07:15:02-04:00",
+            "symbols": [{"symbol": "OLD.US", "subscribed": True}],
+        }), encoding="utf-8")
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            code = collect_premarket.main([])
+        said = printed.getvalue()
+
+        if code == 0:
+            failures.append(
+                f"the collector accepted a watchlist generated {previous} and "
+                "returned 0, so another session's pool reaches the socket")
+        if "REFUSED" not in said:
+            failures.append("the collector did not say it refused, so the job "
+                            f"trail records a failure with no reason: {said[:200]!r}")
+        if previous not in said:
+            failures.append("the refusal does not name the date it read, which is "
+                            "the one fact a reader needs to tell this apart from a "
+                            f"missing file: {said[:200]!r}")
+        if subscriptions.exists():
+            failures.append(
+                "the refusal still wrote a subscription list, which closes the "
+                "watchdog's rerun gate through _collector_has_subscribed and "
+                "leaves the morning as stuck as it was before the fix")
+
+        # And today's file gets past. now_et is moved beyond the collector's
+        # stop_time so main returns at "the stop time has already passed"
+        # without reaching the socket; today_et is derived from the same call,
+        # so the watchlist below stays today's under the patch.
+        config.WATCHLIST_PATH.write_text(json.dumps({
+            "generated_at": f"{day.isoformat()}T07:15:02-04:00",
+            "symbols": [{"symbol": "NEW.US", "subscribed": True}],
+        }), encoding="utf-8")
+
+        real_now = ettime.now_et
+        ettime.now_et = lambda: dt.datetime.combine(
+            day, dt.time(23, 0), tzinfo=real_now().tzinfo)
+        try:
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                code = collect_premarket.main([])
+        finally:
+            ettime.now_et = real_now
+        said = printed.getvalue()
+
+        if "REFUSED" in said:
+            failures.append("the collector refused a watchlist generated today, so "
+                            f"the check costs every morning: {said[:200]!r}")
+        if code != 0:
+            failures.append(f"a today watchlist past the stop time returned {code}, "
+                            "so this half proved nothing about the check")
+
+        # The override exists, and it lets exactly this case through. Same
+        # stale file, same clock trick to return before the socket.
+        config.WATCHLIST_PATH.write_text(json.dumps({
+            "generated_at": f"{previous}T07:15:02-04:00",
+            "symbols": [{"symbol": "OLD.US", "subscribed": True}],
+        }), encoding="utf-8")
+        real_now = ettime.now_et
+        ettime.now_et = lambda: dt.datetime.combine(
+            day, dt.time(23, 0), tzinfo=real_now().tzinfo)
+        try:
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                code = collect_premarket.main(["--stale-watchlist-ok"])
+        finally:
+            ettime.now_et = real_now
+        said = printed.getvalue()
+
+        if code != 0:
+            failures.append(
+                f"--stale-watchlist-ok did not get past the refusal, it returned "
+                f"{code}, so the monitor's last-resort branch would strand the "
+                "collector exactly as the 2026-08-20 hold once did")
+        if "NOT today's" not in said:
+            failures.append("the override ran silently; the whole defect it "
+                            "overrules was a collector that looked healthy, so "
+                            f"this path has to say what it did: {said[:200]!r}")
+
+    # And the one caller entitled to it is the only one that passes it. The
+    # last-resort branch is the 08:55 pass: next_pass is 09:25, which is not
+    # INSIDE a window ending 09:25, so the hold is unanswerable and the branch
+    # starts the collector rather than stranding it.
+    from ops import monitor_jobs
+
+    with conftest_activate():
+        day = ettime.today_str()
+        previous = (ettime.now_et().date() - dt.timedelta(days=1)).isoformat()
+        config.WATCHLIST_PATH.write_text(json.dumps(
+            {"generated_at": f"{previous}T07:15:00-04:00", "symbols": []}),
+            encoding="utf-8")
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        for name in (f"{day}.jsonl", f"{day}-stats.jsonl",
+                     f"{day}-subscriptions.json"):
+            (config.PREMARKET_DIR / name).unlink(missing_ok=True)
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        (config.LOGS_DIR / f"discover-{day}.log").unlink(missing_ok=True)
+        (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+
+        asleep = {"exists": True, "status": "Ready",
+                  "last_run": None, "last_result": "1"}
+
+        def one_pass(now):
+            seen: list[tuple[str, tuple[str, ...]]] = []
+            real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
+            monitor_jobs.query_task = lambda name: dict(asleep)
+            monitor_jobs.launch_bat = (
+                lambda bat, dry, args=(): seen.append((bat, tuple(args))))
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    monitor_jobs.check_all(now, dry_run=True)
+            finally:
+                monitor_jobs.query_task = real_query
+                monitor_jobs.launch_bat = real_launch
+            return seen
+
+        base = ettime.now_et()
+        last_resort = one_pass(base.replace(hour=8, minute=55, second=0,
+                                            microsecond=0))
+        early = one_pass(base.replace(hour=7, minute=25, second=0,
+                                      microsecond=0))
+
+        collector_calls = [a for bat, a in last_resort if bat == "job_collector.bat"]
+        if not collector_calls:
+            failures.append("the 08:55 last-resort pass launched no collector, so "
+                            "this half proved nothing about the override")
+        elif ("stale-watchlist-ok",) not in collector_calls:
+            failures.append(
+                "the last-resort pass started the collector WITHOUT "
+                f"stale-watchlist-ok ({collector_calls}), so the collector will "
+                "refuse the very file this branch decided was better than no "
+                "tape, and the window is stranded")
+
+        for bat, a in early:
+            if a:
+                failures.append(
+                    f"the 07:25 pass passed {a} to {bat}. Only the last-resort "
+                    "branch may overrule the refusal; at 07:25 a later pass "
+                    "still falls inside the window and the right answer is to "
+                    "let the collector refuse and be restarted on a good file")
+
+    print("  collector    another session's watchlist is refused and writes no "
+          "subscription list; today's is accepted; only the last-resort pass "
+          "overrules it")
+
+
 # ---------------------------------------------------------------- plumbing
 
 def conftest_activate():
@@ -8531,6 +8730,7 @@ def main() -> int:
     claim_a_claim_cannot_reach_the_live_database(failures)
     claim_the_two_unrebuildable_artifacts_are_held_twice(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
+    claim_a_watchlist_from_another_session_never_reaches_the_socket(failures)
 
     if failures:
         for failure in failures:

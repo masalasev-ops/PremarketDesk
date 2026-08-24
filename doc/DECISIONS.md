@@ -18,6 +18,55 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-24: the refusal is absolute except where refusing costs the window
+
+The collector now refuses a watchlist that is not today's. The question that
+could have gone the other way is whether anything may overrule that, and the
+first answer taken was no.
+
+**Why no was tempting.** morning/vintage.py refuses stale prices with no
+degrade path and no override, on the reasoning that a stale price is not thin
+evidence a report can hedge around but a wrong number wearing the costume of a
+right one. A watchlist from another session is the same shape one layer up. An
+override flag also has a failure mode of its own: this defect is SILENT, its
+symptom reads like a quiet market, and a flag that exists gets set to "just get
+it running" by whoever is debugging at 07:30.
+
+**Why no was wrong.** CRITERIA [Monitor] already carried a decision, taken on
+2026-08-20 and reasoned in place, that past the last pass which could rerun
+discover inside the collector window the watchdog starts the collector on
+whatever names are on disk, because "half a window of the previous session's
+tape is worth more than no tape". That branch exists because an unanswerable
+hold once stranded the collector for a whole morning with its rerun budget
+unspent. An unconditional refusal silently repeals it: the collector would
+refuse the very file that branch decided was better than nothing, and there is
+no later pass to try again.
+
+**What settled it.** The two cases are not the same case, and the thing that
+separates them is whether a repair is still possible. At 07:54 five monitor
+passes remained and refusing costs half an hour. At 08:55 none remains and
+refusing costs the morning. The only component that knows which of those it is
+looking at is the watchdog, so the override lives there and nowhere else:
+launch_bat gained an args passthrough, one branch passes stale-watchlist-ok,
+and a claim asserts the 07:25 pass does not. A hand run cannot reach it by
+accident because a human would have to type the flag, and the collector prints
+two loud lines saying the names may belong to another session when they do.
+
+**What was NOT decided.** Whether the collector should re-read the watchlist
+during its run, which would dissolve this whole class rather than guard it.
+That is a real design change to the one process whose window cannot be
+recovered, and it wants its own measurement rather than being smuggled in as
+part of an incident fix.
+
+**A second premise was withdrawn rather than reversed.** The 2026-08-20
+paragraph closed with "scan records watchlist_generated_at, so the wrong names
+case stays visible in the packet rather than becoming a silent hole". That was
+offered as the reason the fallback was safe. The field was recorded at two
+places and read by nothing, and on 2026-08-24 nothing anywhere surfaced it, so
+it was never doing the work it was cited for. scan now raises a gap on it,
+which makes the sentence true for the first time. The fallback's reasoning is
+unchanged and its evidence is now real.
+
 ## 2026-08-22, third: a falsy value is not an answer, and what that costs to fix
 
 The twelve reader review's twenty nine confirmed findings sorted into two piles

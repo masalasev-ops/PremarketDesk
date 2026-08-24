@@ -360,21 +360,32 @@ def _record_rerun(day: str, job: str) -> None:
                       "rerun cap is not enforced for it")
 
 
-def launch_bat(bat_name: str, dry_run: bool) -> None:
+def launch_bat(bat_name: str, dry_run: bool, args: tuple[str, ...] = ()) -> None:
+    """Start a job .bat detached, optionally with arguments.
+
+    args exists for exactly one caller and is empty for every other. The
+    collector refuses a watchlist that is not today's, and the last-resort
+    branch below is the only place in this project entitled to overrule that,
+    because it is the only one that knows no later pass falls inside the
+    window. Passing it from anywhere else reintroduces the 2026-08-24 defect
+    the refusal closed. See CRITERIA [Monitor], the stale watchlist note.
+    """
     bat = config.PROJECT_ROOT / "tasks" / bat_name
     if dry_run:
-        print(f"monitor: DRY RUN, would launch {bat.name} detached")
+        extra = f" with {' '.join(args)}" if args else ""
+        print(f"monitor: DRY RUN, would launch {bat.name}{extra} detached")
         return
     flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     subprocess.Popen(
-        ["cmd", "/c", str(bat)],
+        ["cmd", "/c", str(bat), *args],
         cwd=str(config.PROJECT_ROOT),
         creationflags=flags,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
     )
-    print(f"monitor: launched {bat.name} detached, it writes its own dated log")
+    said = f" with {' '.join(args)}" if args else ""
+    print(f"monitor: launched {bat.name}{said} detached, it writes its own dated log")
 
 
 # ----------------------------------------------------- the flag backlog
@@ -683,7 +694,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             report(job, "STEP FAILED", f"{line} ({examined} step record(s) read)")
         return False
 
-    def maybe_rerun(job: str, reason: str) -> bool:
+    def maybe_rerun(job: str, reason: str, args: tuple[str, ...] = ()) -> bool:
         """True when a .bat was actually launched.
 
         The answer is returned rather than dropped because one caller has to
@@ -697,7 +708,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                    f"{reruns_done[job]} time(s) today, a human should look")
             return False
         report(job, "RERUNNING", reason)
-        launch_bat(JOBS[job][1], dry_run)
+        launch_bat(JOBS[job][1], dry_run, args)
         if not dry_run:
             _record_rerun(day, job)
         actions += 1
@@ -843,12 +854,22 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             # a session collected on the previous session's names is visible in
             # the morning rather than silent.
             problems += 1
+            # stale-watchlist-ok is passed HERE and nowhere else. Since
+            # 2026-08-24 the collector refuses a watchlist that is not today's,
+            # which is right everywhere except this branch: here the race it
+            # would refuse is the last chance the morning has, and a refusal
+            # would strand the window exactly as the hold once did. The flag
+            # says "this pass knows", and both the collector and scan still say
+            # loudly which session's names were used.
             maybe_rerun("collector", "no live collector, and discover was "
                         "relaunched in this pass, but no later pass falls "
                         f"inside the window that ends {_clock_text(collector_stop)}, "
                         "so a hold would strand the collector for the rest of "
                         "the morning. Started on whichever watchlist version "
-                        "wins the race; scan records which one it was")
+                        "wins the race, overruling the collector's own refusal "
+                        "because there is no later pass to rerun discover; scan "
+                        "records which one it was",
+                        args=("stale-watchlist-ok",))
         else:
             problems += 1
             maybe_rerun("collector", "inside the window with no live collector; "

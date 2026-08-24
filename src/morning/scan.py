@@ -403,6 +403,31 @@ def pool_candidates(
         "selection_method": watchlist.get("selection_method"),
         "pool_sources": watchlist.get("pool_sources"),
     }
+    # Whether it is TODAY'S watchlist, which is a different question from
+    # whether it has names in it and was asked by nobody until 2026-08-24. The
+    # field below has been in the packet since the packet existed, and CRITERIA
+    # [Monitor] rested on it: "scan records watchlist_generated_at, so the
+    # wrong names case stays visible in the morning rather than silent". It was
+    # recorded and never read, which is not the same as visible. On 2026-08-24
+    # a collector subscribed to the previous session's file and nothing
+    # anywhere said so. Now it goes in gaps_to_fill, which the analyst reads
+    # and the report prints.
+    generated_on = None
+    if not watchlist.get("missing"):
+        try:
+            generated_on = ettime.parse_date(str(watchlist.get("generated_at")))
+        except (TypeError, ValueError):
+            generated_on = None
+        if generated_on != ettime.today_et():
+            packet.gap(
+                f"watchlist.json was written at {watchlist.get('generated_at')}, "
+                f"which is not today, {ettime.today_et().isoformat()}. The "
+                "collector subscribed to whatever that file named, so the names "
+                "with premarket coverage below may belong to another session and "
+                "today's real candidates may be absent entirely. A candidate "
+                "reported here as having no collector bars is NOT evidence the "
+                "tape was quiet. See CRITERIA [Monitor], the stale watchlist note.")
+
     if watchlist.get("missing"):
         packet.gap("watchlist.json is missing, so there is no subscribed list and "
                    "no candidate can be built")

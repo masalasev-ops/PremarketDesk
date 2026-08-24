@@ -14,6 +14,15 @@ set PYTHONPATH=%CD%\src
 rem Every step this job runs records its outcome under this name in
 rem data\job-status.jsonl. See CRITERIA.md [job status].
 set PMD_JOB=collector
+rem One optional argument, and only the watchdog ever passes it. Since
+rem 2026-08-24 collect_premarket REFUSES a watchlist that was not written
+rem today, because a power cut let Task Scheduler catch discover and this job
+rem up in the same second and the collector subscribed to the previous
+rem session's file while looking perfectly healthy. monitor_jobs overrules that
+rem refusal in exactly one branch: past the last pass that could rerun discover
+rem inside the collector window, where the choice is possibly wrong names
+rem against no tape at all. See CRITERIA.md [Monitor], the stale watchlist note.
+set MODE=%~1
 for /f "usebackq delims=" %%d in (`%PY% -c "from core import ettime; print(ettime.today_str())"`) do set TODAY=%%d
 if "%TODAY%"=="" set TODAY=undated
 if not exist logs mkdir logs
@@ -26,7 +35,12 @@ if %ERRORLEVEL% equ 3 (
 )
 
 echo ===== collector started %DATE% %TIME% ===== >> "%LOG%"
-%PY% -m collect.collect_premarket >> "%LOG%" 2>&1
+if /i "%MODE%"=="stale-watchlist-ok" (
+    echo ===== stale-watchlist-ok passed by the watchdog %DATE% %TIME% ===== >> "%LOG%"
+    %PY% -m collect.collect_premarket --stale-watchlist-ok >> "%LOG%" 2>&1
+) else (
+    %PY% -m collect.collect_premarket >> "%LOG%" 2>&1
+)
 set RC=%ERRORLEVEL%
 echo ===== collector finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

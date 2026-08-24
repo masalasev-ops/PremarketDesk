@@ -1642,8 +1642,54 @@ now < stop_time. Held at 08:55, window over at 09:25, no collector all morning
 and its rerun budget unspent. A hold now requires a next pass inside the
 window, and past that point the collector is started on the names that are on
 disk instead: half a window of the previous session's tape is worth more than
-no tape, and scan records watchlist_generated_at, so the wrong names case stays
-visible in the packet rather than becoming a silent hole.
+no tape. See the stale watchlist note below for what that costs and what now
+pays for it.
+
+### The stale watchlist note
+
+The paragraph above stood on a second sentence that was withdrawn on
+2026-08-24: "and scan records watchlist_generated_at, so the wrong names case
+stays visible in the packet rather than becoming a silent hole." The field was
+recorded and read by nothing. Recorded is not visible, and the morning that
+proved it was collected before anyone noticed the difference.
+
+**What happened.** A power cut ran 01:00 to 07:49 ET on 2026-08-24. Every
+weekday task carries -StartWhenAvailable, so Task Scheduler caught the whole
+set up at one instant, 07:54:58, which collapsed the 07:15 to 07:20 gap
+between discover and the collector to nothing. The collector reads the
+watchlist ONCE, at subscribe time. It read the file in the same second discover
+was replacing it, got the previous session's, and select_symbols found no row
+in it marked subscribed. An empty list is not an error, so it subscribed to the
+eight [Collector] context_symbols and nothing else, wrote its subscription
+list, and ran healthy. Nothing objected. The watchdog restarts a collector that
+is DEAD and this one was alive, listening perfectly to the wrong thing, and
+_collector_has_subscribed read the list it had written as proof discovery was
+settled. All 42 of the day's candidates would have reached the 08:45 scan with
+no coverage and been reported as "on the watchlist but the collector recorded
+no bars for it", which reads like a quiet tape.
+
+**Two changes, and they are deliberately in different places.**
+
+collect_premarket REFUSES a watchlist that is not today's and exits non-zero.
+That is the fourth hard rule applied to an empty list, and it is what the
+2026-08-22 review found two thirds of its defects to be: a missing answer
+presented as a measured one, leaking wherever the missing thing had a falsy
+value. The refusal is also the repair, because it writes no subscription list,
+which is what holds the watchdog's discover rerun gate open. --snapshot and
+--verify-intraday return well before the check and are unaffected.
+
+The branch above is the ONE exception, and it passes --stale-watchlist-ok
+through job_collector.bat to say so. It is entitled to, because it is the only
+caller that knows no later pass falls inside the window, which is exactly the
+condition that makes wrong names better than no tape. Nothing else in this
+project passes that flag and a claim holds that the 07:25 pass does not: at
+07:25 a later pass still fits, so the right answer there is to let the
+collector refuse and be restarted on a file discover has finished writing.
+
+**And the withdrawn sentence is now true.** scan raises a gap on a watchlist
+that is not today's, so it lands in gaps_to_fill, which the analyst reads and
+the report prints. The gap says the thing a reader actually needs: a candidate
+reported with no collector bars is NOT evidence the tape was quiet.
 
 ### The flag backlog note
 
