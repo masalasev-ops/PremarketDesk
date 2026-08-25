@@ -1085,12 +1085,17 @@ def _print_quantifier_flags(
         print(f"  flag {flag_id} line {hit['line']}: matched "
               f"{hit['quantifier']!r} near {hit['set_word']!r}")
         print(f"      {hit['text']}")
+    # Local, because ops.quantifier_flags imports this module and a
+    # module level import here would be a cycle. monitor_jobs does the
+    # same for the same reason.
+    from ops import quantifier_flags
+
     print("analyst: packet screen_tally carries the counts to quote instead. "
           "See prompt_analyst.md rule 13.")
     if ids:
         print(f"analyst: logged to {flag_log_path().name}. If one of these is "
               "wrong, record it so the word list is tuned on data: "
-              f"python -m ops.quantifier_flags --mark {ids[0]} false-positive "
+              f"{quantifier_flags.RUN_PREFIX} --mark {ids[0]} false-positive "
               '--note "why"')
 
 
@@ -1554,6 +1559,11 @@ def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
 # ------------------------------------------------------------------- runner
 
 def write_report(packet_path: Path) -> int:
+    # Local, because ops.quantifier_flags imports this module and a
+    # module level import here would be a cycle. monitor_jobs does the
+    # same for the same reason.
+    from ops import quantifier_flags
+
     packet_text = packet_path.read_text(encoding="utf-8")
     packet = json.loads(packet_text)
     session_date = packet.get("session_date") or ettime.today_et().isoformat()
@@ -1702,7 +1712,7 @@ def write_report(packet_path: Path) -> int:
         # watchdog's unjudged count.
         print(f"analyst: {len(warned)} quantifier flag(s) recorded in warn mode "
               "and published. Judge them so the switch can flip: "
-              "python -m ops.quantifier_flags --pending")
+              f"{quantifier_flags.RUN_PREFIX} --pending")
     elif usage.get("quantifier_regenerated"):
         # Deliberately NOT job_status.failed. The morning got its narrative,
         # so calling the step failed would be crying wolf on a good report,
@@ -1713,7 +1723,7 @@ def write_report(packet_path: Path) -> int:
         print("analyst: the quantifier guard rejected the first attempt and the "
               "regeneration passed. The narrative was delivered and the flag "
               "stands, logged as regenerated; judge it with "
-              "python -m ops.quantifier_flags --pending")
+              f"{quantifier_flags.RUN_PREFIX} --pending")
     print(f"analyst: wrote {report_path} ({len(report_text)} chars, status {usage['status']})")
 
     # Checked again, on purpose. The loop above asked the containment question

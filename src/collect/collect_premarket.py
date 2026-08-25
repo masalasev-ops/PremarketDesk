@@ -1442,6 +1442,17 @@ def latest_volume_check(before_day: str) -> dict[str, Any] | None:
 # and calls main() directly. See ops/job_status.py for the contract.
 OK_CODES = (0,)
 
+# The override token, in ONE place. It has to be spelled identically in three
+# unrelated languages: this module's argparse flag, monitor_jobs' args tuple,
+# and job_collector.bat's `if /i` compare. Nothing links them, and a typo in
+# any one is silent in the worst way: the .bat falls through to the plain
+# invocation, the collector refuses the very file the last-resort branch had
+# just decided was better than no tape, and the monitor still logs that it
+# passed the flag. Python's two spellings are derived from this name; the
+# .bat cannot import it, so a claim reads the file and asserts the third
+# agrees.
+STALE_WATCHLIST_ARG = "stale-watchlist-ok"
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Collect the premarket price path.")
@@ -1467,7 +1478,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="Allow --snapshot to replace an existing artifact under "
                              "runs/. Without it the original is spared and the copy is "
                              "written beside it.")
-    parser.add_argument("--stale-watchlist-ok", action="store_true",
+    parser.add_argument("--" + STALE_WATCHLIST_ARG, action="store_true",
                         help="Subscribe even when watchlist.json was not written "
                              "today. For ONE caller: the monitor's last-resort "
                              "branch, past the last pass that could rerun discover "

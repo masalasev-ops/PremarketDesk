@@ -846,10 +846,13 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     # rerun, and the last-resort branch is never reached at all. That turns
     # "wrong names for the rest of the window" into "no tape", which is the one
     # outcome CRITERIA [Monitor] added the branch to prevent.
+    from collect import collect_premarket as _collect
+    from ops import quantifier_flags
+
     watchlist_stale, watchlist_vintage_said = _watchlist_vintage(day)
     discover_repairable = (hold_is_answerable
                            and reruns_done.get("discover", 0) < max_reruns)
-    last_chance_args = (("stale-watchlist-ok",)
+    last_chance_args = ((_collect.STALE_WATCHLIST_ARG,)
                         if watchlist_stale and not discover_repairable else ())
     if now_m < collector_start:
         report("collector", "NOT DUE", "")
@@ -1073,7 +1076,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         report("flags", "UNDATED",
                f"{backlog['pending']} unjudged quantifier flag(s) carry no "
                "readable timestamp, so their age cannot be checked: "
-               "python -m ops.quantifier_flags --pending")
+               f"{quantifier_flags.RUN_PREFIX} --pending")
     elif backlog["oldest_days"] >= backlog_after:
         problems += 1
         report("flags", "BACKLOG",
@@ -1081,13 +1084,13 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                f"the oldest from {backlog['oldest_session']} and "
                f"{backlog['oldest_days']:.0f} days old. The false positive rate "
                "stays an impression until these are judged: "
-               "python -m ops.quantifier_flags --pending")
+               f"{quantifier_flags.RUN_PREFIX} --pending")
     else:
         report("flags", "PENDING",
                f"{backlog['pending']} unjudged of {backlog['raised']} raised, "
                f"the oldest {backlog['oldest_days']:.0f} day(s) old, inside the "
                f"{backlog_after} day judging window: "
-               "python -m ops.quantifier_flags --pending")
+               f"{quantifier_flags.RUN_PREFIX} --pending")
 
     print(f"monitor: {problems} problem(s), {actions} action(s) taken, "
           f"{len(JOBS)} job(s) checked")

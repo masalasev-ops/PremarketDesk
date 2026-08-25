@@ -8680,10 +8680,41 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
         finally:
             collect_premarket.read_subscriptions = real_read
 
+    # The token is spelled in three languages and only two of them can be
+    # checked by importing anything. A typo in the .bat is the silent one: it
+    # falls through to the plain invocation, the collector refuses the file the
+    # last-resort branch just decided was better than no tape, and the monitor
+    # still logs that it passed the flag.
+    bat = config.PROJECT_ROOT / "tasks" / "job_collector.bat"
+    try:
+        bat_text = bat.read_bytes().decode("utf-8-sig")
+    except OSError as exc:
+        failures.append(f"job_collector.bat could not be read, so the third "
+                        f"spelling of the override token is unchecked: {exc}")
+        bat_text = ""
+    token = collect_premarket.STALE_WATCHLIST_ARG
+    if bat_text:
+        if f'"%MODE%"=="{token}"' not in bat_text:
+            failures.append(
+                f"job_collector.bat does not compare MODE against {token!r}, so "
+                "the watchdog's override falls through to the plain invocation "
+                "and the collector refuses the file the last-resort branch chose")
+        if f"--{token}" not in bat_text:
+            failures.append(
+                f"job_collector.bat never passes --{token} to the module, so the "
+                "branch it exists for cannot reach it")
+
+    # And argparse answers to the same name, which is what monitor_jobs sends.
+    parsed = collect_premarket.build_argv_parser().parse_args(
+        [f"--{token}"]) if hasattr(collect_premarket, "build_argv_parser") else None
+    if parsed is not None and not getattr(parsed, token.replace("-", "_"), False):
+        failures.append(f"--{token} does not set the flag argparse exposes")
+
     print("  collector    another session's watchlist is refused and writes no "
           "subscription list; today's is accepted; only the last-resort pass "
-          "overrules it; and a subscription list that does not match the "
-          "watchlist is named even when the file is today's")
+          "overrules it; a subscription list that does not match the watchlist "
+          "is named even when the file is today's; and the override token is "
+          "spelled the same in the module, the watchdog and the .bat")
 
 
 # ---------------------------------------------------------------- plumbing

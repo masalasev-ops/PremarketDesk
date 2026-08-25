@@ -35,6 +35,18 @@ from morning import analyst
 # from a pending one. A second copy of this tuple over there would drift.
 VERDICTS = ("true-positive", "false-positive")
 
+# How to invoke this module, as a line that WORKS when pasted into cmd from
+# the project root. Every message telling a human to judge a flag is built
+# from this, because the bare "python -m ops.quantifier_flags" those messages
+# carried fails two ways at once: the system python has none of this
+# project's dependencies, and without PYTHONPATH the ops package is not
+# importable at all. The owner hit exactly that on 2026-08-25, off a line the
+# WATCHDOG had printed into its own log as the thing to do next. An
+# instruction that does not run is the same defect as a field nobody reads,
+# one step further out.
+RUN_PREFIX = (r"set PYTHONPATH=%CD%\src && "
+              r".venv\Scripts\python.exe -m ops.quantifier_flags")
+
 
 def load_flags() -> list[dict[str, Any]]:
     """Every flag ever raised, oldest first. Missing file means none yet."""
