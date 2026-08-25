@@ -8618,9 +8618,72 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
                     "still falls inside the window and the right answer is to "
                     "let the collector refuse and be restarted on a good file")
 
+    # And the morning says so even when the FILE looks right, which is the
+    # case the date check cannot see and the one 2026-08-24 actually was.
+    from morning import scan as _scan
+
+    with conftest_activate():
+        day = ettime.today_str()
+        watchlist = {
+            "generated_at": f"{day}T07:15:02-04:00",
+            "symbols": [{"symbol": f"CAND{n}.US", "subscribed": True}
+                        for n in range(6)],
+        }
+        context = ["SPY.US", "QQQ.US"]
+
+        real_read = collect_premarket.read_subscriptions
+        try:
+            # The 2026-08-24 shape: a today stamped watchlist, and a collector
+            # that was started on a file that is no longer on disk, so it asked
+            # for the context tickers and none of the names here.
+            collect_premarket.read_subscriptions = lambda d: {
+                "symbols": list(context),
+                "subscribed_at": f"{day}T07:55:13-04:00",
+                "dropped_to_fit_cap": []}
+            packet = _scan.Packet()
+            with contextlib.redirect_stdout(io.StringIO()):
+                _scan._gap_for_subscription_divergence(watchlist, day, packet)
+            if not packet.gaps:
+                failures.append(
+                    "a today stamped watchlist whose names the collector never "
+                    "subscribed to raised no gap, so the 2026-08-24 morning "
+                    "would still have published silence as a quiet tape")
+            elif "never listened" not in " ".join(packet.gaps):
+                failures.append(f"the gap does not tell the reader the names were "
+                                f"never listened to: {packet.gaps!r}")
+
+            # And it is silent when they agree, or a morning gains a false
+            # alarm every day, which is how a gaps list stops being read.
+            collect_premarket.read_subscriptions = lambda d: {
+                "symbols": context + [f"CAND{n}.US" for n in range(6)],
+                "subscribed_at": f"{day}T07:20:02-04:00",
+                "dropped_to_fit_cap": []}
+            packet = _scan.Packet()
+            with contextlib.redirect_stdout(io.StringIO()):
+                _scan._gap_for_subscription_divergence(watchlist, day, packet)
+            if packet.gaps:
+                failures.append(f"a collector that subscribed to exactly this "
+                                f"watchlist still raised a gap: {packet.gaps!r}")
+
+            # A name discover marked and the collector cut to fit the socket cap
+            # is absent for a recorded reason and is not evidence of anything.
+            collect_premarket.read_subscriptions = lambda d: {
+                "symbols": context + [f"CAND{n}.US" for n in range(5)],
+                "subscribed_at": f"{day}T07:20:02-04:00",
+                "dropped_to_fit_cap": [{"symbol": "CAND5.US"}]}
+            packet = _scan.Packet()
+            with contextlib.redirect_stdout(io.StringIO()):
+                _scan._gap_for_subscription_divergence(watchlist, day, packet)
+            if packet.gaps:
+                failures.append(f"a name the collector recorded as dropped to fit "
+                                f"the cap was reported as missing: {packet.gaps!r}")
+        finally:
+            collect_premarket.read_subscriptions = real_read
+
     print("  collector    another session's watchlist is refused and writes no "
           "subscription list; today's is accepted; only the last-resort pass "
-          "overrules it")
+          "overrules it; and a subscription list that does not match the "
+          "watchlist is named even when the file is today's")
 
 
 # ---------------------------------------------------------------- plumbing

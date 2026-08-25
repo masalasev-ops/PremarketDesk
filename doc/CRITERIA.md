@@ -1686,10 +1686,19 @@ project passes that flag and a claim holds that the 07:25 pass does not: at
 07:25 a later pass still fits, so the right answer there is to let the
 collector refuse and be restarted on a file discover has finished writing.
 
-**And the withdrawn sentence is now true.** scan raises a gap on a watchlist
-that is not today's, so it lands in gaps_to_fill, which the analyst reads and
-the report prints. The gap says the thing a reader actually needs: a candidate
-reported with no collector bars is NOT evidence the tape was quiet.
+**And the withdrawn sentence is now true, on the second attempt.** scan raises
+a gap on a watchlist that is not today's. That check alone would NOT have
+caught 2026-08-24, and saying so matters more than the fix: the collector read
+the previous session's file at 07:55:13 and discover replaced it with a today
+stamped one in the same second, so by 08:45 the file on disk was today's and a
+date test passes while the socket is still listening to eleven context tickers.
+The file is not the evidence. What the collector asked the socket for is, and
+it writes that down at subscribe time. scan therefore ALSO compares the
+subscription list against the names this watchlist marks subscribed, and names
+any that were never requested. Both land in gaps_to_fill, which the analyst
+reads and the report prints, and both say the part a reader needs: a candidate
+reported with no collector bars was never listened to, and that is not evidence
+the tape was quiet.
 
 ### The flag backlog note
 

@@ -614,11 +614,19 @@ def _watchlist_vintage(day: str) -> tuple[bool, str]:
 
     Returns (stale, a phrase naming what is on disk).
 
-    Nothing else in the pipeline asks this. collect_premarket checks only that
-    the file exists, discover.load_watchlist applies no date test, scan records
+    This used to be the only thing in the pipeline that asked.
+    [corrected 2026-08-24: two of the three clauses below are now false and are
+    kept because the reasoning they justify is still the reason this helper
+    exists. collect_premarket now REFUSES a watchlist that is not today's, and
+    scan raises a gap both on a stale file and on a subscription list that does
+    not match it. discover.load_watchlist still applies no date test and
+    vintage.enforce still never mentions the watchlist.]
+
+    The original: "collect_premarket checks only that the file exists,
+    discover.load_watchlist applies no date test, scan records
     watchlist_generated_at into provenance and screens either way, and
     vintage.enforce never mentions the watchlist at all, so a PREVIOUS
-    SESSION's names were nowhere detected as stale. That is the condition the
+    SESSION's names were nowhere detected as stale." That is the condition the
     discover rerun below actually turns on, and the clock it used to turn on
     was only ever a proxy for it.
     """
@@ -822,6 +830,27 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     # now_m < collector_stop and collector_stop is 09:25, and the collector
     # never started at all, with its rerun budget unspent.
     hold_is_answerable = next_pass is not None and next_pass < collector_stop
+    # Whether the WATCHLIST can still be repaired before the window closes,
+    # which is a different question from whether another pass exists. discover
+    # gets max_reruns_per_job_per_day attempts and no more, so once that budget
+    # is spent a later pass cannot rebuild the file however many of them are
+    # left. Both have to hold, or the collector is being asked to wait for a
+    # rescue that is not coming.
+    #
+    # This is what the stale-watchlist-ok override turns on. Gating it on
+    # discover_relaunched instead, as it was first written on 2026-08-24, left
+    # the ordinary restart path below unable to pass it: with discover's single
+    # rerun already spent, maybe_rerun("discover") returns False,
+    # discover_relaunched is False, the plain else restarts the collector with
+    # no flag, the collector refuses the stale file and burns its own single
+    # rerun, and the last-resort branch is never reached at all. That turns
+    # "wrong names for the rest of the window" into "no tape", which is the one
+    # outcome CRITERIA [Monitor] added the branch to prevent.
+    watchlist_stale, watchlist_vintage_said = _watchlist_vintage(day)
+    discover_repairable = (hold_is_answerable
+                           and reruns_done.get("discover", 0) < max_reruns)
+    last_chance_args = (("stale-watchlist-ok",)
+                        if watchlist_stale and not discover_repairable else ())
     if now_m < collector_start:
         report("collector", "NOT DUE", "")
     elif now_m < collector_stop:
@@ -869,11 +898,23 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                         "wins the race, overruling the collector's own refusal "
                         "because there is no later pass to rerun discover; scan "
                         "records which one it was",
-                        args=("stale-watchlist-ok",))
+                        args=last_chance_args)
         else:
             problems += 1
+            # The override reaches HERE too, and has to. This is the ordinary
+            # restart, and it is also where a morning lands once discover's
+            # rerun budget is spent: nothing above can fire again, so if the
+            # watchlist is still another session's this pass is the last chance
+            # the window gets, exactly as the branch above is on its own clock.
+            extra = ""
+            if last_chance_args:
+                extra = (f". {watchlist_vintage_said}, and discover cannot be "
+                         "rebuilt before the window closes, so the collector is "
+                         "started on the file that is there rather than left to "
+                         "refuse it; scan says which session's names were used")
             maybe_rerun("collector", "inside the window with no live collector; "
-                        "restart is safe, it resumes the bar file")
+                        "restart is safe, it resumes the bar file" + extra,
+                        args=last_chance_args)
     else:
         verdict = log_verdict("collector", JOBS["collector"][3], day)
         if verdict in ("finished", "skipped_closed"):

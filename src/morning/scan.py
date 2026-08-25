@@ -1069,6 +1069,59 @@ def _baseline_age_days(computed_at: str | None) -> int | None:
     return (ettime.today_et() - when).days
 
 
+def _gap_for_subscription_divergence(
+    watchlist: dict[str, Any], session_date: str, packet: Packet
+) -> None:
+    """Say when the collector subscribed to something other than this watchlist.
+
+    The date check in pool_candidates asks whether the FILE ON DISK is today's,
+    and that is not the question 2026-08-24 asked. There the collector read the
+    previous session's watchlist at 07:55:13 and discover replaced it with a
+    today stamped one in the same second. By 08:45 the file was today's, so a
+    date check passes, and the collector was still listening to eleven context
+    tickers and none of the day's 42 candidates. The file is not the evidence.
+
+    What the collector actually asked the socket for is, and it writes that
+    down at subscribe time for exactly this kind of question. Comparing the two
+    catches the race the date cannot see, and it also catches the case the date
+    does: a collector started on a previous session's file has none of today's
+    names in its list however the file is stamped afterwards.
+
+    Silent when they agree, and silent when there is no subscription list at
+    all, because build_volume_check already owns and reports that state.
+    """
+    subscriptions = collect_premarket.read_subscriptions(session_date)
+    if not subscriptions:
+        return
+    requested = {str(s).upper() for s in subscriptions.get("symbols") or []}
+    if not requested:
+        return
+    # Names discover marked subscribed and the collector then cut to fit the
+    # socket cap are absent for a reason the collector recorded, so they are
+    # not evidence of the wrong file.
+    for_cap = {str(r.get("symbol", "")).upper()
+               for r in subscriptions.get("dropped_to_fit_cap") or []
+               if isinstance(r, dict)}
+    expected = {str(r["symbol"]).upper()
+                for r in watchlist.get("symbols", [])
+                if r.get("symbol") and r.get("subscribed", True)}
+    missing = sorted(expected - requested - for_cap)
+    if not missing:
+        return
+    named = ", ".join(missing[:8])
+    more = f" and {len(missing) - 8} more" if len(missing) > 8 else ""
+    packet.gap(
+        f"the collector subscribed to {len(requested)} symbol(s) at "
+        f"{subscriptions.get('subscribed_at') or 'an unrecorded time'}, and "
+        f"{len(missing)} of the {len(expected)} name(s) this watchlist marks "
+        f"subscribed are NOT among them: {named}{more}. The collector reads the "
+        "watchlist once, at subscribe time, so it was started on a different "
+        "file from the one in this packet. Any of those names reported below "
+        "as having no collector bars was never listened to, and that is NOT "
+        "evidence the tape was quiet. See CRITERIA [Monitor], the stale "
+        "watchlist note.")
+
+
 def _gap_for_stale_baselines(candidates: list[dict[str, Any]], packet: Packet) -> None:
     """Name the RVOLs whose denominator was not computed this morning.
 
@@ -4286,6 +4339,10 @@ def build_packet() -> dict[str, Any]:
     else:
         snapshot = market_snapshot(api, packet, bars_by_symbol)
     candidates, provenance = pool_candidates(watchlist, packet)
+    # After pool_candidates, because that one asks whether the file is today's
+    # and this one asks whether the collector was ever started on it. They are
+    # different failures and 2026-08-24 was the second.
+    _gap_for_subscription_divergence(watchlist, session_date, packet)
     if collector_stats.get("partial_line_discarded"):
         print("scan: the collector was mid write, one partial trailing line discarded")
     if run_stats and (run_stats.get("reconnects") or 0) > 0:
