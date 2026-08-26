@@ -204,8 +204,22 @@ Delete the task when the question is answered:
 
       schtasks /Delete /TN "\PremarketDesk\probe-capture" /F
 
-  Armed on 2026-08-23 for 2026-08-24 08:45. DECISIONS.md pre-registers what
-  each outcome licenses, written before the answer existed.
+  ANSWERED, and the task is gone. It ran 2026-08-24 08:45 and again 2026-08-26
+  08:45, the second armed because the first had a collector that started at
+  08:09 rather than 07:20 and so measured half a window. Both sweeps were
+  SERVED and both controls were refused 403, which closes the served or
+  refused question. The capture half came back 0.1298 median on the clean
+  session against 0.1172 assumed, and the 118 fold spread the first sweep
+  seemed to show was mostly the late start. See DECISIONS.md 2026-08-26.
+
+  The .bat and research/probe_capture_live.py are KEPT, which is a departure
+  from the two probes retired on 2026-08-17. Their questions retired together;
+  this one's did not. Served or refused is closed and will not be asked again,
+  while the capture share is the input to a number the whole volume floor rests
+  on and gets better with sessions. Re-arm with -Capture and a date. What was
+  deleted is the scheduled task, because its one time trigger had fired and a
+  folder people read as the schedule must not carry entries that never will
+  again.
 
 Two further probes lived here and are gone, and only one of them settled
 anything. `job_probe_live_v1.bat` went on 2026-08-17, settling that EODHD

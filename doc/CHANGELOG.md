@@ -15,6 +15,31 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-26: the capture spread was mostly a late collector, and the probe is retired
+
+probe_capture_live's second sweep, armed because the first ran against a
+collector that started at 08:09 instead of 07:20. Both questions answered, no
+code changed, no threshold moved.
+
+The free tier serves a live premarket session behind the documented lag and
+refuses the same window at the wall clock: served on both sessions, control 403
+on both. Two independent confirmations.
+
+The capture share measured 0.1298 median over 37 symbols on the clean session,
+range 0.0195 to 0.4317, against 0.1172 assumed. The 2026-08-24 reading of
+0.0072 to 0.8480 was mostly the missing forty nine minutes, and calling that a
+118 fold spread in the tape overstated it. Corrected here rather than left
+standing, because it was cited as the finding with consequences. Three
+measurements from two methods now bracket the assumed rate at 0.73, 0.83 and
+1.11 times, so [Collector] premarket_capture_rate stays where it is. The
+remaining 22 fold spread and its direction are unchanged and still unfixed; see
+DECISIONS.md for what that does and does not license.
+
+The scheduled task is deleted, its one time trigger having fired. The .bat and
+the module are KEPT, unlike the two probes retired on 2026-08-17, because the
+capture half of the question improves with sessions while the served or refused
+half is closed. tasks/README says so where it lists the probe.
+
 ## 2026-08-24, second: five test fixtures were being counted as measurements
 
 data/quantifier-flags.jsonl held seven rows. Five of them were written by the

@@ -18,6 +18,73 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-26: what two sweeps settled, and the spread that was mostly a late collector
+
+probe_capture_live ran twice, on 2026-08-24 and 2026-08-26, and the second was
+armed specifically because the first had a collector that started at 08:09
+rather than 07:20. Both fired at 08:45:30, the production clock plus the thirty
+second wait, and spent no EODHD quota.
+
+**Question one is closed.** The free tier SERVES a live premarket session over a
+window ending documented_lag_minutes behind the wall clock, and REFUSES the
+same window ending at the clock. 2026-08-24: served, all 5 requests, control
+403. 2026-08-26: served, all 3 requests, control 403, "subscription does not
+permit querying recent SIP data" both times. Two sessions, same answer, and the
+control refused in the same breath each time, so this is the entitlement rule
+and not one session being lucky. It replaces what the 2026-08-22 withdrawal
+left open, and the 2026-08-17 reading of 46 refusals stays withdrawn: those
+refusals were about recency and never about the feed.
+
+What this does NOT license is a live discovery source. The window a live session
+will serve ends fifteen minutes behind the clock, and [Price age] refuses a
+price older than 900s, which is the same fifteen minutes. A window the vendor
+will serve at 08:45 is stale by construction before any screen sees it. That is
+an arithmetic identity, not a measurement, and it was already noted on
+2026-08-22. Serving is necessary and not sufficient.
+
+**Question two is answered more modestly than the first sweep suggested, and
+the correction is on this project rather than on the data.** 2026-08-24 was read
+as a 118 fold spread in the socket's capture share, 0.0072 to 0.8480, against a
+[Collector] premarket_capture_rate of 0.1172, and that was called the finding
+with consequences. Most of it was the late collector. On 2026-08-26, with the
+socket listening from 07:20, the same instrument over the same window measured
+a median of 0.1298 across 37 symbols and a range of 0.0195 to 0.4317. Twenty
+two fold, not a hundred and eighteen, and a median within eleven percent of the
+assumed rate.
+
+Three measurements now bracket 0.1172, from two vendors and two methods:
+
+| session | how | median | ratio to 0.1172 |
+| --- | --- | ---: | ---: |
+| 2026-08-24, collector from 08:09 | probe, Alpaca, 41 symbols | 0.0969 | 0.83 |
+| 2026-08-25 | night truth pass, Alpaca, 9 picks | 0.0859 | 0.73 |
+| 2026-08-26, collector from 07:20 | probe, Alpaca, 37 symbols | 0.1298 | 1.11 |
+
+**Decision: premarket_capture_rate does not move.** Two sweeps cannot overturn a
+number derived from four sessions, they bracket it rather than displace it, and
+the probe's own closing line says it measures the default's size rather than
+replacing it. A change here would be tuning a live divisor on the newest two
+readings, which is the shape of mistake this file exists to prevent.
+
+**What stays true and unfixed.** A twenty two fold spread is still a spread, and
+one divisor still cannot correct a quantity that varies that much. The bias
+direction that true_volume.py's docstring names is unchanged: thin names capture
+least and are understated most, and they are the population the float rotation
+fallback exists to rescue. Nothing here closes that. What changed is only its
+size, and the honest reason the first estimate was wrong is that the instrument
+was pointed at a session whose collector had missed the first forty nine
+minutes.
+
+**The instrument is not deleted, and that is a departure.** job_probe_live_v1
+and job_probe_alpaca_live were removed once answered. This one is kept, with its
+scheduled task retired, because its two questions retired unequally: the served
+or refused half is closed and will not be asked again, while the capture half
+gets better with sessions and is the input to a number the whole volume floor
+rests on. Re-arm it with register_tasks.ps1 -Capture and a date. A registered
+task with a spent one time trigger is a different thing and is deleted, because
+a folder people read as the schedule must not carry entries that will never fire
+again.
+
 ## 2026-08-24: the refusal is absolute except where refusing costs the window
 
 The collector now refuses a watchlist that is not today's. The question that
