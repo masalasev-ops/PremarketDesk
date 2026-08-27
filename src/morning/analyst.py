@@ -1145,11 +1145,15 @@ def quantifier_reason(hits: list[dict[str, Any]], ids: list[int]) -> str:
     if len(sentence) > _QUOTE_LIMIT:
         sentence = sentence[:_QUOTE_LIMIT].rstrip() + "..."
     where = f"logged as flag {ids[0]}" if ids else "not logged, the flag file could not be written"
+    # Local, because ops.quantifier_flags imports this module and a module
+    # level import here would be a cycle.
+    from ops import quantifier_flags
+
     plural = "" if len(hits) == 1 else f", {len(hits)} in total"
     return (
         f"the model asserted a quantifier over the candidate set on both "
         f"attempts, matching {first['quantifier']!r} near {first['set_word']!r}{plural} "
-        f'in "{sentence}" ({where}, judge it with python -m ops.quantifier_flags)'
+        f'in "{sentence}" ({where}, judge it with {quantifier_flags.RUN_PREFIX})'
     )
 
 

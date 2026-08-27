@@ -1099,9 +1099,23 @@ def _gap_for_subscription_divergence(
     # Names discover marked subscribed and the collector then cut to fit the
     # socket cap are absent for a reason the collector recorded, so they are
     # not evidence of the wrong file.
-    for_cap = {str(r.get("symbol", "")).upper()
-               for r in subscriptions.get("dropped_to_fit_cap") or []
-               if isinstance(r, dict)}
+    #
+    # write_subscriptions serialises this as a list of plain STRINGS,
+    # [row.get("symbol") for row in dropped]. The first version of this filter
+    # demanded dicts, so the set was always empty and a capped name was
+    # reported as proof the collector had been started on another session's
+    # file: a false accusation of the one failure this check exists to catch,
+    # printed into gaps_to_fill and from there into the report. It stayed
+    # latent only because [Discovery] max_subscribed_candidates plus the
+    # context tickers lands exactly on the socket cap today, so nothing has
+    # been dropped yet. Both shapes are read now, because the cost of being
+    # liberal here is nothing and the cost of being wrong is a fabricated
+    # accusation in the one document a human reads every morning.
+    for_cap = set()
+    for row in subscriptions.get("dropped_to_fit_cap") or []:
+        name = row.get("symbol") if isinstance(row, dict) else row
+        if name:
+            for_cap.add(str(name).upper())
     expected = {str(r["symbol"]).upper()
                 for r in watchlist.get("symbols", [])
                 if r.get("symbol") and r.get("subscribed", True)}

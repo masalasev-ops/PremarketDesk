@@ -8670,13 +8670,31 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
             collect_premarket.read_subscriptions = lambda d: {
                 "symbols": context + [f"CAND{n}.US" for n in range(5)],
                 "subscribed_at": f"{day}T07:20:02-04:00",
-                "dropped_to_fit_cap": [{"symbol": "CAND5.US"}]}
+                "dropped_to_fit_cap": ["CAND5.US"]}
             packet = _scan.Packet()
             with contextlib.redirect_stdout(io.StringIO()):
                 _scan._gap_for_subscription_divergence(watchlist, day, packet)
             if packet.gaps:
                 failures.append(f"a name the collector recorded as dropped to fit "
                                 f"the cap was reported as missing: {packet.gaps!r}")
+
+            # The shape above is the one write_subscriptions actually emits, a
+            # list of plain strings. The first version of this fixture used
+            # [{"symbol": ...}] and the check filtered on isinstance dict, so
+            # fixture and code agreed with each other and disagreed with
+            # production, and the claim printed as proven while the real shape
+            # raised a false accusation. A dict is accepted too and is driven
+            # here so neither reading can rot unnoticed.
+            collect_premarket.read_subscriptions = lambda d: {
+                "symbols": context + [f"CAND{n}.US" for n in range(5)],
+                "subscribed_at": f"{day}T07:20:02-04:00",
+                "dropped_to_fit_cap": [{"symbol": "CAND5.US"}]}
+            packet = _scan.Packet()
+            with contextlib.redirect_stdout(io.StringIO()):
+                _scan._gap_for_subscription_divergence(watchlist, day, packet)
+            if packet.gaps:
+                failures.append(f"the dict spelling of dropped_to_fit_cap was not "
+                                f"understood: {packet.gaps!r}")
         finally:
             collect_premarket.read_subscriptions = real_read
 
@@ -8704,11 +8722,20 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
                 f"job_collector.bat never passes --{token} to the module, so the "
                 "branch it exists for cannot reach it")
 
-    # And argparse answers to the same name, which is what monitor_jobs sends.
-    parsed = collect_premarket.build_argv_parser().parse_args(
-        [f"--{token}"]) if hasattr(collect_premarket, "build_argv_parser") else None
-    if parsed is not None and not getattr(parsed, token.replace("-", "_"), False):
-        failures.append(f"--{token} does not set the flag argparse exposes")
+    # And the module reads the attribute argparse derives from that name.
+    # This used to call build_argv_parser() behind a hasattr guard, and no such
+    # function exists anywhere in the repo, so the guard was always false, the
+    # leg never ran, and the claim line advertised coverage it did not have.
+    # The real failure mode is the constant being renamed while the attribute
+    # read stays behind, which is exactly what this catches.
+    dest = "args." + token.replace("-", "_")
+    module_source = (config.PROJECT_ROOT / "src" / "collect"
+                     / "collect_premarket.py").read_bytes().decode("utf-8-sig")
+    if dest not in module_source:
+        failures.append(
+            f"collect_premarket never reads {dest}, so the argparse flag built "
+            f"from STALE_WATCHLIST_ARG is parsed and then ignored, and the "
+            "watchdog's override would be accepted and do nothing")
 
     print("  collector    another session's watchlist is refused and writes no "
           "subscription list; today's is accepted; only the last-resort pass "

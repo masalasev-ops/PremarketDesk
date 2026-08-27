@@ -850,8 +850,19 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     from ops import quantifier_flags
 
     watchlist_stale, watchlist_vintage_said = _watchlist_vintage(day)
+    #
+    # Three conditions, not two. Budget and a later pass are not enough: the
+    # discover block above REFUSES to rerun at all, budget untouched, once a
+    # subscription list exists and the watchlist is stale, because a rewrite
+    # then desyncs the file from what the socket was actually asked for. In
+    # that state the first two conditions both read true, the override is
+    # withheld, the collector refuses on restart and burns its own single
+    # rerun, and the next pass reports GAVE UP. That is the no tape outcome
+    # this flag exists to prevent, reached by the gate that is supposed to
+    # prevent it.
     discover_repairable = (hold_is_answerable
-                           and reruns_done.get("discover", 0) < max_reruns)
+                           and reruns_done.get("discover", 0) < max_reruns
+                           and not _collector_has_subscribed(day))
     last_chance_args = ((_collect.STALE_WATCHLIST_ARG,)
                         if watchlist_stale and not discover_repairable else ())
     if now_m < collector_start:
