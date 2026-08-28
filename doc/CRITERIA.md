@@ -904,11 +904,18 @@ session_start                 = 04:00      # premarket volume accumulates from h
 refresh_after_days            = 7
 min_sessions_for_rvol         = 10         # below this pm_rvol is null with a recorded reason
 min_baseline_premarket_volume = 1000       # shares; below this the denominator is degenerate and pm_rvol is null
+thin_baseline_premarket_volume = 10000     # shares; at or above the floor but below this, pm_rvol is PUBLISHED and
+                                           # SAID to rest on a thin denominator. Disclosure only: it refuses nothing,
+                                           # changes no screen and moves nobody onto the float rotation path. Measured
+                                           # 2026-08-28, see the note below.
 
 ### The denominator floor note
 
 A seed value, chosen to exclude degenerate denominators, not a validated
-threshold. Nothing has been measured against it yet.
+threshold. [corrected 2026-08-28: this went on to say "Nothing has been
+measured against it yet", which was true from 2026-08-14 until it was
+measured. The measurement is below. The VALUE has not moved and is still a
+seed; what is no longer true is that nothing is known about it.]
 
 It exists because a baseline median can be small enough that the ratio built
 on it stops meaning anything. On 2026-08-14 ARX had a median premarket volume
@@ -923,6 +930,73 @@ denominator was never usable, which is the same class of error as substituting
 a stale price: it replaces a visible absurdity with an invisible one. Below
 the floor, pm_rvol is null with the reason recorded, the RVOL score component
 is unavailable, and the total score is null rather than partial credit.
+
+#### What 1000 actually buys, measured 2026-08-28
+
+The floor's stated job is that a denominator must not max the RVOL scoring
+band "by construction rather than by evidence". That is a testable claim and
+nothing had tested it, so this is the test.
+
+For each of the 241 names holding a cached 08:45 baseline, the same 20 prior
+sessions over the same 04:00 window were refetched, and each session was
+divided by the median of the set it belongs to. The question asked of every
+name: what share of its own ORDINARY sessions would score above 3, the top
+band, against its own median? Half of them sit above the median by
+construction, so this measures the right tail, and a name whose premarket
+volume is steady has almost nothing at 3x while a name that usually trades
+nothing has most of it there. 241 intraday calls, 239 names with a non zero
+median.
+
+| baseline median | names | ordinary sessions above 3x their own median |
+| --- | ---: | ---: |
+| 0 to 1,000 | 46 | 30% |
+| 1,000 to 2,000 | 13 | 20% |
+| 2,000 to 5,000 | 30 | 20% |
+| 5,000 to 10,000 | 19 | 15% |
+| 10,000 to 25,000 | 25 | 15% |
+| 25,000 to 100,000 | 37 | 10% |
+| 100,000 and up | 69 | 5% |
+
+Monotonic, and it says two things.
+
+The floor is real and points the right way: it removes the 30% band, which is
+the population ARX and MH came from. It is also set too low to do the job the
+paragraph above claims for it. Just over the floor, one ordinary session in
+five scores into the top band, against one in twenty for the largest names.
+A name at 1,078 shares clearing the volume screen is not evidence of anything
+in the way a name at 740,086 clearing it is.
+
+It is not hypothetical either. 25 of the 80 premarket RVOLs ever published
+stood on a median under 10,000 shares, 14 of them since the floor was added:
+DKS at 514.0 on 1,085 shares, CHA at 316.1 on 1,078, KSS at 191.1 on 1,944,
+PLAB at 70.7 on 4,135, DQ at 53.6 on 1,198, MNSO at 25.2 on 6,276.
+
+#### Why the value did not move, and what it would take
+
+The obvious answer, raise the floor to 10,000, is refused here because the
+floor does not travel alone. A name refused by it is not dropped: it is
+RESCUED onto [Score premarket float rotation], and those bands were set on
+2026-08-16 by reading the rotation distribution of the rescued population
+specifically, at the quantiles reproducing what the RVOL bands pay. Raising
+the floor changes who is rescued: the names it would newly rescue have medians
+between 1,000 and 10,000 and are materially more liquid than the sub 1,000
+names the bands were fitted on. Their rotations sit higher, so the existing
+edges would pay them MORE than the RVOL bands would have, which is the wrong
+direction: the change meant to stop a thin name maxing a band would hand it
+the band through the other door.
+
+So moving this number is a TWO PART change, floor and rotation edges together,
+refitted on whatever population the new floor rescues. That is a study, not an
+edit, and it is owed one. Until then the number stays and the report says when
+a published ratio rests on a thin denominator, which is what
+thin_baseline_premarket_volume above is for. 10,000 is where the table stops
+improving: the bands below it run 15 to 30 percent and the bands above it run
+5 to 15.
+
+Disclosure was chosen over a cap for the reason the paragraph above gives
+about caps, and over a refusal because a refusal is the two part change. It
+costs nothing and hides nothing: the ratio is still published, still screened
+on, still scored, and the reader is told what it rests on.
 
 ## Float rotation
 

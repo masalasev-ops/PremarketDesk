@@ -18,6 +18,74 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-28: measuring the RVOL denominator floor, and refusing to move it alone
+
+The measurement is in CHANGELOG.md. This is the part that could have gone the
+other way, which is what to DO about a floor now known to be set too low for
+the claim made about it.
+
+**The obvious answer was refused.** Raise min_baseline_premarket_volume from
+1,000 to 10,000, where the table stops improving. It is one line in CRITERIA
+and it would have removed CHA, BWLP, MNSO, DKS, KSS, PLAB and DQ from the RVOL
+path in one edit.
+
+It was refused because the floor does not travel alone, and the coupling runs
+the wrong way. A name this floor refuses is not dropped from the score: it is
+rescued onto [Score premarket float rotation], which exists precisely to fill
+the slot for names with no usable baseline. Those edges are not free choices.
+DECISIONS.md 2026-08-16 records them being read off the rotation distribution
+at the quantiles reproducing what the RVOL bands pay, and read off the RESCUED
+population specifically, after a first attempt calibrated on the overlap
+underpaid the rescued names by eight percentage points and had to be redone.
+
+Raising the floor changes who is rescued. The names it would newly rescue carry
+medians between 1,000 and 10,000 and are materially more liquid than the sub
+1,000 names the edges were fitted on. More liquid names rotate more float, so
+those names land higher in bands calibrated on thinner ones, and the edges
+would pay them MORE than the RVOL bands they were removed from would have. The
+change meant to stop a thin name maxing a band by construction would hand it
+the band through the other door, and the packet would show nothing wrong.
+
+That is a two part change: a new floor and refitted rotation edges, the second
+measured on whatever population the first rescues. It is owed one and this pass
+does not pretend to have done it.
+
+**What was done instead, and why it is not just documentation.** A disclosure
+line, thin_baseline_premarket_volume, naming a published ratio that rests
+between the floor and 10,000.
+
+The case for it is the case _gap_for_stale_baselines already won on 2026-08-20.
+That gap names an RVOL whose denominator was computed six days ago. Every row
+it names is inside policy, nothing is refused, and it exists because the report
+was setting a six day old denominator beside a same day one with nothing to
+tell them apart. The denominator's SIZE is the same argument with more force
+behind it: the age gap spans a factor of seven in days, and this one spans a
+factor of 686 in shares between CHA and MRVL on one morning's list.
+
+Three alternatives, and why each is worse:
+
+A CAP on the ratio was refused by the floor note itself in 2026-08-14 and the
+reasoning still holds. Capping 316 at some plausible number replaces a visible
+absurdity with an invisible one, which is the same class of error as
+substituting a stale price.
+
+NULLING the thin ratios is the refusal, which is the two part change above.
+
+SAYING NOTHING and waiting for the study was the real alternative, and it is
+the one worth arguing against. The study is not scheduled, the morning runs
+every weekday, and 14 ratios have already been published on thin denominators
+since the floor was added. A reader looking at CHA at 316.1 beside MRVL at 1.84
+has no way to know that one of them is a name whose own ordinary sessions reach
+that band one time in five. Telling them costs one sentence in gaps_to_fill and
+forecloses nothing.
+
+**What is NOT claimed.** That 10,000 is the right floor. It is where this
+table stops improving, which is a reason to draw a disclosure line and not a
+threshold. That the disclosure fixes the score: it does not, CHA still takes
+its 2 points. And that the measurement settles the floor: it settles that
+1,000 is too low for the sentence written about it, which is a different and
+smaller claim than knowing what the number should be.
+
 ## 2026-08-28: ranking the unusualness lists on the size, and why the spec's own words were not enough
 
 The correction in CHANGELOG.md for the same date could have gone the other

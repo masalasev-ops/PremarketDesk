@@ -1056,6 +1056,7 @@ def attach_premarket_rvol(
     _gap_for_lower_bound_rvol(candidates, packet, numerator_window,
                               denominator_window)
     _gap_for_stale_baselines(candidates, packet)
+    _gap_for_thin_baselines(candidates, packet)
 
 
 def _baseline_age_days(computed_at: str | None) -> int | None:
@@ -1162,6 +1163,61 @@ def _gap_for_stale_baselines(candidates: list[dict[str, Any]], packet: Packet) -
         "because the report otherwise sets them beside same-day ones with "
         "nothing to tell them apart: "
         + ", ".join(f"{symbol} {age} day(s) old" for symbol, age in aged)
+    )
+
+
+THIN_BASELINE_VOLUME = _CRIT.number("baseline", "thin_baseline_premarket_volume")
+
+
+def _gap_for_thin_baselines(candidates: list[dict[str, Any]], packet: Packet) -> None:
+    """Name the RVOLs whose denominator is legal and thin.
+
+    The same shape as _gap_for_stale_baselines above, and for the same reason.
+    That one exists because the report set a six day old denominator beside a
+    same day one with nothing to tell them apart. This one exists because it
+    sets a 1,078 share denominator beside a 740,086 share one, and the reader
+    comparing two RVOLs has even less to go on.
+
+    Every row here is INSIDE policy. It cleared
+    [Baseline] min_baseline_premarket_volume, its ratio is published, it is
+    screened on and it is scored. Nothing is refused and nothing is capped:
+    see the floor note in CRITERIA.md for why a cap would be the worse of the
+    two errors, and why raising the floor instead is a two part change coupled
+    to the float rotation bands.
+
+    The number quoted is measured rather than asserted. On 2026-08-28 the 20
+    prior sessions behind all 241 cached baselines were refetched and divided
+    by their own medians: below 10,000 shares, 15 to 30 percent of a name's own
+    ORDINARY sessions score into the top RVOL band, against 5 percent for names
+    above 100,000. A ratio built here is not evidence in the way the same ratio
+    on a liquid name is, and the report now says so instead of leaving the two
+    looking alike.
+    """
+    thin = [
+        (c["symbol"], (c.get("baseline") or {}).get("median_volume"))
+        for c in candidates
+        if c.get("pm_rvol") is not None
+        and (c.get("baseline") or {}).get("median_volume") is not None
+        and (c.get("baseline") or {}).get("median_volume") < THIN_BASELINE_VOLUME
+    ]
+    if not thin:
+        return
+    thin.sort(key=lambda row: (row[1], row[0]))
+    packet.gap(
+        f"{len(thin)} premarket RVOL(s) rest on a THIN denominator: at or above "
+        f"the {baseline.MIN_BASELINE_VOLUME:,.0f} share floor in "
+        f"{config.CRITERIA_PATH.name} "
+        f"[Baseline] min_baseline_premarket_volume, and below the "
+        f"{THIN_BASELINE_VOLUME:,.0f} shares that floor note measures as where a "
+        "name's own ordinary sessions stop reaching the top band by construction. "
+        "Measured 2026-08-28: under 10,000 shares, 15 to 30 percent of a name's own "
+        "ordinary premarket sessions score above 3 times its own median, against 5 "
+        "percent above 100,000. These ratios are published, screened on and scored "
+        "like the rest, and they are named here because the report otherwise sets "
+        "them beside a ratio built on a denominator hundreds of times larger with "
+        "nothing to tell them apart: "
+        + ", ".join(f"{symbol} on a {median:,.0f} share median"
+                    for symbol, median in thin)
     )
 
 

@@ -445,6 +445,75 @@ def claim_the_template_reads_the_roll_rather_than_deriving_it(
           "ask for none of the five filters")
 
 
+# ------------------------------------------------------- 11, the thin one
+
+def claim_a_thin_denominator_is_named_and_never_refused(failures: list[str]) -> None:
+    """A legal but thin RVOL denominator reaches the reader as a fact.
+
+    The floor at [Baseline] min_baseline_premarket_volume is a seed, and on
+    2026-08-28 it was measured for the first time: below 10,000 shares, 15 to
+    30 percent of a name's OWN ordinary premarket sessions score above 3 times
+    its own median, against 5 percent above 100,000. So a ratio just over the
+    floor is not evidence the way the same ratio on a liquid name is, and 25 of
+    the 80 RVOLs ever published stood there.
+
+    Three things have to hold together, and the third is the one worth pinning.
+    The thin rows are NAMED. The ratio is still published, still carries a
+    score, and is not nulled, because refusing it is the two part change the
+    floor note refuses to make here: a refused name is rescued onto the float
+    rotation bands, and those were fitted on the population the CURRENT floor
+    rescues. And a row at or above the thin line is not named, or the sentence
+    says nothing.
+    """
+    from morning import analyst, scan
+
+    candidates = [
+        # Just over the floor, and the case that prompted the measurement.
+        {"symbol": "THIN.US", "pm_rvol": 316.1,
+         "baseline": {"median_volume": 1077.5}, "score": 6.0},
+        # Comfortably over the thin line: must NOT be named.
+        {"symbol": "DEEP.US", "pm_rvol": 1.84,
+         "baseline": {"median_volume": 740086.0}, "score": 7.0},
+        # Exactly ON the line, which is the off by one this would hide.
+        {"symbol": "EDGE.US", "pm_rvol": 2.0,
+         "baseline": {"median_volume": 10000.0}, "score": 5.0},
+        # Null RVOL: refused upstream, so it is not a thin ratio, it is no
+        # ratio, and naming it here would double count the same name.
+        {"symbol": "NULL.US", "pm_rvol": None,
+         "baseline": {"median_volume": 12.0}, "score": None},
+    ]
+    packet = scan.Packet()
+    scan._gap_for_thin_baselines(candidates, packet)
+    text = " ".join(packet.gaps)
+
+    if "THIN.US" not in text:
+        failures.append("a 1,077 share denominator carrying a published RVOL is "
+                        "not named in gaps_to_fill, so the report sets it beside "
+                        "a 740,086 share one with nothing to tell them apart")
+    for quiet in ("DEEP.US", "EDGE.US", "NULL.US"):
+        if quiet in text:
+            failures.append(f"{quiet} is named as thin. DEEP is 74x the line, "
+                            "EDGE sits exactly on it and the test is below, and "
+                            "NULL has no ratio to rest on anything")
+
+    # Named, NOT refused. The ratio and the score survive untouched: this gap
+    # is disclosure, and turning it into a refusal silently re-fits the float
+    # rotation bands onto a population they were not measured on.
+    thin = candidates[0]
+    if thin["pm_rvol"] != 316.1 or thin["score"] != 6.0:
+        failures.append("the thin gap changed the candidate's ratio or score. "
+                        "It is disclosure only; refusing here is the two part "
+                        "change the floor note declines to make.")
+
+    # It is quoted into the report like every other gap, so it faces the guard.
+    for hit in analyst.quantifier_violations(text):
+        failures.append(f"the thin denominator gap asserts {hit['quantifier']!r} "
+                        f"near {hit['set_word']!r} and the report quotes it")
+
+    print("  thin denom   a 1,077 share median is named, a 740,086 and a 10,000 "
+          "are not, and the ratio it names is still published and scored")
+
+
 def main() -> int:
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="pmd-gaps-") as raw:
@@ -459,6 +528,7 @@ def main() -> int:
     claim_the_roll_selects_by_the_predicate_it_names(failures)
     claim_the_rolls_own_words_pass_the_quantifier_guard(failures)
     claim_the_template_reads_the_roll_rather_than_deriving_it(failures)
+    claim_a_thin_denominator_is_named_and_never_refused(failures)
 
     if failures:
         for failure in failures:

@@ -15,6 +15,68 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the RVOL denominator floor is measured for the first time, and says 1000 is low
+
+Prompted by CHA publishing a premarket RVOL of 316.1 on a baseline median of
+1,077.5 shares, which cleared [Baseline] min_baseline_premarket_volume by 77
+shares and took the maximum 2 points from [Score premarket rvol], the same 2
+that BWLP took at 3.36.
+
+The floor note has said since 2026-08-14 that the floor exists so a denominator
+cannot max the RVOL band "by construction rather than by evidence", and in the
+same paragraph that it is a seed and nothing has been measured against it. Both
+were true. The second is no longer.
+
+**The measurement.** src/research/measure_baseline_floor.py, new. For each of
+the 241 names holding a cached 08:45 baseline, refetch the same 20 sessions
+over the same 04:00 window the baseline is built from, and divide every one of
+those ORDINARY sessions by the median of the set it belongs to. What share of a
+name's own ordinary mornings would score above 3, the top band, against its own
+median? Half of any set is above its own median by construction, so this reads
+the right tail. 241 intraday calls, 239 names with a non zero median, payload
+in doc/research/baseline_floor_study-2026-08-28.json with the raw per session
+volumes so it reruns offline.
+
+| baseline median | names | ordinary sessions above 3x their own median |
+| --- | ---: | ---: |
+| 0 to 1,000 | 46 | 30% |
+| 1,000 to 2,000 | 13 | 20% |
+| 2,000 to 5,000 | 30 | 20% |
+| 5,000 to 10,000 | 19 | 15% |
+| 10,000 to 25,000 | 25 | 15% |
+| 25,000 to 100,000 | 37 | 10% |
+| 100,000 and up | 69 | 5% |
+
+Monotonic. The floor is real and points the right way: it removes the 30
+percent band, which is where ARX at 23.5 shares and MH at 10 came from. It is
+also too low for the claim made about it. Just over it, one ordinary session in
+five reaches the top band, against one in twenty for the largest names.
+
+Not hypothetical: 25 of the 80 premarket RVOLs ever published stood on a median
+under 10,000 shares, 14 of them since the floor was added. DKS 514.0 on 1,085.
+CHA 316.1 on 1,078. KSS 191.1 on 1,944. PLAB 70.7 on 4,135. DQ 53.6 on 1,198.
+
+**The floor did not move.** Reasoning in DECISIONS.md. In short: a name the
+floor refuses is not dropped, it is rescued onto [Score premarket float
+rotation], and those edges were fitted on 2026-08-16 against the population the
+CURRENT floor rescues. Raising the floor rescues more liquid names whose
+rotations sit higher, so the existing edges would pay them MORE than the RVOL
+bands would have. The change meant to stop a thin name maxing a band would hand
+it the band through the other door. Floor and edges move together or not at
+all, and that is a study rather than an edit.
+
+**What did change**, and it costs nothing: [Baseline]
+thin_baseline_premarket_volume = 10000, disclosure only. It refuses nothing,
+screens nothing out and moves nobody onto the rotation path. A published RVOL
+resting between the floor and this line is NAMED in gaps_to_fill with the
+median it rests on, the way _gap_for_stale_baselines already names a
+denominator that was not computed this morning, and for the identical reason:
+the report was setting a 1,078 share denominator beside a 740,086 share one
+with nothing to tell them apart. 10,000 is where the table stops improving.
+
+On this morning's packet the new gap names CHA on a 1,078 share median, BWLP on
+4,876 and MNSO on 6,276.
+
 ## 2026-08-28: the two unusualness lists were ranking on the sign, and published the quietest names on a morning of decliners
 
 Found reviewing the 2026-08-28 morning. The report ran clean end to end: nine
