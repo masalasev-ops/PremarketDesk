@@ -18,13 +18,26 @@ advice`, capital N included, because analyst.py finds this line by that string
 and appends the containment, quantifier and job health notes to it; a line
 worded any other way sends those notes to the end of the report instead. After
 it, state that the screen
-thresholds are unvalidated seed values, and then name the candidates whose
-pm_rvol is null and the candidates whose pm_window_starts_late is true,
-saying premarket volume or path evidence is partial or missing for those
-names. Name the candidates whose pm_rvol_basis.is_lower_bound is true in the
-same breath, as names whose RVOL understates rather than names without one:
-scoping the volume caveat to the null names alone tells the reader the rest
-have complete volume evidence, and on 2026-08-19 every one of the other ten
+thresholds are unvalidated seed values.
+
+DO NOT WORK OUT WHICH CANDIDATES BELONG IN THE NEXT THREE CLAUSES. The packet
+has already selected them. Quote `evidence_roll.text.rvol_null`,
+`evidence_roll.text.window_starts_late` and
+`evidence_roll.text.rvol_lower_bound` WORD FOR WORD, in that order, including
+the mornings when one of them reads 0 of N. You may join them with commas and
+semicolons into the one line this disclaimer is, and you may not reword them,
+drop one for reading zero, or re-derive the membership from the candidate
+blocks. Python performed those three filters before you ran, and a filter
+performed a second time in prose is a membership claim nothing checks. That is
+the shape of the 2026-08-18 sentence this template's audit began with, which
+asserted a missed condition over the whole screened set when one of the twelve
+had cleared it. Its exact wording is a specimen and is quoted here on its own
+line so the guard reads it as one:
+`every candidate`
+
+The lower bound line is quoted even when the null line names nobody, and
+scoping the volume caveat to the null names alone would tell the reader the
+rest have complete volume evidence: on 2026-08-19 every one of the other ten
 was a lower bound. If dropped_no_coverage is not empty, name the symbols in it in the
 same line with the reason the packet records against it, and say it had no
 premarket price and was dropped rather than published at a stale prior
@@ -33,9 +46,10 @@ why it is absent. If dropped_stale_price is not empty, name those symbols
 too, with the price age the packet records against each, and say the collector
 did record a price for them and it was too old to publish as this morning's.
 They are a different failure from the line above and the fixes differ, so do
-not fold the two lists into one. Name the candidates whose score is null
-as unscored, not low conviction: a score component input was never observed
-and unknown is not zero.
+not fold the two lists into one. Then name the symbols in
+`score_roll.unscored` as unscored, not low conviction: a score component input
+was never observed and unknown is not zero. That list too is READ and not
+derived; do not scan the candidate blocks for a null score.
 
 THE DISCLAIMER MUST ALSO SAY THAT PREMARKET VOLUME IS AN ESTIMATE, and say
 what was estimated with. The premarket RVOL and float rotation columns divide
@@ -493,12 +507,30 @@ of claiming there are no notable earnings.}
 
 ## Skips and traps
 
-{Named candidates to leave alone, listed with the packet fact that puts
-them here: catalyst_found false is a skip and is written as moving on no found
-catalyst, catalyst_found null is a separate line saying the catalyst status is
-unknown rather than absent and quoting catalyst_why for the reason,
-pm_rvol null means unverifiable volume, and pm_window_starts_late true means
-the premarket path is partial.
+{Named candidates to leave alone. MEMBERSHIP IN THIS SECTION IS DECIDED IN THE
+PACKET AND YOU MUST NOT DECIDE IT AGAIN. `evidence_roll` carries the four
+lists and a sentence for each, and this section is built by quoting those
+sentences WORD FOR WORD:
+
+- `evidence_roll.text.catalyst_absent`, the names read for news that came back
+  with a found catalyst of class none, which is a window checked and paid
+  nothing.
+- `evidence_roll.text.catalyst_unknown`, whose catalyst status is unknown
+  rather than absent. After it, add the `catalyst_why` that
+  `evidence_roll.catalyst_unknown` records against a symbol, one per symbol,
+  because the reason differs per row and the sentence cannot carry it.
+- `evidence_roll.text.rvol_null`, whose premarket volume is unverifiable. This
+  is the same sentence the disclaimer quotes and it is quoted again here
+  rather than referred back to, because a reader arriving at this section is
+  not holding the first line of the report in their head.
+- `evidence_roll.text.window_starts_late`, whose premarket path is partial.
+
+Quote a sentence that reads 0 of N as readily as one that names somebody.
+Selecting the members of a published section by reading a predicate over the
+candidate blocks is the thing prompt rule 2 forbids for the watchlists, and
+until 2026-08-28 this section asked for it by prose instead. Four separate
+filters, performed by the model, over four booleans Python had already
+resolved.
 
 TRAPS ARE DECIDED IN THE PACKET AND YOU MUST NOT RE-DERIVE ONE. Name a
 candidate a trap only where its `trap` field is true, and give the reason from
@@ -525,12 +557,15 @@ premarket price. Do NOT add a clause claiming they are absent from the rest of
 this document: the disclaimer line names them, this template requires it to,
 and the Summary reaches them through gaps_to_fill, which carries them as an
 evidence gap, so any such claim is
-false every time it is written. Only when there is no
-false catalyst, no unknown catalyst, no partial window and no dropped symbol,
+false every time it is written. Only when `evidence_roll.catalyst_absent`, `evidence_roll.catalyst_unknown`,
+`evidence_roll.rvol_null` and `evidence_roll.window_starts_late` are ALL four
+empty and dropped_no_coverage is empty,
 write one sentence saying this section is empty, giving the count from the
 packet rather than a quantifier: "Nothing to skip: {N} of {N} candidates carry a
 found catalyst and a full premarket window", taking N from
-screen_tally.candidates_examined. That state is rare and worth saying, and it
+evidence_roll.candidates_examined. Reading four empty lists is not the same
+as deciding four predicates: the lists are in front of you and their emptiness
+is a fact about the packet. That state is rare and worth saying, and it
 must be said with a number. This instruction previously asked for the words
 `every candidate carries a found catalyst and full evidence`, which is the
 one claim in this template a reader cannot check against the report in front

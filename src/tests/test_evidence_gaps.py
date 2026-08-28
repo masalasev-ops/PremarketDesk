@@ -299,6 +299,152 @@ def claim_the_template_does_not_ask_for_the_false_sentences(failures: list[str])
           "packet contradicts")
 
 
+# ------------------------------------------------- 8, 9 and 10, the roll
+
+# Every shape the roll has to answer in, chosen so that a predicate read the
+# wrong way round shows up. FULL sets every flag on one name, MIXED splits them
+# across three so a roll that ORs its predicates together fails, and EMPTY is
+# the quiet morning where each line has to read 0 of N rather than disappear.
+_ROLL_CASES = {
+    "empty": [
+        {"symbol": "AAA.US", "pm_rvol": 1.0, "pm_rvol_basis": {},
+         "catalyst_found": True},
+    ],
+    "full": [
+        {"symbol": "AAA.US", "pm_rvol": None, "pm_rvol_reason": "why",
+         "pm_window_starts_late": True,
+         "pm_rvol_basis": {"is_lower_bound": True}, "catalyst_found": False,
+         "catalyst_why": "checked and paid nothing"},
+    ],
+    "mixed": [
+        {"symbol": "AAA.US", "pm_rvol": None, "pm_rvol_reason": "why",
+         "catalyst_found": None, "catalyst_why": "the feed was never read"},
+        {"symbol": "BBB.US", "pm_rvol": 2.0, "pm_window_starts_late": True,
+         "pm_rvol_basis": {"is_lower_bound": True}, "catalyst_found": False},
+        {"symbol": "CCC.US", "pm_rvol": 3.0, "pm_rvol_basis": {},
+         "catalyst_found": True},
+    ],
+}
+
+
+def claim_the_roll_selects_by_the_predicate_it_names(failures: list[str]) -> None:
+    """Five filters the template used to make the model perform in prose.
+
+    TEMPLATE_DERIVATIONS T2, T3, T15 and P1. The failure this guards is not
+    arithmetic, it is a predicate read the wrong way round or two of them
+    conflated, which is invisible in a report that reads fluently. So the
+    mixed case puts a different flag on each of three names: a roll that ORs
+    them, or that reuses one list for another, cannot pass all five.
+    """
+    from morning import scan
+
+    expected = {
+        "empty": {"rvol_null": [], "window_starts_late": [],
+                  "rvol_lower_bound": [], "catalyst_absent": [],
+                  "catalyst_unknown": []},
+        "full": {"rvol_null": ["AAA.US"], "window_starts_late": ["AAA.US"],
+                 "rvol_lower_bound": ["AAA.US"], "catalyst_absent": ["AAA.US"],
+                 "catalyst_unknown": []},
+        "mixed": {"rvol_null": ["AAA.US"], "window_starts_late": ["BBB.US"],
+                  "rvol_lower_bound": ["BBB.US"], "catalyst_absent": ["BBB.US"],
+                  "catalyst_unknown": ["AAA.US"]},
+    }
+    for case, candidates in _ROLL_CASES.items():
+        roll = scan.evidence_roll(candidates)
+        if roll["candidates_examined"] != len(candidates):
+            failures.append(f"the roll examined {roll['candidates_examined']} "
+                            f"on the {case} case and was handed {len(candidates)}")
+        for key, want in expected[case].items():
+            got = [row["symbol"] for row in roll[key]]
+            if got != want:
+                failures.append(f"the roll's {key} on the {case} case is {got} "
+                                f"and the predicate selects {want}")
+
+    # catalyst_found False and catalyst_found None must never land in one list.
+    # They are the two states the template has separated since 2026-08-14: a
+    # window read and paid nothing against a window never read.
+    mixed = scan.evidence_roll(_ROLL_CASES["mixed"])
+    overlap = {r["symbol"] for r in mixed["catalyst_absent"]} & {
+        r["symbol"] for r in mixed["catalyst_unknown"]}
+    if overlap:
+        failures.append(f"{sorted(overlap)} is on both catalyst lists, so false "
+                        "and null have been folded into one state")
+    print("  roll         five predicates selected apart on an empty, a full "
+          "and a mixed candidate set")
+
+
+def claim_the_rolls_own_words_pass_the_quantifier_guard(failures: list[str]) -> None:
+    """The roll is quoted word for word, so its words face the same guard.
+
+    The notable movers section already holds this for its reasons and it is the
+    same trap: a line reading "no candidate carries a null RVOL" would be built
+    by Python, quoted by the model under instruction, and then flagged against
+    the model on the quietest morning of the year. In enforcing mode that costs
+    a regeneration and then the plain table, for words the packet put there.
+    """
+    from morning import analyst, scan
+
+    seen = 0
+    for case, candidates in _ROLL_CASES.items():
+        for key, text in scan.evidence_roll(candidates)["text"].items():
+            seen += 1
+            for hit in analyst.quantifier_violations(text):
+                failures.append(
+                    f"the roll's {key} line on the {case} case asserts "
+                    f"{hit['quantifier']!r} near {hit['set_word']!r}, and the "
+                    f"report quotes it word for word: {text!r}")
+            # A line that names nobody must still carry its denominator. "0 of
+            # 5" tells a reader the screen examined five and found none; a bare
+            # sentence with the names left out does not.
+            if f"of {len(candidates)}" not in text:
+                failures.append(f"the roll's {key} line on the {case} case does "
+                                f"not carry its denominator: {text!r}")
+    print(f"  roll words   {seen} quoted line(s) across 3 candidate sets, and "
+          "not one asserts a quantifier over the screened set")
+
+
+def claim_the_template_reads_the_roll_rather_than_deriving_it(
+        failures: list[str]) -> None:
+    """The instructions quote the roll, and no longer ask for the filter.
+
+    Both halves matter. Dropping the old wording without naming the new field
+    leaves the model to invent the section; naming the field while the old
+    instruction stands leaves it two ways to answer and no reason to prefer
+    either. TEMPLATE_DERIVATIONS calls this pattern SUPPLY IN PACKET AND QUOTE,
+    and T9 and T10 are the ones that already did it.
+    """
+    text = TEMPLATE.read_text(encoding="utf-8")
+    prompt = (config.PROJECT_ROOT / "doc" / "prompt_analyst.md").read_text(
+        encoding="utf-8")
+
+    for field in ("evidence_roll.text.rvol_null",
+                  "evidence_roll.text.window_starts_late",
+                  "evidence_roll.text.rvol_lower_bound",
+                  "evidence_roll.text.catalyst_absent",
+                  "evidence_roll.text.catalyst_unknown"):
+        if field not in text:
+            failures.append(f"REPORT_TEMPLATE.md does not quote {field}, so the "
+                            "model is left to derive that membership again")
+    if "evidence_roll" not in prompt:
+        failures.append("prompt_analyst.md rule 6 does not name evidence_roll, "
+                        "so the prompt and the template disagree about who "
+                        "performs the filter")
+    if "score_roll.unscored" not in text:
+        failures.append("REPORT_TEMPLATE.md must read score_roll.unscored for "
+                        "the unscored names rather than scanning for a null score")
+
+    # And the instruction that asked for the filter has to be GONE, not merely
+    # supplemented. These are the exact phrases T2 and T15 were written against.
+    for phrase in ("name the candidates whose\npm_rvol is null",
+                   "name the candidates whose score is null",
+                   "pm_rvol null means unverifiable volume"):
+        if phrase in text:
+            failures.append("REPORT_TEMPLATE.md still asks the model to filter: "
+                            f"{phrase!r}")
+    print("  roll quoted  the template and the prompt read the five lists and "
+          "ask for none of the five filters")
+
+
 def main() -> int:
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="pmd-gaps-") as raw:
@@ -310,6 +456,9 @@ def main() -> int:
     claim_the_failure_line_stays_readable(failures)
     claim_a_lower_bound_reaches_gaps_to_fill(failures)
     claim_the_template_does_not_ask_for_the_false_sentences(failures)
+    claim_the_roll_selects_by_the_predicate_it_names(failures)
+    claim_the_rolls_own_words_pass_the_quantifier_guard(failures)
+    claim_the_template_reads_the_roll_rather_than_deriving_it(failures)
 
     if failures:
         for failure in failures:

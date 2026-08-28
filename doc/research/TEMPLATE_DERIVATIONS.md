@@ -31,8 +31,8 @@ owner's decision and deliberately not changed.
 | # | Where | What the model is asked to derive | Class | Verdict | Status |
 | --- | --- | --- | --- | --- | --- |
 | T1 | line 11, title | a two to six word market mood phrase | characterise whole | KEEP AS PROSE. A mood phrase has no correct value, so there is nothing to get factually wrong. | unchanged |
-| T2 | disclaimer, 17 to 24 | name every candidate whose pm_rvol is null, and every one whose pm_window_starts_late is true | filter across set | SUPPLY IN PACKET. Omitting a name here is a silent evidence gap, which is the exact failure the disclaimer exists to prevent. | PROPOSED |
-| T3 | disclaimer, 24 to 26 | name every candidate whose score is null | filter across set | SUPPLY IN PACKET. Same reason as T2. | PROPOSED |
+| T2 | disclaimer, 17 to 24 | name every candidate whose pm_rvol is null, and every one whose pm_window_starts_late is true | filter across set | SUPPLY IN PACKET. Omitting a name here is a silent evidence gap, which is the exact failure the disclaimer exists to prevent. | APPLIED 2026-08-28 |
+| T3 | disclaimer, 24 to 26 | name every candidate whose score is null | filter across set | SUPPLY IN PACKET. Same reason as T2. | APPLIED 2026-08-28 |
 | T4 | Summary, 43 | how many candidates cleared the floors | count | SUPPLY IN PACKET. A count is checkable and the model has no reason to compute it. | PROPOSED |
 | T5 | Summary, 44 | how many are day eligible and swing eligible | count | SUPPLY IN PACKET. Same. | PROPOSED |
 | T6 | Summary, 45 | the strongest conviction names by bucket | rank, superlative | SUPPLY IN PACKET. "Strongest" is an ordering over a computed score, so Python already knows the answer. | APPLIED 2026-08-20 |
@@ -44,7 +44,7 @@ owner's decision and deliberately not changed.
 | T12 | Technical signals, 116 to 119 | premarket high, low and VWAP versus price; prior day high versus price; 200 day average versus price | compare, per candidate | SUPPLY IN PACKET. These are directional claims about two packet numbers, and a reversed one reads as a breakout that is not there. Not across candidates, but wrong in the same way. | PROPOSED |
 | T13 | Economic, 125 | which events have an actual published versus still pending | classify per row | KEEP AS PROSE. A direct field read per event, with no aggregation. | unchanged |
 | T14 | Economic, 125 to 126 | what the rate picture does to the gap trade | judge | KEEP AS PROSE. | unchanged |
-| T15 | Skips and traps, 141 to 147 | select the candidates belonging here, by five separate predicates | filter across set | SUPPLY IN PACKET. Membership in a published section decided by the model is the thing rule 2 forbids for watchlists, applied here by prose instead. | PROPOSED |
+| T15 | Skips and traps, 141 to 147 | select the candidates belonging here, by five separate predicates | filter across set | SUPPLY IN PACKET. Membership in a published section decided by the model is the thing rule 2 forbids for watchlists, applied here by prose instead. | APPLIED 2026-08-28 |
 | T16 | Skips and traps, 144 to 145 | a positive gap whose headlines carry negative sentiment is a trap | derive, combine two fields across headlines | SUPPLY IN PACKET. The model must read every headline's polarity and compare it to the gap sign. | APPLIED 2026-08-20 |
 | T17 | Skips and traps, 151 to 153 | evaluate four predicates over the whole set, and if all are clear write "every candidate carries a found catalyst and full evidence" | universal quantifier over set | MUST CHANGE, and it is the sharpest case on this list: the template instructs the model to ASSERT A UNIVERSAL about the candidate set. It is also the one instruction that the new quantifier guard would fail, so it cannot be left as written. | APPLIED |
 
@@ -59,7 +59,7 @@ Not a derivation, and worth naming as the pattern the rest should follow:
 
 | # | Where | What the model is asked to derive | Class | Verdict | Status |
 | --- | --- | --- | --- | --- | --- |
-| P1 | rule 6 | name every candidate whose pm_rvol is null, every one whose pm_window_starts_late is true, every symbol in dropped_no_coverage | filter across set | SUPPLY IN PACKET. Duplicates T2 and T3 and should be fixed with them, in one place rather than two. | PROPOSED |
+| P1 | rule 6 | name every candidate whose pm_rvol is null, every one whose pm_window_starts_late is true, every symbol in dropped_no_coverage | filter across set | SUPPLY IN PACKET. Duplicates T2 and T3 and should be fixed with them, in one place rather than two. | APPLIED 2026-08-28 |
 | P2 | rule 5 | a candidate gapping up on negative sentiment headlines is a trap | derive | SUPPLY IN PACKET. Duplicates T16. | APPLIED 2026-08-20 |
 | P3 | rule 2 | the day watchlist is exactly the candidates with day_eligible true | filter, but on a precomputed boolean | KEEP. The predicate is a single computed field, and this rule is the guard rather than a derivation. | unchanged |
 | P4 | rule 4 | classify catalyst_found false against null | classify per candidate | KEEP. Direct field reads with the three states spelled out. | unchanged |
@@ -95,6 +95,65 @@ other Summary item, the strongest conviction names by bucket, and it is a rank
 rather than a count; it is left because ranking on a computed score is a smaller
 risk than counting, and because the same pass should not both resolve and
 redesign the section.
+
+
+## Fourth pass, 2026-08-28: the five filters are resolved, and the guard is armed
+
+T2, T3, T15 and P1 are APPLIED. With T16 and P2 already applied on 2026-08-20,
+every item CRITERIA names as gating `analyst.quantifier_guard` is now closed
+and the knob reads `enforcing`.
+
+What was actually wrong, stated plainly, because the third pass got close and
+stopped short. It recorded that T2, T3 and P1 were "SUPPLIED IN PACKET but
+still phrased as filters", which is a fair description and the wrong verdict.
+The lists existed in gaps_to_fill as PROSE and in score_roll.unscored as data,
+and the template still said "name the candidates whose pm_rvol is null". A
+model handed a sentence and asked to reproduce the set it describes is
+performing the filter, whatever the packet happens to contain. Supplying the
+data and leaving the instruction alone changes nothing about who decides
+membership.
+
+So the packet gained `evidence_roll`, which carries the five lists as data AND
+a sentence per list, and the instructions were rewritten to quote those
+sentences word for word. The five:
+
+  rvol_null            pm_rvol is null                        T2, T15, P1
+  window_starts_late   pm_window_starts_late is true          T2, T15, P1
+  rvol_lower_bound     pm_rvol_basis.is_lower_bound is true   T2
+  catalyst_absent      catalyst_found is false                T15
+  catalyst_unknown     catalyst_found is null                 T15
+
+T3's list is score_roll.unscored, which already existed and is now READ rather
+than re-derived; evidence_roll deliberately does not carry a second copy.
+
+Three properties the sentences have to hold, and a claim for each in
+test_evidence_gaps.py:
+
+1. Each line is a count and never a quantifier. These strings are quoted into
+   the report and then scanned by the guard that judges the report, so a line
+   reading "no candidate carries a null RVOL" would be built by Python, quoted
+   under instruction, and flagged against the model. Under `enforcing` that
+   costs a regeneration and then the plain table, for words the packet put
+   there. The notable movers section already held this rule for its own
+   reasons and this is the same trap one section over.
+2. The empty case is written the same way, "0 of 5", rather than disappearing.
+   A count carries its denominator: a reader can tell a screen that examined
+   five names and found none from a morning with nothing to examine. This is
+   the second pass's argument about the Summary, applied to four more lines.
+3. false and null stay apart. catalyst_found false is a window read that paid
+   nothing; catalyst_found null is a window never read. The template has
+   separated them since 2026-08-14 and a roll that ORs them loses which one a
+   reader is holding.
+
+All three claims were mutation tested. Conflating the two catalyst states, and
+replacing the zero line with "no candidates", both fail the suite.
+
+Still PROPOSED and untouched: T4 and T5 are done, T6, T16 and P2 are done, and
+what remains on this list is T12, the per candidate directional comparisons in
+Technical signals. It is the last SUPPLY IN PACKET verdict outstanding. It is
+not a filter across the set, so it does not gate the guard, and it is left
+here rather than folded into this pass because it is a different shape of
+change: sixteen comparisons per candidate rather than five lists per morning.
 
 ## What was applied in the first pass, and what waits
 

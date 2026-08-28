@@ -59,9 +59,14 @@ decide nothing.
    since 2026-08-20 while this rule went on saying the opposite. An
    instruction to judge and an instruction not to judge cannot both be obeyed,
    so one of them had to go, and it was this one.
-6. The one line disclaimer must name the candidates whose pm_rvol is null
-   and the candidates whose pm_window_starts_late is true, stating that
-   volume or path evidence is partial or missing for them, and must name
+6. The one line disclaimer QUOTES the packet's own sentences and derives
+   none of them. `evidence_roll.text.rvol_null`,
+   `evidence_roll.text.window_starts_late` and
+   `evidence_roll.text.rvol_lower_bound` go in word for word, including when
+   one reads 0 of N, and `score_roll.unscored` names the unscored. Do not read
+   the candidate blocks to work out who belongs in any of those four: Python
+   selected them before you ran, and selecting them again in prose is a
+   membership claim nothing can check. It must also name
    the symbols in dropped_no_coverage with the reason recorded against it.
    A dropped name had no collector coverage, so it has no premarket price and
    was left out rather than published at a stale prior session close.

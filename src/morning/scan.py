@@ -2861,6 +2861,101 @@ def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """The membership lists the template used to make the model filter for.
+
+    TEMPLATE_DERIVATIONS.md rows T2, T3, T15 and P1. Each of them asks the
+    model to walk the candidate list and select the names matching a
+    predicate: pm_rvol is null, pm_window_starts_late is true,
+    pm_rvol_basis.is_lower_bound is true, catalyst_found is false, catalyst_found
+    is null. Python decides all five before the model runs, and until now it
+    threw the answers away and asked for them back in prose.
+
+    That is the same shape as T9, the derivation that produced the false claim
+    this whole audit started from: the 2026-08-18 report said a condition was
+    missed by "every candidate" when one of the twelve had cleared it. A filter
+    performed in prose over a set the packet already holds is a claim about
+    membership that nothing checks, and this section publishes five of them.
+
+    Every string built here is QUOTED into the report word for word and is then
+    scanned by analyst.quantifier_violations, so all of them are written in
+    counts rather than quantifiers, the same rule the notable movers section's
+    reasons follow. A line reading "no candidate carries a null RVOL" would put
+    a set quantifier into the model's mouth on the quietest morning of the year.
+    Counts also say strictly more: "0 of 5" carries the denominator, so a reader
+    can tell a screen that examined five names from a morning that found none to
+    examine. claim_the_rolls_own_words_pass_the_quantifier_guard walks every
+    string this can produce and holds that.
+
+    unscored is deliberately NOT here. score_roll already owns it and two
+    copies of one list is how the two drift apart; the template quotes
+    score_roll.unscored for T3.
+    """
+    examined = len(candidates)
+
+    def bare(symbol: str) -> str:
+        return str(symbol or "").upper().removesuffix(".US")
+
+    def names(rows: list[dict[str, Any]]) -> str:
+        return ", ".join(bare(r["symbol"]) for r in rows)
+
+    def line(rows: list[dict[str, Any]], what: str) -> str:
+        """One count led sentence, and the same shape when the list is empty.
+
+        Written the same way at zero rather than switching to prose, for the
+        reason the Summary counts are: prose written only for the empty case is
+        prose that runs on the mornings nobody scrutinises, and that is exactly
+        where both false universals of 2026-08-18 were published.
+        """
+        if not rows:
+            return f"0 of {examined} candidates {what}."
+        return f"{len(rows)} of {examined} candidates {what}: {names(rows)}."
+
+    rvol_null = [{"symbol": c["symbol"], "reason": c.get("pm_rvol_reason")}
+                 for c in candidates if c.get("pm_rvol") is None]
+    late = [{"symbol": c["symbol"]}
+            for c in candidates if c.get("pm_window_starts_late")]
+    lower_bound = [{"symbol": c["symbol"]} for c in candidates
+                   if (c.get("pm_rvol_basis") or {}).get("is_lower_bound")]
+    # catalyst_found false and catalyst_found null are DIFFERENT rows, and the
+    # template has said so since 2026-08-14: false is a name the feed was read
+    # for and paid nothing, null is a name the feed was never read for or came
+    # back unreadable. Folding them loses which of the two a reader is holding.
+    absent = [{"symbol": c["symbol"], "catalyst_why": c.get("catalyst_why")}
+              for c in candidates if c.get("catalyst_found") is False]
+    unknown = [{"symbol": c["symbol"], "catalyst_why": c.get("catalyst_why")}
+               for c in candidates if c.get("catalyst_found") is None]
+
+    return {
+        "candidates_examined": examined,
+        "rvol_null": rvol_null,
+        "window_starts_late": late,
+        "rvol_lower_bound": lower_bound,
+        "catalyst_absent": absent,
+        "catalyst_unknown": unknown,
+        "text": {
+            "rvol_null": line(
+                rvol_null, "carry a null premarket RVOL, so their premarket "
+                           "volume evidence is missing"),
+            "window_starts_late": line(
+                late, "opened their premarket window late, so their premarket "
+                      "path evidence is partial"),
+            "rvol_lower_bound": line(
+                lower_bound, "carry a premarket RVOL that understates as a "
+                             "lower bound, because the numerator covers a "
+                             "shorter window than the baseline denominator"),
+            "catalyst_absent": line(
+                absent, "were read for news and carry a found catalyst of "
+                        "class none, which is a window that was checked and "
+                        "paid nothing"),
+            "catalyst_unknown": line(
+                unknown, "carry an unknown catalyst status, which is a window "
+                         "that was never read rather than one that came back "
+                         "empty"),
+        },
+    }
+
+
 def score_candidate(candidate: dict[str, Any]) -> None:
     """Confluence score from 0 to 10, with the breakdown kept.
 
@@ -4691,6 +4786,12 @@ def build_packet() -> dict[str, Any]:
         # Built here so the report neither enumerates a set it can miscount nor
         # ranks by a score that has no sign without saying so.
         "score_roll": score_roll(candidates),
+        # The five membership lists the disclaimer and Skips and traps used to
+        # ask the model to filter for. TEMPLATE_DERIVATIONS T2, T3, T15 and P1.
+        # Each carries a ready to quote sentence written in counts, because the
+        # report quotes these word for word and the quantifier guard scans what
+        # comes back. See evidence_roll.
+        "evidence_roll": evidence_roll(candidates),
         # Transient. main pops this before write_packet, so it never reaches
         # disk; the leading underscore is the convention true_volume uses for
         # the same reason.

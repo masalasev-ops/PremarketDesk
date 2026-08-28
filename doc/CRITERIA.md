@@ -1243,7 +1243,10 @@ timeout_s                     = 537        # 3x the slowest morning on record wh
                                            # rule did not change, the evidence under it did.]
 max_attempts                  = 2          # total tries, including the first
 quantifier_regenerations      = 1          # flagged narratives thrown away and asked for again before the plain table takes over
-quantifier_guard              = warn       # warn: log and print flags, deliver the narrative anyway. enforcing: regenerate, then fall back. See the note below for what has to be true before this flips.
+quantifier_guard              = enforcing  # warn: log and print flags, deliver the narrative anyway. enforcing: regenerate, then fall back. See the note below for the three things that had to be true, and were, on 2026-08-28.
+                                           # [corrected 2026-08-28: was warn, from 2026-08-18. The three conditions below
+                                           # are met. Flipping does not widen the clock budget: the worst case was already
+                                           # computed at two CLI runs, 09:03:13, in the timeout note above.]
 prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI, A, I
 
 ### The timeout note, and why the number moved
@@ -1384,15 +1387,54 @@ telemetry: a flag log filling under the template that provokes the flags says
 which words and which instructions are responsible, where one filling after the
 provocation is gone would only say the remainder is quiet.
 
-Three things have to be true before this reads `enforcing`:
+Three things have to be true before this reads `enforcing`, and on 2026-08-28
+all three do. What each one was, and what closed it:
 
   1. T2, T3, T15, T16, P1 and P2 are resolved, so the instructions no longer
      ask for a claim about the set that the model cannot compute.
+     CLOSED. T16 and P2 went on 2026-08-20 with the trap work, which this
+     list was never updated to say, so it named two resolved items as
+     blockers for eight days. T2, T3, T15 and P1 went on 2026-08-28: the
+     packet's evidence_roll carries the five membership lists and a quoted
+     sentence for each, and the template and prompt read them instead of
+     asking the model to filter. See TEMPLATE_DERIVATIONS.md fourth pass.
   2. A morning runs clean, meaning a real report with zero flags rather than a
      fixture with zero flags.
+     CLOSED on 2026-08-19, and seven more since: the last flag of any kind
+     was raised on 2026-08-21.
   3. The flags already logged have dispositions, since the word list was going
      to be tuned on them and flipping the switch first would mean tuning it on
      a sample that stopped growing.
+     CLOSED on 2026-08-25. Both flags are judged, and both are false
+     positives on the forward only `no`, six words ahead of a set word.
+
+### What flipping this does and does not risk
+
+Stated here rather than left to be rediscovered, because 2 of 2 judged flags
+were false positives and that is the number a reader will reach for.
+
+The clock does not move. The worst case under `enforcing` is one flagged
+report plus one regeneration, which is two CLI runs, which is the same
+1,074 seconds the timeout note above already computed and accepted at
+09:03:13. `quantifier_regenerations` is 1, so a third run is not reachable.
+
+The cost of a false positive is one regeneration, and the narrative is lost
+only when the SECOND answer flags too. A false positive is cheap to clear:
+the rejected sentence is appended to the piped document, and both flags on
+record are ordinary sentences that reword in a clause.
+
+The flag rate is 2 in 11 scheduled mornings, both of them in the first week,
+and 0 in the last seven. Both were the model writing freehand about names
+dropped for no coverage and about partial premarket windows, which is
+precisely the prose evidence_roll now supplies pre worded and guard clean.
+So the population that produced both flags is the one this pass removed.
+
+What is NOT settled: the word list itself. The review scheduled for a month
+after 2026-08-18 still stands, `no` and `each` are still the words most
+likely to move, and a sample of two is not a rate. Enforcing changes what a
+flag costs, not how often the guard is right, and if the plain table starts
+appearing on mornings a reader disagrees with, the word list is the thing to
+tune and this knob is the thing to put back to `warn` while that happens.
 
 An unrecognised value here is treated as enforcing and says so, because a typo
 must not be a silent way to switch the guard off.
