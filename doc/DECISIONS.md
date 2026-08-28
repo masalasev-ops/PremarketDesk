@@ -18,6 +18,53 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-28: ranking the unusualness lists on the size, and why the spec's own words were not enough
+
+The correction in CHANGELOG.md for the same date could have gone the other
+way, because BUILD_PLAN 4.4 literally said "move_sigma descending" for lists 1
+and 4 and the code did exactly that. The question was whether the spec meant
+it.
+
+It did not, on three independent readings.
+
+**The purpose statement.** CRITERIA [Notable] opens "these names are chosen for
+the size and unusualness of their move", and REPORT_TEMPLATE makes the model
+write that sentence character for character at the top of the section every
+morning. Neither size nor unusualness has a direction. A section that publishes
+that sentence and then cannot see a decliner is making a claim its own ordering
+contradicts.
+
+**The sibling list.** List 3 already ranks on `abs()`, and BUILD_PLAN 4.4 spells
+it "absolute two session move descending". The asymmetry in the spec is not a
+distinction anyone drew; it is one point being written more carefully than the
+others. The 2026-08-20 mutation testing that put `abs()` on list 3 recorded the
+reason in the test file as "ranking on the signed move instead of its size lost
+every large decliner", which is word for word the defect the other two still
+had.
+
+**The section's own second column.** `_watchlist_mark` says to expect most
+premarket rows to carry a watchlist mark. Under the signed ordering none ever
+did, on any morning. Two parts of the same section held incompatible beliefs
+about what it would publish, and the ranking was the one that was wrong.
+
+The alternative was to keep the sign and add a fifth list for decliners. Refused:
+list_size is 5 and the section already publishes up to twenty rows, four lists
+were chosen so a reader can hold the section in their head, and a fifth would
+double the prior session leg's presence to answer a question the existing lists
+answer once the sign stops filtering them. The direction a reader needs is
+already in the Move % and Sigma columns of every row.
+
+What is NOT claimed here. This does not say the section now surfaces the right
+names, only that it no longer discards half of them before ranking. The
+premarket leg still draws only from the collector's subscriptions, so it
+remains a ranking over at most [Collector] max_subscriptions names and not over
+the market. And on a morning like 2026-08-28 the fixed list leads with four
+names that are already candidates in the gappers section, which is the overlap
+_watchlist_mark's docstring predicted and which the also_on_watchlist column
+now has something to say. Whether that overlap makes the premarket list
+redundant on gap heavy mornings is a real question and is NOT settled here; it
+needs more than one morning to answer.
+
 ## 2026-08-26: what two sweeps settled, and the spread that was mostly a late collector
 
 probe_capture_live ran twice, on 2026-08-24 and 2026-08-26, and the second was

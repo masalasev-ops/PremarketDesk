@@ -579,15 +579,28 @@ def claim_each_list_ranks_on_the_key_it_names(failures: list[str]) -> None:
                         "ranks one window and labels another is the exact thing "
                         "the leg labels exist to prevent.")
 
-    # 1. sigma descending on the prior session leg.
+    # 1. the SIZE of the sigma on the prior session leg, so the faller leads.
+    #    Ranking on the signed sigma published the five largest RISERS and
+    #    dropped every large decliner, which on 2026-08-28 cost this list HRL
+    #    at -8.00 sigma, the second most unusual move in the universe.
     sigma_list = lists["prior_session_by_sigma"]
-    values = [rows[("prior_session", s)]["move_sigma"] for s in sigma_list
+    values = [abs(rows[("prior_session", s)]["move_sigma"]) for s in sigma_list
               if ("prior_session", s) in rows]
     if values != sorted(values, reverse=True):
-        failures.append(f"list 1 is not sorted by sigma descending: {values}")
-    if sigma_list and sigma_list[0] != "QUIET.US":
-        failures.append(f"list 1 leads with {sigma_list[0]} where QUIET carries "
-                        "the highest prior session sigma at 2.0")
+        failures.append(f"list 1 is not sorted by the size of the sigma: {values}")
+    if sigma_list and sigma_list[0] != "DOWN.US":
+        failures.append(f"list 1 leads with {sigma_list[0]} where DOWN fell 45 "
+                        "percent at 45 sigma against QUIET's 2.0. Ranking on "
+                        "the signed sigma puts the largest riser first and "
+                        "drops every large decliner off the unusualness list.")
+    # The sigma key is still told apart from the raw move. QUIET moved 2.0
+    # percent at 2.0 sigma and LOUD moved 8 at 0.8, so a list ranking on the
+    # move carries LOUD and drops QUIET, and this list must do the opposite.
+    if "QUIET.US" not in sigma_list or "LOUD.US" in sigma_list:
+        failures.append(f"list 1 holds {sigma_list}, and QUIET at 2.0 sigma "
+                        "belongs on it while LOUD at 0.8 does not. Ranking on "
+                        "the size of the raw MOVE rather than of the sigma "
+                        "swaps exactly those two.")
 
     # 2. market cap descending, and the LARGEST first. Ranking on minus the cap
     #    publishes the smallest and was caught by nothing before this.
@@ -653,6 +666,64 @@ def claim_each_list_ranks_on_the_key_it_names(failures: list[str]) -> None:
           f"cap with {cap_list[0] if cap_list else None}, size with "
           f"{size_list[0] if size_list else None}, premarket with "
           f"{premarket_list[0] if premarket_list else None}")
+
+
+def claim_the_premarket_sigma_list_ranks_on_the_size_of_the_move(
+        failures: list[str]) -> None:
+    """List 4 leads with the biggest premarket move whichever way it went.
+
+    The shared fixture cannot ask this. Its only faller, DOWN, sits on the
+    universe legs and is not subscribed, so both subscribed names moved UP and
+    the signed ordering and the size ordering agreed on every run. That is
+    precisely how the defect survived: list 3 was corrected to abs() when
+    mutation testing found it, and lists 1 and 4 were left ranking on the sign
+    because no claim here could see the difference.
+
+    So this one builds a two name premarket leg where the orderings disagree.
+    SLIDE falls 4 percent at 4.0 sigma and RISE gains 2 at 2.0, so the size
+    ordering leads with SLIDE and the signed ordering leads with RISE and puts
+    the larger move last. On 2026-08-28 the live section took the signed
+    ordering and published five names at 0.26 sigma and below while MNSO sat
+    on the same leg at -2.51.
+    """
+    universe = [
+        {"symbol": "RISE.US", "code": "RISE", "market_cap": 800_000_000.0},
+        {"symbol": "SLIDE.US", "code": "SLIDE", "market_cap": 900_000_000.0},
+    ]
+    closes = {
+        "RISE.US": {"c3": 100.0, "c2": 100.0, "c1": 100.0},
+        "SLIDE.US": {"c3": 100.0, "c2": 100.0, "c1": 100.0},
+    }
+    stats = {"RISE.US": {"return_stdev_20d": 1.0},
+             "SLIDE.US": {"return_stdev_20d": 1.0}}
+    bars = {"RISE.US": [_bar("RISE.US", "08:40", 102.0)],
+            "SLIDE.US": [_bar("SLIDE.US", "08:40", 96.0)],
+            "SPY.US": [_bar("SPY.US", "08:40", 700.0)]}
+
+    _write_closes(closes=closes)
+    block, _packet, _rows = _run(bars=bars, candidates=[], universe=universe,
+                                 stats=stats)
+    premarket = block["lists"]["premarket_by_sigma"]
+    rows = {(r["leg"], r["symbol"]): r for r in block["rows"]}
+
+    if premarket != ["SLIDE.US", "RISE.US"]:
+        failures.append(
+            f"list 4 is {premarket} where SLIDE moved -4 percent at -4.0 sigma "
+            "and RISE moved 2 at 2.0. Ranking on the signed sigma leads with "
+            "RISE and puts the larger move last, which is how a morning of "
+            "decliners publishes its five quietest names.")
+
+    # The SIGN is not lost by ranking on the size: the row still carries it,
+    # because the reader has to see which way the name went.
+    slide = rows.get(("premarket", "SLIDE.US")) or {}
+    if (slide.get("move_sigma") or 0) >= 0:
+        failures.append(f"SLIDE's row carries move_sigma "
+                        f"{slide.get('move_sigma')!r}, and the ordering is "
+                        "taken on the size only so that the row can keep the "
+                        "sign the reader needs")
+
+    print(f"  premarket    list 4 leads with {premarket[0] if premarket else None} "
+          f"at {slide.get('move_sigma')} sigma, ahead of the smaller riser")
 
 
 def claim_no_ranked_list_mixes_two_legs(failures: list[str]) -> None:
@@ -2264,6 +2335,7 @@ CLAIMS = (
     claim_a_quiet_name_under_the_discovery_floor_can_still_appear,
     claim_no_ranked_list_mixes_two_legs,
     claim_each_list_ranks_on_the_key_it_names,
+    claim_the_premarket_sigma_list_ranks_on_the_size_of_the_move,
     claim_a_mis_stamped_notable_row_stops_the_run,
     claim_the_context_tickers_stay_out_of_the_premarket_leg,
     claim_a_stale_collector_print_is_not_a_notable_move,

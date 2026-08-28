@@ -1234,7 +1234,10 @@ like the Api section above, not screen criteria.
 
 model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
-timeout_s                     = 537        # 3x the slowest morning on record when it was set, 178.9s on 2026-08-19, and 2.4x the 226.1s of 2026-08-20 since. See the timeout note below.
+timeout_s                     = 537        # 3x the slowest morning on record when it was set, 178.9s on 2026-08-19, and 1.6x the 335.7s of 2026-08-27 since. See the timeout note below.
+                                           # [corrected 2026-08-28: was "2.4x the 226.1s of 2026-08-20 since", which four
+                                           # scheduled mornings have overtaken. The value has NOT moved; what moved is how
+                                           # much slack it carries, and the rule that defines it now asks for 1,007.]
                                            # [corrected 2026-08-20: was 293, "3x the slowest of five measured opus
                                            # medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds". The
                                            # rule did not change, the evidence under it did.]
@@ -1257,6 +1260,32 @@ five dry runs of 2026-08-14, which the schedule has overtaken.
 | 2026-08-18 | 107.5 | 98.5 | 8,954 |
 | 2026-08-19 | 185.3 | 178.9 | 16,005 |
 | 2026-08-20 | 231.7 | 226.1 | 20,188 |
+| 2026-08-24 | 270.8 | 262.8 | 22,936 |
+| 2026-08-25 | 252.4 | 246.2 | 21,947 |
+| 2026-08-26 | 272.2 | 265.7 | 23,488 |
+| 2026-08-27 | 342.6 | 335.7 | 28,633 |
+| 2026-08-28 | 213.3 | 206.3 | 18,264 |
+
+[appended 2026-08-28] The five rows above are the scheduled mornings since the
+number was set, read from each session's chain log for the step and from its
+analyst_usage.json for the CLI duration and the output tokens. 2026-08-21 is
+not among them: it produced no narrative and its usage file records no run.
+
+The doubling has stopped. 226.1, 262.8, 246.2, 265.7, 335.7, 206.3 is a plateau
+with one high session, not the trend the paragraph below was written against,
+and output tokens plateau with it at 18k to 29k. What HAS moved is the slack:
+the rule is three times the slowest run on record, the slowest is now 335.7s on
+2026-08-27, and three times that is 1,007. 537 is 1.6 times it.
+
+The number is NOT changed here, because it does not travel alone. Raising it to
+1,007 puts the worst case at 08:45:19 plus two attempts, 09:18:53, which is past
+[monitor] chain_due at 09:00 and inside rerun_chain_until at 09:30, and it
+breaks the derivation at [monitor] job_log_stale_after_s, whose 1,200 was chosen
+to leave two minutes over max_attempts times timeout_s. Four coupled numbers,
+and the owner picks the trade: a wider timeout, a lower max_attempts, or an
+accepted 1.6x. What is fixed here is the record of where the margin actually
+stands, because the line above claimed 2.4x and nothing had checked it since
+2026-08-20.
 
 Nothing has timed out. This is not a fault being fixed, it is a threshold being
 kept faithful to the rule that defines it, and the direction is what forces it:

@@ -1031,15 +1031,34 @@ into the same ordering as the 2,704 names nothing selected. They would
 dominate systematically and the section would end up restating the watchlist
 it exists not to restate.
 
-  1. move_sigma descending, PRIOR SESSION leg, universe wide.
+  1. move_sigma descending BY SIZE, PRIOR SESSION leg, universe wide.
+     [corrected 2026-08-28: was "move_sigma descending", which the code read
+     as the signed value, so the list published the five largest RISERS and
+     no decliner could reach it however unusual. Point 3 below already said
+     "absolute" and point 1 was written without the sign being considered at
+     all. On 2026-08-28 this dropped HRL at -8.00 sigma, the second most
+     unusual move in the 2,769 name universe, to publish VEEV at +6.04.]
   2. market cap descending among names whose absolute prior session move
      clears min_abs_gap_pct, PRIOR SESSION leg, universe wide.
   3. absolute two session move descending, TWO SESSION leg, universe wide.
-  4. move_sigma descending, PREMARKET leg, the collector names only.
+  4. move_sigma descending BY SIZE, PREMARKET leg, the collector names only.
+     [corrected 2026-08-28: same correction as point 1 and for the same
+     reason. This one was the more visible of the two, because the premarket
+     leg is small: on 2026-08-28 the list published five names at 0.26 sigma
+     and below while MNSO sat on the same leg at -2.51, and across the five
+     mornings the list has run it lost the leg's largest move on three.]
 
 List 3 ranks on the raw move rather than on sigma, as the original brief
 specified. It is the size list for the multi session window, where list 1 is
 the unusualness list for the single session one.
+
+All three of those keys are taken on the SIZE and not on the sign, because
+neither size nor unusualness has a direction: a name 8 sigma down is not less
+unusual than one 6 sigma up, and a section whose stated purpose is what MOVED
+cannot be blind to half the ways a name can move. The row still carries the
+signed value, so the direction is on the page and only the ordering is taken
+on the size. List 2 is the exception and ranks on the market cap itself, which
+has no sign to take; its FLOOR already reads the absolute move.
 
 List 4's key is decided here rather than by the owner and is cheap to
 overrule: move_sigma is the section's headline measure and these are its

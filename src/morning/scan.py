@@ -3419,7 +3419,7 @@ def attach_notable_candidate_fields(
 
 
 def mark_notable_watchlist(notable: dict[str, Any],
-                          candidates: list[dict[str, Any]]) -> int:
+                          candidates: list[dict[str, Any]]) -> tuple[int, int]:
     """Fill in each row's also_on_watchlist, AFTER the screens have decided.
 
     This is a second pass because of an ordering nothing in the spec mentions
@@ -4041,10 +4041,28 @@ def notable_movers(
     def with_sigma(leg: str) -> dict[str, tuple[Any, ...]]:
         return {s: v for s, v in legs[leg].items() if v[1] is not None}
 
+    # Lists 1 and 4 rank on the SIZE of the sigma, not on its sign. They are
+    # the unusualness lists and unusualness has no direction: a name 8 sigma
+    # down is more unusual than one 6 sigma up, and ranking on the signed value
+    # drops every large decliner off both of them. This is the same defect list
+    # 3 carried until abs() was put on its key, and it survived here because
+    # the fixture's only faller sat on the two session leg, so no claim could
+    # tell the two orderings apart on these two.
+    #
+    # It was never hypothetical. On 2026-08-28 the premarket list published
+    # five names at 0.26 sigma and below while MNSO sat on the same leg at
+    # -2.51, and the prior session list dropped HRL at -8.00, the second most
+    # unusual move in the whole 2,769 name universe, to publish VEEV at +6.04.
+    # Across the five mornings the premarket list has run it lost the leg's
+    # largest move on three of them.
+    #
+    # The row still carries the SIGNED sigma, so the direction stays on the
+    # page and a reader sees which way the name went. Only the ordering is
+    # taken on the size.
     cleared["prior_session_by_sigma"] = dict(legs["prior_session"])
     populations["prior_session_by_sigma"] = with_sigma("prior_session")
     picks["prior_session_by_sigma"] = top(
-        "prior_session", lambda s: legs["prior_session"][s][1],
+        "prior_session", lambda s: abs(legs["prior_session"][s][1]),
         populations["prior_session_by_sigma"])
 
     # See call TWO in the docstring: at least, not more than.
@@ -4068,7 +4086,7 @@ def notable_movers(
     cleared["premarket_by_sigma"] = dict(legs["premarket"])
     populations["premarket_by_sigma"] = with_sigma("premarket")
     picks["premarket_by_sigma"] = top(
-        "premarket", lambda s: legs["premarket"][s][1],
+        "premarket", lambda s: abs(legs["premarket"][s][1]),
         populations["premarket_by_sigma"])
 
     block["lists"] = dict(picks)

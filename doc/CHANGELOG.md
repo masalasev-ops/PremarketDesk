@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the two unusualness lists were ranking on the sign, and published the quietest names on a morning of decliners
+
+Found reviewing the 2026-08-28 morning. The report ran clean end to end: nine
+steps green, 0 problems from the watchdog, 25 EODHD calls, containment passed
+on 33 ticker claims, and every number in it reconciles against packet.json.
+The defect is not in what the report SAID, it is in what reached it.
+
+The notable movers section ranks four lists. List 3 takes the size of the two
+session move, `abs(...)`, and has since mutation testing found it ranking on
+the signed value and losing every large decliner. Lists 1 and 4 rank on
+move_sigma and were still taking the SIGNED sigma, so they published the five
+largest risers and no faller could reach either of them however unusual it
+was. BUILD_PLAN 4.4 said "move_sigma descending" for both and "absolute" only
+for list 3; the sign was never considered for the other two.
+
+What it cost, measured rather than asserted:
+
+- 2026-08-28 premarket list: published FRO 0.26, BTQ 0.09, ORCL 0.09, NOK
+  -0.02, SOUN -0.05, while MNSO sat on the same leg at -2.51, CHA at -2.10,
+  BWLP at -1.84 and MRVL at -1.19. The section whose first sentence is "these
+  names were selected for the size and unusualness of their move" published
+  the five quietest names on the leg.
+- 2026-08-28 prior session list: dropped HRL at -8.00 sigma, the second most
+  unusual move in the whole 2,769 name universe, to publish VEEV at +6.04.
+- Across the five mornings the premarket list has run, it lost the leg's
+  largest move on three of them: 2026-08-25 published 0.77 against a 6.82 on
+  the leg, 2026-08-27 published 3.01 against 4.60, 2026-08-28 published 0.26
+  against 2.51. The two it got right, 2026-08-24 and 2026-08-26, were mornings
+  whose largest premarket move happened to be UP.
+
+A second symptom had been visible for a week and was read as normal. The
+`also_on_watchlist` column has been "not screened" on every row of every
+morning, while _watchlist_mark's own docstring says "expect most premarket
+rows to carry a mark, since that leg draws from the pool the watchlist came
+from". The mark was empty because the ranking could not reach the candidates,
+not because the two sections disagree.
+
+Fixed by taking `abs()` on both keys, which is what list 3 already does. The
+rows keep the signed sigma, so the direction stays on the page and only the
+ordering changed. BUILD_PLAN 4.4 points 1 and 4 are corrected in place with
+markers.
+
+Why no claim caught it: the fixture's only faller, DOWN, sits on the universe
+legs and is not subscribed, so both subscribed names moved up and the signed
+and size orderings agreed on list 4 on every run. On list 1 the fixture DID
+carry the discriminating case, DOWN at -45 sigma, and the claim asserted the
+buggy answer, that list 1 leads with QUIET at +2.0. That claim now asserts
+DOWN and a second one holds that QUIET is on the list while LOUD at 0.8 is
+not, so the sigma key is still told apart from the raw move. List 4 gets a new
+claim with its own two name leg where the two orderings disagree. Both were
+mutation tested: reverting either `abs()` fails the suite.
+
+Not regenerated. runs/2026-08-28/ is the record of what ran this morning and
+the archive is built from it; the fix applies from the next morning.
+
 ## 2026-08-26: the capture spread was mostly a late collector, and the probe is retired
 
 probe_capture_live's second sweep, armed because the first ran against a
