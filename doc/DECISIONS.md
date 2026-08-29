@@ -18,6 +18,60 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: measuring the reference levels rather than correcting them
+
+entry_ref and stop_ref are the collector's raw live pm_high and pm_low, and
+every excursion in the record is measured from them. The collector's socket is
+a sample, and a sample understates a maximum and overstates a minimum, so both
+levels were known to be wrong in a known direction and by an unknown amount.
+The amount is now measured.
+
+**Beside, not over, and the sampled columns are not deleted.** The alternative
+was to correct entry_ref in place once a better number existed, which is
+tempting because every downstream reader would then be right without changing.
+It was refused for the reason the pm_high_true precedent was set: the GAP
+between the two pairs is itself a measurement of the feed, and a corrected
+column with the original discarded cannot state it. It also destroys the only
+record of what the morning actually had at 08:45, which is the thing any later
+question about the screen has to be asked against.
+
+**Two shortfalls, two columns.** entry_ref_true is the extreme over the full
+premarket window; entry_ref_collector_window is the extreme over the socket's
+own minutes. One column would have folded the collector's 07:20 start into a
+number that reads as the sampling shortfall. That is not a hypothetical error:
+backfill_premarket made exactly it for pm_high_true, called the difference "the
+standing measurement of what a 07:20 collector start misses", and had to
+correct the sentence on 2026-08-28 after finding it conflated three causes.
+
+**The measurement said the opposite of what specified it.** The premise was
+that the socket sampling was the problem. Over 54 live rows across six
+sessions, the median entry gap is +1.189 percent, of which +0.095 comes from
+sampling and +0.984 from the 04:00 to 07:20 stretch the collector never hears.
+Ten to one, on the median, the other way round. The socket reproduces the
+extremes of the minutes it does hear almost exactly. Anything that wants
+better reference levels should be aimed at [Collector] start_time, and nothing
+is aimed anywhere here: this pass measures and writes, and changes no screen.
+
+**Both excursion medians change sign, which is the part that matters.** On the
+sampled levels the median pick ran +0.81 percent past its entry reference and
+broke its stop reference by 1.92. On the measured levels it did neither:
+-2.13 favourable and +0.15 adverse, over 48 rows across five sessions. The
+count that reached the entry reference falls from 29 of 48 to 20; the count
+that undercut the stop reference falls from 30 to 22. The record has not been
+slightly optimistic about its upside, it has been reporting a median name as
+having reached a level it never reached.
+
+Five sessions is five observations and this is a measurement of the record,
+not of the screen. No threshold moved and none is calibrated against either
+column.
+
+**mfe_pct_true is filled by a pass of its own.** It is arithmetic on columns
+already in the row, so putting it behind fill()'s candidate query would have
+rationed a computation that costs nothing, and that query selects on
+next_day_close being null, so every row whose short leg had already filled
+would never have been re-selected. On the day the columns were added that was
+every row in the table.
+
 ## 2026-08-29: raising the timeout rather than trimming the retries
 
 Four ways to restore the three times rule were on the table on 2026-08-28: a

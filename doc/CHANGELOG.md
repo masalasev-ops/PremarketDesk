@@ -15,6 +15,55 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the reference levels get measured, beside the ones that were sampled
+
+**What changed.** night/true_volume.py now reads the high, the low and a volume
+weighted price off the Alpaca bars it was already fetching, and writes
+entry_ref_true, stop_ref_true, entry_ref_collector_window,
+stop_ref_collector_window and refs_true_reason into picks beside entry_ref and
+stop_ref. night/fill_outcomes.py gains mfe_pct_true and mae_pct_true, filled by
+a separate pass that spends no vendor call. Both passes report the distribution
+of the gap they open up. No sampled column is corrected, replaced or removed,
+and no threshold moved.
+
+**Why it had to.** entry_ref and stop_ref are the collector's raw live levels,
+which are the extremes of a socket sample. A sample understates a maximum and
+overstates a minimum, so mfe_pct was overstated and mae_pct was overstated in
+depth, both by construction and neither by a measured amount. CRITERIA.md and
+BUILD_PLAN.md both designate the picks table as the record the seed thresholds
+will one day be recalibrated against, and it was carrying a biased excursion in
+every row with nothing beside it to say so.
+
+**What the measurement found.** Over 54 live rows across the six sessions whose
+packets carry an rvol_cutoff_hhmm, the median entry reference gap is +1.189
+percent and the median stop reference gap is -1.732 percent. Split into its
+two causes, the median sampling effect is +0.095 percent and the median late
+start effect is +0.984, which is ten to one against the premise that specified
+the work: the socket reproduces the extremes of the minutes it hears, and
+nearly all of the gap is 04:00 to 07:20 going unheard.
+
+Over the 48 rows across five sessions carrying both an outcome and a measured
+reference, the favourable excursion median moves +0.8132 to -2.1271 percent and
+the adverse median moves -1.9243 to +0.1465. Both change sign. The count of
+picks whose next session reached the entry reference falls from 29 of 48 to 20,
+and the count that undercut the stop reference falls from 30 to 22.
+
+Five sessions is five observations, the sample unit is the session, and this
+measures the record rather than the screen.
+
+**Held in place by** three claims in test_regressions.py, each mutation tested.
+reference_level reads the field [Picks] names rather than assuming high and low,
+and returns null rather than a fabricated zero on an empty window; the full
+window pair and the collector window pair stay in separate columns, the sampled
+pair survives the write, and a refused float cannot become the recorded reason a
+reference level is missing; and the true excursion is null wherever the true
+reference is, refuses a row repriced by a corporate action, never reads a
+source='test' row, and writes nothing on a second run.
+
+**2026-08-21 is refused** and says so. Its packet carries no rvol_cutoff_hhmm,
+so the window the morning used is unknown, and this pass will not guess a
+window: a guessed one mismeasures precisely the sessions that went wrong.
+
 ## 2026-08-29: the analyst timeout is raised, and the number derived from it moves with it
 
 [Analyst] timeout_s 537 to 1007, and [Monitor] job_log_stale_after_s 1200 to

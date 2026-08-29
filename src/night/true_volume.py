@@ -34,6 +34,22 @@ would repeat, one vendor down, the exact defect this module exists to correct.
 Both are meant to be consolidated. This project has been wrong about "meant to
 be" several times.
 
+IT MEASURES THE REFERENCE LEVELS TOO, for the same reason and off the same
+bars. entry_ref and stop_ref are the collector's raw live pm_high and pm_low,
+which are the extremes of a sample that carried a median 0.0296 of the tape. A
+sample understates a maximum and overstates a minimum, so entry_ref sits below
+the true premarket high and stop_ref sits above the true premarket low.
+
+THOSE TWO BIASES POINT IN OPPOSITE DIRECTIONS once they reach the excursions.
+mfe_pct measures up from entry_ref, so too low an entry_ref makes the
+favourable excursion look bigger than it was. mae_pct measures down from
+stop_ref, so too high a stop_ref makes the adverse excursion look deeper than
+it was. The record flatters its upside and overstates its downside at once, and
+whether the two cancel, and by how much, is not knowable without measuring it.
+entry_ref_true and stop_ref_true are the same references over the same window
+off the whole tape, written beside the sampled pair and never over it, because
+the gap between the pairs IS the measurement.
+
     PYTHONPATH=src .venv/Scripts/python.exe -m night.true_volume
     PYTHONPATH=src .venv/Scripts/python.exe -m night.true_volume --date 2026-08-21
     PYTHONPATH=src .venv/Scripts/python.exe -m night.true_volume --dry-run
@@ -91,7 +107,18 @@ def _window(day: dt.date, cutoff_hhmm: str,
 def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
                  start: dt.datetime, end: dt.datetime,
                  ) -> tuple[dict[str, dict[str, Any]], str | None]:
-    """(per symbol volume and bar count, error). One window, all symbols.
+    """(per symbol path over the window, error). One window, all symbols.
+
+    Each entry carries volume, bar count, the high, the low and a volume
+    weighted price sum. The three price fields cost one comparison per bar over
+    bars that are being walked anyway, and they are what reference_level below
+    turns into entry_ref_true and stop_ref_true. Fetching them separately would
+    double the request count to answer a question these bars already answer.
+
+    THE EXTREMES ARE NULL, NOT ZERO, when nothing parsed. A high of 0.0 on a
+    window with no readable bar would be a fabricated level in the column a
+    reader is being invited to trust over the collector's, which is the exact
+    failure this module exists to stop one level up.
 
     Paged and batched. A page token still outstanding at the page cap is an
     INCOMPLETE fetch and is returned as an error rather than as a total,
@@ -102,7 +129,8 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
     max_pages = _CRIT.integer("truth", "max_pages_per_request")
     feed = _CRIT.text("truth", "feed")
     out: dict[str, dict[str, Any]] = {
-        symbol: {"volume": 0.0, "bars": 0} for symbol in symbols}
+        symbol: {"volume": 0.0, "bars": 0, "high": None, "low": None,
+                 "price_volume": 0.0} for symbol in symbols}
 
     for index in range(0, len(symbols), batch_size):
         chunk = symbols[index:index + batch_size]
@@ -128,8 +156,28 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
                 if symbol not in out:
                     continue
                 for row in rows or []:
-                    out[symbol]["volume"] += float(row.get("v") or 0)
-                    out[symbol]["bars"] += 1
+                    held = out[symbol]
+                    volume = float(row.get("v") or 0)
+                    held["volume"] += volume
+                    held["bars"] += 1
+                    high, low = _as_float(row.get("h")), _as_float(row.get("l"))
+                    if high is not None:
+                        held["high"] = (high if held["high"] is None
+                                        else max(held["high"], high))
+                    if low is not None:
+                        held["low"] = (low if held["low"] is None
+                                       else min(held["low"], low))
+                    # The vendor publishes a per bar VWAP. It is used where it
+                    # is there and hlc3 stands in where it is not, which is the
+                    # same proxy backfill_premarket builds off EODHD bars that
+                    # carry no vw field at all.
+                    typical = _as_float(row.get("vw"))
+                    if typical is None and high is not None and low is not None:
+                        close = _as_float(row.get("c"))
+                        if close is not None:
+                            typical = (high + low + close) / 3.0
+                    if typical is not None:
+                        held["price_volume"] += typical * volume
             token = (payload or {}).get("next_page_token")
             if not token:
                 break
@@ -225,6 +273,57 @@ def _ratio(top: float | None, bottom: float | None) -> float | None:
     if top is None or not bottom:
         return None
     return round(top / bottom, 6)
+
+
+# The three field names scan.write_picks allows for entry_ref_field and
+# stop_ref_field. Repeated here rather than imported for the reason usable_float
+# gives: importing scan pulls discover, universe, vintage, baseline and the
+# collector into a night job that needs none of them.
+REFERENCE_FIELDS = ("pm_high", "pm_low", "pm_vwap")
+
+
+def reference_level(path: dict[str, Any], field: str) -> float | None:
+    """One reference level off one fetched window, under one configured field.
+
+    THE FIELD NAME IS READ, NEVER ASSUMED. [Picks] entry_ref_field and
+    stop_ref_field are configuration, and the whole worth of entry_ref_true is
+    that it is the SAME reference over the SAME window off a complete tape. A
+    pair hard coded to high and low here would go on being written, silently
+    and wrongly named, the day either key moved to pm_vwap, and the column that
+    exists to measure a bias would then be measuring a different level.
+
+    Null rather than zero on an empty window, and null rather than a fallback
+    to another field on an unusable one. A level that was never observed is not
+    a level, which is the sentence scan.write_picks already applies to
+    entry_ref itself.
+    """
+    if field not in REFERENCE_FIELDS:
+        raise criteria.CriteriaError(
+            f"picks reference field {field!r} is not one of "
+            f"{sorted(REFERENCE_FIELDS)}, so there is no true level to measure "
+            "against it")
+    if not path.get("bars"):
+        return None
+    if field == "pm_high":
+        value = path.get("high")
+    elif field == "pm_low":
+        value = path.get("low")
+    else:
+        volume = path.get("volume") or 0.0
+        value = (path["price_volume"] / volume) if volume else None
+    return round(value, 4) if value is not None else None
+
+
+def reference_fields() -> tuple[str, str]:
+    """(entry field, stop field), validated once before any row is written."""
+    entry = _CRIT.text("picks", "entry_ref_field")
+    stop = _CRIT.text("picks", "stop_ref_field")
+    for field in (entry, stop):
+        if field not in REFERENCE_FIELDS:
+            raise criteria.CriteriaError(
+                f"picks reference field {field!r} is not one of "
+                f"{sorted(REFERENCE_FIELDS)}")
+    return entry, stop
 
 
 def _only_failure_was_volume(candidate: dict[str, Any]) -> tuple[bool, bool]:
@@ -495,8 +594,8 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     with store.session() as connection:
         store.init(connection)
         rows = connection.execute(
-            "SELECT ticker, pm_volume, pm_volume_estimated FROM picks "
-            "WHERE date=? AND source='live' ORDER BY ticker", (day,),
+            "SELECT ticker, pm_volume, pm_volume_estimated, entry_ref, stop_ref "
+            "FROM picks WHERE date=? AND source='live' ORDER BY ticker", (day,),
         ).fetchall()
     tickers = [row["ticker"] for row in rows]
     if not tickers:
@@ -522,6 +621,9 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     history, sessions_used = prior_sessions(probe, symbols, session_day, cutoff)
 
     min_bars = _CRIT.integer("truth", "min_true_bars")
+    # Validated before the loop rather than inside it, so a bad key fails the
+    # whole pass loudly instead of writing eleven good rows and then raising.
+    entry_field, stop_field = reference_fields()
     window_text = f"{start.strftime('%H:%M')}-{cutoff}"
     stamp = ettime.stamp(ettime.now_et())
     source = f"{_CRIT.text('truth', 'source')}-{_CRIT.text('truth', 'feed')}"
@@ -538,6 +640,10 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
             "_estimated": row["pm_volume_estimated"]
                           if row["pm_volume_estimated"] is not None
                           else fallback.get("pm_volume_estimated"),
+            # The morning's own sampled pair, carried for the printout and the
+            # gap arithmetic. Never written back: this pass writes BESIDE the
+            # morning and never over it, which is what the underscore marks.
+            "_entry_ref": row["entry_ref"], "_stop_ref": row["stop_ref"],
             "ticker": ticker, "true_window": window_text,
             "truth_source": source, "truth_at": stamp,
             "true_bars": found["bars"] or None,
@@ -547,17 +653,35 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
             "capture_observed": None, "estimate_error": None,
             "true_volume_socket_window": None, "collector_window_share": None,
             "truth_reason": None,
+            "entry_ref_true": None, "stop_ref_true": None,
+            "entry_ref_collector_window": None,
+            "stop_ref_collector_window": None,
+            "refs_true_reason": None,
         }
         if error:
             record["truth_reason"] = error
+            record["refs_true_reason"] = error
             out.append(record)
             continue
         if found["bars"] < min_bars:
-            record["truth_reason"] = (
-                f"alpaca returned {found['bars']} bars inside {window_text}, "
-                f"below [Truth] min_true_bars of {min_bars}")
+            reason = (f"alpaca returned {found['bars']} bars inside "
+                      f"{window_text}, below [Truth] min_true_bars of {min_bars}")
+            record["truth_reason"] = reason
+            record["refs_true_reason"] = reason
             out.append(record)
             continue
+
+        # The true references, gated on the same bar count as the volume below
+        # and written whether or not the baseline or the float turns out to be
+        # usable. They need neither: a high and a low are read off the window
+        # itself, so a row with no baseline still carries a measured pair.
+        record["entry_ref_true"] = reference_level(found, entry_field)
+        record["stop_ref_true"] = reference_level(found, stop_field)
+        if record["entry_ref_true"] is None or record["stop_ref_true"] is None:
+            record["refs_true_reason"] = (
+                f"alpaca returned {found['bars']} bars inside {window_text} and "
+                f"none of them carried a readable {entry_field}/{stop_field} "
+                "pair, so the level is null rather than a zero")
 
         true_volume = found["volume"]
         record["pm_volume_true"] = round(true_volume, 2)
@@ -590,6 +714,15 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
         record["true_volume_socket_window"] = (
             round(socket_true, 2) if socket_true is not None else None)
         record["collector_window_share"] = _ratio(socket_true, true_volume)
+        # The same two levels over the socket's OWN window. Full against this
+        # is what the 04:00 to 07:20 stretch costs; this against the live level
+        # is the sampling. Conflating them is the error backfill_premarket's
+        # docstring records having made and had to correct.
+        if in_socket_window.get("bars"):
+            record["entry_ref_collector_window"] = reference_level(
+                in_socket_window, entry_field)
+            record["stop_ref_collector_window"] = reference_level(
+                in_socket_window, stop_field)
         record["capture_observed"] = _ratio(record["_socket"], socket_true)
         record["estimate_error"] = _ratio(record["_estimated"], true_volume)
         if socket_error and not record["truth_reason"]:
@@ -708,6 +841,28 @@ def report(result: dict[str, Any]) -> None:
         print(f"truth: {len(shares) - len(outside)} of {len(shares)} symbols "
               f"captured LESS than the shipped {shipped}, so the morning "
               "divided by too large a share and understated them")
+    pairs = [r for r in rows
+             if r["_entry_ref"] and r["entry_ref_true"] is not None]
+    if pairs:
+        print(f"  {'ticker':<10} {'entry_ref':>12} {'entry TRUE':>12} "
+              f"{'gap %':>9} {'stop_ref':>12} {'stop TRUE':>12} {'gap %':>9}")
+        for record in pairs:
+            entry_gap = ((record["entry_ref_true"] - record["_entry_ref"])
+                         / record["_entry_ref"] * 100.0)
+            stop_gap = (((record["stop_ref_true"] - record["_stop_ref"])
+                         / record["_stop_ref"] * 100.0)
+                        if record["_stop_ref"] and record["stop_ref_true"]
+                        is not None else None)
+            print(f"  {record['ticker']:<10} {record['_entry_ref']:>12} "
+                  f"{record['entry_ref_true']:>12} {entry_gap:>+8.3f}% "
+                  f"{record['_stop_ref'] if record['_stop_ref'] is not None else 'null':>12} "
+                  f"{record['stop_ref_true'] if record['stop_ref_true'] is not None else 'null':>12} "
+                  f"{f'{stop_gap:+.3f}%' if stop_gap is not None else 'null':>9}")
+    for record in rows:
+        if record["refs_true_reason"] and not record["truth_reason"]:
+            print(f"  {record['ticker']}: no true reference level. "
+                  f"{record['refs_true_reason']}")
+
     windows = sorted(r["collector_window_share"] for r in rows
                      if r["collector_window_share"] is not None)
     if windows:
@@ -716,6 +871,82 @@ def report(result: dict[str, Any]) -> None:
               f"range {windows[0]:.4f} to {windows[-1]:.4f}. That is the OTHER "
               "lower bound, the one called arithmetic since 2026-08-14 and "
               "never measured until now")
+
+
+def _spread(values: list[float]) -> str:
+    """median, then the range, for a list nobody has checked is non empty."""
+    ordered = sorted(values)
+    return (f"median {statistics.median(ordered):+.3f}%, "
+            f"range {ordered[0]:+.3f}% to {ordered[-1]:+.3f}%")
+
+
+def reference_gap_report() -> None:
+    """How far the sampled reference levels sit from the measured ones.
+
+    THE WHOLE TABLE, not tonight's session, because one morning of twelve
+    correlated names is one observation and this number is meant to stand as
+    the project's standing estimate of a bias. Both denominators are printed
+    for the reason fill_outcomes prints both: rows are not observations.
+
+    Three quantities, and keeping them apart is the point.
+
+      full     (entry_ref_true - entry_ref) / entry_ref, the whole gap, which
+               is what actually reaches mfe_pct.
+      sampling (entry_ref_collector_window - entry_ref) / entry_ref, the part
+               inside the minutes the socket was listening to. This is the
+               only one of the three that is a statement about the FEED.
+      window   (entry_ref_true - entry_ref_collector_window) / that, the part
+               that comes from the collector starting at 07:20 rather than
+               04:00. A start time question, not a feed question.
+
+    Reported in both directions and never as a correction. The sampled columns
+    stay exactly as the morning wrote them.
+    """
+    with store.session() as connection:
+        store.init(connection)
+        rows = [dict(row) for row in connection.execute(
+            "SELECT date, ticker, entry_ref, stop_ref, entry_ref_true, "
+            "stop_ref_true, entry_ref_collector_window, "
+            "stop_ref_collector_window FROM picks WHERE source='live' "
+            "AND entry_ref IS NOT NULL AND entry_ref_true IS NOT NULL")]
+    if not rows:
+        print("truth: no live row carries both a sampled and a measured "
+              "entry_ref, so the reference gap is not yet computable")
+        return
+
+    sessions = len({row["date"] for row in rows})
+    entry_full = [(r["entry_ref_true"] - r["entry_ref"]) / r["entry_ref"] * 100.0
+                  for r in rows if r["entry_ref"]]
+    print("")
+    print(f"truth: THE REFERENCE GAP, over {len(entry_full)} live rows across "
+          f"{sessions} session(s). The sample unit is the session.")
+    print(f"  entry_ref  measured against sampled: {_spread(entry_full)}")
+    stop_rows = [r for r in rows
+                 if r["stop_ref"] and r["stop_ref_true"] is not None]
+    if stop_rows:
+        stop_full = [(r["stop_ref_true"] - r["stop_ref"]) / r["stop_ref"] * 100.0
+                     for r in stop_rows]
+        print(f"  stop_ref   measured against sampled: {_spread(stop_full)}")
+
+    split = [r for r in rows if r["entry_ref"]
+             and r["entry_ref_collector_window"]]
+    if not split:
+        print("  no row carries entry_ref_collector_window, so the sampling "
+              "and window halves of that gap cannot be separated yet")
+    else:
+        sampling = [(r["entry_ref_collector_window"] - r["entry_ref"])
+                    / r["entry_ref"] * 100.0 for r in split]
+        window = [(r["entry_ref_true"] - r["entry_ref_collector_window"])
+                  / r["entry_ref_collector_window"] * 100.0 for r in split]
+        print(f"  of which sampling, inside the socket's own minutes: "
+              f"{_spread(sampling)}")
+        print(f"  of which the 04:00 to 07:20 start:                 "
+              f"{_spread(window)}")
+    print("  A positive entry gap means the true premarket high ran ABOVE the "
+          "level the collector saw, which is the direction mfe_pct is "
+          "overstated by. A negative stop gap means the true low ran BELOW "
+          "stop_ref, which is the direction mae_pct is overstated by. The two "
+          "do not cancel by construction and neither column is corrected.")
 
 
 # The exit codes that mean this step did its job. Declared at module level so
@@ -747,6 +978,11 @@ def main(argv: list[str] | None = None) -> int:
     result = measure(day, dry_run=args.dry_run)
     written = write(result)
     report(result)
+    # Reads the whole table rather than tonight's rows, so it stands as the
+    # project's estimate of the bias rather than as one morning's. Printed
+    # after the write so tonight's session is in it.
+    if not args.dry_run:
+        reference_gap_report()
     job_status.produced("rows given a true volume", written)
     return 0
 

@@ -7551,6 +7551,322 @@ def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
           "writes beside the morning rather than over it")
 
 
+def claim_the_true_reference_reads_the_field_the_criteria_names(
+        failures: list[str]) -> None:
+    """entry_ref_true is the SAME reference as entry_ref, over a whole tape.
+
+    [Picks] entry_ref_field and stop_ref_field are configuration, constrained
+    to pm_high, pm_low and pm_vwap. The worth of entry_ref_true is that it is
+    the same level over the same window read off a complete tape rather than a
+    socket sample, so the rule that picks it has to be the same rule. A pair
+    hard coded to high and low would go on being written, silently and wrongly
+    named, the day either key moved, and the column that exists to measure a
+    bias would then be measuring a different level.
+
+    AND AN EMPTY WINDOW IS NULL, NOT ZERO. A high of 0.0 on a window with no
+    bar is a fabricated level in the column a reader is being invited to trust
+    over the collector's, which is this project's worst defect class written
+    one layer down: a missing answer read as a measured one.
+    """
+    from core import criteria
+    from night import true_volume as _truth
+
+    # 3,000 shares at 10, 1,000 at 20. The volume weighted price is 12.5, which
+    # no unweighted average of these bars produces, so a mean standing in for a
+    # VWAP cannot pass this.
+    path = {"bars": 2, "volume": 4000.0, "high": 21.0, "low": 9.0,
+            "price_volume": 3000.0 * 10.0 + 1000.0 * 20.0}
+    for field, expected in (("pm_high", 21.0), ("pm_low", 9.0),
+                            ("pm_vwap", 12.5)):
+        got = _truth.reference_level(path, field)
+        if got != expected:
+            failures.append(
+                f"reference_level read {field!r} as {got!r}, not {expected}. "
+                "The field name is configuration and reading a different one "
+                "writes a level under a name it does not have")
+
+    empty = {"bars": 0, "volume": 0.0, "high": None, "low": None,
+             "price_volume": 0.0}
+    for field in _truth.REFERENCE_FIELDS:
+        got = _truth.reference_level(empty, field)
+        if got is not None:
+            failures.append(
+                f"a window with no bars produced {field} {got!r} rather than "
+                "null. Zero and no measurement are different facts")
+
+    try:
+        _truth.reference_level(path, "pm_close")
+    except criteria.CriteriaError:
+        pass
+    else:
+        failures.append(
+            "reference_level accepted a field scan.write_picks would refuse, "
+            "so the two ends of the comparison can drift apart silently")
+
+    # And the module's own reader of the criteria agrees with the shipped keys.
+    entry, stop = _truth.reference_fields()
+    crit = criteria.load()
+    if (entry, stop) != (crit.text("picks", "entry_ref_field"),
+                         crit.text("picks", "stop_ref_field")):
+        failures.append(
+            f"reference_fields returned {(entry, stop)!r}, which is not what "
+            "[Picks] says. The night would then measure a level the morning "
+            "never recorded")
+    print("  true refs    the measured reference reads the configured field, "
+          "refuses an unknown one, and is null rather than zero on an empty "
+          "window")
+
+
+def claim_the_true_reference_pair_is_kept_apart_from_the_sampled_one(
+        failures: list[str]) -> None:
+    """The measured levels land beside entry_ref and stop_ref, never over them.
+
+    Three things, and the third is the one that was easy to get wrong.
+
+    entry_ref_true is the extreme over the FULL premarket window and
+    entry_ref_collector_window is the extreme over the socket's own minutes.
+    Collapsing them to one column would fold the collector's 07:20 start into a
+    number that reads as the sampling shortfall, and those are two different
+    shortfalls with two different fixes. backfill_premarket's docstring records
+    this project making exactly that conflation for pm_high_true and having to
+    correct it.
+
+    The sampled pair is not touched. The gap between the pairs IS the
+    measurement, and a corrected column with the original discarded could not
+    state it.
+
+    And refs_true_reason is its OWN column rather than a share of truth_reason.
+    truth_reason is first wins across the volume side, so a refused float would
+    otherwise stand as the recorded explanation for a missing reference level,
+    which is a true sentence about the wrong column.
+    """
+    import json as _json
+
+    from core import config, store
+    from night import true_volume as _truth
+
+    class Fake:
+        """Canned bars per window. Prices differ between the two windows."""
+
+        def __init__(self, by_window):
+            self.by_window = by_window
+            self.request_count = 0
+
+        def get(self, params):
+            self.request_count += 1
+            key = (params["start"][11:16], params["end"][11:16])
+            bars = self.by_window.get(key, {})
+            return 200, {"bars": {s: rows for s, rows in bars.items()}}, 0.0
+
+    day = "2026-08-21"
+    with conftest.isolated_store():
+        with store.session() as connection:
+            store.init(connection)
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": day, "ticker": "AAA.US", "source": "live",
+                "pm_volume": 1000.0, "entry_ref": 11.0, "stop_ref": 10.0,
+            })
+            connection.commit()
+
+        run_dir = config.run_dir(day)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        # The float is deliberately unusable. A refused float must null the
+        # rotation and NOTHING else, and must not become the recorded reason
+        # the reference level is missing, because the reference level is here.
+        (run_dir / "packet.json").write_text(_json.dumps({
+            "session_date": day, "rvol_cutoff_hhmm": "08:45",
+            "candidates": [{"symbol": "AAA.US",
+                            "quote": {"sharesFloat": None}}],
+        }), encoding="utf-8")
+
+        # The full window reaches 12.0 and 9.0; the socket's own minutes only
+        # 11.5 and 9.5. Four distinct numbers, so no column can borrow another.
+        probe = Fake({
+            ("04:00", "08:45"): {"AAA": [{"v": 600.0, "h": 12.0, "l": 11.0,
+                                          "c": 11.5, "vw": 11.5},
+                                         {"v": 400.0, "h": 10.0, "l": 9.0,
+                                          "c": 9.5, "vw": 9.5}]},
+            ("07:20", "08:45"): {"AAA": [{"v": 300.0, "h": 11.5, "l": 9.5,
+                                          "c": 10.0, "vw": 10.0}]},
+        })
+        result = _truth.measure(day, probe=probe)
+        row = {r["ticker"]: r for r in result["rows"]}["AAA.US"]
+
+        for column, expected, why in (
+                ("entry_ref_true", 12.0,
+                 "the high of the FULL premarket window"),
+                ("stop_ref_true", 9.0,
+                 "the low of the FULL premarket window"),
+                ("entry_ref_collector_window", 11.5,
+                 "the high of the SOCKET'S OWN window"),
+                ("stop_ref_collector_window", 9.5,
+                 "the low of the SOCKET'S OWN window")):
+            if row[column] != expected:
+                failures.append(
+                    f"{column} is {row[column]!r}, not {expected}, which is "
+                    f"{why}. Full against collector window is what the 04:00 "
+                    "start costs and collector window against the live level "
+                    "is the sampling; one column cannot carry both")
+
+        if row["refs_true_reason"] is not None:
+            failures.append(
+                f"a measured reference pair still carries a reason: "
+                f"{row['refs_true_reason']!r}")
+        if not row["truth_reason"] or "float" not in row["truth_reason"]:
+            failures.append(
+                "the refused float left no reason on the row, so a null "
+                f"rotation cannot be told from a pass that never ran: {row!r}")
+
+        _truth.write(result)
+        with store.session() as connection:
+            after = dict(connection.execute(
+                "SELECT entry_ref, stop_ref, entry_ref_true, stop_ref_true "
+                "FROM picks WHERE date=? AND ticker=?",
+                (day, "AAA.US")).fetchone())
+        if (after["entry_ref"], after["stop_ref"]) != (11.0, 10.0):
+            failures.append(
+                f"the morning's sampled pair became {after!r}. The night writes "
+                "BESIDE the morning and never over it, and the gap between the "
+                "two pairs is the whole measurement")
+        if (after["entry_ref_true"], after["stop_ref_true"]) != (12.0, 9.0):
+            failures.append(f"the measured pair never reached the table: {after!r}")
+
+        # A window the feed refused nulls the pair WITH a reason of its own.
+        blank = _truth.measure(day, probe=Fake({}))
+        empty = {r["ticker"]: r for r in blank["rows"]}["AAA.US"]
+        if empty["entry_ref_true"] is not None:
+            failures.append(
+                f"a window with no bars produced entry_ref_true "
+                f"{empty['entry_ref_true']!r} rather than null")
+        if not empty["refs_true_reason"]:
+            failures.append(
+                "a null reference pair carries no reason of its own, so it "
+                "cannot be told from a pass that never reached the row")
+    print("  ref beside   the measured pair lands beside the sampled one, the "
+          "two windows stay in separate columns, and a refused float is not "
+          "read as the reason a level is missing")
+
+
+def claim_the_true_excursion_never_borrows_the_sampled_reference(
+        failures: list[str]) -> None:
+    """mfe_pct_true is null where the measured level is, never the old number.
+
+    A row night/true_volume could not reach has no entry_ref_true, and the
+    tempting repair is to fall back to entry_ref so the column is populated.
+    That would put the number this column exists to be COMPARED AGAINST into
+    the column doing the comparing, and the gap it is supposed to measure would
+    read as zero on exactly the rows where it is unknown. Same shape as the
+    off exchange counter and the socket cap reading: a missing answer wearing a
+    measured one's clothes.
+
+    Also asserted: the pass is idempotent, it needs no vendor call, and it
+    reaches rows whose short leg filled before these columns existed. That last
+    one is why it is not a branch of fill(), whose candidate query selects on
+    next_day_close being null and so can never see them.
+    """
+    from core import store
+    from night import fill_outcomes
+
+    day = "2026-07-13"
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            store.ensure_columns(connection, "picks",
+                                 fill_outcomes._OUTCOME_COLUMNS)
+            # MEASURED: the true levels are there, and both differ from the
+            # sampled pair, so an excursion taken against the wrong one is
+            # visible rather than coincidentally equal.
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, entry_ref, stop_ref, "
+                "entry_ref_true, stop_ref_true, next_day_high, next_day_low, "
+                "mfe_pct, mae_pct) VALUES (?,?,'live',?,?,?,?,?,?,?,?)",
+                (day, "AAA.US", 10.0, 9.0, 12.5, 8.0, 11.0, 8.5,
+                 10.0, -5.5555))
+            # UNREACHED: no true pair. The row keeps nulls.
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, entry_ref, stop_ref, "
+                "next_day_high, next_day_low, mfe_pct, mae_pct, "
+                "refs_true_reason) VALUES (?,?,'live',?,?,?,?,?,?,?)",
+                (day, "BBB.US", 10.0, 9.0, 11.0, 8.5, 10.0, -5.5555,
+                 "alpaca returned 0 bars inside 04:00-08:45"))
+            # REFUSED for a corporate action. The refusal is about price units
+            # and applies to whichever reference the excursion is measured from.
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, entry_ref, stop_ref, "
+                "entry_ref_true, stop_ref_true, next_day_high, next_day_low, "
+                "next_day_refused_reason) VALUES (?,?,'live',?,?,?,?,?,?,?)",
+                (day, "CCC.US", 10.0, 9.0, 12.5, 8.0, 11.0, 8.5,
+                 "the vendor's split adjustment factor moved 74 percent"))
+            # A TEST row. Outcome math never sees these.
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, entry_ref, stop_ref, "
+                "entry_ref_true, stop_ref_true, next_day_high, next_day_low) "
+                "VALUES (?,?,'test',?,?,?,?,?,?)",
+                (day, "DDD.US", 10.0, 9.0, 12.5, 8.0, 11.0, 8.5))
+            connection.commit()
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            first = fill_outcomes.fill_true_excursions()
+            second = fill_outcomes.fill_true_excursions()
+
+        with store.session() as connection:
+            rows = {row["ticker"]: dict(row) for row in connection.execute(
+                "SELECT ticker, mfe_pct, mae_pct, mfe_pct_true, mae_pct_true "
+                "FROM picks WHERE date=?", (day,)).fetchall()}
+
+        aaa = rows["AAA.US"]
+        # 11.0 against a measured 12.5 is -12.0 percent. Against the sampled
+        # 10.0 it is +10.0, which is the number already in mfe_pct, so a
+        # fallback to entry_ref here would be invisible in a weaker fixture.
+        if aaa["mfe_pct_true"] != -12.0:
+            failures.append(
+                f"mfe_pct_true is {aaa['mfe_pct_true']!r}, not -12.0. The "
+                "measured entry_ref_true is 12.5 and the next session's high "
+                "was 11.0, so the name never reached the true premarket high")
+        if aaa["mae_pct_true"] != 6.25:
+            failures.append(
+                f"mae_pct_true is {aaa['mae_pct_true']!r}, not 6.25. The "
+                "measured stop_ref_true is 8.0 and the next session's low was "
+                "8.5, so the true premarket low was never undercut")
+        if (aaa["mfe_pct"], aaa["mae_pct"]) != (10.0, -5.5555):
+            failures.append(
+                f"the sampled excursions changed to {aaa!r}. They are kept "
+                "because the difference between the pairs is the measurement")
+
+        bbb = rows["BBB.US"]
+        if bbb["mfe_pct_true"] is not None or bbb["mae_pct_true"] is not None:
+            failures.append(
+                f"a row with no measured reference got excursions anyway: "
+                f"{bbb!r}. Falling back to entry_ref puts the number being "
+                "compared against into the column doing the comparing, and the "
+                "gap reads as zero on exactly the rows where it is unknown")
+
+        ccc = rows["CCC.US"]
+        if ccc["mfe_pct_true"] is not None or ccc["mae_pct_true"] is not None:
+            failures.append(
+                f"a row refused for a corporate action was measured anyway: "
+                f"{ccc!r}. The two sides are in different price units whichever "
+                "reference the excursion is taken from")
+
+        if rows["DDD.US"]["mfe_pct_true"] is not None:
+            failures.append("a source='test' row was given a true excursion")
+
+        if first != 1 or second != 0:
+            failures.append(
+                f"the pass wrote {first} row(s) then {second}; it is meant to "
+                "write the one reachable row and then find nothing left. A "
+                "second run straight after the first must change nothing")
+        if "EODHD" in printed.getvalue() or "http" in printed.getvalue():
+            failures.append(
+                "the true excursion pass reached a vendor. It is arithmetic on "
+                "columns already in the row and must not sit behind a query "
+                "that exists to ration requests")
+    print("  true excur   the measured excursion is null where the measured "
+          "reference is, refuses a repriced row, and a second run changes "
+          "nothing")
+
+
 def claim_the_weekly_page_reads_and_renders_and_nothing_else(
         failures: list[str]) -> None:
     """A reporting layer that fetches is a second pipeline to keep right.
@@ -9279,6 +9595,9 @@ def main() -> int:
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
     claim_the_prune_deletes_only_what_its_whitelist_names(failures)
     claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(failures)
+    claim_the_true_reference_reads_the_field_the_criteria_names(failures)
+    claim_the_true_reference_pair_is_kept_apart_from_the_sampled_one(failures)
+    claim_the_true_excursion_never_borrows_the_sampled_reference(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_a_claim_cannot_reach_the_live_database(failures)
     claim_the_two_unrebuildable_artifacts_are_held_twice(failures)

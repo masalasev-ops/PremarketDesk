@@ -46,6 +46,15 @@ _OUTCOME_COLUMNS = (
     ("pm_high_broke_next_day", "INTEGER"),
     ("mfe_pct", "REAL"),
     ("mae_pct", "REAL"),
+    # The same two excursions against the reference levels night/true_volume.py
+    # measured off the full SIP tape, rather than the ones the collector
+    # sampled. See fill_true_excursions below and CRITERIA [Outcomes]. Written
+    # beside, never over: the gap between the pairs is what says how much the
+    # sampled record has been flattering its upside and overstating its
+    # downside, and a corrected column with the original thrown away could not
+    # say it.
+    ("mfe_pct_true", "REAL"),
+    ("mae_pct_true", "REAL"),
     ("outcomes_filled_at", "TEXT"),
 )
 
@@ -408,6 +417,119 @@ def fill(day_limit: str | None = None) -> int:
     return 0
 
 
+def fill_true_excursions() -> int:
+    """mfe_pct_true and mae_pct_true. Arithmetic only, no vendor call.
+
+    THE SAME TWO SUBTRACTIONS the short leg above performs, against the
+    reference levels night/true_volume.py measured off Alpaca's full SIP tape
+    instead of the ones the collector sampled. entry_ref is the extreme of a
+    socket sample that carried a median 0.0296 of the tape, so it sits below
+    the true premarket high, and mfe_pct measured up from it is overstated.
+    stop_ref sits above the true premarket low, and mae_pct measured down from
+    it is overstated too. The two point opposite ways as a judgement, which is
+    exactly why both are computed rather than one being argued about.
+
+    A SEPARATE PASS, not a branch of fill(), for two reasons. It needs no
+    network call at all, so it must not sit behind a candidate query that
+    exists to ration end of day requests. And that query selects on
+    next_day_close being null, so a row whose short leg filled before these
+    columns existed is never re-selected and would never have been measured;
+    every such row is in the table today.
+
+    Idempotent: a row is written only where an output is still null and both
+    its inputs are present, so a second run straight after the first finds
+    nothing and changes nothing.
+
+    NO FALLBACK TO THE SAMPLED PAIR. A row true_volume could not reach keeps
+    null excursions, and refs_true_reason on the same row says why. Substituting
+    entry_ref there would put a column named _true in the table holding the
+    number it exists to be compared against, which is the defect this project
+    has now caught under four other names.
+    """
+    with store.session() as connection:
+        store.init(connection)
+        store.ensure_columns(connection, "picks", _OUTCOME_COLUMNS)
+        # next_day_refused_reason IS NULL keeps the corporate action refusal.
+        # A refused row has null next_day_high anyway so the arithmetic could
+        # not run, but the condition is stated rather than relied on: the
+        # refusal is a rule about price units and it applies to whichever
+        # reference the excursion is measured from.
+        rows = [dict(row) for row in connection.execute(
+            "SELECT date, ticker, next_day_high, next_day_low, entry_ref_true, "
+            "stop_ref_true FROM picks WHERE source='live' "
+            "AND next_day_refused_reason IS NULL AND ("
+            "  (mfe_pct_true IS NULL AND next_day_high IS NOT NULL "
+            "   AND entry_ref_true IS NOT NULL)"
+            "  OR (mae_pct_true IS NULL AND next_day_low IS NOT NULL "
+            "      AND stop_ref_true IS NOT NULL))"
+            " ORDER BY date, ticker")]
+
+        written = 0
+        for row in rows:
+            updates: dict[str, Any] = {}
+            entry, stop = row["entry_ref_true"], row["stop_ref_true"]
+            if entry and row["next_day_high"] is not None:
+                updates["mfe_pct_true"] = round(
+                    (row["next_day_high"] - entry) / entry * 100.0, 4)
+            if stop and row["next_day_low"] is not None:
+                updates["mae_pct_true"] = round(
+                    (row["next_day_low"] - stop) / stop * 100.0, 4)
+            if not updates:
+                continue
+            assignments = ", ".join(f"{column}=?" for column in updates)
+            connection.execute(
+                f"UPDATE picks SET {assignments} WHERE date=? AND ticker=?",
+                [*updates.values(), row["date"], row["ticker"]])
+            written += 1
+        connection.commit()
+    print(f"outcomes: {written} row(s) given a true excursion")
+    excursion_gap_report()
+    return written
+
+
+def _median(values: list[float]) -> float:
+    return sorted(values)[len(values) // 2]
+
+
+def excursion_gap_report() -> None:
+    """What the sampled references cost the excursion record, both directions.
+
+    Over the WHOLE table, and both denominators printed, because twelve names
+    from one morning share a tape and are one observation. This is a
+    measurement of a bias, not a result, and it names no threshold.
+    """
+    with store.session() as connection:
+        rows = [dict(row) for row in connection.execute(
+            "SELECT date, mfe_pct, mfe_pct_true, mae_pct, mae_pct_true "
+            "FROM picks WHERE source='live' AND ("
+            "(mfe_pct IS NOT NULL AND mfe_pct_true IS NOT NULL) OR "
+            "(mae_pct IS NOT NULL AND mae_pct_true IS NOT NULL))")]
+    if not rows:
+        print("outcomes: no live row carries both a sampled and a true "
+              "excursion yet, so the gap between them is not computable")
+        return
+    sessions = len({row["date"] for row in rows})
+    favourable = [(r["mfe_pct"], r["mfe_pct_true"]) for r in rows
+                  if r["mfe_pct"] is not None and r["mfe_pct_true"] is not None]
+    adverse = [(r["mae_pct"], r["mae_pct_true"]) for r in rows
+               if r["mae_pct"] is not None and r["mae_pct_true"] is not None]
+    print(f"outcomes: THE EXCURSION GAP, across {sessions} session(s). The "
+          "sample unit is the session.")
+    for label, pairs in (("favourable", favourable), ("adverse", adverse)):
+        if not pairs:
+            print(f"  {label:<11} no row carries both halves")
+            continue
+        sampled = _median([p[0] for p in pairs])
+        measured = _median([p[1] for p in pairs])
+        drift = _median([p[1] - p[0] for p in pairs])
+        print(f"  {label:<11} n={len(pairs):<4} median sampled {sampled:+.4f}%, "
+              f"median measured {measured:+.4f}%, median row by row "
+              f"difference {drift:+.4f} points")
+    print("  Measured is the honest number. Sampled is what the record has "
+          "carried, and it is kept because the difference between them is "
+          "itself the measurement of the feed.")
+
+
 # The exit codes that mean this step did its job. Declared at module level so
 # the __main__ line below and the entrypoint test harness read the same value:
 # a literal inside __main__ is invisible to a harness that imports the module
@@ -420,7 +542,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--before", metavar="YYYY-MM-DD", default=None,
                         help="Only consider picks dated on or before this date.")
     args = parser.parse_args(argv)
-    return fill(args.before)
+    code = fill(args.before)
+    # After the end of day fill, so tonight's newly written next_day_high and
+    # next_day_low are in it. It spends no vendor call, so it runs even on a
+    # night fill() had nothing to do: the rows it reaches are mostly ones whose
+    # short leg filled long before these columns existed.
+    #
+    # Deliberately NOT calling job_status.produced. The last call before exit
+    # is the one recorded, and the number the watchdog reads for this step is
+    # picks filled, not a backfill count that will be zero every night once it
+    # has caught up.
+    fill_true_excursions()
+    return code
 
 
 if __name__ == "__main__":

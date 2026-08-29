@@ -153,6 +153,44 @@ _PICKS_LATER_COLUMNS = (
     # measurement of the feed, and the two have different fixes.
     ("true_volume_socket_window", "REAL"),
     ("collector_window_share", "REAL"),
+    # THE REFERENCE LEVELS AS THE WHOLE TAPE HAD THEM, written by
+    # night/true_volume.py off the same Alpaca bars as the columns above.
+    #
+    # entry_ref and stop_ref are pm_high and pm_low, which are the COLLECTOR'S
+    # RAW LIVE levels: the extremes of a socket sample that carried a median
+    # 0.0296 of the tape over its own window. A sample understates a maximum
+    # and overstates a minimum, so entry_ref sits BELOW the true premarket high
+    # and stop_ref sits ABOVE the true premarket low.
+    #
+    # THE TWO BIASES DO NOT POINT THE SAME WAY, and saying they do would be the
+    # easy mistake here. mfe_pct measures up from entry_ref, so too low an
+    # entry_ref makes the favourable excursion look BIGGER than it was.
+    # mae_pct measures down from stop_ref, so too high a stop_ref makes the
+    # adverse excursion look DEEPER than it was. The record therefore flatters
+    # its upside and overstates its downside at the same time, and the net
+    # effect on any read of it is not signed in advance. It has to be measured,
+    # which is what these columns are for.
+    #
+    # Beside, never over, on the pm_high_true precedent. The gap between the
+    # two pairs is a measurement of the feed and the project needs it, so the
+    # sampled pair is not corrected and not replaced.
+    ("entry_ref_true", "REAL"),
+    ("stop_ref_true", "REAL"),
+    # The same two levels over the COLLECTOR'S OWN window, 07:20 to the cutoff,
+    # for the same reason capture_observed sits beside collector_window_share.
+    # The full window pair folds the collector's LATE START into a number that
+    # would otherwise read as the sampling shortfall alone, and those are two
+    # different shortfalls with two different fixes. Full against collector
+    # window is what the 04:00 to 07:20 stretch costs; collector window against
+    # the live level is the sampling, and only the second is a statement about
+    # the socket. Null when the socket's window carried no bar, which
+    # true_volume_socket_window above says independently.
+    ("entry_ref_collector_window", "REAL"),
+    ("stop_ref_collector_window", "REAL"),
+    # Why the true pair is null. Separate from truth_reason, which is first
+    # wins across the volume columns: sharing it would let a refused float
+    # stand as the recorded explanation for a missing reference level.
+    ("refs_true_reason", "TEXT"),
 )
 
 

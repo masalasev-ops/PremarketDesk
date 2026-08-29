@@ -1121,6 +1121,66 @@ symbols_per_request           = 100        # MEASURED: batch 100 returned 200 wi
 max_pages_per_request         = 20         # pages of 10,000 bars before the fetch is called incomplete and refused rather than silently truncated
 max_calendar_days_back        = 40         # DERIVED: baseline_sessions of 20 trading days spans 28 calendar days at five a week, and the worst holiday stretch on this calendar adds two. 40 leaves a full week of margin and bounds the walk when a symbol simply has no history
 
+### The reference level note
+
+The same pass measures the REFERENCE LEVELS, off the same bars, for the same
+reason it measures the volume.
+
+entry_ref and stop_ref are [Picks] entry_ref_field and stop_ref_field, which
+are pm_high and pm_low, which are the collector's raw live levels: the extremes
+of a socket sample over a window that starts at [Collector] start_time. A
+sample understates a maximum and overstates a minimum, so entry_ref sits below
+the true premarket high and stop_ref sits above the true premarket low, and
+every excursion in [Outcomes] is measured from a level that is off by an amount
+nobody had measured.
+
+THE TWO BIASES DO NOT POINT THE SAME WAY, and the easy mistake here is to say
+they do. mfe_pct measures UP from entry_ref, so too low an entry_ref makes the
+favourable excursion look bigger. mae_pct measures DOWN from stop_ref, so too
+high a stop_ref makes the adverse excursion look deeper. The record flatters
+its upside and overstates its downside at once. Whether they cancel, and by how
+much, is a measurement rather than an argument, and it is below.
+
+entry_ref_true and stop_ref_true are the same two references over the same
+window off the whole tape. Beside, never over: the sampled pair is what the
+morning had and the gap between the pairs IS the measurement, so a corrected
+column with the original discarded could not state it. The FIELD NAMES are read
+from [Picks] rather than assumed, so a pair hard coded to high and low cannot
+go on being written under a name it no longer has.
+
+entry_ref_collector_window and stop_ref_collector_window are the same two
+levels over the socket's OWN minutes, and they exist for the reason
+capture_observed sits beside collector_window_share. There are two shortfalls
+here with two different fixes, and one column cannot carry both:
+
+  sampling   collector window against the live level. The socket missing
+             trades inside minutes it was listening to. A FEED question.
+  late start full window against the collector window. The socket not
+             listening from 04:00. A START TIME question.
+
+MEASURED 2026-08-29, over the 54 live rows of the six sessions whose packets
+carry an rvol_cutoff_hhmm. 2026-08-21 is refused because its packet does not,
+and a guessed window would mismeasure exactly the session that went wrong. Six
+sessions, and the sample unit is the session, so this is six observations and
+not fifty-four.
+
+  entry_ref gap    p10 +0.046%  p25 +0.391%  MEDIAN +1.189%  p75 +4.076%
+                   p90 +8.328%  max +20.936%
+  stop_ref gap     p10 -4.922%  p25 -3.317%  MEDIAN -1.732%  p75 -0.370%
+                   p90 +0.000%  max +0.065%
+  of which sampling    median +0.095%  p90 +0.822%  max  +3.480%
+  of which late start  median +0.984%  p90 +7.930%  max +20.373%
+
+THE SAMPLING IS NOT WHERE THE BIAS IS. Ten to one, on the median, in favour of
+the late start. The socket reproduces the extremes of the minutes it hears
+almost exactly, and nearly the whole reference gap comes from 04:00 to 07:20
+being unheard. That is the opposite of what this file assumed when the columns
+were specified, and it points any fix at [Collector] start_time rather than at
+the feed. It is NOT acted on here; see BUILD_PLAN.md for what a 04:00 start
+would cost in socket hours and quota.
+
+Neither sampled column is corrected and neither is deleted.
+
 ### The true window note
 
 The window is 04:00 to THE SAME CLOCK CUTOFF THE MORNING USED, which the scan
@@ -1183,6 +1243,46 @@ reference levels, not a simulation of any trade.
 max_adjustment_drift_pct      = 0.1        # SEED, not measured. See the price units note below.
 horizon_sessions_short        = 1
 horizon_sessions_long         = 5
+
+### The measured excursion note
+
+mfe_pct_true and mae_pct_true are the same two subtractions against
+entry_ref_true and stop_ref_true, the reference levels [Truth] measures off the
+full SIP tape rather than the ones the collector sampled. See the reference
+level note there for why the sampled pair is biased and in which direction.
+
+Filled by night/fill_outcomes.py in a pass of its OWN, not as a branch of the
+end of day fill. It needs no vendor call, so it must not sit behind a query
+that exists to ration requests, and that query selects on next_day_close being
+null, so a row whose short leg filled before these columns existed would never
+be re-selected and never measured. Every such row was in the table on the day
+they were added.
+
+NO FALLBACK TO THE SAMPLED PAIR. A row [Truth] could not reach keeps null true
+excursions and refs_true_reason on the same row says why. Substituting
+entry_ref would put the number this column exists to be compared against into
+the column doing the comparing, and the gap would read as zero on exactly the
+rows where it is unknown.
+
+MEASURED 2026-08-29, over the 48 live rows across 5 sessions that carry both
+an outcome and a measured reference. The sample unit is the session.
+
+                     median sampled   median measured   median row difference
+  favourable            +0.8132%          -2.1271%           -1.2336 points
+  adverse               -1.9243%          +0.1465%           +1.7354 points
+
+  reached entry_ref     sampled 29 of 48    measured 20 of 48
+  undercut stop_ref     sampled 30 of 48    measured 22 of 48
+
+BOTH MEDIANS CHANGE SIGN. On the sampled levels the median pick ran past its
+entry reference and broke its stop reference. On the measured levels it did
+neither: the median name never reached the true premarket high and never
+undercut the true premarket low. That is not a small correction to a result, it
+is the reverse of one, and it is the reason nothing in this file is calibrated
+against mfe_pct.
+
+Five sessions is five observations. This is a measurement of a bias in the
+record, not a result about the screen, and it names no threshold.
 
 ### The price units note
 
@@ -2005,6 +2105,13 @@ can drag. Excursion math against a traded extreme stays interpretable.
 
 entry_ref_field               = pm_high
 stop_ref_field                = pm_low
+
+Both are levels the COLLECTOR saw, which is a sample of a window that starts at
+07:20. [Truth] measures the same two references off the whole tape over the
+whole premarket and writes them beside these as entry_ref_true and
+stop_ref_true; the reference level note there carries the measured gap and its
+direction. These two field names are read by that pass rather than assumed, so
+moving either key moves both ends of the comparison together.
 
 Every picks row carries a source: 'live' for rows written by the scheduled
 morning inside the window below, 'test' for rows from manual or off clock
