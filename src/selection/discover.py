@@ -869,7 +869,7 @@ def build(write: bool = True) -> dict[str, Any]:
     news_since = news_window_start(today)
 
     print(f"discover: universe started with {len(universe_symbols)} names")
-    print(f"discover: building a pool from four priors, no price from today is read")
+    print("discover: building a pool from four priors, no price from today is read")
 
     api = eodhd.client()
     sources = {

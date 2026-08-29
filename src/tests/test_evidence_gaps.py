@@ -308,21 +308,26 @@ def claim_the_template_does_not_ask_for_the_false_sentences(failures: list[str])
 _ROLL_CASES = {
     "empty": [
         {"symbol": "AAA.US", "pm_rvol": 1.0, "pm_rvol_basis": {},
-         "catalyst_found": True},
+         "catalyst_found": True, "collector_covered": True},
     ],
     "full": [
         {"symbol": "AAA.US", "pm_rvol": None, "pm_rvol_reason": "why",
-         "pm_window_starts_late": True,
+         "pm_window_starts_late": True, "collector_covered": False,
          "pm_rvol_basis": {"is_lower_bound": True}, "catalyst_found": False,
          "catalyst_why": "checked and paid nothing"},
     ],
     "mixed": [
+        # Heard, and NOT on the watchlist, so it keeps a price, survives
+        # drop_uncovered and carries collector_covered false. The live shape,
+        # seen with WDAY on 2026-08-13 and AAPL on 2026-08-21.
         {"symbol": "AAA.US", "pm_rvol": None, "pm_rvol_reason": "why",
-         "catalyst_found": None, "catalyst_why": "the feed was never read"},
+         "catalyst_found": None, "catalyst_why": "the feed was never read",
+         "collector_covered": False},
         {"symbol": "BBB.US", "pm_rvol": 2.0, "pm_window_starts_late": True,
-         "pm_rvol_basis": {"is_lower_bound": True}, "catalyst_found": False},
+         "pm_rvol_basis": {"is_lower_bound": True}, "catalyst_found": False,
+         "collector_covered": True},
         {"symbol": "CCC.US", "pm_rvol": 3.0, "pm_rvol_basis": {},
-         "catalyst_found": True},
+         "catalyst_found": True, "collector_covered": True},
     ],
 }
 
@@ -341,13 +346,14 @@ def claim_the_roll_selects_by_the_predicate_it_names(failures: list[str]) -> Non
     expected = {
         "empty": {"rvol_null": [], "window_starts_late": [],
                   "rvol_lower_bound": [], "catalyst_absent": [],
-                  "catalyst_unknown": []},
+                  "catalyst_unknown": [], "coverage_absent": []},
         "full": {"rvol_null": ["AAA.US"], "window_starts_late": ["AAA.US"],
                  "rvol_lower_bound": ["AAA.US"], "catalyst_absent": ["AAA.US"],
-                 "catalyst_unknown": []},
+                 "catalyst_unknown": [], "coverage_absent": ["AAA.US"]},
         "mixed": {"rvol_null": ["AAA.US"], "window_starts_late": ["BBB.US"],
                   "rvol_lower_bound": ["BBB.US"], "catalyst_absent": ["BBB.US"],
-                  "catalyst_unknown": ["AAA.US"]},
+                  "catalyst_unknown": ["AAA.US"],
+                  "coverage_absent": ["AAA.US"]},
     }
     for case, candidates in _ROLL_CASES.items():
         roll = scan.evidence_roll(candidates)
@@ -369,8 +375,50 @@ def claim_the_roll_selects_by_the_predicate_it_names(failures: list[str]) -> Non
     if overlap:
         failures.append(f"{sorted(overlap)} is on both catalyst lists, so false "
                         "and null have been folded into one state")
-    print("  roll         five predicates selected apart on an empty, a full "
+    print("  roll         six predicates selected apart on an empty, a full "
           "and a mixed candidate set")
+
+
+def claim_the_roll_and_the_fallback_agree_on_partial_evidence(
+        failures: list[str]) -> None:
+    """Two renderers of one morning must not disagree about whom to distrust.
+
+    analyst.fallback_report marks a candidate's premarket levels "(partial)" on
+    `pm_window_starts_late OR NOT collector_covered`. The roll the narrative
+    quotes carries those as two lists, because a late window and no window at
+    all are different facts that deserve different sentences. Their UNION has
+    to be what the fallback marks, or the same morning says one thing when the
+    model writes it and another when the plain table does.
+
+    Reachable, not theoretical, and it became more so when the quantifier guard
+    was armed on 2026-08-28: the fallback is now what a twice flagged narrative
+    degrades to. drop_uncovered splits on `price is not None` rather than on
+    collector_covered, and collector_covered is `bool(bars) and on_watchlist`,
+    so a name the collector heard that is not on today's watchlist keeps its
+    price and survives with collector_covered false. WDAY did on 2026-08-13 and
+    AAPL on 2026-08-21, and a subscription list that does not match the
+    watchlist is a failure this project has already had.
+    """
+    from morning import scan
+
+    for case, candidates in _ROLL_CASES.items():
+        roll = scan.evidence_roll(candidates)
+        union = ({r["symbol"] for r in roll["window_starts_late"]}
+                 | {r["symbol"] for r in roll["coverage_absent"]})
+        # analyst.fallback_report's own predicate, kept spelled out here rather
+        # than imported. Re-deriving it from the function under test is what
+        # would make this claim agree with itself instead of with the report.
+        fallback = {c["symbol"] for c in candidates
+                    if c.get("pm_window_starts_late")
+                    or not c.get("collector_covered")}
+        if union != fallback:
+            failures.append(
+                f"on the {case} case the roll names {sorted(union)} as having "
+                f"partial or absent premarket evidence and the fallback report "
+                f"marks {sorted(fallback)} partial. One morning, two renderers, "
+                "two answers.")
+    print("  roll v table the narrative and the plain table agree on which "
+          "names carry partial or absent premarket evidence")
 
 
 def claim_the_rolls_own_words_pass_the_quantifier_guard(failures: list[str]) -> None:
@@ -526,6 +574,7 @@ def main() -> int:
     claim_a_lower_bound_reaches_gaps_to_fill(failures)
     claim_the_template_does_not_ask_for_the_false_sentences(failures)
     claim_the_roll_selects_by_the_predicate_it_names(failures)
+    claim_the_roll_and_the_fallback_agree_on_partial_evidence(failures)
     claim_the_rolls_own_words_pass_the_quantifier_guard(failures)
     claim_the_template_reads_the_roll_rather_than_deriving_it(failures)
     claim_a_thin_denominator_is_named_and_never_refused(failures)

@@ -15,6 +15,57 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the two report renderers disagreed about whose evidence was partial
+
+Found sweeping the modules the morning review had not read. Not a defect in
+what shipped this morning, but one that arming the quantifier guard the same
+day made reachable.
+
+analyst.fallback_report, the deterministic plain table, marks a candidate's
+premarket levels "(partial)" on `pm_window_starts_late OR NOT
+collector_covered`. evidence_roll, added earlier today for the narrative to
+quote, carried only the first half. Two renderers of one morning would then
+name different sets of names as the ones a reader should distrust, and the
+plain table stopped being a theoretical path this morning: it is what a twice
+flagged narrative degrades to under enforcing.
+
+The second half is not dead code. drop_uncovered splits on
+`price is not None` and NOT on collector_covered, while collector_covered is
+`bool(bars) and on_watchlist`. So a name the collector HEARD that is not on
+today's watchlist keeps its price, survives the drop, and reaches the report
+with collector_covered false. Checked against every packet on disk: WDAY did
+it on 2026-08-13 and AAPL on 2026-08-21, 2 of the 12 mornings. A subscription
+list that does not match the watchlist is the ordinary way to produce it, and
+that is a failure this project has already had after a power outage.
+
+evidence_roll gains coverage_absent, kept as its own list rather than folded
+into window_starts_late because the two are different facts and the sentences
+differ: a late window is partial path evidence, and no coverage at all is
+ABSENT path evidence, where any level published rests on something other than
+this morning's tape. The template quotes it as a fifth line in Skips and traps.
+
+claim_the_roll_and_the_fallback_agree_on_partial_evidence holds that the union
+of the two lists is exactly what the fallback marks, and spells the fallback's
+predicate out rather than importing it: re-deriving it from the function under
+test would make the claim agree with itself instead of with the report. Both
+new claims mutation tested.
+
+Also in this pass, and all cosmetic: a try/except in scan.main that caught
+StaleUniverseError only to re-raise it, which read as though something was
+handled; an f-string with nothing to interpolate in discover; an unused
+ettime import in backup_evidence; and a `\s` in a test_regressions docstring
+that raised a SyntaxWarning on every suite run and is now a raw string.
+
+What the sweep did NOT find, recorded so the next reader does not repeat it:
+no mutable default arguments anywhere, no bare except, no swallowed exception
+on a scheduled path, and no CRITERIA key read by any module that the file does
+not define, checked by walking every _CRIT reader call in the tree against the
+parsed sections. The hand rolled ET fallback was verified against the real
+transition instants for 2025 to 2028: both boundaries land on the right UTC
+instant, the offsets flip correctly either side, and the November repeated
+hour produces 01:00, 01:30, 01:00 fold=1, 01:30 fold=1, 02:00 rather than
+02:00 twice.
+
 ## 2026-08-28: the RVOL denominator floor is measured for the first time, and says 1000 is low
 
 Prompted by CHA publishing a premarket RVOL of 316.1 on a baseline median of

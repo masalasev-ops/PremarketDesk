@@ -524,6 +524,10 @@ sentences WORD FOR WORD:
   rather than referred back to, because a reader arriving at this section is
   not holding the first line of the report in their head.
 - `evidence_roll.text.window_starts_late`, whose premarket path is partial.
+- `evidence_roll.text.coverage_absent`, whose premarket path evidence is
+  ABSENT rather than partial: the collector was not listening to these names,
+  so any level published for them rests on something other than this morning's
+  tape. A different fact from the line above and it gets its own sentence.
 
 Quote a sentence that reads 0 of N as readily as one that names somebody.
 Selecting the members of a published section by reading a predicate over the

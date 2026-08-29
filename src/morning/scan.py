@@ -2946,6 +2946,30 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     unscored is deliberately NOT here. score_roll already owns it and two
     copies of one list is how the two drift apart; the template quotes
     score_roll.unscored for T3.
+
+    coverage_absent is the one list here that is not a row on
+    TEMPLATE_DERIVATIONS, and it exists because of the drift this docstring
+    just warned about. analyst.fallback_report marks a candidate's premarket
+    levels "(partial)" on `pm_window_starts_late OR NOT collector_covered`,
+    and the first draft of this roll carried only the first half. Two
+    renderers of one morning would then disagree about which names a reader
+    should distrust, and arming the quantifier guard made the second renderer
+    reachable rather than theoretical.
+
+    The second half is not dead. drop_uncovered splits on `price is not None`
+    and NOT on collector_covered, while collector_covered is
+    `bool(bars) and on_watchlist`, so a name the collector heard that is not
+    on today's watchlist keeps its price, survives the drop and carries
+    collector_covered false. That is exactly what a subscription list which
+    does not match the watchlist produces, which is a failure this project
+    has already had. It happened on 2026-08-13 with WDAY and on 2026-08-21
+    with AAPL.
+
+    Kept as its own list rather than folded into window_starts_late, because
+    the two are different facts and the sentences say different things: a late
+    window is partial path evidence, and no coverage at all is absent path
+    evidence. claim_the_roll_and_the_fallback_agree_on_partial_evidence holds
+    that their union is what the fallback marks.
     """
     examined = len(candidates)
 
@@ -2971,6 +2995,8 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
                  for c in candidates if c.get("pm_rvol") is None]
     late = [{"symbol": c["symbol"]}
             for c in candidates if c.get("pm_window_starts_late")]
+    uncovered = [{"symbol": c["symbol"]}
+                 for c in candidates if not c.get("collector_covered")]
     lower_bound = [{"symbol": c["symbol"]} for c in candidates
                    if (c.get("pm_rvol_basis") or {}).get("is_lower_bound")]
     # catalyst_found false and catalyst_found null are DIFFERENT rows, and the
@@ -2986,6 +3012,7 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "candidates_examined": examined,
         "rvol_null": rvol_null,
         "window_starts_late": late,
+        "coverage_absent": uncovered,
         "rvol_lower_bound": lower_bound,
         "catalyst_absent": absent,
         "catalyst_unknown": unknown,
@@ -2996,6 +3023,11 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             "window_starts_late": line(
                 late, "opened their premarket window late, so their premarket "
                       "path evidence is partial"),
+            "coverage_absent": line(
+                uncovered, "carry no collector coverage, so their premarket "
+                           "path evidence is absent rather than partial, and "
+                           "any level published for them rests on something "
+                           "other than this morning's tape"),
             "rvol_lower_bound": line(
                 lower_bound, "carry a premarket RVOL that understates as a "
                              "lower bound, because the numerator covers a "
@@ -4475,10 +4507,10 @@ def build_packet() -> dict[str, Any]:
     if abs((now.hour * 60 + now.minute) - (run_hour * 60 + run_minute)) <= snap_minutes:
         cutoff = _CRIT.clock_text("scan", "run_time")
 
-    try:
-        universe_payload = universe.require_fresh_universe()
-    except universe.StaleUniverseError as exc:
-        raise
+    # Deliberately unguarded. A stale universe stops the morning, and
+    # require_fresh_universe raises with the reason; catching it here only to
+    # re-raise it said nothing and read as though something was handled.
+    universe_payload = universe.require_fresh_universe()
 
     watchlist = discover.load_watchlist()
     if watchlist.get("missing"):

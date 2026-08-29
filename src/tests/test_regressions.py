@@ -1483,7 +1483,7 @@ def claim_a_refused_name_is_not_an_overlap(failures: list[str]) -> None:
 
 
 def claim_blanking_a_time_does_not_eat_the_next_word(failures: list[str]) -> None:
-    """The containment tokenizer does not manufacture a ticker out of a clock.
+    r"""The containment tokenizer does not manufacture a ticker out of a clock.
 
     _TIME_RE's meridiem and zone groups had no trailing word boundary, so
     `\s*(?:AM|PM|...)?` matched the first two letters of any capitalised word

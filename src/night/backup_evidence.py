@@ -51,7 +51,6 @@ from typing import Any
 
 from core import config
 from core import criteria
-from core import ettime
 from ops import job_status
 
 _CRIT = criteria.load()
