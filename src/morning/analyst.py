@@ -1250,6 +1250,33 @@ _SHORT_ABBREVIATION_PIECE = 2
 # exactly the claim the old tokenizer already found there.
 _EXCHANGE_SUFFIX_RE = re.compile(r"\b([A-Z][A-Z0-9]{0,5})\.US\b")
 
+# A form, filing or release DESIGNATOR: letters bound to digits by a hyphen or
+# a dot. The same defect _ABBREVIATION_RE was written for, one punctuation mark
+# further out, and it survived that fix because every piece of an abbreviation
+# there has to START with a letter. "10-Q" and "H.4.1" have digit led pieces
+# and a hyphen, so neither matched, and _TOKEN_RE then took the bare capital
+# out of each: Q out of "10-Q", S out of "S-1", H out of "H.4.1".
+#
+# Q, S and H are all real listings in universe.json. Measured 2026-08-28 by
+# injecting one ordinary sentence into this morning's real report and checking
+# it against this morning's real packet: "A 10-Q is due next week" invented Q
+# and "The Fed's H.4.1 release is out Thursday" invented H. "A Form S-1 was
+# filed for the IPO" claimed S and escaped only because that packet happens to
+# carry a bare S somewhere, which is luck and not safety, and is the same way
+# 2026-08-18 escaped the S&P case.
+#
+# The cost of being wrong here is the whole morning, not one unchecked claim.
+# check_report exits 2 on an invented ticker and the chain's
+# "if %RC% neq 0 exit /b %RC%" then skips render, verify, deliver and archive.
+#
+# The letter run is capped at TWO for the letter led form, deliberately. That
+# covers every real designator, S-1, F-1, A-1, H.4.1, and leaves a three or
+# more letter ticker followed by a hyphen and a number alone, so "SPY-1" stays
+# a claim about SPY. The digit led form has no such risk: nothing in the
+# universe starts with a digit.
+_DESIGNATOR_RE = re.compile(
+    r"\b(?:\d+[.-][A-Z][A-Z0-9]{0,2}|[A-Z]{1,2}[.-]\d+(?:[.-]\d+)*)\b")
+
 
 def _blank_abbreviations(text: str) -> str:
     """Blank punctuation joined abbreviations, leaving ticker claims alone.
@@ -1277,7 +1304,9 @@ def _prose_tokens(report_text: str) -> set[str]:
     before anything is called a token. Time expressions and ISO dates are
     stripped first, because "06:37 ET" is a time and ET is also Energy
     Transfer. Punctuation joined abbreviations go next, because "S&P" is one
-    word and not a claim about two one letter listings. Then the stopword list
+    word and not a claim about two one letter listings. Form designators go
+    with them, because "10-Q" is one designator and not a claim about the
+    listing Q. Then the stopword list
     in CRITERIA.md removes the finance and unit acronyms that survive. What is
     left is intersected with the known symbols by the caller, so an ordinary
     capitalised word never becomes a claim.
@@ -1293,6 +1322,7 @@ def _prose_tokens(report_text: str) -> set[str]:
     prose = _ISO_RE.sub(" ", prose)
     prose = _TIME_RE.sub(" ", prose)
     prose = _EXCHANGE_SUFFIX_RE.sub(r"\1 ", prose)
+    prose = _DESIGNATOR_RE.sub(" ", prose)
     prose = _blank_abbreviations(prose)
     return {token for token in _TOKEN_RE.findall(prose) if token not in stopwords}
 

@@ -888,6 +888,68 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
           "exemption and a wrapped instruction still caught")
 
 
+def claim_a_form_designator_is_not_a_ticker_claim(failures: list[str]) -> None:
+    """"10-Q" is a form, not a claim about the listing Q.
+
+    The same defect _ABBREVIATION_RE was written for, one punctuation mark
+    further out. Every piece of an abbreviation there has to start with a
+    LETTER, so "10-Q", "S-1" and "H.4.1" matched nothing and _TOKEN_RE took the
+    bare capital out of each. Q, S and H are all real listings.
+
+    Measured 2026-08-28 against the real 2026-08-28 report and packet: "A 10-Q
+    is due next week" invented Q, and "The Fed's H.4.1 release is out Thursday"
+    invented H. "A Form S-1 was filed for the IPO" claimed S and escaped only
+    because that packet happens to carry a bare S somewhere, which is the same
+    luck that let 2026-08-18 escape the S&P case.
+
+    The cost of being wrong is the whole morning rather than one unchecked
+    claim: check_report exits 2 on an invented ticker and the chain's
+    "if %RC% neq 0 exit /b %RC%" skips render, verify, deliver and archive.
+
+    BOTH DIRECTIONS ARE ASSERTED. Blanking too much is a claim silently not
+    checked, which is the failure this whole guard exists to prevent, so the
+    second half holds that ordinary ticker prose still produces its claim,
+    including a three letter ticker followed by a hyphen and a digit, which is
+    the shape the letter cap was chosen to leave alone.
+    """
+    designators = [
+        ("A 10-Q is due next week.", "Q"),
+        ("A Form S-1 was filed for the IPO.", "S"),
+        ("The Fed's H.4.1 release is out Thursday.", "H"),
+        ("An 8-K was filed Monday morning.", "K"),
+        ("A 13-F showed the stake.", "F"),
+        ("The 10-K lands after the close.", "K"),
+    ]
+    for sentence, fragment in designators:
+        tokens = analyst._prose_tokens(sentence)
+        if fragment in tokens:
+            failures.append(
+                f"{sentence!r} produces the token {fragment!r}. That is a form "
+                "designator, not a claim about a listing, and an invented "
+                "ticker exits 2 and costs the whole morning.")
+
+    keep = [
+        ("MRVL trades at 223.70.", "MRVL"),
+        ("SPY is up 0.12 percent.", "SPY"),
+        ("NVDA.US leads the tape.", "NVDA"),
+        ("CHA and BWLP opened their windows late.", "BWLP"),
+        ("AU was dropped for a stale price.", "AU"),
+        # Three letters and a hyphenated digit. The letter run in the
+        # designator pattern is capped at two so this stays a claim; a cap of
+        # three would swallow it and the claim would go unchecked.
+        ("SPY-1 is not a real instrument.", "SPY"),
+    ]
+    for sentence, wanted in keep:
+        tokens = analyst._prose_tokens(sentence)
+        if wanted not in tokens:
+            failures.append(
+                f"{sentence!r} lost the claim {wanted!r}. Blanking too much is "
+                "a ticker claim nobody checks, which is what this guard is for.")
+
+    print(f"  designators  {len(designators)} form designators produce no "
+          f"ticker claim and {len(keep)} ordinary sentences keep theirs")
+
+
 def main() -> int:
     # Every check below reads the universe through analyst.check_report. It
     # reads THIS fixture, not whatever the live file holds today, and the
@@ -1078,6 +1140,8 @@ def _checks() -> int:
     claim_the_watchdog_names_the_unjudged(failures)
 
     claim_the_instructions_cannot_ask_for_what_the_guard_forbids(failures)
+
+    claim_a_form_designator_is_not_a_ticker_claim(failures)
 
     if failures:
         for failure in failures:

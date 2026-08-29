@@ -15,6 +15,49 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: a 10-Q would have cost the whole morning
+
+The containment tokenizer's third false ticker of the same family, found by
+firing ordinary financial prose at it rather than by reading it.
+
+_ABBREVIATION_RE was written on 2026-08-20 for "S&P", "P/E", "U.S." and "R&D",
+after those took apart into P, S, U, E, D, every one of them a real listing.
+That fix requires every piece of an abbreviation to START WITH A LETTER, so it
+never saw a designator whose pieces are digits and whose separator is a hyphen.
+_TOKEN_RE then took the bare capital out of each:
+
+  "A 10-Q is due next week."                   -> Q
+  "A Form S-1 was filed for the IPO."          -> S
+  "The Fed's H.4.1 release is out Thursday."   -> H
+
+Q, S and H are all in universe.json. Measured by injecting one sentence at a
+time into the real 2026-08-28 report and checking it against the real
+2026-08-28 packet: the 10-Q sentence invented Q and the H.4.1 sentence invented
+H. The S-1 sentence claimed S and escaped only because that packet happens to
+carry a bare S somewhere, which is luck rather than safety and is exactly how
+2026-08-18 escaped the S&P case.
+
+The consequence is the whole morning, not one bad claim. check_report exits 2
+on an invented ticker, and the chain's "if %RC% neq 0 exit /b %RC%" then skips
+render, verify, deliver and archive. A report saying "a 10-Q is due next week",
+which is ordinary prose for a catalyst note, would have produced no HTML, no
+gate table and no archive entry.
+
+_DESIGNATOR_RE blanks letters bound to digits by a hyphen or a dot, in either
+order, before the abbreviation pass. The letter run is capped at TWO for the
+letter led form on purpose: that covers every real designator, S-1, F-1, A-1,
+H.4.1, and leaves a three letter ticker followed by a hyphen and a digit alone,
+so "SPY-1" is still a claim about SPY. The digit led form needs no such cap
+because nothing in the universe starts with a digit.
+
+Checked in both directions and against the record. Six designator sentences now
+produce no ticker claim and six ordinary sentences keep theirs, including the
+three letter hyphen digit case. All twelve archived reports were re-checked
+against their own packets under the new tokenizer: no invented tickers and the
+prose claim counts unchanged on every one, 33 of 33 identical on today's.
+Blanking too much would be a ticker claim silently unchecked, which is the
+failure this guard exists to prevent, so the claim asserts that half too.
+
 ## 2026-08-28: the true premarket gap was three causes reported as one
 
 backfill_premarket writes pm_high_true, pm_low_true and pm_vwap_true over
