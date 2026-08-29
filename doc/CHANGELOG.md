@@ -15,6 +15,47 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the universe covered four exchanges while the file named two
+
+[Universe] exchanges reads "NYSE, NASDAQ". universe.py used it to choose which
+symbol lists to REQUEST and then admitted every Common Stock row either list
+returned, whatever venue the row itself named.
+
+The vendor's NYSE list is not only NYSE. Measured 2026-08-28 across both lists:
+2,365 Common Stock rows on NYSE splitting 2,322 NYSE, 27 NYSE ARCA and 16 NYSE
+MKT, and 3,693 clean rows on NASDAQ. Three of the 43 off venue rows cleared the
+price, cap and volume floors into the 2,771 name file: PHYS, PSLV and VZLA.
+
+Two of the three are the second half of the finding. Sprott Physical Gold Trust
+and Sprott Physical Silver are closed end commodity trusts, which is exactly
+what allowed_security_type exists to exclude, and they are in the universe
+because the vendor TYPES them Common Stock. A type filter cannot catch a vendor
+mistyping and was never going to; the exchange key catches both for nothing.
+The third, VZLA, is a real mining company on NYSE MKT and is dropped because
+the key does not name that venue, which is the key's job rather than a defect.
+
+The row's own Exchange field is now matched against the key. A row whose field
+is EMPTY is kept and attributed to the list it came from: that list is a
+configured exchange by construction, and dropping it would empty the universe
+on a vendor that stops populating the column. Every drop is counted PER VENUE
+into the build notes and printed, because the failure this could hide is the
+vendor relabelling NYSE itself, which would drop every row and leave
+min_count_fraction_of_previous and expected_count_min refusing the build with
+nothing saying why.
+
+CRITERIA gains an exchange coverage note saying that adding NYSE ARCA or NYSE
+MKT to the key is what admits them, which is the whole change and belongs
+there rather than in code.
+
+Not retroactive. universe.json is rebuilt on the Sunday 21:00 pass, so the
+current file still carries all three names until then.
+
+Found while reviewing what the last pass had not read, by checking the built
+file against every rule in [Universe] rather than by reading universe.py. The
+price, market cap and dollar volume rules all held on all 2,771 rows, no
+duplicate codes, no missing names or caps, and nothing ETF shaped survived the
+type filter. The exchange key was the only one the file disagreed with.
+
 ## 2026-08-28: a vendor headline could write markup into the archive
 
 Python-Markdown passes raw HTML through by design and dropped safe_mode in

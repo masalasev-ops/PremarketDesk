@@ -275,7 +275,9 @@ market_cap                    = >= 500M
 min_sessions                  = 20         # sessions of history required to admit a symbol
 lookback_sessions             = 20         # sessions pulled to compute the averages
 allowed_security_type         = Common Stock
-exchanges                     = NYSE, NASDAQ
+exchanges                     = NYSE, NASDAQ   # the venues the universe COVERS, not only the symbol lists fetched.
+                                           # A row is admitted on its own Exchange field, so adding NYSE ARCA or
+                                           # NYSE MKT here is what admits them. See the exchange coverage note.
 session_calendar_symbol       = SPY.US   # its EOD history supplies the real session dates
 expected_count_min            = 1000       # a smaller result means the build went wrong
 expected_count_max            = 3000       # a larger result means the type filter went wrong
@@ -315,6 +317,37 @@ max_unswept_fraction          = 0.02       # SEED, not measured. Names the marke
                                            # baseline here is zero and 0.02 of 2,942
                                            # is 58 names, which clears two lost
                                            # batches of twenty and trips on the third.
+
+### The exchange coverage note
+
+Added 2026-08-28, when this key was found to filter the REQUESTS and not the
+rows. universe.py asked the vendor for the NYSE and NASDAQ symbol lists and
+then admitted every Common Stock row either list returned, whatever venue the
+row named. The vendor's NYSE list is not only NYSE: measured 2026-08-28, its
+2,365 Common Stock rows split 2,322 NYSE, 27 NYSE ARCA and 16 NYSE MKT. So a
+key reading "NYSE, NASDAQ" produced a file covering four exchanges.
+
+Three of those 43 cleared the price, cap and volume floors into the 2,771 name
+file: PHYS, PSLV and VZLA. Two of the three are the second half of the
+argument. Sprott Physical Gold Trust and Sprott Physical Silver are closed end
+commodity trusts, which is what allowed_security_type above exists to exclude,
+and they are in the file because the vendor TYPES them Common Stock. A type
+filter cannot catch a vendor mistyping and was never going to. The exchange key
+catches both for nothing.
+
+The row's own Exchange field is now matched against this key. A row whose field
+is EMPTY is kept and attributed to the list it came from, because that list is
+a configured exchange by construction and dropping it would empty the universe
+on a vendor that stops populating the column. Every drop is counted per venue
+into the build's notes, because the failure this could hide is the vendor
+relabelling NYSE itself: every row would drop, and the count floors above would
+refuse the build with nothing saying why.
+
+To admit NYSE ARCA or NYSE MKT, add them to the key. That is the whole change,
+and it is here rather than in the code because that is what this file is for.
+
+The current universe.json predates this and still carries all three names. It
+is rebuilt on the Sunday 21:00 pass.
 
 ### The closes retention note
 

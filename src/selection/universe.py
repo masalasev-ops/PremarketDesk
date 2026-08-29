@@ -186,6 +186,26 @@ def _common_stock_index(
     wanted_type = _CRIT.text("universe", "allowed_security_type")
     exchanges = _CRIT.text_list("universe", "exchanges")
 
+    # The row's OWN Exchange, matched against the same key that chose which
+    # lists to ask for. Until 2026-08-28 this filtered the REQUESTS and not the
+    # rows, so [Universe] exchanges read "NYSE, NASDAQ" while the file it
+    # produced covered four: the vendor's NYSE list carries NYSE ARCA and NYSE
+    # MKT rows typed Common Stock, measured 2026-08-28 at 2,322 NYSE, 27 NYSE
+    # ARCA and 16 NYSE MKT of 2,365. Three of those 43 survived the price, cap
+    # and volume floors into the 2,771 name file: PHYS, PSLV and VZLA.
+    #
+    # Two of the three are the second half of the argument. Sprott Physical
+    # Gold Trust and Sprott Physical Silver are closed end commodity trusts,
+    # which is exactly what allowed_security_type exists to exclude, and they
+    # are in the file because the vendor TYPES them Common Stock. The type
+    # filter cannot catch a vendor mistyping and was never going to; the
+    # exchange key catches these two for nothing.
+    #
+    # A key in CRITERIA.md that the code reads and then does not apply is the
+    # thing this project's fourth hard rule is about. If NYSE ARCA and NYSE MKT
+    # are wanted, they belong in that key, where a reader can see them.
+    wanted_exchanges = {name.strip().upper() for name in exchanges}
+
     index: dict[str, str] = {}
     answered: list[str] = []
     for exchange in exchanges:
@@ -195,23 +215,46 @@ def _common_stock_index(
             continue
         answered.append(exchange)
         kept = 0
+        off_venue: dict[str, int] = {}
         for row in rows:
             if str(row.get("Type", "")).strip().lower() != wanted_type.lower():
                 continue
             code = _norm_code(row.get("Code", ""))
             if not code:
                 continue
+            # An empty Exchange field is the LIST this row came from, which is
+            # a configured one by construction. Only a row that names a venue
+            # of its own is judged against the key.
+            venue = str(row.get("Exchange") or exchange).strip()
+            if venue.upper() not in wanted_exchanges:
+                off_venue[venue] = off_venue.get(venue, 0) + 1
+                continue
+
             def _text(field: str) -> str | None:
                 value = str(row.get(field) or "").strip()
                 return value or None
 
             index.setdefault(code, {
-                "exchange": row.get("Exchange") or exchange,
+                "exchange": venue,
                 "name": _text("Name"),
                 "isin": _text("Isin"),
             })
             kept += 1
         print(f"universe: {exchange} listed {len(rows)}, kept {kept} as {wanted_type}")
+        if off_venue:
+            # Printed rather than silent, and per venue, because the failure
+            # this could hide is the vendor RELABELLING its rows. If NYSE ever
+            # comes back as "New York Stock Exchange" every row drops, and the
+            # count floors below would refuse the build without ever saying
+            # why. This line is the why.
+            listed = ", ".join(f"{name} {count}"
+                               for name, count in sorted(off_venue.items()))
+            notes.append(f"{exchange} list carried {sum(off_venue.values())} "
+                         f"{wanted_type} row(s) from a venue outside "
+                         f"[Universe] exchanges: {listed}")
+            print(f"universe: {exchange} dropped {sum(off_venue.values())} "
+                  f"{wanted_type} row(s) from outside "
+                  f"{', '.join(exchanges)}: {listed}")
 
     # An exchange that did not answer is a MISSING HALF OF THE MARKET, not a
     # note. Raised here, three credits into the run, rather than left to the

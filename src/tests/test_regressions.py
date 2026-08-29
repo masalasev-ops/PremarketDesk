@@ -7936,6 +7936,87 @@ def claim_the_two_unrebuildable_artifacts_are_held_twice(
           "and no pipeline module reads it")
 
 
+def claim_the_universe_covers_the_exchanges_the_file_names(failures: list[str]) -> None:
+    """[Universe] exchanges filtered the requests and not the rows.
+
+    It read "NYSE, NASDAQ" while the file it produced covered four. The
+    vendor's NYSE symbol list carries NYSE ARCA and NYSE MKT rows typed Common
+    Stock: measured 2026-08-28, 2,322 NYSE, 27 NYSE ARCA and 16 NYSE MKT of
+    2,365. Three of those 43 cleared the price, cap and volume floors into the
+    2,771 name file.
+
+    Two of the three are the second half of it. PHYS and PSLV are Sprott
+    physical metal trusts, closed end commodity funds, which is exactly what
+    allowed_security_type exists to exclude and which are in the file because
+    the vendor TYPES them Common Stock. A type filter cannot catch a vendor
+    mistyping. The exchange key catches these two for nothing.
+
+    Four things are asserted, and the third is the one that keeps this
+    diagnosable. A row from an unnamed venue is dropped; a row from a named one
+    is kept; a row with an EMPTY Exchange field is kept and attributed to the
+    list it came from, because that list is a configured exchange by
+    construction and dropping it would empty the universe on a vendor that
+    stops populating the field; and the drop is COUNTED per venue into notes,
+    because the failure this could hide is the vendor relabelling NYSE, which
+    would drop every row and leave the count floors refusing the build without
+    ever saying why.
+    """
+    from selection import universe
+
+    rows = [
+        {"Code": "KEEP", "Type": "Common Stock", "Exchange": "NYSE",
+         "Name": "Keep Inc", "Isin": "US1"},
+        {"Code": "ARCA", "Type": "Common Stock", "Exchange": "NYSE ARCA",
+         "Name": "Sprott Physical Something", "Isin": "US2"},
+        {"Code": "MKT", "Type": "Common Stock", "Exchange": "NYSE MKT",
+         "Name": "Small Miner Corp", "Isin": "US3"},
+        {"Code": "BLANK", "Type": "Common Stock", "Exchange": "",
+         "Name": "No Venue Field Inc", "Isin": "US4"},
+        {"Code": "FUND", "Type": "ETF", "Exchange": "NYSE",
+         "Name": "An ETF", "Isin": "US5"},
+    ]
+
+    class _Api:
+        def exchange_symbol_list(self, exchange):
+            return (rows if exchange == "NYSE" else []), None
+
+    notes: list[str] = []
+    index = universe._common_stock_index(_Api(), notes)
+
+    if "KEEP" not in index:
+        failures.append("a row from a named exchange was dropped")
+    if "BLANK" not in index:
+        failures.append(
+            "a row with an empty Exchange field was dropped. That field is not "
+            "always populated, and the list it came from is a configured "
+            "exchange by construction, so dropping it empties the universe on "
+            "a vendor that stops writing the column.")
+    elif index["BLANK"]["exchange"] != "NYSE":
+        failures.append(f"a row with no Exchange field was attributed to "
+                        f"{index['BLANK']['exchange']!r} rather than to the "
+                        "list it came from")
+    for code, venue in (("ARCA", "NYSE ARCA"), ("MKT", "NYSE MKT")):
+        if code in index:
+            failures.append(
+                f"a {venue} row reached the universe while [Universe] exchanges "
+                "names NYSE and NASDAQ. A key this file reads and does not "
+                "apply is the fourth hard rule.")
+    if "FUND" in index:
+        failures.append("an ETF row survived allowed_security_type")
+
+    joined = " ".join(notes)
+    if "NYSE ARCA" not in joined or "NYSE MKT" not in joined:
+        failures.append(
+            f"the dropped venues are not named in the notes: {notes}. If the "
+            "vendor ever relabels NYSE itself, every row drops and the count "
+            "floors refuse the build with nothing saying why.")
+    if "2" not in joined:
+        failures.append(f"the notes do not carry a count per venue: {notes}")
+
+    print("  exchanges    a row from an unnamed venue is dropped and counted, "
+          "a blank venue is kept as its list, and an ETF still cannot get in")
+
+
 def claim_a_vendor_headline_cannot_write_markup(failures: list[str]) -> None:
     """Third party text reaches the page as text, not as tags.
 
@@ -9123,6 +9204,7 @@ def main() -> int:
     claim_the_night_refuses_the_floats_the_morning_refuses(failures)
     claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)
     claim_a_vendor_headline_cannot_write_markup(failures)
+    claim_the_universe_covers_the_exchanges_the_file_names(failures)
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
