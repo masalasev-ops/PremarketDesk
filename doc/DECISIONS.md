@@ -18,6 +18,54 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: raising the timeout rather than trimming the retries
+
+Four ways to restore the three times rule were on the table on 2026-08-28: a
+wider timeout, a lower max_attempts, an accepted 1.6x written down as the new
+rule, or nothing. The owner chose the wider timeout and said why, and the
+reason is worth keeping because it reframes what this threshold is for.
+
+**A slower report costs nothing; a shorter one costs everything.** The morning
+exists to produce a correct and genuinely detailed premarket report. Duration
+is constrained by exactly two things and neither is a preference for speed: the
+09:30 open, because a premarket report has to exist before the market trades,
+and the watchdog, because a job silent for long enough gets relaunched on top
+of itself. Everything else about how long the analyst takes is free.
+
+So the timeout is not a speed control. It is a guillotine: cross it twice and
+the narrative is discarded and the plain table published. Read that way, the
+number being too small is the only risk it carries to the thing the report is
+for, and 1.6x was the wrong direction of travel rather than an acceptable
+margin.
+
+**Why not lower max_attempts instead.** It would have bought the same headroom
+for free: one attempt at 1007 has the same worst case as two at 537 minus the
+retry. It was refused because the retry is not spare capacity, it is what makes
+a bad morning recoverable. Under `enforcing` the second attempt is the
+regeneration that a flagged narrative gets before the morning falls back, and
+under any mode it is the retry a transient CLI failure gets. Trading it away
+buys a later deadline by making a bad morning likelier to end in the plain
+table, which is the outcome the whole change exists to avoid.
+
+**Why not accept 1.6x.** Because the rule is not arbitrary and nothing had
+challenged it. Three times the slowest observed run is a margin for the run
+that is slower than every run so far, which is precisely the case a timeout is
+for. Rewriting the rule to match a decayed number would have been fitting the
+standard to the measurement.
+
+**What is NOT claimed.** That 1007 is right in any deeper sense: it is three
+times one observation, 2026-08-27's 335.7 seconds, and the next slower morning
+re-derives it exactly as this one did. That the growth is understood: output
+went 18,264 to 28,633 tokens across the week and the timeout buys room for that
+trend without explaining it, which the 2026-08-20 note already said and which
+is still true. And that the watchdog band is free: it widened from twenty
+minutes to thirty-seven and the CHANGELOG entry says what that costs.
+
+The lasting change is smaller than either number and matters more. The
+dependency between them was written in prose and checked by nobody, which is
+how the 537 could sit at 1.6x for eight days with every test green. It is an
+assertion now.
+
 ## 2026-08-28: measuring the RVOL denominator floor, and refusing to move it alone
 
 The measurement is in CHANGELOG.md. This is the part that could have gone the

@@ -1341,10 +1341,13 @@ like the Api section above, not screen criteria.
 
 model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
 effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
-timeout_s                     = 537        # 3x the slowest morning on record when it was set, 178.9s on 2026-08-19, and 1.6x the 335.7s of 2026-08-27 since. See the timeout note below.
-                                           # [corrected 2026-08-28: was "2.4x the 226.1s of 2026-08-20 since", which four
-                                           # scheduled mornings have overtaken. The value has NOT moved; what moved is how
-                                           # much slack it carries, and the rule that defines it now asks for 1,007.]
+timeout_s                     = 1007       # 3x the slowest morning on record, 335.7s on 2026-08-27. See the timeout note below.
+                                           # [corrected 2026-08-29: was 537, itself 3x the 178.9s of 2026-08-19 when it was
+                                           # set on 2026-08-20. Four scheduled mornings overtook that and the multiple had
+                                           # decayed to 1.6, which the 2026-08-28 pass recorded and declined to act on
+                                           # because the number does not travel alone. It travels with [monitor]
+                                           # job_log_stale_after_s, which moved with it. The RULE is unchanged throughout;
+                                           # only its evidence moved. See DECISIONS.md 2026-08-29.]
                                            # [corrected 2026-08-20: was 293, "3x the slowest of five measured opus
                                            # medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds". The
                                            # rule did not change, the evidence under it did.]
@@ -1387,15 +1390,23 @@ and output tokens plateau with it at 18k to 29k. What HAS moved is the slack:
 the rule is three times the slowest run on record, the slowest is now 335.7s on
 2026-08-27, and three times that is 1,007. 537 is 1.6 times it.
 
-The number is NOT changed here, because it does not travel alone. Raising it to
-1,007 puts the worst case at 08:45:19 plus two attempts, 09:18:53, which is past
-[monitor] chain_due at 09:00 and inside rerun_chain_until at 09:30, and it
-breaks the derivation at [monitor] job_log_stale_after_s, whose 1,200 was chosen
-to leave two minutes over max_attempts times timeout_s. Four coupled numbers,
-and the owner picks the trade: a wider timeout, a lower max_attempts, or an
-accepted 1.6x. What is fixed here is the record of where the margin actually
-stands, because the line above claimed 2.4x and nothing had checked it since
-2026-08-20.
+The number was not changed on 2026-08-28, because it does not travel alone, and
+this paragraph listed the trade for the owner: a wider timeout, a lower
+max_attempts, or an accepted 1.6x.
+
+[resolved 2026-08-29] The owner chose the wider timeout, on the stated ground
+that a slower report costs nothing and a report that is CORRECT AND DETAILED is
+the whole point. That reading is right and it reverses the direction this note
+was drifting in. The timeout is not a speed control: exceeding it does not make
+the report late, it KILLS the narrative and hands the morning the deterministic
+plain table. So the number being too SMALL is the risk to a detailed report,
+and the pressure on it comes from the detail itself, output having grown from
+18,264 tokens to 28,633 across the week.
+
+max_attempts stays at 2 and quantifier_regenerations at 1. Lowering either
+would have bought the same headroom by removing a retry, which is a smaller
+report on a bad morning rather than a later one, and that is the trade the
+owner declined.
 
 Nothing has timed out. This is not a fault being fixed, it is a threshold being
 kept faithful to the rule that defines it, and the direction is what forces it:
@@ -1412,13 +1423,20 @@ seconds across the three mornings recorded when this was written, and 22.3 on
 verify, deliver and archive are about two seconds together. So the worst case is
 08:45:00 plus 19s plus max_attempts times timeout_s.
 
-  at 293: two attempts exhaust at 08:55:05, 35 minutes before the open
-  at 537: two attempts exhaust at 09:03:13, 27 minutes before the open
+  at 293:  two attempts exhaust at 08:55:05, 35 minutes before the open
+  at 537:  two attempts exhaust at 09:03:13, 27 minutes before the open
+  at 1007: two attempts exhaust at 09:18:53, 11 minutes before the open
 
-Both clear the open, and both clear the watchdog: [monitor] chain_due is 09:00
-but the watchdog only fires on its half hours, so the 08:55 pass reads NOT DUE
-and the next is 09:25, by which time even the worst case has finished. Nothing
-downstream of the chain has a deadline between those two numbers.
+All three clear the open, and all three clear the watchdog: [monitor] chain_due
+is 09:00 but the watchdog only fires on its half hours, so the 08:55 pass reads
+NOT DUE and the next is 09:25, by which time even the worst case has finished.
+Nothing downstream of the chain has a deadline between those two numbers.
+
+At 1007 the margin against the 09:25 pass is six minutes rather than
+twenty-two, and that is the number to watch if this rises again. The margin
+against the OPEN is eleven minutes and is not the binding one: a report that
+lands at 09:19 is still a premarket report, where a chain still running at
+09:25 is one the watchdog has to reason about.
 
 The output length is the thing actually worth watching. 16,005 output tokens on
 2026-08-19 was double the previous high on a template whose nine sections did
@@ -1521,9 +1539,14 @@ Stated here rather than left to be rediscovered, because 2 of 2 judged flags
 were false positives and that is the number a reader will reach for.
 
 The clock does not move. The worst case under `enforcing` is one flagged
-report plus one regeneration, which is two CLI runs, which is the same
-1,074 seconds the timeout note above already computed and accepted at
-09:03:13. `quantifier_regenerations` is 1, so a third run is not reachable.
+report plus one regeneration, which is two CLI runs, which is the same figure
+the timeout note above already computes and accepts for two attempts.
+`quantifier_regenerations` is 1, so a third run is not reachable. [corrected
+2026-08-29: this read "1,074 seconds ... at 09:03:13", which was the worst case
+against a 537 second timeout_s. timeout_s is 1007 and the worst case is 2,014
+seconds ending 09:18:53. The ARGUMENT is unchanged, and it is the argument that
+matters here: enforcing adds no CLI run that the two attempt budget did not
+already allow for.]
 
 The cost of a false positive is one regeneration, and the narrative is lost
 only when the SECOND answer flags too. A false positive is cheap to clear:
@@ -1723,14 +1746,23 @@ rebuilt on a weekday only when the Sunday build was missed. Each job gets at mos
 max_reruns_per_job_per_day so a hard failure cannot loop.
 
 discover_due                  = 07:25      # discover plus baseline warm should be done by here
-chain_due                     = 09:00      # a healthy chain is done by about 08:50; the worst case runs to 09:03, see the [Analyst] timeout note
+chain_due                     = 09:00      # a healthy chain is done by about 08:52; the worst case runs to 09:18:53, see the [Analyst] timeout note
+                                           # [corrected 2026-08-29: the worst case read 09:03 against a 537s timeout_s.
+                                           # 09:00 is unchanged and still correct: the only pass inside
+                                           # [chain_due, rerun_chain_until] is 09:25, and the worst case now finishes six
+                                           # minutes before it rather than twenty-two.]
 nightly_due                   = 22:45      # the 22:15 nightly is minutes long
 rerun_chain_until             = 09:30      # after the open a premarket report is history, report only
 collector_stale_after_s       = 180        # no bar file write for this long inside the window means dead
 universe_rerun_after_days     = 8          # a fresh weekly build is 7 days old at most
 max_reruns_per_job_per_day    = 1
 flag_backlog_after_days       = 7          # an unjudged quantifier flag older than this is a backlog rather than a fresh flag
-job_log_stale_after_s         = 1200       # no write to a job's dated log for this long means the job is not alive. See the liveness note below.
+job_log_stale_after_s         = 2200       # no write to a job's dated log for this long means the job is not alive. See the liveness note below.
+                                           # [corrected 2026-08-29: was 1200, two minutes over max_attempts times a 537s
+                                           # timeout_s. [Analyst] timeout_s moved to 1007 and this is the number derived
+                                           # from it, so it moved too: 2 x 1007 is 2,014 and 2,200 leaves three minutes
+                                           # over it. Leaving it at 1200 would have made a HEALTHY long analyst step read
+                                           # as a dead job, which is the double chain this gate exists to prevent.]
 pass_interval_min             = 30         # register_tasks.ps1: the monitor task repeats on this interval
 first_pass                    = 07:25      # register_tasks.ps1: the weekday monitor trigger, and what its repetition counts from
 last_pass                     = 09:25      # first_pass plus the two hour repetition duration in register_tasks.ps1
@@ -1758,10 +1790,28 @@ correction below is why.
 The number has to clear the longest silence a healthy job can produce, and that
 is the analyst step: cmd writes a step marker at each boundary but nothing
 touches the log while one python step runs, so the worst case is [Analyst]
-max_attempts times timeout_s, 1,074 seconds. 1,200 leaves two minutes over it.
+max_attempts times timeout_s, 2,014 seconds. 2,200 leaves three minutes over it.
 Measured within-run gaps to compare it against: the morning chain's worst is
-232.1 seconds on 2026-08-20 and 398.4 on 2026-08-13, discover's is 33.0 and the
-nightly's is 62.0.
+342.6 seconds on 2026-08-27, 232.1 on 2026-08-20 and 398.4 on 2026-08-13,
+discover's is 33.0 and the nightly's is 62.0.
+
+[corrected 2026-08-29: the two figures above were 1,074 and 1,200, against a
+537 second timeout_s. Both moved with it. This is the whole reason the timeout
+could not be raised alone: this gate's job is to tell a hung job from a working
+one, and a healthy analyst step is by far the longest silence in the tree.]
+
+WHAT THE LARGER NUMBER COSTS, said rather than left to be discovered. The blind
+band below widens with it, from twenty minutes to about thirty-seven. A job
+that dies with NO finish marker, leaving only a warm log, now reads as
+possibly-alive for that much longer. Two things bound it and neither is new:
+the mtime is asked last, so any death where a step actually exited is caught by
+its finish marker whatever the mtime says; and where the mtime is the only
+evidence and no later pass falls inside the window, the job is reported
+UNRESOLVED and counted as a problem rather than as RUNNING. For the morning
+chain, whose only in-window pass is 09:25, that verdict is the same at 1,200 as
+at 2,200. What actually changes is that the watchdog will no longer RERUN a
+chain in that band, which is the safer direction: a second chain races the
+first on packet.json and spends another CLI completion.
 
 The first version of this note ended on a claim that is not true, kept here
 because the shape of the error is worth more than the sentence was: "It does

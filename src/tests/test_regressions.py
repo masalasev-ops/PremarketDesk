@@ -7936,6 +7936,74 @@ def claim_the_two_unrebuildable_artifacts_are_held_twice(
           "and no pipeline module reads it")
 
 
+def claim_the_watchdog_outlasts_the_longest_healthy_analyst(failures: list[str]) -> None:
+    """[Monitor] job_log_stale_after_s is derived from [Analyst] timeout_s.
+
+    Nothing was checking that, and it is the reason the timeout could not be
+    raised alone. cmd writes a step marker at each boundary and nothing touches
+    the log while a python step runs, so the longest silence a HEALTHY morning
+    can produce is the analyst at max_attempts times timeout_s. If the watchdog
+    calls a job dead before that, it declares a working chain dead and launches
+    a second one onto the same packet.json and another CLI completion.
+
+    The coupling lived in prose in two places and in arithmetic in neither. On
+    2026-08-29 timeout_s moved 537 to 1007 and job_log_stale_after_s had to move
+    1200 to 2200 with it; a pass that moved only the first would have been
+    green everywhere and wrong every slow morning.
+
+    Three inequalities, and the second is the one with a real deadline behind
+    it. The watchdog must outlast the silence. The worst case must finish
+    before the LAST monitor pass that judges the chain, because that pass is
+    the only one inside [chain_due, rerun_chain_until] and a chain still
+    running then is one the watchdog has to reason about. And it must finish
+    before the open, which is the softer of the two: a report landing at 09:19
+    is still a premarket report.
+    """
+    import datetime as dt
+
+    from core import criteria
+
+    crit = criteria.load()
+    timeout = crit.integer("analyst", "timeout_s")
+    attempts = crit.integer("analyst", "max_attempts")
+    stale_after = crit.integer("monitor", "job_log_stale_after_s")
+    silence = attempts * timeout
+
+    if stale_after <= silence:
+        failures.append(
+            f"[monitor] job_log_stale_after_s is {stale_after}s and a healthy "
+            f"analyst can be silent for {attempts} x {timeout} = {silence}s. "
+            "The watchdog would call a working chain dead and start a second "
+            "one on the same packet.json.")
+
+    # The chain starts at [Scan] run_time. Everything that is not the analyst
+    # has measured 19.0 to 22.3 seconds across every morning on record; 30 is
+    # the round number above all of them and the slack does not change any
+    # verdict below.
+    run_hour, run_minute = crit.clock("scan", "run_time")
+    start = dt.datetime(2026, 1, 2, run_hour, run_minute) + dt.timedelta(seconds=30)
+    worst_end = (start + dt.timedelta(seconds=silence)).time()
+
+    last_pass = crit.clock("monitor", "last_pass")
+    if worst_end >= dt.time(*last_pass):
+        failures.append(
+            f"the chain's worst case ends {worst_end} and the last monitor pass "
+            f"is {dt.time(*last_pass)}. That pass is the only one inside "
+            "[chain_due, rerun_chain_until], so a chain still running then is "
+            "judged while it works.")
+
+    open_hour, open_minute = crit.clock("backfill", "market_open")
+    if worst_end >= dt.time(open_hour, open_minute):
+        failures.append(
+            f"the chain's worst case ends {worst_end}, at or after the "
+            f"{dt.time(open_hour, open_minute)} open. A premarket report has to "
+            "exist before the market trades.")
+
+    print(f"  timeout      {attempts} x {timeout}s of silence clears the "
+          f"watchdog's {stale_after}s by {stale_after - silence}s, and the "
+          f"worst case ends {worst_end}")
+
+
 def claim_the_universe_covers_the_exchanges_the_file_names(failures: list[str]) -> None:
     """[Universe] exchanges filtered the requests and not the rows.
 
@@ -9205,6 +9273,7 @@ def main() -> int:
     claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)
     claim_a_vendor_headline_cannot_write_markup(failures)
     claim_the_universe_covers_the_exchanges_the_file_names(failures)
+    claim_the_watchdog_outlasts_the_longest_healthy_analyst(failures)
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)

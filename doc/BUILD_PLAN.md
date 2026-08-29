@@ -232,7 +232,12 @@ at the root and is gitignored along with .env.
   The 2026-08-20 morning has since run 226.1 seconds of CLI time inside a
   231.7 second analyst step, so 537 is 2.4 times the slowest morning rather
   than three and the derivation is owed a re-run. See item 5b below and the
-  timeout note in CRITERIA.md, whose table also stops at 2026-08-19. [corrected 2026-08-20: was
+  timeout note in CRITERIA.md, whose table also stops at 2026-08-19.
+  [corrected 2026-08-29: the re-run was owed for eight days and is done.
+  timeout_s is 1007, three times the 335.7 seconds of 2026-08-27, which is the
+  slowest morning on record. [monitor] job_log_stale_after_s moved with it,
+  1200 to 2200, because it is derived from it. The rule never changed; its
+  evidence did, twice. CRITERIA's timeout note carries every session.] [corrected 2026-08-20: was
   "timeout_s is now 293, three times the slowest", derived from those five dry
   runs. The rule is unchanged and the evidence under it is not; see the timeout
   note in CRITERIA.md for the table and the slack arithmetic.]
@@ -713,7 +718,10 @@ because what a fix WAS is the useful part.
        is now 537, three times the slowest morning on record, and the timeout
        note in CRITERIA carries the table and the slack arithmetic: two
        attempts exhaust at 09:03 rather than 08:55, both well clear of the open
-       and of the watchdog's 09:25 pass.
+       and of the watchdog's 09:25 pass. [corrected 2026-08-29: 537 held until
+       then and is 1007 now, on the same rule against the 335.7 seconds of
+       2026-08-27. Two attempts exhaust at 09:18:53, still clear of the open
+       and six minutes clear of the 09:25 pass.]
 
        WHAT IS STILL OPEN, and it is a threshold question rather than a code
        one, so it stays with the owner: the analyst step is close to DOUBLING

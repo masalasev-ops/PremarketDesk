@@ -15,6 +15,73 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the analyst timeout is raised, and the number derived from it moves with it
+
+[Analyst] timeout_s 537 to 1007, and [Monitor] job_log_stale_after_s 1200 to
+2200. The RULE behind the first is unchanged and has been since it was written:
+three times the slowest morning on record. Its evidence moved. The slowest is
+335.7 seconds on 2026-08-27, and three times that is 1,007.
+
+The 2026-08-28 pass measured this and declined to act on it, listing the trade
+for the owner. The owner chose the wider timeout, on the ground that a slower
+report costs nothing and a correct, detailed report is the whole point.
+
+That reading corrects the direction the note was drifting in, and it is worth
+writing down plainly. THE TIMEOUT IS NOT A SPEED CONTROL. Exceeding it does not
+make the report late; it kills the narrative and hands the morning the
+deterministic plain table. So the number being too SMALL is the risk to a
+detailed report, and the pressure on it comes from the detail itself: output
+grew from 18,264 tokens to 28,633 across the week, and duration grew with it.
+Headroom over the slowest morning was 201 seconds. It is now 671.
+
+max_attempts stays at 2 and quantifier_regenerations at 1. Lowering either
+would have bought the same headroom by removing a retry, which is a smaller
+report on a bad morning rather than a later one, and that is the trade the
+owner declined.
+
+**The coupled number, which is why this could not be one edit.** cmd writes a
+step marker at each boundary and nothing touches the log while a python step
+runs, so the longest silence a HEALTHY morning can produce is the analyst at
+max_attempts times timeout_s. job_log_stale_after_s is what the watchdog uses
+to tell a hung job from a working one. At 1200 against a 2,014 second silence
+it would have declared a working chain dead and launched a second one onto the
+same packet.json and another CLI completion. 2 x 1007 is 2,014 and 2,200 leaves
+three minutes over it.
+
+**What the larger watchdog number costs**, recorded rather than left to be
+found. The blind band widens from twenty minutes to about thirty-seven: a job
+that dies with NO finish marker, leaving only a warm log, reads as
+possibly-alive for that much longer. Two existing bounds are unchanged. The
+mtime is asked last, so any death where a step exited is caught by its finish
+marker whatever the mtime says. And where the mtime is the only evidence and no
+later pass falls inside the window, the job is reported UNRESOLVED and counted
+as a problem rather than as RUNNING, which for the morning chain is the same
+verdict at 1200 as at 2200. What actually changes is that the watchdog will no
+longer RERUN a chain in that band, which is the safer direction.
+
+**The arithmetic, checked rather than asserted.** Two attempts exhaust at
+09:18:53, eleven minutes before the open and six minutes before the 09:25
+watchdog pass. The margin against the OPEN is not the binding one: a report
+landing at 09:19 is still a premarket report, where a chain still running at
+09:25 is one the watchdog has to reason about. Six minutes is the number to
+watch if this rises again.
+
+**And the coupling is now machine checked**, which is the part that should have
+existed before any of this. It lived in prose in two files and in arithmetic in
+neither, so a pass that raised timeout_s alone would have been green everywhere
+and wrong on every slow morning.
+claim_the_watchdog_outlasts_the_longest_healthy_analyst holds three
+inequalities: the watchdog outlasts the silence, the worst case finishes before
+the last monitor pass that judges the chain, and it finishes before the open.
+Mutation tested both ways: reverting job_log_stale_after_s to 1200 fails it, and
+a timeout long enough to push the chain past 09:25 fails it.
+
+Sites corrected in place with markers: the two values, the timeout note's
+arithmetic block and its 2026-08-28 paragraph, the liveness note's derivation,
+chain_due's inline comment, the enforcing section's worst case, and two places
+in BUILD_PLAN.
+
+
 ## 2026-08-28: the three writers artifacts.py named as unprotected, and the loop that proved it
 
 core/artifacts.py exists because a hand run against a past session destroyed
