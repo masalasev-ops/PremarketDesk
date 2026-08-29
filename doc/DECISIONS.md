@@ -18,6 +18,75 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: fill plausibility, and two definitions of it that were wrong
+
+A reference level is not a price anyone could have transacted at. Every
+excursion in the record is measured from entry_ref, and on a name whose whole
+premarket is a few hundred shares that level is a print rather than a market,
+so the excursion is arithmetic about a price that was never available. Nothing
+asked the question before today.
+
+**Measured, not screened on.** The verdict is written into picks and nothing
+reads it. It is evidence for the ledger to skip on and for a later calibration
+to group by, and putting it in the morning path would change what gets picked
+while the record is being repaired, which makes both unreadable.
+
+**Two definitions were tried and rejected, and the rejections are the useful
+part of this entry.**
+
+The first counted a minute as being at the level when the minute's own volume
+weighted price was inside the band. It is the obvious definition and it
+measures the wrong thing. entry_ref is a session HIGH, which is an extreme that
+no whole minute AVERAGES near, so a wide ranging name scored near zero however
+much it traded. BABA on 2026-08-20 has 2,986,339 premarket shares over 268
+minutes and came back with a band volume of 0, and MSTR with 5,212,834 over 286
+minutes did the same. It was measuring how long a name sat at its top, and it
+called the most liquid names in the table the least fillable. It was only
+visible because the calibration printed the thinnest ten rows and they were the
+biggest names on the list.
+
+The second required a MINUTE COUNT as well as a volume. It fails the opposite
+way: MSTR traded 49,768 shares inside the band in a single minute, which is 1.4
+million dollars at the level, and KSS, TIGR, BBY and PLAB are the same shape. A
+rule that calls that a print because it lasted one bar is measuring duration.
+The minute count is recorded and reported because it says how loose the volume
+bound is, and it does not gate.
+
+**Dollars rather than shares**, which is the third thing the calibration
+changed. The table holds prices from 5.64 to 1,585. Ten thousand shares is
+56,000 dollars of TIGR and 9,400,000 of MU, and a single share floor ranks
+those two backwards.
+
+**The volume is an upper bound and is called one.** A one minute bar carries
+o, h, l, c and v and no distribution, so a minute that ran from below up into
+the band contributes all of its volume while only some of it transacted inside.
+Correcting it needs trade level data this plan does not buy, so it is stated as
+a bound, the way premarket RVOL already is.
+
+**250,000 dollars is a placeholder for a rule this project cannot write yet.**
+What makes a fill implausible is being too much of the volume at the level,
+which is a statement about an ORDER and not about a name, so the right form is
+size divided by a participation cap. No rule here names a position size. The
+constant behaves like that rule for an order of about 10,000 dollars at a 4
+percent cap, and it goes when the ledger's rule version supplies a size.
+
+**A refused session gets a verdict too.** measure() refuses a session whose
+packet does not record which window the morning used, and wrote nothing at all,
+which left the twelve rows of 2026-08-21 with a NULL fill_plausible: a fourth
+state, outside the three the column promises and indistinguishable from a row
+the pass had not reached. They are marked 'unknown' with the reason. It is a
+record of a refusal, not a measurement, and it never lands on a row that
+already carries a verdict.
+
+**What it found.** 44 plausible, 10 implausible, 12 unknown, over 66 live rows
+across 7 sessions. The ten implausible sit across 4 sessions and eight of them
+had under 7,000 shares within half a percent of the level.
+
+And one thing worth flagging rather than concluding: SIX OF THE NINE
+day_eligible ROWS ARE UNKNOWN, because all six are from 2026-08-21. Any earlier
+reading of that group, including the favourable one taken on 2026-08-28, rests
+on three rows with measured references and not nine.
+
 ## 2026-08-29: measuring the reference levels rather than correcting them
 
 entry_ref and stop_ref are the collector's raw live pm_high and pm_low, and

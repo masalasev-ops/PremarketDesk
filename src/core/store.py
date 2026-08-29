@@ -191,6 +191,32 @@ _PICKS_LATER_COLUMNS = (
     # wins across the volume columns: sharing it would let a refused float
     # stand as the recorded explanation for a missing reference level.
     ("refs_true_reason", "TEXT"),
+    # WHETHER entry_ref_true IS A PRICE ANYONE COULD HAVE TRANSACTED AT, which
+    # is a different question from what the level was. On a name whose whole
+    # premarket is a few hundred shares the level is a print rather than a
+    # market, and every excursion measured from it is arithmetic about a price
+    # that was never available.
+    #
+    # fill_band_volume is an UPPER BOUND and is not a measurement of volume at
+    # the level: a one minute bar carries no distribution, so a minute that ran
+    # from below up into the band contributes all of its volume while only some
+    # of it transacted inside. fill_band_minutes is exact. fill_band_notional
+    # is the volume at the level, which is the comparable one: this table holds
+    # prices from 5.64 to 1,585 and a share count means different things at the
+    # two ends. fill_band_pct is the band the row was judged under, carried per
+    # row so a row says what it was measured by rather than inheriting whatever
+    # the file says today.
+    ("fill_band_volume", "REAL"),
+    ("fill_band_minutes", "INTEGER"),
+    ("fill_band_notional", "REAL"),
+    ("fill_band_pct", "REAL"),
+    # THREE STATE AND NEVER A BOOLEAN: 'plausible', 'implausible', or
+    # 'unknown'. A boolean has no room for the third, and the third is the one
+    # that matters, because a row the feed could not reach would otherwise read
+    # as one that was checked and failed. The two are opposite facts and this
+    # project has now confused them under four other names.
+    ("fill_plausible", "TEXT"),
+    ("fill_plausible_reason", "TEXT"),
 )
 
 

@@ -106,6 +106,7 @@ def _window(day: dt.date, cutoff_hhmm: str,
 
 def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
                  start: dt.datetime, end: dt.datetime,
+                 keep_minutes: bool = False,
                  ) -> tuple[dict[str, dict[str, Any]], str | None]:
     """(per symbol path over the window, error). One window, all symbols.
 
@@ -114,6 +115,13 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
     bars that are being walked anyway, and they are what reference_level below
     turns into entry_ref_true and stop_ref_true. Fetching them separately would
     double the request count to answer a question these bars already answer.
+
+    keep_minutes additionally retains one (high, low, volume) triple per bar,
+    which band_stats needs because the band is centred on a level that is not
+    known until the whole window has been walked. It is OFF by default and on
+    for the two windows measure() reads: prior_sessions calls this twenty times
+    a session for a median it takes at the end, and holding every minute of all
+    of them would be twenty windows of tuples kept to answer nothing.
 
     THE EXTREMES ARE NULL, NOT ZERO, when nothing parsed. A high of 0.0 on a
     window with no readable bar would be a fabricated level in the column a
@@ -130,7 +138,8 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
     feed = _CRIT.text("truth", "feed")
     out: dict[str, dict[str, Any]] = {
         symbol: {"volume": 0.0, "bars": 0, "high": None, "low": None,
-                 "price_volume": 0.0} for symbol in symbols}
+                 "price_volume": 0.0, "minutes": [] if keep_minutes else None}
+        for symbol in symbols}
 
     for index in range(0, len(symbols), batch_size):
         chunk = symbols[index:index + batch_size]
@@ -178,6 +187,8 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
                             typical = (high + low + close) / 3.0
                     if typical is not None:
                         held["price_volume"] += typical * volume
+                    if keep_minutes:
+                        held["minutes"].append((high, low, volume))
             token = (payload or {}).get("next_page_token")
             if not token:
                 break
@@ -312,6 +323,109 @@ def reference_level(path: dict[str, Any], field: str) -> float | None:
         volume = path.get("volume") or 0.0
         value = (path["price_volume"] / volume) if volume else None
     return round(value, 4) if value is not None else None
+
+
+def band_stats(path: dict[str, Any], level: float | None,
+               band_pct: float) -> tuple[float | None, int | None]:
+    """(volume upper bound, minutes) for trading within band_pct of one level.
+
+    A REFERENCE LEVEL IS NOT A PRICE ANYONE COULD HAVE TRANSACTED AT. On a name
+    whose entire premarket is a few hundred shares, entry_ref is a print rather
+    than a market, and every excursion measured from it is arithmetic about a
+    level nobody could have got. These two counts are what let a later reader
+    tell that case from a real one.
+
+    A MINUTE COUNTS WHEN ITS RANGE REACHES THE BAND, which is high >= the band
+    floor and low <= the band ceiling. The minute count is then EXACT: that
+    many minutes traded somewhere inside the band.
+
+    THE VOLUME IS AN UPPER BOUND AND IS NOT A MEASUREMENT OF VOLUME AT THE
+    LEVEL. One minute bar carries o, h, l, c and v and no distribution, so a
+    minute that ran from well below up into the band contributes all of its
+    volume here while only some of it transacted inside. Stated as a bound
+    rather than corrected, the way this file already treats premarket RVOL,
+    because the correction would need trade level data this plan does not buy.
+
+    REJECTED: counting a minute by its own volume weighted price instead of its
+    range. It was written that way first and calibrated on 2026-08-29, and it
+    measured the wrong thing. entry_ref is a session HIGH, which is an extreme
+    no whole minute averages near, so a wide ranging name scored zero however
+    much it traded: BABA on 2026-08-20 has 2,986,339 premarket shares over 268
+    minutes and came back with a band volume of 0. That is a measurement of how
+    long a name sat at its top, and it called the most liquid names in the
+    table the least fillable.
+
+    Both are null, not zero, when the level is unknown or the window carried no
+    minutes to look at. Zero volume at a level and no measurement of the volume
+    at a level are different facts, and only the first is evidence.
+    """
+    if level is None or not level or not path.get("minutes"):
+        return None, None
+    floor, ceiling = level * (1.0 - band_pct), level * (1.0 + band_pct)
+    volume = 0.0
+    minutes = 0
+    for high, low, size in path["minutes"]:
+        if high is None or low is None or high < floor or low > ceiling:
+            continue
+        volume += size
+        minutes += 1
+    return round(volume, 2), minutes
+
+
+# The three verdicts fill_plausible may carry. Named rather than spelled as
+# literals through the module, so a claim can assert the set is closed and a
+# typo cannot invent a fourth state that reads as a real one.
+FILL_PLAUSIBLE = "plausible"
+FILL_IMPLAUSIBLE = "implausible"
+FILL_UNKNOWN = "unknown"
+FILL_STATES = (FILL_PLAUSIBLE, FILL_IMPLAUSIBLE, FILL_UNKNOWN)
+
+
+def fill_verdict(notional: float | None, volume: float | None,
+                 minutes: int | None, level: float | None,
+                 band_pct: float, floor: float,
+                 ) -> tuple[str, str]:
+    """(verdict, the numbers behind it). Three states, never two.
+
+    NO ROW IS CALLED PLAUSIBLE ON ABSENT EVIDENCE. A window the feed could not
+    reach, or one with no measured reference to centre a band on, is UNKNOWN
+    and says which. Reading that as either of the other two is the failure this
+    project keeps finding under other names: a missing answer wearing a
+    measured one's clothes. A boolean has no room for the third state, which is
+    why this column is text.
+
+    THE VERDICT RESTS ON THE NOTIONAL ALONE. Requiring a minute count as well
+    was written first and rejected on the 2026-08-29 calibration: MSTR on
+    2026-08-20 traded 49,768 shares inside the band in a SINGLE minute, and
+    KSS, TIGR, BBY and PLAB are the same shape. Half a million dollars changing
+    hands at the level in one minute is a market, and a rule that called it a
+    print because it lasted one bar would be measuring duration rather than
+    liquidity. The minute count is recorded and reported because it says how
+    loose the volume bound is, and it does not gate.
+
+    Dollars rather than shares because this table holds prices from 5.64 to
+    1,585. Ten thousand shares is 56,000 dollars of TIGR and 9,400,000 of MU,
+    and one share floor cannot mean the same thing at both ends.
+    """
+    if level is None or notional is None:
+        return FILL_UNKNOWN, (
+            "there is no measured reference level to centre a band on"
+            if level is None else
+            "no alpaca minutes were held for this window, so nothing can be "
+            "said about what traded near the level")
+    numbers = (f"{volume:,.0f} shares over {minutes} minute(s) within "
+               f"{band_pct * 100:g} percent of {level:g}, which is "
+               f"{notional:,.0f} dollars")
+    if notional < floor:
+        return FILL_IMPLAUSIBLE, (
+            f"{numbers}, below the {floor:,.0f} dollar floor in "
+            f"{config.CRITERIA_PATH.name} [Truth] min_fill_band_notional. The "
+            "level is closer to a print than to a market, and an excursion "
+            "measured from it is arithmetic about a price that was not there")
+    return FILL_PLAUSIBLE, (
+        f"{numbers}, at or above the {floor:,.0f} dollar floor. The volume is "
+        "an UPPER BOUND: a one minute bar carries no distribution, so a minute "
+        "that ran from below up into the band counts whole")
 
 
 def reference_fields() -> tuple[str, str]:
@@ -613,7 +727,10 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     probe = probe if probe is not None else probe_alpaca.Probe()
     session_day = ettime.parse_date(day)
     start, end = _window(session_day, cutoff)
-    observed, error = fetch_window(probe, symbols, start, end)
+    # keep_minutes only here. The band is centred on entry_ref_true, which is
+    # the FULL window's own level, and the socket window and the twenty
+    # baseline sessions are summed rather than looked through.
+    observed, error = fetch_window(probe, symbols, start, end, keep_minutes=True)
     socket_start, socket_end = _window(session_day, cutoff,
                                        ("collector", "start_time"))
     on_socket, socket_error = fetch_window(probe, symbols, socket_start,
@@ -624,6 +741,8 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     # Validated before the loop rather than inside it, so a bad key fails the
     # whole pass loudly instead of writing eleven good rows and then raising.
     entry_field, stop_field = reference_fields()
+    band_pct = _CRIT.number("truth", "fill_band_pct")
+    band_floor = _CRIT.number("truth", "min_fill_band_notional")
     window_text = f"{start.strftime('%H:%M')}-{cutoff}"
     stamp = ettime.stamp(ettime.now_et())
     source = f"{_CRIT.text('truth', 'source')}-{_CRIT.text('truth', 'feed')}"
@@ -657,10 +776,14 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
             "entry_ref_collector_window": None,
             "stop_ref_collector_window": None,
             "refs_true_reason": None,
+            "fill_band_volume": None, "fill_band_minutes": None,
+            "fill_band_notional": None, "fill_band_pct": band_pct,
+            "fill_plausible": FILL_UNKNOWN, "fill_plausible_reason": None,
         }
         if error:
             record["truth_reason"] = error
             record["refs_true_reason"] = error
+            record["fill_plausible_reason"] = error
             out.append(record)
             continue
         if found["bars"] < min_bars:
@@ -668,6 +791,7 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
                       f"{window_text}, below [Truth] min_true_bars of {min_bars}")
             record["truth_reason"] = reason
             record["refs_true_reason"] = reason
+            record["fill_plausible_reason"] = reason
             out.append(record)
             continue
 
@@ -682,6 +806,20 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
                 f"alpaca returned {found['bars']} bars inside {window_text} and "
                 f"none of them carried a readable {entry_field}/{stop_field} "
                 "pair, so the level is null rather than a zero")
+
+        # WHETHER THAT LEVEL WAS A PRICE ANYONE COULD HAVE TRANSACTED AT. A
+        # different question from what the level was, and one nothing asked
+        # before: an excursion from a level nobody could have got is arithmetic
+        # rather than a measurement.
+        level = record["entry_ref_true"]
+        band_volume, band_minutes = band_stats(found, level, band_pct)
+        record["fill_band_volume"] = band_volume
+        record["fill_band_minutes"] = band_minutes
+        if band_volume is not None and level is not None:
+            record["fill_band_notional"] = round(band_volume * level, 2)
+        record["fill_plausible"], record["fill_plausible_reason"] = fill_verdict(
+            record["fill_band_notional"], band_volume, band_minutes, level,
+            band_pct, band_floor)
 
         true_volume = found["volume"]
         record["pm_volume_true"] = round(true_volume, 2)
@@ -858,6 +996,10 @@ def report(result: dict[str, Any]) -> None:
                   f"{record['_stop_ref'] if record['_stop_ref'] is not None else 'null':>12} "
                   f"{record['stop_ref_true'] if record['stop_ref_true'] is not None else 'null':>12} "
                   f"{f'{stop_gap:+.3f}%' if stop_gap is not None else 'null':>9}")
+    verdicts = [r for r in rows if r["fill_plausible"] != FILL_PLAUSIBLE]
+    for record in verdicts:
+        print(f"  {record['ticker']}: fill {record['fill_plausible']}. "
+              f"{record['fill_plausible_reason']}")
     for record in rows:
         if record["refs_true_reason"] and not record["truth_reason"]:
             print(f"  {record['ticker']}: no true reference level. "
@@ -949,6 +1091,99 @@ def reference_gap_report() -> None:
           "do not cancel by construction and neither column is corrected.")
 
 
+def mark_unmeasurable(day: str, reason: str) -> int:
+    """Record a REFUSED session on its rows, rather than leaving them null.
+
+    measure() refuses a session whose packet does not say which window the
+    morning used, because guessing one mismeasures precisely the sessions that
+    went wrong. It then writes nothing at all, which leaves every row of that
+    session with a null fill_plausible: a FOURTH state, sitting outside the
+    three the column promises, and indistinguishable from a row the pass has
+    simply not reached yet. 2026-08-21 is twelve such rows.
+
+    'unknown' is the state for exactly this, so the refusal is written into it
+    with the reason beside. That is a record of a refusal and not a
+    measurement, and it invents no window, no level and no count.
+
+    ONLY ROWS WITH NO VERDICT. A row that carries one was measured on some
+    earlier night, and overwriting a measurement with a refusal is the failure
+    write() above exists to prevent, one column across.
+    """
+    with store.session() as connection:
+        store.init(connection)
+        changed = connection.execute(
+            "UPDATE picks SET fill_plausible=?, fill_plausible_reason=? "
+            "WHERE date=? AND source='live' AND fill_plausible IS NULL",
+            (FILL_UNKNOWN, reason, day)).rowcount
+        connection.commit()
+    if changed:
+        print(f"truth: {changed} row(s) of {day} marked fill "
+              f"{FILL_UNKNOWN}: {reason}")
+    return changed
+
+
+def fill_plausibility_report() -> None:
+    """How many reference levels were prices anyone could have transacted at.
+
+    THE WHOLE TABLE, and both denominators, because twelve names from one
+    morning share a tape and are one observation.
+
+    The three states are counted separately and 'unknown' is never folded into
+    either of the others. A row the feed could not reach and a row that was
+    checked and failed are opposite facts, and a count that adds them is the
+    defect this column's three states exist to prevent.
+    """
+    with store.session() as connection:
+        store.init(connection)
+        rows = [dict(row) for row in connection.execute(
+            "SELECT date, ticker, fill_plausible, fill_band_volume, "
+            "fill_band_minutes, fill_band_notional, fill_band_pct, "
+            "entry_ref_true FROM picks WHERE source='live'")]
+    if not rows:
+        print("truth: no live picks row, so fill plausibility is not computable")
+        return
+    sessions = len({row["date"] for row in rows})
+    counted = {state: [r for r in rows if r["fill_plausible"] == state]
+               for state in FILL_STATES}
+    unlabelled = [r for r in rows if r["fill_plausible"] not in FILL_STATES]
+
+    print("")
+    print(f"truth: FILL PLAUSIBILITY, over {len(rows)} live rows across "
+          f"{sessions} session(s). The sample unit is the session.")
+    for state in FILL_STATES:
+        held = counted[state]
+        print(f"  {state:<12} {len(held):>3} of {len(rows)}")
+    if unlabelled:
+        # A row written before the column existed, or by something that
+        # invented a fourth state. Named rather than counted into a bucket it
+        # does not belong to.
+        print(f"  {'no verdict':<12} {len(unlabelled):>3} of {len(rows)}, rows "
+              "the pass has not reached: "
+              f"{', '.join(sorted({r['ticker'] for r in unlabelled}))[:90]}")
+
+    thin = sorted((r for r in counted[FILL_IMPLAUSIBLE]
+                   if r["fill_band_notional"] is not None),
+                  key=lambda r: r["fill_band_notional"])
+    if thin:
+        floor = _CRIT.number("truth", "min_fill_band_notional")
+        print(f"  the levels that are prints rather than markets, against the "
+              f"{floor:,.0f} dollar floor:")
+        for row in thin[:15]:
+            print(f"    {row['date']} {row['ticker']:<9} "
+                  f"{row['fill_band_volume']:>10,.0f} shares over "
+                  f"{row['fill_band_minutes']:>3} minute(s) = "
+                  f"{row['fill_band_notional']:>13,.0f} dollars within "
+                  f"{row['fill_band_pct'] * 100:g}% of "
+                  f"{row['entry_ref_true']:g}")
+        if len(thin) > 15:
+            print(f"    and {len(thin) - 15} more")
+    print("  The band volume is an UPPER BOUND on what traded at the level: a "
+          "one minute bar carries no distribution, so a minute that ran from "
+          "below up into the band counts whole. The minute count is exact and "
+          "says how loose that bound is. See CRITERIA [Truth] the fill "
+          "plausibility note.")
+
+
 # The exit codes that mean this step did its job. Declared at module level so
 # the __main__ line below and the entrypoint test harness read the same value.
 OK_CODES = (0,)
@@ -977,12 +1212,17 @@ def main(argv: list[str] | None = None) -> int:
     day = args.date or ettime.today_str()
     result = measure(day, dry_run=args.dry_run)
     written = write(result)
+    if result.get("skipped") and not args.dry_run:
+        # A refused session still gets a verdict, because 'no verdict' is a
+        # fourth state the column does not have. See mark_unmeasurable.
+        mark_unmeasurable(day, result["skipped"])
     report(result)
     # Reads the whole table rather than tonight's rows, so it stands as the
     # project's estimate of the bias rather than as one morning's. Printed
     # after the write so tonight's session is in it.
     if not args.dry_run:
         reference_gap_report()
+        fill_plausibility_report()
     job_status.produced("rows given a true volume", written)
     return 0
 

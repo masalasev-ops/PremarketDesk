@@ -7867,6 +7867,198 @@ def claim_the_true_excursion_never_borrows_the_sampled_reference(
           "nothing")
 
 
+def claim_the_fill_band_counts_the_minutes_that_reached_it(
+        failures: list[str]) -> None:
+    """A minute is in the band when its RANGE reaches it, not when its mean is.
+
+    band_stats was written the other way first and calibrated on 2026-08-29,
+    and it measured the wrong thing. entry_ref is a session HIGH, an extreme
+    that no whole minute AVERAGES near, so a wide ranging name scored near zero
+    however much it traded: BABA on 2026-08-20 has 2,986,339 premarket shares
+    over 268 minutes and came back with a band volume of 0. That is a
+    measurement of how long a name sat at its top, and it called the most
+    liquid names in the table the least fillable.
+
+    The fixture is that shape. One minute runs from far below up into the band,
+    which is the bar that made the high; its volume weighted price is nowhere
+    near the level and its RANGE reaches it.
+
+    AND NULL IS NOT ZERO. No level to centre a band on, or no minutes held for
+    the window, means no measurement, and a zero there would be evidence of
+    thinness that nobody gathered.
+    """
+    from night import true_volume as _truth
+
+    level, band = 100.0, 0.005          # the band is 99.5 to 100.5
+    minutes = [
+        # The bar that made the high. Ran from 90 up to the level, so its own
+        # mean sits around 95 and its range reaches the band. Under a mean
+        # rule this whole 50,000 disappears.
+        (100.0, 90.0, 50000.0),
+        # Never got closer than 1.5 percent. Out under either rule.
+        (98.0, 97.0, 9999.0),
+        # Sat inside the band for a whole minute. In under either rule.
+        (99.6, 99.55, 1000.0),
+    ]
+    volume, count = _truth.band_stats({"minutes": minutes}, level, band)
+    if volume != 51000.0 or count != 2:
+        failures.append(
+            f"band_stats returned {volume!r} over {count!r} minute(s), not "
+            "51,000 over 2. The minute that ran from 90 up to the level "
+            "reached the band and a rule that reads its mean instead drops it, "
+            "which is how the most liquid names in the table scored zero")
+
+    for path, why in (({"minutes": []}, "a window with no minutes held"),
+                      ({}, "a path with no minutes key at all")):
+        got = _truth.band_stats(path, level, band)
+        if got != (None, None):
+            failures.append(f"{why} produced {got!r} rather than nulls. Zero "
+                            "volume at a level and no measurement of it are "
+                            "different facts, and only the first is evidence")
+    if _truth.band_stats({"minutes": minutes}, None, band) != (None, None):
+        failures.append("a band was measured around a level that is not there")
+    print("  fill band    a minute counts when its range reaches the band, not "
+          "when its mean does, and an absent level measures nothing")
+
+
+def claim_fill_plausibility_is_three_state_and_never_guesses(
+        failures: list[str]) -> None:
+    """plausible, implausible, unknown. Never a boolean, never on absent evidence.
+
+    A boolean has no room for the third state, and the third is the one that
+    matters: a row the feed could not reach would otherwise read as one that
+    was checked and failed, and those are opposite facts. This project has now
+    confused a missing answer with a measured one under four other names.
+
+    AND THE VERDICT RESTS ON THE NOTIONAL ALONE. Requiring a minute count too
+    was written first and rejected on the 2026-08-29 calibration: MSTR on
+    2026-08-20 traded 49,768 shares inside the band in a SINGLE minute, which
+    is 1.4 million dollars at the level. That is a market, and a rule calling
+    it a print because it lasted one bar measures duration rather than
+    liquidity. KSS, TIGR, BBY and PLAB are the same shape.
+    """
+    from night import true_volume as _truth
+
+    band, floor = 0.005, 250_000.0
+
+    def verdict(notional, volume, minutes, level):
+        return _truth.fill_verdict(notional, volume, minutes, level, band, floor)
+
+    state, reason = verdict(None, None, None, None)
+    if state != _truth.FILL_UNKNOWN or "reference level" not in reason:
+        failures.append(
+            f"no measured level gave {state!r}: {reason!r}. A row with nothing "
+            "to centre a band on was not checked, and reading that as either "
+            "of the other two states is a missing answer wearing a measured "
+            "one's clothes")
+    state, reason = verdict(None, None, None, 100.0)
+    if state != _truth.FILL_UNKNOWN or "minutes" not in reason:
+        failures.append(
+            f"a level with no minutes held gave {state!r}: {reason!r}")
+
+    # The boundary. At the floor is plausible; a cent under it is not.
+    state, _ = verdict(floor, 2500.0, 4, 100.0)
+    if state != _truth.FILL_PLAUSIBLE:
+        failures.append(
+            f"a band notional exactly at the floor read {state!r}. The floor is "
+            "the least that counts, not the least that fails")
+    state, reason = verdict(floor - 0.01, 2500.0, 4, 100.0)
+    if state != _truth.FILL_IMPLAUSIBLE:
+        failures.append(f"a band notional under the floor read {state!r}")
+    for number in ("2,500", "4 minute", "250,000"):
+        if number not in reason:
+            failures.append(
+                f"the implausible verdict does not carry {number!r}: "
+                f"{reason!r}. A verdict without the numbers behind it cannot "
+                "be checked by the person reading the row")
+
+    # MSTR's shape. One minute, and a market all the same.
+    state, _ = verdict(1_438_295.0, 49768.0, 1, 28.9)
+    if state != _truth.FILL_PLAUSIBLE:
+        failures.append(
+            f"49,768 shares at the level in one minute, 1.4 million dollars, "
+            f"read {state!r}. A minute gate here measures how long the level "
+            "lasted rather than whether anyone could have transacted at it, "
+            "and it would take MSTR, KSS, TIGR, BBY and PLAB with it")
+
+    for state, _ in (verdict(None, None, None, None),
+                     verdict(floor, 1.0, 1, 1.0),
+                     verdict(0.0, 0.0, 0, 1.0)):
+        if state not in _truth.FILL_STATES:
+            failures.append(
+                f"fill_verdict invented the state {state!r}, which is outside "
+                f"{_truth.FILL_STATES!r} and would read as a real verdict")
+    print("  fill verdict three states with the numbers behind each, the floor "
+          "is the least that counts, and one liquid minute is still a market")
+
+
+def claim_a_refused_session_still_carries_a_verdict(
+        failures: list[str]) -> None:
+    """A null fill_plausible is a fourth state the column does not have.
+
+    measure() refuses a session whose packet does not record which window the
+    morning used, and writes nothing at all for it. That left every row of
+    2026-08-21, twelve of them, with a null verdict: outside the three states
+    the column promises and indistinguishable from a row the pass has not
+    reached. 'unknown' is the state for exactly this.
+
+    It is a record of a REFUSAL and not a measurement, so it invents no window,
+    no level and no count, and it must never land on a row that already carries
+    a verdict: overwriting a measurement with a refusal is the failure write()
+    exists to prevent, one column across.
+    """
+    from core import store
+    from night import true_volume as _truth
+
+    day, reason = "2026-08-21", "the packet carries no rvol_cutoff_hhmm"
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks WHERE date=?", (day,))
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, fill_plausible, "
+                "fill_plausible_reason) VALUES (?,?,'live',?,?)",
+                (day, "AAA.US", _truth.FILL_PLAUSIBLE, "41,146 shares"))
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source) VALUES (?,?,'live')",
+                (day, "BBB.US"))
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source) VALUES (?,?,'test')",
+                (day, "CCC.US"))
+            connection.commit()
+
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            first = _truth.mark_unmeasurable(day, reason)
+            second = _truth.mark_unmeasurable(day, reason)
+
+        with store.session() as connection:
+            rows = {row["ticker"]: dict(row) for row in connection.execute(
+                "SELECT ticker, fill_plausible, fill_plausible_reason FROM "
+                "picks WHERE date=?", (day,)).fetchall()}
+
+        if rows["AAA.US"]["fill_plausible"] != _truth.FILL_PLAUSIBLE:
+            failures.append(
+                f"a refusal overwrote a measured verdict: {rows['AAA.US']!r}. "
+                "A row that carries one was measured on some earlier night")
+        if rows["BBB.US"]["fill_plausible"] != _truth.FILL_UNKNOWN:
+            failures.append(
+                f"a row of a refused session reads {rows['BBB.US']!r}. A null "
+                "verdict is a fourth state the column does not have, and it "
+                "cannot be told from a row the pass has not reached")
+        if reason not in (rows["BBB.US"]["fill_plausible_reason"] or ""):
+            failures.append(
+                f"the refusal recorded no reason: {rows['BBB.US']!r}")
+        if rows["CCC.US"]["fill_plausible"] is not None:
+            failures.append("a source='test' row was given a verdict")
+        if (first, second) != (1, 0):
+            failures.append(
+                f"the pass marked {first} row(s) then {second}; it is meant to "
+                "reach the one row with no verdict and then find nothing left")
+    print("  fill refused a session with no recorded window marks its rows "
+          "unknown with the reason, and never over a verdict already taken")
+
+
 def claim_the_weekly_page_reads_and_renders_and_nothing_else(
         failures: list[str]) -> None:
     """A reporting layer that fetches is a second pipeline to keep right.
@@ -9598,6 +9790,9 @@ def main() -> int:
     claim_the_true_reference_reads_the_field_the_criteria_names(failures)
     claim_the_true_reference_pair_is_kept_apart_from_the_sampled_one(failures)
     claim_the_true_excursion_never_borrows_the_sampled_reference(failures)
+    claim_the_fill_band_counts_the_minutes_that_reached_it(failures)
+    claim_fill_plausibility_is_three_state_and_never_guesses(failures)
+    claim_a_refused_session_still_carries_a_verdict(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_a_claim_cannot_reach_the_live_database(failures)
     claim_the_two_unrebuildable_artifacts_are_held_twice(failures)

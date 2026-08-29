@@ -1120,6 +1120,110 @@ min_true_bars                 = 1          # bars inside the window before a tru
 symbols_per_request           = 100        # MEASURED: batch 100 returned 200 with a 444 character symbol list, ALPACA_PROBE.md section 3. Larger batches also worked and a morning's picks is about twelve names, so this is never the binding constraint
 max_pages_per_request         = 20         # pages of 10,000 bars before the fetch is called incomplete and refused rather than silently truncated
 max_calendar_days_back        = 40         # DERIVED: baseline_sessions of 20 trading days spans 28 calendar days at five a week, and the worst holiday stretch on this calendar adds two. 40 leaves a full week of margin and bounds the walk when a symbol simply has no history
+fill_band_pct                 = 0.005      # SEED. Half width of the band around entry_ref_true that fill plausibility is measured in, as a fraction. See the fill plausibility note below
+min_fill_band_notional        = 250000     # SEED, DOLLARS not shares. Band notional below this makes fill_plausible read 'implausible'. See the fill plausibility note below
+
+### The fill plausibility note
+
+A reference level is not a price anyone could have transacted at. On a name
+whose entire premarket is a few hundred shares, entry_ref is a print rather
+than a market, and every excursion in [Outcomes] measured from it is arithmetic
+about a price that was never available. Nothing asked this question before
+2026-08-29.
+
+**The three counts, and where each already lived.** Two of them did.
+
+  total premarket volume   pm_volume_true, from the same pass
+  distinct minutes traded  true_bars. Alpaca publishes a one minute bar only
+                           for a minute that carried a trade, so the bar count
+                           IS the minute count
+  volume near the level    fill_band_volume, which is new
+
+**A minute counts when its range reaches the band**, high at or above the band
+floor and low at or below its ceiling. The MINUTE COUNT IS THEN EXACT: that
+many minutes traded somewhere inside the band.
+
+**The volume is an UPPER BOUND and is not volume at the level.** A one minute
+bar carries o, h, l, c and v and no distribution, so a minute that ran from
+well below up into the band contributes all of its volume while only some of it
+transacted inside. Stated as a bound rather than corrected, the way premarket
+RVOL is, because correcting it needs trade level data this plan does not buy.
+
+**Dollars, not shares.** fill_band_notional is fill_band_volume times the
+level. The table holds prices from 5.64 to 1,585: ten thousand shares is 56,000
+dollars of TIGR and 9,400,000 of MU, and one share floor cannot mean the same
+thing at both ends.
+
+**fill_plausible is three state and never a boolean:** 'plausible',
+'implausible', 'unknown'. A boolean has no room for the third, and the third is
+the one that matters, because a row the feed could not reach would otherwise
+read as one that was checked and failed. Those are opposite facts. Every row
+carries fill_plausible_reason with the numbers behind whichever verdict it got,
+and fill_band_pct so a row says which band it was judged under rather than
+inheriting whatever this file says today.
+
+**Two rejected alternatives, both tried on the 2026-08-29 calibration.**
+
+Counting a minute by its own volume weighted price rather than its range. It
+measures the wrong thing: entry_ref is a session HIGH, an extreme no whole
+minute averages near, so a wide ranging name scored near zero however much it
+traded. BABA on 2026-08-20 has 2,986,339 premarket shares over 268 minutes and
+came back with a band volume of 0. It called the most liquid names in the table
+the least fillable.
+
+Requiring a minute count as well as a notional. MSTR on 2026-08-20 traded
+49,768 shares inside the band in a SINGLE minute, and KSS, TIGR, BBY and PLAB
+are the same shape. Half a million dollars at the level in one minute is a
+market, and a rule that called it a print because it lasted one bar would be
+measuring duration. The minute count is recorded and reported, and it does not
+gate.
+
+**MEASURED 2026-08-29**, over the 54 live rows across the six sessions whose
+packets carry an rvol_cutoff_hhmm. The sample unit is the session, so this is
+six observations.
+
+  band width   median band volume   median band minutes   median share of the
+                                                          whole premarket
+    0.10%             14,212                  1                  2.40%
+    0.25%             25,108                  3                  3.59%
+    0.50%             41,146                  7                  6.71%
+    1.00%             79,768                 20                 15.29%
+    2.00%            201,570                 81                 46.72%
+
+0.005 is the band. 0.001 is too tight to separate anything: the median row has
+one minute in it, which is the bar that made the high and nothing else. 0.02 is
+too wide to mean anything: it holds 46.72 percent of the whole premarket at the
+median and 100 percent at the p90, so it stops being a band and becomes the
+session. 0.005 sits where the band is a small slice, 6.71 percent at the
+median, and still separates: it is also a realistic slippage tolerance for a
+breakout entry, which is what the level is for.
+
+  band notional at 0.005, dollars    min 7,085   p10 111,033   p25 310,123
+                                     median 1,967,202   p75 16,538,588
+                                     p90 76,028,180   max 894,263,874
+
+250,000 is the floor and it is a SEED. Five orders of magnitude separate the
+thinnest row from the thickest, so no percentile of this distribution is a
+natural cut. What picks the number is that it flags 10 rows of 54, and those
+ten read as genuinely thin on inspection: eight of them had under 7,000 shares
+in the band and three had the level touched in a single minute. Below the floor
+the distribution falls away fast, p25 being 310,123 and p10 being 111,033.
+
+  at    25,000    1 of 54 implausible   CSIQ
+  at    50,000    3 of 54               CSIQ, DQ, SCSC
+  at   100,000    5 of 54               + HMY, MNSO
+  at   250,000   10 of 54               + AAP, BLSH, BWLP, CHA, TIGR
+  at   500,000   16 of 54               + DLTR, DY, NSSC, PLAB, WOLF, WSM
+  at 1,000,000   23 of 54
+
+THE RIGHT FORM OF THIS THRESHOLD IS NOT A CONSTANT. It should be the intended
+position size divided by the largest share of the band a fill may be, because
+what makes a fill implausible is being too much of the volume at the level, and
+that is a statement about an order rather than about a name. No rule in this
+file names a position size yet. When one does, this becomes
+size / max_participation and the constant goes, and 250,000 is a placeholder
+that behaves like the right rule for an order of about 10,000 dollars at a
+4 percent participation cap.
 
 ### The reference level note
 

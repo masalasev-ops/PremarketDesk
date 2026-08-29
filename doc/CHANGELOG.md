@@ -15,6 +15,66 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: whether the reference level was a price anyone could have got
+
+**What changed.** night/true_volume.py measures, off the bars it already
+fetches, how much traded within [Truth] fill_band_pct of entry_ref_true and
+over how many minutes, and writes fill_band_volume, fill_band_minutes,
+fill_band_notional, fill_band_pct, fill_plausible and fill_plausible_reason
+into picks. Two new SEED keys in CRITERIA [Truth]: fill_band_pct 0.005 and
+min_fill_band_notional 250000. Nothing screens on any of it and no threshold in
+the morning path moved.
+
+**Why it had to.** entry_ref is the level every mfe_pct and mae_pct is measured
+from, and on a thin name it is one print. The record could not tell a level a
+market was standing at from one a single trade produced, and both were feeding
+the table this project says its seed thresholds will be calibrated against.
+
+**fill_plausible is three state and never a boolean:** plausible, implausible,
+unknown. A boolean has no room for the third, and a row the feed could not
+reach reading as one that was checked and failed is the failure this project
+keeps finding under other names.
+
+**The counts.** Two of the three the design asked for already existed:
+pm_volume_true is the window total and true_bars is the count of minutes
+carrying a trade, since Alpaca publishes a one minute bar only for a minute
+that traded. fill_band_volume is the new one. It is an UPPER BOUND and is
+labelled one: a one minute bar carries no distribution, so a minute running
+from below up into the band counts whole.
+
+**Two definitions were built and thrown away first**, both caught by the
+calibration rather than by review. Counting a minute by its own mean scored
+BABA's 2,986,339 premarket shares as 0 at the level, because a session high is
+an extreme no minute averages near. Requiring a minute count as well as a
+volume rejected MSTR's 49,768 shares in one minute, which is 1.4 million
+dollars and plainly a market. The verdict rests on notional alone; the minute
+count is recorded because it says how loose the volume bound is. See
+DECISIONS.md.
+
+**MEASURED 2026-08-29**, 66 live rows across 7 sessions: 44 plausible, 10
+implausible across 4 sessions, 12 unknown. The twelve unknown are all of
+2026-08-21, whose packet records no rvol_cutoff_hhmm; they are marked rather
+than left null, because a null verdict is a fourth state.
+
+The ten implausible, thinnest first, all within 0.5 percent of the level:
+CSIQ 500 shares over 2 minutes for 7,085 dollars, DQ 2,010 over 3 for 28,421,
+SCSC 714 over 1 for 42,840, MNSO 6,030 over 2 for 69,466, HMY 3,845 over 1 for
+87,205, AAP 1,898 over 1 for 108,755, CHA 10,577 over 5 for 116,347, BWLP 6,748
+over 7 for 158,173, BLSH 6,518 over 8 for 188,370, TIGR 39,761 over 1 for
+224,252.
+
+**Worth flagging rather than concluding.** Six of the nine day_eligible rows
+are unknown, all six being 2026-08-21. Any reading of that group rests on three
+rows with measured references, not nine.
+
+**Held in place by** three claims in test_regressions.py, mutation tested
+against eight edits: a minute counts when its range reaches the band and not
+when its mean does, and an absent level measures nothing rather than zero; the
+verdict has three states with the numbers behind each, the floor is the least
+that counts rather than the least that fails, and one liquid minute is still a
+market; and a refused session marks its rows unknown with the reason, never
+over a verdict already taken and never on a test row.
+
 ## 2026-08-29: the reference levels get measured, beside the ones that were sampled
 
 **What changed.** night/true_volume.py now reads the high, the low and a volume
