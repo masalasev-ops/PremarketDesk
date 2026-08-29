@@ -2583,3 +2583,37 @@ unscored rows, never fold them into red.
 band = >= 7 : green
 band = >= 4 : yellow
 band = else : red
+
+## Score watch
+
+The score exists to order names by confidence, and over the first fifty filled
+rows it ordered them BACKWARDS: yellow beat green, twenty-five rows each. At
+that count it is noise. It is also exactly the thing that should be watched
+rather than rediscovered, so night/weekly_page.py renders it every night and
+doc/research/SCORE_INVERSION.md holds a pre-registration written before the
+count is reached.
+
+**The page reports and does not conclude.** No test, no p value, no verdict in
+the code. It prints n, the session count and three medians per group, and the
+judging is a separate act performed against a rule written down in advance.
+
+**BOTH DENOMINATORS, EVERYWHERE.** Twelve names from one morning share a tape
+and are one observation, so every group states rows and sessions. A group that
+looks like twelve data points and is one is the single easiest way to be wrong
+with this table.
+
+**A group below either minimum is WITHHELD and says so**, rather than showing a
+median nobody should read. Suppression is per METRIC, not per group: booked
+P&L, favourable excursion and adverse excursion each have their own n, because
+the ledger reaches fewer rows than the outcome fill does.
+
+min_group_rows                = 10         # SEED. Below ten rows one name moves the median
+min_group_sessions            = 3          # SEED. The sample unit is the session. Below three, the rows share at most two tapes and the group is one or two observations wearing a larger number
+
+**The excursion columns on that page are D+1.** mfe_pct_true and mae_pct_true
+come from [Outcomes], which measures the session AFTER the one the report was
+about; the booked P&L comes from [Paper], which trades the pick's own session.
+See the [Paper] section on which session it trades. They are shown together
+because they are the numbers that exist, and the page says on every rendering
+that they are not the same day.
+

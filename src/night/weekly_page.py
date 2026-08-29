@@ -398,8 +398,232 @@ border-top:1px solid var(--line);padding-top:1rem}
 """
 
 
+# The score components, in the order scan.score_candidate adds them. The two
+# volume measures fill ONE slot and only one of them is ever present on a row,
+# so they are listed as alternatives and grouped under one heading.
+SCORE_COMPONENTS = (
+    "catalyst_class",
+    "premarket_rvol",
+    "premarket_float_rotation",
+    "gap",
+    "above_prior_high",
+    "above_premarket_vwap",
+    "market_cap",
+)
+
+
+def _median(values: list[float]) -> float | None:
+    return statistics.median(values) if values else None
+
+
+def _group(rows: list[dict[str, Any]], minimum_rows: int,
+           minimum_sessions: int) -> dict[str, Any]:
+    """n, sessions and three medians for one group, each withheld on its own.
+
+    SUPPRESSION IS PER METRIC. The ledger reaches fewer rows than the outcome
+    fill does, so a group can have plenty of excursions and almost no booked
+    trades, and one verdict over the whole group would either publish a median
+    resting on two trades or withhold twenty excursions to protect them.
+
+    Nothing here decides anything. It returns the numbers and the reasons they
+    were withheld, and CRITERIA [Score watch] holds the minimums. The judging
+    is pre-registered in doc/research/SCORE_INVERSION.md and is a separate act.
+    """
+    sessions = len({row["date"] for row in rows})
+
+    def metric(values: list[float], of: list[dict[str, Any]]) -> dict[str, Any]:
+        held = len({row["date"] for row in of})
+        if len(values) < minimum_rows or held < minimum_sessions:
+            return {"value": None, "rows": len(values), "sessions": held,
+                    "withheld": (
+                        f"{len(values)} row(s) across {held} session(s), below "
+                        f"the {minimum_rows} row and {minimum_sessions} "
+                        "session minimum")}
+        return {"value": _median(values), "rows": len(values),
+                "sessions": held, "withheld": None}
+
+    booked = [r for r in rows if r.get("pnl_pct") is not None]
+    favourable = [r for r in rows if r.get("mfe_pct_true") is not None]
+    adverse = [r for r in rows if r.get("mae_pct_true") is not None]
+    return {
+        "rows": len(rows), "sessions": sessions,
+        "pnl": metric([r["pnl_pct"] for r in booked], booked),
+        "mfe": metric([r["mfe_pct_true"] for r in favourable], favourable),
+        "mae": metric([r["mae_pct_true"] for r in adverse], adverse),
+    }
+
+
+def _score_components_by_row() -> dict[tuple[str, str], dict[str, float]]:
+    """Each pick's own awarded component points, read from its packet.
+
+    THE POINTS THE MORNING ACTUALLY AWARDED, not a recomputation. picks holds
+    the total and the inputs but not the per component breakdown, and
+    recomputing it here would build a second scorer that can drift from the one
+    that ran. The packets are already on disk and this page's whole constraint
+    is that it reads and renders.
+
+    A packet that is missing or unreadable contributes nothing rather than
+    zeros. A component nobody scored is not a component that scored zero.
+    """
+    out: dict[tuple[str, str], dict[str, float]] = {}
+    for path in sorted(config.RUNS_DIR.glob("*/packet.json")):
+        day = path.parent.name
+        try:
+            packet = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        for candidate in packet.get("candidates") or []:
+            symbol = candidate.get("symbol")
+            components = candidate.get("score_components")
+            if not symbol or not components:
+                continue
+            out[(day, symbol)] = {
+                entry["component"]: entry["points"] for entry in components
+                if isinstance(entry, dict) and entry.get("points") is not None}
+    return out
+
+
+def how_did_the_score_do() -> dict[str, Any]:
+    """The conviction bucket and each score component against what happened.
+
+    THE WHOLE RECORD, not this page's window. Everything else here is a seven
+    day view of whether the machine ran; this is an accumulating measurement
+    and truncating it to a week would reset the only thing it is trying to
+    build. The section says so on the page.
+
+    Reads picks, paper_trades and the packets. No vendor call, no new table,
+    no measurement of its own, which is this module's standing constraint.
+    """
+    minimum_rows = _CRIT.integer("score_watch", "min_group_rows")
+    minimum_sessions = _CRIT.integer("score_watch", "min_group_sessions")
+    with store.session() as connection:
+        store.init(connection)
+        rows = [dict(row) for row in connection.execute(
+            "SELECT k.date, k.ticker, k.conviction, k.score, "
+            "k.mfe_pct_true, k.mae_pct_true, p.pnl_pct "
+            "FROM picks k LEFT JOIN paper_trades p "
+            "  ON p.date = k.date AND p.ticker = k.ticker AND p.booked = 1 "
+            "WHERE k.source = 'live' "
+            "  AND (k.mfe_pct_true IS NOT NULL OR p.pnl_pct IS NOT NULL)")]
+
+    components = _score_components_by_row()
+    buckets: list[dict[str, Any]] = []
+    # Ordered green, yellow, red so the page reads as the score intends, which
+    # is what makes an inversion visible at a glance. unscored is carried
+    # separately and never folded into red: CRITERIA [Score buckets] says a
+    # null score is unscored, not low.
+    for name in ("green", "yellow", "red", None):
+        held = [r for r in rows if r["conviction"] == name]
+        if not held:
+            continue
+        buckets.append({"bucket": name or "unscored",
+                        **_group(held, minimum_rows, minimum_sessions)})
+
+    by_component: list[dict[str, Any]] = []
+    for component in SCORE_COMPONENTS:
+        awarded: dict[float, list[dict[str, Any]]] = {}
+        for row in rows:
+            points = (components.get((row["date"], row["ticker"])) or {}).get(component)
+            if points is None:
+                continue
+            awarded.setdefault(float(points), []).append(row)
+        if not awarded:
+            continue
+        by_component.append({
+            "component": component,
+            "levels": [{"points": points,
+                        **_group(held, minimum_rows, minimum_sessions)}
+                       for points, held in sorted(awarded.items(),
+                                                  reverse=True)],
+        })
+
+    return {
+        "rows": len(rows), "sessions": len({r["date"] for r in rows}),
+        "buckets": buckets, "components": by_component,
+        "minimum_rows": minimum_rows, "minimum_sessions": minimum_sessions,
+        "packets_read": len(components),
+    }
+
+
+def _cell(metric: dict[str, Any]) -> str:
+    """One median, or the reason it is not shown. Never a number and a caveat.
+
+    A withheld group prints WHY it is withheld and how far short it is, which
+    is a more useful thing to read than a median resting on two rows with a
+    footnote nobody reaches.
+    """
+    if metric["withheld"]:
+        return (f"<span class=null>withheld</span>"
+                f"<div class=note>{_esc(metric['withheld'])}</div>")
+    return (f"{metric['value']:+.2f}%"
+            f"<div class=note>n={metric['rows']} over "
+            f"{metric['sessions']} session(s)</div>")
+
+
+def _render_score_watch(add, score: dict[str, Any]) -> None:
+    add("<h2>Does the score order anything</h2>")
+    add(f"<p class=sub>THE WHOLE RECORD, not the window above: "
+        f"{_n(score['rows'])} live picks across {_n(score['sessions'])} "
+        f"session(s) that carry an outcome or a booked trade. The sample unit "
+        f"is the SESSION, so both denominators are printed everywhere. A group "
+        f"below {score['minimum_rows']} rows or {score['minimum_sessions']} "
+        f"sessions is withheld rather than shown. This page reports and does "
+        f"not conclude: the judging point and what would count as the score "
+        f"having no relationship to outcomes are pre-registered in "
+        f"doc/research/SCORE_INVERSION.md.</p>")
+    add("<p class=sub>Booked P&amp;L is the CRITERIA [Paper] rule on the "
+        "pick's own session. The two excursions come from [Outcomes], which "
+        "measures the session AFTER it. They are different days and are shown "
+        "together only because they are the numbers that exist.</p>")
+
+    if not score["buckets"]:
+        add("<div class=card><span class=null>no live pick carries an outcome "
+            "or a booked trade yet, so there is nothing to group</span></div>")
+        return
+
+    for title, groups, label in (
+            ("By conviction bucket", score["buckets"], "bucket"),
+            (None, None, None)):
+        if title is None:
+            break
+        add(f"<h3>{title}</h3>")
+        add("<div class='card scroll'><table><tr><th>Bucket</th><th>Rows</th>"
+            "<th>Sessions</th><th>Median booked P&amp;L</th>"
+            "<th>Median favourable, D+1</th><th>Median adverse, D+1</th></tr>")
+        for group in groups:
+            add(f"<tr><td>{_esc(group[label])}</td><td>{_n(group['rows'])}</td>"
+                f"<td>{_n(group['sessions'])}</td>"
+                f"<td>{_cell(group['pnl'])}</td>"
+                f"<td>{_cell(group['mfe'])}</td>"
+                f"<td>{_cell(group['mae'])}</td></tr>")
+        add("</table></div>")
+
+    add("<h3>By each score component, separately</h3>")
+    add(f"<p class=sub>Points as the morning actually awarded them, read from "
+        f"{_n(score['packets_read'])} packet row(s) rather than recomputed. A "
+        "component a row never scored is absent from its table rather than "
+        "counted as a zero.</p>")
+    if not score["components"]:
+        add("<div class=card><span class=null>no packet in runs/ carries "
+            "score_components, so the components cannot be grouped</span>"
+            "</div>")
+        return
+    for entry in score["components"]:
+        add(f"<div class='card scroll'><table><tr><th>{_esc(entry['component'])}"
+            "</th><th>Rows</th><th>Sessions</th><th>Median booked P&amp;L</th>"
+            "<th>Median favourable, D+1</th><th>Median adverse, D+1</th></tr>")
+        for level in entry["levels"]:
+            add(f"<tr><td>{level['points']:g} point(s)</td>"
+                f"<td>{_n(level['rows'])}</td>"
+                f"<td>{_n(level['sessions'])}</td>"
+                f"<td>{_cell(level['pnl'])}</td>"
+                f"<td>{_cell(level['mfe'])}</td>"
+                f"<td>{_cell(level['mae'])}</td></tr>")
+        add("</table></div>")
+
+
 def render(days: list[str], ran: dict, trust: dict, published: dict,
-           cost: dict) -> str:
+           cost: dict, score: dict | None = None) -> str:
     out: list[str] = []
     add = out.append
     add("<title>PremarketDesk Weekly</title>")
@@ -591,10 +815,17 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
                "The morning ran on full evidence.")
             + "</div></div>")
 
+    # LAST, because it is the only accumulating section on a page that is
+    # otherwise a seven day view, and reading it after the window sections
+    # makes that difference harder to miss.
+    if score is not None:
+        _render_score_watch(add, score)
+
     add("<footer>Rendered by night/weekly_page.py at the end of the nightly "
         "job. It reads job-status.jsonl, the meter trail, "
-        "quantifier-flags.jsonl, runs/&lt;date&gt;/verify_intraday.json and "
-        "the picks table, and writes this file. Nothing else.</footer>")
+        "quantifier-flags.jsonl, runs/&lt;date&gt;/verify_intraday.json, the "
+        "packets' score components, and the picks and paper_trades tables, and "
+        "writes this file. Nothing else.</footer>")
     add("</div>")
     return "\n".join(out)
 
@@ -602,7 +833,8 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
 def build(window: int) -> Any:
     days = _days(window)
     page = render(days, did_it_run(days), is_it_trustworthy(days),
-                  what_did_it_publish(days), what_did_it_cost(days))
+                  what_did_it_publish(days), what_did_it_cost(days),
+                  how_did_the_score_do())
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(page, encoding="utf-8")
     return OUT_PATH

@@ -18,6 +18,69 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: watching the score inversion instead of rediscovering it
+
+The score exists to order names by confidence and over the first fifty filled
+rows it ordered them backwards. At that count it is noise. It is also exactly
+the kind of thing that gets rediscovered every few months by someone eyeballing
+a table, argued about, and forgotten.
+
+**Pre-registered rather than judged.** doc/research/SCORE_INVERSION.md names
+the judging point, the three outcomes and the stop rule, and it was written
+today with 66 picks and 16 booked trades on the record: far below every
+threshold in it, on purpose. A rule written after the numbers are in is not a
+rule. The project already has this convention from the VWAP gappers study,
+whose own pre-registered stop rule fired and stopped the work; that was the only
+pre-registration block in the tree and it belongs to a closed study, so this is
+a new one rather than an append.
+
+**No test, no p value, no verdict in the code.** weekly_page prints n, the
+session count and three medians per group and concludes nothing. Adding a
+significance test would invite the reading that a passing p value makes the
+score usable, when the honest position is that 200 correlated rows from 60
+sessions cannot settle much either way.
+
+**Suppression is per METRIC, not per group.** The ledger reaches far fewer rows
+than the outcome fill does: 16 booked trades against 48 filled excursions. One
+verdict over the whole group would either publish a median resting on two
+trades or withhold twenty excursions to protect them. So each of the three
+numbers is judged on its own count, and a withheld cell says HOW FAR SHORT it
+is rather than just refusing.
+
+**Both minimums have to bite.** min_group_rows alone passes exactly the group
+that misleads most: twelve names from one morning, which is one observation
+wearing a larger number. min_group_sessions is the one that catches it.
+
+**The component points are READ, not recomputed.** picks holds the score total
+and the inputs but not the per component breakdown, and recomputing it on the
+page would build a second scorer that can drift from the one that ran. The
+packets already carry score_components with the points the morning awarded. A
+component whose input was never observed is recorded there as null and is
+ABSENT from its grouping rather than counted as zero points, which would put a
+name in the "scored nothing here" bucket when the truth is that the question
+was never asked.
+
+**Unscored is its own group.** CRITERIA [Score buckets] already says a null
+score is unscored and not low and that calibration queries must never fold it
+into red. A page grouping by conviction is a calibration query.
+
+**What it shows today, and none of it is a result.** Green n=20 over 6
+sessions, median favourable -7.44 percent. Yellow n=21 over 5 sessions, median
++1.36 percent. Red withheld at n=8 over 3 sessions. Green's booked P&L is
+withheld at 5 trades over 4 sessions and yellow's is -1.00 percent over 10
+trades and 5 sessions. The direction survived the correction from the sampled
+reference levels to the measured ones, which is the only new thing here and is
+still eight sessions of evidence.
+
+**One schema fix fell out of it.** mfe_pct_true and mae_pct_true were declared
+only in fill_outcomes' widening tuple, so store.init never created them and a
+database that had never run the outcome fill was missing the columns entirely.
+The weekly page raised OperationalError on exactly that path, in the test
+sandbox, which is where it should be found. They are declared in store.py now,
+beside every other _true column on that table, and removed from the widening
+tuple: a column declared in two places is one edit away from two different
+declarations.
+
 ## 2026-08-29: the paper ledger, and the off by one it uncovered
 
 The ledger exists so that "what would this have done" has one answer instead of

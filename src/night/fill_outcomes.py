@@ -46,15 +46,10 @@ _OUTCOME_COLUMNS = (
     ("pm_high_broke_next_day", "INTEGER"),
     ("mfe_pct", "REAL"),
     ("mae_pct", "REAL"),
-    # The same two excursions against the reference levels night/true_volume.py
-    # measured off the full SIP tape, rather than the ones the collector
-    # sampled. See fill_true_excursions below and CRITERIA [Outcomes]. Written
-    # beside, never over: the gap between the pairs is what says how much the
-    # sampled record has been flattering its upside and overstating its
-    # downside, and a corrected column with the original thrown away could not
-    # say it.
-    ("mfe_pct_true", "REAL"),
-    ("mae_pct_true", "REAL"),
+    # mfe_pct_true and mae_pct_true are NOT in this tuple. They are declared in
+    # store.py beside the other _true columns, so store.init creates them and a
+    # reader that has never run this step still finds them. Declaring a column
+    # in two places is one drift away from two different declarations.
     ("outcomes_filled_at", "TEXT"),
 )
 

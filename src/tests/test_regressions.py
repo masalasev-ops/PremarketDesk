@@ -8332,6 +8332,188 @@ def claim_the_fill_band_floor_is_the_position_over_the_participation_cap(
           f"the [Truth] floor the ledger's skips are decided by")
 
 
+def claim_the_score_watch_withholds_what_it_cannot_report(
+        failures: list[str]) -> None:
+    """Both denominators, and a group too small says so instead of a number.
+
+    Twelve names from one morning share a tape and are ONE observation, so a
+    group of twelve rows from one session is not twelve data points. The
+    minimums in CRITERIA [Score watch] are stated in rows AND sessions and both
+    have to bite, because a row count alone passes exactly the group that is
+    most misleading.
+
+    SUPPRESSION IS PER METRIC. The ledger reaches fewer rows than the outcome
+    fill does, so a group can carry twenty excursions and two booked trades.
+    One verdict over the whole group either publishes a median resting on those
+    two or withholds the twenty to protect them, and both are wrong.
+    """
+    from night import weekly_page
+
+    def rows(n, sessions, booked):
+        """n rows spread over `sessions` dates, `booked` of them with a P&L."""
+        out = []
+        for index in range(n):
+            out.append({
+                "date": f"2026-01-{(index % sessions) + 1:02d}",
+                "mfe_pct_true": float(index), "mae_pct_true": -float(index),
+                "pnl_pct": float(index) if index < booked else None})
+        return out
+
+    # Plenty of rows, one session. The row count alone would pass this.
+    got = weekly_page._group(rows(20, 1, 20), 10, 3)
+    if got["sessions"] != 1:
+        failures.append(f"the session count is {got['sessions']!r}, not 1")
+    for name in ("pnl", "mfe", "mae"):
+        if got[name]["value"] is not None:
+            failures.append(
+                f"{name} was published for 20 rows from ONE session: "
+                f"{got[name]!r}. Those rows share a tape and are one "
+                "observation, and a minimum in rows alone passes exactly the "
+                "group that misleads most")
+
+    # Enough sessions, too few rows.
+    got = weekly_page._group(rows(6, 6, 6), 10, 3)
+    if got["mfe"]["value"] is not None:
+        failures.append(f"six rows cleared a ten row minimum: {got['mfe']!r}")
+    if not got["mfe"]["withheld"] or "6 row" not in got["mfe"]["withheld"]:
+        failures.append(
+            f"the withheld group does not say how far short it is: "
+            f"{got['mfe']!r}. A reader cannot tell a group that is nearly "
+            "there from one that is nowhere")
+
+    # PER METRIC. Twenty excursions across five sessions, two booked trades.
+    got = weekly_page._group(rows(20, 5, 2), 10, 3)
+    if got["mfe"]["value"] is None:
+        failures.append(
+            f"twenty excursions across five sessions were withheld: "
+            f"{got['mfe']!r}. One verdict for the whole group throws away the "
+            "metric that has the rows to protect the one that does not")
+    if got["pnl"]["value"] is not None:
+        failures.append(
+            f"a median booked P&L was published over two trades: "
+            f"{got['pnl']!r}")
+    if got["pnl"]["rows"] != 2 or got["pnl"]["sessions"] != 2:
+        failures.append(
+            f"the withheld P&L reports {got['pnl']['rows']} rows over "
+            f"{got['pnl']['sessions']} sessions, which is not the count of "
+            "rows that actually carry one")
+    print("  score gate   a group states rows AND sessions, is withheld on "
+          "either, says how far short it is, and each metric is judged on its "
+          "own count")
+
+
+def claim_the_score_watch_reads_the_points_the_morning_awarded(
+        failures: list[str]) -> None:
+    """Component points come from the packets, and a missing one is not a zero.
+
+    picks holds the score total and the inputs but not the per component
+    breakdown, and recomputing it on the page would build a SECOND scorer that
+    can drift from the one that ran. The packets carry score_components with
+    the points the morning actually awarded, and this page's whole constraint
+    is that it reads and renders.
+
+    A COMPONENT NOBODY SCORED IS NOT ONE THAT SCORED ZERO. score_candidate
+    records a null for a component whose input was never observed, and reading
+    that as a zero would put a name in the "scored no points here" group when
+    the truth is that the question was never asked. That is this project's
+    worst defect class, one layer down.
+    """
+    import json as _json
+
+    from core import config
+    from night import weekly_page
+
+    with conftest_activate() as _sandbox:
+        day = "2026-07-13"
+        run_dir = config.run_dir(day)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(_json.dumps({
+            "session_date": day,
+            "candidates": [
+                {"symbol": "AAA.US", "score_components": [
+                    {"component": "gap", "points": 2.0, "why": ""},
+                    # Never observed. Null, and it must not become a zero.
+                    {"component": "market_cap", "points": None,
+                     "why": "market cap was never observed"},
+                ]},
+                {"symbol": "BBB.US", "score_components": [
+                    {"component": "gap", "points": 0.0, "why": ""},
+                ]},
+                # No components at all. Contributes nothing.
+                {"symbol": "CCC.US"},
+            ],
+        }), encoding="utf-8")
+        # Unreadable. Contributes nothing rather than raising or zeroing.
+        broken = config.run_dir("2026-07-14")
+        broken.mkdir(parents=True, exist_ok=True)
+        (broken / "packet.json").write_text("{not json", encoding="utf-8")
+
+        found = weekly_page._score_components_by_row()
+
+    if found.get((day, "AAA.US"), {}).get("gap") != 2.0:
+        failures.append(
+            f"the awarded gap points did not come back: "
+            f"{found.get((day, 'AAA.US'))!r}")
+    if "market_cap" in (found.get((day, "AAA.US")) or {}):
+        failures.append(
+            f"a component the morning could not score was carried anyway: "
+            f"{found[(day, 'AAA.US')]!r}. A null there means the input was "
+            "never observed, and grouping it as zero points puts the name in "
+            "a bucket it does not belong to")
+    if found.get((day, "BBB.US"), {}).get("gap") != 0.0:
+        failures.append(
+            "a real zero was dropped along with the nulls. A component that "
+            "scored no points IS evidence and a component nobody scored is "
+            f"not: {found.get((day, 'BBB.US'))!r}")
+    if (day, "CCC.US") in found:
+        failures.append("a candidate with no components got an entry anyway")
+    if any(key[0] == "2026-07-14" for key in found):
+        failures.append("an unreadable packet contributed rows")
+    print("  score parts  the component points are the ones the morning "
+          "awarded, an unscored component is absent rather than zero, and an "
+          "unreadable packet contributes nothing")
+
+
+def claim_the_score_watch_keeps_unscored_out_of_red(
+        failures: list[str]) -> None:
+    """A null conviction is unscored, not low, and never folded into red.
+
+    CRITERIA [Score buckets]: "A null score is unscored, not low ... Calibration
+    and threshold queries must exclude unscored rows, never fold them into
+    red." A page grouping by conviction is a calibration query, and folding
+    them would put every name whose score could not be computed into the
+    bucket the score reserves for names it computed and disliked.
+    """
+    from core import store
+    from night import weekly_page
+
+    day = "2026-07-13"
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            connection.execute("DELETE FROM paper_trades")
+            for ticker, conviction in (("AAA.US", "red"), ("BBB.US", None),
+                                       ("CCC.US", "green")):
+                connection.execute(
+                    "INSERT INTO picks (date, ticker, source, conviction, "
+                    "mfe_pct_true, mae_pct_true) VALUES (?,?,'live',?,?,?)",
+                    (day, ticker, conviction, 1.0, -1.0))
+            connection.commit()
+        got = weekly_page.how_did_the_score_do()
+
+    named = {group["bucket"]: group for group in got["buckets"]}
+    if named.get("red", {}).get("rows") != 1:
+        failures.append(
+            f"the red bucket holds {named.get('red', {}).get('rows')!r} rows, "
+            "not 1. A null conviction folded into red scores a name the "
+            "morning declined to score")
+    if named.get("unscored", {}).get("rows") != 1:
+        failures.append(
+            f"the unscored rows are not carried separately: {sorted(named)!r}")
+    print("  score null   an unscored row is its own group and never joins red")
+
+
 def claim_the_weekly_page_reads_and_renders_and_nothing_else(
         failures: list[str]) -> None:
     """A reporting layer that fetches is a second pipeline to keep right.
@@ -10069,6 +10251,9 @@ def main() -> int:
     claim_the_paper_rule_reads_the_minutes_in_order(failures)
     claim_the_ledger_writes_the_picks_it_declined(failures)
     claim_the_fill_band_floor_is_the_position_over_the_participation_cap(failures)
+    claim_the_score_watch_withholds_what_it_cannot_report(failures)
+    claim_the_score_watch_reads_the_points_the_morning_awarded(failures)
+    claim_the_score_watch_keeps_unscored_out_of_red(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_a_claim_cannot_reach_the_live_database(failures)
     claim_the_two_unrebuildable_artifacts_are_held_twice(failures)

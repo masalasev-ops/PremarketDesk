@@ -15,6 +15,63 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the weekly page starts watching whether the score orders anything
+
+**What changed.** night/weekly_page.py gains a section grouping every live pick
+that carries an outcome or a booked trade, by conviction bucket and by each
+score component separately, reporting n, the session count, median booked P&L,
+median mfe_pct_true and median mae_pct_true. New CRITERIA section [Score watch]
+with min_group_rows 10 and min_group_sessions 3, both SEED. New
+doc/research/SCORE_INVERSION.md holding the pre-registration. Nothing in the
+morning path or the screen moved.
+
+**Why it had to.** The score exists to order names by confidence and over the
+first fifty filled rows it ordered them backwards, and nothing was watching.
+
+**The section reports and concludes nothing.** No test, no p value, no verdict
+in the code. The judging point, the three possible outcomes and the stop rule
+are pre-registered, written today at 66 picks and 16 booked trades, which is
+far below every threshold in that file. The primary is judged at 200 booked
+trades across 60 sessions; the secondary, the two excursions, at 200 rows
+across 40. Outcome 2 is "no relationship", defined in advance as the three
+bucket medians spanning under one percentage point or not being monotone.
+Outcome 3 is a confirmed inversion, and re-deriving the bands by inverting
+them is explicitly not permitted.
+
+**Both denominators everywhere, and a group too small is withheld with the
+shortfall named.** Suppression is per METRIC: the ledger reaches 16 rows where
+the outcome fill reaches 48, and one verdict over a group would either publish
+a median resting on two trades or throw away twenty excursions to protect them.
+
+**Component points are read from the packets**, which carry score_components
+with the points the morning actually awarded. A component whose input was never
+observed is null there and is ABSENT from its grouping rather than counted as
+zero.
+
+**WHAT IT SHOWS TODAY, and none of it is a result.**
+
+  bucket    rows  sessions  booked P&L   favourable D+1   adverse D+1
+  green       20         6    withheld           -7.44%        +0.10%
+  yellow      21         5     -1.00%            +1.36%        +0.19%
+  red          8         3    withheld         withheld      withheld
+
+Green's booked P&L is withheld at 5 trades across 4 sessions. The direction of
+the inversion survived the correction from the sampled reference levels to the
+measured ones, which is the only new fact here and is still six sessions of
+evidence.
+
+**A schema fix fell out of it.** mfe_pct_true and mae_pct_true were declared
+only in fill_outcomes' widening tuple, so store.init never created them and a
+database that had never run the outcome fill lacked the columns; the new
+section raised OperationalError on that path in the test sandbox. They are in
+store.py now beside every other _true column and out of the widening tuple.
+
+**Held in place by** three claims in test_regressions.py, mutation tested
+against five edits: a group states rows AND sessions and is withheld on either,
+each metric is judged on its own count, a withheld cell says how far short it
+is, a component the morning could not score is absent rather than zero, and an
+unscored row is its own group and never joins red.
+
 ## 2026-08-29: the paper ledger, one written rule, and a horizon that was off by one
 
 **What changed.** New CRITERIA section [Paper] holding ONE rule, written before

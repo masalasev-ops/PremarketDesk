@@ -237,6 +237,17 @@ _PICKS_LATER_COLUMNS = (
     # wins across the volume columns: sharing it would let a refused float
     # stand as the recorded explanation for a missing reference level.
     ("refs_true_reason", "TEXT"),
+    # The two excursions measured against the pair above rather than against
+    # the collector's sampled one, written by night/fill_outcomes.py.
+    #
+    # DECLARED HERE rather than only in that module's widening tuple, which is
+    # where they started. store.init did not then create them, so a database
+    # the outcome fill had never run against was missing the columns entirely
+    # and night/weekly_page.py's score section raised OperationalError reading
+    # them. Every other _true column on this table is declared here; these are
+    # not different.
+    ("mfe_pct_true", "REAL"),
+    ("mae_pct_true", "REAL"),
     # WHETHER entry_ref_true IS A PRICE ANYONE COULD HAVE TRANSACTED AT, which
     # is a different question from what the level was. On a name whose whole
     # premarket is a few hundred shares the level is a print rather than a
