@@ -652,6 +652,8 @@
         <li>collector_covered, pm_window_start</li>
         <li>prior_high, catalyst_class</li>
         <li>entry_ref, stop_ref</li>
+        <li>pm_band_volume, pm_band_minutes</li>
+        <li>pm_band_notional, pm_band_state</li>
         <li>pool_source, pool_tier</li>
         <li>source</li>
       </ul>
@@ -742,7 +744,8 @@
       <h3>3. The paper ledger</h3>
       <p class="when">night/paper_ledger.py</p>
       <ul>
-        <li>ONE rule, written in CRITERIA first</li>
+        <li>rules written in CRITERIA first</li>
+        <li>v1 and v2 booked side by side</li>
         <li>books against the measured levels</li>
         <li>skips an implausible fill, with the reason</li>
         <li>paper_trades, keyed on rule_version</li>
@@ -877,6 +880,101 @@
     percent participation cap, and 10,000 / 0.04 is exactly 250,000. One shipped
     value, in [Truth], with the coupling machine checked, the same shape as the
     analyst timeout and the watchdog's stale window.</p>
+  </div>
+</section>
+
+
+<section>
+  <p class="eyebrow">Added 2026-08-29, after the first ledger result</p>
+  <h2>What v1 actually proved, and the two things built on it</h2>
+  <div class="prose">
+    <p>Rule v1 lost 3,487.81 dollars over 16 trades and the obvious reading is
+    that the screen does not work. The diagnostic says otherwise, and it says
+    something more useful.</p>
+  </div>
+
+  <div class="callout">
+    <h3>Every one of the 16 was in profit at some point while held</h3>
+    <p class="asof">median best price reached while held   +1.84%
+median given back by the hold-to-close  -3.91 points
+losers that had been up more than 1%     6 of 11
+losers never up more than 0.5%           2 of 11</p>
+    <p>NSSC was up 10.81 percent and closed -18.22. WOLF was up 6.36 and closed
+    -7.72. PLAB was up 1.15 and closed -19.18. The trigger is not producing
+    random entries.</p>
+    <p><strong>But in units of the risk taken it is weak, and that is the
+    finding.</strong> The median trade reached 0.46 of the risk it was carrying
+    and only 4 of 16 ever reached 1R. A trade that risks 5.89 percent to reach
+    0.46 of that cannot work at any hit rate, and the two largest losses were
+    the two widest stops.</p>
+    <p><strong>The stop was never designed to be a stop.</strong> CRITERIA
+    [Picks] says of entry_ref and stop_ref: "references for outcome measurement
+    in later nightly jobs, never advice". The premarket low was chosen because
+    it is a traded extreme that keeps excursion math interpretable. v1 borrowed
+    it as a trade level because it was the level that existed, and on a gapper
+    the premarket range is routinely 20 percent.</p>
+  </div>
+
+  <h3>Rule v2 changes exactly one thing</h3>
+  <div class="prose">
+    <p>The position size, from a fixed notional to a fixed dollar risk. Entry,
+    stop, exit, tie break and skip rule are byte for byte v1's, so the two book
+    the same trades and any difference is attributable to the sizing alone.</p>
+    <p>Two other candidates were refused and the refusals are the useful part.
+    An <strong>exit rule</strong>, a target or a trail, would capture some of
+    that 3.91 point give-back and is a free parameter that 16 trades will fit
+    any value of. A <strong>different stop reference</strong> changes which
+    trades exist, so the versions would stop booking the same trades and
+    nothing could be attributed.</p>
+    <p><strong>The risk budget holds TOTAL risk constant.</strong> v1's 16
+    trades carried 12,354 dollars of risk between them, a mean of 772;
+    risk_notional is 750. The versions put the same money at risk and differ
+    only in how it is spread. A smaller number would have manufactured a better
+    v2.</p>
+  </div>
+
+  <div class="table-wrap">
+  <table class="files">
+    <tr><td>v1, notional</td><td>16 trades, total -3,487.81, 158,512 deployed, 12,354 at risk, worst single trade -1,912.54. Risk carried per trade ran 253 to 2,141: an eight fold spread across trades the rule treats as equals</td></tr>
+    <tr><td>v2, risk</td><td>the same 16 trades, total -2,713.74, 229,430 deployed, 11,814 at risk, worst single trade -748.90. Risk carried per trade 667 to 750, the spread being the whole-share rounding and the position cap</td></tr>
+    <tr><td>what did not change</td><td>every per trade PERCENT return, identically. Median -1.38 percent and win rate 5 of 16 under both. Sizing cannot change what a trade did; it changes the portfolio's shape. CRITERIA [Paper] pre-registers the verdict at 200 trades across 60 sessions and 16 is not it</td></tr>
+  </table>
+  </div>
+
+  <h3>And the morning gets the fill warning</h3>
+  <div class="prose">
+    <p>A third of what the report publishes has a headline level no market
+    stands behind, and until now the reader found that out three weeks later in
+    a database. Alpaca refuses a session that is still running, so the morning
+    cannot run the real check; it computes its own band from the collector's
+    sample instead, at 08:45, and prints it in Skips and traps.</p>
+    <p><strong>It is a warning and never an approval</strong>, and the
+    asymmetry is the design. Measured over all 66 rows:</p>
+  </div>
+
+  <div class="table-wrap">
+  <table class="files">
+    <tr><td>morning: thin</td><td>caught 6 of the 10 the night calls untradeable, and flagged 6 of the 44 that were fine</td></tr>
+    <tr><td>morning: not flagged</td><td>38 the night agreed with, and <strong>4 it did not</strong>. Four in ten untradeable levels get past this test, which is why its silence means nothing</td></tr>
+    <tr><td>morning: unknown</td><td>12, the session with no collector coverage. Never "not flagged", which a reader would take for a clean bill</td></tr>
+  </table>
+  </div>
+
+  <div class="prose">
+    <p>It cannot be calibrated better and the reason is structural: the morning
+    centres its band on pm_high and the night on entry_ref_true, which differ by
+    a median 1.19 percent and by up to 20.9, so on the names that matter most
+    the two bands do not overlap. The socket's share of the band ran 0.017 to
+    1.158 of the night's figure across the same rows. A floor sweep from 5,000
+    to 100,000 dollars trades one error for the other at every step and never
+    removes either.</p>
+    <p>It keeps its own vocabulary, <span class="mono">thin</span> and
+    <span class="mono">not flagged</span>, never the night's
+    <span class="mono">plausible</span>: a reader seeing that word at 08:45
+    would take it for the verdict that cannot exist until the session is over.
+    It reads its band width from [Truth] rather than restating it, so the two
+    bands cannot drift apart. And REPORT_TEMPLATE.md now tells the model, in
+    the section itself, never to write that a level is tradeable.</p>
   </div>
 </section>
 
@@ -1035,7 +1133,7 @@
     <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the probe_ scripts and the measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the thirteen test_ modules, the newest being test_notable, one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
     <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the ten fixed report sections, nine until Layer 4 added notable movers on 2026-08-20), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written 2026-08-29 at 66 picks with every judging point in it far beyond that count</td></tr>
     <tr><td>tasks\</td><td>nine job .bat files, seven of which register_tasks.ps1 registers as nine scheduled tasks, plus job_probe_socket_cap.bat and job_probe_capture.bat, each armed one morning at a time. job_probe_capture is registered for 2026-08-24, so ten tasks stand today (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. Two more .bat files sit here and are not among the nine, both one offs armed a morning at a time. job_probe_socket_cap is the instrument for the open collector volume question, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30; its 2026-08-21 task ran and was removed. job_probe_capture is the Alpaca live capture test, armed with <code>register_tasks.ps1 -Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number, and it is armed for 2026-08-24 08:45. A plain run of the script never registers it, so a schedule refresh cannot resurrect a probe that has been answered and deleted, and <code>-Unregister</code> removes it if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both questions were answered and recorded in DECISIONS.md</td></tr>
-    <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks, gap_stats, gap_sweeps and paper_trades tables, the last holding one row per live pick per rule version: the trade the CRITERIA [Paper] rule took, or the reason it declined), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
+    <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks, gap_stats, gap_sweeps and paper_trades tables, the last holding one row per live pick PER RULE VERSION, two of them since 2026-08-29: the trade the CRITERIA [Paper] rule took, or the reason it declined), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>
     <tr><td>logs\</td><td>one dated log per job per day</td></tr>
