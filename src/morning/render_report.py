@@ -16,6 +16,7 @@ from pathlib import Path
 
 import markdown
 
+from core import artifacts
 from core import config
 from core import ettime
 from ops import job_status
@@ -101,7 +102,19 @@ _SHELL = """<!doctype html>
 """
 
 
-def render(report_path: Path) -> Path:
+def render(report_path: Path, overwrite: bool = False) -> Path:
+    """Render one report, sparing a past morning's HTML by default.
+
+    artifacts.py named this writer as one of three still going straight to
+    write_text, and the hazard is not hypothetical: on 2026-08-28 a review
+    loop called render() over every archived report.md to check that the
+    escaping change had not altered them, and rewrote twelve past mornings'
+    report.html in the process. Bodies were identical so nothing was lost, and
+    that was luck rather than design.
+
+    The scheduled path is unaffected: a .bat sets PMD_JOB, artifacts.scheduled_run
+    reads it, and the chain owns today's artifacts and rewrites them freely.
+    """
     text = report_path.read_text(encoding="utf-8")
     body = to_html(text)
 
@@ -111,7 +124,10 @@ def render(report_path: Path) -> Path:
             title = line[2:].strip()
             break
 
-    html_path = report_path.with_suffix(".html")
+    html_path, _spared = artifacts.resolve(
+        report_path.with_suffix(".html"),
+        overwrite or artifacts.scheduled_run(),
+        what="render")
     # The title is the model's own mood phrase and goes into an element that
     # does not parse markup, so it is escaped rather than neutralised: a bare
     # `<` there ends the title element and the rest of the line becomes body.
@@ -132,6 +148,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Render report.md to report.html.")
     parser.add_argument("--report", metavar="PATH",
                         help="Report to render. Defaults to runs/<today>/report.md.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Replace an existing report.html instead of "
+                             "writing beside it. See core/artifacts.py.")
     args = parser.parse_args(argv)
 
     report_path = (
@@ -142,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"render: there is no report at {report_path}. Run analyst.py first.")
         return 1
 
-    html_path = render(report_path)
+    html_path = render(report_path, overwrite=args.overwrite)
     job_status.produced("html bytes", html_path.stat().st_size)
     print(f"render: wrote {html_path} ({html_path.stat().st_size} bytes)")
     return 0

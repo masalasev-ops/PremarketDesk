@@ -15,6 +15,41 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the three writers artifacts.py named as unprotected, and the loop that proved it
+
+core/artifacts.py exists because a hand run against a past session destroyed
+the 2026-08-14 collector snapshot on 2026-08-15, and it was only noticed
+because a test happened to read that file. Its docstring then named three
+writers still going straight to write_text: analyst.write_report for report.md
+and analyst_usage.json, and render_report.render for report.html.
+
+The gap fired during this review. Checking that the markup escaping change had
+not altered any archived report, a loop called render_report.render over every
+report.md on disk and rewrote twelve past mornings' report.html on the way. The
+bodies were identical so nothing was lost. That was luck: the same loop a week
+earlier, before the shell last changed, would have replaced twelve frozen
+artifacts with output from a different template, and said nothing.
+
+Both writers now resolve through artifacts.resolve against
+`overwrite or scheduled_run()`, the pattern snapshot_bars, verify_intraday and
+pool_recall already use, and both gain --overwrite. The scheduled path is
+unchanged by construction: a .bat sets PMD_JOB, so the morning chain and the
+watchdog's rerun still own today's artifacts and replace them, which they have
+to, because a rule that spared them would break the schedule rather than
+protect it.
+
+analyst.write_report resolves ONCE, up front, and reuses the destination for
+every write. It writes report.md twice on the path where containment examined
+nothing, and resolving per write would spare the original on the first write
+and then spare the SPARED FILE on the second, leaving the real output two
+infixes deep. analyst_usage.json is resolved separately rather than derived
+from the report's name: they are two artifacts and either can exist without the
+other, since a morning whose analyst died between them leaves exactly that.
+
+claim_the_narrative_writers_spare_artifacts_too holds all three states: a hand
+run spares the frozen file and lands beside it, --overwrite replaces it, and a
+run with PMD_JOB set replaces it. Mutation tested.
+
 ## 2026-08-28: the universe covered four exchanges while the file named two
 
 [Universe] exchanges reads "NYSE, NASDAQ". universe.py used it to choose which

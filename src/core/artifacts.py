@@ -21,11 +21,22 @@ test_entrypoints.claim_operator_tools_spare_artifacts pins. The default spares
 the original and writes beside it; --overwrite is the explicit way to say
 otherwise, and even then the thing being replaced is described before it goes.
 
-Three writers are NOT through it yet, and the gap is named rather than implied.
-analyst.write_report writes report.md and analyst_usage.json, and
-render_report.render writes report.html, each with a plain write_text into
-whatever run directory its --packet or --report argument points at, so a hand
-run against a past session still replaces that morning's narrative.
+The three writers this paragraph used to name as NOT routed through it are
+routed now, as of 2026-08-28: analyst.write_report for report.md and
+analyst_usage.json, and render_report.render for report.html. Each takes
+--overwrite and each resolves against `overwrite or scheduled_run()`.
+
+That gap was not hypothetical. On 2026-08-28 a review loop called
+render_report.render over every archived report.md to check that an escaping
+change had not altered them, and rewrote twelve past mornings' report.html on
+the way. The bodies were identical so nothing was lost, and that was luck
+rather than design: the same loop a week earlier would have replaced twelve
+frozen artifacts with output from a different shell.
+
+analyst.write_report resolves ONCE and reuses the destination, because it
+writes report.md twice on the path where containment examined nothing.
+Resolving per write would spare the original on the first write and then spare
+the spared file on the second, leaving the real output two infixes deep.
 """
 
 from __future__ import annotations

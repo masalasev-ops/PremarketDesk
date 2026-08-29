@@ -26,6 +26,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from core import artifacts
 from core import config
 from core import criteria
 from core import ettime
@@ -1592,7 +1593,7 @@ def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
 
 # ------------------------------------------------------------------- runner
 
-def write_report(packet_path: Path) -> int:
+def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # Local, because ops.quantifier_flags imports this module and a
     # module level import here would be a cycle. monitor_jobs does the
     # same for the same reason.
@@ -1602,7 +1603,20 @@ def write_report(packet_path: Path) -> int:
     packet = json.loads(packet_text)
     session_date = packet.get("session_date") or ettime.today_et().isoformat()
     run_directory = config.run_dir(session_date)
-    report_path = run_directory / "report.md"
+
+    # RESOLVED ONCE, up front, and reused for every write below. report.md is
+    # written twice on the path where containment examined nothing, and
+    # resolving per write would spare the original on the first and then spare
+    # the SPARED FILE on the second, leaving the real output two infixes deep.
+    #
+    # artifacts.py named this writer as one of three still going straight to
+    # write_text. The scheduled path is unchanged: a .bat sets PMD_JOB, so the
+    # chain and the watchdog's rerun own today's artifacts and replace them.
+    # A hand run against a past session is what gets spared, which is the
+    # route that destroyed the 2026-08-14 snapshot.
+    allow_overwrite = overwrite or artifacts.scheduled_run()
+    report_path, _spared = artifacts.resolve(
+        run_directory / "report.md", allow_overwrite, what="analyst")
 
     # One narrative attempt, plus however many regenerations CRITERIA allows.
     #
@@ -1782,7 +1796,12 @@ def write_report(packet_path: Path) -> int:
         "invented": invented,
         "candidates_missing_from_report": missing,
     }
-    usage_path = run_directory / "analyst_usage.json"
+    # Resolved separately from report.md rather than derived from it. They are
+    # two artifacts and either can exist without the other: a morning whose
+    # analyst died after the report and before the usage file leaves exactly
+    # that, and deriving the name would then spare a file that is not there.
+    usage_path, _usage_spared = artifacts.resolve(
+        run_directory / "analyst_usage.json", allow_overwrite, what="analyst")
     usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True), encoding="utf-8")
     if usage["status"] == "ok":
         print(
@@ -1834,6 +1853,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Write report.md from packet.json via the claude CLI.")
     parser.add_argument("--packet", metavar="PATH",
                         help="Packet to narrate. Defaults to runs/<today>/packet.json.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Replace an existing report.md and "
+                             "analyst_usage.json instead of writing beside "
+                             "them. See core/artifacts.py.")
     parser.add_argument("--check", metavar="REPORT",
                         help="Run only the containment check on an existing report.")
     args = parser.parse_args(argv)
@@ -1881,7 +1904,7 @@ def main(argv: list[str] | None = None) -> int:
             print("analyst: containment check passed")
         return 0
 
-    return write_report(packet_path)
+    return write_report(packet_path, overwrite=args.overwrite)
 
 
 if __name__ == "__main__":

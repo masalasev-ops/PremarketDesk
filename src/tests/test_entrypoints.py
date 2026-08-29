@@ -583,6 +583,87 @@ def claim_subscription_refusal_is_fatal(failures: list[str]) -> None:
           "error, and normal frames still fold")
 
 
+def claim_the_narrative_writers_spare_artifacts_too(failures: list[str]) -> None:
+    """report.md, analyst_usage.json and report.html survive a hand run.
+
+    artifacts.py named these three as the writers still going straight to
+    write_text, and the gap fired during the 2026-08-28 review: a loop called
+    render_report.render over every archived report.md to check that an
+    escaping change had not altered them, and rewrote twelve past mornings'
+    report.html on the way. The bodies were identical so nothing was lost,
+    which was luck rather than design.
+
+    Three things are asserted. The frozen file survives a hand run and the
+    output lands beside it; the SCHEDULED path still replaces it, because the
+    chain and the watchdog's rerun own today's artifacts and a rule that spared
+    them would break the schedule rather than protect it; and --overwrite
+    replaces it on demand, which is the operator's explicit way to say so.
+    """
+    import os
+
+    from core import artifacts
+    from morning import analyst
+    from morning import render_report
+
+    day = "2026-05-05"
+    run_dir = config.run_dir(day)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    source = run_dir / "report.md"
+    source.write_text("# A past morning\n\nBody text.\n", encoding="utf-8")
+    frozen = run_dir / "report.html"
+    frozen.write_text("<html>FROZEN</html>", encoding="utf-8")
+    original = frozen.read_bytes()
+
+    was = os.environ.pop(job_status.JOB_ENV_VAR, None)
+    try:
+        # 1. A hand run spares the frozen artifact and writes beside it.
+        out = render_report.render(source)
+        if frozen.read_bytes() != original:
+            failures.append("render_report.render replaced a frozen report.html "
+                            "on a hand run with no --overwrite")
+        if out == frozen:
+            failures.append(f"render_report.render returned {out}, the frozen "
+                            "path, rather than a sibling")
+        if not out.exists() or artifacts.SPARED_INFIX not in out.name:
+            failures.append(f"the spared render landed at {out}, which does not "
+                            f"carry the {artifacts.SPARED_INFIX!r} infix")
+        out.unlink(missing_ok=True)
+
+        # 2. --overwrite replaces it, which is the operator saying so.
+        render_report.render(source, overwrite=True)
+        if frozen.read_bytes() == original:
+            failures.append("--overwrite did not replace report.html")
+        frozen.write_text("<html>FROZEN</html>", encoding="utf-8")
+
+        # 3. The SCHEDULER still owns today's artifacts. A rule that spared
+        #    these would break the watchdog's rerun rather than protect it.
+        os.environ[job_status.JOB_ENV_VAR] = "test-chain"
+        render_report.render(source)
+        if frozen.read_bytes() == original:
+            failures.append("a scheduled render was spared. The chain owns "
+                            "today's artifacts and its rerun must replace them.")
+    finally:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+        if was is not None:
+            os.environ[job_status.JOB_ENV_VAR] = was
+
+    # analyst routes both of its files, checked structurally because driving it
+    # needs the CLI. Two writers, two resolves, one shared decision.
+    source_text = Path(analyst.__file__).read_text(encoding="utf-8")
+    flat = " ".join(source_text.split())
+    for wanted in ('artifacts.resolve( run_directory / "report.md"',
+                   'run_directory / "analyst_usage.json", allow_overwrite'):
+        if wanted not in flat:
+            failures.append(f"analyst.write_report does not route {wanted!r} "
+                            "through artifacts.resolve")
+    if flat.count("allow_overwrite = overwrite or artifacts.scheduled_run()") != 1:
+        failures.append("analyst.write_report does not derive one overwrite "
+                        "decision from --overwrite and the scheduler")
+
+    print("  narrative    a hand render spares the frozen html, --overwrite "
+          "replaces it, the scheduler still owns it, and analyst routes both")
+
+
 def claim_operator_tools_spare_artifacts(failures: list[str]) -> None:
     """A hand run against a past session does not destroy that session's evidence.
 
@@ -2064,6 +2145,7 @@ def main(argv: list[str] | None = None) -> int:
     claim_ok_codes_declared(failures)
     claim_subscription_refusal_is_fatal(failures)
     claim_operator_tools_spare_artifacts(failures)
+    claim_the_narrative_writers_spare_artifacts_too(failures)
     claim_calendar(failures)
     claim_calendar_refresh_keeps_the_cache(failures)
     claim_universe(failures)
