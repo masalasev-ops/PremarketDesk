@@ -528,6 +528,15 @@ sentences WORD FOR WORD:
   ABSENT rather than partial: the collector was not listening to these names,
   so any level published for them rests on something other than this morning's
   tape. A different fact from the line above and it gets its own sentence.
+- `evidence_roll.text.band_thin`, whose premarket high may be a print rather
+  than a price anyone could transact at. The collector saw very little trade
+  near the level it is publishing as that name's reference. Quote the sentence
+  word for word and then add the `why` that `evidence_roll.band_thin` records
+  against a symbol, one per symbol, because the share and minute counts differ
+  per row and the sentence cannot carry them.
+  The sentence itself already says this test is a warning whose silence is not
+  an approval; do not soften that clause, drop it, or restate it in your own
+  words.
 
 Quote a sentence that reads 0 of N as readily as one that names somebody.
 Selecting the members of a published section by reading a predicate over the
@@ -535,6 +544,15 @@ candidate blocks is the thing prompt rule 2 forbids for the watchlists, and
 until 2026-08-28 this section asked for it by prose instead. Four separate
 filters, performed by the model, over four booleans Python had already
 resolved.
+
+NEVER SAY A LEVEL IS TRADEABLE. The band sentence above fires only in one
+direction: a name it does not name has not passed anything, because the
+collector sees a fraction of the tape and, measured over 54 past rows, this
+check missed 4 of the 10 levels the nightly pass went on to call untradeable.
+Writing that a candidate's level "looks liquid", "should fill" or anything of
+that shape converts a warning into an approval that the evidence does not
+support. The definitive answer is `fill_plausible`, it is written that night,
+and it is not available to you.
 
 TRAPS ARE DECIDED IN THE PACKET AND YOU MUST NOT RE-DERIVE ONE. Name a
 candidate a trap only where its `trap` field is true, and give the reason from

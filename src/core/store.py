@@ -104,6 +104,15 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     exit_reason      TEXT,
     shares           INTEGER,
     notional         REAL,
+    -- What this trade could actually LOSE in dollars: the stop distance times
+    -- the shares. Under a fixed notional it is whatever the stop distance
+    -- happens to be, and over v1's first sixteen trades it ran 253 to 2,141;
+    -- under a fixed risk it is the same on every trade by construction.
+    -- Recorded rather than derived so the two sizings can be read side by side.
+    risk_notional_taken REAL,
+    -- Which sizing mode produced the position, carried per row so a row says
+    -- how it was sized rather than inheriting whatever CRITERIA says today.
+    sizing_mode      TEXT,
     -- NULL, never zero, on a row that took no trade. A zero P&L is a flat
     -- trade and a null one is no trade, and a median that mixes them is the
     -- defect this project has now found under five other names.
@@ -237,6 +246,20 @@ _PICKS_LATER_COLUMNS = (
     # wins across the volume columns: sharing it would let a refused float
     # stand as the recorded explanation for a missing reference level.
     ("refs_true_reason", "TEXT"),
+    # THE MORNING'S OWN FILL WARNING, written by scan at 08:45 from the
+    # collector's bars, because the definitive check cannot run until the
+    # session is over and Alpaca will serve it. A WARNING, never an approval:
+    # over 54 rows it missed four of the ten levels the night went on to call
+    # untradeable. See CRITERIA [Fill warning], which records both error rates.
+    #
+    # Kept beside the night's fill_plausible and never merged with it. The
+    # morning's band is centred on pm_high and the night's on entry_ref_true,
+    # which differ by a median 1.19 percent and by as much as 20.9, so on the
+    # names that matter most they are not even the same band.
+    ("pm_band_volume", "REAL"),
+    ("pm_band_minutes", "INTEGER"),
+    ("pm_band_notional", "REAL"),
+    ("pm_band_state", "TEXT"),
     # The two excursions measured against the pair above rather than against
     # the collector's sampled one, written by night/fill_outcomes.py.
     #
@@ -274,6 +297,15 @@ _PICKS_LATER_COLUMNS = (
     # project has now confused them under four other names.
     ("fill_plausible", "TEXT"),
     ("fill_plausible_reason", "TEXT"),
+)
+
+
+# Columns added to paper_trades after it first shipped. init() widens an
+# existing database with these, the same way _PICKS_LATER_COLUMNS does, so a
+# ledger written before rule v2 existed is not dropped to gain its columns.
+_PAPER_LATER_COLUMNS = (
+    ("risk_notional_taken", "REAL"),
+    ("sizing_mode", "TEXT"),
 )
 
 
@@ -450,6 +482,7 @@ def init(connection: sqlite3.Connection | None = None) -> None:
     try:
         connection.executescript(_SCHEMA)
         ensure_columns(connection, "picks", _PICKS_LATER_COLUMNS)
+        ensure_columns(connection, "paper_trades", _PAPER_LATER_COLUMNS)
         # Any row without a source predates the source column, and everything
         # written before it existed was test data. Writers always set source,
         # so this can never touch a post migration row.

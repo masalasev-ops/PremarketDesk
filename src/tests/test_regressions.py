@@ -8082,7 +8082,10 @@ def claim_the_paper_rule_reads_the_minutes_in_order(failures: list[str]) -> None
     """
     from night import paper_ledger
 
-    entry, stop, notional = 100.0, 95.0, 10000.0
+    entry, stop = 100.0, 95.0
+    # The mode, not a number. [Paper] position_notional is 10,000, so a 100.00
+    # entry buys 100 whole shares under it, which the assertions below use.
+    notional = paper_ledger.SIZING_NOTIONAL
 
     def bar(t, o, h, l, c):
         return {"t": t, "o": o, "h": h, "l": l, "c": c, "v": 1000}
@@ -8163,6 +8166,214 @@ def claim_the_paper_rule_reads_the_minutes_in_order(failures: list[str]) -> None
           "an untaken trade is null rather than zero")
 
 
+def claim_the_two_sizings_differ_only_in_how_much_they_buy(
+        failures: list[str]) -> None:
+    """v2 changes the position size and NOTHING else, which is the whole design.
+
+    v1 puts the same dollar POSITION on every trade, so what each trade can
+    lose is whatever its own stop distance happens to be: over v1's first
+    sixteen it ran 253 to 2,141 dollars, an eight fold spread across trades the
+    rule treats as equals. v2 puts the same dollar RISK on every trade.
+
+    Two changes at once would leave no way to say which of them moved the
+    number, so this holds that the entry, the exit, the reason and the percent
+    return are IDENTICAL under both, and only the share count differs.
+
+    THE CAP IS NOT DECORATION. Without it a tight stop turns the sizing rule
+    into a leverage rule: at [Paper] risk_notional over a 1 percent stop the
+    position would be 75,000 dollars.
+    """
+    from core import criteria
+    from night import paper_ledger
+
+    crit = criteria.load()
+    budget = crit.number("paper", "risk_notional")
+    cap = crit.number("paper", "max_position_notional")
+    base = crit.number("paper", "position_notional")
+
+    def bar(t, o, h, l, c):
+        return {"t": t, "o": o, "h": h, "l": l, "c": c, "v": 1000}
+
+    # A 5 percent stop. Risk sizing buys budget/0.05 worth, which is under the
+    # cap, so this is the ordinary case and not the capped one.
+    bars = [bar("A", 99, 101, 98, 100.5), bar("B", 100.5, 102, 99.5, 101.0)]
+    entry, stop = 100.0, 95.0
+    one = paper_ledger.simulate(bars, entry, stop, paper_ledger.SIZING_NOTIONAL)
+    two = paper_ledger.simulate(bars, entry, stop, paper_ledger.SIZING_RISK)
+
+    for field in ("entry_price", "exit_price", "exit_reason", "pnl_pct",
+                  "max_drawdown_pct", "bars_held", "entry_at", "exit_at"):
+        if one[field] != two[field]:
+            failures.append(
+                f"the two sizings disagree on {field}: {one[field]!r} against "
+                f"{two[field]!r}. They are meant to differ in the position "
+                "size alone, and a second difference makes the comparison "
+                "between them unreadable")
+    if one["shares"] == two["shares"]:
+        failures.append(
+            f"both sizings bought {one['shares']} shares, so v2 is not sizing "
+            "by risk at all")
+    if one["shares"] != int(base // entry):
+        failures.append(
+            f"the notional sizing bought {one['shares']} shares, not "
+            f"{int(base // entry)}. It is meant to spend position_notional")
+    if two["shares"] != int(budget * entry / (entry - stop) // entry):
+        failures.append(
+            f"the risk sizing bought {two['shares']} shares. It is meant to "
+            f"risk {budget:,.0f} dollars over a {entry - stop:g} stop distance")
+
+    # THE RISK IS CONSTANT under v2 and varies under v1. Two stop widths, and
+    # the risk taken is compared across them rather than within one trade.
+    wide = paper_ledger.simulate(
+        [bar("A", 99, 101, 98, 100.5), bar("B", 100.5, 102, 99.5, 101.0)],
+        100.0, 80.0, paper_ledger.SIZING_RISK)
+    if abs(wide["risk_notional_taken"] - two["risk_notional_taken"]) > entry:
+        failures.append(
+            f"a 20 percent stop risked {wide['risk_notional_taken']!r} and a 5 "
+            f"percent stop risked {two['risk_notional_taken']!r}. Under risk "
+            "sizing those are meant to agree to within one share")
+    wide_v1 = paper_ledger.simulate(
+        [bar("A", 99, 101, 98, 100.5), bar("B", 100.5, 102, 99.5, 101.0)],
+        100.0, 80.0, paper_ledger.SIZING_NOTIONAL)
+    if abs(wide_v1["risk_notional_taken"] - one["risk_notional_taken"]) < entry:
+        failures.append(
+            "under notional sizing a 20 percent stop and a 5 percent stop "
+            "risked the same amount, which is the defect v2 exists to fix and "
+            "means this fixture cannot show the difference")
+
+    # The cap. A 1 percent stop would buy budget/0.01 without it.
+    tight = paper_ledger.simulate(
+        [bar("A", 99, 101, 99, 100.5), bar("B", 100.5, 102, 100, 101.0)],
+        100.0, 99.0, paper_ledger.SIZING_RISK)
+    if tight["notional"] > cap + entry:
+        failures.append(
+            f"a 1 percent stop bought {tight['notional']!r}, past the "
+            f"{cap:,.0f} cap. Uncapped, risk sizing quietly becomes a leverage "
+            f"rule: this position would be {budget * 100:,.0f} dollars")
+
+    # A stop at or above the entry risks nothing and cannot be risk sized.
+    broken = paper_ledger.position_size(paper_ledger.SIZING_RISK, 100.0, 100.0)
+    if broken[0] != 0 or not broken[1]:
+        failures.append(
+            f"a stop at the entry price sized {broken!r} rather than refusing. "
+            "The position is the budget over a zero distance and there is no "
+            "answer to give")
+
+    modes = paper_ledger.rule_versions()
+    if set(modes.values()) - set(paper_ledger.SIZING_MODES):
+        failures.append(
+            f"[Paper] sizing names a mode outside {paper_ledger.SIZING_MODES!r}: "
+            f"{modes!r}")
+    if len(modes) < 2:
+        failures.append(
+            f"only {len(modes)} rule version is registered: {modes!r}. A "
+            "second version is what makes the first one falsifiable")
+    print("  two sizings  the same trade, the same exit and the same percent "
+          "return under both, with constant risk under v2, variable under v1, "
+          "and a cap that stops it becoming leverage")
+
+
+def claim_the_morning_fill_warning_is_never_an_approval(
+        failures: list[str]) -> None:
+    """A weak instrument, labelled as one, and null where it has no evidence.
+
+    Alpaca refuses a session that is still running, so the definitive fill
+    check cannot happen at 08:45 and the morning has only the collector's
+    sample. Measured over 54 rows, that sample carried a median 0.115 of the
+    night's band figure with a 68 fold spread, and the two bands are centred on
+    DIFFERENT levels: pm_high against entry_ref_true, a median 1.19 percent
+    apart and up to 20.9.
+
+    So the morning field is a WARNING with three states and its silence means
+    nothing. It is deliberately not spelled with [Truth] fill_plausible's
+    words, because a reader seeing 'plausible' in a morning report will take it
+    for the night's answer.
+
+    AND THE BAND WIDTH IS READ FROM [Truth], not restated, so the morning's
+    band and the night's are the same width by construction.
+    """
+    from core import criteria
+    from morning import scan
+
+    crit = criteria.load()
+    width = crit.number("truth", "fill_band_pct")
+    floor = crit.number("fill_warning", "min_morning_band_notional")
+
+    if scan._BAND_PCT != width:
+        failures.append(
+            f"scan measures a {scan._BAND_PCT!r} band and [Truth] says "
+            f"{width!r}. Two copies of one width is how the morning's band and "
+            "the night's stop being comparable")
+    if set(scan.BAND_STATES) & {"plausible", "implausible"}:
+        failures.append(
+            f"the morning states {scan.BAND_STATES!r} reuse the night's words. "
+            "A reader who sees 'plausible' at 08:45 will take it for the "
+            "verdict that cannot be computed until the session is over")
+
+    level = 100.0
+    bars = [
+        # In the band, and the only one that is.
+        {"h": 100.2, "l": 99.8, "v": 400.0},
+        # Touched up into the band from below. Counts: its RANGE reaches it.
+        {"h": 99.9, "l": 90.0, "v": 100.0},
+        # Never got near it.
+        {"h": 98.0, "l": 97.0, "v": 90000.0},
+    ]
+    volume, minutes = scan.band_at_level(bars, level, 0.005)
+    if volume != 500.0 or minutes != 2:
+        failures.append(
+            f"band_at_level returned {volume!r} over {minutes!r} minute(s), "
+            "not 500 over 2. The 90,000 share bar never reached the band and "
+            "counting it would call the thinnest level in the fixture the "
+            "thickest")
+    if scan.band_at_level(bars, None, 0.005) != (None, None):
+        failures.append("a band was measured around a level that is not there")
+    if scan.band_at_level([], level, 0.005) != (None, None):
+        failures.append(
+            "a name with no collector bars produced a band rather than nulls. "
+            "No evidence and no volume are different facts")
+
+    # And the three states, driven through the real attach_premarket_path.
+    packet = scan.Packet()
+    candidates = [{"symbol": "AAA.US"}, {"symbol": "BBB.US"},
+                  {"symbol": "CCC.US"}]
+    watchlist = {"symbols": [{"symbol": "AAA.US"}, {"symbol": "BBB.US"}]}
+    thick = floor / level * 2.0
+    by_symbol = {
+        # Well past the floor.
+        "AAA.US": [{"h": 100.0, "l": 99.9, "v": thick, "pv": thick * 100.0,
+                    "minute_epoch": 1787829540}],
+        # A print. One share at the level.
+        "BBB.US": [{"h": 100.0, "l": 99.9, "v": 1.0, "pv": 100.0,
+                    "minute_epoch": 1787829540}],
+        # CCC is not covered at all.
+    }
+    scan.attach_premarket_path(candidates, watchlist, packet, by_symbol)
+    got = {c["symbol"]: c for c in candidates}
+    for symbol, expected in (("AAA.US", scan.BAND_NOT_FLAGGED),
+                             ("BBB.US", scan.BAND_THIN),
+                             ("CCC.US", scan.BAND_UNKNOWN)):
+        if got[symbol].get("pm_band_state") != expected:
+            failures.append(
+                f"{symbol} was marked {got[symbol].get('pm_band_state')!r}, "
+                f"not {expected!r}")
+        if not got[symbol].get("pm_band_why"):
+            failures.append(f"{symbol} carries no reason for its band state")
+    if got["CCC.US"].get("pm_band_notional") is not None:
+        failures.append(
+            "an uncovered name got a band notional, which is a number about a "
+            "tape nobody read")
+    said = (got["AAA.US"].get("pm_band_why") or "").lower()
+    if "not an approval" not in said:
+        failures.append(
+            f"the unflagged reason does not say it is not an approval: "
+            f"{said[:120]!r}. It misses four of ten untradeable levels and a "
+            "reader has to be told that where they read it")
+    print("  fill warning the morning band reads the night's width, keeps its "
+          "own words, is null without evidence, and says on the row that its "
+          "silence is not an approval")
+
+
 def claim_the_ledger_writes_the_picks_it_declined(failures: list[str]) -> None:
     """A skipped pick is a row with a reason, never a row that is not there.
 
@@ -8241,8 +8452,15 @@ def claim_the_ledger_writes_the_picks_it_declined(failures: list[str]) -> None:
             paper_ledger.write(result)
 
         with store.session() as connection:
-            ledger = {row["ticker"]: dict(row) for row in connection.execute(
-                "SELECT * FROM paper_trades WHERE date=?", (day,)).fetchall()}
+            every = [dict(row) for row in connection.execute(
+                "SELECT * FROM paper_trades WHERE date=?", (day,)).fetchall()]
+        # Keyed by ticker alone, over ONE version, because every assertion
+        # below is about the skip decision and the skip rule is deliberately
+        # the same for every version: they all trade one population. The row
+        # count across all versions is checked separately at the end.
+        versions = paper_ledger.rule_versions()
+        first = sorted(versions)[0]
+        ledger = {r["ticker"]: r for r in every if r["rule_version"] == first}
 
         if set(ledger) != {"AAA.US", "BBB.US", "CCC.US", "DDD.US"}:
             failures.append(
@@ -8282,11 +8500,20 @@ def claim_the_ledger_writes_the_picks_it_declined(failures: list[str]) -> None:
             again = connection.execute(
                 "SELECT COUNT(*) FROM paper_trades WHERE date=?",
                 (day,)).fetchone()[0]
-        if again != 4:
+        expected = 4 * len(versions)
+        if again != expected or len(every) != expected:
             failures.append(
-                f"a second run left {again} rows, not 4. The ledger is keyed "
-                "on (date, ticker, rule_version), so re-running one version is "
-                "an update and only a NEW version books beside it")
+                f"a second run left {again} rows and the first left "
+                f"{len(every)}, against {expected} for 4 picks across "
+                f"{len(versions)} version(s). The ledger is keyed on "
+                "(date, ticker, rule_version), so re-running one version is an "
+                "update and only a NEW version books beside it")
+        if len({r["rule_version"] for r in every}) != len(versions):
+            failures.append(
+                f"only {len({r['rule_version'] for r in every})} of "
+                f"{len(versions)} registered version(s) reached the table: "
+                "a version that books nothing cannot be compared to one that "
+                "does")
     print("  paper skips  every live pick gets a row, a declined one carries "
           "the evidence, an unmeasured level is never borrowed from the "
           "sampled pair, and a re-run replaces its own rows")
@@ -10249,6 +10476,8 @@ def main() -> int:
     claim_fill_plausibility_is_three_state_and_never_guesses(failures)
     claim_a_refused_session_still_carries_a_verdict(failures)
     claim_the_paper_rule_reads_the_minutes_in_order(failures)
+    claim_the_two_sizings_differ_only_in_how_much_they_buy(failures)
+    claim_the_morning_fill_warning_is_never_an_approval(failures)
     claim_the_ledger_writes_the_picks_it_declined(failures)
     claim_the_fill_band_floor_is_the_position_over_the_participation_cap(failures)
     claim_the_score_watch_withholds_what_it_cannot_report(failures)

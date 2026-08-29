@@ -23,6 +23,17 @@ opened 70.30 and reached 70.85, a miss by 0.13 percent, while next_day_high is
 changed by this module; it fetches its own bars for its own session and the
 two horizons are kept apart on purpose.
 
+EVERY RULE VERSION IS BOOKED, SIDE BY SIDE, over the same trades. CRITERIA
+[Paper]'s sizing map is the registry: each version named there gets its own row
+per pick, keyed on (date, ticker, rule_version), so a new version lands BESIDE
+what the old one produced and never over it. A ledger that overwrote itself on
+every rule change could not answer whether the change helped, which is most of
+what a ledger is for.
+
+v2 differs from v1 in exactly one thing, the position size, and the versions
+are otherwise byte for byte identical. That is the design: two changes at once
+would leave no way to say which of them moved the number.
+
 IT BOOKS AGAINST THE MEASURED REFERENCES AND THE ALPACA TAPE. entry_ref and
 stop_ref are the collector's raw live levels, which are the extremes of a
 socket sample, and a ledger built on a level that was never available books a
@@ -85,6 +96,13 @@ LEDGER_COLUMNS = (
     ("exit_reason", "TEXT"),
     ("shares", "INTEGER"),
     ("notional", "REAL"),
+    # What this trade could actually LOSE, in dollars: the stop distance times
+    # the shares. Under v1 it is whatever the stop distance happens to be and
+    # ran 253 to 2,141 over the first sixteen trades; under v2 it is the same
+    # on every trade by construction. Recorded rather than derived so a reader
+    # can see the two sizings side by side without recomputing either.
+    ("risk_notional_taken", "REAL"),
+    ("sizing_mode", "TEXT"),
     # NULL, never zero, on a row that took no trade. A zero P&L is a flat
     # trade and a null one is no trade, and a median that mixes them is the
     # defect this project has now found under five other names.
@@ -94,6 +112,74 @@ LEDGER_COLUMNS = (
     ("bars_held", "INTEGER"),
     ("booked_at", "TEXT"),
 )
+
+# The sizing modes CRITERIA [Paper]'s sizing map may name. A tuple rather than
+# three literals scattered through the module, so a claim can assert the set is
+# closed and a typo in the file cannot invent a fourth mode that reads as real.
+SIZING_NOTIONAL = "notional"
+SIZING_RISK = "risk"
+SIZING_MODES = (SIZING_NOTIONAL, SIZING_RISK)
+
+
+def rule_versions() -> dict[str, str]:
+    """{version: sizing mode}, from CRITERIA [Paper]'s sizing map.
+
+    THE SIZING MAP IS THE VERSION REGISTRY. There is deliberately no separate
+    list of versions: a version with no sizing mode could not be booked, and a
+    sizing mode for a version nobody lists would be dead configuration, so the
+    two are one line and cannot disagree.
+    """
+    modes = _CRIT.pair_map("paper", "sizing")
+    for version, mode in modes.items():
+        if mode not in SIZING_MODES:
+            raise criteria.CriteriaError(
+                f"[Paper] sizing names {mode!r} for {version!r}, which is not "
+                f"one of {sorted(SIZING_MODES)}")
+    return modes
+
+
+def position_size(mode: str, entry_price: float, stop_level: float,
+                  ) -> tuple[int, str | None]:
+    """(whole shares, why not). The one thing that differs between v1 and v2.
+
+    notional  the same dollar POSITION on every trade. What each trade can lose
+              is then whatever its own stop distance happens to be, which over
+              v1's first sixteen trades ran from 253 dollars to 2,141: an eight
+              fold spread across trades the rule treats as equals.
+
+    risk      the same dollar RISK on every trade. The position is the risk
+              budget over the stop distance, capped, so a wide stop buys a
+              small position and a tight one buys a large position up to the
+              cap. Without the cap this stops being a sizing rule and becomes a
+              leverage rule: a two percent stop would buy 37,500 dollars.
+
+    A size that works out below one whole share books NO TRADE and says so,
+    rather than rounding up to one and inventing a position the budget does not
+    cover.
+    """
+    if mode == SIZING_NOTIONAL:
+        notional = _CRIT.number("paper", "position_notional")
+    elif mode == SIZING_RISK:
+        risk = entry_price - stop_level
+        if risk <= 0:
+            return 0, (
+                f"the stop {stop_level:g} is at or above the entry "
+                f"{entry_price:g}, so the trade risks nothing and a risk sized "
+                "position is undefined. Nothing is booked rather than sizing "
+                "it off a division this rule cannot perform")
+        budget = _CRIT.number("paper", "risk_notional")
+        cap = _CRIT.number("paper", "max_position_notional")
+        notional = min(budget * entry_price / risk, cap)
+    else:
+        raise criteria.CriteriaError(
+            f"sizing mode {mode!r} is not one of {sorted(SIZING_MODES)}")
+    shares = int(notional // entry_price)
+    if shares < 1:
+        return 0, (
+            f"one share costs {entry_price:,.2f} and the {mode} sizing allows "
+            f"{notional:,.0f}, so the rule cannot be applied at this size")
+    return shares, None
+
 
 EXIT_STOP = "stop"
 EXIT_CLOSE = "session close"
@@ -127,7 +213,7 @@ def session_window(day: str) -> tuple[dt.datetime, dt.datetime]:
 
 
 def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
-             notional: float) -> dict[str, Any]:
+             sizing_mode: str = SIZING_NOTIONAL) -> dict[str, Any]:
     """Apply the rule to one session's minutes. Returns what it did and why.
 
     Reads the bars in ORDER, which is the whole reason this fetches one minute
@@ -169,13 +255,11 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
     if entry_price is None or entry_index is None:
         return out
 
-    shares = int(notional // entry_price)
-    if shares < 1:
-        # One share costs more than the whole position. Not a trade, and not a
-        # zero either: the rule could not be applied at this size.
-        out["exit_reason"] = (
-            f"one share costs {entry_price:,.2f} and the position is "
-            f"{notional:,.0f}, so the rule cannot be applied at this size")
+    # The ONE thing that differs between versions. Everything above and below
+    # this line is identical for every rule version by design.
+    shares, refused = position_size(sizing_mode, entry_price, stop_level)
+    if refused:
+        out["exit_reason"] = refused
         return out
 
     lowest = None
@@ -211,6 +295,7 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
         "exit_at": exit_at, "exit_price": round(exit_price, 4),
         "exit_reason": exit_reason,
         "shares": shares, "notional": round(shares * entry_price, 2),
+        "risk_notional_taken": round((entry_price - stop_level) * shares, 2),
         "pnl": round((exit_price - entry_price) * shares, 2),
         "pnl_pct": round((exit_price - entry_price) / entry_price * 100.0, 4),
         "max_drawdown_pct": (
@@ -222,9 +307,14 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
 
 
 def book(day: str, probe: Any = None) -> dict[str, Any]:
-    """Every live pick of one session, put through the rule. Writes nothing."""
-    version = _CRIT.text("paper", "rule_version")
-    notional = _CRIT.number("paper", "position_notional")
+    """Every live pick of one session, through EVERY rule version. Writes nothing.
+
+    One fetch of the session's minutes serves every version, because the
+    versions differ only in how much they buy and not in what they look at.
+    Fetching per version would multiply the request count to re-read identical
+    bars.
+    """
+    versions = rule_versions()
     with store.session() as connection:
         store.init(connection)
         rows = [dict(row) for row in connection.execute(
@@ -234,7 +324,7 @@ def book(day: str, probe: Any = None) -> dict[str, Any]:
             "WHERE date=? AND source='live' ORDER BY ticker", (day,))]
     if not rows:
         return {"day": day, "rows": [], "skipped": "no live picks rows",
-                "version": version}
+                "versions": list(versions)}
 
     start, end = session_window(day)
     stamp = ettime.stamp(ettime.now_et())
@@ -256,9 +346,10 @@ def book(day: str, probe: Any = None) -> dict[str, Any]:
 
     out: list[dict[str, Any]] = []
     for row in rows:
+      for version, mode in versions.items():
         record: dict[str, Any] = {
             "date": day, "ticker": row["ticker"], "rule_version": version,
-            "session": window_text,
+            "sizing_mode": mode, "session": window_text,
             "day_eligible": row["day_eligible"],
             "swing_eligible": row["swing_eligible"],
             "conviction": row["conviction"], "score": row["score"],
@@ -267,7 +358,8 @@ def book(day: str, probe: Any = None) -> dict[str, Any]:
             "stop_ref_used": row["stop_ref_true"],
             "entry_at": None, "entry_price": None, "exit_at": None,
             "exit_price": None, "exit_reason": None, "shares": None,
-            "notional": None, "pnl": None, "pnl_pct": None,
+            "notional": None, "risk_notional_taken": None,
+            "pnl": None, "pnl_pct": None,
             "max_drawdown_pct": None, "bars_held": None,
             "booked_at": stamp,
         }
@@ -292,14 +384,15 @@ def book(day: str, probe: Any = None) -> dict[str, Any]:
             record.update(simulate(
                 bars.get(bare[row["ticker"]]) or [],
                 float(row["entry_ref_true"]), float(row["stop_ref_true"]),
-                notional))
+                mode))
             if not (bars.get(bare[row["ticker"]]) or []):
                 record["skip_reason"] = (
                     f"alpaca returned no minutes for {window_text}, so the "
                     "rule was not applied rather than read as no trigger")
                 record["exit_reason"] = None
         out.append(record)
-    return {"day": day, "rows": out, "skipped": None, "version": version,
+    return {"day": day, "rows": out, "skipped": None,
+            "versions": list(versions),
             "session": window_text, "fetch_error": error,
             "requests": getattr(probe, "request_count", 0)}
 
@@ -331,25 +424,35 @@ def report(result: dict[str, Any]) -> None:
         print(f"paper: nothing booked for {result['day']}: {result['skipped']}")
         return
     rows = result["rows"]
+    versions = result.get("versions") or []
     booked = [r for r in rows if r["booked"]]
-    print(f"paper: {result['day']} under rule {result['version']} over "
-          f"{result['session']}, {len(booked)} of {len(rows)} live picks "
-          f"traded, {result.get('requests', 0)} alpaca requests, no EODHD quota")
-    print(f"  {'ticker':<10} {'trigger':>10} {'stop':>10} {'entry':>10} "
-          f"{'exit':>10} {'why':>14} {'pnl':>10} {'pnl %':>8} {'drawdn':>8}")
+    picks = len({r["ticker"] for r in rows})
+    print(f"paper: {result['day']} over {result['session']}, "
+          f"{len(booked)} trades booked from {picks} live picks across "
+          f"{len(versions)} rule version(s) {', '.join(versions)}, "
+          f"{result.get('requests', 0)} alpaca requests, no EODHD quota")
+    print(f"  {'rule':<5} {'ticker':<10} {'entry':>10} {'exit':>10} "
+          f"{'why':>14} {'shares':>7} {'position':>11} {'at risk':>9} "
+          f"{'pnl':>10} {'pnl %':>8}")
     for record in rows:
         if not record["booked"]:
             continue
-        print(f"  {record['ticker']:<10} {record['entry_ref_used']:>10} "
-              f"{record['stop_ref_used']:>10} {record['entry_price']:>10} "
-              f"{record['exit_price']:>10} {record['exit_reason']:>14} "
-              f"{record['pnl']:>10,.2f} {record['pnl_pct']:>+7.2f}% "
-              f"{record['max_drawdown_pct']:>+7.2f}%")
+        print(f"  {record['rule_version']:<5} {record['ticker']:<10} "
+              f"{record['entry_price']:>10} {record['exit_price']:>10} "
+              f"{record['exit_reason']:>14} {record['shares']:>7} "
+              f"{record['notional']:>11,.0f} "
+              f"{record['risk_notional_taken']:>9,.0f} "
+              f"{record['pnl']:>10,.2f} {record['pnl_pct']:>+7.2f}%")
+    # The refusals are per TICKER, not per version: the skip rule is deliberately
+    # the same for every version so they all trade one population. Printing them
+    # once keeps that visible rather than repeating each reason per version.
+    seen: set[str] = set()
     for record in rows:
-        if record["booked"]:
+        if record["booked"] or record["ticker"] in seen:
             continue
+        seen.add(record["ticker"])
         why = record["skip_reason"] or record["exit_reason"] or "no reason"
-        print(f"  {record['ticker']:<10} not traded: {why}")
+        print(f"  {'':5} {record['ticker']:<10} not traded: {why}")
 
 
 def ledger_report() -> None:
@@ -383,20 +486,29 @@ def ledger_report() -> None:
         by_version.setdefault(row["rule_version"], []).append(row)
 
     print("")
+    summaries: dict[str, dict[str, Any]] = {}
     for version, held in sorted(by_version.items()):
         booked = [r for r in held if r["booked"] and r["pnl_pct"] is not None]
+        picks = len({r["ticker"] + r["date"] for r in held})
         sessions = len({r["date"] for r in held})
         skipped = [r for r in held if r["skip_reason"]]
-        never = [r for r in held
-                 if not r["booked"] and not r["skip_reason"]]
+        never = [r for r in held if not r["booked"] and not r["skip_reason"]]
         if not booked:
             print(f"paper: rule {version} booked NO trades across "
-                  f"{len(held)} picks in {sessions} session(s). "
+                  f"{picks} picks in {sessions} session(s). "
                   f"{len(skipped)} skipped, {len(never)} never triggered.")
             continue
         wins = [r for r in booked if r["pnl_pct"] > 0]
         drawdowns = [r["max_drawdown_pct"] for r in booked
                      if r["max_drawdown_pct"] is not None]
+        risks = [r["risk_notional_taken"] for r in booked
+                 if r["risk_notional_taken"] is not None]
+        summaries[version] = {
+            "booked": booked, "sessions": sessions, "picks": picks,
+            "pnl": sum(r["pnl"] for r in booked),
+            "worst_trade": min(r["pnl"] for r in booked),
+            "risks": risks,
+        }
         # THE ONE LINE. Rule version, both denominators, median booked P&L,
         # win rate, worst drawdown. The drawdown clause is appended rather than
         # made a condition on the whole line: written the other way round the
@@ -405,7 +517,7 @@ def ledger_report() -> None:
         worst = (f", worst drawdown {min(drawdowns):+.2f}%" if drawdowns
                  else ", worst drawdown unknown, no row carries one")
         print(f"paper: rule {version} booked {len(booked)} trades from "
-              f"{len(held)} picks across {sessions} session(s): median "
+              f"{picks} picks across {sessions} session(s): median "
               f"{statistics.median(r['pnl_pct'] for r in booked):+.2f}%, "
               f"win rate {len(wins)}/{len(booked)}{worst}")
         print(f"  not traded: {len(skipped)} skipped on evidence, "
@@ -413,9 +525,15 @@ def ledger_report() -> None:
         stopped = [r for r in booked if r["exit_reason"] == EXIT_STOP]
         print(f"  exits: {len(stopped)} stopped, "
               f"{len(booked) - len(stopped)} held to the close")
-        print(f"  median booked P&L "
-              f"{statistics.median(r['pnl'] for r in booked):+,.2f} dollars on "
-              f"a {_CRIT.number('paper', 'position_notional'):,.0f} position")
+        # The sizing is NAMED on the line rather than assumed, because the two
+        # versions put different amounts of money to work and a dollar total
+        # read without it is not comparable to anything.
+        mode = (booked[0].get("sizing_mode") or "unrecorded")
+        if risks:
+            print(f"  sized by {mode}: total P&L {summaries[version]['pnl']:+,.2f} "
+                  f"dollars, {sum(r['notional'] for r in booked):,.0f} deployed, "
+                  f"{sum(risks):,.0f} put at risk "
+                  f"({min(risks):,.0f} to {max(risks):,.0f} per trade)")
 
         paired = [r for r in booked if r["mfe_pct_true"] is not None]
         if paired:
@@ -424,6 +542,43 @@ def ledger_report() -> None:
                   f" over n={len(paired)}. That is a BOUND at the tape's best "
                   "moment, on the session AFTER the one the rule traded, and "
                   "it is not a return.")
+
+    # ------------------------------------------------------- head to head
+    #
+    # The comparison the versions exist for, and the ONLY honest way to read
+    # two sizing rules against each other: the same trades, so the difference
+    # is the sizing and nothing else. The pre-registered verdict in
+    # CRITERIA [Paper] is stated but NOT evaluated here, because the count is
+    # nowhere near its judging point and a verdict printed early is a verdict
+    # that gets read.
+    if len(summaries) < 2:
+        return
+    print("")
+    print("paper: HEAD TO HEAD, over the trades every version booked")
+    common = set.intersection(*[
+        {(r["date"], r["ticker"]) for r in s["booked"]}
+        for s in summaries.values()])
+    if not common:
+        print("  no trade was booked by every version, so there is nothing to "
+              "compare that is not confounded by a different population")
+        return
+    print(f"  {'rule':<5} {'mode':<9} {'trades':>7} {'total P&L':>12} "
+          f"{'deployed':>12} {'at risk':>10} {'worst trade':>12}")
+    for version, s in sorted(summaries.items()):
+        shared = [r for r in s["booked"] if (r["date"], r["ticker"]) in common]
+        risks = [r["risk_notional_taken"] for r in shared
+                 if r["risk_notional_taken"] is not None]
+        print(f"  {version:<5} {shared[0].get('sizing_mode') or '?':<9} "
+              f"{len(shared):>7} "
+              f"{sum(r['pnl'] for r in shared):>+12,.2f} "
+              f"{sum(r['notional'] for r in shared):>12,.0f} "
+              f"{sum(risks):>10,.0f} "
+              f"{min(r['pnl'] for r in shared):>+12,.2f}")
+    print(f"  {len(common)} trade(s) booked by every version, across "
+          f"{len({d for d, _ in common})} session(s). The sample unit is the "
+          "session.")
+    print("  CRITERIA [Paper] pre-registers the verdict and its judging point, "
+          "200 booked trades across 60 sessions. Nothing here is that verdict.")
 
 
 OK_CODES = (0,)

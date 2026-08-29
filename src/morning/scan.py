@@ -672,6 +672,56 @@ def attach_daily_history(
         candidate["avg_volume_20d"] = round(sum(volumes) / len(volumes), 2) if volumes else None
 
 
+# The three states the morning's fill warning may carry. Named rather than
+# spelled as literals, so a claim can assert the set is closed and a typo
+# cannot invent a fourth state that reads as real. Deliberately NOT the same
+# words as [Truth] fill_plausible: that column is a verdict and this one is a
+# warning, and a reader who sees 'plausible' in a morning report will take it
+# for the night's answer.
+_BAND_PCT = _CRIT.number("truth", "fill_band_pct")
+_MIN_BAND_NOTIONAL = _CRIT.number("fill_warning", "min_morning_band_notional")
+
+BAND_THIN = "thin"
+BAND_NOT_FLAGGED = "not flagged"
+BAND_UNKNOWN = "unknown"
+BAND_STATES = (BAND_THIN, BAND_NOT_FLAGGED, BAND_UNKNOWN)
+
+
+def band_at_level(bars: list[dict[str, Any]], level: float | None,
+                  band_pct: float) -> tuple[float | None, int | None]:
+    """(shares, minutes) the COLLECTOR saw within band_pct of one level.
+
+    The same shape as night/true_volume.band_stats and the same band width,
+    read from the same [Truth] fill_band_pct key, so the morning's band and the
+    night's are the same width by construction rather than by inspection. What
+    differs is the tape underneath: this walks the socket's sample, which
+    carried a median 0.115 of the night's figure over the 54 rows where both
+    exist, with a 68 fold spread around it.
+
+    A minute counts when its RANGE reaches the band. Counting it by its own
+    average price was tried on 2026-08-29 and measures the wrong thing: the
+    premarket high is an extreme no whole minute averages near, so a wide
+    ranging name scores zero however much it traded.
+
+    Null, not zero, when there is no level or no bar. A window nobody could
+    look at and a window with nothing in it are different facts.
+    """
+    if level is None or not level or not bars:
+        return None, None
+    floor, ceiling = level * (1.0 - band_pct), level * (1.0 + band_pct)
+    volume = 0.0
+    minutes = 0
+    for bar in bars:
+        high, low = bar.get("h"), bar.get("l")
+        if high is None or low is None:
+            continue
+        if float(high) < floor or float(low) > ceiling:
+            continue
+        volume += float(bar.get("v") or 0)
+        minutes += 1
+    return round(volume, 2), minutes
+
+
 def attach_premarket_path(
     candidates: list[dict[str, Any]],
     watchlist: dict[str, Any],
@@ -717,6 +767,15 @@ def attach_premarket_path(
             candidate["pm_window_thin"] = None
             candidate["pm_window_bars"] = 0
             candidate["pm_window_thin_reason"] = None
+            # No bars means no evidence about the level either. UNKNOWN, and
+            # never "not flagged", which a reader would take for a clean bill.
+            candidate["pm_band_volume"] = None
+            candidate["pm_band_minutes"] = None
+            candidate["pm_band_notional"] = None
+            candidate["pm_band_state"] = BAND_UNKNOWN
+            candidate["pm_band_why"] = (
+                "the collector has no bars for this name, so nothing is known "
+                "about what traded near its premarket high")
             if not on_watchlist:
                 candidate["pm_reason"] = (
                     "not on watchlist.json, so the collector never subscribed to it. "
@@ -744,6 +803,41 @@ def attach_premarket_path(
             ettime.from_epoch_s(max(b["minute_epoch"] for b in bars) + 60)
         )
         candidate["pm_reason"] = None
+
+        # THE MORNING'S FILL WARNING. Whether the level this report is about to
+        # print as a trigger is one anybody could have transacted at, answered
+        # from the only evidence 08:45 has. See CRITERIA [Fill warning] for how
+        # weak it is: four of ten genuinely untradeable levels get past it.
+        band_volume, band_minutes = band_at_level(
+            bars, candidate["pm_high"], _BAND_PCT)
+        candidate["pm_band_volume"] = band_volume
+        candidate["pm_band_minutes"] = band_minutes
+        candidate["pm_band_notional"] = (
+            round(band_volume * candidate["pm_high"], 2)
+            if band_volume is not None and candidate["pm_high"] else None)
+        if candidate["pm_band_notional"] is None:
+            candidate["pm_band_state"] = BAND_UNKNOWN
+            candidate["pm_band_why"] = (
+                "the collector recorded no premarket high for this name, so "
+                "there is no level to measure trading around")
+        elif candidate["pm_band_notional"] < _MIN_BAND_NOTIONAL:
+            candidate["pm_band_state"] = BAND_THIN
+            candidate["pm_band_why"] = (
+                f"the collector saw {band_volume:,.0f} share(s) over "
+                f"{band_minutes} minute(s) within {_BAND_PCT * 100:g} percent "
+                f"of {candidate['pm_high']:g}, which is "
+                f"{candidate['pm_band_notional']:,.0f} dollars, below the "
+                f"{_MIN_BAND_NOTIONAL:,.0f} dollar warning floor. This level "
+                "may be a print rather than a market")
+        else:
+            candidate["pm_band_state"] = BAND_NOT_FLAGGED
+            candidate["pm_band_why"] = (
+                f"the collector saw {band_volume:,.0f} share(s) over "
+                f"{band_minutes} minute(s) within {_BAND_PCT * 100:g} percent "
+                f"of {candidate['pm_high']:g}, which is "
+                f"{candidate['pm_band_notional']:,.0f} dollars. NOT an "
+                "approval: the socket sees a fraction of the tape and this "
+                "test misses four of every ten untradeable levels")
 
         window_start_hhmm = candidate["pm_window_start"][11:16]
         # The intended start is recorded BESIDE the observed one rather than
@@ -3008,6 +3102,14 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     unknown = [{"symbol": c["symbol"], "catalyst_why": c.get("catalyst_why")}
                for c in candidates if c.get("catalyst_found") is None]
 
+    # THE MORNING'S FILL WARNING, as a membership list like the six above, so
+    # the report quotes a count rather than filtering the candidate table in
+    # prose. Only the flagged names are listed: "not flagged" is not an
+    # approval and a list of names that failed to trip a weak test is not a
+    # thing any report should print as a group.
+    band_thin = [{"symbol": c["symbol"], "why": c.get("pm_band_why")}
+                 for c in candidates if c.get("pm_band_state") == BAND_THIN]
+
     return {
         "candidates_examined": examined,
         "rvol_null": rvol_null,
@@ -3016,6 +3118,7 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "rvol_lower_bound": lower_bound,
         "catalyst_absent": absent,
         "catalyst_unknown": unknown,
+        "band_thin": band_thin,
         "text": {
             "rvol_null": line(
                 rvol_null, "carry a null premarket RVOL, so their premarket "
@@ -3040,6 +3143,13 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
                 unknown, "carry an unknown catalyst status, which is a window "
                          "that was never read rather than one that came back "
                          "empty"),
+            "band_thin": line(
+                band_thin, "traded so little near their own premarket high "
+                           "that the level may be a print rather than a price "
+                           "anyone could transact at. This is a WARNING and "
+                           "its silence is not an approval: measured over 54 "
+                           "past rows it missed 4 of the 10 levels the nightly "
+                           "check went on to call untradeable"),
         },
     }
 
@@ -5159,6 +5269,14 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 "pm_high": candidate.get("pm_high"),
                 "pm_low": candidate.get("pm_low"),
                 "pm_vwap": candidate.get("pm_vwap"),
+                # The morning's fill warning, so the night's verdict lands
+                # beside what the morning was able to say rather than replacing
+                # a blank. The two are different bands on different tapes and
+                # the gap between them is worth keeping.
+                "pm_band_volume": candidate.get("pm_band_volume"),
+                "pm_band_minutes": candidate.get("pm_band_minutes"),
+                "pm_band_notional": candidate.get("pm_band_notional"),
+                "pm_band_state": candidate.get("pm_band_state"),
                 "collector_covered": int(bool(candidate.get("collector_covered"))),
                 "pm_window_start": candidate.get("pm_window_start"),
                 "prior_high": candidate.get("prior_high"),

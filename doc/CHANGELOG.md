@@ -15,6 +15,64 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: rule v2 books beside v1, and the morning gets a fill warning
+
+**What changed.** CRITERIA [Paper] now registers TWO rule versions through its
+sizing map, which is also the registry: v1 sizes by a fixed notional and v2 by
+a fixed dollar risk. Everything else about the two is identical. New keys, all
+SEED: account_notional 100000, risk_notional 750, max_position_notional 25000.
+night/paper_ledger.py books every registered version over one fetch and prints
+a head to head. New CRITERIA section [Fill warning] and a morning band warning
+written by scan at 08:45, carried in the packet, on the picks row and in the
+report's Skips and traps section. No screen threshold moved.
+
+**Why v2 is a sizing rule and not an exit rule.** Every one of v1's 16 trades
+was in profit at some point while held, median best +1.84 percent, median given
+back -3.91 points. The entries are not random. But the median trade reached
+only 0.46 of the risk it was taking and just 4 of 16 ever reached 1R, and the
+two largest losses were the two widest stops. That is a sizing defect with a
+standard fix, where an exit rule would have been a free parameter to tune
+against 16 trades. See DECISIONS.md.
+
+**The risk budget is calibrated to hold total risk CONSTANT**, at v1's own mean
+of 772 dollars rounded to 750, so the versions differ in distribution and not
+in amount. A smaller number would have manufactured the result.
+
+**HEAD TO HEAD, over the same 16 trades across 6 sessions:**
+
+  rule  mode        trades    total P&L     deployed    at risk   worst trade
+  v1    notional        16    -3,487.81      158,512     12,354     -1,912.54
+  v2    risk            16    -2,713.74      229,430     11,814       -748.90
+
+Every per trade percent return is identical under both; sizing cannot change
+what a trade did. Median -1.38 percent, win rate 5 of 16, under either. What
+changes is the portfolio's shape. [Paper] pre-registers the verdict and its
+judging point at 200 booked trades across 60 sessions, and 16 is not it.
+
+**The morning fill warning, and its measured error rate.**
+
+                  night: plausible   implausible   unknown
+  morning thin                   6             6         0
+  not flagged                   38             4         0
+  unknown                        0             0        12
+
+It catches 6 of the 10 untradeable levels, misses 4, and over-flags 6 of 44.
+Those counts are printed in the report sentence itself. It uses its own words,
+'thin' and 'not flagged', never the night's 'plausible', and the template is
+told in the section never to write that a level is tradeable.
+
+**Backfilled** onto all 66 existing rows from runs/&lt;date&gt;/premarket_snapshot.jsonl,
+which is the same file the scan reads, so the comparison above rests on every
+row rather than on the ones written from today.
+
+**Held in place by** two new claims, mutation tested against eight edits: the
+two sizings agree on entry, exit, reason and percent return and differ only in
+share count, risk is constant under v2 and variable under v1, the cap stops
+risk sizing becoming leverage, and a stop at the entry is refused rather than
+sized off a fabricated risk; and the morning band reads [Truth]'s width, counts
+a minute by its range, is null without evidence, keeps its own vocabulary, and
+says on the row that its silence is not an approval.
+
 ## 2026-08-29: the weekly page starts watching whether the score orders anything
 
 **What changed.** night/weekly_page.py gains a section grouping every live pick

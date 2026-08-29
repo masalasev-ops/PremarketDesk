@@ -18,6 +18,117 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: rule v2, and why the sizing rather than the exit
+
+v1 booked 16 trades and lost 3,487.81 dollars. The obvious reading is that the
+screen does not work. The diagnostic says otherwise and says something more
+useful.
+
+**EVERY ONE OF THE 16 WAS IN PROFIT AT SOME POINT WHILE HELD.** Median best
+price reached +1.84 percent, median given back by the hold-to-close -3.91
+points. NSSC was up 10.81 percent and closed -18.22. WOLF was up 6.36 and
+closed -7.72. Six of the eleven losers had been up more than a percent, and
+only two never got above half a percent. The trigger is not producing random
+entries.
+
+**But in units of the risk taken it is weak, and that is the real finding.**
+Median distance reached, expressed in the trade's own risk, is 0.46R. Only 4 of
+16 ever reached 1R. A trade that risks 5.89 percent to reach 0.46 of that
+cannot work at any hit rate.
+
+**The stop was never designed to be a stop.** CRITERIA [Picks] says of
+entry_ref and stop_ref: "references for outcome measurement in later nightly
+jobs, never advice", and the premarket low was chosen because it is a traded
+extreme that keeps excursion math interpretable. v1 borrowed it as a trade
+level because it was the level that existed. On a gapper the premarket range is
+routinely 20 percent, and the two largest losses were the two widest stops:
+PLAB risked 21.48 percent and reached 0.05R, NSSC risked 18.22 and reached
+0.59R.
+
+**Sizing, not the exit, and one change only.** Three candidates were on the
+table.
+
+An exit rule, a target or a trail, would capture some of that 3.91 point median
+give-back. It was refused for now: a target is a dial with a free number on it,
+and with 16 trades any value can be turned until the table looks good. It is
+named in [Paper] as the next pre-registration if sizing turns out not to be it.
+
+A different stop reference. Refused because it changes which trades exist: a
+tighter stop stops out names v1 held, so v1 and v2 would no longer be booking
+the same trades and nothing could be attributed.
+
+Position sizing. Chosen because it changes NO trade, only how much of each one
+is bought. Under v1 the risk carried ran 253 to 2,141 dollars, an eight fold
+spread across trades the rule treats as equals, and that is a defect with a
+standard fix rather than a number to search for.
+
+**THE RISK BUDGET IS CALIBRATED TO HOLD TOTAL RISK CONSTANT.** v1's 16 trades
+carried 12,354 dollars of risk between them, a mean of 772. risk_notional is
+750, that mean rounded to a policy number. So the two versions put the same
+money at risk and differ only in how it is spread. Picking a smaller number
+would have manufactured a better v2, and that is precisely the move this file
+exists to make visible.
+
+**What it did, and it is not a verdict.** Over the same 16 trades: total P&L
+-2,713.74 against v1's -3,487.81, worst single trade -748.90 against -1,912.54,
+total risk 11,814 against 12,354. Every per trade PERCENT return is identical
+under both, because sizing cannot change what a trade did; what changes is the
+portfolio's shape. By the criteria pre-registered in [Paper] before any of this
+was run, that reads as "v2 is better" on both required legs. At 16 trades it is
+not read at all: the judging point is 200 across 60 sessions.
+
+**A known imperfection, kept deliberately.** [Truth] min_fill_band_notional is
+derived from v1's position size and both versions are skipped against it, so
+v2's larger positions are judged by v1's floor. Fixing that would mean the two
+versions traded different names, which would confound the only comparison the
+section exists to make.
+
+## 2026-08-29: a morning fill warning that refuses to be an approval
+
+The fill plausibility check is a nightly pass because Alpaca refuses a session
+that is still running. That is exactly the wrong time for it: a third of what
+the report publishes has a headline level no market stands behind, and the
+reader finds out three weeks later.
+
+**So the morning computes its own, from the collector's sample, and it is a
+warning rather than a verdict.** The asymmetry is the design. A low number
+means the collector saw very little trade at the level and it is probably not a
+price anybody could get. A high number means nothing at all: it means a weak
+instrument did not fire.
+
+**How weak, measured rather than asserted.** Over the 66 live rows:
+
+                  night: plausible   implausible   unknown
+  morning thin                   6             6         0
+  not flagged                   38             4         0
+  unknown                        0             0        12
+
+It catches 6 of the 10 the night calls untradeable, MISSES 4, and flags 6 of
+the 44 that were fine. Those counts are in CRITERIA, in the sentence the report
+prints, and in the reason on the row.
+
+**It cannot be calibrated better, and the reason is structural.** The morning
+centres its band on pm_high and the night on entry_ref_true, which differ by a
+median 1.19 percent and by up to 20.9, so on the names that matter most the two
+bands do not overlap. On top of that the socket's share of the band ran 0.017
+to 1.158 of the night's figure, a 68 fold spread. A floor sweep from 5,000 to
+100,000 dollars trades one error for the other at every step and never removes
+either. 40,000 was taken as the point that catches the most without flagging
+more than it catches, and both error counts travel with it everywhere it is
+written down.
+
+**It does not share the night's words.** 'thin', 'not flagged' and 'unknown',
+not 'implausible' and 'plausible'. A reader seeing 'plausible' in a morning
+report would take it for the night's answer, which is the one number this
+warning is not.
+
+**The band width is read from [Truth] fill_band_pct rather than restated**, so
+the morning's band and the night's are the same width by construction and the
+two can never drift apart in a way nobody notices.
+
+**The template is told, in the section itself, never to say a level is
+tradeable.** A name the warning does not name has passed nothing.
+
 ## 2026-08-29: watching the score inversion instead of rediscovering it
 
 The score exists to order names by confidence and over the first fifty filled

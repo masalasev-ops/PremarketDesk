@@ -2286,9 +2286,11 @@ warning that the two horizons are not the same and must never be read as one.
   NEVER FIRED   no trade. exit_reason says so and pnl is NULL, never zero. A
                 zero would read as a flat trade, and a trade that was not taken
                 and a trade that made nothing are different facts.
-  SIZE          position_notional dollars, whole shares, floor divided. Fixed
-                notional rather than fixed shares because this table holds
-                prices from 5.64 to 1,585.
+  SIZE          set by the version's own sizing mode above, whole shares,
+                floor divided. v1 uses a fixed notional; v2 uses a fixed dollar
+                risk. Never fixed SHARES under either, because this table holds
+                prices from 5.64 to 1,585. A version whose size works out below
+                one whole share books no trade and records why.
 
 **No target, and that is a choice.** Adding one would make this a family of
 rules with a parameter to fit, and the instruction was one rule. Holding to the
@@ -2297,10 +2299,97 @@ from it cannot be a result about a tuned number. What it costs is visible on
 every row, because mfe_pct sits beside the booked P&L and the gap between them
 is exactly what a target would have been trying to capture.
 
-rule_version                  = v1         # bumped whenever any rule above changes. Rows are keyed on it, so a new version books BESIDE the old rather than over it and the two can be read against each other
+THE SIZING MAP IS THE VERSION REGISTRY. Every version named on a `sizing` line
+is booked, side by side, on every session, and a new version NEVER replaces an
+old one. There is deliberately no separate list of versions: a version with no
+sizing mode cannot be booked, and a sizing mode for a version nobody lists
+would be dead configuration, so the two are one line.
+
+sizing = v1 : notional                     # the same dollar POSITION on every trade
+sizing = v2 : risk                         # the same dollar RISK on every trade
+
+account_notional              = 100000     # SEED, DOLLARS. The notional both sizings are expressed against, so a booked P&L can be read as a return on something rather than as a number
+position_notional             = 10000      # SEED. v1's fixed position, 10 percent of the account. Also the base [Truth] min_fill_band_notional derives from
+risk_notional                 = 750        # SEED. v2's fixed dollar risk, 0.75 percent of the account. CALIBRATED, and the calibration matters: see the v2 note below
+max_position_notional         = 25000      # SEED. v2's cap, 25 percent of the account. Without it a two percent stop buys a 37,500 dollar position and the sizing rule quietly becomes a leverage rule
 session_close                 = 16:00      # ET. The regular session end the hold-to-close exit uses. The open comes from [Backfill] market_open, which is the same fact and is not restated here
-position_notional             = 10000      # SEED, DOLLARS. One position, every trade, whole shares floor divided
 max_band_participation        = 0.04       # SEED. The largest share of [Truth] fill_band_volume's notional that one position may be. See the note below
+
+### Rule v2, pre-registered 2026-08-29
+
+**Written before the code and before any v2 result existed.** v1 had booked 16
+trades at that point and its numbers are below; nothing about v2 was chosen by
+trying variants and keeping the best.
+
+**v2 CHANGES EXACTLY ONE THING: the position size.** Entry, entry price, stop,
+same-minute tie break, exit, the skip rule and the universe are byte for byte
+v1's. That is deliberate and it is the whole design. Two changes at once would
+leave no way to say which of them moved the number.
+
+  v1   the same DOLLAR POSITION on every trade: position_notional
+  v2   the same DOLLAR RISK on every trade: risk_notional, where the risk is
+       entry_price minus stop_ref_true, capped at max_position_notional
+
+**What v1's numbers said, and why sizing is the one thing to change.** Measured
+2026-08-29 over v1's 16 booked trades:
+
+  every one of the 16 was in profit at some point while held
+  median best price reached while held      +1.84 percent
+  median given back by the hold-to-close    -3.91 points
+  median risk taken per trade                5.89 percent of the position
+  widest risk taken                         21.48 percent
+  median distance reached, in units of the risk taken   0.46R
+  reached 1R at any point                    4 of 16
+
+A trade that risks 5.89 percent to reach 0.46 of that cannot work at any hit
+rate, and the two largest losses were the two widest stops: PLAB risked 21.48
+percent and reached 0.05R, NSSC risked 18.22 and reached 0.59R. Under a fixed
+notional those two carried 2,141 and 1,943 dollars of risk while LITE carried
+253. That is an eight fold spread in what each trade could lose, across trades
+the rule treats as equals. It is a sizing defect, not an exit defect, and it is
+the one this project can fix without inventing a number to tune.
+
+**THE RISK BUDGET IS CALIBRATED TO HOLD TOTAL RISK CONSTANT, not to win.** v1's
+16 trades carried 12,354 dollars of risk between them, a mean of 772 per trade.
+risk_notional is 750, which is that mean rounded to a policy number. So v1 and
+v2 put the SAME total money at risk across the same trades and differ only in
+how it is distributed. If v2 comes out ahead it is because equal risk beats
+arbitrary risk, and not because it risked less. Choosing a smaller number here
+would have manufactured the result.
+
+**THE SKIP RULE IS NOT CHANGED FOR v2**, and this is a known imperfection
+written down rather than fixed. [Truth] min_fill_band_notional is derived from
+position_notional, which is v1's size; v2's positions run up to
+max_position_notional. A v2 specific floor would be more correct and would also
+mean the two versions traded DIFFERENT NAMES, which would confound the only
+comparison this section exists to make. Both versions trade the same
+population. A per version floor is a question for whenever a third version
+needs one.
+
+**What would make v2 the better rule.** Judged at the same point [Score watch]
+and doc/research/SCORE_INVERSION.md name for the primary, 200 booked trades
+across 60 sessions, on the same trades under both versions:
+
+  v2 IS BETTER    its total P&L exceeds v1's AND its worst single trade loss is
+                  smaller. Both, because a sizing rule that only improves the
+                  total by taking more risk somewhere has not done the thing it
+                  was built to do.
+  NO DIFFERENCE   the total P&Ls are within 10 percent of each other. Sizing is
+                  then not where this system's problem is, and the search moves
+                  to the entry or the exit.
+  v2 IS WORSE     its total P&L is below v1's. Equal risk sizing is standard
+                  practice, so this outcome is more likely to mean the trades
+                  with wide stops are the ones carrying whatever edge exists,
+                  which is a real finding and points at the screen rather than
+                  at the sizing.
+
+**No test and no p value**, for the reason SCORE_INVERSION.md gives.
+
+**What v2 is NOT.** It is not an exit rule and it does not add a target. The
++3.91 point median give-back is real and a target would capture some of it, and
+a target is also a dial with a free number on it that could be turned until 16
+trades looked good. If sizing turns out not to be the answer, an exit rule is
+the next pre-registration, written the same way and run beside these two.
 
 ### What ties this section to the fill band
 
@@ -2311,11 +2400,64 @@ cap". Those two numbers now exist here, and the placeholder is exactly their
 quotient: 10,000 / 0.04 = 250,000.
 
 It stays ONE shipped value, in [Truth], because that is the key the code reads
-and a second key holding the same number is two things to keep right. The
+and a second key holding the same number is two things to keep right. It is
+derived from position_notional, which is v1's size, and every version is judged
+against the same floor so that they all trade the same population; see the v2
+note above on why that imperfection is kept deliberately. The
 coupling is machine checked instead, by
 claim_the_fill_band_floor_is_the_position_size_over_the_participation_cap, so a
 change to either number here that is not carried into [Truth] fails the suite
 rather than quietly decoupling the two.
+
+## Fill warning
+
+The MORNING'S version of [Truth]'s fill plausibility check, computed at 08:45
+from the collector's own bars, because the definitive one cannot be.
+
+**Why the morning cannot just run the real check.** Alpaca serves its sip feed
+for a session that is OVER and refuses it with HTTP 403 for one that is
+running, which is why [Truth] is a nightly pass. So at 08:45 the only evidence
+available is the socket sample the collector has been accumulating since 07:20.
+
+**IT IS A WARNING AND IT IS NEVER AN APPROVAL**, and the asymmetry is the whole
+design. A low number here means the collector saw very little trade at the
+premarket high and the level is probably not a price anyone could transact at.
+A high number means nothing of the kind: it means this weak instrument did not
+fire.
+
+**How weak, measured rather than asserted.** Over the 54 live rows across 6
+sessions where both the morning band and the night's verdict exist, at the
+floor below:
+
+  it fires on                                        12 of 54 rows
+  names the night called implausible that it MISSES   4 of 10
+  names the night called plausible that it flags       6 of 44
+
+Four in ten of the genuinely untradeable levels get past it. That is stated
+here, printed in the report, and is the reason the field is a warning rather
+than a verdict.
+
+**Why it cannot be calibrated any better than this.** The morning centres its
+band on `pm_high`, which is the collector's own level; the night centres on
+`entry_ref_true`, the level off the whole tape. Those differ by a median 1.19
+percent and by as much as 20.9, so on the names that matter most the two bands
+do not even overlap. On top of that the socket's share of the band ran 0.017 to
+1.158 of the true figure across those same rows, a 68 fold spread. No single
+floor turns one into the other, and one that appeared to would be fitted to 54
+rows.
+
+**The band width is NOT restated here.** It is [Truth] fill_band_pct and the
+morning reads that same key, so the two bands are the same width by
+construction and can never drift apart.
+
+min_morning_band_notional     = 40000      # SEED, DOLLARS. Socket-observed volume times the level, within [Truth] fill_band_pct of pm_high. Below this the candidate is flagged thin. Chosen from the sweep above as the point that catches the most known-thin names without flagging more than it catches; the two error counts are recorded above and in DECISIONS.md rather than left to be discovered
+
+**Three states, never a boolean**, on the [Truth] fill_plausible precedent:
+
+  thin        below the floor. The collector saw very little at this level
+  not flagged at or above it. NOT an approval, see above
+  unknown     the collector never covered this name, so there is no evidence
+              either way and none is invented
 
 ## Economic importance
 
