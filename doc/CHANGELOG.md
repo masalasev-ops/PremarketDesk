@@ -15,6 +15,39 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the arc page goes back to being about the arc
+
+**What changed.** doc/Premarketdesk_ADayRunArc.html had grown a standing state
+board at the top and three sections headed "Added 2026-08-29". The board is
+gone, the dated headings are gone, and the sections are reordered so the page
+follows one day once, in order: the timeline, the morning, the night, the
+measurement chain, why there is one rule, what a finished row looks like, the
+fill warning, what the record is worth to a reader, failure, rules, file map.
+A navigation list was added, and every section carries an anchor.
+
+**Why it had to.** The page has one job, which is to show the arc of a day and
+what each stage of it achieves. A reader hitting a status board and a changelog
+before reaching the first stage cannot use it for that, and the material was
+already held properly in CHANGELOG.md and DECISIONS.md, so the page was
+carrying a third copy that would go stale on its own schedule.
+
+**What was cut, and where it lives instead.** The "Where this actually stands,
+2026-08-20" block with its nested corrections; the "What the measurements said"
+table of current readings; the v1 against v2 dollar totals. All of it is a
+dated observation rather than a description of a stage, and all of it is in
+CHANGELOG.md and DECISIONS.md already.
+
+**What was kept and re-framed.** Every finding that explains why a stage
+exists: both excursion medians changing sign on measured references, the ten to
+one inversion of the premise that specified the work, every trade being in
+profit at some point while held, and the ten of ten that peaked early and
+closed red. Those are what the stages achieve, which is what the page is for.
+
+**Also corrected here:** the same one vendor rule the architecture page was
+carrying, which said nothing in night imports Alpaca; a lede that named which
+morning a one off probe was armed for; and both file maps, which still had
+job_probe_capture armed for 2026-08-24 after it was retired on 2026-08-26.
+
 ## 2026-08-29: the architecture page catches up, and two of its statements were wrong
 
 **What changed.** doc/ArchitecturePremarketdesk.html had not been touched since

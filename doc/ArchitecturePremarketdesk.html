@@ -1212,13 +1212,15 @@ tbody tr:hover{background:var(--ground)}
 
     <dt>tasks\</dt>
     <dd>the seven scheduled job batch files, register_tasks.ps1, and scheduling notes. Two more .bat
-    files sit here and are deliberately absent from register_tasks.ps1's schedule: job_probe_socket_cap,
-    the instrument for the open collector volume question. It is a one off, armed a morning at a
-    time with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> and armed today for 2026-08-21
-    06:30. A plain run of the script never registers it, so refreshing the schedule cannot
-    resurrect a probe that has been answered and deleted, and <code>-Unregister</code> removes it
+    files sit here and are deliberately absent from register_tasks.ps1's schedule, both one off probes
+    armed a morning at a time: job_probe_socket_cap, the instrument for the collector volume question,
+    armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, the
+    Alpaca live capture test, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan]
+    run_time rather than a chosen number. Both have run, both questions are answered in DECISIONS.md,
+    and neither is armed today. A plain run of the script never registers either, so refreshing the
+    schedule cannot resurrect a probe that has been answered, and <code>-Unregister</code> removes one
     if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
-    2026-08-20, once both questions were answered and recorded in DECISIONS.md; the modules they
+    2026-08-20 once the same was true of them; the modules they
     wrapped stay in the research package
     <span style="color:var(--ink-3)">(C02-C06, C46, C48)</span></dd>
 
