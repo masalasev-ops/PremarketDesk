@@ -15,6 +15,71 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the paper ledger, one written rule, and a horizon that was off by one
+
+**What changed.** New CRITERIA section [Paper] holding ONE rule, written before
+any code as specified: trigger, entry price, stop, same minute tie break, exit,
+size, and what happens when the trigger never fires. New module
+src/night/paper_ledger.py applying it, new paper_trades table keyed on (date,
+ticker, rule_version), and a nightly step after truth. New keys, all SEED:
+rule_version v1, session_close 16:00, position_notional 10000,
+max_band_participation 0.04. Nothing in the morning path moved and no screen
+threshold changed.
+
+**THE OFF BY ONE.** Writing the rule forced the question of which session it
+trades, and [Outcomes] turns out to measure the wrong one. The scan runs 08:45
+on the pick date and the report is about the open ninety minutes later, but
+next_day_open through mae_pct_true all describe the session AFTER that. The
+session the report was about is measured by nothing.
+
+AXTI on 2026-08-27: entry_ref 70.94, its own session opened 70.30 and reached
+70.85, a miss by 0.13 percent. next_day_high is 65.4155 from 2026-08-28 and
+mfe_pct reads -7.79. Nothing in [Outcomes] is changed, because repointing those
+columns would rewrite the meaning of every row already in the table. The ledger
+fetches its own bars for its own session and the mismatch is written into
+CRITERIA [Paper], the module docstring and the ledger's own summary line.
+
+Every mfe and mae figure quoted in this file on 2026-08-28 and 2026-08-29
+therefore describes D+1. The reference gap measurement is unaffected: both of
+its halves are premarket levels from the same morning.
+
+**FIRST RESULT, rule v1, 66 picks across 7 sessions.**
+
+  booked          16 trades across 6 sessions
+  median          -1.38 percent, which is -132.74 dollars on a 10,000 position
+  win rate        5 of 16
+  worst drawdown  -20.33 percent
+  exits           4 stopped, 12 held to the close
+  not traded      22 skipped because fill_plausible was not 'plausible',
+                  28 never reached the trigger
+
+  beside it, mfe_pct_true over the same picks: median +2.64 percent, n=15.
+
+That last pair is the point of the whole exercise and it is a four point gap.
+The BOUND says the tape ran 2.64 percent past the reference at its best moment;
+the RULE captured -1.38. They are also measured over different sessions, which
+the summary line says every time it prints.
+
+Grouped, and every group is far too small to act on:
+
+  day_eligible      n=3   3 sessions   median +2.52%   wins 2/3
+  not day eligible  n=13  6 sessions   median -1.70%   wins 3/13
+  conviction green  n=5   4 sessions   median -2.75%   wins 2/5
+  conviction yellow n=10  5 sessions   median -1.00%   wins 3/10
+  conviction red    n=1   1 session    median -4.11%   wins 0/1
+
+**Held in place by** three claims in test_regressions.py, mutation tested
+against nine edits. The rule reads its minutes in order, which is the whole
+reason it fetches one minute data: a gap through the trigger fills at the open,
+a minute that both triggers and stops is a loss, a low that undercuts the stop
+BEFORE the trigger fires is not a stop, and an untaken trade is null rather
+than zero. Every live pick gets a ledger row, a declined one carries the
+evidence, an unmeasured level is never borrowed from the sampled pair, and a
+re-run of one rule version replaces its own rows. And [Truth]
+min_fill_band_notional equals [Paper] position_notional over
+max_band_participation, so the placeholder set yesterday is now derived rather
+than asserted.
+
 ## 2026-08-29: whether the reference level was a price anyone could have got
 
 **What changed.** night/true_volume.py measures, off the bars it already

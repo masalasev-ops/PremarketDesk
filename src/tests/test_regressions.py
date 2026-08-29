@@ -8059,6 +8059,279 @@ def claim_a_refused_session_still_carries_a_verdict(
           "unknown with the reason, and never over a verdict already taken")
 
 
+def claim_the_paper_rule_reads_the_minutes_in_order(failures: list[str]) -> None:
+    """The ledger's six cases, and four of them are only right in sequence.
+
+    An end of day bar cannot say whether its high came before its low, so it
+    cannot say whether a stop was reached before a target. That is the whole
+    reason this fetches one minute data, and these fixtures are the cases where
+    a summary built on OHLC would book a different trade.
+
+      gap through   a session that opens ABOVE the trigger fills at the open,
+                    not at the level. The flattering alternative books the
+                    level every time and is wrong on exactly the gap
+                    candidates this screen selects.
+      same minute   a minute that both triggers and reaches the stop is a LOSS.
+                    One bar carries no sequence, so the order inside it is
+                    unknowable, and the losing reading is taken rather than the
+                    flattering one.
+      stop first    a low that undercuts the stop BEFORE the trigger fires is
+                    not a stop. Nothing was held then.
+      never fired   no trade, and a NULL P&L. Zero would read as a flat trade,
+                    and those are different facts.
+    """
+    from night import paper_ledger
+
+    entry, stop, notional = 100.0, 95.0, 10000.0
+
+    def bar(t, o, h, l, c):
+        return {"t": t, "o": o, "h": h, "l": l, "c": c, "v": 1000}
+
+    # 1. Clean trigger at the level, then held to the close.
+    got = paper_ledger.simulate(
+        [bar("A", 98, 99, 97, 98.5),
+         bar("B", 99, 101, 98.5, 100.5),
+         bar("C", 100.5, 102, 99, 101.8)], entry, stop, notional)
+    if (got["booked"], got["entry_price"], got["exit_price"]) != (1, 100.0, 101.8):
+        failures.append(f"a clean trigger booked {got!r}, not an entry at "
+                        "100.0 and a close exit at 101.8")
+    if got["exit_reason"] != paper_ledger.EXIT_CLOSE:
+        failures.append(f"a trade that never reached its stop exited for "
+                        f"{got['exit_reason']!r}")
+    if got["shares"] != 100 or got["pnl"] != 180.0:
+        failures.append(
+            f"the position is {got['shares']!r} shares for {got['pnl']!r}. "
+            "10,000 dollars at 100.0 is 100 whole shares and 1.80 each")
+    if got["max_drawdown_pct"] != -1.5:
+        failures.append(
+            f"the drawdown is {got['max_drawdown_pct']!r}, not -1.5. It is the "
+            "worst mark against the entry WHILE HELD, and the 97 low of the "
+            "bar before the trigger was never held")
+
+    # 2. The session gaps straight through the resting order.
+    got = paper_ledger.simulate(
+        [bar("A", 105, 106, 104, 105.5),
+         bar("B", 105.5, 106, 105, 105.8)], entry, stop, notional)
+    if got["entry_price"] != 105.0:
+        failures.append(
+            f"a session that opened at 105 against a 100 trigger filled at "
+            f"{got['entry_price']!r}. A stop order does not get the level when "
+            "the market gaps past it, and booking 100.0 here credits the rule "
+            "with five percent it could not have had")
+
+    # 3. The stop.
+    got = paper_ledger.simulate(
+        [bar("A", 99, 101, 98, 100),
+         bar("B", 100, 100.5, 94, 96)], entry, stop, notional)
+    if (got["exit_price"], got["exit_reason"]) != (95.0, paper_ledger.EXIT_STOP):
+        failures.append(f"a bar reaching 94 against a 95 stop gave {got!r}")
+
+    # 4. THE SAME MINUTE. Trigger and stop in one bar, booked as the loss.
+    got = paper_ledger.simulate(
+        [bar("A", 99, 101, 94, 96)], entry, stop, notional)
+    if (got["exit_price"], got["exit_reason"]) != (95.0, paper_ledger.EXIT_STOP):
+        failures.append(
+            f"a minute that both triggered and reached the stop booked {got!r}. "
+            "Scanning for the stop only AFTER the entry bar holds this to the "
+            "close at 96, which is -4 percent rather than -5, and that choice "
+            "would show up in every summary this table feeds")
+
+    # 5. STOP FIRST. A low under the stop before the trigger is not a stop.
+    got = paper_ledger.simulate(
+        [bar("A", 96, 97, 94, 96),
+         bar("B", 97, 101, 96.5, 100.5),
+         bar("C", 100.5, 101, 100, 100.8)], entry, stop, notional)
+    if got["exit_reason"] != paper_ledger.EXIT_CLOSE or got["exit_price"] != 100.8:
+        failures.append(
+            f"a 94 low BEFORE the trigger fired was read as a stop: {got!r}. "
+            "Nothing was held then, and scanning the whole session for the "
+            "stop rather than the minutes after entry books a loss that never "
+            "happened")
+
+    # 6. Never fired. No trade, and a null P&L rather than a zero.
+    got = paper_ledger.simulate(
+        [bar("A", 98, 99, 97, 98.5)], entry, stop, notional)
+    if got["booked"] or got["exit_reason"] != paper_ledger.EXIT_NEVER:
+        failures.append(f"a trigger that never fired booked {got!r}")
+    if got["pnl"] is not None or got["pnl_pct"] is not None:
+        failures.append(
+            f"a trade that was not taken carries pnl {got['pnl']!r}. Zero is a "
+            "FLAT TRADE and null is no trade, and a median that mixes them is "
+            "the defect this project has now found under five other names")
+    print("  paper rule   gap through fills at the open, a minute that both "
+          "triggers and stops is a loss, a low before the trigger is not, and "
+          "an untaken trade is null rather than zero")
+
+
+def claim_the_ledger_writes_the_picks_it_declined(failures: list[str]) -> None:
+    """A skipped pick is a row with a reason, never a row that is not there.
+
+    A pick that vanishes from the ledger is one nobody can ask about later, and
+    the count of rows the rule declined is as much a result as the ones it
+    took: 22 of 66 on the first run. A ledger holding only its trades reports a
+    win rate over a population it silently chose.
+
+    AND THE SAMPLED REFERENCE IS NEVER SUBSTITUTED. A row with no
+    entry_ref_true is skipped rather than booked against entry_ref, because
+    entry_ref is the number the measured one exists to be compared against and
+    a ledger built on it books a P&L that is wrong from its first row.
+    """
+    from core import store
+    from night import paper_ledger
+    from night import true_volume
+
+    class Fake:
+        def __init__(self):
+            self.request_count = 0
+            self.asked = []
+
+        def get(self, params):
+            # Answers for EVERY symbol asked for, so a row that reaches the
+            # simulator books rather than falling into the no-bars skip. A
+            # fixture that served only the tradeable name would protect DDD
+            # below by accident and the substitution check would prove nothing.
+            self.request_count += 1
+            self.asked.append(params["symbols"])
+            minutes = [
+                {"t": "2026-07-13T09:30:00Z", "o": 99, "h": 101, "l": 98,
+                 "c": 100.5, "v": 5000},
+                {"t": "2026-07-13T09:31:00Z", "o": 100.5, "h": 102, "l": 100,
+                 "c": 101.0, "v": 4000}]
+            return 200, {"bars": {symbol: list(minutes)
+                                  for symbol in params["symbols"].split(",")}}, 0.0
+
+    # A date the live record does not hold. The sandbox is a COPY of the real
+    # database, so a real session's date brings its own picks and its own
+    # ledger rows into the fixture and the counts below stop being about what
+    # this claim inserted.
+    day = "2026-07-13"
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks WHERE date=?", (day,))
+            connection.execute("DELETE FROM paper_trades WHERE date=?", (day,))
+            rows = [
+                # Tradeable.
+                ("AAA.US", 100.0, 95.0, true_volume.FILL_PLAUSIBLE, None),
+                # Skipped on evidence, and the reason travels onto the ledger.
+                ("BBB.US", 100.0, 95.0, true_volume.FILL_IMPLAUSIBLE,
+                 "500 shares over 2 minute(s), below the floor"),
+                # Skipped for a reason the feed never reached.
+                ("CCC.US", 100.0, 95.0, true_volume.FILL_UNKNOWN,
+                 "the packet carries no rvol_cutoff_hhmm"),
+                # PLAUSIBLE but with no measured level. Must not borrow one.
+                ("DDD.US", None, None, true_volume.FILL_PLAUSIBLE, None),
+            ]
+            for ticker, entry, stop, verdict, why in rows:
+                connection.execute(
+                    "INSERT INTO picks (date, ticker, source, entry_ref, "
+                    "stop_ref, entry_ref_true, stop_ref_true, fill_plausible, "
+                    "fill_plausible_reason) VALUES (?,?,'live',?,?,?,?,?,?)",
+                    (day, ticker, 88.0, 80.0, entry, stop, verdict, why))
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, entry_ref_true, "
+                "stop_ref_true, fill_plausible) VALUES (?,?,'test',?,?,?)",
+                (day, "EEE.US", 100.0, 95.0, true_volume.FILL_PLAUSIBLE))
+            connection.commit()
+
+        probe = Fake()
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            result = paper_ledger.book(day, probe=probe)
+            paper_ledger.write(result)
+
+        with store.session() as connection:
+            ledger = {row["ticker"]: dict(row) for row in connection.execute(
+                "SELECT * FROM paper_trades WHERE date=?", (day,)).fetchall()}
+
+        if set(ledger) != {"AAA.US", "BBB.US", "CCC.US", "DDD.US"}:
+            failures.append(
+                f"the ledger holds {sorted(ledger)!r}. Every live pick gets a "
+                "row and a source='test' pick gets none: a declined pick that "
+                "is simply absent is one nobody can count later")
+        if ledger.get("AAA.US", {}).get("booked") != 1:
+            failures.append(f"the tradeable pick was not booked: "
+                            f"{ledger.get('AAA.US')!r}")
+        for ticker, fragment in (("BBB.US", "below the floor"),
+                                 ("CCC.US", "rvol_cutoff_hhmm")):
+            row = ledger.get(ticker) or {}
+            if row.get("booked") or not row.get("skip_reason"):
+                failures.append(f"{ticker} was booked or carries no skip "
+                                f"reason: {row!r}")
+            elif fragment not in row["skip_reason"]:
+                failures.append(
+                    f"{ticker}'s skip reason lost the evidence behind it: "
+                    f"{row['skip_reason']!r}")
+        ddd = ledger.get("DDD.US") or {}
+        if ddd.get("booked") or ddd.get("entry_price") is not None:
+            failures.append(
+                f"a pick with no MEASURED reference was traded anyway: {ddd!r}. "
+                "Its sampled entry_ref of 88.0 is right there in the row, and "
+                "borrowing it books against the number the measured one exists "
+                "to be compared against")
+
+        # Only the tradeable symbol is fetched. A skipped row needs no bars.
+        if any("BBB" in asked or "CCC" in asked for asked in probe.asked):
+            failures.append(
+                f"bars were fetched for a skipped pick: {probe.asked!r}")
+
+        # A second run of the SAME rule version replaces its own rows.
+        with contextlib.redirect_stdout(io.StringIO()):
+            paper_ledger.write(paper_ledger.book(day, probe=Fake()))
+        with store.session() as connection:
+            again = connection.execute(
+                "SELECT COUNT(*) FROM paper_trades WHERE date=?",
+                (day,)).fetchone()[0]
+        if again != 4:
+            failures.append(
+                f"a second run left {again} rows, not 4. The ledger is keyed "
+                "on (date, ticker, rule_version), so re-running one version is "
+                "an update and only a NEW version books beside it")
+    print("  paper skips  every live pick gets a row, a declined one carries "
+          "the evidence, an unmeasured level is never borrowed from the "
+          "sampled pair, and a re-run replaces its own rows")
+
+
+def claim_the_fill_band_floor_is_the_position_over_the_participation_cap(
+        failures: list[str]) -> None:
+    """[Truth] min_fill_band_notional is derived from two [Paper] numbers.
+
+    The floor was set on 2026-08-29 before any rule named a position size, and
+    written down as a placeholder that "behaves like the right rule for an
+    order of about 10,000 dollars at a 4 percent participation cap". [Paper]
+    then named both. The placeholder is exactly their quotient and the note in
+    CRITERIA says so, which makes it a coupling between three numbers in two
+    sections that nothing was checking.
+
+    One shipped value, in [Truth], because that is the key the code reads and a
+    second key holding the same number is two things to keep right. So the
+    coupling is checked here instead: raising the position size or tightening
+    the participation cap without carrying it into [Truth] fails this rather
+    than quietly decoupling the two, which is the same shape as the analyst
+    timeout and the watchdog's stale window.
+    """
+    from core import criteria
+
+    crit = criteria.load()
+    size = crit.number("paper", "position_notional")
+    cap = crit.number("paper", "max_band_participation")
+    floor = crit.number("truth", "min_fill_band_notional")
+    if not cap:
+        failures.append("[Paper] max_band_participation is zero, so the floor "
+                        "it derives cannot be computed")
+        return
+    derived = size / cap
+    if abs(derived - floor) > 0.5:
+        failures.append(
+            f"[Truth] min_fill_band_notional is {floor:,.0f} and [Paper] "
+            f"position_notional {size:,.0f} over max_band_participation {cap} "
+            f"is {derived:,.0f}. One position would then be "
+            f"{size / floor * 100:.2f} percent of the thinnest band the ledger "
+            "will trade, which is not the cap the file says it is")
+    print(f"  band floor   {size:,.0f} over {cap} is {derived:,.0f}, which is "
+          f"the [Truth] floor the ledger's skips are decided by")
+
+
 def claim_the_weekly_page_reads_and_renders_and_nothing_else(
         failures: list[str]) -> None:
     """A reporting layer that fetches is a second pipeline to keep right.
@@ -9793,6 +10066,9 @@ def main() -> int:
     claim_the_fill_band_counts_the_minutes_that_reached_it(failures)
     claim_fill_plausibility_is_three_state_and_never_guesses(failures)
     claim_a_refused_session_still_carries_a_verdict(failures)
+    claim_the_paper_rule_reads_the_minutes_in_order(failures)
+    claim_the_ledger_writes_the_picks_it_declined(failures)
+    claim_the_fill_band_floor_is_the_position_over_the_participation_cap(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_a_claim_cannot_reach_the_live_database(failures)
     claim_the_two_unrebuildable_artifacts_are_held_twice(failures)

@@ -1929,6 +1929,7 @@ outcomes                      = 1
 pool_recall                   = 1
 prune                         = 1
 truth                         = 1
+paper                         = 1          # the [Paper] ledger, run in the nightly right after truth because it reads entry_ref_true, stop_ref_true and fill_plausible and every one of those is written by that step
 weekly                        = 1
 backup                        = 1
 monitor                       = 1
@@ -2230,6 +2231,91 @@ one of them was.
 
 live_window_start             = 07:00      # rows written inside this ET window are source live
 live_window_end               = 09:30
+
+## Paper
+
+ONE RULE, written down before any code, and a SEED like everything else here.
+It is a measuring instrument and not advice: it exists so that "what would this
+have done" has one answer instead of an argument, and so that mfe_pct becomes a
+diagnostic rather than a result.
+
+**Which session it trades, and why that is not the one [Outcomes] measures.**
+The scan runs at [Scan] run_time, 08:45, on the pick's own date, and the report
+is about the open that follows it ninety minutes later. So the rule trades THE
+PICK'S OWN SESSION.
+
+[Outcomes] measures the session AFTER that one. next_day_open, next_day_high,
+next_day_low, next_day_close, pm_high_broke_next_day, mfe_pct, mae_pct,
+mfe_pct_true and mae_pct_true all describe D+1, and the session the report was
+actually about is not measured by any of them. AXTI on 2026-08-27 is the
+clearest case on the record: entry_ref 70.94, and its own session opened 70.30
+and reached 70.85, which is a miss by 0.13 percent. next_day_high is 65.4155,
+from 2026-08-28, and mfe_pct reads -7.79. Those are different facts about
+different days and only the first is about the report.
+
+Nothing in [Outcomes] is changed here. Those columns are a real second horizon
+and rewriting them would destroy the record rather than extend it. The ledger
+fetches its own bars for its own session, and this paragraph is the standing
+warning that the two horizons are not the same and must never be read as one.
+
+**The rule.**
+
+  UNIVERSE      every live picks row. Not only the eligible ones: day_eligible
+                and swing_eligible travel onto the ledger row as GROUPING
+                columns instead, so a later pass can ask whether the screen's
+                verdict separated outcomes at all. Booking only what the screen
+                admitted makes that question unaskable.
+  SKIP          any row whose fill_plausible is not 'plausible'. The trigger
+                level has to be a price somebody could have transacted at or
+                the booked P&L is fiction. A skipped row is WRITTEN with its
+                reason, never dropped.
+  TRIGGER       the first minute of the regular session whose high reaches
+                entry_ref_true. A stop order resting at that level.
+  ENTRY PRICE   max(entry_ref_true, that minute's open). A session that gaps
+                straight through the trigger fills at the open and not at the
+                level, which is the honest treatment and the common case for a
+                gap candidate.
+  STOP          stop_ref_true. The first minute whose low reaches it exits at
+                that level.
+  SAME MINUTE   a minute that both triggers and reaches the stop is booked as
+                STOPPED. One minute bar carries no sequence, so the order
+                inside it is unknowable, and the losing reading is taken rather
+                than the flattering one.
+  EXIT          the close of the last minute of the session, if the stop was
+                never reached.
+  NEVER FIRED   no trade. exit_reason says so and pnl is NULL, never zero. A
+                zero would read as a flat trade, and a trade that was not taken
+                and a trade that made nothing are different facts.
+  SIZE          position_notional dollars, whole shares, floor divided. Fixed
+                notional rather than fixed shares because this table holds
+                prices from 5.64 to 1,585.
+
+**No target, and that is a choice.** Adding one would make this a family of
+rules with a parameter to fit, and the instruction was one rule. Holding to the
+close is the least fitted exit there is: it has nothing to tune, so a result
+from it cannot be a result about a tuned number. What it costs is visible on
+every row, because mfe_pct sits beside the booked P&L and the gap between them
+is exactly what a target would have been trying to capture.
+
+rule_version                  = v1         # bumped whenever any rule above changes. Rows are keyed on it, so a new version books BESIDE the old rather than over it and the two can be read against each other
+session_close                 = 16:00      # ET. The regular session end the hold-to-close exit uses. The open comes from [Backfill] market_open, which is the same fact and is not restated here
+position_notional             = 10000      # SEED, DOLLARS. One position, every trade, whole shares floor divided
+max_band_participation        = 0.04       # SEED. The largest share of [Truth] fill_band_volume's notional that one position may be. See the note below
+
+### What ties this section to the fill band
+
+[Truth] min_fill_band_notional was set on 2026-08-29 before any rule named a
+position size, and it was written down as a placeholder that "behaves like the
+right rule for an order of about 10,000 dollars at a 4 percent participation
+cap". Those two numbers now exist here, and the placeholder is exactly their
+quotient: 10,000 / 0.04 = 250,000.
+
+It stays ONE shipped value, in [Truth], because that is the key the code reads
+and a second key holding the same number is two things to keep right. The
+coupling is machine checked instead, by
+claim_the_fill_band_floor_is_the_position_size_over_the_participation_cap, so a
+change to either number here that is not carried into [Truth] fails the suite
+rather than quietly decoupling the two.
 
 ## Economic importance
 

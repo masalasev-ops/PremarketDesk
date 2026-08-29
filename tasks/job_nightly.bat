@@ -83,6 +83,18 @@ echo ===== truth started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.true_volume >> "%LOG%" 2>&1
 echo ===== truth finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
+rem What ONE written rule in CRITERIA.md [Paper] would have done with each of
+rem today's picks, booked against the MEASURED reference levels and Alpaca's
+rem one minute bars. AFTER truth, because it reads entry_ref_true,
+rem stop_ref_true and fill_plausible, and every one of those is written by the
+rem step above. It trades the PICK'S OWN session, which is not the session
+rem night.fill_outcomes measures; see the module docstring. Never fails the
+rem chain: a ledger is a record and nothing downstream reads it. It spends no
+rem EODHD quota.
+echo ===== paper started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m night.paper_ledger >> "%LOG%" 2>&1
+echo ===== paper finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
 rem What the morning's candidate pool missed, measured against every name in
 rem the universe that actually gapped at the open. Never fails the chain: a
 rem recall measurement is a diagnostic and nothing downstream reads it.

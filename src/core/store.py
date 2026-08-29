@@ -68,6 +68,52 @@ CREATE TABLE IF NOT EXISTS picks (
     score_unavailable TEXT,
     PRIMARY KEY (date, ticker)
 );
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+    date             TEXT NOT NULL,
+    ticker           TEXT NOT NULL,
+    -- Rows are keyed on the rule version, so changing the rule in CRITERIA
+    -- [Paper] books BESIDE what the old one produced rather than over it. A
+    -- ledger that overwrote itself on every rule change could not answer
+    -- whether the change helped, which is most of what a ledger is for.
+    rule_version     TEXT NOT NULL,
+    -- The window the rule traded, on the PICK'S OWN session. Not the one
+    -- picks.next_day_* describes, which is the session after it. Carried per
+    -- row so a row says which day it is about rather than inheriting an
+    -- assumption. See CRITERIA [Paper].
+    session          TEXT,
+    -- The screen's verdict, carried as a GROUPING column and never as a
+    -- filter. Booking only what the screen admitted makes "did the screen
+    -- separate outcomes" unaskable, and that is the question this feeds.
+    day_eligible     INTEGER,
+    swing_eligible   INTEGER,
+    conviction       TEXT,
+    score            REAL,
+    -- 1 when a trade was taken. 0 covers both a row skipped on evidence and
+    -- one whose trigger never fired; skip_reason and exit_reason say which,
+    -- and a skipped pick is WRITTEN rather than dropped so it can still be
+    -- counted later.
+    booked           INTEGER,
+    skip_reason      TEXT,
+    entry_ref_used   REAL,
+    stop_ref_used    REAL,
+    entry_at         TEXT,
+    entry_price      REAL,
+    exit_at          TEXT,
+    exit_price       REAL,
+    exit_reason      TEXT,
+    shares           INTEGER,
+    notional         REAL,
+    -- NULL, never zero, on a row that took no trade. A zero P&L is a flat
+    -- trade and a null one is no trade, and a median that mixes them is the
+    -- defect this project has now found under five other names.
+    pnl              REAL,
+    pnl_pct          REAL,
+    max_drawdown_pct REAL,
+    bars_held        INTEGER,
+    booked_at        TEXT,
+    PRIMARY KEY (date, ticker, rule_version)
+);
 """
 
 # Columns added after the first schema shipped. init() widens existing

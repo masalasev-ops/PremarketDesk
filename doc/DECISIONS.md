@@ -18,6 +18,85 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: the paper ledger, and the off by one it uncovered
+
+The ledger exists so that "what would this have done" has one answer instead of
+an argument, and so that mfe_pct can go back to being a diagnostic. mfe_pct is
+a BOUND: how far the tape ran past a reference at its best moment, which a real
+rule captures only with perfect exit timing and usually not at all. CRITERIA
+has said "not a simulation of any trade" since the column existed. This is the
+simulation.
+
+**THE OFF BY ONE, which is the largest thing found in this pass.** Writing the
+rule forced the question of which session it trades, and the answer exposed
+that [Outcomes] measures the wrong one.
+
+The scan runs 08:45 on the pick date and the report is about the open ninety
+minutes later. next_day_open, next_day_high, next_day_low, next_day_close,
+pm_high_broke_next_day, mfe_pct, mae_pct and now mfe_pct_true and mae_pct_true
+all describe the session AFTER that one. The session the report was actually
+about is measured by nothing.
+
+AXTI on 2026-08-27 is the clearest case on the record. entry_ref 70.94. Its own
+session opened 70.30 and reached 70.85, a miss by 0.13 percent. next_day_high
+is 65.4155, from 2026-08-28, and mfe_pct reads -7.79 with
+pm_high_broke_next_day 0. Those are two different facts about two different
+days, and only the first is about the report.
+
+**Nothing in [Outcomes] is changed.** Three options were on the table.
+Repointing those columns at the pick's own session rewrites the meaning of
+every row already in the table and destroys the comparison. Adding a parallel
+set of D columns beside them is the "beside, never over" pattern and would work,
+but the ledger does not need them: it fetches its own bars for its own session.
+So the record is left alone, the ledger books the right session, and the
+mismatch is written into CRITERIA [Paper], into paper_ledger's docstring and
+into the ledger's own summary line, which says on every printing that the bound
+beside the booked P&L is measured over a different day.
+
+The consequence for everything reported on 2026-08-28 and 2026-08-29 is that
+those excursion figures describe D+1. That does not touch the reference gap
+measurement, whose two halves are both premarket levels from the same morning,
+but it does touch every mfe and mae number quoted anywhere.
+
+**One rule, and no target.** A target would make this a family with a parameter
+to fit, and the instruction was one rule. Holding to the close is the least
+fitted exit there is: nothing to tune, so a result from it cannot be a result
+about a tuned number. What it costs is visible on every row, because mfe_pct
+sits beside the booked P&L and the gap between them is exactly what a target
+would have been trying to capture.
+
+**Four choices inside the rule, each taken the unflattering way.**
+
+A session that gaps through the resting order fills at the OPEN, not the level.
+Booking the level would credit the rule with the gap, and gap candidates are
+what this screen selects, so it is the common case rather than an edge one.
+HUT on 2026-08-27 opened 89.46 against an 88.90 trigger, and booking 88.90
+there would have turned a 3.00 percent loss into 2.38.
+
+A minute that both triggers and reaches the stop is booked as STOPPED. One bar
+carries no sequence, so the order inside it is unknowable, and the losing
+reading is taken.
+
+A trigger that never fires books a NULL P&L, not zero. Twenty-eight of the
+sixty-six picks never triggered, and a zero apiece would have dragged every
+median toward nothing while looking like data.
+
+A pick the rule declines is WRITTEN with its reason, never dropped. Twenty-two
+of sixty-six were skipped because fill_plausible was not 'plausible'. A ledger
+holding only its trades reports a win rate over a population it silently chose.
+
+**It books against the measured references.** entry_ref and stop_ref are the
+collector's raw live levels and a ledger on those books a P&L that is wrong
+from its first row. Where entry_ref_true is missing the row is skipped rather
+than falling back, for the reason mfe_pct_true does not fall back either.
+
+**The fill band floor is now derivable.** [Truth] min_fill_band_notional was
+set at 250,000 on the same day as a placeholder that "behaves like the right
+rule for an order of about 10,000 dollars at a 4 percent participation cap".
+[Paper] now names both. 10,000 / 0.04 is exactly 250,000, and the coupling is
+machine checked rather than left as prose, the same shape as the analyst
+timeout and the watchdog's stale window.
+
 ## 2026-08-29: fill plausibility, and two definitions of it that were wrong
 
 A reference level is not a price anyone could have transacted at. Every

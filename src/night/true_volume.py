@@ -104,6 +104,64 @@ def _window(day: dt.date, cutoff_hhmm: str,
     return start, end
 
 
+def fetch_bars(probe: probe_alpaca.Probe, symbols: list[str],
+               start: dt.datetime, end: dt.datetime,
+               ) -> tuple[dict[str, list[dict[str, Any]]], str | None]:
+    """(per symbol one minute bars in time order, error). One window.
+
+    Paged and batched. A page token still outstanding at the page cap is an
+    INCOMPLETE fetch and is returned as an error rather than as a total,
+    because a truncated window is indistinguishable from a quiet session and
+    this whole module exists to stop numbers being read for more than they are.
+
+    The bars are returned RAW and in order. fetch_window below folds them into
+    the sums it needs and night/paper_ledger.py walks them in sequence, and
+    those are two different uses of one fetch. The paging and the refusal live
+    here so there is one place either can be got wrong.
+    """
+    batch_size = _CRIT.integer("truth", "symbols_per_request")
+    max_pages = _CRIT.integer("truth", "max_pages_per_request")
+    feed = _CRIT.text("truth", "feed")
+    out: dict[str, list[dict[str, Any]]] = {symbol: [] for symbol in symbols}
+
+    for index in range(0, len(symbols), batch_size):
+        chunk = symbols[index:index + batch_size]
+        token = None
+        pages = 0
+        while True:
+            params = {
+                "symbols": ",".join(chunk),
+                "timeframe": "1Min",
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+                "limit": probe_alpaca.PAGE_LIMIT,
+                "feed": feed,
+            }
+            if token:
+                params["page_token"] = token
+            status, payload, _ = probe.get(params)
+            pages += 1
+            if status != 200:
+                return out, (f"alpaca returned {status}: "
+                             f"{probe_alpaca._error_text(payload)}")
+            for symbol, rows in ((payload or {}).get("bars") or {}).items():
+                if symbol in out:
+                    out[symbol].extend(rows or [])
+            token = (payload or {}).get("next_page_token")
+            if not token:
+                break
+            if pages >= max_pages:
+                return out, (f"{max_pages} pages consumed with a page token "
+                             "still outstanding, so this window is incomplete")
+    # The vendor returns each page in time order, and pages arrive in order, so
+    # this is already sorted. Sorted again anyway because paper_ledger reads
+    # the sequence as the record of what happened first, and an out of order
+    # bar there would book a stop before the entry that preceded it.
+    for symbol in out:
+        out[symbol].sort(key=lambda row: str(row.get("t") or ""))
+    return out, None
+
+
 def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
                  start: dt.datetime, end: dt.datetime,
                  keep_minutes: bool = False,
@@ -127,75 +185,38 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
     window with no readable bar would be a fabricated level in the column a
     reader is being invited to trust over the collector's, which is the exact
     failure this module exists to stop one level up.
-
-    Paged and batched. A page token still outstanding at the page cap is an
-    INCOMPLETE fetch and is returned as an error rather than as a total,
-    because a truncated volume is indistinguishable from a quiet session and
-    this whole module exists to stop numbers being read for more than they are.
     """
-    batch_size = _CRIT.integer("truth", "symbols_per_request")
-    max_pages = _CRIT.integer("truth", "max_pages_per_request")
-    feed = _CRIT.text("truth", "feed")
     out: dict[str, dict[str, Any]] = {
         symbol: {"volume": 0.0, "bars": 0, "high": None, "low": None,
                  "price_volume": 0.0, "minutes": [] if keep_minutes else None}
         for symbol in symbols}
-
-    for index in range(0, len(symbols), batch_size):
-        chunk = symbols[index:index + batch_size]
-        token = None
-        pages = 0
-        while True:
-            params = {
-                "symbols": ",".join(chunk),
-                "timeframe": "1Min",
-                "start": start.isoformat(),
-                "end": end.isoformat(),
-                "limit": probe_alpaca.PAGE_LIMIT,
-                "feed": feed,
-            }
-            if token:
-                params["page_token"] = token
-            status, payload, _ = probe.get(params)
-            pages += 1
-            if status != 200:
-                return out, (f"alpaca returned {status}: "
-                             f"{probe_alpaca._error_text(payload)}")
-            for symbol, rows in ((payload or {}).get("bars") or {}).items():
-                if symbol not in out:
-                    continue
-                for row in rows or []:
-                    held = out[symbol]
-                    volume = float(row.get("v") or 0)
-                    held["volume"] += volume
-                    held["bars"] += 1
-                    high, low = _as_float(row.get("h")), _as_float(row.get("l"))
-                    if high is not None:
-                        held["high"] = (high if held["high"] is None
-                                        else max(held["high"], high))
-                    if low is not None:
-                        held["low"] = (low if held["low"] is None
-                                       else min(held["low"], low))
-                    # The vendor publishes a per bar VWAP. It is used where it
-                    # is there and hlc3 stands in where it is not, which is the
-                    # same proxy backfill_premarket builds off EODHD bars that
-                    # carry no vw field at all.
-                    typical = _as_float(row.get("vw"))
-                    if typical is None and high is not None and low is not None:
-                        close = _as_float(row.get("c"))
-                        if close is not None:
-                            typical = (high + low + close) / 3.0
-                    if typical is not None:
-                        held["price_volume"] += typical * volume
-                    if keep_minutes:
-                        held["minutes"].append((high, low, volume))
-            token = (payload or {}).get("next_page_token")
-            if not token:
-                break
-            if pages >= max_pages:
-                return out, (f"{max_pages} pages consumed with a page token "
-                             "still outstanding, so this window is incomplete")
-    return out, None
+    bars, error = fetch_bars(probe, symbols, start, end)
+    for symbol, rows in bars.items():
+        held = out[symbol]
+        for row in rows:
+            volume = float(row.get("v") or 0)
+            held["volume"] += volume
+            held["bars"] += 1
+            high, low = _as_float(row.get("h")), _as_float(row.get("l"))
+            if high is not None:
+                held["high"] = (high if held["high"] is None
+                                else max(held["high"], high))
+            if low is not None:
+                held["low"] = (low if held["low"] is None
+                               else min(held["low"], low))
+            # The vendor publishes a per bar VWAP. It is used where it is there
+            # and hlc3 stands in where it is not, which is the same proxy
+            # backfill_premarket builds off EODHD bars that carry no vw field.
+            typical = _as_float(row.get("vw"))
+            if typical is None and high is not None and low is not None:
+                close = _as_float(row.get("c"))
+                if close is not None:
+                    typical = (high + low + close) / 3.0
+            if typical is not None:
+                held["price_volume"] += typical * volume
+            if keep_minutes:
+                held["minutes"].append((high, low, volume))
+    return out, error
 
 
 def prior_sessions(probe: probe_alpaca.Probe, symbols: list[str], day: dt.date,
