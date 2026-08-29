@@ -119,6 +119,18 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     pnl              REAL,
     pnl_pct          REAL,
     max_drawdown_pct REAL,
+    -- WHEN things happened, which is the only part of this table that is any
+    -- use before the record is large enough to judge. minutes_to_trigger is
+    -- counted from the open and minutes_to_peak from the ENTRY, so one answers
+    -- "should I still be watching this at 10:00" and the other "is this one
+    -- done", and neither answers the other. Both are BAR counts: the vendor
+    -- publishes a minute bar only for a minute that traded.
+    minutes_to_trigger INTEGER,
+    minutes_to_peak  INTEGER,
+    -- The best the position was ever worth while it was actually open. NOT
+    -- picks.mfe_pct_true, which is a bound over the whole of the FOLLOWING
+    -- session measured from a reference level rather than from a fill.
+    mfe_pct_held     REAL,
     bars_held        INTEGER,
     booked_at        TEXT,
     PRIMARY KEY (date, ticker, rule_version)
@@ -306,6 +318,9 @@ _PICKS_LATER_COLUMNS = (
 _PAPER_LATER_COLUMNS = (
     ("risk_notional_taken", "REAL"),
     ("sizing_mode", "TEXT"),
+    ("minutes_to_trigger", "INTEGER"),
+    ("minutes_to_peak", "INTEGER"),
+    ("mfe_pct_held", "REAL"),
 )
 
 

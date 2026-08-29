@@ -15,6 +15,53 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the morning report starts carrying what the record has observed
+
+**What changed.** paper_trades gains minutes_to_trigger, minutes_to_peak and
+mfe_pct_held. night/paper_ledger.py gains record_so_far, which turns the ledger
+into counts with their own denominators; morning/scan.py puts it in the packet;
+REPORT_TEMPLATE.md gains a "What the record says so far" section that quotes it.
+paper_ledger's probe_alpaca and true_volume imports moved inside book() so the
+08:45 scan can read the record without loading a research HTTP client. No screen
+threshold moved and no vendor call was added to the morning.
+
+**Why it had to.** Everything built earlier today was a measurement apparatus
+and none of it changed what a reader does at 08:50. Individual past outcomes
+never will: PLAB losing 19 percent last Wednesday predicts nothing about today.
+The shape of what those trades did is a different quantity and it was being
+thrown away.
+
+**MEASURED over v1's 16 trades across 6 sessions:**
+
+  triggered within 30 minutes of the open   14 of 16, median 1 minute
+  triggered at 291 and 337 minutes           2, making +0.60 and +0.36 percent
+  never triggered                           28 picks, median -1.97 percent open
+                                            to close, 7 of 28 above their open
+  peaked within 10 minutes of entry         10, of which 10 closed BELOW entry
+  peaked over 100 minutes after entry        4, of which  4 closed ABOVE it
+  median best while a position was open     +1.84 percent
+  median booked at the exit                 -1.38 percent
+
+**It is a record and not a rule, and the template enforces that.** Ten and four
+are not sample sizes. The section must quote every count with its denominator,
+must name the rule version, must say the ledger is as of last night, and is
+forbidden from writing any of it as an instruction or calling it a pattern, a
+signal, an edge or a tendency. Three specimens of the forbidden phrasing are
+listed in the template.
+
+**Two timings because they answer different questions.** minutes_to_trigger
+runs from the open, minutes_to_peak from the ENTRY. Measured from the open the
+second would fold the wait into the hold and a name that triggered at 09:31
+would look like one that triggered at 14:20.
+
+**Held in place by** two claims, mutation tested against eight edits: every
+count arrives over its own row AND session denominator, a pick skipped on
+evidence is never counted as one that never triggered, the record names its
+rule version, the trigger is timed from the open and the peak from the entry,
+the best price while held is the highest rather than the first, a trade that
+never fired times nothing rather than zero, and paper_ledger keeps a research
+client out of its module scope.
+
 ## 2026-08-29: rule v2 books beside v1, and the morning gets a fill warning
 
 **What changed.** CRITERIA [Paper] now registers TWO rule versions through its

@@ -18,6 +18,68 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: the report gets a record section, because last week's names are useless
+
+The owner's objection, and it was right: "what will I do with the previous
+week's winners and losers, they are of no use to me." Everything built today
+had been a measurement apparatus. None of it changed what a reader does at
+08:50 with the ten names in front of them.
+
+Individual past outcomes are worth nothing to that reader and always will be.
+PLAB losing 19 percent last Wednesday predicts nothing about today. What IS
+worth something is the SHAPE of what those trades did, and that is a different
+quantity, so the ledger now records the two timings that carry it and the
+report states them.
+
+**What the timings say, over v1's 16 trades across 6 sessions.**
+
+  triggered within 30 minutes of the open   14 of 16, median 1 minute
+  the two that triggered later, at 291 and 337 minutes, made +0.60 and +0.36
+  never triggered at all                    28 picks, median -1.97 percent
+                                            open to close, and 7 of 28 finished
+                                            above their open
+  peaked within 10 minutes of entry         10 of 10 closed BELOW entry
+  peaked more than 100 minutes after entry   4 of 4 closed ABOVE it
+
+The last two lines are the ones that were not expected. A name that makes its
+high in the first ten minutes and fades did not recover once in ten tries; the
+four that worked were still making highs an hour or more in.
+
+**WHY THIS IS A RECORD SECTION AND NOT A RULE.** Ten and four are not sample
+sizes. Written as "cut the ones that stall and let the winners run" this
+becomes a strategy fitted to eight sessions and stated with the authority of a
+generated report, which is worse than saying nothing. So REPORT_TEMPLATE.md
+requires the counts with their denominators and FORBIDS the model from turning
+any of them into an instruction, with three specimens of the phrasing it must
+not use. It also forbids the words pattern, signal, edge and tendency: counts
+over a record this small support none of them.
+
+**Two timings, not one, and they answer different questions.**
+minutes_to_trigger runs from the OPEN and answers whether a name is still worth
+watching at 10:00. minutes_to_peak runs from the ENTRY and answers whether the
+one you are in is done. Measuring the second from the open would fold the wait
+into the hold and make a name that triggered at 09:31 indistinguishable from
+one that triggered at 14:20, which is precisely the distinction the numbers
+above rest on.
+
+**mfe_pct_held is not picks.mfe_pct_true.** The new column is what the POSITION
+was worth while it was open. The old one is a bound over the whole of the
+FOLLOWING session measured from a reference level rather than from a fill. Two
+different quantities that would read as the same thing if they shared a name.
+
+**The morning reads it without loading a vendor client.** record_so_far is one
+read of a local table, so paper_ledger now imports probe_alpaca and
+true_volume inside book() rather than at module scope. Before this the 08:45
+scan could not have imported the ledger at all without pulling a research HTTP
+client into the window for the first time. The claim that holds it checks the
+module's own text: popping sys.modules and reloading was tried first and does
+not work, because the import machinery hands back a cached module and the
+mutation passes.
+
+**The ledger is as of LAST NIGHT and the report says so.** Tonight's pass has
+not run when the scan reads it, so today's picks are in no figure. Left
+unstated a reader would reasonably assume otherwise.
+
 ## 2026-08-29: rule v2, and why the sizing rather than the exit
 
 v1 booked 16 trades and lost 3,487.81 dollars. The obvious reading is that the

@@ -37,6 +37,7 @@ from core import criteria
 from selection import discover
 from core import eodhd
 from core import ettime
+from night import paper_ledger
 from ops import job_status
 from core import store
 from selection import universe
@@ -4980,6 +4981,15 @@ def build_packet() -> dict[str, Any]:
         # for two of them, and no name here is screened, scored, given a
         # conviction or written to picks. See notable_movers.
         "notable_movers": notable,
+        # WHAT THE RECORD HAS OBSERVED SO FAR, in counts with their own
+        # denominators. Last week's winners and losers are worth nothing to
+        # somebody reading this morning's report; the SHAPE of what those
+        # trades did is worth something, and it is a different quantity.
+        #
+        # One local table read, no vendor call, so the 08:45 window is not
+        # touched. It describes the ledger as of LAST NIGHT, because tonight's
+        # pass has not run, and the report says so.
+        "record_so_far": paper_ledger.record_so_far(),
         # Who is in which conviction bucket, and which way each one is moving.
         # Built here so the report neither enumerates a set it can miscount nor
         # ranks by a score that has no sign without saying so.

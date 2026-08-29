@@ -56,12 +56,9 @@ import statistics
 import sys
 from typing import Any
 
-import probe_alpaca
-
 from core import criteria
 from core import ettime
 from core import store
-from night import true_volume
 from ops import job_status
 
 _CRIT = criteria.load()
@@ -109,6 +106,14 @@ LEDGER_COLUMNS = (
     ("pnl", "REAL"),
     ("pnl_pct", "REAL"),
     ("max_drawdown_pct", "REAL"),
+    # WHEN things happened, which is the only part of this table that is any
+    # use before the record is large enough to judge. minutes_to_trigger is
+    # from the open; minutes_to_peak is from the ENTRY, so the two answer
+    # "should I still be watching this at 10:00" and "is this one done" and
+    # neither answers the other.
+    ("minutes_to_trigger", "INTEGER"),
+    ("minutes_to_peak", "INTEGER"),
+    ("mfe_pct_held", "REAL"),
     ("bars_held", "INTEGER"),
     ("booked_at", "TEXT"),
 )
@@ -236,6 +241,9 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
         "shares": None, "notional": None, "pnl": None, "pnl_pct": None,
         "max_drawdown_pct": None, "bars_held": None,
     }
+    out["minutes_to_trigger"] = None
+    out["minutes_to_peak"] = None
+    out["mfe_pct_held"] = None
     entry_price = None
     entry_index = None
     for index, bar in enumerate(bars):
@@ -250,6 +258,13 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
             # would book the level every time.
             entry_price = max(entry_level, opened)
             entry_index = index
+            # Bars, not wall clock. The vendor publishes a one minute bar only
+            # for a minute that traded, so on a thin name this UNDERSTATES the
+            # elapsed time and the column is a bar count wearing a minute's
+            # name. Said here because a reader will otherwise take it for a
+            # clock reading. It is exact on any name that trades every minute,
+            # which is every name the fill check calls plausible.
+            out["minutes_to_trigger"] = index
             out["entry_at"] = str(bar.get("t") or "")
             break
     if entry_price is None or entry_index is None:
@@ -263,6 +278,8 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
         return out
 
     lowest = None
+    highest = None
+    peak_at = 0
     exit_price = None
     exit_at = None
     exit_reason = EXIT_CLOSE
@@ -274,6 +291,8 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
             continue
         held += 1
         lowest = low if lowest is None else min(lowest, low)
+        if highest is None or high > highest:
+            highest, peak_at = high, held - 1
         if low <= stop_level:
             exit_price = stop_level
             exit_at = str(bar.get("t") or "")
@@ -301,6 +320,15 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
         "max_drawdown_pct": (
             round((lowest - entry_price) / entry_price * 100.0, 4)
             if lowest is not None else None),
+        # The best the position was ever worth, and when. mfe_pct_held is NOT
+        # picks.mfe_pct_true: that one is a bound over the whole of the FOLLOWING
+        # session measured from a reference level, and this one is what this
+        # position was actually worth while it was actually open.
+        "mfe_pct_held": (
+            round((highest - entry_price) / entry_price * 100.0, 4)
+            if highest is not None else None),
+        "minutes_to_peak": peak_at,
+        "minutes_to_trigger": out["minutes_to_trigger"],
         "bars_held": held,
     })
     return out
@@ -315,6 +343,13 @@ def book(day: str, probe: Any = None) -> dict[str, Any]:
     bars.
     """
     versions = rule_versions()
+    # IMPORTED HERE, not at module scope, and probe_alpaca below for the same
+    # reason. record_so_far is read by the 08:45 scan, and true_volume pulls
+    # the research HTTP client the morning path has never loaded. Nothing that
+    # answers a question from one local table should drag a socket client into
+    # the window.
+    from night import true_volume
+
     with store.session() as connection:
         store.init(connection)
         rows = [dict(row) for row in connection.execute(
@@ -340,6 +375,12 @@ def book(day: str, probe: Any = None) -> dict[str, Any]:
     bars: dict[str, list[dict[str, Any]]] = {}
     error = None
     if tradeable:
+        # IMPORTED HERE, not at module scope. record_so_far below is read by
+        # the 08:45 scan, and probe_alpaca is a research client the morning
+        # path has never loaded and should not start loading to answer a
+        # question that is one local table read.
+        import probe_alpaca
+
         probe = probe if probe is not None else probe_alpaca.Probe()
         bars, error = true_volume.fetch_bars(
             probe, sorted({bare[r["ticker"]] for r in tradeable}), start, end)
@@ -417,6 +458,66 @@ def write(result: dict[str, Any], dry_run: bool = False) -> int:
                          ["date", "ticker", "rule_version"], record)
         connection.commit()
     return len(result["rows"])
+
+
+def record_so_far(rule: str | None = None) -> dict[str, Any]:
+    """What the ledger has observed, as plain counts with their denominators.
+
+    THIS IS WHAT THE MORNING CAN USE, and it is the only part of the ledger
+    that is any use before the record is large enough to judge. Last Tuesday's
+    winners and losers are worth nothing to somebody reading Wednesday's
+    report; the SHAPE of what those trades did is worth something, and it is a
+    different quantity.
+
+    Every figure carries its own n and its own session count, and nothing here
+    is a threshold, a recommendation or a rule. It is a description of a record
+    that currently spans a handful of sessions, and scan puts it in the packet
+    so the report can state it with those denominators attached rather than
+    leaving a reader to assume it rests on something.
+
+    NO NETWORK AND NO VENDOR CALL. One read of a local table, which is why the
+    08:45 scan may call it.
+    """
+    rule = rule or sorted(rule_versions())[0]
+    with store.session() as connection:
+        store.init(connection)
+        rows = [dict(r) for r in connection.execute(
+            "SELECT * FROM paper_trades WHERE rule_version=?", (rule,))]
+    booked = [r for r in rows if r["booked"] and r["pnl_pct"] is not None]
+    timed = [r for r in booked if r["minutes_to_trigger"] is not None]
+    peaked = [r for r in booked if r["minutes_to_peak"] is not None
+              and r["pnl_pct"] is not None]
+    never = [r for r in rows if not r["booked"] and not r["skip_reason"]]
+    skipped = [r for r in rows if r["skip_reason"]]
+
+    def denom(held: list[dict[str, Any]]) -> dict[str, int]:
+        return {"rows": len(held), "sessions": len({r["date"] for r in held})}
+
+    early = [r for r in timed if r["minutes_to_trigger"] <= 30]
+    fast_peak = [r for r in peaked if r["minutes_to_peak"] <= 10]
+    slow_peak = [r for r in peaked if r["minutes_to_peak"] >= 100]
+    return {
+        "rule_version": rule,
+        "picks": denom(rows), "booked": denom(booked),
+        "skipped": denom(skipped), "never_triggered": denom(never),
+        "triggered_within_30_min": len(early),
+        "triggered_total": len(timed),
+        "peaked_within_10_min": len(fast_peak),
+        "peaked_within_10_min_closed_red":
+            sum(1 for r in fast_peak if r["pnl_pct"] <= 0),
+        "peaked_after_100_min": len(slow_peak),
+        "peaked_after_100_min_closed_green":
+            sum(1 for r in slow_peak if r["pnl_pct"] > 0),
+        "median_minutes_to_trigger": (
+            statistics.median(r["minutes_to_trigger"] for r in timed)
+            if timed else None),
+        "median_best_while_held": (
+            statistics.median(r["mfe_pct_held"] for r in booked
+                              if r["mfe_pct_held"] is not None)
+            if any(r["mfe_pct_held"] is not None for r in booked) else None),
+        "median_booked_pct": (
+            statistics.median(r["pnl_pct"] for r in booked) if booked else None),
+    }
 
 
 def report(result: dict[str, Any]) -> None:

@@ -8374,6 +8374,180 @@ def claim_the_morning_fill_warning_is_never_an_approval(
           "silence is not an approval")
 
 
+def claim_the_record_block_carries_its_own_denominators(
+        failures: list[str]) -> None:
+    """Every count in the morning's record section arrives with what it is over.
+
+    The section exists because last week's individual winners and losers are
+    worth nothing to somebody reading this morning's report. What is worth
+    something is the SHAPE of what those trades did, and the only way to state
+    that honestly at this sample size is to put the denominator on every
+    figure. A bare "10 peaked early and closed red" reads as a law; "10 of 10,
+    across 4 sessions" reads as what it is.
+
+    AND THE MORNING MUST NOT LOAD A RESEARCH CLIENT TO GET IT. record_so_far is
+    one read of a local table. paper_ledger reaches probe_alpaca and
+    true_volume only inside book(), so importing it from scan pulls neither,
+    and the 08:45 window never touches an HTTP client it has never needed.
+    """
+    import pathlib as _pathlib
+
+    from core import store
+    from night import paper_ledger
+
+    day = "2026-07-13"
+    with conftest_activate() as _sandbox:
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM paper_trades")
+            # (date, ticker, booked, skip_reason, minutes_to_trigger,
+            #  minutes_to_peak, mfe_pct_held, pnl_pct)
+            rows = [
+                # booked, triggered at the open, peaked fast, closed RED
+                (day, "AAA.US", 1, None, 0, 2, 1.0, -3.0),
+                # booked, peaked slow, closed GREEN
+                (day, "BBB.US", 1, None, 4, 140, 9.0, 8.0),
+                # booked, triggered LATE and peaked in neither bucket, so it
+                # counts in the trigger denominator and in no peak bucket
+                ("2026-07-14", "CCC.US", 1, None, 200, 50, 1.0, 0.5),
+                # never triggered: booked 0 and NO skip reason
+                (day, "DDD.US", 0, None, None, None, None, None),
+                # skipped on evidence
+                (day, "EEE.US", 0, "fill_plausible is 'implausible'",
+                 None, None, None, None),
+            ]
+            for r in rows:
+                connection.execute(
+                    "INSERT INTO paper_trades (date, ticker, rule_version, "
+                    "booked, skip_reason, minutes_to_trigger, minutes_to_peak, "
+                    "mfe_pct_held, pnl_pct) VALUES (?,?,'v1',?,?,?,?,?,?)",
+                    (r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]))
+            connection.commit()
+        got = paper_ledger.record_so_far("v1")
+
+    for key in ("picks", "booked", "skipped", "never_triggered"):
+        held = got.get(key) or {}
+        if "rows" not in held or "sessions" not in held:
+            failures.append(
+                f"record_so_far.{key} is {held!r} and carries no session "
+                "count. Twelve names from one morning share a tape and are one "
+                "observation, so a row count on its own overstates the record "
+                "by whatever the names per session happens to be")
+    if got["picks"] != {"rows": 5, "sessions": 2}:
+        failures.append(f"picks is {got['picks']!r}, not 5 rows over 2 sessions")
+    if got["booked"] != {"rows": 3, "sessions": 2}:
+        failures.append(f"booked is {got['booked']!r}, not 3 over 2")
+    if got["never_triggered"]["rows"] != 1 or got["skipped"]["rows"] != 1:
+        failures.append(
+            f"a pick skipped on evidence and one that never triggered were "
+            f"counted together: {got!r}. Those are different facts and the "
+            "first is about the level while the second is about the session")
+
+    if (got["triggered_within_30_min"], got["triggered_total"]) != (2, 3):
+        failures.append(
+            f"the trigger timing reads "
+            f"{got['triggered_within_30_min']}/{got['triggered_total']}, not "
+            "2/3. The 200 minute trigger is outside thirty minutes and the "
+            "figure is meaningless without the denominator beside it")
+    if (got["peaked_within_10_min_closed_red"],
+            got["peaked_within_10_min"]) != (1, 1):
+        failures.append(f"the fast peak counts read {got!r}")
+    if (got["peaked_after_100_min_closed_green"],
+            got["peaked_after_100_min"]) != (1, 1):
+        failures.append(f"the slow peak counts read {got!r}")
+    if got["rule_version"] != "v1":
+        failures.append(
+            f"the record does not name its rule version: {got!r}. A booked "
+            "figure without the rule that produced it is not a number anybody "
+            "can act on or argue with")
+
+    # The morning reads this, so it must not drag a socket client into 08:45.
+    #
+    # Checked STRUCTURALLY, on the module's own text, rather than by popping
+    # sys.modules and reloading. That was tried first and does not work: the
+    # test module has already imported these under other claims and the import
+    # machinery hands back a cached module, so the reload observes nothing and
+    # a mutation that moves the import back to module scope passes.
+    source = _pathlib.Path(paper_ledger.__file__).read_text(encoding="utf-8")
+    header = source[:source.index(chr(10) + "def ")]
+    for statement in ("import probe_alpaca", "from night import true_volume"):
+        if any(line.strip() == statement for line in header.splitlines()):
+            failures.append(
+                f"paper_ledger runs {statement!r} at module scope. The 08:45 "
+                "scan imports this module to read record_so_far, which is one "
+                "local table read, and that import would pull a research HTTP "
+                "client into the morning window for the first time")
+    print("  record block every count arrives over its own row and session "
+          "denominator, a skip is not a missed trigger, and reading it loads "
+          "no vendor client")
+
+
+def claim_the_ledger_records_when_things_happened(
+        failures: list[str]) -> None:
+    """Minutes to the trigger and minutes to the peak, from the entry not the open.
+
+    These are the only two columns in the ledger that are any use before the
+    record is large enough to judge, and they answer DIFFERENT questions.
+    minutes_to_trigger runs from the open and answers whether a name is still
+    worth watching at 10:00. minutes_to_peak runs from the ENTRY and answers
+    whether the one you are in is done. Measuring the second from the open
+    would fold the wait into the hold and make a name that triggered at 09:31
+    look identical to one that triggered at 14:20.
+
+    mfe_pct_held is what the POSITION was worth while open, which is not
+    picks.mfe_pct_true: that one is a bound over the whole of the following
+    session, measured from a reference level rather than from a fill.
+    """
+    from night import paper_ledger
+
+    def bar(t, o, h, l, c):
+        return {"t": t, "o": o, "h": h, "l": l, "c": c, "v": 1000}
+
+    # Triggers on the fourth bar, peaks two bars after that.
+    got = paper_ledger.simulate([
+        bar("A", 98, 99.0, 97, 98.5),
+        bar("B", 98.5, 99.5, 98, 99.0),
+        bar("C", 99, 99.9, 98.5, 99.5),
+        bar("D", 99.5, 101.0, 99, 100.5),   # trigger, index 3
+        bar("E", 100.5, 103.0, 100, 102.0),
+        bar("F", 102, 106.0, 101, 101.5),   # peak, 2 bars after entry
+        bar("G", 101.5, 102.0, 100, 100.2),
+    ], 100.0, 95.0, paper_ledger.SIZING_NOTIONAL)
+
+    if got["minutes_to_trigger"] != 3:
+        failures.append(
+            f"minutes_to_trigger is {got['minutes_to_trigger']!r}, not 3. It "
+            "runs from the OPEN, and it is what says whether a name is still "
+            "worth watching an hour in")
+    if got["minutes_to_peak"] != 2:
+        failures.append(
+            f"minutes_to_peak is {got['minutes_to_peak']!r}, not 2. It runs "
+            "from the ENTRY, and measuring it from the open would fold the "
+            "wait into the hold: a name that triggered at 09:31 would look the "
+            "same as one that triggered at 14:20")
+    if got["mfe_pct_held"] != 6.0:
+        failures.append(
+            f"mfe_pct_held is {got['mfe_pct_held']!r}, not 6.0. Entry was "
+            "100.0 and the best bid while held reached 106.0")
+    if got["max_drawdown_pct"] != -1.0:
+        failures.append(
+            f"the drawdown is {got['max_drawdown_pct']!r}, not -1.0. The 97 "
+            "low of the first bar was never held")
+
+    # A trade that never triggers records no timing rather than a zero.
+    none = paper_ledger.simulate(
+        [bar("A", 98, 99, 97, 98.5)], 100.0, 95.0,
+        paper_ledger.SIZING_NOTIONAL)
+    for field in ("minutes_to_trigger", "minutes_to_peak", "mfe_pct_held"):
+        if none[field] is not None:
+            failures.append(
+                f"a trade that never triggered recorded {field} "
+                f"{none[field]!r}. Zero here would say it triggered instantly "
+                "and peaked instantly, which is a trade that happened")
+    print("  when it moved the trigger is timed from the open and the peak "
+          "from the entry, and a trade that never fired times nothing")
+
+
 def claim_the_ledger_writes_the_picks_it_declined(failures: list[str]) -> None:
     """A skipped pick is a row with a reason, never a row that is not there.
 
@@ -10478,6 +10652,8 @@ def main() -> int:
     claim_the_paper_rule_reads_the_minutes_in_order(failures)
     claim_the_two_sizings_differ_only_in_how_much_they_buy(failures)
     claim_the_morning_fill_warning_is_never_an_approval(failures)
+    claim_the_record_block_carries_its_own_denominators(failures)
+    claim_the_ledger_records_when_things_happened(failures)
     claim_the_ledger_writes_the_picks_it_declined(failures)
     claim_the_fill_band_floor_is_the_position_over_the_participation_cap(failures)
     claim_the_score_watch_withholds_what_it_cannot_report(failures)

@@ -505,6 +505,65 @@ what the packet carries. If the packet's earnings block carries a skipped
 field, state that the calendar was not checked and quote that reason instead
 of claiming there are no notable earnings.}
 
+## What the record says so far
+
+{THE ONLY SECTION IN THIS REPORT THAT IS NOT ABOUT TODAY. Everything above
+describes this morning; this describes what the paper ledger has observed
+across every session it holds, and it exists because last week's individual
+winners and losers are worth nothing to somebody reading this morning.
+
+EVERY NUMBER IS IN `record_so_far` AND YOU MUST NOT COMPUTE ONE. Quote the
+figures below with their denominators attached, in the order given. A figure
+without its denominator is the thing this whole section is designed not to be.
+
+Open with the size of the record, because it governs how much weight anything
+after it carries: `record_so_far.picks.rows` picks across
+`record_so_far.picks.sessions` sessions, of which `record_so_far.booked.rows`
+were traded across `record_so_far.booked.sessions`. Then say, in one sentence,
+that the sample unit is the SESSION and not the pick, so this rests on that
+many observations rather than on the row count.
+
+Then these four, each as a bare count over its denominator:
+
+- `record_so_far.triggered_within_30_min` of
+  `record_so_far.triggered_total` trades reached their trigger within thirty
+  minutes of the open, at a median of
+  `record_so_far.median_minutes_to_trigger` minutes.
+- `record_so_far.never_triggered.rows` picks never reached their trigger at
+  all, across `record_so_far.never_triggered.sessions` sessions.
+- `record_so_far.peaked_within_10_min_closed_red` of
+  `record_so_far.peaked_within_10_min` trades that made their best price
+  within ten minutes of entry went on to close below their entry.
+- `record_so_far.peaked_after_100_min_closed_green` of
+  `record_so_far.peaked_after_100_min` trades that made their best price more
+  than a hundred minutes after entry closed above it.
+
+Then the two medians: `record_so_far.median_best_while_held` percent was the
+best a position was worth while open, against
+`record_so_far.median_booked_pct` percent booked at the exit.
+
+THIS IS A DESCRIPTION AND NOT ADVICE, and the difference has to survive into
+the prose. Do NOT write that a reader should therefore do anything. Three
+specimens of the phrasing this forbids, and they are forbidden:
+
+`so watch the first thirty minutes`
+`cut the ones that stall`
+`let the winners run`
+
+Those are rules; this section is a record. The moment a description of a
+handful of sessions is written as an instruction it becomes a strategy nobody
+validated. State the counts and stop.
+
+DO NOT CALL ANY OF IT A PATTERN, A SIGNAL, AN EDGE OR A TENDENCY. Counts over
+a record this small support none of those words. Say what was observed.
+
+Name the rule version from `record_so_far.rule_version`, because a booked
+figure without the rule that produced it is not a number anybody can act on or
+argue with.
+
+Say plainly that the ledger is as of LAST NIGHT: tonight's pass has not run,
+so today's picks are not in any figure above.}
+
 ## Skips and traps
 
 {Named candidates to leave alone. MEMBERSHIP IN THIS SECTION IS DECIDED IN THE
