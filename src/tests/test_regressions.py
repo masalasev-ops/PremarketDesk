@@ -7936,6 +7936,118 @@ def claim_the_two_unrebuildable_artifacts_are_held_twice(
           "and no pipeline module reads it")
 
 
+def claim_the_true_premarket_gap_separates_the_feed_from_the_window(
+        failures: list[str]) -> None:
+    """One number was reported as three causes, and now it decomposes.
+
+    backfill_premarket wrote pm_high_true over 04:00 to [backfill] market_open
+    and called its distance from the live pm_high "the standing measurement of
+    what a 07:20 collector start misses". It is three things at once:
+
+      1. the collector's late start, 04:00 to 07:20
+      2. the vendor and the socket disagreeing over minutes BOTH watched
+      3. the stretch after the scan cutoff, which no report written at the
+         cutoff could ever have contained
+
+    Measured on 2026-08-20 before the fix: AAP's gap was 17.25 percent feed and
+    2.33 percent window, SCSC's was 0.30 feed and 8.08 window, WMT's was 8.05
+    feed and 0.00 window. The cause the sentence named was the smaller half on
+    three of four names.
+
+    night/true_volume had already reasoned this out for volume and ends its
+    window at the packet's own rvol_cutoff_hhmm. This pins the same treatment
+    for the price path: the collector window values come from the SAME fetch,
+    bound correctly inside the full window, and a bar outside the collector
+    window reaches the full columns and not the collector ones.
+    """
+    import datetime as dt
+
+    from core import ettime
+    from night import backfill_premarket as backfill
+
+    day = "2026-08-20"
+
+    def bar(hour: int, minute: int, high: float, low: float, close: float,
+            volume: float = 100.0) -> dict:
+        when = dt.datetime(2026, 8, 20, hour, minute, tzinfo=ettime.ET)
+        return {"timestamp": ettime.epoch_s(when), "high": high, "low": low,
+                "close": close, "volume": volume}
+
+    # One bar in each of the three stretches, each carrying the extreme of its
+    # own. If the collector columns were computed over the whole session they
+    # would take 99.0 and 1.0; if the full columns were computed over the
+    # collector window alone they would take 50.0 and 40.0.
+    bars = [
+        bar(5, 0, 99.0, 90.0, 95.0),     # before the collector started
+        bar(8, 0, 50.0, 40.0, 45.0),     # inside the collector's own window
+        bar(9, 0, 60.0, 1.0, 30.0),      # after the scan cutoff
+    ]
+
+    class _Api:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def intraday(self, symbol, start, end, interval):
+            self.calls += 1
+            return bars, None
+
+    api = _Api()
+    row, error = backfill._true_path(api, "AAA.US", day)
+    if error:
+        failures.append(f"_true_path refused a three bar session: {error}")
+        return
+
+    # ONE fetch. The collector window is a subset of what is already in hand,
+    # and fetching it separately would double the nightly's call count to
+    # answer a question the bars already answer.
+    if api.calls != 1:
+        failures.append(f"_true_path made {api.calls} intraday calls for one "
+                        "symbol; the collector window is a subset of the full "
+                        "window and must come from the same fetch")
+
+    expected = {
+        "pm_high_true": 99.0, "pm_low_true": 1.0, "pm_true_bars": 3,
+        "pm_high_collector_window": 50.0, "pm_low_collector_window": 40.0,
+        "pm_collector_window_bars": 1,
+    }
+    for key, want in expected.items():
+        if row.get(key) != want:
+            failures.append(f"_true_path {key} is {row.get(key)!r} and the "
+                            f"three bar fixture gives {want!r}")
+
+    if row.get("pm_collector_window") != "07:20-08:45":
+        failures.append("_true_path does not record the collector window it "
+                        f"compared: {row.get('pm_collector_window')!r}")
+
+    # The decomposition has to be usable: both halves computable from the row.
+    live_high = 45.0
+    feed = (row["pm_high_collector_window"] - live_high) / live_high * 100.0
+    window = ((row["pm_high_true"] - row["pm_high_collector_window"])
+              / row["pm_high_collector_window"] * 100.0)
+    if not (feed > 0 and window > 0):
+        failures.append(f"the split came out feed {feed} window {window}; the "
+                        "fixture puts a real gap in each half")
+
+    # A session whose collector window carried NO bar is a null, never a zero.
+    # A high of nothing is not a high, and pm_collector_window_bars beside it
+    # says which of the two a reader is holding.
+    quiet = [bar(5, 0, 99.0, 90.0, 95.0)]
+    bars = quiet
+    row2, error2 = backfill._true_path(_Api(), "BBB.US", day)
+    if error2:
+        failures.append(f"_true_path refused a session with only an early bar: {error2}")
+    elif (row2.get("pm_high_collector_window") is not None
+            or row2.get("pm_collector_window_bars") != 0):
+        failures.append(
+            "a collector window with no bars reports "
+            f"high {row2.get('pm_high_collector_window')!r} over "
+            f"{row2.get('pm_collector_window_bars')!r} bar(s); it must be a "
+            "null with a zero count, not a number")
+
+    print("  true split   the live to true premarket gap separates into a feed "
+          "half and a window half, both from one fetch")
+
+
 def claim_the_night_refuses_the_floats_the_morning_refuses(failures: list[str]) -> None:
     """One float validity rule, two implementations, and they have to agree.
 
@@ -8931,6 +9043,7 @@ def main() -> int:
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_documents_count_what_is_actually_here(failures)
     claim_the_night_refuses_the_floats_the_morning_refuses(failures)
+    claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)

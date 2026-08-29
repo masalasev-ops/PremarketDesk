@@ -6,9 +6,37 @@ one minute intraday bars cover all of it, published a few hours behind live.
 So every evening this job writes pm_high_true, pm_low_true and pm_vwap_true
 into the day's picks, next to the morning values, never over them.
 
-The two sets of columns are the point. Their difference is the standing
-measurement of what a 07:20 collector start misses, reported here as a median
-and worst case over recent sessions. A true high LOWER than the live high
+The two sets of columns are the point, and until 2026-08-28 this paragraph
+claimed more for them than they hold. Their difference was called "the standing
+measurement of what a 07:20 collector start misses". It is not: it conflates
+THREE causes and cannot separate them.
+
+  1. The collector's late start, 04:00 to 07:20, which is the one this
+     sentence named.
+  2. A feed disagreement INSIDE the shared window, where the vendor's bars and
+     the trades socket disagree over minutes both of them saw.
+  3. The window END. The true window ran to [backfill] market_open, 09:30,
+     while the morning's pm_high stops at the scan cutoff, 08:45. Nothing
+     after 08:45 can be in a report written at 08:45, so that stretch is not
+     something the collector missed, it is something the report is not about.
+
+Measured on 2026-08-20, four names, three different causes: AAP's true high of
+58.00 against a live 48.34 came from 04:00 to 07:20 and is cause 1; SCSC's
+64.85 against 59.82 came from 08:45 to 09:30 and is cause 3; and WMT's 116.695
+against 108.00 came from 07:20 to 08:45, the minutes the collector was
+listening to, and is cause 2 with the other two contributing nothing.
+
+night/true_volume.py had already reasoned this out for volume and ends its
+window at the packet's own rvol_cutoff_hhmm for exactly this reason. This
+module predates that and never got it. So the true path is now computed TWICE
+over the same fetched bars, once over the full premarket session and once over
+the collector's own window, and the pm_*_collector_window columns are what
+make the three causes separable: full against collector window is what the
+window bounds cost, and collector window against the live value is the feed
+disagreement on identical minutes, which is the only one of the three that is
+a statement about the collector.
+
+A true high LOWER than the live high
 should not happen if both sources saw the same tape, since the true window
 contains the collector window, but the trades websocket and the published
 bars can legitimately differ on odd lots, condition codes, and late
@@ -65,6 +93,18 @@ _TRUE_COLUMNS = (
     # feed noise and bad bars both trip a boolean, and then nobody can tell
     # them apart. Queries counting clean rows must test = 0.0, never IS NULL.
     ("pm_source_disagreement", "REAL"),
+    # The same three values over the COLLECTOR'S OWN window, 07:20 to the scan
+    # cutoff, from the same bars in the same pass at no extra call. Without
+    # these the difference between live and true is one number covering three
+    # causes; with them it decomposes. See the module docstring.
+    ("pm_high_collector_window", "REAL"),
+    ("pm_low_collector_window", "REAL"),
+    ("pm_vwap_collector_window", "REAL"),
+    ("pm_collector_window_bars", "INTEGER"),
+    # What that window actually was on this row, never assumed by a reader.
+    # The morning's cutoff snaps to [Scan] run_time only inside
+    # rvol_cutoff_snap_minutes, so a rerun genuinely has a different clock.
+    ("pm_collector_window", "TEXT"),
     ("backfilled_at", "TEXT"),
 )
 
@@ -76,6 +116,40 @@ def _window(day: str) -> tuple[dt.datetime, dt.datetime]:
     start = dt.datetime(date.year, date.month, date.day, open_h, open_m, tzinfo=ettime.ET)
     end = dt.datetime(date.year, date.month, date.day, close_h, close_m, tzinfo=ettime.ET)
     return start, end
+
+
+def _collector_window(day: str) -> tuple[dt.datetime, dt.datetime, str]:
+    """The minutes the collector was actually listening to, on this session.
+
+    The end comes from the packet's own rvol_cutoff_hhmm rather than a fixed
+    08:45, the same rule night/true_volume._window follows and for the same
+    reason: the morning cutoff snaps to [Scan] run_time only inside
+    rvol_cutoff_snap_minutes, so a session that ran late genuinely compared a
+    different window, and a fixed clock here would mismeasure precisely the
+    sessions that went wrong.
+
+    Unlike true_volume this does NOT refuse a session whose packet is gone. It
+    falls back to the scheduled [Scan] run_time and puts the window it used on
+    the row, because the true columns beside it are still worth writing and a
+    row that says which window it compared can be read either way. true_volume
+    refuses because its whole output is that one comparison; here it is one of
+    two, and the full session columns do not need the packet at all.
+    """
+    date = ettime.parse_date(day)
+    open_h, open_m = _CRIT.clock("collector", "start_time")
+    close_h, close_m = _CRIT.clock("scan", "run_time")
+    packet_path = config.run_path(day) / "packet.json"
+    if packet_path.is_file():
+        try:
+            cutoff = json.loads(packet_path.read_text(encoding="utf-8")
+                                ).get("rvol_cutoff_hhmm")
+            if cutoff:
+                close_h, close_m = (int(part) for part in str(cutoff).split(":"))
+        except (ValueError, OSError, TypeError):
+            pass
+    start = dt.datetime(date.year, date.month, date.day, open_h, open_m, tzinfo=ettime.ET)
+    end = dt.datetime(date.year, date.month, date.day, close_h, close_m, tzinfo=ettime.ET)
+    return start, end, f"{open_h:02d}:{open_m:02d}-{close_h:02d}:{close_m:02d}"
 
 
 def _true_path(api: eodhd.EodhdClient, symbol: str, day: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -91,11 +165,29 @@ def _true_path(api: eodhd.EodhdClient, symbol: str, day: str) -> tuple[dict[str,
     if error:
         return None, error
     start_epoch, end_epoch = ettime.epoch_s(start), ettime.epoch_s(end)
+    # The collector's own window is a SUBSET of the one already fetched, so the
+    # second accumulator costs nothing but a comparison per bar. Fetching it
+    # separately would double the call count to answer a question the bars in
+    # hand already answer.
+    socket_start, socket_end, socket_text = _collector_window(day)
+    socket_from, socket_to = ettime.epoch_s(socket_start), ettime.epoch_s(socket_end)
 
-    high = low = None
-    volume_sum = 0.0
-    price_volume = 0.0
-    bars = 0
+    class _Path:
+        __slots__ = ("high", "low", "volume_sum", "price_volume", "bars")
+
+        def __init__(self) -> None:
+            self.high = self.low = None
+            self.volume_sum = self.price_volume = 0.0
+            self.bars = 0
+
+        def add(self, hi: float, lo: float, typical: float, vol: float) -> None:
+            self.bars += 1
+            self.high = hi if self.high is None else max(self.high, hi)
+            self.low = lo if self.low is None else min(self.low, lo)
+            self.price_volume += typical * vol
+            self.volume_sum += vol
+
+    full, socket = _Path(), _Path()
     for row in rows or []:
         stamp = row.get("timestamp")
         if stamp is None or not (start_epoch <= int(stamp) < end_epoch):
@@ -106,28 +198,58 @@ def _true_path(api: eodhd.EodhdClient, symbol: str, day: str) -> tuple[dict[str,
         bar_volume = float(row.get("volume") or 0)
         if bar_high is None or bar_low is None or bar_close is None:
             continue
-        bars += 1
-        high = float(bar_high) if high is None else max(high, float(bar_high))
-        low = float(bar_low) if low is None else min(low, float(bar_low))
-        typical = (float(bar_high) + float(bar_low) + float(bar_close)) / 3.0
-        price_volume += typical * bar_volume
-        volume_sum += bar_volume
+        hi, lo = float(bar_high), float(bar_low)
+        typical = (hi + lo + float(bar_close)) / 3.0
+        full.add(hi, lo, typical, bar_volume)
+        if socket_from <= int(stamp) < socket_to:
+            socket.add(hi, lo, typical, bar_volume)
 
-    if bars == 0:
+    if full.bars == 0:
         return None, "intraday returned no bars inside the premarket window"
     return {
-        "pm_high_true": round(high, 4) if high is not None else None,
-        "pm_low_true": round(low, 4) if low is not None else None,
-        "pm_vwap_true": round(price_volume / volume_sum, 4) if volume_sum else None,
-        "pm_true_bars": bars,
+        "pm_high_true": round(full.high, 4) if full.high is not None else None,
+        "pm_low_true": round(full.low, 4) if full.low is not None else None,
+        "pm_vwap_true": (round(full.price_volume / full.volume_sum, 4)
+                         if full.volume_sum else None),
+        "pm_true_bars": full.bars,
+        # Null rather than zero when the collector's window carried no bar at
+        # all. A window with nothing in it is not a high of nothing, and the
+        # bar count beside it says which of the two a reader is holding.
+        "pm_high_collector_window": (round(socket.high, 4)
+                                     if socket.high is not None else None),
+        "pm_low_collector_window": (round(socket.low, 4)
+                                    if socket.low is not None else None),
+        "pm_vwap_collector_window": (round(socket.price_volume / socket.volume_sum, 4)
+                                     if socket.volume_sum else None),
+        "pm_collector_window_bars": socket.bars,
+        "pm_collector_window": socket_text,
     }, None
 
 
+def _median(values: list[float]) -> float:
+    return sorted(values)[len(values) // 2]
+
+
 def _gap_report(connection, sessions: int) -> None:
-    """Median and worst case gap between the true and live premarket highs."""
+    """The live to true gap on the premarket high, split by what causes it.
+
+    One number here used to be reported as what a 07:20 collector start
+    misses. It is not one thing, and the module docstring has the measurement
+    that showed it: the total splits into a FEED gap, the vendor against the
+    socket over minutes both were watching, and a WINDOW gap, the stretches of
+    the true session the morning was never looking at.
+
+    The split matters because the two have different fixes and opposite
+    meanings. A window gap is the report working as designed: nothing after
+    the scan cutoff belongs in a report written at the cutoff. A feed gap is
+    the collector disagreeing with the vendor about minutes it recorded, which
+    is the same direction as the known volume under capture and is the only
+    half of this that is a statement about the collector.
+    """
     rows = connection.execute(
         """
-        SELECT date, ticker, pm_high, pm_high_true FROM picks
+        SELECT date, ticker, pm_high, pm_high_true, pm_high_collector_window
+        FROM picks
         WHERE pm_high IS NOT NULL AND pm_high_true IS NOT NULL AND source='live'
           AND date IN (SELECT DISTINCT date FROM picks WHERE source='live'
                        ORDER BY date DESC LIMIT ?)
@@ -142,13 +264,36 @@ def _gap_report(connection, sessions: int) -> None:
     if not gaps:
         print("backfill: no rows with both a live and a true premarket high yet, no gap report")
         return
-    ordered = sorted(gaps)
-    median = ordered[len(ordered) // 2]
     worst = max(gaps, key=abs)
     print(
         f"backfill: over the last {sessions} sessions ({len(gaps)} live rows), the "
-        f"true premarket high exceeds the live one by median {median:+.2f} percent, "
+        f"true premarket high exceeds the live one by median {_median(gaps):+.2f} percent, "
         f"worst case {worst:+.2f} percent"
+    )
+
+    # Rows written before 2026-08-28 carry no collector window column, so the
+    # split is reported over the rows that HAVE one and says how many that is.
+    # Reporting it over all of them with the missing ones read as zero is the
+    # absence dressed as a measurement this project keeps finding.
+    split = [row for row in rows
+             if row["pm_high"] and row["pm_high_collector_window"]]
+    if not split:
+        print(f"backfill: 0 of {len(gaps)} of those rows carry "
+              "pm_high_collector_window, so the feed and window halves of that "
+              "gap cannot be separated yet. Rows written before 2026-08-28 have "
+              "no such column and are not refilled by this pass.")
+        return
+    feed = [(r["pm_high_collector_window"] - r["pm_high"]) / r["pm_high"] * 100.0
+            for r in split]
+    window = [(r["pm_high_true"] - r["pm_high_collector_window"])
+              / r["pm_high_collector_window"] * 100.0 for r in split]
+    print(
+        f"backfill: on the {len(split)} of those row(s) carrying a collector "
+        f"window high, that gap splits into a FEED half of median "
+        f"{_median(feed):+.2f} percent, the vendor against the socket over "
+        f"minutes both watched, and a WINDOW half of median "
+        f"{_median(window):+.2f} percent, the true session the morning was "
+        "never looking at. Only the first is a statement about the collector."
     )
 
 

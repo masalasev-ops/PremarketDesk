@@ -15,6 +15,64 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the true premarket gap was three causes reported as one
+
+backfill_premarket writes pm_high_true, pm_low_true and pm_vwap_true over
+04:00 to [backfill] market_open, 09:30, beside the morning's collector values.
+Its docstring called the difference "the standing measurement of what a 07:20
+collector start misses". It is not one thing. It is three:
+
+  1. the collector's late start, 04:00 to 07:20, the cause the sentence named
+  2. the vendor's bars and the trades socket disagreeing over minutes BOTH of
+     them watched
+  3. the stretch after the scan cutoff, 08:45 to 09:30, which no report
+     written at 08:45 could ever have contained and which is therefore not
+     something the collector missed at all
+
+Measured on 2026-08-20 by splitting the same bars three ways, four names and
+three different dominant causes. AAP's true high of 58.00 against a live 48.34
+is 17.25 percent feed and 2.33 percent window. WMT's 116.695 against 108.00 is
+8.05 percent feed and 0.00 window: the whole of it came from minutes the
+collector was listening to. SCSC's 64.85 against 59.82 is 0.30 feed and 8.08
+window, entirely the stretch after the cutoff. BABA's is 2.55 and 1.99. The
+cause the sentence named is the smaller half on three of the four.
+
+night/true_volume.py had already reasoned this out for volume, and ends its
+window at the packet's own rvol_cutoff_hhmm precisely because "a truth measured
+over a wider window than the estimate is too large by whatever the extra
+minutes carried, and that error looks exactly like the socket missing more of
+the tape, which is the thing being measured". This module predates that and
+never got it.
+
+_true_path now computes the path TWICE over the same fetched bars, once over
+the full premarket session and once over the collector's own window, at no
+extra call because the second is a subset of the first. picks gains
+pm_high_collector_window, pm_low_collector_window, pm_vwap_collector_window,
+pm_collector_window_bars and pm_collector_window, the last carrying the window
+actually compared rather than leaving a reader to assume 08:45. The end comes
+from the packet's rvol_cutoff_hhmm where the packet survives, falling back to
+the scheduled [Scan] run_time where it does not, unlike true_volume which
+refuses outright: there the comparison IS the output, here the full session
+columns do not need the packet at all.
+
+The nightly's gap report now prints the split, and prints it only over rows
+that carry the new column, saying how many that is. Rows written before today
+have no collector window and are not refilled, and reporting the split over
+them with the missing half read as zero would be the absence dressed as a
+measurement this project keeps finding. On the 61 rows currently on disk it
+correctly reports 0 of 61 splittable.
+
+A collector window that carried no bar reports a null high with a zero bar
+count, never a zero high. claim_the_true_premarket_gap_separates_the_feed_from_the_window
+pins the bounds, the single fetch, the recorded window text and the empty
+window case; mutation tested by widening the window filter.
+
+What this does NOT settle: which of the two halves the collector's feed gap
+belongs to in cause terms. A median feed half above zero says the socket
+reports a lower high than the vendor over shared minutes, which is the same
+direction as the known volume under capture in COLLECTOR_VOLUME.md, and
+whether it is one phenomenon or two is not answered here.
+
 ## 2026-08-28: the night divided by floats the morning refuses
 
 night/true_volume.py exists to write what was TRUE beside what the morning
