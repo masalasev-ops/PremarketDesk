@@ -208,6 +208,19 @@ def volume_ratio(row: Any) -> tuple[float | None, str]:
     return _get("pm_rvol"), "estimated"
 
 
+def _as_float(value: Any) -> float | None:
+    """A number the vendor may not have sent, coerced or refused. Never raises.
+
+    The same shape scan._as_float has. usable_float below is handed raw quote
+    fields, and a string, a None or a malformed value must come back as "no
+    number" rather than as an exception inside a night job.
+    """
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _ratio(top: float | None, bottom: float | None) -> float | None:
     if top is None or not bottom:
         return None
@@ -377,6 +390,66 @@ def reread_report(results: list[dict[str, Any]]) -> None:
               f"{', '.join(result['clears_but_blocked'])}")
 
 
+MIN_SHARES_FLOAT = _CRIT.number("float_rotation", "min_shares_float")
+MIN_FLOAT_RATIO = _CRIT.number("float_rotation", "min_float_to_shares_outstanding")
+MAX_FLOAT_RATIO = _CRIT.number("float_rotation", "max_float_to_shares_outstanding")
+
+
+def usable_float(share_float: Any, outstanding: Any) -> tuple[float | None, str | None]:
+    """The denominator pm_float_rotation_true may divide by, and why not.
+
+    THE SAME FOUR REFUSALS scan.attach_float_rotation applies, and they have to
+    be the same or this module breaks its own promise. It exists to write what
+    was true BESIDE what the morning estimated so a reader can compare the two,
+    and until 2026-08-28 it divided by whatever sharesFloat the quote carried
+    with no check at all. A float the morning refused as a vendor artifact
+    would therefore come back with a rotation beside the morning's null, and
+    the comparison would read as the night measuring something the morning
+    could not, when both had the same bad denominator and only one noticed.
+
+    Rotation is volume over float, so an unchecked fabricated float of a few
+    thousand shares does not produce a slightly wrong number. It produces a
+    very large one, in the column a reader is being invited to trust over the
+    estimate.
+
+    Not imported from scan. Importing it would pull discover, universe,
+    vintage, baseline and the collector into a night job that needs none of
+    them, so the rule is spelled out here the way measure_baseline_floor
+    spells out baseline.compute's window, and
+    claim_the_night_refuses_the_floats_the_morning_refuses holds that the two
+    agree over every shape a quote can take.
+    """
+    value = _as_float(share_float)
+    cross = _as_float(outstanding)
+    if value is None or value <= 0:
+        return None, "the delayed quote carried no sharesFloat, so there is no denominator"
+    if cross is not None and cross < 0:
+        return None, (
+            f"sharesOutstanding is reported as {cross:,.0f}, a negative share count, "
+            "so the quote is corrupt rather than merely missing a cross check and "
+            "the sharesFloat in it is not divided by")
+    usable = cross is not None and cross > 0
+    if usable and value > cross * MAX_FLOAT_RATIO:
+        return None, (
+            f"sharesFloat {value:,.0f} exceeds sharesOutstanding {cross:,.0f}, "
+            "which is impossible, so the vendor figure is not divided by")
+    if usable and value < cross * MIN_FLOAT_RATIO:
+        return None, (
+            f"sharesFloat {value:,.0f} is {value / cross * 100:.3f} percent of "
+            f"sharesOutstanding {cross:,.0f}, below the {MIN_FLOAT_RATIO * 100:g} "
+            "percent floor, so it reads as a vendor artifact rather than a small "
+            "free float")
+    if not usable and value < MIN_SHARES_FLOAT:
+        no_cross_check = ("there is no sharesOutstanding to check it against"
+                          if cross is None else
+                          "sharesOutstanding is reported as zero, which is not a "
+                          "share count and cannot check it")
+        return None, (
+            f"sharesFloat {value:,.0f} is below the {MIN_SHARES_FLOAT:,.0f} share "
+            f"floor and {no_cross_check}")
+    return value, None
+
+
 def measure(day: str, dry_run: bool = False, probe: Any = None,
             ) -> dict[str, Any]:
     """Everything this pass writes for one session, computed before it writes."""
@@ -405,11 +478,15 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     # capture_observed is exactly the quantity that cannot be computed without
     # them. Reading them here makes the whole existing record measurable
     # instead of only sessions from today forward.
-    floats: dict[str, Any] = {}
+    floats: dict[str, tuple[Any, Any]] = {}
     from_packet: dict[str, dict[str, Any]] = {}
     for candidate in packet.get("candidates", []):
         quote = candidate.get("quote") or {}
-        floats[candidate["symbol"]] = quote.get("sharesFloat")
+        # sharesOutstanding travels with it now. Three of usable_float's four
+        # refusals are cross checks against it, so reading the float alone was
+        # not a shortcut, it was most of the rule missing.
+        floats[candidate["symbol"]] = (quote.get("sharesFloat"),
+                                       quote.get("sharesOutstanding"))
         from_packet[candidate["symbol"]] = {
             "pm_volume": candidate.get("pm_volume"),
             "pm_volume_estimated": candidate.get("pm_volume_consolidated"),
@@ -493,10 +570,16 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
                 "no prior session in the window carried an alpaca bar for this "
                 "symbol, so there is no baseline to divide by and pm_rvol_true "
                 "is null rather than computed against the morning's EODHD one")
-        share_float = floats.get(ticker)
+        share_float, outstanding = floats.get(ticker) or (None, None)
+        share_float, float_refused = usable_float(share_float, outstanding)
         if share_float:
-            record["pm_float_rotation_true"] = _ratio(true_volume,
-                                                      float(share_float))
+            record["pm_float_rotation_true"] = _ratio(true_volume, share_float)
+        elif float_refused and not record["truth_reason"]:
+            # First wins, the same convention the two clauses below follow.
+            # A refused float is a null rotation WITH a reason, never a null
+            # nobody can tell from a pass that has not run.
+            record["truth_reason"] = (
+                f"pm_float_rotation_true is null: {float_refused}")
         # capture_observed divides by the socket's OWN window, so it is
         # directly comparable to [Collector] premarket_capture_rate, which was
         # measured on common minutes. collector_window_share is the other

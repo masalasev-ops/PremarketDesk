@@ -7936,6 +7936,94 @@ def claim_the_two_unrebuildable_artifacts_are_held_twice(
           "and no pipeline module reads it")
 
 
+def claim_the_night_refuses_the_floats_the_morning_refuses(failures: list[str]) -> None:
+    """One float validity rule, two implementations, and they have to agree.
+
+    night/true_volume.py exists to write what was TRUE beside what the morning
+    ESTIMATED, so a reader can compare the two columns. Until 2026-08-28 it
+    divided by whatever sharesFloat the quote carried, with none of the four
+    refusals scan.attach_float_rotation applies. A float the morning refused as
+    a vendor artifact came back from the night with a rotation sitting beside
+    the morning's null, and the comparison then read as the night measuring
+    something the morning could not, when both had the same bad denominator and
+    only one of them noticed.
+
+    Rotation is volume over float, so an unchecked fabricated float of a few
+    thousand shares does not produce a slightly wrong number, it produces a
+    very large one, in the column a reader is invited to trust over the
+    estimate.
+
+    Unfired on the record: all 100 candidate floats on disk at the time were
+    valid. It is written anyway because the checks exist for a reason, YPF at
+    0.013 percent of its own outstanding having been found in a 1,785 name
+    sweep, and because a latent disagreement between two renderers of one
+    quantity is the same class of defect as the one the 2026-08-28 sweep
+    found between the narrative and the plain table.
+
+    Driven through scan's REAL function rather than through a copy of its
+    rule, so a change to either implementation alone fails this.
+    """
+    from morning import scan
+    from night import true_volume
+
+    # Every shape a quote can take at this denominator, one per refusal branch
+    # plus the two that pass. float, outstanding, and whether it may be used.
+    shapes = [
+        (5_000_000, 10_000_000, True, "an ordinary float under its outstanding"),
+        (600_000, None, True, "over the absolute floor with no cross check"),
+        (None, 10_000_000, False, "no sharesFloat at all"),
+        (0, 10_000_000, False, "a zero float"),
+        (-5, 10_000_000, False, "a negative float"),
+        (20_000_000, -25_000_000, False, "a negative sharesOutstanding"),
+        (2_000_000, 1_000_000, False, "a float above its outstanding"),
+        (50, 10_000_000, False, "a float implausibly small against outstanding"),
+        (1_000, None, False, "under the floor with no outstanding"),
+        (1_000, 0, False, "under the floor with a zero outstanding"),
+    ]
+
+    for share_float, outstanding, usable, why in shapes:
+        candidate = {
+            "symbol": "AAA.US",
+            "collector_covered": True,
+            "pm_volume": 10_000.0,
+            "pm_volume_consolidated": 100_000.0,
+            "pm_capture_share": 0.1,
+            "quote": {"sharesFloat": share_float,
+                      "sharesOutstanding": outstanding},
+        }
+        packet = scan.Packet()
+        scan.attach_float_rotation([candidate], packet)
+        morning_published = candidate["pm_float_rotation"] is not None
+        night_value, night_reason = true_volume.usable_float(share_float, outstanding)
+        night_published = night_value is not None
+
+        if morning_published != night_published:
+            failures.append(
+                f"on {why} the morning "
+                f"{'publishes' if morning_published else 'refuses'} a float "
+                f"rotation and the night "
+                f"{'publishes' if night_published else 'refuses'} one. "
+                "true_volume writes its column beside the morning's for a "
+                "reader to compare, and two different rules make that "
+                "comparison meaningless.")
+        if morning_published != usable:
+            failures.append(f"scan publishes a rotation for {why} and this "
+                            f"claim expects it to {'' if usable else 'not '}be "
+                            "usable, so the claim and the screen disagree")
+        # A refusal must carry its reason on BOTH sides. A null nobody can
+        # tell from a pass that never ran is the failure this project keeps
+        # finding, and the night writes into a table read months later.
+        if not night_published and not night_reason:
+            failures.append(f"the night refuses {why} and records no reason, "
+                            "so the null reads as a pass that never reached "
+                            "the row")
+        if not morning_published and not candidate.get("pm_float_rotation_reason"):
+            failures.append(f"the morning refuses {why} and records no reason")
+
+    print(f"  float rule   {len(shapes)} quote shapes, and the night refuses "
+          "exactly the floats the morning refuses, each with a reason")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -8842,6 +8930,7 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_documents_count_what_is_actually_here(failures)
+    claim_the_night_refuses_the_floats_the_morning_refuses(failures)
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)

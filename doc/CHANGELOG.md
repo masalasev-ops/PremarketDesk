@@ -15,6 +15,51 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: the night divided by floats the morning refuses
+
+night/true_volume.py exists to write what was TRUE beside what the morning
+ESTIMATED, so a reader can compare the two columns. It computed
+pm_float_rotation_true as `if share_float: true_volume / float(share_float)`,
+with none of the four refusals scan.attach_float_rotation applies to the same
+vendor field: no float, a negative sharesOutstanding, a float above its
+outstanding, a float implausibly small against it, and the absolute share
+floor where there is no usable cross check.
+
+So a float the morning refused as a vendor artifact came back from the night
+with a rotation sitting beside the morning's null. The comparison then reads
+as the night measuring something the morning could not, when both had the same
+bad denominator and only one of them noticed. Rotation is volume over float, so
+an unchecked fabricated float of a few thousand shares does not produce a
+slightly wrong number: it produces a very large one, in the column a reader is
+being invited to trust over the estimate.
+
+UNFIRED ON THE RECORD, and said plainly rather than dressed up. All 100
+candidate floats in the packets on disk are valid under both rules, so no
+published pm_float_rotation_true is wrong today. It is fixed because the checks
+exist for a reason, YPF at 0.013 percent of its own outstanding having been
+found in the 1,785 name sweep of 2026-08-16, and because a latent disagreement
+between two renderers of one quantity is the same class of defect the sweep
+earlier the same day found between the narrative and the plain table.
+
+true_volume gains usable_float, carrying the four refusals and a reason for
+each, plus the _as_float coercion the rule needs so a malformed quote field
+cannot raise inside a night job. A refused float now writes a null rotation
+WITH its reason into truth_reason on the module's existing first wins
+convention, rather than a null nobody can tell from a pass that never reached
+the row. sharesOutstanding is read from the packet alongside sharesFloat,
+which it was not before: three of the four refusals are cross checks against
+it, so reading the float alone was not a shortcut, it was most of the rule
+missing.
+
+Not imported from scan. Importing it would pull discover, universe, vintage,
+baseline and the collector into a night job that needs none of them, so the
+rule is spelled out the way measure_baseline_floor spells out
+baseline.compute's window. claim_the_night_refuses_the_floats_the_morning_refuses
+drives scan's REAL function over ten quote shapes, one per branch plus the two
+that pass, and holds that the two agree on every one and that each refusal
+carries a reason on both sides. Mutation tested: disabling any single refusal
+in the night fails it.
+
 ## 2026-08-28: the two report renderers disagreed about whose evidence was partial
 
 Found sweeping the modules the morning review had not read. Not a defect in
