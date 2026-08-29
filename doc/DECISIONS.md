@@ -18,6 +18,38 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-29: what the one vendor rule was actually protecting
+
+Adding Alpaca to two scheduled night steps broke a rule written on the
+architecture page as load bearing, and the honest options were to break it, to
+rewrite it, or to say it had never meant what it said.
+
+The rule read "EODHD is the only market data source in the pipeline", and it
+named its own exception: research carries Alpaca probes, "nothing in selection,
+collect, morning or night imports them and no number they produce reaches a
+packet or a picks row". Half of that is now false. night/true_volume.py and
+night/paper_ledger.py both import probe_alpaca, and numbers Alpaca produced sit
+in picks rows.
+
+**REWRITTEN, AND THE OLD WORDING QUOTED IN THE NEW ONE.** What the rule bought
+was that a reader never has to ask which feed a number in the report came from,
+and that is untouched: nothing in selection, collect or morning calls a second
+vendor, and nothing Alpaca measures can reach a report. The boundary moved from
+"the pipeline" to "a published number", which is narrower and is the line that
+was doing the work.
+
+**The enforcement is structural rather than a promise.** Alpaca's free plan
+serves the sip feed for a session that is OVER and refuses a running one with
+403, measured in ALPACA_PROBE.md section 1. There is no version of this that
+runs at 08:45 even if someone wanted it to, which is a stronger guarantee than
+the sentence it replaces ever had.
+
+**WHY NOT LEAVE THE RULE AND CALL THE NIGHT STEPS AN EXCEPTION.** Because that
+is how a rule stops being read. A load bearing rule with a growing exception
+list is a paragraph, and the next person to add a vendor would have had a
+precedent instead of a boundary. The column suffix argument is the same one:
+_true does not mean one source, so truth_source carries the vendor on every row.
+
 ## 2026-08-29: the report gets a record section, because last week's names are useless
 
 The owner's objection, and it was right: "what will I do with the previous

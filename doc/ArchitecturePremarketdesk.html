@@ -182,6 +182,8 @@ tbody tr:hover{background:var(--ground)}
 .life .col{background:var(--panel);border:1px solid var(--rule);border-top:3px solid var(--morn);padding:14px 15px}
 .life .col.n2{border-top-color:var(--night)}
 .life .col.n3{border-top-color:var(--night)}
+.life .col.n4{border-top-color:var(--night)}
+.life.four{grid-template-columns:1fr 22px 1fr 22px 1fr 22px 1fr}
 .life .col h5{margin:0 0 2px;font-size:14px;font-weight:600}
 .life .col .when{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:10px;display:block}
 .life .col ul{margin:0;padding:0;list-style:none;font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--ink-2)}
@@ -225,9 +227,33 @@ tbody tr:hover{background:var(--ground)}
   07:00 is exactly where a sibling project draining the shared key would hide.
   The schedule is the architecture.</p>
   <div class="meta">
-    <span>58 components</span><span>7 job scripts, 9 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
+    <span>66 components</span><span>7 job scripts, 9 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
   </div>
   <p class="sub" style="margin-top:18px;border-left:3px solid var(--accent);padding-left:14px">
+  <b>Read the standing state below as of 2026-08-20. Six things have moved since, on 2026-08-28 and
+  2026-08-29.</b>
+  <b>The record is no longer at zero.</b> picks holds 66 live rows across 7 sessions, 2026-08-20 to
+  2026-08-28, all 66 measured by the night's truth pass and 60 with outcomes filled. Section 08 has
+  all four of its columns now, and a ledger row beside them.
+  <b>Alpaca is in the pipeline.</b> It was research only when the rule in section 11 was written and
+  it is not any more: C59 and C60 are scheduled night steps and both read it. EODHD is still the only
+  vendor any number in a report comes from, which is the part of that rule that was load bearing.
+  <b>There is a paper ledger.</b> C60 applies one written rule from CRITERIA [Paper] to every pick and
+  books the result into paper_trades, keyed on rule version so v2 lands beside v1 and never over it.
+  Its first result is the useful one: 16 trades at a median -1.38 percent, and every one of the 16 was
+  in profit at some point while held, at a median best of +1.84. The trigger is not producing random
+  entries; the exit and the risk per trade are where the money goes.
+  <b>The morning reads the record back.</b> Until now nothing did. C16 puts C60's counts in the packet
+  and the report carries them in a section that is not about today's names.
+  <b>The quantifier guard is enforcing.</b> It read warn here because the three things CRITERIA.md
+  requires before it can be set enforcing were not all true on 2026-08-20. They were on 2026-08-28. A
+  flagged narrative is now regenerated once and then falls back to plain tables, rather than being
+  delivered with the flag logged.
+  <b>The collector volume question has an answer and it is not the feed.</b> The reference gap
+  measurement splits the shortfall in two and finds the sampling inside the socket's own minutes
+  accounts for +0.10 percent at the median against +0.98 for the 04:00 to 07:20 stretch it never
+  hears. Ten to one. Any fix belongs at [Collector] start_time.</p>
+  <p class="sub" style="margin-top:18px;border-left:3px solid var(--ink-3);padding-left:14px">
   <b>Standing state, 2026-08-20.</b> Everything below describes a machine that runs, and has run every
   weekday since 2026-08-13. Four facts qualify it and none are visible from the figures.
   <b>No email has ever been sent</b>: data/UNVERIFIED is still on disk and C19 refuses every morning.
@@ -258,7 +284,7 @@ tbody tr:hover{background:var(--ground)}
     <li><span class="n">05</span><a href="#s5">Inside the scan</a></li>
     <li><span class="n">06</span><a href="#s6">Inside the analyst pass</a></li>
     <li><span class="n">07</span><a href="#s7">The blind window and the night</a></li>
-    <li><span class="n">08</span><a href="#s8">One picks row, three passes</a></li>
+    <li><span class="n">08</span><a href="#s8">One picks row, four passes, one ledger row</a></li>
     <li><span class="n">09</span><a href="#s9">Data store read and write matrix</a></li>
     <li><span class="n">10</span><a href="#s10">Failure behaviour</a></li>
     <li><span class="n">11</span><a href="#s11">Load-bearing rules</a></li>
@@ -415,10 +441,21 @@ tbody tr:hover{background:var(--ground)}
       <div class="t"><b>22:15</b>ET</div>
       <div class="c night">
         <h5>Write down what was really true</h5>
-        <p>The vendor has now published the full 04:00 to 09:30 intraday bars. The backfill widens
-        this morning's rows with the true premarket levels, beside the live values and never over
-        them. The outcomes pass returns to older rows once one and five sessions have elapsed.</p>
-        <div class="ids">C06 fires C20 and C21 &rarr; writes C31</div>
+        <p>Ten steps in one order, and the order is the argument. C62 copies the two artifacts that
+        cannot be rebuilt, first, before anything else touches the tree. Then EODHD has published the
+        full 04:00 to 09:30 intraday bars, so C20 widens this morning's rows with the true premarket
+        levels, beside the live values and never over them, and C21 returns to older rows once one and
+        five sessions have elapsed. Those two are the whole of the 07:00 catch-up firing; everything
+        after them runs only in the evening. C59 then measures the same window against Alpaca's full
+        SIP tape, which is a second vendor and a complete one, and writes the measured reference
+        levels and the fill verdict. C60 books the paper rule, and it comes after C59 rather than
+        before because every level it books against is written by C59. C42 measures what the morning's
+        pool missed, C63 deletes the one file class its whitelist names, C61 renders the weekly page from what the
+        steps above have just written, and C53 rebuilds the archive last. Only C20 and C21 can stop
+        the chain. Every step after them is a record, nothing downstream reads it, and a bad
+        measurement must not cost the archive its rebuild.</p>
+        <div class="ids">C06 fires C50, C62, C20, C21, C59, C60, C42, C63, C61, C53 &rarr; writes C31,
+        C64, C65</div>
       </div>
     </div>
     <figcaption><b>One weekday.</b> The morning jobs gather live evidence while it exists. The night
@@ -454,7 +491,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
       <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:20</td><td>none</td><td>C15, C34</td></tr>
       <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
-      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15 and 07:00</td><td>none</td><td>C50, C20, C21, C42, C53, C34</td></tr>
+      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15 and 07:00. The 07:00 firing is the catch-up and runs C62, C20 and C21 only</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C63, C61, C53, C34</td></tr>
       <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
       <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, C34</td></tr>
       <tr><td class="id">C48</td><td class="nm">job_meter_sampler.bat</td><td><span class="lay sched">Scheduler</span></td><td>Every day 00:00, every 30m for 24h</td><td>none</td><td>C49, C34</td></tr>
@@ -465,7 +502,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C08</td><td class="nm">ettime.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>System clock</td><td>none</td></tr>
       <tr><td class="id">C09</td><td class="nm">criteria.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C23</td><td>none</td></tr>
       <tr><td class="id">C10</td><td class="nm">eodhd.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C35, C36</td><td>Call counter</td></tr>
-      <tr><td class="id">C11</td><td class="nm">store.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C30, C31</td><td>C30, C31</td></tr>
+      <tr><td class="id">C11</td><td class="nm">store.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C30, C31, C41, C64</td><td>C30, C31, C41, C64</td></tr>
       <tr><td class="id">C51</td><td class="nm">job_status.py</td><td><span class="lay found">Foundation</span></td><td>Wraps every scheduled step</td><td>C23, C56</td><td>C56</td></tr>
       <tr><td class="id">C52</td><td class="nm">artifacts.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C32</td><td>Resolves a path, writes nothing itself</td></tr>
       <tr><td class="id">C45</td><td class="nm">conftest.py</td><td><span class="lay found">Foundation</span></td><td>Imported by C44</td><td>C07 paths</td><td>A temporary sandbox</td></tr>
@@ -476,7 +513,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
       <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C27, C30, C35</td><td>C30</td></tr>
       <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>07:20-09:25</td><td>C27, C36</td><td>C28</td></tr>
-      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
+      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35, C64 (counts only, via C60)</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
       <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
       <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, when C17 returns</td><td>C32</td><td>C32</td></tr>
@@ -487,6 +524,11 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
       <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C26, C27, C35</td><td>C32</td></tr>
       <tr><td class="id">C53</td><td class="nm">build_archive.py</td><td><span class="lay night">Night</span></td><td>22:15, and as the morning chain's last step</td><td>C29, C32</td><td>C54</td></tr>
+      <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td><span class="lay night">Night</span></td><td>22:15, after C21</td><td>C31, C32, C66</td><td>C31</td></tr>
+      <tr><td class="id">C60</td><td class="nm">paper_ledger.py</td><td><span class="lay night">Night</span></td><td>22:15, after C59</td><td>C23, C31, C66</td><td>C64</td></tr>
+      <tr><td class="id">C61</td><td class="nm">weekly_page.py</td><td><span class="lay night">Night</span></td><td>22:15, after every step that writes</td><td>C29, C31, C32, C34, C56, C57, C64</td><td>C65</td></tr>
+      <tr><td class="id">C62</td><td class="nm">backup_evidence.py</td><td><span class="lay night">Night</span></td><td>22:15, first step after the calendar</td><td>C28, C29</td><td>[Backup] root, outside the tree</td></tr>
+      <tr><td class="id">C63</td><td class="nm">prune_data.py</td><td><span class="lay night">Night</span></td><td>22:15, after C42</td><td>data\universe-closes-&lt;date&gt;.json by filename date</td><td>Deletes only that one file class. It touches no store on this page</td></tr>
       <tr><td class="id">C43</td><td class="nm">backtest_pool.py</td><td><span class="lay night">Night</span></td><td>By hand</td><td>C26, C35, C41</td><td>data\backtest\ cache, a JSON report on request</td></tr>
 
       <tr><td class="id">C55</td><td class="nm">quantifier_flags.py</td><td><span class="lay night">Night</span></td><td>By hand, to judge what the guard flagged</td><td>C57</td><td>C57</td></tr>
@@ -502,15 +544,18 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C30</td><td class="nm">db: baseline table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C31</td><td class="nm">db: picks table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C41</td><td class="nm">db: gap_stats table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C64</td><td class="nm">db: paper_trades table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>Rewritten by C16 on a vintage violation, deleted by hand</td></tr>
       <tr><td class="id">C54</td><td class="nm">site/PremarketDesk.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C65</td><td class="nm">site/Weekly.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C56</td><td class="nm">data/job-status.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C57</td><td class="nm">data/quantifier-flags.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C58</td><td class="nm">data/exchange-details.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C34</td><td class="nm">logs/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
 
       <tr><td class="id">C35</td><td class="nm">EODHD REST</td><td><span class="lay ext">External</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C66</td><td class="nm">Alpaca market data REST</td><td><span class="lay ext">External</span></td><td>Night only. The free plan serves the sip feed for a session that is OVER and refuses a running one with 403, which is why C59 and C60 are night steps and could not be morning ones</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C36</td><td class="nm">EODHD trades socket</td><td><span class="lay ext">External</span></td><td>04:00-20:00</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C37</td><td class="nm">claude CLI</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C38</td><td class="nm">Resend</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
@@ -619,6 +664,28 @@ tbody tr:hover{background:var(--ground)}
     contribution that looks like a measured one. Two runs against the same inputs produce byte-identical
     scores.</figcaption>
   </figure>
+
+  <div class="note"><p><b>Step 2 gained a fill warning on 2026-08-29, and it is a warning and never an
+  approval.</b> A third of what the report publishes has a headline level no market stands behind, and
+  until then the reader found that out three weeks later in a database. Alpaca refuses a running
+  session, so the morning cannot run the real check; it computes its own band from the collector's
+  sample instead and prints it in Skips and traps. Measured over 66 rows, <code>thin</code> caught 6
+  of the 10 the night calls untradeable and flagged 6 of the 44 that were fine, and
+  <code>not flagged</code> got 4 untradeable levels past it, which is why its silence means nothing.
+  It cannot be calibrated better, and the reason is structural: the morning centres its band on
+  <code>pm_high</code> and the night on <code>entry_ref_true</code>, which differ by a median 1.19
+  percent and by up to 20.9, so on the names that matter most the two bands do not overlap. A floor
+  sweep from 5,000 to 100,000 dollars trades one error for the other at every step. So it keeps its
+  own vocabulary, <code>thin</code> and <code>not flagged</code>, never the night's
+  <code>plausible</code>, which a reader at 08:45 would take for a verdict that cannot exist until the
+  session is over, and it reads its band width from [Truth] rather than restating it so the two cannot
+  drift apart.</p></div>
+
+  <div class="note"><p><b>And the packet gained the ledger's counts.</b> The scan calls C60's
+  <code>record_so_far</code> and carries the result into C29. It is the first thing in the morning
+  path that reads the record back rather than only writing to it, it costs one local table read and no
+  vendor call, and what it produces is a report section that is not about today's names. See section
+  08.</p></div>
 </section>
 
 <!-- 6 -->
@@ -633,7 +700,7 @@ tbody tr:hover{background:var(--ground)}
     <div class="flow">
       <div class="box conf"><span class="cid">C24</span><span class="nm">prompt_analyst.md</span><span class="dt">The contract: what may not be invented.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box conf"><span class="cid">C25</span><span class="nm">REPORT_TEMPLATE.md</span><span class="dt">Nine fixed sections, in order, under a title, subtitle and disclaimer line.</span></div>
+      <div class="box conf"><span class="cid">C25</span><span class="nm">REPORT_TEMPLATE.md</span><span class="dt">Eleven fixed sections, in order, under a title, subtitle and disclaimer line.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box store"><span class="cid">C29</span><span class="nm">packet.json</span><span class="dt">Every number, already decided.</span></div>
       <div class="ar">&rarr;</div>
@@ -656,8 +723,11 @@ tbody tr:hover{background:var(--ground)}
     <p style="font-size:13.5px">A containment check compares every ticker in the report against the
     packet and fails the run on any name that is not there. The prompt requires the disclaimer line to
     name any candidate with a null relative volume or a partial premarket window. The claude CLI gets
-    two attempts, each capped at 537 seconds, three times the slowest measured opus medium
-    MORNING, 178.9 seconds on 2026-08-19. When both attempts time out, exit non-zero, or come
+    two attempts, each capped at 1007 seconds, three times the slowest measured opus medium
+    MORNING, 335.7 seconds on 2026-08-27. It was 537 against 178.9 seconds until 2026-08-29; the RULE
+    did not change and its evidence did, and [Monitor] <code>job_log_stale_after_s</code> moved 1200
+    to 2200 with it, because that number is derived from this one and a timeout the watchdog thinks is
+    a dead job gets relaunched mid-run. When both attempts time out, exit non-zero, or come
     back refused, <code>analyst.py</code> writes the packet out itself as plain tables stamped with
     the reason, so a report always goes out.</p>
 
@@ -681,7 +751,11 @@ tbody tr:hover{background:var(--ground)}
     across four mornings, or why output tokens went 7,697, 4,000, 8,954, 16,005, 20,188 against a
     template whose nine sections did not change. The growth slowed on the fourth point rather than
     doubling again, and the rule the number rests on has already moved under it: 537 is three times
-    2026-08-19's 178.9 seconds and 2.4 times 2026-08-20's 226.1, which is the next re-derivation due.</figcaption>
+    2026-08-19's 178.9 seconds and 2.4 times 2026-08-20's 226.1, which is the next re-derivation due.
+    <b>That re-derivation happened on 2026-08-29.</b> Four more scheduled mornings overtook 537 and the
+    multiple had decayed to 1.6; the slowest morning on record is now 335.7 seconds on 2026-08-27 and
+    the timeout is 1007 on the same rule. The numbers in this caption are the four mornings it was
+    written about and are left as they were.</figcaption>
   </figure>
 </section>
 
@@ -710,6 +784,45 @@ tbody tr:hover{background:var(--ground)}
     cleaned up, it is the measured cost of starting at 07:20 instead of 04:00, and after a month it
     tells you whether that trade was worth making.</figcaption>
   </figure>
+
+  <div class="note"><p><b>Since 2026-08-29 a second vendor measures the same window, and it is
+  named rather than hidden.</b> C59 fetches the identical 04:00 to 09:30 stretch from Alpaca's full
+  SIP tape and writes <code>pm_volume_true</code>, <code>pm_rvol_true</code> and
+  <code>pm_float_rotation_true</code> beside the morning's estimates. It runs at night because it has
+  to: the free plan serves the sip feed for a session that is OVER and refuses a running one with 403,
+  measured in doc/ALPACA_PROBE.md. <b>A column suffix is not a provenance.</b> C20's
+  <code>pm_high_true</code> comes from EODHD intraday and every column C59 writes comes from Alpaca,
+  so <code>truth_source</code> carries the vendor on every row. And both sides of every ratio come
+  from one tape: <code>pm_rvol_true</code> divides an Alpaca window into an Alpaca baseline over the
+  same window on the prior sessions, because dividing an Alpaca numerator into the EODHD baseline the
+  morning uses would repeat, one vendor down, the exact defect the pass exists to correct.</p></div>
+
+  <div class="note"><p><b>The same pass measures the reference levels, and that changed what the
+  record says.</b> <code>entry_ref</code> and <code>stop_ref</code> are the collector's raw live
+  <code>pm_high</code> and <code>pm_low</code>, which are the extremes of a socket SAMPLE. A sample
+  understates a maximum and overstates a minimum, so every excursion measured from them is biased in
+  a known direction. C59 writes <code>entry_ref_true</code> and <code>stop_ref_true</code> off the
+  whole tape, beside the sampled pair and never over it, and C21 fills
+  <code>mfe_pct_true</code> and <code>mae_pct_true</code> from them in a separate arithmetic pass
+  that makes no vendor call. Measured over 48 rows across 5 sessions, BOTH MEDIANS CHANGE SIGN:
+  favourable +0.81 becomes -2.13 percent and adverse -1.92 becomes +0.15. The count that reached the
+  entry reference falls from 29 of 48 to 20. The record had been reporting a median name as having
+  reached a level it never reached. <b>The premise that specified the work was inverted.</b> Split
+  into its two causes, the sampling inside the minutes the socket did hear is +0.10 percent at the
+  median and the 04:00 to 07:20 stretch it never hears is +0.98: ten to one the other way. The socket
+  reproduces the extremes of the minutes it hears almost exactly, and any fix belongs at [Collector]
+  <code>start_time</code> rather than at the feed. Not acted on.</p></div>
+
+  <div class="note"><p><b>A level is not a price you could have got.</b> So C59 also asks whether
+  anything traded near <code>entry_ref_true</code>: total premarket volume, the volume and notional
+  within [Truth] <code>fill_band_pct</code> = 0.5 percent of that level, and how many distinct
+  minutes carried a trade there. <code>fill_plausible</code> is a THREE STATE field and never a
+  boolean, <code>plausible</code> / <code>implausible</code> / <code>unknown</code>, because a row
+  with no evidence is not a row that failed and no row is called plausible on absent evidence. Over
+  66 live rows across 7 sessions: 44 plausible, 10 implausible across 4 sessions, 12 unknown. The
+  band volume is an UPPER BOUND and is called one everywhere: a one minute bar carries o, h, l, c and
+  v and no distribution, so a minute running from below up into the band counts whole. Correcting
+  that needs trade level data this plan does not buy.</p></div>
 
   <div class="note"><p><b>A true high below the live high is suspicious, not impossible.</b> The
   trades socket and the published bars can differ on odd lots, condition codes, and late corrections,
@@ -757,13 +870,14 @@ tbody tr:hover{background:var(--ground)}
 <!-- 8 -->
 <section id="s8">
   <h2><span class="n">08</span> &nbsp;Record</h2>
-  <h3>One picks row, three passes</h3>
+  <h3>One picks row, four passes, one ledger row</h3>
   <p>The clearest way to see the system is to follow a single database row. The scan creates it in the
-  morning, the backfill widens it the same night, and the outcomes pass returns one and five sessions
-  later to record what the market actually did.</p>
+  morning, the backfill and the truth pass widen it the same night, and the outcomes pass returns one
+  and five sessions later to record what the market actually did. Since 2026-08-29 a fifth pass writes
+  to a different table entirely, and it is below the figure.</p>
 
   <figure>
-    <div class="life">
+    <div class="life four">
       <div class="col">
         <h5>Scan creates it</h5>
         <span class="when">C16 at 08:45, same morning</span>
@@ -797,8 +911,27 @@ tbody tr:hover{background:var(--ground)}
           <li>backfilled_at</li>
         </ul>
       </div>
-      <div class="ar night">&rarr;<small>+1, +5</small></div>
+      <div class="ar night">&rarr;<small>same night</small></div>
       <div class="col n3">
+        <h5>Truth measures it</h5>
+        <span class="when">C59 at 22:15, from Alpaca full SIP</span>
+        <ul>
+          <li>pm_volume_true</li>
+          <li>pm_rvol_true</li>
+          <li>pm_float_rotation_true</li>
+          <li>capture_observed</li>
+          <li>estimate_error</li>
+          <li>entry_ref_true</li>
+          <li>stop_ref_true</li>
+          <li>fill_band_volume</li>
+          <li>fill_band_notional</li>
+          <li>fill_band_minutes</li>
+          <li>fill_plausible + reason</li>
+          <li>truth_source, truth_at</li>
+        </ul>
+      </div>
+      <div class="ar night">&rarr;<small>+1, +5</small></div>
+      <div class="col n4">
         <h5>Outcomes finish it</h5>
         <span class="when">C21, once 1 and 5 sessions have passed</span>
         <ul>
@@ -807,15 +940,58 @@ tbody tr:hover{background:var(--ground)}
           <li>day5_close</li>
           <li>pm_high_broke_next_day</li>
           <li>mfe_pct, mae_pct</li>
+          <li>mfe_pct_true, mae_pct_true</li>
           <li>outcomes_filled_at</li>
         </ul>
       </div>
     </div>
-    <figcaption><b>The third column is the point of the project.</b> The first column is what the
-    system claimed. The third is what happened. Until a few dozen sessions of the third column exist,
-    the thresholds driving the first are unvalidated seed values, and the report should be read as a
-    formatted list rather than as a judgement.</figcaption>
+    <figcaption><b>The last column is the point of the project.</b> The first column is what the
+    system claimed. The last is what happened. Until a few dozen sessions of it exist, the thresholds
+    driving the first are unvalidated seed values, and the report should be read as a formatted list
+    rather than as a judgement. <b>Every column in the fourth panel describes D+1, not the session the
+    report was about</b>, and that off-by-one was found on 2026-08-29 by writing the paper rule.
+    Nothing in those columns was repointed: doing so rewrites the meaning of every row already in the
+    table and destroys the comparison. C60 fetches its own bars for its own session instead, and the
+    mismatch is written into CRITERIA [Outcomes], into C60's docstring, and into the ledger's own
+    summary line.</figcaption>
   </figure>
+
+  <div class="note"><p><b>The fifth pass writes a ledger row, not a picks column.</b> C60 applies ONE
+  written rule from CRITERIA [Paper] to every live pick and books the result into C64, keyed on
+  <code>(date, ticker, rule_version)</code>. The rule was written into CRITERIA before any of the code
+  existed, which is the only order that makes it a rule rather than a description of what the code
+  happened to do: trigger at the first regular-session minute whose high reaches
+  <code>entry_ref_true</code>, entry at <code>max(entry_ref_true, that minute's open)</code>, stop at
+  <code>stop_ref_true</code>, a minute that both triggers and stops booked as STOPPED because one bar
+  carries no sequence, exit at the session close if the stop never came, no target deliberately
+  because a target is a free parameter 16 trades will fit any value of, and a NULL P&amp;L rather than
+  a zero when the trigger never fired. Any row whose <code>fill_plausible</code> is not
+  <code>plausible</code> is skipped WITH ITS REASON WRITTEN, never dropped.</p></div>
+
+  <div class="note"><p><b>Every rule version is booked side by side over the same trades.</b> [Paper]'s
+  sizing map is the version registry, so a new version lands beside what the old one produced and
+  never over it: a ledger that overwrote itself on every rule change could not answer whether the
+  change helped, which is most of what a ledger is for. v2 differs from v1 in exactly one thing, the
+  position size, from a fixed 10,000 dollar notional to a fixed dollar risk. Entry, stop, exit, tie
+  break and skip rule are v1's byte for byte, so the two book the same trades and any difference is
+  attributable to the sizing alone. Over the first 16 trades: v1 total -3,487.81 with a worst single
+  trade of -1,912.54, v2 total -2,713.74 with a worst of -748.90, on slightly less total risk. Every
+  per-trade PERCENT return is identical under both, which is the point. Sizing cannot change what a
+  trade did; it changes the portfolio's shape. [Paper] pre-registers the verdict at 200 trades across
+  60 sessions and 16 is not it.</p></div>
+
+  <div class="note"><p><b>And the morning reads the ledger back, which nothing did before.</b> C16
+  calls C60's <code>record_so_far</code> and puts the counts in the packet; the report renders them in
+  a section that is not about today's names. That section exists because last week's individual
+  winners and losers predict nothing about this morning. What carries something is the SHAPE of what
+  those trades did, so the ledger records <code>minutes_to_trigger</code> from the OPEN,
+  <code>minutes_to_peak</code> from the ENTRY, and <code>mfe_pct_held</code>, which is what the
+  POSITION was worth while it was open and is not <code>picks.mfe_pct_true</code>. Every count arrives
+  over BOTH denominators, rows and sessions, and REPORT_TEMPLATE.md forbids the model turning any of
+  them into an instruction or calling any of them a pattern, a signal, an edge or a tendency. Reading
+  it costs the 08:45 window nothing: it is one local table read, and C60 imports its Alpaca client
+  inside <code>book()</code> rather than at module scope so importing the ledger from the morning
+  pulls no HTTP client into that window.</p></div>
 </section>
 
 <!-- 9 -->
@@ -829,11 +1005,14 @@ tbody tr:hover{background:var(--ground)}
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two columns were added on
   2026-08-20 for stores the page had never carried: the published archive (C54), whose single writer
   is build_archive at the end of both the morning chain and the nightly, and the job trail (C56),
-  which every scheduled step appends one line to as it exits. Three stores are not columned
+  which every scheduled step appends one line to as it exits. Five stores are not columned
   here. The gap_stats table (C41) is written weekly by C40 and read at 07:15 by C13, so nothing in
   the morning path touches it. The quantifier flag log (C57) is written by the analyst's guard and
   judged by hand through C55. And the exchange calendar cache (C58) is read by C50 as the first step
-  of every weekday job and rewritten only by the nightly's refresh pass.</p>
+  of every weekday job and rewritten only by the nightly's refresh pass. Two more joined them on
+  2026-08-29: the paper ledger table (C64), whose single writer is C60 at 22:15 and whose readers are
+  C61 and, for the record block only, C16; and the weekly page (C65), written by C61 and read by
+  nobody, which is what a reporting layer should be.</p>
 
   <div class="tw">
   <table class="mx">
@@ -854,6 +1033,11 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C19</td><td class="nm">deliver.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="r">R</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C60</td><td class="nm">paper_ledger.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C61</td><td class="nm">weekly_page.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C62</td><td class="nm">backup_evidence.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C63</td><td class="nm">prune_data.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C53</td><td class="nm">build_archive.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="w">W</td><td class="w">W</td><td class="w">W</td></tr>
       <tr><td class="id">C50</td><td class="nm">market_today.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
@@ -899,11 +1083,16 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
       <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. On 2026-08-14 the chain exited zero at every step and published a report describing the previous session, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>
-      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 537 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
+      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 1007 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
       <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46-08:49</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
       <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
       <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date, and the volume verification for it.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals. The volume check self-heals on a different query, because it has to: it asks which COLLECTED sessions were never measured rather than which picks rows lack a column, so it still runs when the table is empty. Until 2026-08-20 it sat behind the picks early return and did not.</td><td>Already sent</td></tr>
       <tr><td class="nm">C21 fill_outcomes<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Outcome columns.</td><td>Same. It scans for unfilled rows past the one and five session marks, so it catches up on its own.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C59 true_volume<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>The measured volume, the measured reference levels and the fill verdict for that date.</td><td>Nothing today is affected and nothing in the morning path reads any of it. It fills by query rather than by date, so a missed night is picked up by the next run. A row it cannot measure is left null WITH <code>truth_reason</code> written, and <code>fill_plausible</code> is separately marked <code>unknown</code> rather than left null, because a null verdict would be a fourth state the column does not have and would read downstream as a row nobody asked about rather than a row nobody could answer.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C60 paper_ledger<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, after C59</span></td><td>That night's ledger rows, for every rule version.</td><td>Nothing is affected. It is keyed on <code>(date, ticker, rule_version)</code> and re-books what is missing, so a missed night self-heals and a rerun is the same as a run. If C59 failed first, every row that night is SKIPPED with its reason rather than booked against the sampled levels, which is the whole design: a ledger built on a level that was never available books a P&amp;L that is wrong from its first row. The morning's record block then reads a table one night short and says so, because every count it prints carries its own denominator.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C61 weekly_page<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, last of the reading steps</span></td><td>site/Weekly.html for that week.</td><td>Nothing reads it. It renders from what is already on disk, takes no vendor call and adds no measurement of its own, so a failed run costs a page that the next run rebuilds whole. It runs last so every source it reads is current.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C62 backup_evidence<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, first</span></td><td>That night's copy of the two artifacts that cannot be rebuilt.</td><td>Never fails the chain, and nothing in the pipeline reads what it writes: a backup anything depends on is a second input. A dated backup is never overwritten, and if the working copy no longer matches one already taken that is reported as a DISAGREEMENT rather than resolved in either direction, because a stale backup and a corrupted working copy look identical from here.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C63 prune_data<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Nothing. Unfreed disk.</td><td>Never fails the chain. What it may delete is a WHITELIST naming exactly one file class, <code>universe-closes-*.json</code>, not a rule about age: a sweeper that deletes whatever looks stale is one careless pattern away from taking the only copy of something, and data\ holds several only copies. C28, the collector's own socket capture, is a recording of a tape that no longer exists and is never a candidate at any age. The age comes from the FILENAME rather than the mtime, so a file a backup happened to touch is not spared and one it did not is not taken. A file matching the glob whose name carries no readable date is kept and reported.</td><td>Already sent</td></tr>
     </tbody>
   </table>
   </div>
@@ -920,19 +1109,24 @@ tbody tr:hover{background:var(--ground)}
 <section id="s11">
   <h2><span class="n">11</span> &nbsp;Rules</h2>
   <h3>Load-bearing rules</h3>
-  <p>Six decisions that shape everything above. Changing any of them changes the architecture rather
+  <p>Seven decisions that shape everything above. Changing any of them changes the architecture rather
   than the configuration.</p>
 
   <div class="rules">
     <div class="rule-c" style="border-left-color:var(--ext)">
       <span class="tag">One vendor</span>
-      <h5>EODHD is the only market data source in the pipeline</h5>
-      <p>REST for quotes, history, news, and calendars. The trades websocket for live premarket. No
-      second vendor in anything that reaches a report, so there is never a question of which feed a
-      number came from. The exception is named rather than hidden: research carries Alpaca probes,
-      written up in doc/ALPACA_PROBE.md, whose whole job is to price an alternative feed against this
-      one. Nothing in selection, collect, morning or night imports them and no number they produce
-      reaches a packet or a picks row.</p>
+      <h5>EODHD is the only vendor a published number comes from</h5>
+      <p>REST for quotes, history, news, and calendars. The trades websocket for live premarket.
+      Nothing in selection, collect or morning calls a second vendor, so there is never a question of
+      which feed a number in the report came from.</p>
+      <p><b>This rule was narrower until 2026-08-29 and the change is worth stating plainly.</b> It
+      used to read "the only market data source in the pipeline", with Alpaca named as a research
+      exception nothing in night imported. That is no longer true: C59 and C60 are scheduled night
+      steps and both read Alpaca. What the rule protects is unchanged, because the boundary is the
+      one that matters. Alpaca measures the RECORD, after the fact, into columns that carry
+      <code>truth_source</code> and sit beside the morning's values rather than over them. It cannot
+      reach a report, and it could not if someone wanted it to: the free plan refuses a running
+      session with 403, so there is no version of this that runs at 08:45.</p>
     </div>
     <div class="rule-c" style="border-left-color:var(--conf)">
       <span class="tag">One place</span>
@@ -959,6 +1153,16 @@ tbody tr:hover{background:var(--ground)}
       <p>The night writes true premarket columns next to the morning's live values and never over
       them. The distance between them is a measurement the project needs, not an error to clean up.</p>
     </div>
+    <div class="rule-c" style="border-left-color:var(--night)">
+      <span class="tag">One rule</span>
+      <h5>The paper rule is written in CRITERIA before it is written in code</h5>
+      <p>Entry, stop, exit, size and every refusal live in CRITERIA [Paper], and C60 applies them. ONE
+      rule, not a family: no target, because a target is a free parameter that sixteen trades will fit
+      any value of, and a rule with something to tune is a rule that cannot be wrong. Versions are
+      booked side by side over the same trades, each differing from the last in exactly one thing, so
+      a change that helps can be told from a change that happened. And the verdict is pre-registered
+      at 200 trades across 60 sessions, in the same file, before the count gets there.</p>
+    </div>
     <div class="rule-c" style="border-left-color:var(--sched)">
       <span class="tag">Human gate</span>
       <h5>No email until a real morning is verified</h5>
@@ -983,25 +1187,32 @@ tbody tr:hover{background:var(--ground)}
     <b>selection</b> (universe, discover, gap_stats),
     <b>collect</b> (collect_premarket, baseline),
     <b>morning</b> (scan, vintage, analyst, render_report, verify_morning, deliver),
-    <b>night</b> (backfill_premarket, fill_outcomes, pool_recall, build_archive),
+    <b>night</b> (backup_evidence, backfill_premarket, fill_outcomes, true_volume, paper_ledger,
+    pool_recall, prune_data, weekly_page, build_archive, in the order the nightly runs them),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
     vwap_gappers, three probe_ scripts and two measure_ scripts, instruments, not pipeline),
     <b>tests</b> (conftest, run_tests and thirteen test_ modules). One file sits at the root beside the
-    packages, probe_alpaca.py, the shared Alpaca client the probes use; nothing in the pipeline
-    imports it.
-    <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55)</span></dd>
+    packages, probe_alpaca.py, the shared Alpaca client. It was research only until 2026-08-29 and is
+    now imported by two night steps as well, both of them after the close and neither of them able to
+    reach a report; night/paper_ledger.py imports it inside <code>book()</code> rather than at module
+    scope, so the 08:45 scan can read the ledger's counts without pulling an HTTP client into that
+    window.
+    <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55, C59-C63)</span></dd>
 
     <dt>doc\</dt>
-    <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md (nine fixed sections), BUILD_PLAN.md,
+    <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md (eleven fixed sections: nine until
+    notable movers landed on 2026-08-20 and the record block on 2026-08-29), BUILD_PLAN.md,
     CHANGELOG.md, DECISIONS.md, ALPACA_PROBE.md, sample_report.html, this page, the day run arc page
     beside it, and <b>research\</b> holding the written up studies: COLLECTOR_VOLUME.md,
-    VWAP_GAPPERS.md and TEMPLATE_DERIVATIONS.md, beside the two tracked float rotation study payloads
-    DECISIONS.md cites
+    VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and SCORE_INVERSION.md, which pre-registers what would
+    have to be true for the conviction score to be ordering outcomes and what counts as no
+    relationship, written while the record was too small to judge on purpose, beside the tracked
+    float rotation study payloads DECISIONS.md cites
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
     <dt>tasks\</dt>
-    <dd>the seven job batch files, register_tasks.ps1, and scheduling notes. One more .bat file
-    sits here and is deliberately absent from register_tasks.ps1's schedule: job_probe_socket_cap,
+    <dd>the seven scheduled job batch files, register_tasks.ps1, and scheduling notes. Two more .bat
+    files sit here and are deliberately absent from register_tasks.ps1's schedule: job_probe_socket_cap,
     the instrument for the open collector volume question. It is a one off, armed a morning at a
     time with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> and armed today for 2026-08-21
     06:30. A plain run of the script never registers it, so refreshing the schedule cannot
@@ -1014,7 +1225,7 @@ tbody tr:hover{background:var(--ground)}
     <dt>data\</dt>
     <dd>universe.json, watchlist.json, universe-closes-&lt;date&gt;.json,
     premarket\&lt;date&gt;.jsonl beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json,
-    premarketdesk.db (baseline, picks, gap_stats), job-status.jsonl, exchange-details.json,
+    premarketdesk.db (baseline, picks, gap_stats, paper_trades), job-status.jsonl, exchange-details.json,
     monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard fires live,
     UNVERIFIED, backtest\
     <span style="color:var(--ink-3)">(C26-C28, C30, C31, C33, C41, C56-C58)</span></dd>
@@ -1029,8 +1240,13 @@ tbody tr:hover{background:var(--ground)}
     <dt>site\</dt>
     <dd>PremarketDesk.html, the single file report archive: the newest sessions inlined whole, older
     ones linking out to their own runs\&lt;date&gt;\report.html. Rebuilt whole after every morning
-    chain and every nightly run, so running the build twice is the same as running it once
-    <span style="color:var(--ink-3)">(C54)</span></dd>
+    chain and every nightly run, so running the build twice is the same as running it once. Beside it
+    Weekly.html, written by C61 from what is already on disk and read by nobody: it says whether the
+    week ran, whether it is trustworthy, what it published and what it cost, and since 2026-08-29 it
+    carries the score watch, which groups filled outcomes by conviction bucket and by each score
+    component separately, prints both denominators everywhere, and refuses to print any group below
+    the stated minimum
+    <span style="color:var(--ink-3)">(C54, C65)</span></dd>
 
     <dt>logs\</dt>
     <dd>one dated log per job per day, plus meter-&lt;date&gt;.log and meter-sampler.log from the

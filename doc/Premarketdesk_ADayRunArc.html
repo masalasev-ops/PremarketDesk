@@ -193,10 +193,11 @@
 <div class="callout">
   <h3>Where this actually stands, 2026-08-20</h3>
   <div class="callout">
-    <h3>Read the block below as of 2026-08-20. Four things have moved since.</h3>
+    <h3>Read the block below as of 2026-08-20. Five things have moved since.</h3>
     <p><strong>The picks table is no longer one morning.</strong> It holds 66
-    live rows across 7 sessions, 54 of them with measured true volume, 48 with
-    filled outcomes and 16 with a booked paper trade.</p>
+    live rows across 7 sessions, 2026-08-20 to 2026-08-28, all 66 measured by
+    the night's truth pass, 60 with filled outcomes and 16 with a booked paper
+    trade under each of two rule versions.</p>
     <p><strong>The collector volume question has an answer, and it is not the
     feed.</strong> The 2026-08-29 reference gap measurement splits the shortfall
     into its two causes and finds the sampling inside the socket's own minutes
@@ -209,6 +210,10 @@
     <p><strong>The analyst timeout moved 537 to 1007 on 2026-08-29,</strong> and
     [Monitor] job_log_stale_after_s moved 1200 to 2200 with it, because it is
     derived from it.</p>
+    <p><strong>The morning report now reads the ledger back.</strong> Until
+    2026-08-29 nothing did: every measurement built that day was apparatus, and
+    none of it changed what a reader does at 08:50 with the names in front of
+    them. The last section of this page is the answer to that.</p>
   </div>
   <p>Everything below describes a machine that runs. It has run every weekday
   since 2026-08-13 and produced a report on all six of them. Four things qualify
@@ -583,6 +588,9 @@
       <li>Task Scheduler fires <span class="mono">PremarketDesk\nightly</span> at 22:15 on weekdays.</li>
       <li>That runs <span class="mono">tasks\job_nightly.bat</span>, which refreshes
         the exchange calendar so the 08:45 window never has to, then runs
+        <span class="mono">night.backup_evidence</span> first of all, because it
+        copies the day's premarket capture and packet outside the working tree
+        and those are the only two artifacts here that cannot be rebuilt, then
         <span class="mono">python -m night.backfill_premarket</span>, then
         <span class="mono">night.fill_outcomes</span>, then
         <span class="mono">night.true_volume</span>, then
@@ -979,6 +987,92 @@ losers never up more than 0.5%           2 of 11</p>
 </section>
 
 <section>
+  <p class="eyebrow">Added 2026-08-29, and the only thing here a reader uses tomorrow</p>
+  <h2>What last week's names are worth, and what the record is worth instead</h2>
+  <div class="prose">
+    <p>Everything above this line is apparatus. It measures the reference
+    levels, it measures whether they were fillable, it books a rule against
+    them, and it watches the score. None of it changes what somebody does at
+    08:50 with ten tickers in front of them, and the objection that produced
+    this section put it exactly right: the previous week's winners and losers
+    are of no use.</p>
+    <p><strong>They never will be, and that is not a defect to fix.</strong>
+    PLAB losing 19 percent last Wednesday says nothing about this morning.
+    Nothing in this design will ever make an individual past outcome
+    predictive, and a report that implied otherwise would be worse than one
+    that stayed quiet.</p>
+    <p><strong>What carries something is the SHAPE of what those trades did,
+    which is a different quantity, and it was being thrown away.</strong> The
+    ledger booked an entry price, an exit price and a P&amp;L, and recorded
+    nothing about WHEN any of it happened. So paper_trades gained three
+    columns and paper_ledger gained a reader.</p>
+  </div>
+
+  <div class="callout">
+    <h3>The two timings answer different questions, which is why there are two</h3>
+    <p><span class="mono">minutes_to_trigger</span> runs from the OPEN and
+    answers whether a name is still worth watching at 10:00.
+    <span class="mono">minutes_to_peak</span> runs from the ENTRY and answers
+    whether the one you are in is done. Measured from the open the second would
+    fold the wait into the hold, and a name that triggered at 09:31 would be
+    indistinguishable from one that triggered at 14:20, which is precisely the
+    distinction the numbers below rest on.</p>
+    <p><span class="mono">mfe_pct_held</span> is what the POSITION was worth
+    while it was open. It is not <span class="mono">picks.mfe_pct_true</span>,
+    which is a bound over the whole of the FOLLOWING session measured from a
+    reference level rather than from a fill. Two different quantities that would
+    read as the same thing if they shared a name.</p>
+  </div>
+
+  <h3>What the timings said, over v1's 16 trades across 6 sessions</h3>
+  <div class="table-wrap">
+  <table class="files">
+    <tr><td>triggered within 30 minutes of the open</td><td>14 of 16, at a median of 1 minute</td></tr>
+    <tr><td>triggered later than that</td><td>2, at 291 and 337 minutes, making +0.60 and +0.36 percent</td></tr>
+    <tr><td>never triggered at all</td><td>28 picks, median -1.97 percent open to close, and 7 of the 28 finished above their open</td></tr>
+    <tr><td>peaked within 10 minutes of entry</td><td>10 trades, of which <strong>10 closed BELOW entry</strong></td></tr>
+    <tr><td>peaked more than 100 minutes after entry</td><td>4 trades, of which <strong>4 closed ABOVE it</strong></td></tr>
+    <tr><td>median best while a position was open</td><td>+1.84 percent, against a median -1.38 booked at the exit</td></tr>
+  </table>
+  </div>
+
+  <div class="prose">
+    <p>The last two rows are the ones that were not expected. A name that makes
+    its high in the first ten minutes and fades did not recover once in ten
+    tries; the four that worked were still making highs an hour or more in.</p>
+    <p><strong>Ten and four are not sample sizes, and the template enforces
+    that they are not written as though they were.</strong> Written as "cut the
+    ones that stall and let the winners run" this becomes a strategy fitted to
+    eight sessions and stated with the authority of a generated report, which is
+    worse than saying nothing at all. So the report section quotes every count
+    with its denominator, names the rule version that produced it, says the
+    ledger is as of LAST NIGHT because tonight's pass has not run and today's
+    picks are in no figure, and is FORBIDDEN from turning any count into an
+    instruction. Three specimens of the phrasing it must not use are written
+    into REPORT_TEMPLATE.md, and so is a ban on the words pattern, signal, edge
+    and tendency: counts over a record this small support none of them.</p>
+    <p><strong>The morning reads it without loading a vendor client.</strong>
+    record_so_far is one read of a local table, so paper_ledger imports
+    probe_alpaca and true_volume inside <span class="mono">book()</span> rather
+    than at module scope. Before that change the 08:45 scan could not have
+    imported the ledger at all without pulling a research HTTP client into the
+    window for the first time. The claim holding it in place reads the module's
+    own header text: popping sys.modules and reloading was tried first and does
+    not work, because the import machinery hands back a cached module and the
+    mutation passes.</p>
+  </div>
+
+  <div class="table-wrap">
+  <table class="files">
+    <tr><td>minutes_to_trigger</td><td>bars from the session open to the first minute whose high reached entry_ref_true. NULL, never zero, on a trade that never fired: zero would say it triggered instantly, which is a trade that happened</td></tr>
+    <tr><td>minutes_to_peak</td><td>bars from the ENTRY to the highest high while the position was open</td></tr>
+    <tr><td>mfe_pct_held</td><td>the best price reached while held, as a percent of the fill</td></tr>
+    <tr><td>record_so_far()</td><td>every count over BOTH denominators, rows and sessions, because twelve names from one morning share a tape and are one observation. A pick skipped on evidence is counted separately from one that never triggered: the first is a fact about the level, the second about the session</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
   <p class="eyebrow">Degradation, job by job</p>
   <h2>When something fails</h2>
   <div class="prose">
@@ -1131,7 +1225,7 @@ losers never up more than 0.5%           2 of 11</p>
   <div class="table-wrap">
   <table class="files">
     <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the probe_ scripts and the measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the thirteen test_ modules, the newest being test_notable, one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
-    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the ten fixed report sections, nine until Layer 4 added notable movers on 2026-08-20), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written 2026-08-29 at 66 picks with every judging point in it far beyond that count</td></tr>
+    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the eleven fixed report sections, nine until Layer 4 added notable movers on 2026-08-20 and ten until the record block landed on 2026-08-29), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written 2026-08-29 at 66 picks with every judging point in it far beyond that count</td></tr>
     <tr><td>tasks\</td><td>nine job .bat files, seven of which register_tasks.ps1 registers as nine scheduled tasks, plus job_probe_socket_cap.bat and job_probe_capture.bat, each armed one morning at a time. job_probe_capture is registered for 2026-08-24, so ten tasks stand today (job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, and job_meter_sampler.bat every thirty minutes of every day, weekends included), register_tasks.ps1, README with scheduling notes. Two more .bat files sit here and are not among the nine, both one offs armed a morning at a time. job_probe_socket_cap is the instrument for the open collector volume question, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30; its 2026-08-21 task ran and was removed. job_probe_capture is the Alpaca live capture test, armed with <code>register_tasks.ps1 -Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number, and it is armed for 2026-08-24 08:45. A plain run of the script never registers it, so a schedule refresh cannot resurrect a probe that has been answered and deleted, and <code>-Unregister</code> removes it if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on 2026-08-20 once both questions were answered and recorded in DECISIONS.md</td></tr>
     <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks, gap_stats, gap_sweeps and paper_trades tables, the last holding one row per live pick PER RULE VERSION, two of them since 2026-08-29: the trade the CRITERIA [Paper] rule took, or the reason it declined), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>

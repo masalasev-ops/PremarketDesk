@@ -15,6 +15,44 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the architecture page catches up, and two of its statements were wrong
+
+**What changed.** doc/ArchitecturePremarketdesk.html had not been touched since
+2026-08-20 and described a night pipeline of four steps against the ten that
+actually run. Eight components were added (C59 true_volume, C60 paper_ledger,
+C61 weekly_page, C62 backup_evidence, C63 prune_data, C64 the paper_trades
+table, C65 site/Weekly.html, C66 the Alpaca REST feed), the picks row figure
+went from three passes to four with the ledger row beside it, the store matrix
+gained five rows, the failure table gained five, and sections 05, 06, 07, 11
+and 12 were reconciled to the tree. The arc page gained the record section and
+backup_evidence, which its nightly step list had never named.
+
+**Two statements were not merely stale, they were false, and both are the kind
+this project calls the worst kind.** The load bearing rule "EODHD is the only
+market data source in the pipeline" carried its own exception clause: "nothing
+in selection, collect, morning or night imports them". Since 2026-08-29 two
+scheduled night steps import Alpaca. The rule is rewritten to what it actually
+protects, which is that no vendor but EODHD reaches a published number, and the
+change is stated in the rule rather than quietly absorbed. Separately, the
+store matrix marked C63 as a WRITER of the collector capture. prune_data has
+never touched that file and its own docstring says it is never a candidate at
+any age. A reader checking whether the only irreplaceable artifact in the tree
+is safe would have got the wrong answer from the page.
+
+**Also corrected:** the analyst timeout read 537 in two places against 1007;
+the report template was called nine sections in two places and eleven is right;
+the tasks directory was called seven .bat files against nine, two of which are
+unscheduled probes; the standing state block still said the picks table held one
+morning and the long goal was at zero, against 66 rows over 7 sessions with 60
+outcomes filled; and the quantifier guard was still called warn against
+enforcing since 2026-08-28.
+
+**Nothing was overwritten.** The 2026-08-20 standing state stays where it is
+with a dated correction block above it, and the analyst timeout figcaption keeps
+the four mornings it was written about. That is the same rule the night columns
+follow: a correction sits beside the original, because the reasoning that turned
+out to be wrong is the part worth keeping.
+
 ## 2026-08-29: the morning report starts carrying what the record has observed
 
 **What changed.** paper_trades gains minutes_to_trigger, minutes_to_peak and

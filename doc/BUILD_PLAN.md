@@ -410,7 +410,10 @@ byte identical output (fc: no differences).
 
 CP10 analyst: doc/REPORT_TEMPLATE.md (nine fixed sections)
 [corrected 2026-08-20: was "eleven fixed sections"; the file has held nine
-since it was written, and the architecture page has said nine throughout],
+since it was written, and the architecture page has said nine throughout]
+[since 2026-08-29 the file holds eleven: notable movers landed 2026-08-20 and
+the record block, which quotes paper_ledger.record_so_far, on 2026-08-29. The
+count in this line is left at what CP10 verified],
 doc/prompt_analyst.md (the numbered rules), src/morning/analyst.py. Pipes prompt plus
 template plus packet to the CLI on stdin, parses the JSON envelope, writes
 report.md and analyst_usage.json, logs tokens and cost, then runs the
