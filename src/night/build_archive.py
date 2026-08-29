@@ -26,7 +26,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import markdown
 
 from core import config
 from core import criteria
@@ -335,7 +334,11 @@ def build(embed_sessions: int) -> Path:
             f'    <button class="rail-day" data-date="{date}">'
             f'<span class="d">{date}</span>{_counts_html(entry["counts"])}</button>'
         )
-        body = markdown.markdown(entry["markdown"], extensions=render_report._EXTENSIONS)
+        # render_report.to_html, not markdown.markdown with a borrowed
+        # extension list. This page concatenates twelve mornings, so a raw tag
+        # in one headline reaches the other eleven; see the note on
+        # _TAG_OPENER_RE.
+        body = render_report.to_html(entry["markdown"])
         banner = _fixture_banner(date, entry["counts"])
         day_parts.append(f'<section class="day" id="day-{date}" hidden>\n'
                          f'{banner}{body}\n</section>')

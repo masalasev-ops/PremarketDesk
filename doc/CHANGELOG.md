@@ -15,6 +15,50 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-28: a vendor headline could write markup into the archive
+
+Python-Markdown passes raw HTML through by design and dropped safe_mode in
+3.0, so every character of report.md reached the page as markup. The report is
+not all first party text: vendor news headlines are quoted into it verbatim,
+from a feed nobody here controls, and they land in Premarket gappers and in
+Skips and traps.
+
+The consequence that matters is the archive rather than the single report.
+build_archive wraps each morning in `<section class="day" id="day-DATE"
+hidden>` and switches days with a script, so a headline carrying a section
+close ends that day early and takes the other eleven mornings on the page with
+it. A headline carrying a script tag runs when the file is opened, and the
+archive is a double click file rather than a served page, so there is no origin
+to constrain it.
+
+Neither is likely from a real newswire. Both are the ordinary consequence of
+putting third party text into a document with passthrough on, which is the
+same reasoning that made the collector scrub its token out of exception text
+before printing it into a log that sits on disk for months.
+
+render_report gains to_html, THE one place markdown is rendered, which
+neutralises a `<` that begins something tag shaped before handing the text to
+markdown. Only the tag shaped one: "guidance < consensus" is left for markdown
+to escape as it already did, and `>` is not matched at all so blockquotes are
+untouched. The title is html.escape'd separately, because it goes into an
+element that does not parse markup and a bare `<` there ends the element and
+turns the rest of the line into body.
+
+build_archive was calling markdown.markdown itself with render_report's
+extension list. The two therefore agreed on extensions and would not have
+agreed on this, and the archive is the last file that should have had its own
+renderer. It now calls to_html, and a claim refuses a second markdown.markdown
+in that module.
+
+Nothing legitimate is taken away, checked rather than assumed: no archived
+report contains a raw tag, an autolink or a fenced block, and neither
+REPORT_TEMPLATE.md nor prompt_analyst.md asks for HTML. All twelve report
+bodies render byte identical under the old and the new path.
+
+One wart, recorded rather than hidden: inside an inline code span, `<b>` now
+renders as &lt;b> because markdown escapes the ampersand this produces. No
+report uses a code span at all, and the alternative is passthrough.
+
 ## 2026-08-28: a 10-Q would have cost the whole morning
 
 The containment tokenizer's third false ticker of the same family, found by

@@ -9,6 +9,8 @@ email client cannot render is a fancy thing that turns into noise there.
 from __future__ import annotations
 
 import argparse
+import html
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +21,50 @@ from core import ettime
 from ops import job_status
 
 _EXTENSIONS = ["tables", "fenced_code", "sane_lists"]
+
+# A `<` that begins something tag SHAPED. Python-Markdown passes raw HTML
+# through by design and dropped safe_mode in 3.0, so every character of the
+# report reaches the page as markup unless something stops it.
+#
+# The report is not all first party text. Vendor news headlines are quoted into
+# it verbatim, from a feed nobody here controls, and they land in the Premarket
+# gappers section and in Skips and traps. A headline carrying "</section>"
+# closes the archive's day early and takes the rest of the page with it,
+# because build_archive wraps each morning in
+# `<section class="day" id="day-DATE" hidden>` and its day switching script
+# then addresses a section that no longer contains what it should. A headline
+# carrying `<script>` runs when the file is opened.
+#
+# Neither is likely from a real newswire. Both are ordinary consequences of
+# putting third party text into a document with passthrough on, which is the
+# same reasoning that made the collector scrub its token out of exception text
+# before printing.
+#
+# Only the tag SHAPED `<` is neutralised, so "guidance < consensus" is left for
+# markdown to escape as it already does, and blockquotes are untouched because
+# `>` is not matched at all. No archived report contains a raw tag, an autolink
+# or a fenced block, and neither REPORT_TEMPLATE.md nor prompt_analyst.md asks
+# for HTML, so nothing legitimate is being taken away.
+#
+# The one wart: inside an inline code span, `<b>` now renders as &lt;b>,
+# because markdown escapes the ampersand this produces. No report uses a code
+# span at all, and the alternative is passthrough.
+_TAG_OPENER_RE = re.compile(r"<(?=[a-zA-Z/!?])")
+
+
+def to_html(text: str) -> str:
+    """Report markdown to a body fragment, with raw HTML neutralised.
+
+    THE one place markdown is rendered. build_archive embeds twelve mornings
+    into a single page and used to call markdown.markdown itself with this
+    module's extension list, so the two agreed on extensions and would not have
+    agreed on this. A renderer that escapes and an archive that does not is the
+    archive being the unescaped one, which is also the file that concatenates
+    twelve reports into one document where a single unclosed tag reaches
+    eleven other mornings.
+    """
+    return markdown.markdown(_TAG_OPENER_RE.sub("&lt;", text),
+                             extensions=_EXTENSIONS)
 
 _SHELL = """<!doctype html>
 <html>
@@ -57,7 +103,7 @@ _SHELL = """<!doctype html>
 
 def render(report_path: Path) -> Path:
     text = report_path.read_text(encoding="utf-8")
-    body = markdown.markdown(text, extensions=_EXTENSIONS)
+    body = to_html(text)
 
     title = "PremarketDesk"
     for line in text.splitlines():
@@ -66,7 +112,12 @@ def render(report_path: Path) -> Path:
             break
 
     html_path = report_path.with_suffix(".html")
-    html_path.write_text(_SHELL.format(title=title, body=body), encoding="utf-8")
+    # The title is the model's own mood phrase and goes into an element that
+    # does not parse markup, so it is escaped rather than neutralised: a bare
+    # `<` there ends the title element and the rest of the line becomes body.
+    html_path.write_text(
+        _SHELL.format(title=html.escape(title, quote=False), body=body),
+        encoding="utf-8")
     return html_path
 
 

@@ -7936,6 +7936,84 @@ def claim_the_two_unrebuildable_artifacts_are_held_twice(
           "and no pipeline module reads it")
 
 
+def claim_a_vendor_headline_cannot_write_markup(failures: list[str]) -> None:
+    """Third party text reaches the page as text, not as tags.
+
+    Python-Markdown passes raw HTML through by design and dropped safe_mode in
+    3.0, so every character of report.md reached the page as markup. The report
+    is not all first party text: vendor news headlines are quoted into it
+    verbatim, from a feed nobody here controls.
+
+    Two consequences, and the first is the one that matters. build_archive
+    wraps each morning in `<section class="day" id="day-DATE" hidden>` and
+    switches days with a script, so a headline carrying a section close ends
+    that day early and takes the other eleven mornings on the page with it. And
+    a headline carrying a script tag runs when the file is opened.
+
+    Both halves are asserted. Tag shaped text must come back escaped, and a
+    plain comparison must NOT be mangled: `>` is untouched so blockquotes still
+    work, and a bare `<` is left for markdown to escape the way it already did.
+
+    Also asserted: build_archive goes through the same function. It called
+    markdown.markdown itself with this module's extension list, so the two
+    agreed on extensions and would not have agreed on this, and the archive is
+    the file where one unclosed tag reaches eleven other mornings.
+    """
+    import ast
+    import pathlib as _pathlib
+
+    from morning import render_report
+
+    hostile = 'Headline: "Foo </section><script>alert(1)</script>".'
+    rendered = render_report.to_html(hostile)
+    for tag in ("</section>", "<script>", "</script>"):
+        if tag in rendered:
+            failures.append(f"render_report.to_html passed {tag!r} through as "
+                            f"markup: {rendered!r}")
+    if "&lt;/section&gt;" not in rendered:
+        failures.append(f"the section close is not escaped into text: {rendered!r}")
+
+    # A comparison is not a tag. Escaping it would be the other failure.
+    plain = render_report.to_html("guidance < consensus and EPS > 3")
+    if "&lt; consensus" not in plain or "&gt; 3" not in plain:
+        failures.append(f"an ordinary comparison was mangled: {plain!r}")
+
+    # A blockquote still works, because `>` is not matched at all.
+    quoted = render_report.to_html("> a quoted line")
+    if "<blockquote>" not in quoted:
+        failures.append(f"a blockquote stopped rendering: {quoted!r}")
+
+    # The title goes into an element that does not parse markup, so a bare `<`
+    # there ends the element rather than being escaped by markdown.
+    source = _pathlib.Path(render_report.__file__).read_bytes().decode("utf-8")
+    tree = ast.parse(source)
+    render_fn = next((n for n in tree.body if isinstance(n, ast.FunctionDef)
+                      and n.name == "render"), None)
+    if render_fn is None:
+        failures.append("render_report.render is gone")
+    else:
+        calls = {n.func.attr for n in ast.walk(render_fn)
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+        if "escape" not in calls:
+            failures.append("render_report.render does not escape the title it "
+                            "puts inside <title>, where a bare < ends the "
+                            "element and the rest of the line becomes body")
+
+    # And the archive must not render markdown on its own.
+    archive = (config.PROJECT_ROOT / "src" / "night" / "build_archive.py"
+               ).read_bytes().decode("utf-8")
+    if "markdown.markdown(" in archive:
+        failures.append("build_archive calls markdown.markdown itself again. "
+                        "It concatenates twelve mornings into one page, so it "
+                        "is the last file that should have its own renderer.")
+    if "render_report.to_html" not in archive:
+        failures.append("build_archive does not render through "
+                        "render_report.to_html")
+
+    print("  markup       a hostile headline comes back as text, a comparison "
+          "and a blockquote do not, and the archive shares the one renderer")
+
+
 def claim_the_true_premarket_gap_separates_the_feed_from_the_window(
         failures: list[str]) -> None:
     """One number was reported as three causes, and now it decomposes.
@@ -9044,6 +9122,7 @@ def main() -> int:
     claim_the_documents_count_what_is_actually_here(failures)
     claim_the_night_refuses_the_floats_the_morning_refuses(failures)
     claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)
+    claim_a_vendor_headline_cannot_write_markup(failures)
     claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
     claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
     claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
