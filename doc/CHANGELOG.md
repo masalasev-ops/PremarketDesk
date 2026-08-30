@@ -15,6 +15,25 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the architecture page has no standing state at all
+
+**What changed.** The masthead block is gone, not shortened and not rewritten.
+The page now runs from the lede straight into the table of contents.
+
+**Why.** The previous entry replaced two stacked blocks with one and called that
+the fix. It was not. A standing state on this page is the wrong artifact at any
+length, because it goes stale the next weekday and a reader has no way to tell
+whether it did. Every fact it carried has a home that stays right on its own:
+the gate is a load bearing rule in section 11 and a row in section 10, the
+counts are CHANGELOG.md, the reasoning is DECISIONS.md, the readings are
+doc/research/, and the pre-registration is SCORE_INVERSION.md. The page
+describes the machine. Nothing else.
+
+**Nothing was lost to the deletion.** The one fact that had lived only in that
+block, the 2026-08-19 collector against vendor reading of 0 of 73 symbols within
+one percent at a median absolute difference of 90.0 percent, was moved into
+doc/research/COLLECTOR_VOLUME.md's session table in the preceding commit.
+
 ## 2026-08-29: one standing state, rewritten, not a stack of corrections
 
 **What changed.** The architecture page's masthead carried two stacked blocks:
