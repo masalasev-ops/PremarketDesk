@@ -110,6 +110,299 @@ they were armed for has an answer in `doc/DECISIONS.md`. A plain run of the
 register script never resurrects them. `tasks/README.md` says what each one
 measures.
 
+## What you actually see, and how to read it
+
+Everything above says how the machine works. This says what lands in front of
+you, when, and what to do with it. Read this section before the setup one if
+what you want is to use the thing rather than install it.
+
+Every ticker and number in the worked examples below is INVENTED. `runs/` and
+`site/` are gitignored so that no real morning is ever committed to a public
+repository, and this section keeps that rule. The one place real figures appear
+is the paper ledger's aggregate counts, which are already in
+`doc/CHANGELOG.md`, and they are labelled where they are used.
+
+### The two things it produces
+
+The system produces exactly two documents. Everything else on disk is evidence
+behind them.
+
+| | The morning report | The weekly page |
+| --- | --- | --- |
+| File | `runs/YYYY-MM-DD/report.html`, and every past one in `site/PremarketDesk.html` | `site/Weekly.html` |
+| Written | 08:46 to 08:49 each weekday | Every night at 22:15 |
+| Covers | This morning only, except one section | A rolling trailing 7 days |
+| Answers | Which names gapped, on what, and what the evidence behind each is worth | Did the machine run, is its data trustworthy, what did it publish, what did it cost, and is the score ordering anything |
+| Read it | Before 09:30, ideally around 08:50 | Whenever. Nothing in it is time critical |
+
+The weekly page is not weekly in cadence, only in span. It is rebuilt from
+scratch every night, so it always covers the last seven days ending yesterday.
+Nothing accumulates in it and running the build twice is the same as running it
+once.
+
+### Where the report is right now, and why it is not in your inbox
+
+`data/UNVERIFIED` is on disk, so `deliver.py` refuses to send regardless of what
+keys are configured. No email has ever gone out from this system. Until you
+delete that file you read the report by opening `site/PremarketDesk.html` from
+disk, which needs no server and no network.
+
+That gate is deliberate and it is the one thing in the project a person has to
+clear by hand. Deleting it is a statement that you have taken one live morning's
+numbers, checked them against an independent source, and found them right. See
+`## When things go wrong` for what to check.
+
+### The morning report, section by section
+
+Eleven fixed sections, always in this order, always present even when a section
+has nothing to say. A section that goes missing is a defect, not an empty
+morning.
+
+| # | Section | The question it answers | What you do with it |
+| ---: | --- | --- | --- |
+| 1 | Summary | What kind of morning is this, and how much survived the funnel | Read the counts. They tell you whether today is a twelve candidate morning or a two candidate one |
+| 2 | Premarket gappers | Everything that cleared the floors, eligible or not | Skim. This is the pool, not the picks |
+| 3 | Day watchlist | Which names passed every day trading condition | The main table. See below |
+| 4 | Swing watchlist | Which names passed the swing conditions | Same, on a longer horizon |
+| 5 | Notable movers | What else moved that is not a candidate | Context. Sector and index level moves you would otherwise miss |
+| 6 | Market trends | Index, volatility, rates, oil, dollar | Tone. Never an input to any screen |
+| 7 | Technical signals | Where each candidate sits against prior high, premarket high, 200 day | Per name detail behind the tables |
+| 8 | Economic data and rates | Today and tomorrow's high importance events | What could overrun everything at 08:30 or 10:00 |
+| 9 | Coming up | Earnings for candidates and notable names reporting tomorrow | Tomorrow's setup, today |
+| 10 | What the record says so far | What the paper ledger has observed across every session it holds | The only section not about today. See below |
+| 11 | Skips and traps | Names to leave alone, and every candidate with weak evidence | **Read this before the watchlists.** See below |
+
+#### 3. The day watchlist, and the one column that is not what it looks like
+
+The table has a fixed header, character for character, because the containment
+guard locates the ticker column by it:
+
+```
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
+| ------ | -----:| -----:| --------------:| --------------:| --------------:| -----:| ---------- |
+| ACME   | +14.2 | 18.44 |            6.1 |          18.90 |          17.95 |   7.0 | green      |
+| BOLT   |  +9.8 | 42.10 |            2.3 |          43.05 |          41.60 |   5.0 | yellow     |
+| CRUX   |  +7.1 |  6.22 |           null |           6.40 |           6.05 |  null | unscored   |
+```
+
+**`Premarket RVOL` is an estimate, not a measurement**, and the report says so
+in one sentence directly under the table every time. The collector's socket
+carries a measured fraction of the consolidated tape, so the numerator is the
+socket's count divided by `[Collector] premarket_capture_rate` while the
+denominator measures the whole tape. The sentence names how many rows would have
+cleared the volume floor on the raw socket count against how many clear on the
+estimate, so you can see how much work the correction is doing on any given
+morning. Where the correction is what put a name on this list, the report names
+that name.
+
+**`unscored` is not a bucket.** A row whose score could not be computed says
+`unscored` in the conviction column and never a colour. CRUX above has a null
+RVOL, so the volume component could not be scored, so no total exists. It is on
+the list because `day_eligible` is true, which is decided by the screens and not
+by the score.
+
+**A name being on this table is not a recommendation.** Membership means it
+passed a set of thresholds copied from a third party and not yet validated on
+this data. See the last part of this section.
+
+#### 11. Skips and traps, which you read first
+
+This is the section that says what the evidence is worth, and it is built by
+quoting sentences the packet already resolved rather than by the model judging
+anything. Six kinds of line appear here:
+
+```
+Catalyst absent: 3 of 12 candidates were read for news and came back with
+nothing. BOLT, CRUX, DELTA.
+
+Catalyst unknown: 1 of 12. ECHO, because the news call returned an error and
+was not retried inside the window.
+
+Premarket RVOL unverifiable: 2 of 12. CRUX and FOXO have fewer than ten
+baseline sessions, so no median exists to divide into.
+
+Premarket window starts late: 1 of 12. GRID, whose first collector bar is
+07:48 rather than 07:20, so its premarket high describes 92 minutes of a
+330 minute session.
+
+Premarket path evidence absent: 0 of 12.
+
+Premarket high may not be a transactable price: 2 of 12. ACME and BOLT. The
+collector saw very little trade near the level being published as that name's
+reference. This test is a warning and its silence is not an approval.
+```
+
+Four things about that block are worth knowing.
+
+**A `0 of 12` line is printed as readily as one that names somebody.** An absent
+line would be indistinguishable from a section the model forgot.
+
+**The last line is the fill warning and it fires in one direction only.** A name
+it does NOT mention has not passed anything. Measured over 66 past rows, this
+check caught 6 of the 10 levels the nightly pass went on to call untradeable and
+flagged 6 of the 44 that were fine. Four in ten untradeable levels get past it.
+The report is forbidden from ever writing that a level looks liquid, should
+fill, or anything of that shape, because the definitive answer is computed that
+night from a complete tape and is not available at 08:45.
+
+**A trap is a packet field, not a reading of the headlines.** The report names a
+name a trap only where `trap` is true, and quotes the counts behind it, so you
+can disagree with the call. Until 2026-08-20 the model judged this from headline
+polarity and published names as traps on a single vendor mis-scored headline.
+
+**`dropped_no_coverage` names appear here too.** Those cleared selection and
+were dropped before pricing because the collector recorded no bars for them.
+They carry no premarket price at all and are absent from every table above.
+
+#### 10. What the record says so far
+
+The only section that is not about this morning. It quotes counts from the paper
+ledger, which is what one written rule in `doc/CRITERIA.md [Paper]` would have
+done with every past pick.
+
+```
+The ledger holds 66 picks across 7 sessions, of which 16 were traded across 6.
+The sample unit is the session and not the pick, so this rests on six
+observations rather than sixteen.
+
+14 of 16 trades reached their trigger within thirty minutes of the open, at a
+median of 1 minute.
+28 picks never reached their trigger at all, across 6 sessions.
+10 of 10 trades that made their best price within ten minutes of entry closed
+below their entry.
+4 of 4 trades that made their best price more than a hundred minutes after
+entry closed above it.
+
+The best a position was worth while open was a median +1.84 percent, against
+a median -1.38 percent booked at the exit. Rule version v1. The ledger is as
+of last night: tonight's pass has not run, so today's picks are in no figure
+above.
+```
+
+Those are the real current figures and they are also in `doc/CHANGELOG.md`.
+
+**What you take from it is shape, not instruction.** A name that made its high in
+the first ten minutes and faded has not recovered once in ten tries, and the
+four that worked were still making highs an hour or more in. Ten and four are
+not sample sizes.
+
+The template FORBIDS the report from turning any of this into advice. Three
+specimens of the phrasing it may not use are written into
+`doc/REPORT_TEMPLATE.md` verbatim, and so is a ban on the words pattern, signal,
+edge and tendency. If you ever see the report write one of those, that is a
+defect worth chasing, because a description of six sessions written as an
+instruction is a strategy nobody validated wearing the authority of a generated
+document.
+
+### The reading order at 08:50
+
+The section order in the report is not the order to read it in.
+
+1. **Skips and traps.** Find out what today's evidence is worth before you look
+   at what it concluded. A thin band line against a name means the level in the
+   table above is a print rather than a price.
+2. **Summary.** The counts. How many names were ranked, how many cleared the
+   floors, how many were kept, and how many the rank cap cut. A morning where
+   the cap cut six names is a different morning from one where it cut none.
+3. **The two watchlists.** Now that you know what is behind them.
+4. **What the record says so far.** Shape, once, as context. It does not change
+   between 08:50 and 09:30 and it is not about any name in front of you.
+
+Everything else is reference you consult when a name interests you.
+
+**What this report cannot do.** Gap setups resolve inside the first fifteen
+minutes and you are reading this at 09:00. It replaces the hour of scanning
+between 07:00 and 09:30. It is not a signal and the design does not allow it to
+become one.
+
+### The weekly page, section by section
+
+Five sections, in the order a person actually asks them. It reads and renders
+only: no vendor call, no measurement of its own, and if a number is not already
+on disk it does not appear.
+
+| Section | What it answers | What a bad answer looks like |
+| --- | --- | --- |
+| Did it run | Jobs fired, non zero exits, mornings that produced a report at all | A step with no record inside its window. That is the silent failure mode the job trail exists to catch |
+| Is the data trustworthy | The collector against vendor comparison as a SERIES rather than one reading, and what the truth pass measured the capture share actually to be | A capture share that moves a lot session to session, which is what the single divisor in `premarket_capture_rate` cannot correct |
+| What did it publish | Candidates a morning, how many reached each watchlist, how many went unscored and why | A rising unscored count, which means evidence is going missing upstream |
+| What did it cost | This project's spend against the shared key's siblings, and the closest any morning came to the preflight floor | A morning that came close to the floor. The jobs that spend before the open refuse rather than discover the limit through errors |
+| Does the score order anything | Filled outcomes grouped by conviction bucket AND by each score component separately, with both denominators everywhere | Nothing yet. See below |
+
+**The score watch is the long game and it currently reads backwards.** Green
+n=20 at a median -7.44 percent favourable excursion against yellow n=21 at
++1.36. Red is withheld at n=8 because it is below the stated minimum, and the
+page refuses to print any group below that minimum rather than printing a number
+with a caveat.
+
+That direction survived correcting the reference levels from the collector's
+sampled ones to measured ones, which is the correction that flipped the sign on
+both excursion medians for everything else. It is six sessions and it is not a
+result. `doc/research/SCORE_INVERSION.md` holds the pre-registered judging point
+and what would count as no relationship, written while the record was too small
+to judge, on purpose, so the verdict cannot be chosen once the counts arrive.
+
+### A worked example: one morning, end to end
+
+07:15. Discovery ranks 38 names from the four priors and subscribes the
+collector to 34 of them, four short of the cap because the pool did not fill it.
+Everything below the cut is written to `watchlist.json` marked
+`not_subscribed`, so the cut is auditable.
+
+07:20. The collector opens the socket and starts writing minute bars. This is
+the only source of today's premarket tape. A name discovery did not subscribe
+cannot be priced at 08:45 no matter what it does.
+
+08:45. The scan prices all 34 from the collector file, measures each gap against
+the prior session close, and keeps the top 12. It enriches those 12, computes
+RVOL against the cached baseline, reads catalysts, computes the eligibility
+booleans and the score. It writes `packet.json` and 12 picks rows.
+
+08:46. `vintage.py` has already passed, so `analyst.py` pipes the prompt, the
+template and the packet to the CLI. The model writes prose around numbers that
+are already fixed. A containment check fails the run if the report names a
+ticker the packet does not carry.
+
+08:49. `deliver.py` refuses because `data/UNVERIFIED` exists, and says so.
+`build_archive.py` rebuilds `site/PremarketDesk.html` with this morning in it.
+
+You open it at 08:50 and read Skips and traps first. It says the premarket high
+of ACME may not be a transactable price. ACME is the top row of the day
+watchlist at a score of 7.0 green. **Those two facts belong together and the
+report will not join them for you**, because the fill test's silence is not an
+approval and its warning is not a verdict. What you now know is that the 18.90
+in that row is a level the collector saw very little trade near.
+
+22:15 that night. The backfill writes what the premarket really was from EODHD
+intraday. The truth pass measures it again from Alpaca's complete tape and
+writes the measured reference levels beside the sampled ones, then decides
+whether ACME's level was transactable at all: `fill_plausible` comes back
+`implausible`. The ledger then SKIPS ACME with that reason recorded rather than
+booking a trade against a level nobody could have got.
+
+Tomorrow morning, ACME's skip is one row inside the counts in section 10.
+
+### What the scope is today, plainly
+
+**The machine is complete and runs.** Nine scheduled tasks, every weekday since
+2026-08-13, with a watchdog over them and a job trail under them.
+
+**The record is 66 picks across 7 sessions.** That is enough to have found real
+defects and nowhere near enough to validate anything.
+
+**Every threshold in `doc/CRITERIA.md` is a seed value copied from a third
+party.** Until a few dozen more sessions of outcomes exist, the report is a well
+formatted list of names that met a stranger's rules. That is not modesty, it is
+the actual epistemic state, and the pre-registered judging points exist so the
+moment it changes is not a matter of opinion.
+
+**The one thing the record has already earned.** Rule v1 lost money over its
+first 16 trades, and every one of those 16 was in profit at some point while it
+was held. A trigger producing random entries could not do that. So the first
+result indicts the exit and the risk carried per trade, not the screen behind
+it, and that is a more useful thing to know than a profitable sixteen trades
+would have been.
+
 ## What you need
 
 - **Windows 10 or 11.** Scheduling is Windows Task Scheduler plus the `.bat`

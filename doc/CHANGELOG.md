@@ -15,6 +15,33 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: the README says what you see, not only how it works
+
+**What changed.** A new section, "What you actually see, and how to read it",
+sits between the schedule and the setup instructions. It names the two documents
+the system produces, says where they are and why the report is not in an inbox,
+walks all eleven report sections and all five weekly ones, gives the reading
+order at 08:50, and follows one invented morning end to end from the 07:15
+ranking to the next day's ledger skip.
+
+**Why it had to.** Every document in this project described the machine. None
+described the output. A reader could learn what backfill_premarket.py does and
+still not know which section of the report to read first, that the RVOL column
+is an estimate, or that the fill warning's silence is not an approval. That is
+the gap that produced "I really dont know what I am looking at" on 2026-08-29,
+and it was a documentation failure rather than a reporting one.
+
+**Every ticker and number in the worked examples is invented, and the section
+says so at the top.** runs/ and site/ are gitignored so no real morning reaches
+a public repository, and a usage guide is not a reason to break that. The one
+exception is the paper ledger's aggregate counts, which are already public in
+this file, and they are labelled where they are used.
+
+**One figure was wrong in the first draft and was caught by reading it back off
+the code.** The never-triggered count was written as 28 picks across 7 sessions.
+paper_ledger.record_so_far reports 6. Every other figure in the section was
+verified the same way rather than carried over from a note.
+
 ## 2026-08-29: the architecture page has no standing state at all
 
 **What changed.** The masthead block is gone, not shortened and not rewritten.
