@@ -15,6 +15,36 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-29: one standing state, rewritten, not a stack of corrections
+
+**What changed.** The architecture page's masthead carried two stacked blocks:
+a "Standing state, 2026-08-20" and, above it, a "read the standing state below
+as of 2026-08-20, six things have moved" correction added the same day the arc
+page's equivalent was being removed for exactly that fault. Both are replaced by
+one block dated today, and a line under it says the block is REWRITTEN rather
+than appended to and names where a dated log belongs instead.
+
+**Why it had to.** The correction was the mistake. Appending to a status block
+is the right instinct in the record, where a corrected value must sit beside the
+original, and it is the wrong one on a page whose whole job is to describe the
+machine as it stands: a reader hit fifty lines of qualifications and errata
+before reaching the table of contents. The two rules are not in tension. A
+MEASUREMENT is never overwritten. A DESCRIPTION is never accreted.
+
+**One fact was rescued before the old block went.** The 2026-08-19 collector
+against vendor verification, 0 of 73 symbols within one percent at a median
+absolute difference of 90.0 percent, existed nowhere but that masthead. It is
+now a row in doc/research/COLLECTOR_VOLUME.md's session table, which is where a
+reading belongs. Everything else in the block was already in CHANGELOG.md,
+DECISIONS.md or that same document.
+
+**What the new block says**, in four facts that qualify the page and are not
+visible from its figures: no email has ever been sent; the record has started
+and decides nothing yet, at 66 rows over 7 sessions; the ledger separated the
+screen from the rule, because all 16 booked trades were in profit at some point
+while held; and the conviction score orders outcomes backwards so far, which is
+six sessions and not a result.
+
 ## 2026-08-29: the arc page goes back to being about the arc
 
 **What changed.** doc/Premarketdesk_ADayRunArc.html had grown a standing state

@@ -447,6 +447,12 @@ had never been done for more than two of them at once:
 | 2026-08-14 | 37 | 0 of 37 | 70.95% |
 | 2026-08-17 | 50 | 1 of 50 | 88.43% |
 | 2026-08-18 | 50 | 0 of 50 | 90.05% |
+| 2026-08-19 | 73 | 0 of 73 | 90.0% |
+
+[the 2026-08-19 row was taken by the 07:00 catch-up on 2026-08-20 and the 08:45
+packet read it straight back out of runs/2026-08-19/verify_intraday.json. It was
+recorded only on the architecture page until 2026-08-29, which is the wrong home
+for a reading: that page describes the machine, this document is the diagnosis.]
 
 [corrected 2026-08-19: written the same afternoon with a 2026-08-13 row reading
 "38 | 0 of 38 | 69.77%", and with the sentence below saying BOTH sessions this

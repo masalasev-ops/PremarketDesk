@@ -230,49 +230,31 @@ tbody tr:hover{background:var(--ground)}
     <span>66 components</span><span>7 job scripts, 9 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
   </div>
   <p class="sub" style="margin-top:18px;border-left:3px solid var(--accent);padding-left:14px">
-  <b>Read the standing state below as of 2026-08-20. Six things have moved since, on 2026-08-28 and
-  2026-08-29.</b>
-  <b>The record is no longer at zero.</b> picks holds 66 live rows across 7 sessions, 2026-08-20 to
-  2026-08-28, all 66 measured by the night's truth pass and 60 with outcomes filled. Section 08 has
-  all four of its columns now, and a ledger row beside them.
-  <b>Alpaca is in the pipeline.</b> It was research only when the rule in section 11 was written and
-  it is not any more: C59 and C60 are scheduled night steps and both read it. EODHD is still the only
-  vendor any number in a report comes from, which is the part of that rule that was load bearing.
-  <b>There is a paper ledger.</b> C60 applies one written rule from CRITERIA [Paper] to every pick and
-  books the result into paper_trades, keyed on rule version so v2 lands beside v1 and never over it.
-  Its first result is the useful one: 16 trades at a median -1.38 percent, and every one of the 16 was
-  in profit at some point while held, at a median best of +1.84. The trigger is not producing random
-  entries; the exit and the risk per trade are where the money goes.
-  <b>The morning reads the record back.</b> Until now nothing did. C16 puts C60's counts in the packet
-  and the report carries them in a section that is not about today's names.
-  <b>The quantifier guard is enforcing.</b> It read warn here because the three things CRITERIA.md
-  requires before it can be set enforcing were not all true on 2026-08-20. They were on 2026-08-28. A
-  flagged narrative is now regenerated once and then falls back to plain tables, rather than being
-  delivered with the flag logged.
-  <b>The collector volume question has an answer and it is not the feed.</b> The reference gap
-  measurement splits the shortfall in two and finds the sampling inside the socket's own minutes
-  accounts for +0.10 percent at the median against +0.98 for the 04:00 to 07:20 stretch it never
-  hears. Ten to one. Any fix belongs at [Collector] start_time.</p>
-  <p class="sub" style="margin-top:18px;border-left:3px solid var(--ink-3);padding-left:14px">
-  <b>Standing state, 2026-08-20.</b> Everything below describes a machine that runs, and has run every
+  <b>Standing state, 2026-08-29.</b> Everything below describes a machine that runs, and has run every
   weekday since 2026-08-13. Four facts qualify it and none are visible from the figures.
-  <b>No email has ever been sent</b>: data/UNVERIFIED is still on disk and C19 refuses every morning.
-  <b>The picks table holds one morning</b>: the 51 rows on it before today were exported to
-  data/purged-picks-2026-08-19.jsonl and deleted on 2026-08-19 because collector premarket volume,
-  which feeds pm_rvol and pm_float_rotation, is under investigation. The purge did not stop the scan
-  writing, and the 08:45 pass on 2026-08-20 wrote twelve rows, so section 08 below has its first
-  column and nothing else: backfilled_at is null on all twelve and no outcome has been filled, which
-  is to say the long goal is still at zero. <b>Collector volume is the open question</b>: one session over
-  reporting by 3.8x, two under reporting by about 10x, replay measured and too small to be either;
-  doc/research/COLLECTOR_VOLUME.md is the diagnosis. C20's definitive verification had stopped
-  running when picks was emptied, because it sat behind that table's early return; it was decoupled
-  on 2026-08-20, runs first now, and sweeps sessions that were collected and never measured. The
-  07:00 catch-up took 2026-08-19's reading that same morning, 0 of 73 symbols within one percent at
-  a median absolute difference of 90.0 percent, and the 08:45 packet read it straight back out of
-  runs/2026-08-19/verify_intraday.json. <b>The quantifier guard is in warn mode</b> and fired on its first live
-  morning on 2026-08-20: one flag at 08:49, quantifier "no" over the word watchlist, outcome warned,
-  the narrative delivered anyway. C57 exists now and that flag carries no disposition, which is the
-  third of the three things CRITERIA.md wants true before the guard can read enforcing.</p>
+  <b>No email has ever been sent</b>: data/UNVERIFIED is still on disk and C19 refuses every morning,
+  so every report so far has been read out of runs\&lt;date&gt;\ and site/PremarketDesk.html.
+  <b>The record has started but decides nothing yet</b>: picks holds 66 rows across 7 sessions,
+  2026-08-20 to 2026-08-28, all 66 measured by the night's truth pass and 60 with outcomes filled.
+  That is enough for section 08 to have all four of its columns and a ledger row beside them, and it
+  is nowhere near enough to judge a threshold. Every number in CRITERIA.md is still a seed value, and
+  the pre-registered judging points say so in the file rather than being chosen once the counts
+  arrive.
+  <b>The screen and the rule are not the same question, and the ledger separated them</b>: rule v1
+  books 16 trades at a median -1.38 percent, and every one of the 16 was in profit at some point while
+  it was held. A trigger producing random entries could not do that, so what the first result
+  indicts is the exit and the risk per trade, not the screen.
+  <b>The conviction score orders outcomes backwards so far</b>: green n=20 at a median -7.44 percent
+  favourable excursion against yellow n=21 at +1.36, a direction that survived correcting the
+  reference levels from sampled to measured. Six sessions is not a result;
+  doc/research/SCORE_INVERSION.md holds the pre-registration and C61 refuses to print any group below
+  the stated minimum.</p>
+  <p class="sub" style="margin-top:12px;font-size:13px;color:var(--ink-3);border-left:3px solid var(--rule);padding-left:14px">
+  This block says what is true today and is rewritten rather than appended to. What changed on which
+  date is CHANGELOG.md, why a choice went the way it did is DECISIONS.md, and the collector volume
+  readings are doc/research/COLLECTOR_VOLUME.md. A page that describes the machine should not also be
+  a dated log of it, which is what this masthead had become by 2026-08-29: two stacked blocks, the
+  second correcting the first.</p>
 </header>
 
 <nav class="toc">
