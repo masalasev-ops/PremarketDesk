@@ -9727,6 +9727,130 @@ def claim_the_night_refuses_the_floats_the_morning_refuses(failures: list[str]) 
           "exactly the floats the morning refuses, each with a reason")
 
 
+def claim_the_floor_sweep_fits_edges_the_way_the_study_does(
+        failures: list[str]) -> None:
+    """The sweep re-fits at a candidate floor by the study's own arithmetic.
+
+    CRITERIA's denominator floor note calls raising the floor "a study, not an
+    edit", because a name the floor refuses is RESCUED onto the rotation bands
+    and those bands were fitted on the population the CURRENT floor rescues.
+    research/sweep_baseline_floor.py answers that at every candidate floor, and
+    it answers it offline: research/float_rotation_study.py now records
+    sweep_rows, so a re-fit is arithmetic on a file rather than another 462
+    vendor requests. That lesson was paid for once already, on 2026-08-20, when
+    both payloads on disk carried only quantiles and a quantile of one
+    population does not yield the quantile of another.
+
+    THE SWEEP COPIES round_down RATHER THAN IMPORTING IT, on purpose: importing
+    float_rotation_study pulls probe_alpaca and a research HTTP client, and the
+    sweep's whole claim is that it needs no vendor. A copied function is a
+    function that can drift, so this holds the two to the same answers across
+    the decades a band edge actually lands in. Without it, the sweep could
+    round an edge differently from the study that fitted the shipped one and
+    the two would be quietly incomparable.
+    """
+    import importlib
+
+    from research import sweep_baseline_floor as sweep
+
+    # The study is imported for its round_down alone. It reaches a vendor
+    # client at module scope, which is why the sweep does not import it.
+    study = importlib.import_module("research.float_rotation_study")
+
+    # Values spanning the decades a rotation edge sits in, plus the two the
+    # 2026-08-20 re-derivation was argued over and the binary floating point
+    # cases the study's own docstring names.
+    for value in (0.00033659, 0.00020006, 0.00014266, 0.0006, 0.00027782,
+                  0.0001054, 0.00056, 0.0, 1.0, 0.5, 123.456, 1e-9):
+        mine, theirs = sweep.round_down(value), study.round_down(value)
+        if mine != theirs:
+            failures.append(
+                f"sweep_baseline_floor.round_down({value}) is {mine!r} where "
+                f"float_rotation_study.round_down gives {theirs!r}. The sweep "
+                "copies that function to stay offline, and a copy that drifts "
+                "makes its edges incomparable with the fit that shipped the "
+                "current ones")
+
+    # And the sweep must reproduce the shipped floor's own fit from the file,
+    # or it is not measuring the same thing the study measured.
+    path = config.PROJECT_ROOT / "data" / "float_rotation_study.json"
+    if not path.is_file():
+        print("  floor sweep  round_down agrees; no study payload on disk to "
+              "reproduce against")
+        return
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("sweep_rows")
+    if not rows:
+        print("  floor sweep  round_down agrees; the payload predates "
+              "sweep_rows")
+        return
+    from core import criteria as _criteria
+
+    shipped_floor = _criteria.load().number(
+        "baseline", "min_baseline_premarket_volume")
+    got = sweep.fit(rows, shipped_floor, top_only=True)
+    want = payload["mapping_transfer"]["top_12_by_gap"]
+    for field, mine, theirs in (
+            ("overlap_n", got["overlap_n"], want["overlap_n"]),
+            ("rescued_n", got["rescued_n"], want["rescued_n"]),
+            ("two point edge", got["refitted_edges"]["two_points"],
+             want["rederived_on_rescued"]["two_points"]),
+            ("one point edge", got["refitted_edges"]["one_point"],
+             want["rederived_on_rescued"]["one_point"])):
+        if mine != theirs:
+            failures.append(
+                f"at the shipped floor the sweep reports {field} {mine!r} "
+                f"where the study that wrote the file reports {theirs!r}. The "
+                "sweep is only worth reading at other floors if it reproduces "
+                "this one")
+    # THE BOUNDARY, on synthetic rows, because the real file has no median
+    # sitting exactly on a floor and the off by one would never show. CRITERIA
+    # reads `median >= floor`, so a name exactly at the floor keeps its ratio.
+    # [median, volume, rotation, in_top]
+    edge_rows = [
+        [1000.0, 5000.0, 0.0009, 1],   # exactly on it: keeps its RVOL
+        [999.99, 5000.0, 0.0008, 1],   # just under: rescued
+        [None, 5000.0, 0.0007, 1],     # history too short: rescued at any floor
+        [50000.0, 5000.0, 0.0006, 1],  # far above: keeps its RVOL
+    ]
+    edge_fit = sweep.fit(edge_rows, 1000.0, top_only=True)
+    if (edge_fit["overlap_n"], edge_fit["rescued_n"]) != (2, 2):
+        failures.append(
+            f"at a 1,000 floor the sweep splits four rows "
+            f"{edge_fit['overlap_n']} to {edge_fit['rescued_n']}, not 2 to 2. "
+            "A median exactly ON the floor keeps its ratio, because CRITERIA "
+            "reads min_baseline_premarket_volume as >=, and a row whose "
+            "history is too short is rescued at every floor rather than by "
+            "this one")
+
+    # AND THE TARGET HAS TO MOVE WITH THE FLOOR. The rotation edges are fitted
+    # to reproduce what the RVOL bands pay on the population that still HAS an
+    # RVOL, so a higher floor changes the target as well as the distribution.
+    # Carrying the shipped target over to a new floor is the quiet way to get
+    # this wrong, and it would leave every re-fitted edge answering the old
+    # question.
+    high = sweep.fit(rows, 10_000.0, top_only=True)
+    if "note" not in high:
+        if high["rvol_target"] == got["rvol_target"]:
+            failures.append(
+                f"the RVOL target is {got['rvol_target']} at both the shipped "
+                "floor and 10,000, so the sweep is fitting every floor to one "
+                "population's payout. A floor that refuses more names refuses "
+                "them out of the paired set the target is read from")
+        if high["overlap_n"] >= got["overlap_n"]:
+            failures.append(
+                f"a 10,000 floor leaves {high['overlap_n']} rows carrying an "
+                f"RVOL against {got['overlap_n']} at 1,000, which is not fewer")
+
+    print(f"  floor sweep  round_down agrees across 12 values, the shipped "
+          f"floor reproduces the study's own fit at "
+          f"{got['refitted_edges']['two_points']} and "
+          f"{got['refitted_edges']['one_point']}, a median on the floor keeps "
+          f"its ratio, and the target moves with the floor "
+          f"({got['rvol_target']['two_points']} to "
+          f"{high['rvol_target']['two_points']})")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -10632,6 +10756,7 @@ def main() -> int:
     claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(failures)
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
+    claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
     claim_the_documents_count_what_is_actually_here(failures)
     claim_the_night_refuses_the_floats_the_morning_refuses(failures)
     claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)

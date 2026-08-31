@@ -18,6 +18,62 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-31: the denominator floor is a three part change, not two
+
+CRITERIA's floor note has said since 2026-08-28 that raising
+min_baseline_premarket_volume is a TWO part change, floor and rotation edges
+together, and called it a study rather than an edit. The study ran today.
+
+**The two parts it named are confirmed and sized.** The names a higher floor
+newly rescues are more liquid than the sub 1,000 names the shipped edges were
+fitted on, their rotations sit higher, and the edges have to rise to stop
+overpaying them: 0.00033 to 0.00056 at a 10,000 floor. Raising the floor alone
+would hand a thin name its band through the other door, exactly as written.
+
+**The third part is the one that decides it.** [Day setup] premarket_rvol is
+> 1.5 and there is no rotation alternative on that screen; float rotation
+substitutes in the SCORE only. Rule.test(None) is false, so a name whose ratio
+the floor refuses does not get rescored, it stops being day_eligible. On the
+live record a 10,000 floor takes two green names off the day watchlist, PLAB and
+SAIC, neither of which the evidence rejects: both carry a rotation far above the
+edge that admits the same share the RVOL floor admits.
+
+**So the floor cannot move until the day screen has a rotation path**, or the
+day watchlist shrinks for a reason no reader of the report could see, which is
+the same defect class as a missing answer read as a measured one. The sweep
+prints that edge at every floor, so the third part is costed too.
+
+**NOTHING MOVED TODAY, and that is the decision.** The measurement was asked
+for, the measurement is written into the floor note, and the change it prices is
+larger than the note thought. Choosing to make it is a separate decision with a
+day screen change inside it.
+
+## 2026-08-31: recording the rows so the next re-fit is not another vendor run
+
+float_rotation_study now writes sweep_rows: per scored row, the baseline median,
+the volume, the rotation, and whether the row is in the top-by-gap slice.
+
+**This is the third time the lesson has presented itself.** On 2026-08-20 both
+payloads on disk carried only quantiles, and a quantile of a contaminated set
+does not yield the quantile of the clean one, so answering a question about
+numbers already measured twice cost a full vendor run. That correction added
+rescued_rotation_values, which answers exactly one question: whether the warm up
+rows belonged. It cannot answer the floor question, because who is rescued
+depends on the floor and a list of rotations does not say which side of any
+floor a row sat on.
+
+**Four fields answer every floor question there is**, and the file is 515 KB
+against 66 KB. That is the whole cost, against 462 vendor requests and three
+minutes per question asked.
+
+**The sweep copies round_down rather than importing it**, because
+float_rotation_study imports probe_alpaca at module scope and the sweep's whole
+argument is that it needs no vendor. A copied function drifts, so round_down and
+edge_at were lifted to module scope there and a claim holds the two to the same
+answers across the decades a band edge lands in. That is the cheaper of the two
+bad options: the alternative is a research HTTP client imported to round a
+number.
+
 ## 2026-08-31: a disclosure that survives on a judgement call is not a disclosure
 
 Today's report dropped the thin denominator warning, and the interesting part is

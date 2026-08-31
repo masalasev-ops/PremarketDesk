@@ -1020,7 +1020,55 @@ the band through the other door.
 
 So moving this number is a TWO PART change, floor and rotation edges together,
 refitted on whatever population the new floor rescues. That is a study, not an
-edit, and it is owed one. Until then the number stays and the report says when
+edit, and it is owed one.
+
+#### The study, run 2026-08-31, and it is a THREE part change
+
+`research/sweep_baseline_floor.py` re-fits the rotation edges at every candidate
+floor by the same arithmetic `research/float_rotation_study.py` uses, against
+the RVOL payout recomputed on the population each floor produces. It takes no
+vendor call: the study now records `sweep_rows`, four fields per scored row, so
+a re-fit is arithmetic on a file. At the shipped floor the sweep reproduces the
+study's own fit exactly, which is what makes the other rows worth reading.
+
+Measured over 6,500 scored rows from 50 sessions, on the top-by-gap slice the
+shipped edges are fitted to:
+
+| floor | keeps an RVOL | rescued | 2pt target | 2pt edge | 1pt edge |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 (shipped) | 358 | 189 | 0.5335 | 0.00033 | 0.0002 |
+| 2,000 | 326 | 221 | 0.4939 | 0.0004 | 0.00023 |
+| 5,000 | 275 | 272 | 0.4509 | 0.00049 | 0.00029 |
+| 10,000 | 244 | 303 | 0.4180 | 0.00056 | 0.00034 |
+| 25,000 | 184 | 363 | 0.3696 | 0.00079 | 0.00042 |
+
+**The paragraph above predicted the direction and the size is now known.** The
+newly rescued names do sit higher, so the edges have to RISE to stop
+overpaying them: 0.00033 becomes 0.00056 at a 10,000 floor, a 70 percent move,
+against 48 percent at 5,000 and 21 percent at 2,000. Raising the floor without
+that refit hands a thin name its band through the other door, exactly as
+written.
+
+**The part that was not named, and it is the one that decides the change.**
+[Day setup] `premarket_rvol` is `> 1.5` and has NO rotation alternative, and
+`Rule.test(None)` is false, so a name whose ratio the floor refuses is not
+merely rescored: it leaves the day watchlist outright, however busy it was.
+Over the live record, 11 sessions carrying 70 published ratios, a 10,000 floor
+refuses 16 of them, and 2 of those were day_eligible: PLAB on 2026-08-26 at a
+4,135 share median and SAIC on 2026-08-31 at 1,002. Both were green. Both have
+a rotation far above the edge that would admit the same share the RVOL floor
+admits, 0.007036 and 0.000703 against 0.00034. So they are not names the
+evidence rejects; they are names the screen has no way to measure.
+
+The score survives where membership does not, and that asymmetry is the whole
+finding. Of the 16 refused rows, 14 are paid the same points by rotation under
+the current edges, 2 are paid less, and none is paid more.
+
+**So the change is floor, rotation edges, AND a rotation path on the day
+screen, or the day watchlist shrinks for a reason no reader could see.** The
+day screen edge is in the sweep output. Nothing here is a recommendation and no
+value moved: this is the study the paragraph above says is owed, and what it
+found is that the change is bigger than the paragraph thought. Until then the number stays and the report says when
 a published ratio rests on a thin denominator, which is what
 thin_baseline_premarket_volume above is for. 10,000 is where the table stops
 improving: the bands below it run 15 to 30 percent and the bands above it run

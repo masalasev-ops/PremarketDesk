@@ -159,6 +159,51 @@ def volume_between(probe: Any, start: str, end: str, codes: list[str]) -> tuple[
     return volumes, complete
 
 
+# Lifted out of run() on 2026-08-31 so research/sweep_baseline_floor.py
+# can be held to them by a claim. That module keeps its own copies
+# rather than importing this one, because `import probe_alpaca` above
+# is module scope and the sweep's whole argument is that re-fitting at
+# a different floor costs no vendor call. A copy that can drift needs
+# something watching it, and at module scope there is something that
+# can: claim_the_floor_sweep_fits_edges_the_way_the_study_does.
+def round_down(value: float) -> float:
+    """To two significant figures, so a band edge is a number a human can
+    hold, and downward so the rounding never makes a band stricter than
+    the share it was matched to.
+
+    It was ONE significant figure until 2026-08-20, and that is lossy in
+    proportion to where the value sits inside its decade. At 0.00033763 a
+    single figure costs 2 percent; at 0.00014266 it costs 30 percent,
+    because the value sits at the start of its decade and the next figure
+    down is a third of it. The rounding is not free either way: the edges
+    exist to make the rotation bands pay what the RVOL bands pay, and at
+    one figure the re-derived pair missed that target by 4.94 points
+    against 1.77 at two. Rounding a threshold is allowed to cost a little
+    readability. It is not allowed to cost more accuracy than the
+    re-derivation it is rounding was performed to gain.
+    """
+    if value <= 0:
+        return 0.0
+    import math
+    power = math.floor(math.log10(value)) - 1
+    # round() BEFORE the floor as well as after, and both for the same
+    # reason. 0.0006 scaled by 1e5 is 59.999999999999993, so a bare floor
+    # answers 0.00059: a rounding rule that exists to make an edge readable
+    # would have moved it by a sixtieth. The pre-round is to nine places,
+    # far finer than any edge and far coarser than the noise. The post
+    # round is the original one, because 6 * 1e-4 in binary floating point
+    # is 0.0006000000000000001 and a band edge written into CRITERIA with
+    # a tail like that is unreadable.
+    scaled = math.floor(round(value / (10 ** power), 9))
+    return round(scaled * (10 ** power), -power + 1)
+
+def edge_at(values: list[float], share: float) -> float:
+    """The value that this share of the population exceeds."""
+    ordered = sorted(values, reverse=True)
+    index = min(max(int(round(share * len(ordered))) - 1, 0), len(ordered) - 1)
+    return ordered[index]
+
+
 def _percentiles(values: list[float]) -> dict[str, Any]:
     if not values:
         return {"n": 0}
@@ -252,6 +297,26 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     overlap_rot_top: list[float] = []
     rescued_rot_all: list[float] = []
     rescued_rot_top: list[float] = []
+    # EVERY SCORED ROW, kept so a re-fit at a DIFFERENT denominator floor is
+    # arithmetic on this file rather than another 462 vendor requests. The
+    # 2026-08-20 correction already learned this once: both payloads on disk
+    # carried quantiles, and a quantile of a contaminated set does not yield
+    # the quantile of the clean one, so the whole study had to be re-run to
+    # answer a question about numbers already measured twice.
+    #
+    # rescued_rotation_values fixed that for ONE question, whether the warm up
+    # rows belonged. It cannot answer the floor question, because who is
+    # rescued depends on the floor and the rotations alone do not say which
+    # side of any floor a row sat on. Four fields do: the baseline median that
+    # decides it, the volume the ratio is built from, the rotation, and whether
+    # the row is in the top by gap slice the shipped edges are fitted on.
+    #
+    # median is null ONLY where the row could never carry an RVOL at any floor,
+    # which is fewer than [Baseline] min_sessions_for_rvol sessions of history.
+    # A row with a median below the current floor keeps its median here, which
+    # is the whole point: at a higher floor it moves from overlap to rescued
+    # and this file can say so.
+    sweep_rows: list[list[Any]] = []
     scored_by_rvol = scored_by_rotation = scored_by_either = scored_by_neither = 0
     rescued = 0
     rescue_examples: list[dict[str, Any]] = []
@@ -383,10 +448,12 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
             # --- RVOL exactly as the live path builds it
             past = history.get(code, [])[-lookback:]
             rvol = None
-            if len(past) >= min_sessions:
-                median = statistics.median(past)
-                if median > 0 and median >= volume_floor:
-                    rvol = volume / median
+            # Kept apart from `rvol` so sweep_rows can tell a row that could
+            # never carry a ratio from one this floor happens to refuse.
+            usable_history = len(past) >= min_sessions
+            median = statistics.median(past) if usable_history else None
+            if usable_history and median > 0 and median >= volume_floor:
+                rvol = volume / median
 
             # --- float rotation, screened by the same floors the live path uses
             #
@@ -460,6 +527,12 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
             # a rescued name sees nothing else. So the rotation bands have to
             # be calibrated on rescued, and this is what makes that checkable.
             if rotation is not None:
+                sweep_rows.append([
+                    round(median, 4) if usable_history else None,
+                    round(volume, 4),
+                    rotation,
+                    1 if symbol in top_symbols else 0,
+                ])
                 if rvol is not None:
                     overlap_rot_all.append(rotation)
                     if symbol in top_symbols:
@@ -511,43 +584,6 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         return {"two_points": round(two / len(values), 4),
                 "one_point": round(one / len(values), 4),
                 "zero": round((len(values) - two - one) / len(values), 4)}
-
-    def round_down(value: float) -> float:
-        """To two significant figures, so a band edge is a number a human can
-        hold, and downward so the rounding never makes a band stricter than
-        the share it was matched to.
-
-        It was ONE significant figure until 2026-08-20, and that is lossy in
-        proportion to where the value sits inside its decade. At 0.00033763 a
-        single figure costs 2 percent; at 0.00014266 it costs 30 percent,
-        because the value sits at the start of its decade and the next figure
-        down is a third of it. The rounding is not free either way: the edges
-        exist to make the rotation bands pay what the RVOL bands pay, and at
-        one figure the re-derived pair missed that target by 4.94 points
-        against 1.77 at two. Rounding a threshold is allowed to cost a little
-        readability. It is not allowed to cost more accuracy than the
-        re-derivation it is rounding was performed to gain.
-        """
-        if value <= 0:
-            return 0.0
-        import math
-        power = math.floor(math.log10(value)) - 1
-        # round() BEFORE the floor as well as after, and both for the same
-        # reason. 0.0006 scaled by 1e5 is 59.999999999999993, so a bare floor
-        # answers 0.00059: a rounding rule that exists to make an edge readable
-        # would have moved it by a sixtieth. The pre-round is to nine places,
-        # far finer than any edge and far coarser than the noise. The post
-        # round is the original one, because 6 * 1e-4 in binary floating point
-        # is 0.0006000000000000001 and a band edge written into CRITERIA with
-        # a tail like that is unreadable.
-        scaled = math.floor(round(value / (10 ** power), 9))
-        return round(scaled * (10 ** power), -power + 1)
-
-    def edge_at(values: list[float], share: float) -> float:
-        """The value that this share of the population exceeds."""
-        ordered = sorted(values, reverse=True)
-        index = min(max(int(round(share * len(ordered))) - 1, 0), len(ordered) - 1)
-        return ordered[index]
 
     def percentile_of(values: list[float], edge: float) -> float | None:
         """Where an edge sits in a distribution, as the share at or below it."""
@@ -749,6 +785,12 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
             "all_addressable": sorted(rescued_rot_all),
             "top_by_gap": sorted(rescued_rot_top),
         },
+        # [median or null, volume, rotation, in_top_by_gap]. See sweep_rows
+        # where it is built for why these four and not the quantiles.
+        "sweep_rows_schema": ["baseline_median_or_null_when_history_too_short",
+                              "premarket_volume", "float_rotation",
+                              "in_top_by_gap"],
+        "sweep_rows": sweep_rows,
         "rescue_examples": rescue_examples,
         "per_session": per_session,
         "alpaca_requests": probe.request_count,

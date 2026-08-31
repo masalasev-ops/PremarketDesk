@@ -15,6 +15,46 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31: the denominator floor study the CRITERIA note said was owed
+
+**What changed.** research/sweep_baseline_floor.py, a new instrument, re-fits
+the float rotation edges at every candidate denominator floor by the same
+arithmetic float_rotation_study uses. That study now records sweep_rows, four
+fields per scored row, so the re-fit is arithmetic on a file and takes no vendor
+call. round_down and edge_at were lifted out of run() to module scope so a claim
+can hold the sweep's copies to them. No threshold moved.
+
+**The answer, over 6,500 scored rows from 50 sessions.** Raising the floor to
+10,000 moves the two point rotation edge from 0.00033 to 0.00056, a 70 percent
+move, with 48 percent at 5,000 and 21 percent at 2,000. The floor note predicted
+that direction and the size is now measured.
+
+**What the note did not name, and it is the part that decides the change.**
+[Day setup] premarket_rvol is > 1.5 with NO rotation alternative, and
+Rule.test(None) is false, so a name the floor refuses does not get rescored, it
+leaves the day watchlist. Over 11 live sessions and 70 published ratios a 10,000
+floor refuses 16, two of them day_eligible and both green: PLAB on 2026-08-26 at
+a 4,135 share median, SAIC on 2026-08-31 at 1,002. Both carry rotations far
+above the edge admitting the same share the RVOL floor admits. The change is
+three parts, not two.
+
+**The score survives where membership does not.** Of the 16 refused rows, 14 are
+paid the same points by rotation under the current edges, 2 less, none more.
+
+**Held in place by** one claim mutation tested against four edits: the sweep
+rounds to one significant figure, a median exactly on the floor is refused, the
+one point edge is read at the wrong cumulative share, and the RVOL target is
+read over every row rather than the ones the floor admits. Its first draft
+missed two of those, because the real file has no median sitting exactly on a
+floor and one mutation was a no-op at the shipped value; the claim now carries
+synthetic boundary rows and asserts the target moves with the floor.
+
+**Also recorded:** a re-run of float_rotation_study on today's population
+reproduces the shipped two point edge, 0.00033, and does NOT reproduce the one
+point edge, giving 0.0002 against the shipped 0.00014. The population moved. The
+edges are not changed here; the divergence is written down where the next
+re-derivation will find it.
+
 ## 2026-08-31: two things today's report should have said and did not
 
 **Found by reading the 2026-08-31 report against its own packet.** Both are
