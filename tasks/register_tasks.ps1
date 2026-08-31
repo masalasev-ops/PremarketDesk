@@ -37,63 +37,6 @@
 # file not found, before the .bat even started. The module stores the action
 # path structurally, so there is no quoting to get wrong.
 #
-# The one off socket cost probe. NOT in $jobs, for the same reason as the two
-# above: it is meant to be deleted once DECISIONS.md carries its answer.
-#
-# 10:00 is chosen and the reasons are all constraints. Past the collector's
-# 09:25 stop, so the account wide 50 symbol cap is free and this cannot starve
-# the morning it exists to make possible. Inside regular hours, because the
-# heavy tape is the whole question and the quiet evening tape has already been
-# measured twice at zero. Clear of the 12:00 midday job, which spends REST
-# credits and would land inside the delta this reads.
-$socketCostName = "probe-socket-cost"
-$socketCostStart = "10:00"
-if ($SocketCost) {
-    $bat = Join-Path (Join-Path $root "tasks") "job_probe_socket_cost.bat"
-    if (-not (Test-Path $bat)) {
-        Write-Output "MISSING   $bat. The socket cost probe was deleted, which is what"
-        Write-Output "          was meant to happen once the number was written down."
-        exit 1
-    }
-    try {
-        $day = [datetime]::ParseExact($SocketCost, "yyyy-MM-dd", $null)
-    } catch {
-        Write-Output "FAILED    -SocketCost wants a date as yyyy-MM-dd, got '$SocketCost'"
-        exit 1
-    }
-    $at = $day.Date.Add([timespan]::Parse($socketCostStart))
-    if ($at -le (Get-Date)) {
-        Write-Output "FAILED    $SocketCost $socketCostStart is in the past. A one time trigger"
-        Write-Output "          already behind the clock never fires."
-        exit 1
-    }
-    if ($day.DayOfWeek -eq "Saturday" -or $day.DayOfWeek -eq "Sunday") {
-        Write-Output "FAILED    $SocketCost is a $($day.DayOfWeek). The question is what a"
-        Write-Output "          HEAVY LIVE TAPE costs, and there is no tape at the weekend."
-        Write-Output "          A quiet tape has already been measured twice, at zero."
-        exit 1
-    }
-    $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
-    $trigger = New-ScheduledTaskTrigger -Once -At $at
-    $settings = New-ScheduledTaskSettingsSet -WakeToRun `
-        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-        -ExecutionTimeLimit (New-TimeSpan -Minutes 35)
-    try {
-        Register-ScheduledTask -TaskName $socketCostName -TaskPath "\PremarketDesk\" `
-            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
-        Write-Output "registered PremarketDesk\$socketCostName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
-        Write-Output "           it runs 20 minutes and writes logs\probe-socket-cost-$SocketCost.log"
-        Write-Output "           NOTHING ELSE MAY TOUCH THE EODHD KEY WHILE IT RUNS."
-        Write-Output "           The counter is account wide, so a sibling project spending"
-        Write-Output "           alongside it is indistinguishable from a per message charge,"
-        Write-Output "           which is exactly the reading this probe exists to take."
-    } catch {
-        Write-Output "FAILED    could not register $socketCostName : $($_.Exception.Message)"
-        exit 1
-    }
-    exit 0
-}
-
 # All times are local machine time and the machine is expected to keep US
 # Eastern. If this machine ever changes time zone, re-derive these triggers
 # from the clocks in doc\CRITERIA.md before re-registering.
@@ -291,6 +234,62 @@ if ($Capture) {
     exit 0
 }
 
+# The one off socket cost probe. NOT in $jobs, for the same reason as the two
+# above: it is meant to be deleted once DECISIONS.md carries its answer.
+#
+# 10:00 is chosen and the reasons are all constraints. Past the collector's
+# 09:25 stop, so the account wide 50 symbol cap is free and this cannot starve
+# the morning it exists to make possible. Inside regular hours, because the
+# heavy tape is the whole question and the quiet evening tape has already been
+# measured twice at zero. Clear of the 12:00 midday job, which spends REST
+# credits and would land inside the delta this reads.
+$socketCostName = "probe-socket-cost"
+$socketCostStart = "10:00"
+if ($SocketCost) {
+    $bat = Join-Path (Join-Path $root "tasks") "job_probe_socket_cost.bat"
+    if (-not (Test-Path $bat)) {
+        Write-Output "MISSING   $bat. The socket cost probe was deleted, which is what"
+        Write-Output "          was meant to happen once the number was written down."
+        exit 1
+    }
+    try {
+        $day = [datetime]::ParseExact($SocketCost, "yyyy-MM-dd", $null)
+    } catch {
+        Write-Output "FAILED    -SocketCost wants a date as yyyy-MM-dd, got '$SocketCost'"
+        exit 1
+    }
+    $at = $day.Date.Add([timespan]::Parse($socketCostStart))
+    if ($at -le (Get-Date)) {
+        Write-Output "FAILED    $SocketCost $socketCostStart is in the past. A one time trigger"
+        Write-Output "          already behind the clock never fires."
+        exit 1
+    }
+    if ($day.DayOfWeek -eq "Saturday" -or $day.DayOfWeek -eq "Sunday") {
+        Write-Output "FAILED    $SocketCost is a $($day.DayOfWeek). The question is what a"
+        Write-Output "          HEAVY LIVE TAPE costs, and there is no tape at the weekend."
+        Write-Output "          A quiet tape has already been measured twice, at zero."
+        exit 1
+    }
+    $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
+    $trigger = New-ScheduledTaskTrigger -Once -At $at
+    $settings = New-ScheduledTaskSettingsSet -WakeToRun `
+        -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 35)
+    try {
+        Register-ScheduledTask -TaskName $socketCostName -TaskPath "\PremarketDesk\" `
+            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Write-Output "registered PremarketDesk\$socketCostName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
+        Write-Output "           it runs 20 minutes and writes logs\probe-socket-cost-$SocketCost.log"
+        Write-Output "           NOTHING ELSE MAY TOUCH THE EODHD KEY WHILE IT RUNS."
+        Write-Output "           The counter is account wide, so a sibling project spending"
+        Write-Output "           alongside it is indistinguishable from a per message charge,"
+        Write-Output "           which is exactly the reading this probe exists to take."
+    } catch {
+        Write-Output "FAILED    could not register $socketCostName : $($_.Exception.Message)"
+        exit 1
+    }
+    exit 0
+}
 foreach ($job in $jobs) {
     $taskPath = "\PremarketDesk\"
     if ($Unregister) {

@@ -140,7 +140,11 @@ each has its own dated flag, and `-Unregister` removes all three.
   is clear of the 12:00 midday job, whose REST spend would land inside the
   delta. NOTHING ELSE MAY TOUCH THE KEY WHILE IT RUNS: the counter is account
   wide, so a sibling project spending alongside it is indistinguishable from a
-  per message charge.
+  per message charge. The meter sampler firing at 10:00 and 10:30 is the one
+  exception and it is safe, because [Quota costs] pins the user endpoint at
+  zero and three independent measurements have now closed on that.
+
+  Armed on 2026-08-31 for 2026-09-01 10:00.
 
 - `job_probe_socket_cap.bat`. A/B tests the EODHD trades websocket under a
   small subscription and under one at the documented 50 symbol cap,
