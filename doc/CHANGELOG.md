@@ -15,6 +15,48 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31: the drifted rotation edge is fixed, 0.00014 becomes 0.0002
+
+**What changed.** [Score premarket float rotation]'s one point edge moved from
+0.00014 to 0.0002. The two point edge is unmoved at 0.00033. The claim that
+traces the shipped edges to an archived fit now reads the NEWEST payload rather
+than a named one, so a later measurement that disagrees with what is shipped
+fails instead of being ignored.
+
+**Why it had to.** That section exists so the rotation bands pay what the RVOL
+bands pay, because a name is scored by one or the other and never both. On
+today's population the shipped edges paid the one point band to 15.34 percent
+against a 10.89 percent target, so a name with no usable baseline was getting
+that point half again as often as an equivalent name that had one. The re-fit
+pays 10.58. The miss falls from 4.54 points to 0.40.
+
+**It is drift in the data, not a fault in the method.** The two point edge
+reproduces exactly. universe.json has been rebuilt twice since the 2026-08-20
+fit and ten more sessions are cached, and the one point edge sits low in its
+decade where a small shift moves the quantile a long way. That is the same
+sensitivity the rounding argument turned on: one significant figure was refused
+at a 4.94 point miss, and this was 4.54.
+
+**No historical row was rescored**, on the no overwriting rule. Two rows in the
+record would have scored differently: NSSC on 2026-08-24 from 7.0 green to 6.0
+yellow, and WSM on 2026-08-26 from 6.0 to 5.0, still yellow.
+
+**The claim caught this by hand-editing CRITERIA, which is what it is for.**
+Moving the edge failed the suite immediately, because
+claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted pinned the value
+to float_rotation_study-2026-08-20-warmup-fixed.json by name. Pinning one named
+file is one file too specific: it would have passed forever against an elder
+payload while a newer fit disagreed. It now globs and takes the newest, and is
+mutation tested both ways.
+
+**Not fixed, and deliberately: the score is still ordering outcomes backwards.**
+Green 25 rows, best price reached -7.44 percent; yellow 31 rows, +2.64. That is
+six sessions, it is pre-registered in doc/research/SCORE_INVERSION.md, and
+acting on it now would be fitting the score to six mornings. The rotation edge
+is drift from a measurement that exists. The score inversion is a question whose
+measurement is not in yet. They are different things and only one of them is
+fixable today.
+
 ## 2026-08-31: the denominator floor study the CRITERIA note said was owed
 
 **What changed.** research/sweep_baseline_floor.py, a new instrument, re-fits

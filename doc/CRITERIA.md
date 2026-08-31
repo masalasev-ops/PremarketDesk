@@ -2726,6 +2726,41 @@ quantile of the clean one, so the study had to be re-run against Alpaca to
 answer a question about numbers already measured. With those rows and
 `rvol_band_payout`, a re-fit is arithmetic on a file.
 
+**Re-fitted 2026-08-31. The two point edge reproduced; the one point edge did
+not, and it moved 0.00014 to 0.0002.** Measured on the 189 rescued names among
+the top candidate_count by gap, over 50 tallied sessions:
+
+| edges | two points | one point | miss against target |
+| --- | ---: | ---: | ---: |
+| the RVOL target | 53.35% | 10.89% | |
+| 0.00033 / 0.00014, as shipped | 53.44% | 15.34% | 4.54 points |
+| 0.00033 / 0.0002, re-fitted | 53.44% | 10.58% | 0.40 points |
+
+Nothing was wrong with the 2026-08-20 fit. The POPULATION moved: universe.json
+has been rebuilt twice since and ten more sessions are cached, and the one
+point edge sits low in its decade where a small shift in the distribution moves
+the quantile a long way. The two point edge is unmoved at 0.00033, which is
+what says this is drift in the data rather than a fault in the method.
+
+**Why it was worth moving for 4.54 points.** This section exists so the two
+band sets pay alike, because a name is scored by one or the other and never
+both. At 15.34 against a 10.89 target, a name with no usable baseline was
+getting the one point band half again as often as an equivalent name that had
+one, which is the exact defect the matching prevents. It is also the same size
+of miss that settled the rounding argument above: one significant figure was
+refused at 4.94 points.
+
+**No historical row was rescored.** picks rows keep the score they were
+published with, on the no overwriting rule. Two rows in the record would have
+scored differently: NSSC on 2026-08-24 from 7.0 green to 6.0 yellow, and WSM on
+2026-08-26 from 6.0 to 5.0, still yellow.
+
+**The open [Day setup] eligibility floor moved with it.** DECISIONS.md lists a
+rotation floor for day eligibility as still open, at 0.00014. That number was
+the rotation edge admitting the same share the RVOL floor admits, and on this
+population it now reads 0.0002. The question stays open; its candidate value is
+0.0002.
+
 **These edges are conditional on [Scan] candidate_count.** The scored
 population is the top N by gap, and rotation rises with gap size, so changing
 candidate_count changes the population these were fitted to and they must be
@@ -2739,7 +2774,7 @@ hundredths of one percent of the float changing hands between 07:20 and 08:45,
 not over the whole premarket.
 
 band = > 0.00033 : 2
-band = >= 0.00014 : 1
+band = >= 0.0002 : 1
 band = else : 0
 
 ## Score gap

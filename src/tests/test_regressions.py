@@ -10113,13 +10113,20 @@ def claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(
 
     from core import criteria as _criteria
 
-    payload_path = (config.PROJECT_ROOT / "doc" / "research"
-                    / "float_rotation_study-2026-08-20-warmup-fixed.json")
-    if not payload_path.is_file():
-        failures.append(f"{payload_path.name} is gone, so the edges in CRITERIA "
-                        "[Score premarket float rotation] can no longer be "
-                        "traced to the fit they are supposed to come from")
+    # THE NEWEST archived fit, not a named one. This claim pinned
+    # float_rotation_study-2026-08-20-warmup-fixed.json until 2026-08-31, and
+    # that is one file too specific: a later run whose edges disagree with what
+    # is shipped is exactly the drift this claim exists to catch, and against a
+    # hardcoded elder payload it would pass forever. Sorting is by filename and
+    # the names carry ISO dates, so newest is last.
+    archived = sorted((config.PROJECT_ROOT / "doc" / "research").glob(
+        "float_rotation_study-*.json"))
+    if not archived:
+        failures.append("no float_rotation_study payload is archived, so the "
+                        "edges in CRITERIA [Score premarket float rotation] "
+                        "can no longer be traced to the fit they come from")
         return
+    payload_path = archived[-1]
     payload = json.loads(payload_path.read_text(encoding="utf-8"))
     block = (payload.get("mapping_transfer") or {}).get("top_12_by_gap") or {}
     fitted = block.get("rederived_on_rescued") or {}
@@ -10142,10 +10149,12 @@ def claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(
     for result, key in (("2", "two_points"), ("1", "one_point")):
         if shipped[result] != fitted.get(key):
             failures.append(
-                f"CRITERIA scores {result} above {shipped[result]!r} where the "
-                f"archived fit re-derived {fitted.get(key)!r}. An edge that has "
-                "drifted from its own measurement is a seeded threshold wearing "
-                "a measured one's paperwork")
+                f"CRITERIA scores {result} above {shipped[result]!r} where "
+                f"{payload_path.name}, the newest archived fit, re-derived "
+                f"{fitted.get(key)!r}. An edge that has drifted from its own "
+                "measurement is a seeded threshold wearing a measured one's "
+                "paperwork. Either ship the re-fit or say in CRITERIA why the "
+                "measurement is not being followed")
 
     def edge_at(values: list[float], share: float) -> float:
         ordered = sorted(values, reverse=True)

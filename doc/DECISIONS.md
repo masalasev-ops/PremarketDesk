@@ -18,6 +18,38 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-31: shipping the re-fit, and what counts as drift worth fixing
+
+Two numbers looked wrong today and only one of them was fixed. The difference
+is worth writing down, because "something is drifting, fix it" is the right
+instinct and it needs a rule for when it applies.
+
+**FIXED: the one point rotation edge.** There is a measurement, the shipped
+value disagrees with it, and the disagreement has a cost that can be stated:
+15.34 percent paid against a 10.89 percent target, on a band whose entire
+purpose is to pay what the other band pays. Nothing is being predicted. The
+edge is a description of a distribution, the distribution moved, and the
+description was stale. That is drift, and drift gets corrected.
+
+**NOT FIXED: the score ordering outcomes backwards.** Green does worse than
+yellow on both measures available. There is no measurement saying what the
+score SHOULD pay, because that is the question the record is being collected to
+answer, and six sessions is not it. Changing the gap component or the bucket
+edges now would be fitting a screen to six mornings and then having no
+independent evidence left to test it against. SCORE_INVERSION.md fixes the
+judging point in advance for exactly this reason.
+
+**The rule: correct a value against a measurement it already has. Do not invent
+a measurement to justify changing a value you dislike.** The rotation edge had
+one. The score does not yet.
+
+**One more thing changed because of this.** The claim tracing the shipped edges
+to their fit named a single archived payload. That is fine until someone runs
+the study again, at which point the claim keeps validating against the elder
+file and the newer disagreement is invisible, which is the failure mode the
+claim exists to prevent, arriving through the claim itself. It reads the newest
+payload now.
+
 ## 2026-08-31: the denominator floor is a three part change, not two
 
 CRITERIA's floor note has said since 2026-08-28 that raising
