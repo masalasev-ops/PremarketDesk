@@ -156,7 +156,27 @@ cost = eod-bulk-last-day : 100
 cost = us-quote-delayed-per-symbol : 1
 cost = eod : 1
 cost = exchange-symbol-list : 1
+cost = news : 5
+cost = news-feed : 5
+cost = intraday-1m : 5
 cost = user : 0
+
+**The three added 2026-08-31, and the one that is a correction.** Measured the
+same way as the rest, five calls of one kind between two user reads, and every
+delta divided exactly: news 25 over 5, intraday-1m 25 over 5, news-feed 5 over
+1. Nothing else was touching the key, and the six user reads interleaved
+through the measurement re-pin that endpoint at zero for a third time.
+
+intraday-1m is the correction. Nothing had ever priced it, and a reader
+counting http calls would have costed it at one. It is FIVE, so the two
+scheduled steps that use it cost five times what a call count suggests: the
+07:15 baseline warm makes one call per stale subscribed ticker, up to 42, which
+is about 210 credits and not 42, and the nightly verify_against_intraday makes
+one per collected symbol, about 50, which is about 250 and not 50. Neither is
+gated on a number sized off the old reading, so nothing was actually undersized
+and nothing is being fixed here. What changes is that the next gate to be
+written cannot be wrong by a factor of five, which is exactly the mistake this
+section exists to have already made once.
 
 ## Notable
 
@@ -1554,14 +1574,17 @@ DECISIONS: today's completed session returned zero 1m rows two hours after the
 close while the three sessions before it returned full days. So the endpoint
 the night measures the morning with is unavailable to this pass at any hour of
 the trading day. us-quote-delayed is what is left, and during REGULAR HOURS it
-carries today's open, high, low, lastTradePrice, volume and previousClosePrice,
-with lastTradeTime measured 2026-08-17 at 09:56:12 against a 09:57 fetch. Its
+carries today's open, high, low, lastTradePrice and volume, with
+lastTradeTime measured 2026-08-17 at 09:56:12 against a 09:57 fetch. Its
 extended hours fields are NOT read here: they were stale at 08:45 on the same
-morning they were needed, and this pass has no use for them.
+morning they were needed, and this pass has no use for them. Neither is its
+previousClosePrice, for the reason the denominator note gives, and that is the
+most important line in this section.
 
 run_time                      = 12:00      # ET. Deliberately well inside regular hours: the delayed quote's REGULAR hours behaviour is what was measured, and its premarket behaviour is untested
 max_quote_age_seconds         = 1800       # SEED. lastTradeTime older than this against the run clock makes the row's prices null with a reason, never carried
-require_previous_close_date   = true       # a row whose previousCloseDate does not name the prior trading session is REFUSED, not repaired. See the vintage note
+require_prior_session_close   = true       # a symbol the prior session's bulk close payload does not carry is REFUSED and left unmeasured, never measured against the quote's own previousClosePrice. See the denominator note
+open_tolerance_pct            = 0.5        # SEED, PERCENT. A carry through verdict decided by a smaller margin between the open and the entry is flagged, because the quote's open is the first consolidated print and not the opening auction. See the open note
 
 ### The carry through note
 
@@ -1639,20 +1662,61 @@ list_size                     = 15         # how many ranked movers reach the re
 news_lookups                  = 10         # how many of those get a news call. One credit each, and the cost is trivial against the sweep that found them
 rank_by                       = move       # move or rvol. Which of the two floors above orders the list once both are cleared
 
-### The vintage note
+### The denominator note
 
-previousClosePrice is the denominator of every move this pass reports, and the
-quote names its own vintage in previousCloseDate. So it is CHECKED and not
-trusted: 2026-08-31 at 18:14 read 125.74 dated 2026-08-28 for SAIC.US, which is
-the prior session. A row whose previousCloseDate does not name the prior
-trading session is refused with its reason recorded, because this project has
-already published one report priced off the wrong session, on 2026-08-14, from
-an endpoint whose name said live. The difference this time is that the vendor
-hands over the date, so there is no excuse for guessing.
+Every move this pass reports divides by the prior session's close. That close
+comes from eod-bulk-last-day for an EXPLICITLY NAMED date, one call, 100
+credits, the whole exchange. It is NOT the quote's own previousClosePrice, and
+the first draft of this section said it was, which is the mistake this note now
+exists to prevent anyone repeating.
+
+**What previousClosePrice actually is, measured 2026-08-31.** Not one quantity.
+Across the 2,391 universe names carrying both, it equalled the PRIOR session's
+close for about 34 percent and TODAY'S close for about 29 percent, and nothing
+in the payload says which a given row holds. SAIC.US matched neither: 125.74
+against a 125.96 close on 2026-08-28 and a 128.22 close on 2026-08-31. A
+further 359 names carried no previousClosePrice at all while carrying a
+previousCloseDate, an open, a high, a low, a last and a volume.
+
+**And previousCloseDate does not save it.** Every one of those 359 rows carried
+a correct date. The field was RIGHT on rows whose price was wrong, so it is
+evidence about the vendor and not a check on anything. It is recorded in the
+packet and nothing branches on it. A vintage stamp that does not travel with
+the number it stamps is worse than none, because it invites exactly the trust
+the first draft of this section placed in it.
+
+**Why the bulk day is safe where the quote is not.** The request NAMES a
+session, so there is no roll time to be on the wrong side of. Verified
+2026-08-31 against the single symbol eod endpoint that fill_outcomes and the
+morning already trust: the two agreed exactly on every name checked while the
+quote disagreed with both. It also covers all 359 the quote declined, because
+it is keyed on the exchange rather than on a symbol list.
+
+This is the 2026-08-14 defect wearing new clothes. That one published a report
+priced off the last completed session from an endpoint whose name said live.
+The lesson then was that a field's name is not its contract, and the lesson
+holds for a field called previous which is sometimes current.
 
 The prior trading session comes from the session calendar, never from weekday
 arithmetic, for the reason [Outcomes] gives: a Monday holiday makes the prior
 session Thursday and weekday math would compare against a day nobody traded.
+
+### The open note
+
+The carry through rule turns on whether the session open cleared entry_ref, and
+us-quote-delayed's open is the FIRST CONSOLIDATED PRINT, not the opening
+auction price. Measured 2026-08-31 across 2,750 names against
+eod-bulk-last-day: it agreed for about 70 percent, and for the rest it differed
+by a median 0.34 percent, worst among the least liquid, up to 5.8 percent on
+MLR.US. SAIC.US and MNSO.US, the two names that mattered that day, agreed
+exactly.
+
+So the open is USED, because it is the only open available inside the session,
+and a verdict decided by a margin smaller than open_tolerance_pct is FLAGGED
+rather than presented as settled. A row that would read gapped through against
+one open and triggered against the other is a row a reader should be told
+about, not one to be quietly rounded into whichever state the arithmetic
+reached first.
 
 ### Why this pass has no narrative
 

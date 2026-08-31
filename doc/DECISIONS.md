@@ -5397,3 +5397,61 @@ max_subscriptions is 50 ACCOUNT WIDE, so hours held are slots held.
 intraday for a running session today, so no code is wrong. The next person to
 reach for that endpoint at midday would have spent the same six calls finding
 out.
+
+## 2026-08-31, second: previousClosePrice is not one quantity
+
+**How this was nearly shipped.** The midday pass divides every move it reports
+by the prior session's close. us-quote-delayed carries previousClosePrice AND
+previousCloseDate, the date read 2026-08-28 for SAIC.US against a session
+calendar that agreed, and CRITERIA [Midday] was written saying the field is
+checked rather than trusted and is therefore safe. That paragraph was wrong,
+and it was wrong in the most persuasive way available: it cited a real check
+that really passed.
+
+**What the field actually is.** Across the 2,391 universe names carrying both
+it and a bulk close, previousClosePrice equalled the PRIOR session's close for
+about 34 percent and TODAY'S close for about 29 percent. Nothing in the payload
+distinguishes them. SAIC.US matched neither, reading 125.74 against a 125.96
+close on 2026-08-28 and a 128.22 close on 2026-08-31. A further 359 names
+carried no previousClosePrice at all while carrying a correct previousCloseDate
+beside an open, a high, a low, a last and a volume, which is how the problem
+surfaced: they arrived as an unpriced bucket in the movers tally.
+
+**The date field is the part worth remembering.** All 359 of those rows carried
+a CORRECT date. previousCloseDate was right on rows whose price was missing,
+and right on rows whose price belonged to a different session. A vintage stamp
+that does not travel with the number it stamps is worse than no stamp, because
+it manufactures exactly the confidence that stops anyone checking. The check
+that was written into CRITERIA would have passed on every bad row.
+
+**What replaced it.** eod-bulk-last-day for an explicitly named date. One call,
+100 credits, 48,272 closes, the whole exchange rather than the universe, so all
+359 are answered. The request NAMES the session, so there is no roll time to be
+on the wrong side of. Verified against the single symbol eod endpoint that
+fill_outcomes and the morning already trust: the two agree exactly on every
+name checked, while the quote disagreed with both.
+
+**What it changed in the output.** Measured on 2026-08-31's session, the broken
+denominator admitted three movers and the corrected one admits eight. The two
+it had been missing are the largest moves of the day, EIX.US at -22.69 percent
+and PCG.US at -19.22 percent, both on the California wildfire liability
+withdrawal, and neither was named anywhere in that morning's report. So this
+was not a rounding difference. The scan's entire reason to exist was being
+defeated by its denominator.
+
+**The shape, because it will recur.** This is 2026-08-14 again. That one
+published a report priced off the last completed session from an endpoint whose
+name said live. A field's name is not its contract, and previous is not a
+contract when the thing it is previous TO changes at an hour nobody has
+measured. The rule this leaves: a denominator must be fetched by naming the
+session it belongs to, never by trusting a field that claims to already know
+which session that is.
+
+**One thing measured on the way and NOT treated as a defect.** The quote's open
+is the first consolidated print and not the opening auction. It agreed with
+eod-bulk-last-day for about 70 percent of 2,750 names and differed by a median
+0.34 percent for the rest, worst among the least liquid, up to 5.8 percent on
+MLR.US. SAIC.US and MNSO.US agreed exactly. The open is used anyway, because
+inside a running session it is the only open there is, and a carry through
+verdict decided by a margin under [Midday] open_tolerance_pct is flagged rather
+than presented as settled.
