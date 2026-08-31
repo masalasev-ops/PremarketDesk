@@ -122,18 +122,24 @@ repository, and this section keeps that rule. The one place real figures appear
 is the paper ledger's aggregate counts, which are already in
 `doc/CHANGELOG.md`, and they are labelled where they are used.
 
-### The two things it produces
+### The three things it produces
 
-The system produces exactly two documents. Everything else on disk is evidence
-behind them.
+The system produces exactly three documents. Everything else on disk is
+evidence behind them.
 
-| | The morning report | The weekly page |
-| --- | --- | --- |
-| File | `runs/YYYY-MM-DD/report.html`, and every past one in `site/PremarketDesk.html` | `site/Weekly.html` |
-| Written | 08:46 to 08:49 each weekday | Every night at 22:15 |
-| Covers | This morning only, except one section | A rolling trailing 7 days |
-| Answers | Which names gapped, on what, and what the evidence behind each is worth | Did the machine run, is its data trustworthy, what did it publish, what did it cost, and is the score ordering anything |
-| Read it | Before 09:30, ideally around 08:50 | Whenever. Nothing in it is time critical |
+| | The morning report | The midday report | The weekly page |
+| --- | --- | --- | --- |
+| File | `runs/YYYY-MM-DD/report.html`, and every past one in `site/PremarketDesk.html` | `runs/YYYY-MM-DD/report_midday.html` | `site/Weekly.html` |
+| Written | 08:46 to 08:49 each weekday | 12:00 each weekday | Every night at 22:15 |
+| Covers | This morning only, except one section | Today's session so far | A rolling trailing 7 days |
+| Answers | Which names gapped, on what, and what the evidence behind each is worth | What this morning's picks actually did, and what else moved that the morning never named | Did the machine run, is its data trustworthy, what did it publish, what did it cost, and is the score ordering anything |
+| Read it | Before 09:30, ideally around 08:50 | Any time after 12:00 | Whenever. Nothing in it is time critical |
+| Written by | The claude CLI, from a packet | Nothing. It is rendered | Nothing. It is rendered |
+
+The morning report is the only one a model writes. The midday report asks
+closed questions, a pick triggered or it did not, a name moved or it did not,
+so it is laid out directly from arithmetic with no narrative pass, no
+containment check and nothing that could hallucinate.
 
 The weekly page is not weekly in cadence, only in span. It is rebuilt from
 scratch every night, so it always covers the last seven days ending yesterday.
@@ -297,6 +303,102 @@ defect worth chasing, because a description of six sessions written as an
 instruction is a strategy nobody validated wearing the authority of a generated
 document.
 
+### The midday report, section by section
+
+Live from 2026-08-31. It exists because the morning report is written ninety
+minutes before the session it is about, so at 08:45 nothing in it has happened
+yet.
+
+**Section 1, what the morning's picks did.** Every pick from today, graded
+against the levels the morning published. Invented numbers, but the shape is
+real:
+
+| Ticker | Score | Morning entry | Stop | What happened | Now vs fill | Best vs fill | Stop |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MNSO.US | 7.0 green | 9.69 | 9.46 | never triggered | n/a | n/a | not applicable |
+| SAIC.US | 10.0 green | 137.40 | 134.00 | gapped through at the open | -8.87% | +1.62% | stopped out |
+
+Read the second row first, because it is the case the morning report cannot
+show you. SAIC was the highest scoring name of the day, green, eligible on both
+screens. It opened above its entry, so a resting order filled at the open. It
+then ran 1.6 percent, gave all of it back, broke its stop and sat nearly 9
+percent below the fill. The 08:45 report could not know any of that and the
+night's pass would not say so until 22:15.
+
+There are four verdicts and the difference between two of them is the whole
+design:
+
+- **never triggered.** The session high never reached the entry. The stop is
+  NOT read, because a low with no trade under it stops nothing. MNSO's low was
+  under its stop all day and that fact is meaningless: there was no position.
+- **gapped through at the open.** The open was already past the entry, so the
+  fill is the session's first print. Everything after it is after it, which
+  means a later low through the stop is unambiguously a stop out.
+- **triggered after the open.** The fill happened somewhere in the middle of
+  the session. Here a daily high and a daily low carry no order, so if the low
+  went through the stop the report says **stop level reached, sequence
+  unknown** and refuses to call it a stop out. It genuinely cannot be told
+  apart from a dip that happened before the entry.
+- **unknown.** A level the quote did not carry. Null with a written reason.
+
+That third case is the one thing this report cannot answer and it says so on
+every edition, with a count. Fixing it means running the collector past the
+open so there are timestamped minute bars instead of one daily bar, and that is
+gated on a measurement that has not been taken yet.
+
+**Section 2, what else moved.** The whole 2,751 name universe is quoted and
+ranked on today's move, excluding anything the morning already named:
+
+| Ticker | Move | Day RVOL | Last | Market cap | Did the morning reach it |
+| --- | --- | --- | --- | --- | --- |
+| EIX.US | -22.69% | 8.59x | 54.25 | 20.88B | pooled not subscribed |
+| PCG.US | -19.22% | 6.81x | 13.41 | 29.53B | pooled not subscribed |
+| TECX.US | -15.95% | 3.84x | 29.94 | 0.59B | not pooled |
+
+Then the headlines behind each, fetched AFTER the ranking:
+
+> **EIX.US**, -22.69%. discover ranked this name into the pool at 07:15 and the
+> subscription cap cut it, so no premarket tape was ever collected for it.
+> - PG&E Stock Plummets as California Withholds Wildfire Liability Protections
+> - Why Edison International Stock Just Crashed
+>
+> **TECX.US**, -15.95%. discover did not have this name at 07:15 at all.
+> - the vendor tagged no story to this symbol today, so this name moved on
+>   something the feed does not carry under its ticker. That is a silence in
+>   the feed and not evidence of no news.
+
+**The order of those two operations is the whole argument.** The cheap way to
+build this section is to pull the news feed and quote only the names carrying a
+headline. That answers "which names had news and also moved", and a name that
+moved on no tagged headline would be invisible with nothing saying so. Here
+price selects and news only explains, so TECX stays on the list and the report
+can tell you it does not know why it moved.
+
+**The right hand column is a live recall measurement.** Three states, and they
+are not the same fact:
+
+- **subscribed.** The collector was listening to this name and the 08:45 screen
+  still did not publish it. The screen saw it and declined.
+- **pooled not subscribed.** discover ranked it at 07:15 and the 50 symbol
+  subscription cap cut it, so no premarket tape exists for it at all.
+- **not pooled.** discover never had it. Nothing this morning could have
+  reached it.
+
+On the first real run, the two largest moves of the day were both in the middle
+group.
+
+**What it costs.** About 2,900 credits a session against a shared 100,000 a
+day, almost all of it the per symbol universe sweep. There is no cheaper honest
+way to ask what moved: the vendor's bulk endpoints serve the previous session,
+which is the trap that published a wrong report on 2026-08-14. The preflight is
+sized to the sweep and refuses rather than truncating, because half a universe
+is not a market wide scan.
+
+**One thing it does not check.** The night's ledger skips any level that was
+not transactable, judged from a second vendor's tape. That measurement does not
+exist at midday, so these grades are arithmetic on levels without asking
+whether anyone could have traded them. The report says so every day.
+
 ### The reading order at 08:50
 
 The section order in the report is not the order to read it in.
@@ -387,8 +489,9 @@ Tomorrow morning, ACME's skip is one row inside the counts in section 10.
 
 ### What the scope is today, plainly
 
-**The machine is complete and runs.** Nine scheduled tasks, every weekday since
-2026-08-13, with a watchdog over them and a job trail under them.
+**The machine is complete and runs.** Ten scheduled tasks, every weekday since
+2026-08-13, with a watchdog over them and a job trail under them. The midday
+pass is the newest and joined on 2026-08-31.
 
 **The record is 66 picks across 7 sessions.** That is enough to have found real
 defects and nowhere near enough to validate anything.

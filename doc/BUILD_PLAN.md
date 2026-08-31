@@ -109,12 +109,12 @@ at the root and is gitignored along with .env.
   That last one carries the raw per session volumes and not only the
   derived table, so the study reruns offline: the 109.9 MB deleted on
   2026-08-21 is what that costs when it is not done
-- tasks/: ten job .bat files, register_tasks.ps1, README.md. Eight of them
+- tasks/: eleven job .bat files, register_tasks.ps1, README.md. Eight of them
   register as ten scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
   repeating weekday trigger and once more at 22:45. job_midday joined them on
-  2026-08-31 at 12:00. Two further .bat files
-  sit here and are not among those ten, both of them one offs armed a morning
+  2026-08-31 at 12:00. Three further .bat files
+  sit here and are not among those ten, all of them one offs armed a morning
   at a time and both meant to be deleted once their question is answered. A
   plain run of the script registers neither, because a probe that is meant to
   be deleted must not come back every time the schedule is refreshed, and

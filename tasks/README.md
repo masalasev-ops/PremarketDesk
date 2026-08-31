@@ -1,7 +1,7 @@
 # Scheduled jobs
 
 Ten Windows Task Scheduler tasks run PremarketDesk, from eight .bat files:
-job_nightly registers twice and job_monitor registers twice. Up to two further
+job_nightly registers twice and job_monitor registers twice. Up to three further
 tasks may be present and are not part of the schedule: see One off probes at
 the foot of this file. Each .bat here
 changes to the project root, runs its scripts with the project venv, and
@@ -108,13 +108,39 @@ were registered, the tree does not refresh itself.
 
 ## One off probes
 
-Two .bat files in this folder are NOT scheduled steps. Each answers a single
-open question against a live morning and is meant to be deleted once it is
-answered. Neither sets PMD_JOB, neither writes a status record, and neither
+Three .bat files in this folder are NOT scheduled steps. Each answers a single
+open question against a live session and is meant to be deleted once it is
+answered. None sets PMD_JOB, none writes a status record, and none
 appears in CRITERIA.md [job status steps], because a step that is meant to stop
-existing does not belong in a list of steps the watchdog expects. Neither is in
+existing does not belong in a list of steps the watchdog expects. None is in
 the $jobs array, so a plain run of register_tasks.ps1 never resurrects one;
-each has its own dated flag, and `-Unregister` removes both.
+each has its own dated flag, and `-Unregister` removes all three.
+
+- `job_probe_socket_cost.bat`, added 2026-08-31 and NOT yet run. It measures
+  the one number the websocket still owes: the per MESSAGE cost on a heavy live
+  tape. Connecting, subscribing and reconnecting were measured at exactly zero
+  on 2026-08-13, twice, across runs with 9 and 12 reconnects, but both rode the
+  quiet evening tape. The single window that ever streamed a heavy tape, 1,574
+  trade messages, straddled the counter's 00:00 UTC daily reset and its delta
+  was therefore unreadable.
+
+  It matters now because CRITERIA [Midday] argues for moving [Collector]
+  stop_time past the open. A daily high and a daily low carry no order, so the
+  midday pass cannot tell whether a stop that was reached came before or after
+  an intraday fill; timestamped minute bars can. Regular hours print far harder
+  than premarket, so the cost that has never been measured is exactly the cost
+  that extension would incur.
+
+  Arm it for a chosen weekday with:
+
+      powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1 -SocketCost 2026-09-01
+
+  10:00 is past the collector's 09:25 stop, so the account wide 50 symbol cap
+  is free and this cannot starve the morning it exists to make possible, and it
+  is clear of the 12:00 midday job, whose REST spend would land inside the
+  delta. NOTHING ELSE MAY TOUCH THE KEY WHILE IT RUNS: the counter is account
+  wide, so a sibling project spending alongside it is indistinguishable from a
+  per message charge.
 
 - `job_probe_socket_cap.bat`. A/B tests the EODHD trades websocket under a
   small subscription and under one at the documented 50 symbol cap,

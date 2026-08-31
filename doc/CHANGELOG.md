@@ -15,6 +15,72 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31, second: a midday pass, and the field it must never divide by
+
+**What changed.** A tenth scheduled task at 12:00, two new modules under
+`src/midday/`, and CRITERIA gains [Midday]. It answers the two questions the
+08:45 report cannot, because the session it describes has not opened yet: what
+the morning's own picks did, and what else moved that the morning never named.
+
+**Why it reads quotes and not bars.** EODHD does not publish today's intraday
+bars until overnight. Measured: today's completed session returned zero 1m rows
+two hours after the close while the three sessions before it returned full
+days. That is the same vendor lag the 07:00 catch-up exists to absorb, seen
+from the other side, and it rules out every design that reads bars at any hour
+of the trading day.
+
+**The rule, and the case it refuses to answer.** [Paper]'s rule run against
+what a daily quote can say. A name whose high never reached the entry never
+filled, so its low is not read against the stop: the first prototype got that
+wrong and booked a loss on a position nobody held. A name whose OPEN cleared
+the entry filled at the session's first print, so a later low through the stop
+is unambiguously a stop out. A name that filled intraday cannot be resolved at
+all, because a daily high and low carry no order, and that count is published
+on every edition rather than rounded into whichever verdict the arithmetic
+reached first.
+
+**What that gap is worth fixing with.** Moving [Collector] stop_time past the
+open, which turns one daily bar into timestamped minute bars. Gated on a
+measurement: `tasks\job_probe_socket_cost.bat` is written and NOT yet run.
+Connecting, subscribing and reconnecting were measured at zero on 2026-08-13,
+twice, but on the quiet evening tape; the per message cost on a heavy live tape
+has never been readable, because the one window that streamed 1,574 messages
+straddled the counter's daily reset.
+
+**The defect this nearly shipped with.** The denominator. See DECISIONS
+2026-08-31, second, in full: previousClosePrice is not one quantity, it was the
+prior session for about a third of names and TODAY for about another third, and
+previousCloseDate was correct on both so the vintage check written into the
+first draft of [Midday] would have passed on every bad row. The prior close now
+comes from eod-bulk-last-day for an explicitly named date. Corrected before it
+ever ran scheduled, and the measured difference is not cosmetic: on 2026-08-31
+the broken denominator found three movers and the corrected one finds eight,
+the two largest being EIX.US at -22.69 percent and PCG.US at -19.22 percent.
+
+**Three endpoint prices added to [Quota costs], and one is a correction.**
+Measured the same way as the rest, five calls between two user reads, every
+delta dividing exactly: news 5, news-feed 5, intraday-1m 5. intraday had never
+been priced and a reader counting http calls would have costed it at one, so
+the 07:15 baseline warm is about 210 credits rather than 42 and the nightly
+verify about 250 rather than 50. Nothing was undersized, because no gate is
+sized off either; what changes is that the next gate cannot be wrong by five.
+
+**No model runs in it.** The morning uses the analyst because what to make of a
+premarket is open. Midday asks closed questions, so the report is rendered from
+the packet: no claude CLI call, no containment check, no quantifier guard,
+because no prose is written for any of them to police. The renderer builds its
+own markdown and escapes on the way out, which the claims exercise against a
+headline carrying a pipe, a newline, a forged heading, a forged table row and a
+script tag.
+
+**Held to sixteen mutations, all caught.** Including both boundary flips on the
+entry, the one on the stop, an intraday fill booking a stop out it cannot know,
+the never triggered branch falling through to read a stop, and a missing bulk
+close falling back to the quote's own field. Two claims were rewritten during
+that pass because they survived their own defect: one asserted against a table
+row the headline never reaches, and one described a mutation that turned out to
+be behaviourally equivalent.
+
 ## 2026-08-31: the drifted rotation edge is fixed, 0.00014 becomes 0.0002
 
 **What changed.** [Score premarket float rotation]'s one point edge moved from
