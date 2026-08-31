@@ -1542,6 +1542,126 @@ carries both run_time_et and rvol_cutoff_hhmm, and they differ when snapped.
 Outside the snap window nothing is snapped, which is why an off hours test run
 honestly reports no cached baseline.
 
+## Midday
+
+The 12:00 pass. It answers two questions the morning cannot: what the morning's
+own picks did once the session opened, and what else moved that the morning
+never named. Live from 2026-08-31. Every number below is a SEED.
+
+**What it may read, and why the list is this short.** EODHD does not publish
+today's intraday bars until overnight, measured 2026-08-31 and written up in
+DECISIONS: today's completed session returned zero 1m rows two hours after the
+close while the three sessions before it returned full days. So the endpoint
+the night measures the morning with is unavailable to this pass at any hour of
+the trading day. us-quote-delayed is what is left, and during REGULAR HOURS it
+carries today's open, high, low, lastTradePrice, volume and previousClosePrice,
+with lastTradeTime measured 2026-08-17 at 09:56:12 against a 09:57 fetch. Its
+extended hours fields are NOT read here: they were stale at 08:45 on the same
+morning they were needed, and this pass has no use for them.
+
+run_time                      = 12:00      # ET. Deliberately well inside regular hours: the delayed quote's REGULAR hours behaviour is what was measured, and its premarket behaviour is untested
+max_quote_age_seconds         = 1800       # SEED. lastTradeTime older than this against the run clock makes the row's prices null with a reason, never carried
+require_previous_close_date   = true       # a row whose previousCloseDate does not name the prior trading session is REFUSED, not repaired. See the vintage note
+
+### The carry through note
+
+This grades every live picks row for today against THE LEVELS THE MORNING
+PUBLISHED, entry_ref and stop_ref, and never against entry_ref_true or
+stop_ref_true. Those do not exist until the night's truth pass writes them, so
+the choice is between the morning's levels and no answer at all.
+
+The consequence has to be stated wherever this is read: the night ledger books
+the same trade against the corrected levels and WILL sometimes reach a
+different verdict. That is not a defect in either pass. It is two measurements
+of one question against two reference prices, and the midday pass is the one
+built on numbers a reader actually saw at 08:45.
+
+Nothing here is ever written to paper_trades. That table is the night's, it is
+keyed on a rule version, and a second writer booking against uncorrected levels
+would destroy exactly the comparison it exists for. The midday verdict lives in
+its own packet and nowhere else.
+
+**The rule, which is [Paper]'s rule run against what a daily quote can say.**
+
+  NEVER TRIGGERED   high < entry_ref. No position, and the session low is NOT
+                    read: a low with no trade under it stops nothing. This is
+                    the case the first prototype got wrong on 2026-08-31, which
+                    is why it is written down first.
+  GAPPED THROUGH    open >= entry_ref. Fill is the open, exactly as [Paper]
+                    fills a gap through at the open. The fill is the session's
+                    FIRST print, so a low reaching stop_ref after it is
+                    unambiguously a stop out and is booked as one. Order is
+                    knowable here and only here.
+  TRIGGERED         open < entry_ref <= high. Fill is entry_ref. Whether the
+                    session low came before or after that fill is UNKNOWABLE
+                    from a daily high and low, so a low at or under stop_ref is
+                    reported as stop level reached with the sequence unknown,
+                    and NEVER as a stop out. A quote carries no sequence and
+                    this pass will not invent one.
+  UNKNOWN           any level the quote did not carry. Null with a reason.
+
+The third case is the whole argument for extending [Collector] stop_time past
+the open: minute bars with timestamps turn it into the second case's certainty.
+Until that is measured and shipped, the count of rows landing in it is reported
+on every edition, because a pass that is silent about how often it cannot
+answer reads exactly like a pass that always can.
+
+**What it does not check.** [Paper]'s SKIP condition, fill_plausible, is
+computed by the night from Alpaca band volume and does not exist at 12:00. So
+this pass grades levels without asking whether they were transactable, and says
+so. A midday verdict on an illiquid level is arithmetic, not a trade.
+
+### The mover scan note
+
+The second half, and it is a different question from [Notable]. That section
+ranks the previous COMPLETED session's moves out of a file already on disk and
+costs nothing. This ranks TODAY'S move, mid session, and costs one credit per
+universe name because there is no cheaper honest way to ask.
+
+**Why the whole universe and not a news feed.** The affordable design pulls the
+global news feed since 08:45 and quotes only the names carrying a headline.
+That answers which names had news and also moved, which is not the question: a
+name that moved on no tagged headline would be invisible and the report would
+have no way to say it was blind. The owner chose the sweep on 2026-08-31 with
+the price stated. Selection is on PRICE, and news is fetched afterwards to
+explain what price already found, never to decide membership.
+
+**The bill.** One credit per symbol against a 2,751 name universe, priced by
+[Quota costs] us-quote-delayed-per-symbol, so about 2,751 credits a session
+against a shared 100,000 a day. The preflight is sized to the sweep and refuses
+rather than truncating: half a universe is not a market wide scan and must not
+be published as one.
+
+min_move_pct                  = >= 5       # SEED. abs lastTradePrice against previousClosePrice, percent. Not a gap: this is the whole session's move so far
+min_day_rvol                  = >= 3       # SEED. today's volume against averageVolume. Without it the list fills with high beta names doing what they always do
+min_price                     = >= 3       # dollars, lastTradePrice. Matches [Universe] so the scan cannot admit what the population already excluded
+list_size                     = 15         # how many ranked movers reach the report
+news_lookups                  = 10         # how many of those get a news call. One credit each, and the cost is trivial against the sweep that found them
+rank_by                       = move       # move or rvol. Which of the two floors above orders the list once both are cleared
+
+### The vintage note
+
+previousClosePrice is the denominator of every move this pass reports, and the
+quote names its own vintage in previousCloseDate. So it is CHECKED and not
+trusted: 2026-08-31 at 18:14 read 125.74 dated 2026-08-28 for SAIC.US, which is
+the prior session. A row whose previousCloseDate does not name the prior
+trading session is refused with its reason recorded, because this project has
+already published one report priced off the wrong session, on 2026-08-14, from
+an endpoint whose name said live. The difference this time is that the vendor
+hands over the date, so there is no excuse for guessing.
+
+The prior trading session comes from the session calendar, never from weekday
+arithmetic, for the reason [Outcomes] gives: a Monday holiday makes the prior
+session Thursday and weekday math would compare against a day nobody traded.
+
+### Why this pass has no narrative
+
+The morning runs the analyst because what should I make of this is an open
+question. Midday asks closed ones: a pick triggered or it did not, a name moved
+or it did not. Both are arithmetic on numbers already in the packet, so the
+report is RENDERED, not written. No claude CLI call, no containment check, no
+quantifier guard, because there is no prose for any of them to police.
+
 ## Traps
 
 A gap up contradicted by the news underneath it. Decided in scan.py and
