@@ -469,7 +469,8 @@ def claim_the_template_reads_the_roll_rather_than_deriving_it(
                   "evidence_roll.text.window_starts_late",
                   "evidence_roll.text.rvol_lower_bound",
                   "evidence_roll.text.catalyst_absent",
-                  "evidence_roll.text.catalyst_unknown"):
+                  "evidence_roll.text.catalyst_unknown",
+                  "evidence_roll.text.thin_baseline"):
         if field not in text:
             failures.append(f"REPORT_TEMPLATE.md does not quote {field}, so the "
                             "model is left to derive that membership again")
@@ -557,6 +558,44 @@ def claim_a_thin_denominator_is_named_and_never_refused(failures: list[str]) -> 
     for hit in analyst.quantifier_violations(text):
         failures.append(f"the thin denominator gap asserts {hit['quantifier']!r} "
                         f"near {hit['set_word']!r} and the report quotes it")
+
+    # AND IT HAS TO REACH THE REPORT, which for a long time it did not.
+    # gaps_to_fill arrives at the reader only through the Summary's "anything
+    # in gaps_to_fill that materially weakens this morning's evidence", which
+    # is the model's judgement. On 2026-08-31 that judgement went the other
+    # way: both of the morning's candidates rested on a denominator under the
+    # line, the top scored name drew 2 of its 10 points from an RVOL of 27.01
+    # built on a 1,002 share median, and the published report said neither.
+    # So the same membership is also a roll list with its own required
+    # sentence, which the template quotes word for word.
+    roll = scan.evidence_roll(candidates)
+    if "thin_baseline" not in roll or "thin_baseline" not in roll["text"]:
+        failures.append(
+            "evidence_roll carries no thin_baseline list, so the disclosure "
+            "reaches the reader only if the model decides gaps_to_fill was "
+            "worth quoting. A disclosure that survives on a judgement call is "
+            "not a disclosure")
+        return
+    named = {r["symbol"] for r in roll["thin_baseline"]}
+    if named != {"THIN.US"}:
+        failures.append(
+            f"the roll's thin_baseline names {sorted(named)}, not ['THIN.US']. "
+            "DEEP is 74x the line, EDGE sits exactly on it and the test is "
+            "below, and NULL has no ratio to rest on anything")
+    for row in roll["thin_baseline"]:
+        if not row.get("why") or f"{row['median_volume']:,.0f}" not in row["why"]:
+            failures.append(
+                f"{row['symbol']} carries no per row why naming its own median. "
+                "The sentence cannot carry it: the whole point is that one row "
+                "is at 1,077 shares and another at 740,086")
+    line = roll["text"]["thin_baseline"]
+    if "of " not in line or "THIN" not in line:
+        failures.append(f"the roll's thin_baseline line does not carry its "
+                        f"denominator and its names: {line!r}")
+    # The two must not drift: whatever the gap names, the roll names.
+    if ("THIN.US" in text) != ("THIN.US" in str(named)):
+        failures.append("the gap and the roll disagree about who is thin, and "
+                        "two lists of one fact is how they come apart")
 
     print("  thin denom   a 1,077 share median is named, a 740,086 and a 10,000 "
           "are not, and the ratio it names is still published and scored")

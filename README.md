@@ -238,9 +238,12 @@ Four things about that block are worth knowing.
 line would be indistinguishable from a section the model forgot.
 
 **The last line is the fill warning and it fires in one direction only.** A name
-it does NOT mention has not passed anything. Measured over 66 past rows, this
-check caught 6 of the 10 levels the nightly pass went on to call untradeable and
-flagged 6 of the 44 that were fine. Four in ten untradeable levels get past it.
+it does NOT mention has not passed anything. Measured over the 54 past rows
+where the night reached a verdict at all, this check caught 6 of the 10 levels
+it went on to call untradeable and flagged 6 of the 44 that were fine. Four in
+ten untradeable levels get past it. The population is 66 rows; the other 12 are
+the ones the night could not judge either, and they are counted apart rather
+than folded in.
 The report is forbidden from ever writing that a level looks liquid, should
 fill, or anything of that shape, because the definitive answer is computed that
 night from a complete tape and is not available at 08:45.

@@ -18,6 +18,65 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-08-31: a disclosure that survives on a judgement call is not a disclosure
+
+Today's report dropped the thin denominator warning, and the interesting part is
+that nothing was broken. scan.py computed it correctly, wrote it into
+gaps_to_fill with its measured justification, and the model declined to quote
+it, which the template permits: the Summary asks for "anything in gaps_to_fill
+that materially weakens this morning's evidence".
+
+**So the question was whether to sharpen the instruction or move the fact.**
+Sharpening loses. Every wording of "material" is still a judgement, it is made
+fresh every morning by a model that cannot see the other mornings, and the
+mornings where it goes wrong are exactly the quiet ones nobody scrutinises. This
+project has already been here: on 2026-08-28 the Skips and traps section was
+reworked for the same reason, because it asked the model to perform four filters
+over four booleans Python had already resolved.
+
+**MOVED, using the pattern that already exists.** evidence_roll carries
+pre-resolved membership lists and a sentence per list, the template quotes them
+word for word, and the quantifier guard scans what comes back. thin_baseline is
+the eighth. gaps_to_fill keeps its entry, because the Summary is a different
+audience for the same fact and a reader who stops after the Summary should still
+meet it; a claim holds that the gap and the roll name the same rows so the two
+copies cannot drift.
+
+**WHY NOT REFUSE THE RATIO INSTEAD.** Because that is the two part change the
+floor note declines to make. A refused RVOL is rescued onto the float rotation
+bands, and those were fitted on the population the CURRENT floor rescues, so
+raising the bar silently re-fits them onto a population they were never measured
+on. The ratio stays published, screened on and scored. What changes is that the
+reader is told what it rests on.
+
+## 2026-08-31: two market caps in one report, and why both of them stay
+
+The notable movers section and the candidate blocks published different market
+caps for the same tickers this morning. SAIC 5.43 billion against 5.84, MNSO
+3.07 against 2.84.
+
+They come from different places for a good reason. The candidate cap is the live
+08:45 delayed quote, which is the right figure for a name being screened this
+morning. The notable cap is read from universe.json, because one of that
+section's lists RANKS by market cap across the whole universe, and 2,751 live
+quotes is not something the morning can buy at any budget.
+
+**So neither moves, and the stamp arrives instead.** Reconciling them would mean
+either buying quotes the plan cannot afford or ranking the universe on a figure
+the screen does not use. Dropping one would leave a section unable to do its
+job. What was actually missing cost nothing: the section never said which of the
+two a reader was holding.
+
+**The stamp is one fact about the file, not a column on every row.** Every cap
+in the section is read from one file in one pass, so a per row stamp is the same
+value repeated thousands of times with an opportunity to disagree with itself. A
+claim refuses the per row spelling for that reason.
+
+**An undated file is not an old one.** market_cap_as_of_reason fires where the
+universe payload carries no generated_at, on the instrument_name_reason
+precedent from 2026-08-20. A bare null there would read as a column nobody asked
+about rather than one nobody could date.
+
 ## 2026-08-29: what the one vendor rule was actually protecting
 
 Adding Alpaca to two scheduled night steps broke a rule written on the

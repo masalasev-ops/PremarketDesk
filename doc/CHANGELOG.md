@@ -15,6 +15,57 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31: two things today's report should have said and did not
+
+**Found by reading the 2026-08-31 report against its own packet.** Both are
+disclosure defects rather than wrong numbers, and both are the shape this
+project calls worst: something the machine already knew, not reaching the page.
+
+**1. A thin RVOL denominator never reached the reader.** scan.py has computed
+this since 2026-08-28 and put it in gaps_to_fill, and gaps_to_fill reaches the
+report only through the Summary's "anything that materially weakens this
+morning's evidence", which is the model's judgement. Today that judgement went
+the other way. Both of the morning's two candidates rested on a denominator
+under the threshold, the top scored name of the day drew 2 of its 10 points from
+an RVOL of 27.01 built on a 1,002 share median, two shares above the floor, and
+the report said neither. CRITERIA's own measurement is that below 10,000 shares
+15 to 30 percent of a name's ordinary sessions reach the top RVOL band by
+construction, against 5 percent above 100,000.
+
+evidence_roll gains a thin_baseline list and a required sentence, and
+REPORT_TEMPLATE.md quotes it word for word in Skips and traps with the per row
+median attached. The gap entry stays: it feeds the Summary and the roll feeds
+the section, and a claim holds that the two name the same rows. Nothing is
+refused, capped or rescored; this is disclosure, and refusing here is the two
+part change the floor note declines to make.
+
+**2. The notable movers market cap carried no vintage, and disagreed with the
+same document.** Its caps come from universe.json, rebuilt on Sundays. The
+candidate blocks' market_cap is the live 08:45 quote. Today's report published
+SAIC at 5.43 billion in one section and 5.84 in the other, and MNSO at 3.07
+against 2.84, with nothing anywhere to say they were measured at different
+moments. Every other quantity in that section is vintage stamped: as_of_session
+for the move, price_time and price_age_seconds for the price.
+
+Neither number is wrong and neither is fixable: one of those lists ranks by cap
+over the whole universe and that many live quotes is not something the morning
+can buy. The block gains market_cap_as_of, and market_cap_as_of_reason where the
+file carries no stamp, which is a different fact from an old one. Spelled
+market_cap_as_of_reason and not market_cap_reason because the ROWS already use
+that name for a cap missing on one symbol.
+
+**Held in place by** two claims mutation tested against seven edits: the roll
+stops carrying the list, a name exactly on the line is called thin, the per row
+why stops naming its own median, the template stops quoting the line, the cap
+stamp is dropped, the block reuses the rows' spelling, and the stamp is repeated
+per row where it can disagree with the block. The cap claim also refuses to pass
+on an empty section, which is how its first draft passed while broken.
+
+**Also corrected:** README said the fill warning's 6 of 10 and 6 of 44 were
+measured over 66 rows. They are over the 54 where the night reached a verdict;
+the other 12 it could not judge either. The code and CRITERIA were right and the
+README was the thing that was wrong.
+
 ## 2026-08-29: the README says what you see, not only how it works
 
 **What changed.** A new section, "What you actually see, and how to read it",

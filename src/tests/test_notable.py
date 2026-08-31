@@ -2283,6 +2283,103 @@ def claim_the_watchlist_mark_is_filled_after_the_screens_decide(
           "build_packet calls the pass after stamp_all")
 
 
+def claim_the_market_cap_column_says_when_it_was_measured(
+        failures: list[str]) -> None:
+    """The cap here is the weekly file's, and the section says which one it is.
+
+    Every other quantity in this section carries its own vintage:
+    as_of_session for the move, price_time and price_age_seconds for the price.
+    The market cap carried none, and it is the one column in the table that is
+    ALSO published elsewhere in the same document from a different source. The
+    candidate blocks' market_cap is the live 08:45 delayed quote; this one is
+    read out of universe.json, which is rebuilt on Sundays.
+
+    They disagree by whatever the name has done since the rebuild, and on
+    2026-08-31 they disagreed inside one report: SAIC at 5.43 billion in this
+    section against 5.84 billion in Premarket gappers, MNSO at 3.07 against
+    2.84. A reader had nothing anywhere to tell them the two were measured at
+    different moments, which is a stale answer read as a current one.
+
+    NEITHER NUMBER IS WRONG AND NEITHER IS FIXABLE. One of these lists ranks by
+    cap over the whole universe, and that many live quotes is not something the
+    morning can buy. The weekly file is the only affordable source and the live
+    quote is the right one for a name being screened. What was missing was the
+    stamp, and a stamp costs nothing.
+
+    A file with no generated_at is a different fact from an old one, and it
+    gets a reason rather than a null, on the instrument_name_reason precedent.
+    """
+    def assemble(payload: dict[str, Any]) -> dict[str, Any]:
+        real_stats, real_clock = gap_stats.load_all, ettime.now_et
+        gap_stats.load_all = lambda as_of=None: dict(STATS)
+        ettime.now_et = lambda: dt.datetime(
+            *(int(part) for part in SESSION.split("-")), 8, 45, tzinfo=ettime.ET)
+        try:
+            return scan.notable_movers(
+                SESSION, payload,
+                {"HEARD.US": [_bar("HEARD.US", "08:40", 103.0)],
+                 "BIGMOVE.US": [_bar("BIGMOVE.US", "08:40", 110.0)]},
+                _candidates(), scan.Packet())
+        finally:
+            gap_stats.load_all, ettime.now_et = real_stats, real_clock
+
+    # The sidecar has to be on disk or the section loses both universe legs and
+    # publishes no rows at all, and every per row assertion below would then
+    # pass by having nothing to walk. main() writes it before each claim; this
+    # writes it again so the claim holds when it is run on its own.
+    _write_closes()
+
+    stamp = "2026-08-30T21:01:21-04:00"
+    dated = assemble({"symbols": UNIVERSE_ROWS, "generated_at": stamp})
+    if not dated.get("rows"):
+        failures.append(
+            "the section published no rows, so nothing below was actually "
+            "checked. This claim must never pass on an empty section")
+        return
+    if dated.get("market_cap_as_of") != stamp:
+        failures.append(
+            f"the section stamps its caps {dated.get('market_cap_as_of')!r} "
+            f"where the universe file it read them from says {stamp!r}. The "
+            "cap column is the only quantity here also published elsewhere in "
+            "the report from a different source, and undated it cannot be told "
+            "from the live 08:45 quote in Premarket gappers")
+    if dated.get("market_cap_as_of_reason") is not None:
+        failures.append(
+            "the caps carry both a stamp and a reason they have none, and only "
+            "one of those can be true")
+
+    # The two spellings must stay apart. The ROWS carry market_cap_reason for a
+    # cap missing on one symbol; the BLOCK carries market_cap_as_of_reason for
+    # the age of all of them. One spelling over two scopes is how a reader ends
+    # up holding the wrong fact.
+    if "market_cap_reason" in dated:
+        failures.append(
+            "the block carries market_cap_reason, which the rows already use "
+            "for a different fact. Two scopes, one spelling, two meanings")
+    for row in dated["rows"]:
+        if "market_cap_as_of" in row:
+            failures.append(
+                f"{row['symbol']} carries its own market_cap_as_of. Every cap "
+                "in this section is read from one file, so the stamp is one "
+                "fact about the file, and repeating it per row invites the two "
+                "to disagree")
+            break
+
+    # An undated file is a different fact from an old one, and says so.
+    undated = assemble({"symbols": UNIVERSE_ROWS})
+    if undated.get("market_cap_as_of") is not None:
+        failures.append("a universe payload with no generated_at still reports "
+                        f"a cap stamp: {undated['market_cap_as_of']!r}")
+    if not undated.get("market_cap_as_of_reason"):
+        failures.append(
+            "a universe payload with no generated_at leaves the cap age a bare "
+            "null, which reads as a column nobody asked about rather than one "
+            "nobody could date")
+    print(f"  cap vintage  {len(dated['rows'])} row(s) under a cap column "
+          "stamped with the weekly file it came from, an undated file says so, "
+          "and the stamp is one fact about the file rather than a per row one")
+
+
 def claim_a_name_off_the_watchlist_is_marked_and_not_hidden(
         failures: list[str]) -> None:
     """A watchlist name appears here anyway, and the row says so.
@@ -2352,6 +2449,7 @@ CLAIMS = (
     claim_the_counters_say_whether_they_were_read_or_derived,
     claim_a_name_off_the_watchlist_is_marked_and_not_hidden,
     claim_the_watchlist_mark_is_filled_after_the_screens_decide,
+    claim_the_market_cap_column_says_when_it_was_measured,
     claim_the_sections_own_words_pass_the_quantifier_guard,
     claim_a_row_says_what_the_instrument_is_or_why_it_cannot,
 )

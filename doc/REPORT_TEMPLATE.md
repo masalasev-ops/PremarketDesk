@@ -321,6 +321,18 @@ sentence in place of the paragraph, because a file predating the field carries
 nothing there for a single row and a per row absence would print one fact once
 per line.
 
+SAY ONCE, UNDER THE TABLE, WHERE THE MARKET CAP COLUMN COMES FROM. It is
+`notable_movers.market_cap_as_of`, the build stamp of the weekly universe file,
+and where that is null quote `notable_movers.market_cap_as_of_reason` instead
+rather than leaving the column undated. It is NOT the same figure as the market cap in Premarket gappers,
+which is the live 08:45 quote. Write one sentence naming that stamp and saying
+the column is as of it. On 2026-08-31 this report published SAIC at 5.43 billion
+here and 5.84 billion in Premarket gappers, and MNSO at 3.07 against 2.84, with
+nothing anywhere to tell a reader the two were measured at different moments.
+Neither number is wrong: this section ranks one of its lists by cap over 2,751
+names, and 2,751 live quotes is not something the morning can buy. Do not
+reconcile them, do not drop either, and do not call one of them the real one.
+
 That paragraph is here because the table ranks one of its lists by market cap,
 so the largest values in it are read by a human every morning, and a bare
 ticker cannot tell that reader whether a very large one is a real company or a
@@ -587,6 +599,19 @@ sentences WORD FOR WORD:
   ABSENT rather than partial: the collector was not listening to these names,
   so any level published for them rests on something other than this morning's
   tape. A different fact from the line above and it gets its own sentence.
+- `evidence_roll.text.thin_baseline`, whose premarket RVOL is built on a thin
+  denominator. Quote the sentence word for word and then add the `why` that
+  `evidence_roll.thin_baseline` records against a symbol, one per symbol,
+  because the median differs per row and the sentence cannot carry it. THIS
+  LINE IS NOT OPTIONAL AND ITS PLACEMENT IS NOT A JUDGEMENT CALL. The same fact
+  is in gaps_to_fill, which reaches the report only through the Summary's
+  "anything that materially weakens this morning's evidence", and on 2026-08-31
+  that judgement went the other way: both candidates were under the threshold,
+  the top scored name of the morning drew 2 of its 10 points from an RVOL of
+  27.01 built on a 1,002 share median, and the report said neither. A ratio on a
+  thin denominator is still published, still screened on and still scored, so
+  the reader is being shown it either way; what this line adds is that it is not
+  evidence in the way the same ratio on a liquid name is.
 - `evidence_roll.text.band_thin`, whose premarket high may be a print rather
   than a price anyone could transact at. The collector saw very little trade
   near the level it is publishing as that name's reference. Quote the sentence

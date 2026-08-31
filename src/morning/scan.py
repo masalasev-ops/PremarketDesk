@@ -3111,6 +3111,34 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     band_thin = [{"symbol": c["symbol"], "why": c.get("pm_band_why")}
                  for c in candidates if c.get("pm_band_state") == BAND_THIN]
 
+    # THE THIN DENOMINATOR, as a membership list for the same reason as the
+    # seven above. _gap_for_thin_baselines already computes this and puts it in
+    # gaps_to_fill, and gaps_to_fill reaches the report only through the
+    # Summary's "anything that materially weakens this morning's evidence",
+    # which is a judgement call the model makes. On 2026-08-31 it made it the
+    # other way: both candidates rested on a denominator under the threshold,
+    # the top scored name of the morning drew 2 of its 10 points from an RVOL of
+    # 27.01 built on a 1,002 share median, and the report said neither. A
+    # disclosure that survives only when the model agrees it matters is not a
+    # disclosure, which is the whole argument this roll was built on.
+    thin_baseline = [
+        {"symbol": c["symbol"],
+         "median_volume": (c.get("baseline") or {}).get("median_volume"),
+         "why": (
+             f"its denominator is a "
+             f"{(c.get('baseline') or {}).get('median_volume'):,.0f} share "
+             f"median, at or above the "
+             f"{baseline.MIN_BASELINE_VOLUME:,.0f} share floor and below "
+             f"{THIN_BASELINE_VOLUME:,.0f}, where 15 to 30 percent of a name's "
+             "own ordinary sessions reach the top RVOL band by construction "
+             "against 5 percent above 100,000")}
+        for c in candidates
+        if c.get("pm_rvol") is not None
+        and (c.get("baseline") or {}).get("median_volume") is not None
+        and (c.get("baseline") or {}).get("median_volume") < THIN_BASELINE_VOLUME
+    ]
+    thin_baseline.sort(key=lambda r: (r["median_volume"], r["symbol"]))
+
     return {
         "candidates_examined": examined,
         "rvol_null": rvol_null,
@@ -3120,6 +3148,7 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "catalyst_absent": absent,
         "catalyst_unknown": unknown,
         "band_thin": band_thin,
+        "thin_baseline": thin_baseline,
         "text": {
             "rvol_null": line(
                 rvol_null, "carry a null premarket RVOL, so their premarket "
@@ -3151,6 +3180,18 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
                            "its silence is not an approval: measured over 54 "
                            "past rows it missed 4 of the 10 levels the nightly "
                            "check went on to call untradeable"),
+            "thin_baseline": line(
+                thin_baseline, "carry a premarket RVOL built on a THIN "
+                               "denominator: at or above the "
+                               f"{baseline.MIN_BASELINE_VOLUME:,.0f} share "
+                               "floor and below "
+                               f"{THIN_BASELINE_VOLUME:,.0f} shares, measured "
+                               "2026-08-28 as where 15 to 30 percent of a "
+                               "name's own ordinary premarket sessions reach "
+                               "the top RVOL band by construction, against 5 "
+                               "percent above 100,000. These ratios are "
+                               "published, screened on and scored like the "
+                               "rest"),
         },
     }
 
@@ -4059,6 +4100,25 @@ def notable_movers(
         if symbol and label:
             names[symbol] = label
 
+    # THE CAP'S VINTAGE. One fact about the file, not a column repeated on
+    # every row: every cap here is read from the same universe.json, which is
+    # rebuilt on Sundays, while the candidate blocks' market_cap is the live
+    # 08:45 quote. Those two disagree by the size of whatever the name has done
+    # since the rebuild, and on 2026-08-31 they disagreed inside one document
+    # with nothing to tell a reader they were measured at different moments:
+    # SAIC 5.43 billion here against 5.84 billion in Premarket gappers, MNSO
+    # 3.07 against 2.84. Neither is wrong and neither is fixable. Ranking one of
+    # these lists by cap means a cap for the whole universe, and that many live
+    # quotes is not something the morning can buy. Saying which one it is costs
+    # nothing and was the part that was missing.
+    block["market_cap_as_of"] = (
+        str(universe_payload.get("generated_at") or "").strip() or None)
+    # NOT "market_cap_reason": the ROWS already carry that name for a different
+    # fact, a cap missing for one symbol. Two scopes, one spelling, two meanings
+    # is how a reader ends up holding the wrong one.
+    block["market_cap_as_of_reason"] = None if block["market_cap_as_of"] else (
+        "the universe file carries no generated_at, so the age of every market "
+        "cap in this section is unknown rather than merely old")
     block["instrument_names_on_file"] = len(names)
     # A file with no names at all is a file that predates the field, which is a
     # different fact from a name missing for one symbol, and the template needs
