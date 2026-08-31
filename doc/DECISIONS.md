@@ -5347,3 +5347,53 @@ investigation into what an 08:30 screen costs. The other two questions the
 pre-registration lists, the collector's 50 slot websocket as the discovery
 path and the capture correction, are untouched by this and reopen or do not on
 their own evidence.
+
+## 2026-08-31: EODHD intraday does not serve the session it is in
+
+**Why this was asked.** The owner proposed a midday report: which of the
+morning's picks carried the gap through, and which names moved after the open
+on news. The obvious source is the 1m intraday endpoint, which is what
+collect/baseline.py builds denominators from and what
+verify_against_intraday measures the collector against. So the first question
+is whether that endpoint answers for a session that is currently running.
+
+**What was measured, and it is a NEGATIVE.** At 18:14 ET on 2026-08-31, two
+hours and fourteen minutes after the close, intraday 1m for SAIC.US over
+today's 09:30 to 16:00 returned zero rows. MNSO.US likewise. The same request
+for the three prior sessions returned 334, 214 and 235 bars. So the request is
+well formed and the window is right: the vendor simply has not published this
+session yet. Six calls, priced at nothing in [quota costs] because intraday
+has never needed a price.
+
+**What that rules out.** Every design for a midday pass that reads intraday
+bars, at any hour of the trading day. This is not a lag to wait out inside the
+session: it is the same vendor lag the 07:00 nightly catch-up exists to
+absorb, seen from the other side. The endpoint that measures the morning
+cannot measure the afternoon until the afternoon is over.
+
+**What is left, and what it cannot say.** real-time/{symbol} does answer for
+the running session, measured 2026-08-14 at about sixteen minutes behind the
+wall clock, and it carries today's open, high, low, last and volume. That is
+enough to say WHETHER a pick traded through its entry reference. It is not
+enough to say WHEN, and a high and a low with no order between them cannot
+tell "ran, then faded" from "dipped, then ran". That distinction is the most
+valuable thing the ledger has produced: a name that made its high in the first
+ten minutes did not recover once in ten tries, and the four that worked were
+still making highs an hour or more in. A midday report built on quotes would
+publish the quantity that finding calls worthless and stay silent on the one
+it calls decisive.
+
+**So the path, if it is built, is the socket.** The collector already carries
+per minute bars with timestamps and already stops at 09:25 by [Collector]
+stop_time, which is this project's choice and not a vendor limit. Two things
+are owed before that stop time moves, and neither is written down yet.
+research/measure_socket_cost.py exists precisely to read the vendor's counter
+across a socket run and its result has never reached this file, so "the
+collector spends no API calls" remains a client side observation about REST
+requests rather than a measurement of the bill. And [Collector]
+max_subscriptions is 50 ACCOUNT WIDE, so hours held are slots held.
+
+**Recorded now because it cost credits to learn.** Nothing in the tree reads
+intraday for a running session today, so no code is wrong. The next person to
+reach for that endpoint at midday would have spent the same six calls finding
+out.
