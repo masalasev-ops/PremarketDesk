@@ -36,6 +36,12 @@ $jobs = @(
     @{ Name = "discover";      Bat = "job_discover.bat";      Days = $weekdays;    Start = "07:15" },
     @{ Name = "collector";     Bat = "job_collector.bat";     Days = $weekdays;    Start = "07:20" },
     @{ Name = "morning-chain"; Bat = "job_morning_chain.bat"; Days = $weekdays;    Start = "08:45" },
+    # 12:00, and the hour is the point. us-quote-delayed's REGULAR hours
+    # behaviour is what was measured, its premarket behaviour is untested, and
+    # its previousClosePrice rolls at an hour nobody has pinned down, which is
+    # why the midday pass takes its denominator from a bulk day asked for by
+    # date instead. See CRITERIA [Midday].
+    @{ Name = "midday";        Bat = "job_midday.bat";        Days = $weekdays;    Start = "12:00" },
     @{ Name = "nightly";       Bat = "job_nightly.bat";       Days = $weekdays;    Start = "22:15" },
     # The vendor publishes intraday overnight more often than by 22:15, so the
     # same idempotent nightly runs again before the market day: it fills

@@ -71,6 +71,8 @@ SCHEDULED = [
     ("weekly", "night.weekly_page", []),
     ("prune", "night.prune_data", []),
     ("monitor", "ops.monitor_jobs", ["--dry-run"]),
+    ("midday", "midday.scan_midday", []),
+    ("midday_render", "midday.render_midday", []),
 ]
 
 
@@ -243,12 +245,21 @@ ROUTES: list[tuple[str, Any]] = [
         ettime.parse_date(params["date"]) if params.get("date") else YESTERDAY)),
     ("eod/", lambda path, params: _eod_series(path.split("/", 1)[1])),
     ("intraday/", _intraday_route),
+    # open/high/low/lastTradePrice/lastTradeTime/volume are the midday pass's
+    # fields. previousClosePrice is still served because the morning reads it,
+    # but midday deliberately does not: see CRITERIA [Midday] the denominator
+    # note, where the field was measured to be two different sessions.
     ("us-quote-delayed", lambda path, params: {"data": {
         symbol: {
             "symbol": symbol, "previousClosePrice": 100.0,
+            "previousCloseDate": f"{YESTERDAY.isoformat()} 17:00:00",
             "ethVolume": 250_000, "ethTime": ettime.epoch_s(ettime.now_et()),
             "marketCap": 2_000_000_000, "sharesFloat": 500_000_000,
             "averageVolume": 8_000_000, "twoHundredDayAveragePrice": 98.0,
+            "open": 101.0, "high": 104.0, "low": 99.0,
+            "lastTradePrice": 103.0, "volume": 40_000_000,
+            "lastTradeTime": ettime.epoch_ms(ettime.now_et()),
+            "name": f"{symbol} Inc",
         }
         for symbol in str(params.get("s", "")).split(",") if symbol
     }}),
@@ -756,6 +767,47 @@ def claim_operator_tools_spare_artifacts(failures: list[str]) -> None:
     if not unguarded:
         print("  operator     pool_recall, backfill and the collector all route "
               "their runs/ writes through the guard")
+
+
+def claim_midday_runs_and_renders(failures: list[str]) -> None:
+    """The 12:00 pass, driven the way job_midday.bat drives it.
+
+    Two steps in order, because the second reads what the first wrote. The
+    scan is checked for the endpoints it must ask for AND for the one it must
+    not: it takes its denominator from eod-bulk-last-day asked for by date, and
+    a version that fell back to the quote's own previousClosePrice would still
+    pass every other assertion here. See CRITERIA [Midday] the denominator
+    note.
+    """
+    _write_universe()
+    scan = _drive("midday", "midday.scan_midday", [])
+    _check(scan, failures,
+           expect_endpoints=["us-quote-delayed", "eod-bulk-last-day", "eod"])
+    if scan.error:
+        return
+
+    packet_path = config.RUNS_DIR / TODAY.isoformat() / "midday_packet.json"
+    if not packet_path.is_file():
+        failures.append("midday exited clean and wrote no packet")
+        return
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    if packet.get("prior_session") == TODAY.isoformat():
+        failures.append("the midday packet names TODAY as the prior session, so "
+                        "every move it reports divides by today's own close")
+    source = packet.get("price_source") or {}
+    if source.get("denominator_endpoint") != "eod-bulk-last-day":
+        failures.append(
+            f"the packet says its denominator came from "
+            f"{source.get('denominator_endpoint')!r}, not from the bulk day")
+
+    render = _drive("midday_render", "midday.render_midday", [])
+    _check(render, failures)
+    run = config.RUNS_DIR / TODAY.isoformat()
+    for name in ("report_midday.md", "report_midday.html"):
+        if not (run / name).is_file():
+            failures.append(f"midday_render exited clean and wrote no {name}")
+    print("  midday       the scan writes a packet dated to the prior session "
+          "and the render writes both files, with no model in either")
 
 
 def claim_ok_codes_declared(failures: list[str]) -> None:
@@ -2167,6 +2219,7 @@ def main(argv: list[str] | None = None) -> int:
     claim_outcomes_writes_the_excursions(failures)
     claim_pool_recall(failures)
     claim_monitor(failures)
+    claim_midday_runs_and_renders(failures)
     print("")
     print("the recording itself:")
     claim_failure_is_recorded(failures)

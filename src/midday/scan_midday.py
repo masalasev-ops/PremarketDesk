@@ -593,8 +593,13 @@ def live_picks(day: str) -> list[dict[str, Any]]:
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
-def build_packet(day: str | None = None) -> dict[str, Any]:
-    now = ettime.now_et()
+def build_packet(day: str | None = None,
+                 now: dt.datetime | None = None) -> dict[str, Any]:
+    """now is injectable so a test can hold the clock still. Production passes
+    nothing and gets the real one: every quote's age is measured against it and
+    a frozen clock would disable the staleness guard, so it is never defaulted
+    from a file or an argument the scheduler could supply."""
+    now = now or ettime.now_et()
     today = ettime.parse_date(day) if day else ettime.today_et()
     day = today.isoformat()
 
@@ -742,6 +747,13 @@ def write_packet(payload: dict[str, Any], overwrite: bool) -> tuple[Any, bool]:
     return destination, spared
 
 
+# Declared at module level, NOT as a literal in the __main__ line below,
+# so the entrypoint harness that imports this module and calls main()
+# directly reads the same value the scheduler does. See
+# ops/job_status.py and test_entrypoints.claim_ok_codes_declared.
+OK_CODES = (0,)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="The 12:00 pass: carry through and today's movers.")
@@ -794,4 +806,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(job_status.run("midday", main))
+    raise SystemExit(job_status.run("midday", main, ok_codes=OK_CODES))

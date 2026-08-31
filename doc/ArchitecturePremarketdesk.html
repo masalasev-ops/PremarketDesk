@@ -215,11 +215,11 @@ tbody tr:hover{background:var(--ground)}
 <header class="mast">
   <div class="eyebrow">doc / architecture</div>
   <h1>PremarketDesk</h1>
-  <p class="sub">There is no server, no queue, and no service. PremarketDesk is seven Windows Task Scheduler
-  job scripts on one machine, registered as nine tasks: the nightly runs twice (22:15, and again at
+  <p class="sub">There is no server, no queue, and no service. PremarketDesk is eight Windows Task Scheduler
+  job scripts on one machine, registered as ten tasks: the nightly runs twice (22:15, and again at
   07:00 as nightly-catchup) and the watchdog runs twice (07:25, repeating every 30 minutes for two
-  hours, and once at 22:45). Five of the scripts wake on their clock time, read the files the earlier
-  jobs left behind, and leave files for the next. The sixth is the watchdog, which reads the others'
+  hours, and once at 22:45). Six of the scripts wake on their clock time, read the files the earlier
+  jobs left behind, and leave files for the next. The seventh is the watchdog, which reads the others'
   dated logs and Task Scheduler's own record, then relaunches the .bat of whatever is safe to rerun.
   The seventh is the quota meter sampler, which is not a step at all: it takes one reading of the
   shared vendor counter every thirty minutes of every day, weekends included, because the job trail
@@ -1147,7 +1147,7 @@ tbody tr:hover{background:var(--ground)}
     pool_recall, prune_data, weekly_page, build_archive, in the order the nightly runs them),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
     vwap_gappers, three probe_ scripts and two measure_ scripts, instruments, not pipeline),
-    <b>tests</b> (conftest, run_tests and thirteen test_ modules). One file sits at the root beside the
+    <b>tests</b> (conftest, run_tests and fourteen test_ modules). One file sits at the root beside the
     packages, probe_alpaca.py, the shared Alpaca client. It was research only until 2026-08-29 and is
     now imported by two night steps as well, both of them after the close and neither of them able to
     reach a report; night/paper_ledger.py imports it inside <code>book()</code> rather than at module

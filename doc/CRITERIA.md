@@ -1659,7 +1659,8 @@ min_move_pct                  = >= 5       # SEED. abs lastTradePrice against pr
 min_day_rvol                  = >= 3       # SEED. today's volume against averageVolume. Without it the list fills with high beta names doing what they always do
 min_price                     = >= 3       # dollars, lastTradePrice. Matches [Universe] so the scan cannot admit what the population already excluded
 list_size                     = 15         # how many ranked movers reach the report
-news_lookups                  = 10         # how many of those get a news call. One credit each, and the cost is trivial against the sweep that found them
+news_lookups                  = 10         # how many of those get a news call, 5 credits each by [Quota costs], trivial against the sweep that found them
+headlines_per_mover           = 3          # how many of a mover's stories are RENDERED. The packet keeps every one the lookup returned; this only bounds what a reader is asked to read, and the feed tags generic market roundups to most large movers
 rank_by                       = move       # move or rvol. Which of the two floors above orders the list once both are cleared
 
 ### The denominator note
@@ -2162,6 +2163,8 @@ pool_recall                   = 1
 prune                         = 1
 truth                         = 1
 paper                         = 1          # the [Paper] ledger, run in the nightly right after truth because it reads entry_ref_true, stop_ref_true and fill_plausible and every one of those is written by that step
+midday                        = 1          # the 12:00 pass, see [Midday]
+midday_render                 = 1          # rendered from the packet the step above wrote, no model and no vendor call
 weekly                        = 1
 backup                        = 1
 monitor                       = 1

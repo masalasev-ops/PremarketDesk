@@ -46,6 +46,7 @@ SUITE = (
     "tests.test_pool",
     "tests.test_backtest",
     "tests.test_txn_guard",
+    "tests.test_midday",
     "tests.test_entrypoints",
     "tests.test_sandbox",
     "tests.test_evidence_gaps",

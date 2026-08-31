@@ -1,0 +1,599 @@
+"""Regression test for the midday pass, CRITERIA [Midday].
+
+Run it through the suite: `python -m tests.run_tests --only tests.test_midday`
+from the project root with src on PYTHONPATH. Makes no network call and spends
+no quota: every quote is synthetic and the grading rule is pure arithmetic on a
+dict, which is most of why the rule was written as a function taking a quote
+rather than as something that fetches one.
+
+The claims are grouped by what they defend.
+
+FIRST THE SEQUENCE, because it is the one thing this pass can most easily be
+made to lie about. A daily high and a daily low carry no order. When the fill
+is the opening print, everything after it is after it and a stop out is
+knowable; when the fill happens intraday, the session low may predate it and
+the honest answer is that nobody can tell. A pass that collapsed those two into
+one verdict would read exactly like a pass that knew, on the rows where it
+does not, and the ledger's most valuable finding to date is about WHEN a name
+made its high.
+
+THEN THE ROW THAT NEVER FILLED, which the first prototype got wrong on
+2026-08-31: it read the session low against the stop on a name whose high never
+reached the entry. A low with no trade under it stops nothing.
+
+THEN THE DENOMINATOR, which is the defect that nearly shipped. The quote's
+previousClosePrice was measured to be two different sessions depending on the
+row, with a correct previousCloseDate beside it either way, so the vintage
+check written into the first draft of CRITERIA would have passed on every bad
+row. The prior close comes from a bulk day asked for BY DATE, and a symbol the
+bulk day does not carry is left unmeasured rather than measured against the
+field that cannot be trusted.
+
+THEN WHAT THE SCAN LOST, because a count with no names cannot be chased and 358
+names arrived in an unpriced bucket on the first real run with nothing saying
+which field they were missing.
+
+AND THE RENDERER'S ESCAPING, because every headline in the movers section is
+third party text from a feed nobody here controls. It reaches the report as a
+LIST ITEM rather than as a table cell, which is worth stating because the first
+version of that claim asserted against a table row the headline never touches
+and passed while the escaping was removed. The hazard is a newline: a headline
+that starts a line of its own can forge a heading or a table row.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+import sys
+from typing import Any
+
+from core import criteria
+from core import ettime
+from midday import render_midday
+from midday import scan_midday
+
+_CRIT = criteria.load()
+
+
+def _quote(**kw: Any) -> dict[str, Any]:
+    """A quote as read_quote returns one, with everything present."""
+    base = {
+        "open": None, "high": None, "low": None, "last": None,
+        "prev_close": 100.0, "prev_close_source": "eod-bulk-last-day",
+        "vendor_prev_close_date_reported": "2026-08-28",
+        "volume": None, "average_volume": None, "market_cap": 1e9,
+        "name": "Test Inc", "last_trade_at": None, "quote_age_seconds": 30,
+        "refused_reason": None,
+    }
+    base.update(kw)
+    return base
+
+
+def _pick(**kw: Any) -> dict[str, Any]:
+    base = {"ticker": "TEST.US", "score": 8.0, "conviction": "green",
+            "day_eligible": 1, "swing_eligible": 0, "gap_pct": 5.0,
+            "pm_high": 10.0, "pm_low": 9.0, "entry_ref": 10.0, "stop_ref": 9.0}
+    base.update(kw)
+    return base
+
+
+# ------------------------------------------------------------ the sequence
+
+def claim_a_gap_through_can_name_a_stop_out_and_an_intraday_fill_cannot(
+        failures: list[str]) -> None:
+    """The same low, the same stop, two different verdicts, and both are right.
+
+    Identical session extremes. The only difference is whether the open cleared
+    the entry, which is what decides whether the fill was the session's first
+    print. That is the whole argument for extending [Collector] stop_time past
+    the open, so it is asserted rather than described.
+    """
+    through = scan_midday.grade(
+        _pick(), _quote(open=10.5, high=11.0, low=8.5, last=8.7))
+    intraday = scan_midday.grade(
+        _pick(), _quote(open=9.5, high=11.0, low=8.5, last=8.7))
+
+    if through["stop_state"] != scan_midday.STOP_OUT:
+        failures.append(
+            f"a fill at the opening print with a later low through the stop "
+            f"read {through['stop_state']!r}, and it is knowable: the fill is "
+            "the first price of the session")
+    if intraday["stop_state"] != scan_midday.STOP_SEQUENCE_UNKNOWN:
+        failures.append(
+            f"an intraday fill with a session low through the stop read "
+            f"{intraday['stop_state']!r}, which claims an order a daily high "
+            "and low cannot carry")
+    if through["worst_vs_fill_pct"] is None:
+        failures.append("a gap through withheld worst_vs_fill_pct, which it "
+                        "can compute: the fill preceded every other print")
+    if intraday["worst_vs_fill_pct"] is not None:
+        failures.append(
+            f"an intraday fill reported worst_vs_fill_pct "
+            f"{intraday['worst_vs_fill_pct']}, measured against a low that may "
+            "have happened before the fill")
+    if not intraday["worst_vs_fill_reason"]:
+        failures.append("an intraday fill withheld worst_vs_fill_pct and gave "
+                        "no reason, which is a silence rather than a null")
+    print("  sequence     a fill at the open books a stop out, an intraday "
+          "fill says the order is unknown, and only the first reports a worst")
+
+
+def claim_the_two_fills_are_the_paper_rule_s_fills(failures: list[str]) -> None:
+    """A gap through fills at the open, a trigger fills at the level.
+
+    CRITERIA [Paper] ENTRY PRICE is max(entry_ref, that minute's open), and
+    this pass has one bar rather than minutes, so the same rule reduces to
+    these two cases. If they ever diverge, the midday verdict and the night
+    ledger stop being two measurements of one question.
+    """
+    through = scan_midday.grade(
+        _pick(), _quote(open=10.5, high=11.0, low=10.2, last=10.9))
+    trigger = scan_midday.grade(
+        _pick(), _quote(open=9.5, high=11.0, low=9.4, last=10.9))
+    if through["fill"] != 10.5:
+        failures.append(f"a gap through filled at {through['fill']}, not at the "
+                        "10.5 open the session actually opened at")
+    if trigger["fill"] != 10.0:
+        failures.append(f"an intraday trigger filled at {trigger['fill']}, not "
+                        "at the 10.0 entry reference the order rested on")
+    print("  two fills    a gap through fills at the open and a trigger fills "
+          "at the level, as CRITERIA [Paper] books them")
+
+
+def claim_a_row_that_never_filled_reads_no_stop(failures: list[str]) -> None:
+    """The prototype defect of 2026-08-31, pinned.
+
+    The session low is far below the stop and the high never reached the entry.
+    Reading one against the other books a loss on a trade nobody was in.
+    """
+    row = scan_midday.grade(
+        _pick(), _quote(open=9.5, high=9.8, low=5.0, last=9.6))
+    if row["state"] != scan_midday.NEVER_TRIGGERED:
+        failures.append(f"a high of 9.8 under a 10.0 entry read "
+                        f"{row['state']!r}")
+    if row["stop_state"] != scan_midday.STOP_NOT_APPLICABLE:
+        failures.append(
+            f"a row that never triggered read its stop as {row['stop_state']!r} "
+            "against a low of 5.0, which books a loss on a position that was "
+            "never opened")
+    if row["fill"] is not None:
+        failures.append(f"a row that never triggered carries a fill of "
+                        f"{row['fill']}")
+    print("  no fill      a name whose high never reached the entry reads no "
+          "stop however far its low fell")
+
+
+def claim_the_boundaries_go_the_way_criteria_writes_them(
+        failures: list[str]) -> None:
+    """On the line is IN, for all three comparisons, and each is stated.
+
+    open >= entry is a gap through, high >= entry triggers, low <= stop is
+    reached. Every one of the three is a place a later edit can silently move
+    a verdict by one tick.
+    """
+    on_entry_open = scan_midday.grade(
+        _pick(), _quote(open=10.0, high=10.4, low=9.5, last=10.2))
+    on_entry_high = scan_midday.grade(
+        _pick(), _quote(open=9.5, high=10.0, low=9.5, last=9.9))
+    on_stop = scan_midday.grade(
+        _pick(), _quote(open=10.5, high=11.0, low=9.0, last=9.1))
+
+    if on_entry_open["state"] != scan_midday.GAPPED_THROUGH:
+        failures.append(f"an open exactly ON the entry read "
+                        f"{on_entry_open['state']!r}, not a gap through")
+    if on_entry_high["state"] != scan_midday.TRIGGERED:
+        failures.append(f"a high exactly ON the entry read "
+                        f"{on_entry_high['state']!r}, so a resting order at "
+                        "that level would not have filled")
+    if on_stop["stop_state"] != scan_midday.STOP_OUT:
+        failures.append(f"a low exactly ON the stop read "
+                        f"{on_stop['stop_state']!r}, so a resting stop at that "
+                        "level would not have been hit")
+    print("  boundaries   on the line is in, for the open, the high and the low")
+
+
+def claim_a_close_verdict_is_flagged(failures: list[str]) -> None:
+    """The quote's open is the first consolidated print, not the auction.
+
+    Measured 2026-08-31: it differed from the official open for 30 percent of
+    2,750 names, by a median 0.34 percent. So a verdict decided by less than
+    [Midday] open_tolerance_pct says so, and one decided by more does not.
+    """
+    tolerance = _CRIT.number("midday", "open_tolerance_pct")
+    inside = 10.0 * (1 + tolerance / 200.0)
+    outside = 10.0 * (1 + tolerance / 100.0 * 3)
+    close = scan_midday.grade(
+        _pick(), _quote(open=inside, high=11.0, low=9.5, last=10.5))
+    clear = scan_midday.grade(
+        _pick(), _quote(open=outside, high=11.0, low=9.5, last=10.5))
+
+    if not close["decided_inside_the_open_tolerance"]:
+        failures.append(
+            f"an open {inside:g} against a 10.0 entry, inside the {tolerance:g} "
+            "percent tolerance, was presented as settled")
+    if not close["open_tolerance_reason"]:
+        failures.append("a flagged row carried no reason, so a reader sees a "
+                        "flag with nothing behind it")
+    if clear["decided_inside_the_open_tolerance"]:
+        failures.append(
+            f"an open {outside:g} against a 10.0 entry was flagged as close, "
+            "which makes the flag meaningless by firing on everything")
+    print(f"  close call   a verdict decided inside {tolerance:g} percent of "
+          "the entry is flagged, one decided outside it is not")
+
+
+# ----------------------------------------------------------- the denominator
+
+def claim_the_prior_close_is_never_the_quote_s_own_field(
+        failures: list[str]) -> None:
+    """read_quote takes the prior close as an ARGUMENT and reads no substitute.
+
+    The quote carries previousClosePrice, and on 2026-08-31 that field was the
+    prior session for about a third of names and TODAY for about another
+    third, with a correct previousCloseDate on both. So the fixture hands over
+    a quote whose previousClosePrice is wildly wrong and asserts that nothing
+    picked it up.
+    """
+    now = ettime.now_et()
+    raw = {"open": 10.5, "high": 11.0, "low": 9.0, "lastTradePrice": 10.9,
+           "previousClosePrice": 999.0,
+           "previousCloseDate": "2026-08-28 17:00:00",
+           "volume": 1_000_000, "averageVolume": 200_000,
+           "lastTradeTime": ettime.epoch_ms(now)}
+
+    row = scan_midday.read_quote(raw, now, "2026-08-28", 100.0)
+    if row["prev_close"] != 100.0:
+        failures.append(
+            f"prev_close read {row['prev_close']}, not the 100.0 handed in "
+            "from the bulk day. 999.0 is the quote's own field and it must not "
+            "reach a denominator")
+    if row["prev_close_source"] != "eod-bulk-last-day":
+        failures.append(f"prev_close_source says {row['prev_close_source']!r}, "
+                        "so the packet does not name where the denominator "
+                        "came from")
+
+    # And with no bulk close, the row is refused rather than falling back.
+    missing = scan_midday.read_quote(raw, now, "2026-08-28", None)
+    if not missing["refused_reason"]:
+        failures.append(
+            "a symbol the bulk day did not carry was NOT refused, so something "
+            "supplied a denominator from elsewhere, which is the 2026-08-14 "
+            "defect's exact shape")
+    if missing["last"] is not None or missing["prev_close"] is not None:
+        failures.append("a refused row kept its prices, so a later reader can "
+                        "still compute a move from numbers this pass refused")
+    print("  denominator  the prior close comes from the bulk day, a missing "
+          "one refuses the row, and previousClosePrice is never read")
+
+
+def claim_a_stale_quote_is_refused_with_its_age(failures: list[str]) -> None:
+    limit = _CRIT.number("midday", "max_quote_age_seconds")
+    now = ettime.now_et()
+    stale = {"open": 10.5, "high": 11.0, "low": 9.0, "lastTradePrice": 10.9,
+             "volume": 1, "averageVolume": 1,
+             "lastTradeTime": ettime.epoch_ms(
+                 now - dt.timedelta(seconds=limit + 60))}
+    row = scan_midday.read_quote(stale, now, "2026-08-28", 100.0)
+    if not row["refused_reason"] or "second" not in row["refused_reason"]:
+        failures.append(f"a quote {limit + 60:.0f} seconds old was not refused "
+                        f"with its age: {row['refused_reason']!r}")
+
+    undated = dict(stale)
+    undated.pop("lastTradeTime")
+    row = scan_midday.read_quote(undated, now, "2026-08-28", 100.0)
+    if not row["refused_reason"] or "unknown" not in row["refused_reason"]:
+        failures.append(
+            "a quote carrying no lastTradeTime was not refused as UNKNOWN age. "
+            "An unknown age is not a fresh one")
+
+    fresh = dict(stale)
+    fresh["lastTradeTime"] = ettime.epoch_ms(now - dt.timedelta(seconds=10))
+    row = scan_midday.read_quote(fresh, now, "2026-08-28", 100.0)
+    if row["refused_reason"]:
+        failures.append(f"a ten second old quote was refused: "
+                        f"{row['refused_reason']!r}")
+    print(f"  quote age    older than {limit:,.0f}s is refused with its age, an "
+          "absent stamp is refused as unknown, and a fresh quote passes")
+
+
+def claim_a_graded_row_says_which_levels_it_used(failures: list[str]) -> None:
+    """The night books the same trade against corrected levels.
+
+    Two passes reaching different verdicts on one trade is fine and expected.
+    A reader who cannot tell which levels produced which verdict is not.
+    """
+    row = scan_midday.grade(
+        _pick(), _quote(open=10.5, high=11.0, low=10.2, last=10.9))
+    text = str(row.get("levels_are") or "")
+    for wanted in ("entry_ref", "stop_ref", "true"):
+        if wanted not in text:
+            failures.append(f"the levels disclosure does not mention {wanted!r}: "
+                            f"{text!r}")
+    print("  levels       every graded row names the morning's levels and says "
+          "they are not the night's corrected ones")
+
+
+# --------------------------------------------------------- what the scan lost
+
+def claim_an_unmeasured_name_is_named_not_counted(failures: list[str]) -> None:
+    """Four buckets, one per missing field, each carrying examples.
+
+    358 names arrived in a single unpriced bucket on the first real run and the
+    packet could not say what any of them was missing. It turned out to be the
+    denominator, which was the defect. A count that cannot be chased is how
+    that stayed invisible.
+    """
+    quotes = {
+        "NOLAST.US": _quote(open=1.0, high=2.0, low=0.5, last=None,
+                            volume=10, average_volume=1),
+        "NOPREV.US": _quote(open=1.0, high=2.0, low=0.5, last=1.5,
+                            prev_close=None, volume=10, average_volume=1),
+        "NOAVG.US": _quote(open=1.0, high=2.0, low=0.5, last=1.5,
+                           volume=10, average_volume=None),
+        "NOVOL.US": _quote(open=1.0, high=2.0, low=0.5, last=1.5,
+                           volume=None, average_volume=1),
+    }
+    _rows, tally = scan_midday.rank_movers(quotes, set(), set(), set())
+    for bucket, symbol in (("no_last_price", "NOLAST.US"),
+                           ("no_previous_close", "NOPREV.US"),
+                           ("no_average_volume", "NOAVG.US"),
+                           ("no_volume", "NOVOL.US")):
+        if tally.get(bucket) != 1:
+            failures.append(f"{symbol} did not land in {bucket}, which counted "
+                            f"{tally.get(bucket)}")
+        if symbol not in (tally.get("examples", {}).get(bucket) or []):
+            failures.append(f"{bucket} counted {symbol} and did not name it, so "
+                            "the count cannot be chased to a cause")
+    if tally["admitted"]:
+        failures.append(f"{tally['admitted']} unmeasurable names were admitted "
+                        "to the movers list")
+    print("  unmeasured   each missing field is its own count and names the "
+          "symbols behind it")
+
+
+def claim_a_mover_says_how_far_the_morning_reached(failures: list[str]) -> None:
+    """Three states, not two. Subscribed, pooled, and never seen.
+
+    The collector prices only what it subscribed to, 42 of an 851 name pool on
+    2026-08-31. "discover had it" and "the morning could have priced it" are
+    different facts and the biggest mover of that session, EIX.US at -22.69
+    percent, was in the second group.
+    """
+    big = dict(open=100.0, high=130.0, low=99.0, last=130.0, prev_close=100.0,
+               volume=1_000_000, average_volume=100_000)
+    quotes = {"SUB.US": _quote(**big), "POOL.US": _quote(**big),
+              "NEW.US": _quote(**big), "NAMED.US": _quote(**big)}
+    rows, tally = scan_midday.rank_movers(
+        quotes, {"NAMED.US"}, {"SUB.US"}, {"SUB.US", "POOL.US"})
+    reach = {row["symbol"]: row["morning_reach"] for row in rows}
+    for symbol, wanted in (("SUB.US", "subscribed"),
+                           ("POOL.US", "pooled_not_subscribed"),
+                           ("NEW.US", "not_pooled")):
+        if reach.get(symbol) != wanted:
+            failures.append(f"{symbol} reads {reach.get(symbol)!r}, wanted "
+                            f"{wanted!r}")
+    if "NAMED.US" in reach:
+        failures.append("a name the morning already published reached the "
+                        "movers list, which is the half of the report about "
+                        "what the morning did NOT say")
+    if tally["named_this_morning"] != 1:
+        failures.append(f"named_this_morning counted "
+                        f"{tally['named_this_morning']}, wanted 1")
+    for row in rows:
+        if not row.get("morning_reach_note"):
+            failures.append(f"{row['symbol']} carries a reach state with no "
+                            "sentence saying what it means")
+    print("  reach        subscribed, pooled and never seen are three states, "
+          "and a name the morning published is excluded")
+
+
+def claim_a_mover_with_no_headline_stays_on_the_list(
+        failures: list[str]) -> None:
+    """Selection is on price. News explains, it never decides membership.
+
+    A news led scan cannot say it is blind to a mover with no tagged headline.
+    This one can, and the sentence it says it with is asserted here because
+    that sentence IS the difference between the two designs.
+    """
+    big = dict(open=100.0, high=130.0, low=99.0, last=130.0, prev_close=100.0,
+               volume=1_000_000, average_volume=100_000)
+    rows, _tally = scan_midday.rank_movers(
+        {"QUIET.US": _quote(**big)}, set(), set(), set())
+    if len(rows) != 1:
+        failures.append(f"a name clearing every floor produced {len(rows)} rows "
+                        "before news was ever fetched, so price is not what "
+                        "selects")
+        return
+
+    class _Silent:
+        def news(self, *_a: Any, **_k: Any) -> Any:
+            from core import eodhd
+            return eodhd.ApiResult([], None)
+
+    scan_midday.attach_news(_Silent(), rows, ettime.today_et())
+    if rows[0]["news"] != []:
+        failures.append(f"a silent feed left news as {rows[0]['news']!r} rather "
+                        "than an empty list")
+    reason = rows[0].get("news_reason") or ""
+    if "silence" not in reason:
+        failures.append(f"a mover with no tagged story does not say the feed "
+                        f"was silent: {reason!r}")
+    print("  silence      a mover with no headline stays on the list and says "
+          "the feed was silent rather than that there was no news")
+
+
+# -------------------------------------------------------------- the renderer
+
+def claim_a_headline_cannot_break_the_table_or_the_page(
+        failures: list[str]) -> None:
+    """Vendor text reaches a markdown table and an HTML page.
+
+    A pipe closes a column early, a newline ends a row, and a tag shaped run
+    becomes markup. render_report.py carries the long form of this argument for
+    the morning; the midday renderer builds its own markdown, so it is asserted
+    here against its own escaping.
+    """
+    plain = render_midday.to_markdown(_packet_with_headline("an ordinary story"))
+    nasty = ('Acme | Corp <script>alert(1)</script>\n'
+             '## Injected section\n'
+             '| INJECT.US | +99.00% | 99.00x | 1.00 | 9B | subscribed |')
+    markdown_text = render_midday.to_markdown(_packet_with_headline(nasty))
+
+    # A headline reaches the report as a LIST ITEM, not a table cell, so the
+    # hazard is not a broken column: it is a newline starting a line of its own
+    # and that line being read as structure. A heading and a table row are the
+    # two structures this renderer builds, so the headline tries to forge both.
+    if markdown_text.count("\n## ") != plain.count("\n## "):
+        failures.append(
+            f"a headline changed the number of sections in the report, from "
+            f"{plain.count(chr(10) + '## ')} to "
+            f"{markdown_text.count(chr(10) + '## ')}")
+    forged = [line for line in markdown_text.splitlines()
+              if line.startswith("| INJECT.US")]
+    if forged:
+        failures.append(f"a headline forged a movers table row: {forged[0]!r}")
+
+    html_text = render_midday.to_html(markdown_text, "t")
+    if "<script>" in html_text:
+        failures.append("a headline reached the page as a live script tag")
+    if "&lt;script&gt;" not in html_text:
+        failures.append("the script tag was neither escaped nor present, so it "
+                        "was silently dropped rather than neutralised")
+    if "<h2>Injected section</h2>" in html_text:
+        failures.append("a headline became a section heading on the page")
+    print("  escaping     a headline cannot forge a heading, a table row or a "
+          "script tag, in the markdown or on the page")
+
+
+def claim_the_report_states_its_limits_on_every_edition(
+        failures: list[str]) -> None:
+    """The three standing disclosures are unconditional.
+
+    A report that names a limit only when it bites reads, on the quiet days,
+    exactly like a report with no limits. That is the argument DECISIONS
+    2026-08-20 made for the volume check and it applies unchanged here.
+    """
+    packet = _packet_with_headline("nothing interesting")
+    text = render_midday.to_markdown(packet)
+    for wanted, what in (
+            ("fill_plausible", "that these grades never ask whether the level "
+                               "was transactable"),
+            ("entry_ref", "which levels the grades used"),
+            ("sequence", "how often the order of the high and the low is "
+                         "unknowable"),
+            ("open tolerance", "how many verdicts were decided inside the "
+                               "open's own disagreement")):
+        if wanted not in text:
+            failures.append(f"the report never says {what} (looked for "
+                            f"{wanted!r})")
+    print("  disclosures  every edition states the levels used, the "
+          "transactability it does not check, the sequence it cannot see and "
+          "the verdicts decided too close to call")
+
+
+def _packet_with_headline(title: str) -> dict[str, Any]:
+    """A packet shaped exactly as build_packet writes one, with one mover."""
+    graded = scan_midday.grade(
+        _pick(), _quote(open=10.5, high=11.0, low=8.5, last=8.7,
+                        volume=1_000_000, average_volume=200_000))
+    return {
+        "session_date": "2026-08-31",
+        "generated_at": "2026-08-31T12:00:00-04:00",
+        "run_time_et": "12:00",
+        "configured_run_time": "12:00",
+        "prior_session": "2026-08-28",
+        "prior_closes_returned": 48_000,
+        "universe_size": 2_751,
+        "quotes_returned": 2_751,
+        "quotes_missing": 0,
+        "quote_error": None,
+        "api_calls": 140,
+        "price_source": {
+            "endpoint": "us-quote-delayed",
+            "denominator_endpoint": "eod-bulk-last-day",
+            "why_not_intraday": "the vendor publishes intraday overnight",
+            "denominator_note": "the bulk day is asked for by date",
+            "open_is_not_the_auction": "the open is the first consolidated print",
+            "extended_hours_reason": "the extended fields were stale at 08:45",
+        },
+        "carry_through": {
+            "rows": [graded],
+            "picks_found": 1,
+            "states": {scan_midday.GAPPED_THROUGH: 1},
+            "sequence_unknown_rows": 0,
+            "sequence_unknown_note": "0 of 1 rows have an unknown sequence",
+            "decided_inside_the_open_tolerance_rows": 0,
+            "not_checked": "CRITERIA [Paper]'s fill_plausible is not computed here",
+            "picks_reason": None,
+        },
+        "movers": {
+            "rows": [{
+                "symbol": "EVIL.US", "name": "Evil Inc", "last": 130.0,
+                "prev_close": 100.0, "move_pct": 30.0, "open": 100.0,
+                "high": 130.0, "low": 99.0, "volume": 1_000_000,
+                "average_volume": 100_000, "day_rvol": 10.0,
+                "market_cap": 2e9, "morning_reach": "not_pooled",
+                "morning_reach_note": "discover did not have this name",
+                "news": [{"title": title, "date": "2026-08-31"}],
+                "news_reason": None,
+            }],
+            "list_size": 15, "rank_by": "move", "news_calls": 1,
+            "selection_note": "selection is on price",
+            "floors": {"min_move_pct": ">= 5", "min_day_rvol": ">= 3",
+                       "min_price": ">= 3"},
+            "tally": {"quoted": 2_751, "refused": 0, "named_this_morning": 18,
+                      "no_last_price": 0, "no_previous_close": 0,
+                      "no_average_volume": 0, "no_volume": 0,
+                      "below_price": 1, "below_move": 2_664, "below_rvol": 60,
+                      "admitted": 1,
+                      "examples": {"no_last_price": [], "no_previous_close": [],
+                                   "no_average_volume": [], "no_volume": []},
+                      "unpriced_note": "each count names the field"},
+        },
+        "morning_context": {"packet_found": True, "packet_reason": None,
+                            "named_this_morning": [], "pooled": [],
+                            "subscribed": [], "watchlist_reason": None},
+        "quota_preflight": {},
+        "build": {},
+    }
+
+
+CLAIMS = [
+    claim_a_gap_through_can_name_a_stop_out_and_an_intraday_fill_cannot,
+    claim_the_two_fills_are_the_paper_rule_s_fills,
+    claim_a_row_that_never_filled_reads_no_stop,
+    claim_the_boundaries_go_the_way_criteria_writes_them,
+    claim_a_close_verdict_is_flagged,
+    claim_the_prior_close_is_never_the_quote_s_own_field,
+    claim_a_stale_quote_is_refused_with_its_age,
+    claim_a_graded_row_says_which_levels_it_used,
+    claim_an_unmeasured_name_is_named_not_counted,
+    claim_a_mover_says_how_far_the_morning_reached,
+    claim_a_mover_with_no_headline_stays_on_the_list,
+    claim_a_headline_cannot_break_the_table_or_the_page,
+    claim_the_report_states_its_limits_on_every_edition,
+]
+
+
+def main() -> int:
+    failures: list[str] = []
+    print("the midday pass, CRITERIA [Midday]:")
+    for claim in CLAIMS:
+        claim(failures)
+    if failures:
+        print("")
+        for line in failures:
+            print(f"FAIL  {line}")
+        return 1
+    print(f"PASS  {len(CLAIMS)} claims: the midday pass books a stop out only "
+          "where the order is knowable, reads no stop on a row that never "
+          "filled, takes its denominator from a named session, names every "
+          "field it lost, and cannot be broken by a headline")
+    return 0
+
+
+if __name__ == "__main__":
+    from tests import conftest as _conftest
+
+    sys.exit(_conftest.standalone(main))

@@ -87,7 +87,7 @@ at the root and is gitignored along with .env.
              Probe and build_session, so it is the Alpaca transport for a
              scheduled step as well as the instrument that wrote
              doc/ALPACA_PROBE.md. Deleting it stops the nightly truth pass.
-  - tests/   conftest, run_tests and the thirteen test_ modules. test_regressions
+  - tests/   conftest, run_tests and the fourteen test_ modules. test_regressions
              holds one claim per defect confirmed by the 2026-08-20 audit;
              they are grouped by how they were found because that is the
              only thing they have in common.
@@ -109,11 +109,12 @@ at the root and is gitignored along with .env.
   That last one carries the raw per session volumes and not only the
   derived table, so the study reruns offline: the 109.9 MB deleted on
   2026-08-21 is what that costs when it is not done
-- tasks/: nine job .bat files, register_tasks.ps1, README.md. Seven of them
-  register as nine scheduled tasks: job_nightly runs twice, at
+- tasks/: ten job .bat files, register_tasks.ps1, README.md. Eight of them
+  register as ten scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
-  repeating weekday trigger and once more at 22:45. Two further .bat files
-  sit here and are not among those nine, both of them one offs armed a morning
+  repeating weekday trigger and once more at 22:45. job_midday joined them on
+  2026-08-31 at 12:00. Two further .bat files
+  sit here and are not among those ten, both of them one offs armed a morning
   at a time and both meant to be deleted once their question is answered. A
   plain run of the script registers neither, because a probe that is meant to
   be deleted must not come back every time the schedule is refreshed, and
