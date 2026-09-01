@@ -15,6 +15,105 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01: the gate's question answered three ways, and an assumption the record contradicts
+
+Three instruments and no threshold moved. The point of all three is that the
+question `data/UNVERIFIED` has been gated on since 2026-08-18 is now blocked on a
+DECISION rather than on a measurement, and a decision needs the number split in
+the ways that change what it means.
+
+**The counterfactual.** `research/counterfactual_watchlist.py` replays the
+SHIPPED `evaluate_eligibility` and `score_candidate` over each archived packet
+with `pm_rvol` swapped for `pm_rvol_true`, so it cannot drift from the screen it
+is about. It refuses 2026-08-21 whole on `reread()`'s own run time guard, twelve
+rows unresolvable rather than passed or failed, and it runs a BASELINE pass
+first: two rows no longer replay their stored verdict, both on
+`[Score premarket float rotation]`'s one point edge moving to 0.0002 on
+2026-08-31, and both are excluded from the counts rather than being read as the
+counterfactual lowering a score.
+
+Eleven rows over four sessions would have gained the day watchlist. None would
+have lost it. The swing screen cannot move at all, having no volume condition.
+
+**And the three leads matter more than the eleven.**
+
+The substitution swaps a WINDOW and not only a tape. Decomposed per row into
+window, feed and baseline, an identity that closes on 37 of 37 rows carrying all
+four terms: the window factor's median is 2.53, the feed factor's 1.39 and the
+baseline factor's 1.01, against a total of 5.01. The late start is most of it.
+The baseline factor near 1.0 says the two vendors' denominators agree, so the gap
+is not a denominator artefact. The window factor's minimum is exactly 1.0000, a
+construction bound made visible. And "the true number is always bigger" is FALSE:
+three rows measure lower than they published.
+
+Seven of the eleven gains come from 2026-08-20, the one pre-correction session
+that survives the run time guard. Split on `pm_volume_estimated`, the median
+total ratio is 35.91 before the capture correction shipped and 4.59 after it, an
+eight fold difference. Only four gained names over three sessions speak to the
+screen that runs today.
+
+No split of the outcomes can be published. `[Score watch]`'s minimums withhold
+every one, including the `fill_plausible` split, and the pooled group is seven
+parts one session to four parts three others.
+
+**The capture rate, re-derived and left alone.**
+`research/measure_capture_rate.py` guards the record and archives the raw rows;
+`research/sweep_capture_rate.py` scores replacements off that archive with no
+database read and no vendor call, so the question can be re-asked forever for
+nothing. Both session guards fired once each: the 2026-08-21 stub, and
+2026-08-24 for `started_late_minutes` 9.0, whose rows measure a start time
+failure rather than the feed. The guarded set is 46 rows over six sessions.
+
+The re-derived single number is 0.0968 by this file's own recipe, which the
+sweep reproduces exactly against the 2026-08-21 payload at 0.117227. It is NOT
+shipped, for three reasons that each stand alone. Every row was measured over a
+window opening at 07:20 and that key is likely to move. `[Truth]`
+baseline_sessions is twenty and the guarded set is six. And the move is in the
+unsafe direction on a long only screen while buying nothing: 0.0968 admits the
+same 21 names and the same 9 watchlist rows as 0.1172. The shipped key already
+sits at quantile 0.61 of the record, so it is the conservative one.
+
+**The residual no divisor closes.** The socket carries about a tenth of the
+minutes it is awake for, and those minutes are about 41 percent of the premarket
+tape. Composite socket share of the FULL window: 0.039. The capture rate corrects
+the first factor. The 07:20 start is the second and no value of that key reaches
+it.
+
+**An assumption the record contradicts, in two documents.** `[Truth]` and
+`night/true_volume.py` both said thin names capture least and are therefore
+understated most, and that the correction reinstates the bias float rotation
+exists to remove. Over the 46 guarded rows, terciles of the morning's own
+`avg_volume_20d` give median capture shares of 0.178 thin, 0.087 mid and 0.084
+thick, with Spearman rho of share against average volume at -0.405. Thin names
+capture MORE than twice what the thickest band captures. The SPREAD was measured
+and the DIRECTION was assumed. Six sessions is below `baseline_sessions`, so this
+is a contradicted assumption rather than a finding to act on, and both documents
+now say so where they said the opposite.
+
+**The trigger rate per bucket, which the pre-registration promised.**
+`weekly_page` renders it beside the medians, on the rows the rule was actually
+applied to, with skipped and not-in-ledger counted apart and never folded in.
+Green triggers on 6 of 18 evaluated rows, 33.3 percent; yellow on 10 of 18, 55.6
+percent; red is withheld at 8 rows across 3 sessions. The page cross checks its
+own three way split against `paper_ledger.record_so_far` on every rendering and
+prints the agreement, because two copies of one split is how they come to
+disagree.
+
+The survivor set is now visible, which is the whole point: green's booked median
+is withheld at n=6 while yellow's publishes at n=10, and green's smaller n is in
+large part that it triggers at two thirds of yellow's rate.
+
+**And building it found the phrase both confounds rest on is ambiguous.** "A
+bucket whose trigger rate differs by more than half from another's" does not say
+relative or absolute, and the two readings disagree on this record: relative puts
+red past the line against both, absolute puts nothing past it. The same phrase
+carries the gap direction confound. `SCORE_INVERSION.md` now pins it to the
+RELATIVE reading, with the reasoning and today's measurement, dated before either
+judging point, because after one, choosing between two readings is choosing a
+result. It is deliberately not a CRITERIA key and the page does not render the
+verdict: nothing computes off it, it is a rule for the person judging, and a page
+that rendered it would conclude.
+
 ## 2026-08-31, seventh: the watchdog watches the midday job, and the suite counts itself
 
 **The 12:00 job had been running watched by nothing.** `ops/monitor_jobs.JOBS`

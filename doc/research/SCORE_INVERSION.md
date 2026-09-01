@@ -163,3 +163,40 @@ argument for weakening it: those two minimums are read by every group on the
 weekly page, and lowering them so one new split publishes would change
 numbers already published in order to serve it, on the single page built to
 watch for a threshold turned until the output looks the way somebody wanted.
+
+## What "differs by more than half" means
+
+Added 2026-09-01, with both judging points still far out of reach. Two
+confounds above use the phrase, the trigger survivor set and gap direction,
+and it does not say whether the comparison is relative or absolute. On the
+record as it stands the two readings disagree, so the phrase decides
+different things depending on who reads it. Settling it now is the same act
+as writing the confounds down early: after a judging point, choosing between
+two readings is choosing a result.
+
+**It is RELATIVE.** One bucket's rate differs by more than half from
+another's when the smaller is less than half the larger, that is when
+`min(a, b) / max(a, b) < 0.5`. A rate is a proportion and the question the
+confound asks is whether one group is being selected far harder than another,
+which is a ratio question. The absolute reading, more than fifty percentage
+points apart, is nearly unreachable for rates that both sit in the middle of
+the range and would make the safeguard fire almost never.
+
+Measured 2026-09-01 on the trigger rate, so the reading is on the record
+before it is used: green triggers on 6 of 18 evaluated rows across 7
+sessions, 33.3 percent; yellow on 10 of 18 across 6 sessions, 55.6 percent.
+Relative, 0.333 over 0.556 is 0.600, inside the line, so the comparison of
+green's and yellow's booked medians is NOT made unsafe on this ground.
+Absolute, they are 22.2 points apart, also inside. Red is withheld at 8
+evaluated rows across 3 sessions, below `min_group_rows`, and its underlying
+12.5 percent would cross the relative line against both. A withheld rate is
+not read, so it triggers nothing: the safeguard applies to rates that
+publish, and a bucket too small to publish a rate is already too small to
+publish a median beside it.
+
+The threshold is deliberately NOT a CRITERIA key and the page does not render
+the verdict. Every threshold in this project lives in CRITERIA because code
+reads it; nothing computes off this one. It is a rule for the person doing
+the judging, and the judging is a separate act performed against rules
+written in advance. Putting it in CRITERIA would make the page conclude,
+which is the one thing this instrument is built not to do.

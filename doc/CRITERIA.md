@@ -720,6 +720,20 @@ collector over vendor ratio from the newest verify_intraday.json, and reaches
 this number only for a symbol that check does not carry. Each candidate records
 which of the two it used.
 
+**How it is re-derived now.** Not by re-running the EODHD capture backfill.
+The source is picks.capture_observed, written nightly from Alpaca SIP since
+2026-08-21, and the instruments are research/measure_capture_rate.py, which
+applies the guards and archives the raw rows, and research/sweep_capture_rate.py,
+which scores candidate replacements off that archive with no database read and
+no vendor call. Two things gate a change to the value, and both are open:
+[Truth] baseline_sessions of GUARDED sessions, against six today, and
+[Collector] start_time, because every row of that record was measured over a
+window opening at 07:20 and a re-fit taken before that key moves is a fit to a
+window about to be replaced. Measured 2026-09-01 and recorded rather than
+acted on: the re-derived single number is 0.0968 by this file's own recipe,
+0.1172 sits at quantile 0.61 of the record so the shipped key is already the
+conservative one, and the two admit the same names on the day screen.
+
 **What would retire it.** If the 2026-08-21 06:30 census shows the parser is
 dropping volume the feed delivered, the numerator can be made whole and this
 correction becomes unnecessary rather than merely smaller. If the stream
@@ -1167,11 +1181,29 @@ morning's numbers and never over them, on the [Backfill] precedent.
 [Collector] premarket_capture_rate, one number, 0.1172. The socket's real
 share of the consolidated tape was measured at 2.1 to 12.1 percent over the
 2026-08-19 probe window: a six fold spread. A single divisor cannot correct a
-quantity that varies six fold, and the error is not random. Thin names capture
-least and are therefore understated most, and thin names are exactly the
-population premarket float rotation exists to rescue, so the correction
-reinstates at a lower layer the bias the float rotation fallback was built to
-remove. See DECISIONS.md 2026-08-21 on the record.
+quantity that varies six fold. See DECISIONS.md 2026-08-21 on the record.
+
+[corrected 2026-09-01: this went on to say the error is not random, that
+"Thin names capture least and are therefore understated most, and thin names
+are exactly the population premarket float rotation exists to rescue, so the
+correction reinstates at a lower layer the bias the float rotation fallback
+was built to remove". THE RECORD SAYS THE OPPOSITE, and it is the record this
+section exists to accumulate. Over the 46 guarded rows in
+doc/research/capture_rate_study-2026-09-01.json, terciles of the morning's own
+avg_volume_20d give a median capture share of 0.178 for the thinnest band,
+0.087 for the middle and 0.084 for the thickest, with Spearman rho of share
+against average volume at -0.405 over 46 rows and 6 sessions. Thin names
+capture MORE than twice what the thickest band captures.
+
+The spread is real and the DIRECTION was assumed. Both halves matter: a single
+divisor still cannot correct a quantity that varies six fold, and the sign of
+what it gets wrong is the reverse of what was written down. If it holds, the
+single number understates thin names LESS than liquid ones, and the bias the
+float rotation fallback was said to reinstate points the other way. Six
+sessions is below [Truth] baseline_sessions and this is not yet a finding to
+act on; it is a claim that was never measured and is now contradicted, which
+is a different thing from a claim that is merely old. Re-ask it with
+research/sweep_capture_rate.py, which costs nothing.]
 
 **Alpaca, not EODHD, and only after the close.** The free plan serves the sip
 feed for a session that is OVER and refuses it with HTTP 403 for one that is
