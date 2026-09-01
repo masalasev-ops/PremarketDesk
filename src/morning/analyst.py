@@ -592,6 +592,13 @@ def fallback_report(
             f"| {_f(age, 0) if age is not None else '-'} |")
     if not notable_rows:
         add("| none | | | | | | | | | |")
+    # CLOSE THE TABLE FIRST. A markdown table runs until a blank line, so a
+    # paragraph written straight after the last row is parsed as one more row,
+    # and a row carrying no pipes collapses into a single first column cell:
+    # the whole glossary in one narrow column with nine empty ones beside it.
+    # Latent since names began being carried 2026-08-24 and first rendered
+    # 2026-09-01, because only a rejected analyst reaches this function.
+    add("")
     # One paragraph for the whole table rather than a tenth column, because
     # NOTABLE_HEADER is fixed and _ticker_claims locates ticker columns by it.
     # The names are carried at all because list 2 ranks by market cap and a

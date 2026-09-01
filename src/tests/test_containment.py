@@ -888,6 +888,71 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
           "exemption and a wrapped instruction still caught")
 
 
+def claim_the_fallback_closes_every_table_it_opens(failures: list[str]) -> None:
+    """A markdown table runs until a blank line, and prose after a row joins it.
+
+    On 2026-09-01 the notable movers glossary rendered inside the table it was
+    written under: eighteen "TICKER is Company." sentences parsed as one more
+    row, and with no pipes in them the whole paragraph collapsed into a single
+    first column cell beside nine empty ones. The report published that way.
+
+    It was latent for six sessions. The names have been carried since
+    2026-08-24, but fallback_report only runs when the model's answer cannot be
+    used, and 2026-09-01 was the first morning it was rejected. That is the
+    property worth pinning: this renderer is the one that runs when something
+    has already gone wrong, so it is the one least often seen and least able to
+    afford being wrong.
+
+    The rule is structural rather than about this paragraph. Any line that
+    follows a table row must either be another row or be blank, anywhere in the
+    document, so a section added later cannot reintroduce the same shape.
+    """
+    section = {
+        "rows": [
+            {"symbol": "AAA.US", "name": "Aaa Industries Inc", "leg": "premarket",
+             "as_of_session": "2026-01-02", "move_pct": 4.0, "move_sigma": 2.0,
+             "market_cap": 1_000_000_000, "catalyst": None,
+             "catalyst_state": "not checked", "also_on_watchlist": None,
+             "price_time": None, "price_age_seconds": None,
+             "selected_by": ["premarket_by_sigma"]},
+            {"symbol": "BBB.US", "name": "Bbb Holdings PLC", "leg": "premarket",
+             "as_of_session": "2026-01-02", "move_pct": -3.0, "move_sigma": -1.5,
+             "market_cap": 2_000_000_000, "catalyst": None,
+             "catalyst_state": "not checked", "also_on_watchlist": None,
+             "price_time": None, "price_age_seconds": None,
+             "selected_by": ["premarket_by_sigma"]},
+        ],
+        "lists": {}, "list_reports": {}, "legs": {}, "universe_examined": 2754,
+    }
+    packet = {"session_date": "2026-01-02", "candidates": [],
+              "notable_movers": section}
+
+    rendered = analyst.fallback_report(packet, "the model timed out")
+    lines = rendered.splitlines()
+
+    # The fixture is only worth walking if the names actually reached the page.
+    if "Aaa Industries Inc" not in rendered:
+        failures.append(
+            "the fallback did not render the instrument names at all, so this "
+            "claim is walking a document that no longer contains the paragraph "
+            "it exists to place. Fixture and renderer have decoupled.")
+        return
+
+    for index in range(1, len(lines)):
+        previous, current = lines[index - 1].strip(), lines[index].strip()
+        if not previous.startswith("|") or not current or current.startswith("|"):
+            continue
+        failures.append(
+            f"line {index + 1} of the fallback follows a table row and is "
+            f"neither blank nor a row: {current[:90]!r}. Markdown reads it as "
+            "one more row, and with no pipes in it the whole line becomes a "
+            "single first column cell. That is how the 2026-09-01 glossary "
+            "was published in a column two inches wide")
+
+    print(f"  closed tables  the fallback's {sum(1 for l in lines if l.startswith('|')):,} "
+          "table rows are each followed by a row or a blank line")
+
+
 def claim_a_form_designator_is_not_a_ticker_claim(failures: list[str]) -> None:
     """"10-Q" is a form, not a claim about the listing Q.
 
@@ -1141,6 +1206,7 @@ def _checks() -> int:
 
     claim_the_instructions_cannot_ask_for_what_the_guard_forbids(failures)
 
+    claim_the_fallback_closes_every_table_it_opens(failures)
     claim_a_form_designator_is_not_a_ticker_claim(failures)
 
     if failures:
