@@ -448,7 +448,7 @@ rule that spared them would break the schedule rather than protect it. And
 `morning.scan` joins the hand maintained list in
 `claim_operator_tools_spare_artifacts`, which never asked about it.
 
-**Two existing claims now say which path they exercise.** The 09:25 rerun claim
+**Four existing claims now say which path they exercise.** The 09:25 rerun claim
 and the interrupted write claim both pass `overwrite=True`, because both are
 about the scheduled path and neither was explicit about it.
 

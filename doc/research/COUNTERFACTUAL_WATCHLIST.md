@@ -43,7 +43,7 @@ others:
 | baseline | the published denominator over the true one, two vendors on the same clock window | 37 | 6 | 1.0146 | 0.7831 | 1.6027 |
 | total | `pm_rvol_true / pm_rvol` | 47 | 7 | 5.0076 | 0.6627 | 71.4851 |
 
-The twelve rows that carry a total but no window or feed factor are the
+The ten rows that carry a total but no window or feed factor are the
 pre-correction session, and section 2 is about exactly them. **The pooled total
 of 5.0076 in the last line is the number section 2 says not to use**, and it is
 printed here only so the three factors can be read against something.

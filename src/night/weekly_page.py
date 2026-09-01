@@ -568,8 +568,12 @@ def _group(rows: list[dict[str, Any]], minimum_rows: int,
     # WHY THE DENOMINATOR IS SMALLER THAN THE GROUP, carried beside the rate
     # rather than left for a reader to derive by subtraction. Named at zero is
     # pointless here, so only the states that occurred are listed.
+    # BOTH DENOMINATORS, like every other group on this page. A bare row count
+    # here read as N observations where the sample unit is the session.
     trigger["not_evaluated"] = {
-        state: sum(1 for held in states if held == state)
+        state: {"rows": sum(1 for held in states if held == state),
+                "sessions": len({row["date"] for row, held
+                                 in zip(trigger_rows, states) if held == state})}
         for state in (STATE_SKIPPED, STATE_ABSENT)
         if any(held == state for held in states)}
     # THE RATE'S OWN POPULATION AND ITS OWN SESSION COUNT, carried so the
@@ -817,8 +821,9 @@ def _rate_cell(metric: dict[str, Any]) -> str:
     n and the group's own row count is read rather than inferred. A pick the
     rule was never applied to is not a pick whose trigger did not fire.
     """
-    aside = ", ".join(f"{count} {state}"
-                      for state, count in metric["not_evaluated"].items())
+    aside = ", ".join(
+        f"{held['rows']} {state} over {held['sessions']} session(s)"
+        for state, held in metric["not_evaluated"].items())
     aside = (f"<div class=note>{_esc(aside)}, so not evaluated</div>"
              if aside else "")
     # The population is NAMED, because it is not the group's row count and

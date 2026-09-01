@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and twenty eight claims, a count read off
+and the two pages. It now carries one hundred and twenty nine claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -10372,6 +10372,127 @@ def claim_unregister_removes_every_probe_register_can_create(
           f"script registers is also removed by -Unregister")
 
 
+def claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(
+        failures: list[str]) -> None:
+    """The three midday passes buy one property, and nothing drove it.
+
+    CRITERIA and the changelog both stake the three pass design on arithmetic:
+    [Monitor] job_log_stale_after_s is 2,200, so a midday that hung after
+    writing its log at 12:00 is still WARM at 12:25 and cannot be told from a
+    live job, and is 3,300 seconds cold by 12:55. One pass could only ever
+    report UNRESOLVED on that state.
+
+    That was asserted in prose in four documents and executed by nothing.
+    claim_the_watchdog_reads_every_job_that_writes_a_log compares the JOBS list
+    against the .bat files and never enters check_all's midday branch;
+    claim_a_hold_needs_a_pass_that_can_act walks the pass grid and the collector
+    hold. Grepping the suite for a 12:25, 12:55 or 13:25 clock returns nothing.
+
+    So if job_log_stale_after_s moves again, as it already has once, or if
+    midday_last_pass moves, the verdict changes and the suite stays green. That
+    is the same gap the JOBS list claim was written to close, one level down.
+
+    Three clocks, one warm log, and the verdict at each: RUNNING while a later
+    pass inside the window can read it again, and UNRESOLVED with a problem
+    counted at the last one, because nothing revisits it.
+    """
+    import io
+    import contextlib
+
+    from ops import monitor_jobs
+
+    stale_after = monitor_jobs._CRIT.number("monitor", "job_log_stale_after_s")
+    first = monitor_jobs._CRIT.clock("monitor", "midday_first_pass")
+    last = monitor_jobs._CRIT.clock("monitor", "midday_last_pass")
+
+    with conftest_activate() as _sandbox:
+        day = ettime.today_str()
+        log = config.LOGS_DIR / f"midday-{day}.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+
+        def verdict_at(hour: int, minute: int, written_minutes_ago: float) -> str:
+            """The branch's verdict at a simulated clock, with a log of a
+            chosen age.
+
+            The age is SET rather than taken from the real clock, because
+            _job_alive guards with -60 <= age <= stale_after and that lower
+            bound exists so a log written this evening cannot read as alive at
+            a simulated 08:00. A log written now and read at a simulated 12:25
+            has a negative age and is correctly refused, which is the guard
+            working rather than the state this claim is about.
+            """
+            now = ettime.at(ettime.today_et(), hour, minute)
+            # STARTED and no finish marker: the mtime is the only evidence
+            # left, which is the state the three pass window exists to judge.
+            log.write_text("===== midday scan started x =====\n", encoding="utf-8")
+            stamp = now.timestamp() - written_minutes_ago * 60
+            os.utime(log, (stamp, stamp))
+            printed = io.StringIO()
+            real_query, real_launch = monitor_jobs.query_task, monitor_jobs.launch_bat
+            monitor_jobs.query_task = lambda name: {}
+            monitor_jobs.launch_bat = lambda bat, dry, args=(): None
+            try:
+                with contextlib.redirect_stdout(printed):
+                    monitor_jobs.check_all(now, dry_run=True)
+            finally:
+                monitor_jobs.query_task = real_query
+                monitor_jobs.launch_bat = real_launch
+            for line in printed.getvalue().splitlines():
+                if line.startswith("monitor: midday "):
+                    return line.split(None, 2)[2].split()[0]
+            return "NO LINE"
+
+        # A midday that hung at 12:00, read at the first pass. 25 minutes is
+        # inside job_log_stale_after_s, so this reads as possibly alive, and a
+        # later pass falls inside the window to read it again.
+        early = verdict_at(first[0], first[1], 25)
+        if early != "RUNNING":
+            failures.append(
+                f"a midday hung at 12:00 read {early} at the first pass "
+                f"{first[0]:02d}:{first[1]:02d}. Inside the staleness gate and "
+                "with a later pass to come, that is the one reading a live job "
+                "and a just dead one share, and the second pass is what tells "
+                "them apart")
+
+        # The same death, read at the second pass. 55 minutes is past the gate,
+        # so it is decidable and must be called.
+        second = (first[0], first[1] + 30) if first[1] + 30 < 60 else (first[0] + 1, first[1] - 30)
+        later = verdict_at(second[0], second[1], 55)
+        if later != "FAILED":
+            failures.append(
+                f"a midday hung 55 minutes ago read {later} at "
+                f"{second[0]:02d}:{second[1]:02d}, past job_log_stale_after_s, "
+                "where the log is cold and the verdict is decidable. That is "
+                "the whole reason there is more than one pass")
+
+        # And a death inside the last pass's own blind band. Nothing revisits
+        # it, so a warm log must be counted as a problem rather than reported
+        # as a clean RUNNING.
+        blind = verdict_at(last[0], last[1], 25)
+        if blind == "RUNNING":
+            failures.append(
+                f"at the last midday pass {last[0]:02d}:{last[1]:02d} a warm log "
+                "read RUNNING with nothing after it to revisit the verdict, "
+                "which is the blind band the liveness note says must be counted "
+                "as a problem instead")
+        if blind not in ("UNRESOLVED", "FAILED"):
+            failures.append(f"the last midday pass reported {blind}, which is "
+                            "not a state this branch should reach on a warm log")
+
+    # And the arithmetic the three passes rest on, checked rather than quoted.
+    gap_minutes = (last[0] * 60 + last[1]) - (first[0] * 60 + first[1])
+    if gap_minutes * 60 <= stale_after:
+        failures.append(
+            f"the midday window spans {gap_minutes} minutes and "
+            f"job_log_stale_after_s is {stale_after:,.0f} seconds, so a log warm "
+            "at the first pass is still warm at the last and no pass in the "
+            "window can tell a hung midday from a live one")
+
+    print(f"  midday gate  a warm log reads live while a later pass can revisit "
+          f"it and is not a clean RUNNING at the last, and the {gap_minutes} "
+          f"minute window outlasts the {stale_after:,.0f}s staleness gate")
+
+
 def claim_the_midday_pass_never_touches_the_morning(failures: list[str]) -> None:
     """The 12:00 pass writes three files and none of them is the morning's.
 
@@ -10751,6 +10872,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
 
     words = {
         44: "forty four", 57: "fifty seven", 96: "ninety six",
+        131: "one hundred and thirty one", 132: "one hundred and thirty two",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -11694,6 +11816,7 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
+    claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(failures)
     claim_the_midday_pass_never_touches_the_morning(failures)
     claim_the_unsigned_score_says_so_wherever_it_is_named(failures)
     claim_the_watchdog_reads_every_job_that_writes_a_log(failures)
