@@ -15,6 +15,40 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty second: the title does not separate a wrap from a release either
+
+The second candidate signal for the case the macro tag list left open, measured
+on the same 195 articles and the same title-assigned labels, with company names
+from data/universe.json and two deliberately generous matchers.
+
+Labelled releases whose title does NOT name the company: 4 of 40. Labelled
+wraps whose title DOES name a candidate: 20 of 71, or 23 of 107 pairs.
+
+IT DOES NOT SEPARATE, so nothing was adopted and no rule changed.
+
+The release side is clean, and all four misses read individually: two are data
+artifacts (HTHT renamed to H World, EL's e acute corrupted in the packet) and
+two are the feature working correctly on articles the feed attached to the
+wrong company. The wrap side is what kills it, and not by accident of the
+corpus: a movers roundup names companies in its title by construction, which is
+what the headline of a roundup is for.
+
+The feature is worse than silent on the hard cases. Of the 23 wrap pairs whose
+title names the candidate, 15 are already set aside by the tag count, sharing
+or macro tests. The other 8 are invisible to all three, so the title is the
+only signal available, and on every one of them it votes to admit. Those eight
+are the exact population a fourth test would be added for.
+
+PURR's article is a wrap whose title does not name it, so a title rule WOULD
+catch it. That is the temptation being refused: it works on the case that
+prompted it and misfires on the case the existing rule was built for. DQ, the
+control, names itself and would survive any title rule, which means the control
+was never going to be what caught this.
+
+Recorded in DECISIONS with the one sided reading spelled out, so it can be
+picked up deliberately later rather than rediscovered as an oversight. No
+change under src/ except the claim docstring pointing at the measurement.
+
 ## 2026-09-01, twenty first: a third breadth test, for the market piece that is too narrow to be a roundup
 
 The two counts in [Score catalyst tags] measure how WIDE an article is, and

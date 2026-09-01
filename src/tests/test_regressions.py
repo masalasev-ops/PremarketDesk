@@ -3353,7 +3353,13 @@ def claim_a_market_piece_classifies_nobody(failures: list[str]) -> None:
     RETAIL on 7 in this corpus). A count of distinct sector tags would catch it
     at a cut of three, but that distribution runs 86, 71, 29, 7, 2 with no gap
     anywhere, so choosing three would be picking a number inside a continuum.
-    Left open deliberately. See DECISIONS.md.
+
+    THE TITLE WAS THE OTHER IDEA AND IT WAS MEASURED AND REFUSED, so it is not
+    re-proposed. A title rule WOULD catch PURR. It also readmits 20 of the 71
+    labelled wraps, because a movers roundup names companies in its headline by
+    construction, and on the 8 wrap pairs invisible to all three shipped tests
+    the title is the only signal there is and it votes to admit every one of
+    them. Left open deliberately. Both measurements are in DECISIONS.md.
     """
     from morning import scan
 

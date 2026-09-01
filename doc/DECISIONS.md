@@ -5821,3 +5821,117 @@ Left open deliberately, named in CRITERIA and pinned in the suite claim so it
 cannot be forgotten. What would settle it: a corpus large enough for the sector
 count to show a gap, or a different signal entirely.
 
+## 2026-09-01, eleventh: does the title name the candidate? Measured, and it does not separate
+
+THE SECOND CANDIDATE SIGNAL for the case the macro tag list left open. PURR
+still classifies earnings off "Energy stocks lead in subdued final trading day
+of August", which carries five tags, went to one candidate and carries no macro
+tag, so all three shipped tests are blind to it. Sector breadth was measured
+and refused on 2026-09-01 for having no gap. This is the other idea: an article
+whose TITLE does not name the candidate is probably not about it.
+
+HOW IT WAS MEASURED. The same 195 articles and the same wrap/release/unlabelled
+labels, which were assigned by title pattern and never by tags. Company names
+come from data/universe.json, 2,751 rows, and every symbol in the corpus has
+one. Two matchers, both deliberately GENEROUS, because the question is whether
+the feature separates at its best: a stingy matcher failing would prove nothing.
+
+  symbol  the ticker code as a standalone token in the title
+  name    the universe name with corporate suffixes stripped, matched on word
+          boundaries, so "Marvell Technology Inc" is recognisable as "Marvell"
+
+195 articles, 237 (article, candidate) pairs, because a wrap goes to several.
+
+PER ARTICLE, does the title name at least one candidate it was sent to:
+
+    label          names   does not   total   miss
+    release           36          4      40    10%
+    wrap              20         51      71    72%
+    unlabelled        59         25      84    30%
+
+PER PAIR, which is what a rule would actually read:
+
+    label          names   does not   total   miss
+    release           36          4      40    10%
+    wrap              23         84     107    79%
+    unlabelled        60         30      90    33%
+
+THE TWO NUMBERS. Labelled releases whose title does not name the company: 4 of
+40. Labelled wraps whose title does name a candidate: 20 of 71, or 23 of 107
+pairs.
+
+THE VERDICT: IT DOES NOT SEPARATE. The release side is genuinely near zero and
+the wrap side is not, at 28 percent of articles and 21 percent of pairs. Under
+the standing rule, either number being substantial ends it, so it ends here and
+PURR stays open.
+
+THE RELEASE SIDE, all four read individually because four is small enough to
+read, and none of them is the feature failing:
+
+  HTHT, "H World Group Limited Reports Second Quarter" against a universe name
+  of "Huazhu Group Ltd". The company renamed. The title DOES name it and the
+  reference data is stale, which is a real failure mode of any name matcher and
+  not a property of titles.
+
+  EL, "The Est?e Lauder Cos." The e acute is corrupted in the stored packet, so
+  the matcher misses a title that plainly names the company. Also a data
+  artifact, and also real: a rule reading these packets would hit it too.
+
+  ZIM, handed "Corporacion America Airports S.A. (CAAP) Q2 Earnings Miss
+  Estimates". The title correctly does not name ZIM. This is the feature
+  WORKING, on an article the feed attached to the wrong company.
+
+  NBIS, handed "Is Nvidia (NVDA) Stock a Buy Ahead of Q2 Earnings?". Same.
+
+So the release side is 2 data artifacts and 2 correct rejections, and the
+feature costs almost nothing there. That is not what kills it.
+
+THE WRAP SIDE IS WHAT KILLS IT, and it is not an accident of the corpus. A
+movers roundup names companies in its title BY CONSTRUCTION: that is what the
+headline of a roundup is for. "Stocks making the biggest moves premarket:
+Walmart, Coinbase, Moderna, Alibaba and more" names three of the candidates it
+was handed to, and it is the single article this whole line of work exists to
+reject.
+
+Worse than silent, the feature is WRONG on the hard cases. Of the 23 wrap pairs
+whose title names the candidate, 15 are already set aside by the tag count,
+sharing or macro tests, so the feature merely disagrees harmlessly. The other 8
+are invisible to all three shipped tests, which makes the title the only signal
+available, and on every one of them it votes to ADMIT:
+
+    OMER   "Notable Thursday Option Activity: DLO, AAP, OMER"     (twice)
+    SNDK   "Dow Jones Futures Waver After Sandisk, Micron, Credo Lead AI Losses"
+    SNDK   "Dow Jones Futures Fall After Sandisk, Micron, Credo Lead AI Losses"
+    WMT    "Stock Market Today: Dow Falls On Trump's Economic D-Day Threat"
+    DKS    "Earnings live updates: Dick's Sporting Goods stock tanks"
+    BE     "Biggest stock movers Tuesday: BE, INTC, and more"
+    IREN   "Zacks Investment Ideas feature highlights: QQQ, NVIDIA, CoreWeave"
+
+Those eight are the exact population a fourth test would be added for.
+
+THE TWO CASES CALLED OUT:
+
+  PURR's "Energy stocks lead in subdued final trading day of August, utilities
+  under pressure" is a wrap whose title does NOT name PURR, whose universe name
+  is "Hyperliquid Strategies Inc Common Stock". A title rule WOULD catch it.
+  That is precisely the temptation being refused: it works on the case that
+  prompted it and misfires on the case the existing rule was built for.
+
+  DQ, the control, is safe. "DAQO New Energy Non-GAAP EPADS of -$1.20 misses"
+  names it against a universe name of "Daqo New Energy Corp ADR". Any title
+  rule would leave the control intact, which is worth recording because it
+  means the control was never going to be what caught this.
+
+A NOTE ON THE ONE SIDED READING, so it is not rediscovered as an oversight.
+Set-aside tests combine with OR, so if this test were only ever used in the
+direction "the title does not name the candidate, therefore set aside", the
+wrap-hit number stops being a false positive and becomes a limit on reach. Read
+that way the cost is 4 of 40 release pairs and 30 of 90 unlabelled pairs, 28 of
+those newly. That is a DIFFERENT question from the one asked here, it was not
+pursued, and the unlabelled cost of 33 percent is not obviously acceptable.
+Recorded so a later reader can pick it up deliberately rather than by accident.
+
+PURR STAYS OPEN. Two signals have now been measured and refused for it, sector
+breadth on 2026-09-01 and titles here, and both refusals are the same rule
+applied the same way in both directions.
+
