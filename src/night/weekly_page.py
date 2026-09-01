@@ -15,8 +15,9 @@ is worth having at all, because a reporting layer that fetches is a second
 pipeline to keep right.
 
 Five sections and no more, in the order a person actually asks them. It was
-four until the score watch shipped, and this line said four for as long as
-the module rendered five:
+four until the score watch shipped, this line said four for as long as the
+module rendered five, and the fifth is listed below rather than left to be
+counted:
 
   Did it run           jobs fired, non zero exits, mornings that produced a
                        report at all
@@ -27,6 +28,11 @@ the module rendered five:
                        how many went unscored and why
   What did it cost     this project's spend against the shared key's siblings,
                        and the closest any morning came to the preflight floor
+  Does the score       the conviction buckets and the score components against
+  order anything       what followed, on the WHOLE record rather than the
+                       window, with the share of each group the paper rule
+                       ever entered printed beside the medians that share
+                       qualifies
 
     PYTHONPATH=src .venv/Scripts/python.exe -m night.weekly_page
     PYTHONPATH=src .venv/Scripts/python.exe -m night.weekly_page --days 30
@@ -418,9 +424,64 @@ def _median(values: list[float]) -> float | None:
     return statistics.median(values) if values else None
 
 
+# The ledger's own states, named once. paper_ledger.record_so_far draws the
+# split below a booked trade and these are its names for it; EXIT_NEVER is
+# imported from that module rather than spelled again here, because a sentinel
+# copied twice is a sentinel that gets edited once.
+STATE_ABSENT = "not in the ledger"
+STATE_SKIPPED = "skipped"
+STATE_BOOKED = "booked"
+STATE_UNSIZED = "triggered and not booked"
+STATE_NEVER = "never triggered"
+
+# What the trigger rate counts, and what it divides by. The denominator is the
+# rows the rule was actually APPLIED to. A skipped row and a row the ledger has
+# not reached were never checked, and a row that was checked and did not fire
+# is a different fact: folding the three together would publish a never checked
+# result as a negative one.
+TRIGGER_FIRED = (STATE_BOOKED, STATE_UNSIZED)
+TRIGGER_EVALUATED = TRIGGER_FIRED + (STATE_NEVER,)
+
+
+def _trigger_state(row: dict[str, Any]) -> str:
+    """Which of the ledger's states one pick sits in under the primary rule.
+
+    THE PREDICATES ARE paper_ledger.record_so_far's, in its order and for its
+    reasons. This module may not add a function to that one, so this is a
+    second copy, and two copies of a three way split is how they come to
+    disagree. how_did_the_score_do therefore runs this copy over the same rows
+    record_so_far reads and compares the counts on every rendering, so a
+    divergence appears on the page rather than quietly moving a rate.
+
+    FIVE STATES AND NOT FOUR, because a join can miss. A pick the ledger has
+    not reached carries no row at all, and that is not a pick whose trigger
+    did not fire: the rule was never applied to it. Told apart on rule_version,
+    which paper_trades declares NOT NULL, rather than on booked, so an absent
+    row and a row carrying a null flag cannot read the same.
+    """
+    from night import paper_ledger
+
+    if row.get("ledger_rule") is None:
+        return STATE_ABSENT
+    # skip_reason first, exactly as record_so_far reads it. A skip means the
+    # rule was not applied, so nothing below this line was ever measured.
+    if row.get("skip_reason"):
+        return STATE_SKIPPED
+    if row.get("booked"):
+        return STATE_BOOKED
+    # POSITIVELY, by an exit_reason that is present and is not EXIT_NEVER,
+    # which is record_so_far's predicate and its stated reason: a booked=0 row
+    # may legitimately carry a null exit_reason, and reading that null as a
+    # refusal would move rows here on the absence of evidence.
+    if (row.get("exit_reason")
+            and row["exit_reason"] != paper_ledger.EXIT_NEVER):
+        return STATE_UNSIZED
+    return STATE_NEVER
+
+
 def _group(rows: list[dict[str, Any]], minimum_rows: int,
            minimum_sessions: int) -> dict[str, Any]:
-    """n, sessions and three medians for one group, each withheld on its own.
+    """n, sessions, three medians and a trigger rate, each withheld on its own.
 
     SUPPRESSION IS PER METRIC. The ledger reaches fewer rows than the outcome
     fill does, so a group can have plenty of excursions and almost no booked
@@ -444,11 +505,62 @@ def _group(rows: list[dict[str, Any]], minimum_rows: int,
         return {"value": _median(values), "rows": len(values),
                 "sessions": held, "withheld": None}
 
+    def rate(fired: list[dict[str, Any]],
+             of: list[dict[str, Any]]) -> dict[str, Any]:
+        """A share instead of a median, under the very same withholding rule.
+
+        Not a fourth median and not a new measurement. It is the share of this
+        group that [Paper]'s rule actually entered, and it is here to QUALIFY
+        the booked P&L printed beside it: a group that reaches its trigger less
+        often has that median taken over a survivor set, and how much of a
+        survivor set is the thing a reader cannot otherwise see. What counts as
+        too far apart to compare is pre-registered in
+        doc/research/SCORE_INVERSION.md and judged there, not decided here.
+        """
+        held = len({row["date"] for row in of})
+        # NOTHING TO DIVIDE IS NOT A GROUP THAT IS NEARLY THERE, and it says
+        # so in its own words. A group the rule was applied to no row of has
+        # no rate at all, where a group of eight has one that is merely below
+        # the minimum. Reporting the two under one sentence would read a never
+        # checked group as a thin one, and it is also the only way this
+        # division could ever be by zero.
+        if not of:
+            return {"value": None, "fired": len(fired), "rows": 0,
+                    "sessions": 0,
+                    "withheld": (
+                        "the rule was applied to no row in this group, so "
+                        "there is no rate to take")}
+        if len(of) < minimum_rows or held < minimum_sessions:
+            return {"value": None, "fired": len(fired), "rows": len(of),
+                    "sessions": held,
+                    "withheld": (
+                        f"{len(of)} evaluated row(s) across {held} session(s), "
+                        f"below the {minimum_rows} row and {minimum_sessions} "
+                        "session minimum")}
+        return {"value": len(fired) / len(of), "fired": len(fired),
+                "rows": len(of), "sessions": held, "withheld": None}
+
     booked = [r for r in rows if r.get("pnl_pct") is not None]
     favourable = [r for r in rows if r.get("mfe_pct_true") is not None]
     adverse = [r for r in rows if r.get("mae_pct_true") is not None]
+    # Classified once, so the three lists below cannot come from three
+    # different readings of the same row.
+    states = [_trigger_state(row) for row in rows]
+    evaluated = [row for row, state in zip(rows, states)
+                 if state in TRIGGER_EVALUATED]
+    fired = [row for row, state in zip(rows, states)
+             if state in TRIGGER_FIRED]
+    trigger = rate(fired, evaluated)
+    # WHY THE DENOMINATOR IS SMALLER THAN THE GROUP, carried beside the rate
+    # rather than left for a reader to derive by subtraction. Named at zero is
+    # pointless here, so only the states that occurred are listed.
+    trigger["not_evaluated"] = {
+        state: sum(1 for held in states if held == state)
+        for state in (STATE_SKIPPED, STATE_ABSENT)
+        if any(held == state for held in states)}
     return {
         "rows": len(rows), "sessions": sessions,
+        "trigger": trigger,
         "pnl": metric([r["pnl_pct"] for r in booked], booked),
         "mfe": metric([r["mfe_pct_true"] for r in favourable], favourable),
         "mae": metric([r["mae_pct_true"] for r in adverse], adverse),
@@ -519,6 +631,13 @@ def how_did_the_score_do() -> dict[str, Any]:
     doc/research/SCORE_INVERSION.md names v1 as the primary and that is what
     this returns today. It is read rather than written down here because a
     second copy of a version list is a second thing to keep in step.
+
+    THE TRIGGER RATE RIDES ON THE SAME GROUPS. SCORE_INVERSION.md's confounds
+    section commits to reporting it beside the medians, because a bucket that
+    triggers less often has its median taken over a survivor set. It is the
+    same fact about the same rows and it carries the same two denominators, so
+    it lives in _group beside them and is withheld by the same rule. Nothing
+    here judges it: the page reports and the pre-registration concludes.
     """
     from night import paper_ledger
 
@@ -529,13 +648,59 @@ def how_did_the_score_do() -> dict[str, Any]:
         store.init(connection)
         rows = [dict(row) for row in connection.execute(
             "SELECT k.date, k.ticker, k.conviction, k.score, "
-            "k.mfe_pct_true, k.mae_pct_true, p.pnl_pct "
+            "k.mfe_pct_true, k.mae_pct_true, "
+            # booked = 1 has come OFF the join predicate and onto the P&L
+            # column. The join must still return exactly one paper_trades row
+            # per pick, which PRIMARY KEY (date, ticker, rule_version)
+            # guarantees only while all three keys are named, and rule_version
+            # is still named: that is the part that must not move. What it now
+            # also has to do is return the row whether it booked or not, since
+            # a pick that never triggered has no booked row and is exactly the
+            # pick the trigger rate exists to count. Guarding the P&L in the
+            # projection keeps the published median over booked rows alone, as
+            # it was, while the state columns describe every pick.
+            "CASE WHEN p.booked = 1 THEN p.pnl_pct END AS pnl_pct, "
+            "p.rule_version AS ledger_rule, p.booked, "
+            "p.skip_reason, p.exit_reason "
             "FROM picks k LEFT JOIN paper_trades p "
-            "  ON p.date = k.date AND p.ticker = k.ticker AND p.booked = 1 "
+            "  ON p.date = k.date AND p.ticker = k.ticker "
             "     AND p.rule_version = ? "
             "WHERE k.source = 'live' "
-            "  AND (k.mfe_pct_true IS NOT NULL OR p.pnl_pct IS NOT NULL)",
+            "  AND (k.mfe_pct_true IS NOT NULL "
+            "       OR (p.booked = 1 AND p.pnl_pct IS NOT NULL))",
             (primary_rule,))]
+        # The same split over the rows record_so_far itself reads, so the
+        # comparison below is of the PREDICATES and not of a join.
+        ledger_rows = [dict(row) for row in connection.execute(
+            "SELECT date, ticker, rule_version AS ledger_rule, booked, "
+            "skip_reason, exit_reason FROM paper_trades "
+            "WHERE rule_version = ?", (primary_rule,))]
+
+    # ONE SPLIT, CHECKED AGAINST ITS AUTHOR ON EVERY RENDERING. _trigger_state
+    # is a second copy of paper_ledger's predicates because this module may not
+    # add a function to that one, so the copy is run over the rows its author
+    # reads and the counts are compared. A disagreement is REPORTED and not
+    # raised: this page's charter is to say what it found, and a rate published
+    # beside a note that its split no longer matches the ledger's is more use
+    # than a nightly job that stops.
+    #
+    # record_so_far additionally requires a non null pnl_pct on a booked row.
+    # simulate writes the two together, so a row carrying one without the other
+    # would surface here as a disagreement, which is where it should surface.
+    ledger = paper_ledger.record_so_far(primary_rule)
+    counted: dict[str, int] = {
+        STATE_BOOKED: 0, STATE_SKIPPED: 0, STATE_NEVER: 0, STATE_UNSIZED: 0}
+    for row in ledger_rows:
+        state = _trigger_state(row)
+        counted[state] = counted.get(state, 0) + 1
+    expected = {STATE_BOOKED: ledger["booked"]["rows"],
+                STATE_SKIPPED: ledger["skipped"]["rows"],
+                STATE_NEVER: ledger["never_triggered"]["rows"],
+                STATE_UNSIZED: ledger["triggered_but_unsized"]["rows"]}
+    disagreements = [
+        f"{state}: this page counts {counted.get(state, 0)}, "
+        f"paper_ledger.record_so_far counts {count}"
+        for state, count in expected.items() if counted.get(state, 0) != count]
 
     components = _score_components_by_row()
     buckets: list[dict[str, Any]] = []
@@ -573,6 +738,10 @@ def how_did_the_score_do() -> dict[str, Any]:
         "buckets": buckets, "components": by_component,
         "minimum_rows": minimum_rows, "minimum_sessions": minimum_sessions,
         "packets_read": len(components),
+        "rule_version": primary_rule,
+        "ledger_rows": len(ledger_rows),
+        "ledger_split": counted,
+        "ledger_disagreements": disagreements,
     }
 
 
@@ -589,6 +758,26 @@ def _cell(metric: dict[str, Any]) -> str:
     return (f"{metric['value']:+.2f}%"
             f"<div class=note>n={metric['rows']} over "
             f"{metric['sessions']} session(s)</div>")
+
+
+def _rate_cell(metric: dict[str, Any]) -> str:
+    """The trigger rate, with the rows it divided by and the rows it could not.
+
+    BOTH DENOMINATORS on the published branch and on the withheld one, and the
+    states that were never evaluated named beside them, so the gap between this
+    n and the group's own row count is read rather than inferred. A pick the
+    rule was never applied to is not a pick whose trigger did not fire.
+    """
+    aside = ", ".join(f"{count} {state}"
+                      for state, count in metric["not_evaluated"].items())
+    aside = (f"<div class=note>{_esc(aside)}, so not evaluated</div>"
+             if aside else "")
+    if metric["withheld"]:
+        return (f"<span class=null>withheld</span>"
+                f"<div class=note>{_esc(metric['withheld'])}</div>{aside}")
+    return (f"{metric['value'] * 100:.1f}%"
+            f"<div class=note>{_n(metric['fired'])} of {_n(metric['rows'])} "
+            f"evaluated over {metric['sessions']} session(s)</div>{aside}")
 
 
 def _render_score_watch(add, score: dict[str, Any]) -> None:
@@ -617,6 +806,37 @@ def _render_score_watch(add, score: dict[str, Any]) -> None:
         "pick's own session. The two excursions come from [Outcomes], which "
         "measures the session AFTER it. They are different days and are shown "
         "together only because they are the numbers that exist.</p>")
+    # The rate is on the page; the comparison between two rates is not. What
+    # counts as too far apart is a number, it belongs in the pre-registration
+    # that commits to it, and a page that renders nightly is the last place a
+    # threshold should be typed in a second time.
+    add("<p class=sub>THE TRIGGER RATE IS BESIDE THE MEDIANS AND IS NOT ONE "
+        "OF THEM. [Paper]'s rule enters only where the pick's measured "
+        "premarket high is reached, so a group that reaches it less often has "
+        "its booked P&amp;L median taken over a SURVIVOR SET, and the rate is "
+        "what says how much of one. It qualifies the column beside it rather "
+        "than measuring anything of its own. Its denominator is the rows the "
+        "rule was actually APPLIED to: a row the ledger skipped on evidence, "
+        "and a row it has not reached at all, were never checked, and they "
+        "are counted apart from the rows that were checked and did not fire. "
+        "How far apart two rates may sit before the medians stop comparing is "
+        "pre-registered in doc/research/SCORE_INVERSION.md and is judged "
+        "there, not here.</p>")
+    if score.get("ledger_disagreements"):
+        add("<div class=card><span class=bad>THE TRIGGER SPLIT ON THIS PAGE "
+            "NO LONGER MATCHES night/paper_ledger.py's</span><div class=note>"
+            + _esc("; ".join(score["ledger_disagreements"]))
+            + ". The rates below rest on this page's copy of that split and "
+            "should not be read until the two agree.</div></div>")
+    else:
+        split = ", ".join(f"{count} {state}" for state, count
+                          in (score.get("ledger_split") or {}).items())
+        add(f"<p class=sub>The states below a booked trade are "
+            f"night/paper_ledger.py's, re-read here over the same "
+            f"{_n(score.get('ledger_rows') or 0)} ledger row(s) under rule "
+            f"{_esc(score.get('rule_version'))} and compared with that "
+            f"module's own counts on every rendering. They agree tonight: "
+            f"{_esc(split)}.</p>")
 
     if not score["buckets"]:
         add("<div class=card><span class=null>no live pick carries an outcome "
@@ -630,11 +850,13 @@ def _render_score_watch(add, score: dict[str, Any]) -> None:
             break
         add(f"<h3>{title}</h3>")
         add("<div class='card scroll'><table><tr><th>Bucket</th><th>Rows</th>"
-            "<th>Sessions</th><th>Median booked P&amp;L</th>"
+            "<th>Sessions</th><th>Trigger rate</th>"
+            "<th>Median booked P&amp;L</th>"
             "<th>Median favourable, D+1</th><th>Median adverse, D+1</th></tr>")
         for group in groups:
             add(f"<tr><td>{_esc(group[label])}</td><td>{_n(group['rows'])}</td>"
                 f"<td>{_n(group['sessions'])}</td>"
+                f"<td>{_rate_cell(group['trigger'])}</td>"
                 f"<td>{_cell(group['pnl'])}</td>"
                 f"<td>{_cell(group['mfe'])}</td>"
                 f"<td>{_cell(group['mae'])}</td></tr>")
@@ -652,12 +874,14 @@ def _render_score_watch(add, score: dict[str, Any]) -> None:
         return
     for entry in score["components"]:
         add(f"<div class='card scroll'><table><tr><th>{_esc(entry['component'])}"
-            "</th><th>Rows</th><th>Sessions</th><th>Median booked P&amp;L</th>"
+            "</th><th>Rows</th><th>Sessions</th><th>Trigger rate</th>"
+            "<th>Median booked P&amp;L</th>"
             "<th>Median favourable, D+1</th><th>Median adverse, D+1</th></tr>")
         for level in entry["levels"]:
             add(f"<tr><td>{level['points']:g} point(s)</td>"
                 f"<td>{_n(level['rows'])}</td>"
                 f"<td>{_n(level['sessions'])}</td>"
+                f"<td>{_rate_cell(level['trigger'])}</td>"
                 f"<td>{_cell(level['pnl'])}</td>"
                 f"<td>{_cell(level['mfe'])}</td>"
                 f"<td>{_cell(level['mae'])}</td></tr>")
