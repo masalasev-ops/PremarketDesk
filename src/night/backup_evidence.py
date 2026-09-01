@@ -5,7 +5,22 @@ the pipeline reads what it writes. If this file were deleted the morning would
 run exactly as it does now, which is the whole design: a backup that anything
 depends on is a second input, and a second input is a second thing to be wrong.
 
-WHY THESE FOUR AND NOTHING ELSE. Everything in this system regenerates except:
+WHY THESE SIX, AND THE LEDGER BESIDE THEM. Everything in this system
+regenerates, and THE TEST EACH HELD ARTIFACT HAS TO PASS IS THAT NOTHING CAN
+PRODUCE IT AGAIN. Not that it would be slow to rebuild, not that it would cost
+quota: that there is no route back at any price. Everything below passes that
+test and nothing else in the tree does.
+
+[corrected 2026-09-01, second: this said FOUR and the tuple now holds six, with
+a running ledger held beside it. The count moved because the test above was
+applied to two things it had never been asked about. The reports were assumed
+rebuildable from the packet and are not: the analyst is a MODEL, so the same
+packet does not yield the same report twice, and two of this project's test
+modules read archived reports as their evidence. Six sessions of them were
+deleted on 2026-09-01 and are gone for good, which is the loss this correction
+follows. And the flag log holds HUMAN JUDGEMENTS, which cannot be re-derived
+from anything at all, making it more irreplaceable than a packet rather than
+less. Seven of them existed only on this machine until now.]
 
 [corrected 2026-09-01: this said TWO and named two, while _ARTIFACTS has
 copied four since the collector's two sidecars joined it. The comment above
@@ -81,10 +96,25 @@ from ops import job_status
 _CRIT = criteria.load()
 
 # One entry per artifact. (where it lives, how to name it for a date).
-# Adding a fifth is a deliberate edit: the argument above is that exactly four
-# things in this system have no route back, and a list that grows without that
-# argument being remade is a backup of everything, which is a different and
-# much weaker promise.
+# Adding a seventh is a deliberate edit: the argument above is that these six
+# things have no route back, and a list that grows without that argument being
+# remade is a backup of everything, which is a different and much weaker
+# promise. The argument was remade on 2026-09-01 when the reports joined, which
+# is what the last correction says the sidecars should have prompted and did
+# not.
+#
+# WHAT EACH ONE HAS NO ROUTE BACK FROM, in one line each, because a list whose
+# members cannot each answer that question is a list that has stopped meaning
+# anything:
+#   premarket        a recording of a tape that no longer exists
+#   premarket-stats  a record of connections that have closed
+#   subscriptions    what the socket was asked for, at a moment now past
+#   packet           the frozen evidence a morning was judged on
+#   report           a MODEL wrote it, so the same packet yields a different
+#                    report every time, and test_containment and the quantifier
+#                    claims read archived reports as their evidence
+#   report-html      rendered from a report.md that cannot be reproduced, so it
+#                    inherits the same one way door
 #
 # [corrected 2026-09-01: this said a THIRD and exactly TWO. The docstring's
 # own correction marker was written the same night and this comment, which is
@@ -96,7 +126,64 @@ _ARTIFACTS = (
     ("premarket-stats", lambda day: config.PREMARKET_DIR / f"{day}-stats.jsonl"),
     ("subscriptions", lambda day: config.PREMARKET_DIR / f"{day}-subscriptions.json"),
     ("packet", lambda day: config.run_path(day) / "packet.json"),
+    ("report", lambda day: config.run_path(day) / "report.md"),
+    ("report-html", lambda day: config.run_path(day) / "report.html"),
 )
+
+
+# A RUNNING PROJECT FILE rather than a session artifact, held on the SAME
+# promise as the six above and handled differently for one mechanical reason.
+#
+# data/quantifier-flags.jsonl carries dispositions, and a disposition is a
+# person reading a packet and deciding. Nothing can produce one again: not a
+# re-run, not the vendor, not the model. That makes it MORE irreplaceable than
+# a packet, not less, and it sat in a gitignored directory in exactly one copy
+# until 2026-09-01.
+#
+# It is snapshotted UNDER THE DATE THE NIGHT RAN and is deliberately NOT digest
+# compared the way _ARTIFACTS is. Those six are frozen the moment they are
+# written, so a disagreement there means corruption and deserves the tripwire.
+# This one legitimately GROWS every time a flag is raised or judged, so
+# comparing today's log against a snapshot taken nine sessions ago would report
+# a disagreement every single night and teach the reader to ignore the one
+# alarm in this module that matters.
+#
+# Write once per date still holds, so each night keeps its own state and a
+# judgement recorded after the night ran is caught by the next night. The
+# exposure is at most one day of judgements, against no copy at all before.
+_LEDGERS = (
+    ("quantifier-flags", lambda: config.DATA_DIR / "quantifier-flags.jsonl"),
+)
+
+
+def back_up_ledgers(day: str, dry_run: bool = False) -> dict[str, Any]:
+    """Snapshot the running ledgers under one date. Write once, never compared.
+
+    See the comment above _LEDGERS for why these are not digest compared. The
+    day is the night's own date rather than a session being caught up: the file
+    holds one current state, and that state belongs to the moment it was taken.
+    """
+    out: dict[str, Any] = {"copied": [], "held": [], "missing": [], "failed": []}
+    for label, locate in _LEDGERS:
+        source = locate()
+        if not source.is_file():
+            out["missing"].append(f"{label}: {source.name} is not on disk")
+            continue
+        target = backup_root() / day / f"{label}{source.suffix}"
+        if target.is_file():
+            out["held"].append(label)
+            continue
+        if dry_run:
+            out["copied"].append(label)
+            continue
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+        except OSError as exc:
+            out["failed"].append(f"{label}: {type(exc).__name__}: {exc}")
+            continue
+        out["copied"].append(label)
+    return out
 
 
 def study_root() -> Path:
@@ -590,7 +677,16 @@ def main(argv: list[str] | None = None) -> int:
     result = run(sorted(ready), dry_run=args.dry_run)
     report(result)
 
-    # After the four, and reported apart from them, because they are held
+    # The running ledgers, under tonight's date. Same promise as the six, and
+    # reported apart only because they are not session artifacts.
+    ledgers = back_up_ledgers(ettime.today_str(), dry_run=args.dry_run)
+    verb = "would copy" if args.dry_run else "copied"
+    print(f"backup: ledgers {verb} {len(ledgers['copied'])}, already held "
+          f"{len(ledgers['held'])}")
+    for line in ledgers["missing"] + ledgers["failed"]:
+        print(f"  LEDGER NOT HELD  {line}")
+
+    # After the six, and reported apart from them, because they are held
     # on a different promise. See back_up_studies.
     studies = back_up_studies(dry_run=args.dry_run)
     verb = "would copy" if studies["dry_run"] else "copied"

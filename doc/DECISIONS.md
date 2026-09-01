@@ -5625,3 +5625,86 @@ MLR.US. SAIC.US and MNSO.US agreed exactly. The open is used anyway, because
 inside a running session it is the only open there is, and a carry through
 verdict decided by a margin under [Midday] open_tolerance_pct is flagged rather
 than presented as settled.
+## 2026-09-01, ninth: the quantifier false positives are two shapes, not one, and neither is being acted on yet
+
+Recorded now rather than after a month of flags, because the shape is what a
+month will confirm or refute and a review that opens by rediscovering it wastes
+the month. NOTHING IS CHANGED HERE. The word list, the six word window and the
+forward only rule on `no` all stand exactly as they were.
+
+### What was measured
+
+Seven flags, all judged on 2026-09-01 against the packets they fired on. For
+each one the matched word was located in its own sentence and the noun it
+GOVERNS was read off, beside the set word the guard matched on.
+
+| id | word | governs | set word | verdict |
+| --- | --- | --- | --- | --- |
+| 1 | no | bars | watchlist, six words later | false positive |
+| 2 | no | candidate | candidate, immediately | false positive |
+| 3 | no | trade | name, four words later | false positive |
+| 4 | no | candidate | candidate, immediately | TRUE POSITIVE |
+| 5 | every | candidate | candidate, immediately | false positive |
+| 6 | every | candidate | candidate, immediately | false positive |
+| 7 | no | candidate | candidate, immediately | false positive |
+
+### The two shapes
+
+SHAPE A, MISGOVERNMENT. Ids 1 and 3. The determiner governs a different noun,
+`no bars` and `no trade`, and a generic set word lands inside the six word
+window by coincidence. Neither sentence is a claim about the candidate set at
+all: id3's clause is about UUP alone. Two of the six false positives.
+
+SHAPE B, TRUE AND CHECKABLE. Ids 2, 5, 6 and 7. The quantifier really does
+govern the set word, so the guard is RIGHT about the grammar: each of these is
+a universal over the candidate set. They were judged false positives on rule
+13's second half rather than its first, because the claim was verified exact
+AND a reader can check it against the report in front of them. Id5 enumerates
+all twelve price against VWAP pairs in its own sentence. Id7's claim follows
+from a printed column, `require_above_prior_high` failed 12 of 12. FOUR of the
+six false positives are this shape, which makes it the dominant one and not the
+one that was expected.
+
+AND THE MIRROR OF B IS THE ONLY TRUE POSITIVE. Id4 has the identical grammar to
+ids 2 and 7, `no` governing `candidate` immediately, and its claim is also
+true: `pm_window_thin` is false on all twelve. It is a true positive because
+`pm_window_thin` is printed NOWHERE in the report, so the reader is asked to
+take a universal about twelve names on trust. Grammar does not separate id4
+from ids 2 and 7. Only checkability does.
+
+### The candidate fix, and what it would and would not buy
+
+REQUIRE GOVERNMENT RATHER THAN PROXIMITY: match only where the set word is the
+noun the quantifier governs, rather than anywhere inside a six word window.
+
+That fixes shape A and nothing else. It would have cleared ids 1 and 3, two of
+six false positives, and would have left ids 2, 5, 6 and 7 flagged and id4
+correctly flagged. It cannot touch shape B, because in shape B the grammar the
+guard objects to is really there.
+
+Shape B needs a different instrument entirely: a test of whether the report
+carries the evidence for the claim. That is what separates id4 from ids 2 and
+7, it is not a word list question, and no word list change will reach it. It is
+recorded here as the harder half rather than proposed, because nothing has been
+measured about how such a test would behave.
+
+### Why neither is being made now
+
+Five judged flags on `no` and two on `every`. The count at which this is
+revisited is TWENTY JUDGED ON `no`, matching the bar already printed by
+ops/quantifier_flags at line 182, which refuses to draw a conclusion under
+twenty. Ids 5, 6 and 7 came from hand runs against a single packet on one
+afternoon and are not independent mornings, so the honest figure for `no` is
+five observations across four sessions.
+
+WHAT WOULD REFUTE SHAPE A: a `no` false positive at twenty judged where the
+determiner governs the set word directly. There are already four such flags,
+ids 2, 4 and 7 among them, so shape A is already known to be a minority
+mechanism and the government fix is already known to be partial. It is written
+down as a candidate anyway because it is cheap, it is well defined, and it
+removes the only false positives that are unambiguously not about the set.
+
+WHAT WOULD REFUTE SHAPE B BEING BENIGN: a shape B flag that turns out to be a
+true positive, which is exactly what id4 is under a different reading of
+checkability. If the ratio moves, the guard is doing its job and the false
+positive rate is the wrong number to be watching.

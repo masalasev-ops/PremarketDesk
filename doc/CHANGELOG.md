@@ -15,6 +15,59 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, nineteenth: the held set gains the reports and the flag log
+
+Two things failed the test the held set is supposed to apply, which is not that
+an artifact is expensive to rebuild but that NOTHING CAN PRODUCE IT AGAIN.
+
+THE REPORTS. Assumed rebuildable from the packet, and they are not: the analyst
+is a MODEL, so the same packet does not yield the same report twice.
+test_containment and the quantifier claims read archived reports as their
+evidence. Six sessions of reports were deleted on 2026-09-01 and are gone for
+good, which is the loss this follows rather than anticipates.
+
+THE FLAG LOG. A disposition is a person reading a packet and deciding, and
+nothing can re-derive one: not a re-run, not the vendor, not the model. That
+makes data/quantifier-flags.jsonl MORE irreplaceable than a packet rather than
+less, and it sat in a gitignored directory in exactly one copy while seven
+judgements accumulated in it.
+
+### The argument was remade, not extended
+
+_ARTIFACTS now names six and each carries its own one line reason for having no
+route back, because a list whose members cannot each answer that question has
+stopped meaning anything. That is the correction the sidecars should have
+prompted when they joined and did not.
+
+The flag log is held under _LEDGERS and handled differently for one mechanical
+reason. The six are frozen the moment they are written, so a digest
+disagreement means corruption and deserves the tripwire. A running log
+legitimately GROWS, so comparing today's against a snapshot nine sessions old
+would fire every night and teach the reader to ignore the one alarm in this
+module that matters. It is snapshotted under the night's own date, write once,
+never compared. The exposure is at most one day of judgements against no copy
+at all before.
+
+### The gap, as a known range rather than a discovery
+
+Reports are now held for EIGHT sessions: 2026-08-21, 08-24, 08-25, 08-26,
+08-27, 08-28, 08-31 and 09-01. Sixteen files, 0.26 MB.
+
+Reports are gone for good for 2026-08-13, 08-14, 08-17, 08-18, 08-19 and 08-20,
+deleted 2026-09-01 before this change existed, and for the weekend sweeps of
+08-15 and 08-16. The backup already held those sessions' packets and captures;
+it never held a rendered report, which is exactly what made the deletion safe
+to want and is why it cannot be undone. The nightly reports 2026-08-19 and
+2026-08-20 as artifacts not on disk to copy, so the range stays visible in
+every run rather than having to be remembered.
+
+claim_the_two_unrebuildable_artifacts_are_held_twice is renamed. The count had
+travelled into the NAME of the test that exists to prove what is protected,
+which is the furthest it has got: a reader grepping for the held set would have
+been told two. The properties it tests are unchanged.
+
+Suite green, 135 claims, 1,820 paths, no drift.
+
 ## 2026-09-01, eighteenth: CRITERIA said the guard was in warn mode for four days after it was armed
 
 Found while dating the flip, which was asked for because plain tables had

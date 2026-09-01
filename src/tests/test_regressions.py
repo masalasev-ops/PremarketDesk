@@ -9199,15 +9199,24 @@ def claim_a_claim_cannot_reach_the_live_database(failures: list[str]) -> None:
           "fixture restores every name it rebound")
 
 
-def claim_the_two_unrebuildable_artifacts_are_held_twice(
+def claim_the_unrebuildable_artifacts_are_held_twice(
         failures: list[str]) -> None:
     """A backup that anything reads is a second input, not a backup.
 
-    Two artifacts here have no route back. The premarket capture is a recording
-    of a tape that no longer exists, and the packet is the frozen evidence a
-    morning was judged on. Both live under gitignored directories, and on
-    2026-08-21 at 15:46 one mistake wrote 258 fixture bars over roughly 3,200
-    real ones and 762 bytes over a 125 KB packet. That session is gone.
+    The held artifacts have no route back, and backup_evidence's own docstring
+    carries the argument for each one. The premarket capture is a recording of a
+    tape that no longer exists and the packet is the frozen evidence a morning
+    was judged on. Both live under gitignored directories, and on 2026-08-21 at
+    15:46 one mistake wrote 258 fixture bars over roughly 3,200 real ones and
+    762 bytes over a 125 KB packet. That session is gone.
+
+    [corrected 2026-09-01: this said TWO and the function was named for two,
+    while the tuple had held four since the sidecars joined and holds six now
+    that the reports have, with the flag log beside it. The count travelled into
+    the name of the claim, which is the furthest it has got yet: a reader
+    grepping for what is protected would have been told two by the test that
+    exists to prove it. The properties below are unchanged and are what this
+    claim actually tests; only the count was ever wrong.]
 
     Four properties, and the last two matter more than the first two.
 
@@ -12480,7 +12489,7 @@ def main() -> int:
     claim_the_score_watch_keeps_unscored_out_of_red(failures)
     claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
     claim_a_claim_cannot_reach_the_live_database(failures)
-    claim_the_two_unrebuildable_artifacts_are_held_twice(failures)
+    claim_the_unrebuildable_artifacts_are_held_twice(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
     claim_a_watchlist_from_another_session_never_reaches_the_socket(failures)
     claim_unregister_removes_every_probe_register_can_create(failures)
