@@ -15,6 +15,35 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty fourth: the rest of the review, four findings, none fixed
+
+Reading only, nothing under src/ changed. scan.py past the screen and score,
+analyst.py past the quantifier guard, true_volume.py, weekly_page.py,
+universe.py, discover.py and all of research/. Ranked in DECISIONS.
+
+HIGH: model prose reaches the shipped report without passing the quantifier
+guard. write_report runs quantifier_violations on the narrative, then
+annotate_gap_reasons splices in a second body of model written prose that the
+guard never sees. The comment justifying annotation after the guard is correct
+for the two Python written annotations beside it and false for that one, and it
+does not mention it. gap_reasons.validate checks the cited headline and has no
+quantifier logic at all. This one is mine, from earlier the same day.
+
+MEDIUM: median_abs_gap_pct returns 0.0 where the median is undefined, on 154 of
+2,751 names. gap_propensity on the same line is genuinely zero for those names,
+which is what makes it easy to miss. Not on the shipped ranking path, but it is
+ORDERINGS["C"]'s sort key, so a rejected alternative was measured on a
+corrupted key.
+
+MEDIUM: avg_volume_20d is a mean over however many bars carried a volume, with
+no count published, and the capture rate study stratifies its terciles on it.
+
+LOW: the weekly page states the window share median with no n, directly under
+two cards that state theirs, over a population that is genuinely a subset.
+
+Also recorded: what was read and found sound, so the next pass does not
+re-read the same modules looking for the same shapes.
+
 ## 2026-09-01, twenty third: the Alpaca replay, fenced three ways
 
 The 2026-08-31 review recorded that Alpaca's free plan serves SIP for a

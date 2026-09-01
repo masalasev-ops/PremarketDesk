@@ -6044,3 +6044,105 @@ WHAT IT MAY NOT CONCLUDE. Anything about an EDGE:
 THE RESULT IS EXPLORATORY AND IS NAMED AS SUCH. It lives under research/, it
 writes a source nothing reads, and it carries no licence to act.
 
+## 2026-09-01, thirteenth: the rest of the review, four findings, none of them fixed
+
+The reading pass the earlier work kept deferring: scan.py past the screen and
+the score, analyst.py past the quantifier guard, true_volume.py,
+weekly_page.py, universe.py, discover.py and all of research/. Nothing under
+src/ was changed in this pass and nothing here has been acted on.
+
+Ranked by severity. The first one is mine, from earlier the same day.
+
+### 1. HIGH: model prose reaches the shipped report without passing the quantifier guard
+
+analyst.write_report runs quantifier_violations at line 1848, on the model's
+narrative, and that is the guard the whole flag log discipline rests on: seven
+dispositions, an enforcing mode armed on 2026-08-28, a report withheld and
+regenerated when a quantified claim about the candidate set cannot be checked.
+
+Then at line 1939 annotate_gap_reasons splices a SECOND body of model written
+prose into the same report, from gap_reasons.explain, and the guard never sees
+it. The comment at 1943 justifies running annotations after the guard: "Both
+run after the quantifier guard has had its say, so nothing written here can
+cost a morning its narrative; the suite checks this module's own text against
+the guard instead." That reasoning is correct for annotate_column_legends and
+annotate_glossary, which are Python written and can be checked once, for good,
+by a claim. It is FALSE for annotate_gap_reasons, whose content is generated at
+runtime by a local model and which no suite can check in advance. The comment
+does not mention it and sits four lines below it.
+
+gap_reasons.validate does not cover the gap. It checks that a cited headline
+was one we supplied, which is a fabrication check and a good one, and the word
+"quantifier" appears zero times in that module. check_report at line 1983 does
+run on the annotated text, so an invented TICKER is still caught; a quantified
+claim is not a ticker.
+
+So an explanation reading "every one of these names gapped on earnings" ships,
+in the section a reader is most likely to believe, and the flag log records
+nothing. WHAT WOULD SETTLE THE SIZE OF IT: run quantifier_violations over the
+gap_reasons text already in the eight archived reports and count.
+
+### 2. MEDIUM: median_abs_gap_pct fabricates 0.0 where the median is undefined
+
+gap_stats.py:254 returns `round(statistics.median(beyond), 6) if beyond else
+0.0`, where `beyond` is the gaps that cleared the floor. A name with enough
+history that never gapped past the floor has an UNDEFINED median, and 0.0 says
+its typical gap is zero percent. 154 of 2,751 names carry it at as_of
+2026-08-29, against 45 that are correctly null for too little history.
+
+gap_propensity, computed on the same line from the same list, genuinely IS 0.0
+for those names and is right. That is what makes this easy to miss.
+
+It is not on the shipped ranking path: [Discovery] within_tier_key is
+gap_propensity and within_tier_fallback is atr_pct_20d. It IS the sort key of
+backtest_pool.ORDERINGS["C"], "median absolute gap descending", so ordering C
+was measured with 154 names holding a fabricated key and was rejected partly on
+that measurement. A name gapping 2.9 percent every session under a > 3 floor
+scores 0.0 and sorts below a name that is flat all year and once printed 3.1.
+
+gap_stats.py:420 and :425 also print `row['median_abs_gap_pct'] or 0`, which
+collapses null and zero in the displayed table. Same two facts, same column,
+one report.
+
+### 3. MEDIUM: avg_volume_20d is a mean with no denominator, and it stratifies the capture rate study
+
+scan.py:702 averages whatever non null volumes are present in the last
+`lookback` completed bars and publishes no count beside the result. A name with
+three readable bars and a name with twenty both publish a field called
+avg_volume_20d, and nothing downstream can tell them apart.
+
+Downstream is not nothing. true_volume.py's own docstring says the capture rate
+study is stratified by "terciles of avg_volume_20d", and
+measure_capture_rate.py reads the field directly; its avg_volume_20d_reason
+distinguishes only null from non null, never thin from full. So a name can
+enter a tercile on a three session mean.
+
+Every comparable measurement in this project carries its count: pm_rvol
+publishes true_baseline_sessions, gap_stats publishes sessions_used, the truth
+pass publishes true_bars. This one does not.
+
+### 4. LOW: the weekly page states a median with no n, under two cards that state theirs
+
+weekly_page.py:172 builds the window_share block as median, low and high with
+no row count, where the capture and estimate_error blocks beside it both
+publish theirs and the rendered cards print them in words. The population
+really is different: `windows` is filtered on a non null
+collector_window_share and is a subset of the capture rows.
+
+The card at line 1052 prints "What the 07:20 start sees of the 04:00 tape",
+a median and a range, directly under two cards that each say how many rows they
+rest on. A reader carries the previous denominator across, which is the exact
+reading the two cards above it were written to prevent.
+
+### What was read and found sound
+
+Named so the next pass does not re-read them looking for the same shapes.
+discover.py's two broad excepts are both deliberate and both carry the reason
+and the consequence at the catch site. universe.py's market cap funnel
+excludes absent_from_answered_batch from the unswept share and argues why, with
+the count that motivated it. true_volume.reference_level's `or 0.0` is guarded
+by the division's own truth test and cannot fabricate. weekly_page's trigger
+rate reads its own population and says in a comment exactly how the wrong
+population would bias it and by how much it did. paper_ledger's medians are
+guarded on empty and its P&L is null rather than zero on an untaken trade.
+
