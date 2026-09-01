@@ -15,6 +15,43 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, second: the score is unsigned wherever the score is printed
+
+**Missed from the entry above and recorded here rather than folded into it.**
+The change shipped in its own commit and the 2026-09-01 entry, written about the
+three instruments, did not mention it. Every other commit of that night has an
+entry.
+
+[Score gap] weighs the ABSOLUTE gap, so a name down 20 percent and one up 20
+percent earn the same points, while every outcome column is measured from
+`entry_ref`, which is `pm_high` and therefore a long reference. The 2026-08-20
+finding recorded this as closed and half of it was: `score_roll` has carried a
+per row direction since, and REPORT_TEMPLATE has ordered the model to give it.
+
+Three things were left. The caveat was a PARAPHRASE, because the template said
+`direction_note` "says it in words" and that note cannot be quoted verbatim,
+writing ABSOLUTE in capitals against prompt rule 8: six mornings produced six
+different sentences. No candidate carried a direction at all, the sign being
+discarded in `score_candidate` with nothing near the score recording it. And
+`fallback_report` said nothing anywhere, while its Technical signals table
+publishes a score for every candidate with no gap column.
+
+`score_roll.text.direction` is the quotable form, on the `evidence_roll.text`
+precedent, and every constraint on its wording is load bearing: it says rows and
+never name or candidate so the quantifier guard cannot fire on it, it carries no
+capitals so it can be reproduced, it carries its own denominator, and it counts a
+never computed gap apart from up. `gap_direction` is one rule read by both the
+roll and the candidate stamp, and it reads exactly 0.0 as up, which CRITERIA now
+states because it is a decision about how a market fact is published.
+
+The weekly page says its buckets mix directions. It does not render the split:
+that belongs to the pre-registration, which commits to reporting it when either
+point is judged, and a standing table invites eyeballing it at n=11.
+
+No threshold moved and the screen is unchanged. Signing the component would
+change what the score IS while it is under a pre-registered evaluation, which is
+an owner decision, and CRITERIA says so where the value is set.
+
 ## 2026-09-01: the gate's question answered three ways, and an assumption the record contradicts
 
 Three instruments and no threshold moved. The point of all three is that the
@@ -38,9 +75,18 @@ have lost it. The swing screen cannot move at all, having no volume condition.
 **And the three leads matter more than the eleven.**
 
 The substitution swaps a WINDOW and not only a tape. Decomposed per row into
-window, feed and baseline, an identity that closes on 37 of 37 rows carrying all
-four terms: the window factor's median is 2.53, the feed factor's 1.39 and the
-baseline factor's 1.01, against a total of 5.01. The late start is most of it.
+window, feed and baseline, an identity that closes on 37 of 37 rows carrying
+all four terms, worst relative residual 2.5e-06.
+
+THE FOUR MEDIANS DO NOT MULTIPLY, and they are not one group. Each carries its
+own row and session count because each is taken over the rows that have that
+term: window 2.5252 over 44 rows and 6 sessions, feed 1.3869 over 44 and 6,
+baseline 1.0146 over 37 and 6, pooled total 5.0076 over 47 and 7. Over the 37
+rows that carry all four they are 2.743, 1.367, 1.015 and 4.588.
+doc/research/COUNTERFACTUAL_WATCHLIST.md states this and names the pooled total
+as the figure not to quote; the sentence here originally gave the four under
+one denominator, which invited exactly the multiplication that does not close.
+The late start is most of it either way.
 The baseline factor near 1.0 says the two vendors' denominators agree, so the gap
 is not a denominator artefact. The window factor's minimum is exactly 1.0000, a
 construction bound made visible. And "the true number is always bigger" is FALSE:

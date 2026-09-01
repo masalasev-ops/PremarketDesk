@@ -53,8 +53,8 @@ reason it was noticed is that a test happened to read it.
 
     powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
 
-Remove them all again with `-Unregister`, which also removes the one off
-probe if it is armed. The times come from the clocks in `doc\CRITERIA.md`. If a
+Remove them all again with `-Unregister`, which also removes all three one
+off probes if they are armed. The times come from the clocks in `doc\CRITERIA.md`. If a
 clock there changes, change the register script to match and re-register.
 
 In the Task Scheduler GUI the jobs live in their own folder: Task Scheduler

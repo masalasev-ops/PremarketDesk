@@ -2697,7 +2697,7 @@ derived from position_notional, which is v1's size, and every version is judged
 against the same floor so that they all trade the same population; see the v2
 note above on why that imperfection is kept deliberately. The
 coupling is machine checked instead, by
-claim_the_fill_band_floor_is_the_position_size_over_the_participation_cap, so a
+claim_the_fill_band_floor_is_the_position_over_the_participation_cap, so a
 change to either number here that is not carried into [Truth] fails the suite
 rather than quietly decoupling the two.
 
@@ -3034,7 +3034,8 @@ a confound in the score's own evaluation and it is written down as one, in
 doc/research/SCORE_INVERSION.md, dated before either judging point.
 
 The direction is carried rather than the sign being restored: per candidate
-as gap_direction, per packet as score_roll.text.direction, which is written
+as gap_direction, which reads a gap of exactly 0.0 as UP, per packet as
+score_roll.text.direction, which is written
 to be quoted word for word, and the report is required to give it wherever a
 score is named. Signing the component instead would change what the score IS
 while the score is under a pre-registered evaluation, and changing the

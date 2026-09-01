@@ -159,7 +159,12 @@ at the root and is gitignored along with .env.
   [Collector] stop_time past the open AND moving start_time earlier than
   07:20, which is the larger of the two prizes: the RVOL numerator starts at
   07:20 and its baseline denominator accumulates from 04:00, and
-  collector_window_share puts the median cost of that mismatch at 0.366.
+  collector_window_share puts the median cost of that mismatch at 0.366 over
+  all 68 picks rows, and 0.407 over the 46 that survive the capture study's
+  session guards. Both are real and neither is the other: the first is the
+  number a reader takes off the table without the guards, the second is what
+  doc/research/capture_rate_study-2026-09-01.json publishes under
+  residual_no_divisor_closes.
   Armed 2026-08-31 for 2026-09-01 and NOT yet run.
   job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
   2026-08-20 once both questions were answered and recorded in DECISIONS.md;

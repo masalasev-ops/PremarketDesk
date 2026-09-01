@@ -9,15 +9,20 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and twenty seven claims, a count read off
+and the two pages. It now carries one hundred and twenty eight claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
-[corrected 2026-08-31: was ninety six, against one hundred and twenty seven
-defined and one hundred and twenty seven called. The sentence above argues
-that this number must be read off the file, and it had been remembered for
-long enough to be wrong by twenty eight. It is machine checked now, by
-claim_the_suite_can_count_itself, so the next reader does not have to.]
+[corrected 2026-08-31, and the count has moved with every claim added since.
+It read ninety six when the file held one hundred and twenty four, so the
+sentence arguing that this number must be read off the file rather than
+remembered had itself been remembered for long enough to be wrong by
+twenty eight. No figure is quoted in this marker on purpose: the count is
+machine checked by claim_the_suite_can_count_itself, which parses this file
+and compares the docstring against the definitions and the call sites, so a
+number written here would be one more thing to keep in step and would go
+stale the next time a claim lands. The sentence above is the count; this is
+only the record that it was once wrong.]
 
 They have nothing in common except how they were found, which is why they are
 grouped by that rather than scattered across the themed suites: a reader asking
@@ -10367,6 +10372,93 @@ def claim_unregister_removes_every_probe_register_can_create(
           f"script registers is also removed by -Unregister")
 
 
+def claim_the_midday_pass_never_touches_the_morning(failures: list[str]) -> None:
+    """The 12:00 pass writes three files and none of them is the morning's.
+
+    The two passes share a run directory. The morning writes packet.json,
+    premarket_snapshot.jsonl, report.md, report.html and analyst_usage.json;
+    midday writes midday_packet.json, report_midday.md and report_midday.html.
+    Nothing enforces that separation but the constants, and both modules resolve
+    through core/artifacts.py with `overwrite or scheduled_run()`, so a
+    SCHEDULED midday run replaces freely and would replace a morning file
+    outright if a name ever collided.
+
+    That is the whole reason this is a claim and not a comment. A one word edit
+    to REPORT_MD or PACKET_FILE, or a future midday section that decides it
+    wants report.html, destroys the morning's evidence at noon on a weekday with
+    the guard raising nothing, because at 12:00 the scheduler owns the day and
+    the guard is doing exactly what it is told.
+
+    Driven with PMD_JOB SET, which is the dangerous configuration rather than
+    the safe one: the run is the owner of today and every resolve is an
+    overwrite. Hashes before and after, so this asks whether the bytes moved
+    rather than whether the filenames look different.
+    """
+    import hashlib
+
+    from midday import render_midday
+    from midday import scan_midday
+    from ops import job_status
+
+    with conftest_activate() as _sandbox:
+        day = "2026-08-31"
+        run = config.run_dir(day)
+        packet_path = run / scan_midday.PACKET_FILE
+        if not packet_path.is_file():
+            failures.append(
+                f"the sandbox carries no {scan_midday.PACKET_FILE} for {day}, so "
+                "this claim cannot drive the midday pass and is checking nothing")
+            return
+
+        def morning_hashes() -> dict[str, str]:
+            return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in sorted(run.iterdir())
+                    if p.is_file() and "midday" not in p.name}
+
+        before = morning_hashes()
+        if not before:
+            failures.append("the sandbox run directory holds no morning "
+                            "artifacts, so there is nothing to protect here")
+            return
+
+        saved = os.environ.get(job_status.JOB_ENV_VAR)
+        try:
+            os.environ[job_status.JOB_ENV_VAR] = "midday"
+            payload = json.loads(packet_path.read_text(encoding="utf-8"))
+            scan_midday.write_packet(payload, overwrite=True)
+            render_midday.render(packet_path, overwrite=True)
+        finally:
+            os.environ.pop(job_status.JOB_ENV_VAR, None)
+            if saved is not None:
+                os.environ[job_status.JOB_ENV_VAR] = saved
+
+        after = morning_hashes()
+        for name, digest in before.items():
+            if name not in after:
+                failures.append(f"the midday pass DELETED the morning's {name}")
+            elif after[name] != digest:
+                failures.append(
+                    f"the midday pass rewrote the morning's {name}. The two "
+                    "passes share a run directory and a scheduled midday run "
+                    "owns the day, so a collided name is destroyed outright "
+                    "with the artifact guard raising nothing")
+
+        # And the separation stated as names, so a rename is caught here rather
+        # than only when a hash moves on a session that happens to have both.
+        written = {scan_midday.PACKET_FILE, render_midday.REPORT_MD,
+                   render_midday.REPORT_HTML}
+        collided = written & {"packet.json", "premarket_snapshot.jsonl",
+                              "report.md", "report.html", "analyst_usage.json",
+                              "verify_intraday.json", "pool_recall.json"}
+        if collided:
+            failures.append(
+                f"the midday pass is configured to write {sorted(collided)}, "
+                "which the morning and the nightly own")
+
+    print(f"  midday fence the 12:00 pass rewrote its own three files and left "
+          f"all {len(before)} of the morning's byte identical")
+
+
 def claim_the_unsigned_score_says_so_wherever_it_is_named(
         failures: list[str]) -> None:
     """The score is direction blind and every path that prints one says it.
@@ -11602,6 +11694,7 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
+    claim_the_midday_pass_never_touches_the_morning(failures)
     claim_the_unsigned_score_says_so_wherever_it_is_named(failures)
     claim_the_watchdog_reads_every_job_that_writes_a_log(failures)
     claim_the_suite_can_count_itself(failures)

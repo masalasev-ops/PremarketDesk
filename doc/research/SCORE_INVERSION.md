@@ -18,7 +18,15 @@ not written down. An amendment made before either judging point is reached is
 still a pre-registration; one made after the numbers are in is a
 rationalisation, and the date on this line, against the commit that carries
 it, is the only thing that separates the two. Nothing else in this file
-changed.
+changed on that date.
+
+Amended again 2026-09-01, with the record unmoved: a closing section, What
+"differs by more than half" means, pins the phrase two confounds rest on to
+the relative reading. No judging rule, judging point, outcome or stop rule
+moved, and no earlier text was rewritten. This block is the file's register
+of amendments, so an amendment that is not listed here is one a reader
+cannot date, and the line above said nothing else had changed while a
+section dated the next day sat at the foot of the file.
 
 Nothing in this file is a result. `night/weekly_page.py` renders the groups
 every night and concludes nothing; the judging described here is a separate act
