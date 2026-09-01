@@ -79,10 +79,16 @@ from ops import job_status
 _CRIT = criteria.load()
 
 # One entry per artifact. (where it lives, how to name it for a date).
-# Adding a third is a deliberate edit: the argument above is that exactly two
+# Adding a fifth is a deliberate edit: the argument above is that exactly four
 # things in this system have no route back, and a list that grows without that
 # argument being remade is a backup of everything, which is a different and
 # much weaker promise.
+#
+# [corrected 2026-09-01: this said a THIRD and exactly TWO. The docstring's
+# own correction marker was written the same night and this comment, which is
+# the sentence that correction cites as the reason the count matters, was left
+# saying the old number. A correction that does not reach the line it quotes
+# is half a correction.]
 _ARTIFACTS = (
     ("premarket", lambda day: config.PREMARKET_DIR / f"{day}.jsonl"),
     ("premarket-stats", lambda day: config.PREMARKET_DIR / f"{day}-stats.jsonl"),

@@ -15,6 +15,72 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, third: six run directories deleted by hand, and what that costs
+
+**Not a code change. An operator action, recorded here because the tree no
+longer matches what a dozen entries below describe.** On 2026-09-01 the run
+directories for 2026-08-13, 08-14, 08-17, 08-18, 08-19 and 08-20 were deleted,
+leaving 08-21 onward. The reason given was that those mornings published
+reports written before the corrections of the following fortnight, and an
+archive of reports now known to be wrong is its own kind of dishonesty. That
+argument is accepted and the deletion stands.
+
+There is precedent for recording rather than repairing. The entry of
+2026-08-21 records runs/2026-08-15 and runs/2026-08-16 deleted as weekend
+sweeps, and the citations written before it were left alone.
+
+**The boundary is cleaner than it looks.** picks holds no row before
+2026-08-20, so five of the six deleted sessions fed nothing downstream at all.
+Only 2026-08-20 carries picks, twelve of them, and it is the session the
+counterfactual watchlist study names as screened under an arithmetic retired
+2026-08-21. The deletion therefore cuts almost exactly at the freeze.
+
+**What survived.** night.backup_evidence holds all thirteen sessions at its
+root outside the tree, and for each one it holds the four artifacts its
+_ARTIFACTS tuple names: packet.json, the premarket capture, the stats sidecar
+and the subscriptions sidecar. Nothing irreplaceable was lost. The capture in
+particular, which CRITERIA calls not reproducible at any price, was never in
+runs/ and was never touched.
+
+**What did not.** The backup copies no rendered report, which is precisely what
+made the deletion safe to want: report.md and report.html for those six days
+are gone for good, as are pool_recall.json, verify_intraday.json,
+analyst_usage.json and premarket_snapshot.jsonl, none of which _ARTIFACTS
+names. Gone with them is the deliberately preserved pair
+runs/2026-08-20/packet.0845.json and report.0845.md, which the entry of
+2026-08-21 records as the before state of an amended packet. That entry now
+cites two files that do not exist. It is left standing as history, because the
+files did exist when it was written.
+
+**Three consequences, none of them a failure.**
+
+night.build_archive iterates runs/ and rebuilds site/ from what it finds, so
+the published archive shortens from thirteen mornings to seven. That is the
+intent of the deletion rather than a side effect of it.
+
+night.weekly_page reads runs/*/packet.json for the points the morning actually
+awarded, and its own docstring already answers this: a packet that is missing
+contributes nothing rather than zeros, because a component nobody scored is not
+a component that scored zero. The twelve picks of 2026-08-20 keep their row and
+lose their component breakdown. Every median and trigger rate on that page is
+computed from picks and paper_trades, which are in the database and untouched,
+so no published number moves.
+
+night.backup_evidence surveys the last ten sessions by [backup]
+catchup_sessions, which still reaches 2026-08-19 and 2026-08-20, so from
+tonight it reports two missing packets. That is the module telling the truth:
+the working copies are gone and the backup still holds them. It resolves
+itself once those dates fall out of the window, around mid September, and it
+is worth naming because the same report carries the DISAGREES alarm, and noise
+that gets ignored is how a real alarm gets missed.
+
+**One restore is worth considering and is not taken here.** Restoring
+2026-08-20 would return only packet.json, since the three premarket files
+already match and restore refuses to overwrite a working copy that agrees with
+the backup. It would give twelve live picks back the record of how they were
+scored, without resurrecting a single rendered report. That is a judgment for
+the operator and not a defect to be fixed.
+
 ## 2026-09-01, second: the score is unsigned wherever the score is printed
 
 **Missed from the entry above and recorded here rather than folded into it.**
