@@ -372,6 +372,8 @@ def packet_fields(candidate: dict[str, Any] | None) -> dict[str, Any]:
             "packet_candidate_reason": NO_CANDIDATE,
             "avg_volume_20d": None,
             "avg_volume_20d_reason": NO_CANDIDATE,
+            "avg_volume_20d_sessions": None,
+            "avg_volume_20d_sessions_reason": NO_CANDIDATE,
             "baseline_median": None,
             "baseline_median_reason": NO_CANDIDATE,
             "baseline_sessions_used": None,
@@ -389,11 +391,23 @@ def packet_fields(candidate: dict[str, Any] | None) -> dict[str, Any]:
         }
     baseline = candidate.get("baseline") or {}
     volume = candidate.get("avg_volume_20d")
+    # HOW MANY SESSIONS THE MEAN RESTS ON, carried through because this study
+    # STRATIFIES ON that mean and a tercile edge drawn across names measured on
+    # three sessions and names measured on twenty is an edge between two
+    # populations. scan publishes the count from 2026-09-01; a packet written
+    # before that carries none, and null here says so rather than claiming the
+    # full window.
+    sessions = candidate.get("avg_volume_20d_sessions")
     median = baseline.get("median_volume")
     return {
         "packet_candidate_found": True,
         "packet_candidate_reason": None,
         "avg_volume_20d": volume,
+        "avg_volume_20d_sessions": sessions,
+        "avg_volume_20d_sessions_reason": (
+            None if sessions is not None else
+            "this packet predates scan publishing the count, so how many "
+            "sessions the mean rests on is unknown rather than full"),
         "avg_volume_20d_reason": (None if volume is not None else
                                   "the packet candidate carries no "
                                   "avg_volume_20d"),

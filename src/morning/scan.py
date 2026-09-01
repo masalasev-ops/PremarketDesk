@@ -648,6 +648,7 @@ def attach_daily_history(
         candidate["prior_high"] = None
         candidate["prior_session_date"] = None
         candidate["avg_volume_20d"] = None
+        candidate["avg_volume_20d_sessions"] = 0
 
     for candidate in candidates:
         bars, error = api.eod(candidate["symbol"], start=start, end=today)
@@ -699,7 +700,17 @@ def attach_daily_history(
                 )
         volumes = [_as_float(b.get("volume")) for b in completed[-lookback:]]
         volumes = [v for v in volumes if v is not None]
+        # THE COUNT TRAVELS WITH THE MEAN. This averages whatever bars in the
+        # window carried a volume, which can be three of twenty, and a field
+        # named avg_volume_20d asserts a denominator it does not have. It is
+        # not a display number: true_volume's own docstring says the capture
+        # rate study stratifies its terciles on it, so a name can enter a
+        # tercile on a three session mean and nothing downstream could tell.
+        # Every comparable measurement here already carries its count, pm_rvol
+        # through true_baseline_sessions, gap_stats through sessions_used, the
+        # truth pass through true_bars. This one did not.
         candidate["avg_volume_20d"] = round(sum(volumes) / len(volumes), 2) if volumes else None
+        candidate["avg_volume_20d_sessions"] = len(volumes)
 
 
 # The three states the morning's fill warning may carry. Named rather than
@@ -4991,6 +5002,7 @@ def build_packet() -> dict[str, Any]:
                 candidate["prior_high"] = None
                 candidate["prior_session_date"] = None
                 candidate["avg_volume_20d"] = None
+                candidate["avg_volume_20d_sessions"] = 0
                 candidate["catalyst_found"] = None
                 candidate["catalyst_error"] = f"news call skipped: {quota_clause}"
                 candidate["headlines"] = []

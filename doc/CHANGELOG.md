@@ -15,6 +15,60 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty fifth: the guard reads what ships, C survives the corrected key, two denominators published
+
+Three findings from the review, acted on.
+
+### The guard hole cost zero scheduled mornings, and the design was still wrong
+
+gap_reasons landed in 22f6900 AFTER that morning's 08:45 run, so
+runs/2026-09-01/report.md does not carry the section and no scheduled morning
+ever shipped one. The single hand run that does carries 28 lines that scan to
+zero violations, so the flag log undercounts by nothing. First scheduled
+exposure would have been 2026-09-02.
+
+write_report now scans the FINISHED body, not an intermediate. The narrative
+loop is unchanged and still right where it is, because only a narrative can be
+regenerated. Telling a model written violation from this file's own text is not
+done by subtracting the raised list, which was the first attempt: when the
+narrative is withheld the fallback disclaimer QUOTES the rejected sentence on
+purpose, on a different line, and test_containment went from 2 flags to 4 the
+moment the pass was added. So the body is built twice, with and without the
+model written section, and the difference is what the model wrote. The second
+build is also the repair that ships in enforcing mode.
+
+ANNOTATIONS_MODEL_WRITTEN and ANNOTATIONS_PYTHON_WRITTEN are read by
+claim_the_guard_reads_what_ships: every annotate_ function must be declared in
+exactly one, the last guard pass must run after the last model written
+annotation and before the file is written, and a quantifier inside the
+explanation must actually be found. Adding a new model written section after the
+guard turns the suite red, which is the point; a guard whose coverage depends on
+call order gets broken by the next feature.
+
+### Ordering C survives the corrected key
+
+gap_stats returned median_abs_gap_pct 0.0 where the median is undefined. Now
+null with a reason, and the 946 rows already on disk were rewritten exactly: a
+median of gaps clearing a > 3 floor can never be 0.0, and no row anywhere
+disagrees with gap_propensity on it.
+
+C re-run over 60 sessions: 0.0548 mean subscribed recall against SHIPPED's
+0.1149, 4.15 screen passes a session against 7.02. Unchanged to four decimals,
+and that was CHECKED rather than inferred: the old key was rebuilt in memory and
+run side by side, and the subscribed set is identical on all 60 sessions, zero
+gappers gained or lost. Both a fabricated 0.0 and a null sort below every name
+with a positive median, so the correction only reorders the bottom of the
+ordering. The rejection stands and the record is now sound.
+
+### The two denominators
+
+avg_volume_20d publishes avg_volume_20d_sessions at all three sites that set it,
+and measure_capture_rate carries it into the study that stratifies terciles on
+the mean. The weekly page's window share card publishes its rows and sessions
+and says it rests on fewer than the cards above it.
+
+Suite green, 140 claims, no drift.
+
 ## 2026-09-01, twenty fourth: the rest of the review, four findings, none fixed
 
 Reading only, nothing under src/ changed. scan.py past the screen and score,

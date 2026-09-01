@@ -83,7 +83,14 @@ CREATE TABLE IF NOT EXISTS gap_stats (
 # uses.
 _LATER_COLUMNS = (
     ("return_stdev_20d", "REAL"),
+    ("median_abs_gap_pct_reason", "TEXT"),
 )
+
+
+NO_QUALIFYING_GAP = (
+    "no session in the window gapped past the [Day setup] gap_pct floor, so "
+    "the median of the qualifying gaps is undefined")
+
 
 
 # One row per sweep, so a later reader can ask how complete an as_of is without
@@ -114,6 +121,25 @@ def init(connection) -> None:
     added = store.ensure_columns(connection, "gap_stats", _LATER_COLUMNS)
     if added:
         print(f"gap_stats: widened the table with {', '.join(added)}")
+    # THE FABRICATED ZEROS ALREADY ON DISK. Every row written before
+    # 2026-09-01 stored 0.0 where the median is undefined, and the correction
+    # above only fixes rows written from now on. The rewrite is EXACT rather
+    # than a guess: median_abs_gap_pct is the median of gaps clearing a > 3
+    # floor, so a real median can never be 0.0, and 0.0 means the qualifying
+    # list was empty and nothing else. Verified against the live table before
+    # it ran: across all six as_of windows there is not one row where
+    # (median_abs_gap_pct = 0) and (gap_propensity = 0) disagree.
+    #
+    # Idempotent, like the source rewrite in store.init: after the first run
+    # there are no zeros left to find.
+    fixed = connection.execute(
+        "UPDATE gap_stats SET median_abs_gap_pct=NULL, "
+        "median_abs_gap_pct_reason=? WHERE median_abs_gap_pct=0.0",
+        (NO_QUALIFYING_GAP,)).rowcount
+    if fixed:
+        print(f"gap_stats: {fixed} row(s) held a median of 0.0 where the "
+              "median is undefined; they are null with a reason now")
+    connection.commit()
 
 
 def _as_float(value: Any) -> float | None:
@@ -243,19 +269,53 @@ def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:
         return {
             "gap_propensity": None,
             "median_abs_gap_pct": None,
+            "median_abs_gap_pct_reason": (
+                f"{sessions_used} session(s) of history, below the "
+                f"{MIN_SESSIONS} this measurement needs"),
             "atr_pct_20d": atr_pct,
             "return_stdev_20d": return_stdev,
             "sessions_used": sessions_used,
         }
 
     beyond = [abs(gap) for gap in gaps if gap_rule.test(abs(gap))]
+    # NULL, NOT ZERO, when nothing qualified. This column is the median of the
+    # gaps that CLEARED the floor, so with no qualifying session there is no
+    # median: the quantity is undefined, and 0.0 says the name's typical gap is
+    # zero percent, which is a claim about the stock made out of an empty list.
+    #
+    # gap_propensity on the line above is computed from the same list and IS
+    # genuinely 0.0 for those names, because a count of nothing over a real
+    # denominator is a real rate. That is what made this hard to see, and it is
+    # why the two lines now read differently.
+    #
+    # [corrected 2026-09-01: this returned 0.0. 154 of 2,751 names at as_of
+    # 2026-08-29 carried it. Not on the shipped ranking path, which is
+    # [Discovery] within_tier_key gap_propensity with atr_pct_20d beneath it,
+    # but it IS backtest_pool ORDERINGS["C"]'s sort key, so an alternative was
+    # measured against a fabricated column and rejected partly on that
+    # measurement. A name gapping 2.9 percent every session under a > 3 floor
+    # scored 0.0 and sorted below a name flat all year that once printed 3.1.
+    # See DECISIONS 2026-09-01 fourteenth for C re-run on the corrected key.]
+    qualified = bool(beyond)
     return {
         "gap_propensity": round(len(beyond) / sessions_used, 6),
-        "median_abs_gap_pct": round(statistics.median(beyond), 6) if beyond else 0.0,
+        "median_abs_gap_pct": (round(statistics.median(beyond), 6)
+                               if qualified else None),
+        "median_abs_gap_pct_reason": None if qualified else NO_QUALIFYING_GAP,
         "atr_pct_20d": atr_pct,
         "return_stdev_20d": return_stdev,
         "sessions_used": sessions_used,
     }
+
+
+def _shown(value: Any) -> str:
+    """A number, or the word null. NEVER 0 for a value nobody measured.
+
+    The printed table used `value or 0`, which put a measured zero and an
+    undefined quantity in the same cell under the same glyph. That is the one
+    distinction this file's own docstrings spend the most words on.
+    """
+    return "null" if value is None else f"{value:.2f}"
 
 
 def build(as_of_dates: list[dt.date], write: bool = True) -> dict[str, Any]:
@@ -417,13 +477,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {'ticker':<12} {'propensity':>11} {'median gap':>11} {'atr %':>8} {'sessions':>9}")
         for propensity, ticker, row in measured[:args.show]:
             print(f"  {ticker:<12} {propensity:>11.4f} "
-                  f"{row['median_abs_gap_pct'] or 0:>11.2f} "
-                  f"{row['atr_pct_20d'] or 0:>8.2f} {row['sessions_used']:>9}")
+                  f"{_shown(row['median_abs_gap_pct']):>11} "
+                  f"{_shown(row['atr_pct_20d']):>8} {row['sessions_used']:>9}")
         print("  ...")
         for propensity, ticker, row in measured[-args.show:]:
             print(f"  {ticker:<12} {propensity:>11.4f} "
-                  f"{row['median_abs_gap_pct'] or 0:>11.2f} "
-                  f"{row['atr_pct_20d'] or 0:>8.2f} {row['sessions_used']:>9}")
+                  f"{_shown(row['median_abs_gap_pct']):>11} "
+                  f"{_shown(row['atr_pct_20d']):>8} {row['sessions_used']:>9}")
         return 0
 
     if args.as_of:

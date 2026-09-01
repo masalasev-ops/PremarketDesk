@@ -170,6 +170,14 @@ def is_it_trustworthy(days: list[str]) -> dict[str, Any]:
             "rows": len(errors),
         },
         "window_share": {
+            # ROWS, like the two blocks above it. This population is a SUBSET
+            # of theirs, filtered on a non null collector_window_share, so a
+            # reader carrying the capture card's denominator across to this one
+            # is carrying the wrong number. The two cards above each say how
+            # many rows they rest on and this one said nothing.
+            "rows": len(windows),
+            "sessions": len({r["date"] for r in rows
+                             if r["collector_window_share"] is not None}),
             "median": statistics.median(windows) if windows else None,
             "low": min(windows) if windows else None,
             "high": max(windows) if windows else None,
@@ -1054,9 +1062,12 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
             add(f"<div class=card><div class=lab>What the 07:20 start sees of "
                 f"the 04:00 tape</div><div class=big>{_n(win['median'], 4)}"
                 f"</div><div class=note>Range {_n(win['low'], 4)} to "
-                f"{_n(win['high'], 4)}. This is the other lower bound, called "
-                "arithmetic since 2026-08-14 and measured only since the truth "
-                "pass existed.</div></div>")
+                f"{_n(win['high'], 4)} over {_n(win['rows'])} row(s) across "
+                f"{_n(win['sessions'])} session(s), which is fewer than the "
+                "cards above: only rows carrying a collector window share are "
+                "in it. This is the other lower bound, called arithmetic since "
+                "2026-08-14 and measured only since the truth pass "
+                "existed.</div></div>")
     else:
         add("<div class=card><span class=null>The truth pass has not written a "
             "capture_observed yet, so the capture share is still an assumption "

@@ -6146,3 +6146,118 @@ rate reads its own population and says in a comment exactly how the wrong
 population would bias it and by how much it did. paper_ledger's medians are
 guarded on empty and its P&L is null rather than zero on an untaken trade.
 
+## 2026-09-01, fourteenth: the guard reads what ships, and ordering C on the corrected key
+
+Three findings from the 2026-09-01 review, acted on.
+
+### The guard hole, and how many mornings it cost
+
+THE EXPOSURE IS ZERO SCHEDULED MORNINGS, measured rather than assumed.
+gap_reasons landed in commit 22f6900 on 2026-09-01, AFTER that morning's 08:45
+run, and runs/2026-09-01/report.md does not carry the heading. The only report
+on disk that carries it is runs/2026-09-01/report.handrun.md, a hand run, whose
+28 line section scans to ZERO quantifier violations. So the flag log undercounts
+by nothing. The first scheduled exposure would have been 2026-09-02 and the fix
+lands before it.
+
+That is luck rather than design, and the design is what was wrong.
+
+WHAT THE GUARD NOW READS. The loop over the narrative is unchanged and is still
+right where it is: a violation there is answered by regenerating, and only the
+narrative can be regenerated. What was missing is a pass over the FINISHED
+BODY. write_report now builds the body through _annotate_body, scans what it
+produced, and only then writes the file. An intermediate being clean was never
+the question; the version a reader sees is.
+
+HOW A MODEL WRITTEN VIOLATION IS TOLD FROM THIS FILE'S OWN TEXT. Not by
+subtracting the list the narrative loop raised, which was the first attempt and
+was wrong. When the narrative is WITHHELD the body is fallback_report, whose
+disclaimer QUOTES THE REJECTED SENTENCE on purpose so a reader can see what was
+refused. That quote is a different line carrying the same quantifier and a list
+of raised hits does not remove it. Measured rather than argued: test_containment
+went from 2 logged flags to 4 the moment the final pass was added, and both
+extras were the fallback quoting itself.
+
+So the body is built TWICE, once with the model written section and once
+without, and the difference is scanned. Anything in both came from text this
+file wrote, which the suite checks once for good. Anything only in the full body
+came from the model. The second build is also the repair: in enforcing mode it
+is what ships, with the section stating why it is missing rather than vanishing.
+
+WHY A REGISTRY RATHER THAN A COMMENT. A guard whose coverage depends on the
+order functions happen to be called in gets broken by the next feature, which is
+exactly what happened here. ANNOTATIONS_MODEL_WRITTEN and
+ANNOTATIONS_PYTHON_WRITTEN are read by claim_the_guard_reads_what_ships, which
+requires every annotate_ function in the module to be declared in exactly one of
+them, requires the last guard pass to run after the last model written
+annotation and before the file is written, and checks that a quantifier inside
+the explanation is actually found. Adding a new model written section after the
+guard turns the suite red.
+
+The comment at the old line 1943 said annotations run after the guard because
+they are this module's own text and the suite checks it. True of
+annotate_column_legends and annotate_glossary. False of annotate_gap_reasons,
+which it sat four lines below and did not mention. Both that comment and
+annotate_gap_reasons' own docstring are corrected in place.
+
+### Ordering C on the corrected key: the rejection stands
+
+THE FABRICATION. gap_stats returned median_abs_gap_pct 0.0 when no session
+cleared the [Day setup] gap floor. That median is UNDEFINED, and 0.0 says the
+name's typical gap is zero percent. gap_propensity, computed on the same line
+from the same list, IS genuinely 0.0 for those names, which is what made it hard
+to see.
+
+Now null with a reason, in a new median_abs_gap_pct_reason column. The 946 rows
+already on disk across all six as_of windows were rewritten in gap_stats.init,
+and the rewrite is EXACT rather than a guess: the median of gaps clearing a > 3
+floor can never be 0.0, so 0.0 means the qualifying list was empty and nothing
+else. Verified against the live table before it ran, there is not one row where
+(median_abs_gap_pct = 0) and (gap_propensity = 0) disagree.
+
+C RE-RUN, 60 cached sessions, cap 42, ranking metrics as of 2026-05-18:
+
+    ordering                        mean    median   screen passes
+    C, median absolute gap        0.0548    0.0355            4.15
+    SHIPPED, gap propensity       0.1149    0.1056          7.0167
+    B, gap propensity             0.1149    0.1056          7.0167
+
+THE RESULT IS UNCHANGED TO FOUR DECIMAL PLACES, and that was checked properly
+rather than inferred from the sweep printing the same table. The old key was
+reconstructed in memory by restoring 0.0 to the 167 names that carry a null
+median and a real 0.0 propensity, and the two were run side by side: THE
+SUBSCRIBED SET IS IDENTICAL ON ALL 60 SESSIONS. Zero names differ, zero gappers
+gained, zero lost.
+
+The mechanism, since 35 subscribed slots over 18 sessions were filled by names
+the correction touched and it could have moved. order_pool sorts on (tier, 0 if
+value is not None else 1, -(value or 0.0), symbol). A fabricated 0.0 sorted LAST
+inside band 0; a null sorts inside band 1. Both sit below every name carrying a
+positive median, so the correction only ever reorders names among themselves at
+the bottom of the ordering, and on the sessions where the cap reached that far
+it took the same names either way.
+
+SO C'S REJECTION STANDS. It reaches less than half of SHIPPED's subscribed
+recall and 4.15 screen passes a session against 7.02. The record is unchanged
+and is now sound, which is the outcome the re-run was for. Nothing is reopened.
+
+### The two denominators
+
+avg_volume_20d averaged whatever bars in the window carried a volume, three of
+twenty or twenty of twenty, and published no count under a name that asserts
+one. It is not a display number: true_volume's docstring says the capture rate
+study stratifies its terciles on it, so a name could enter a tercile on a three
+session mean and nothing downstream could tell. scan now publishes
+avg_volume_20d_sessions beside it at all three sites that set the field, and
+measure_capture_rate carries it into the study rows with its own reason for a
+packet written before the count existed.
+
+The weekly page stated the window share median, low and high with no n, under
+two cards that each say how many rows they rest on, over a population that is a
+strict subset of theirs. It now publishes rows and sessions and the card says
+both, and says out loud that it is fewer than the cards above and why.
+
+Every comparable measurement in this project already did this: pm_rvol through
+true_baseline_sessions, gap_stats through sessions_used, the truth pass through
+true_bars. These were the two that did not.
+

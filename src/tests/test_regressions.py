@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty nine claims, a count read off
+and the two pages. It now carries one hundred and forty claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11547,6 +11547,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         137: "one hundred and thirty seven",
         138: "one hundred and thirty eight",
         139: "one hundred and thirty nine",
+        140: "one hundred and forty",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -12385,6 +12386,153 @@ def claim_a_reconstruction_never_displaces_the_record(failures: list[str]) -> No
           "reaches the paper ledger")
 
 
+def claim_the_guard_reads_what_ships(failures: list[str]) -> None:
+    """No model written prose reaches the report without passing the guard.
+
+    THE HOLE THIS CLOSES. write_report ran quantifier_violations on the model's
+    NARRATIVE, which is the right question there: a violation is answered by
+    regenerating, and only the narrative can be regenerated. It was not the
+    whole question. annotate_gap_reasons, added 2026-09-01, spliced a SECOND
+    body of model written prose into the report AFTER the guard, generated at
+    run time by a separate CLI call, and nothing read it. An explanation saying
+    "every one of these gapped on earnings" would have shipped in the section a
+    reader is most likely to believe and the flag log would have recorded
+    nothing. gap_reasons.validate checks that a cited headline was one we
+    supplied, which is a fabrication check and a good one, and the word
+    quantifier does not appear in that module.
+
+    The comment beside it justified the position: annotations run after the
+    guard because they are this module's own text and the suite checks it. That
+    is true of annotate_column_legends and annotate_glossary, whose words are
+    fixed at edit time and CAN be checked once for good. It is false of an
+    annotation whose words a model writes while the morning is running.
+
+    A GUARD WHOSE COVERAGE DEPENDS ON CALL ORDER GETS BROKEN BY THE NEXT
+    FEATURE, so this claim checks the order rather than trusting it. Three
+    things, and the first two are structural:
+
+      every annotate_ function in analyst is declared model written or python
+        written, so a new one cannot be added without someone deciding which
+      the last guard pass runs AFTER the last model written annotation and
+        BEFORE the report is written, so whatever body ships is what was read
+      a quantifier inside the model written section is actually found
+
+    Adding a new model written section after the guard fails the second check.
+    """
+    import ast as _ast
+
+    from morning import analyst
+
+    source = pathlib.Path(analyst.__file__).read_text(encoding="utf-8")
+    tree = _ast.parse(source)
+
+    declared = set(analyst.ANNOTATIONS_MODEL_WRITTEN) | set(
+        analyst.ANNOTATIONS_PYTHON_WRITTEN)
+    overlap = set(analyst.ANNOTATIONS_MODEL_WRITTEN) & set(
+        analyst.ANNOTATIONS_PYTHON_WRITTEN)
+    if overlap:
+        failures.append(
+            f"{sorted(overlap)} are declared both model written and python "
+            "written, so the split the guard turns on says nothing")
+
+    defined = {node.name for node in _ast.walk(tree)
+               if isinstance(node, _ast.FunctionDef)
+               and node.name.startswith("annotate_")}
+    if defined - declared:
+        failures.append(
+            f"{sorted(defined - declared)} splice text into the report and are "
+            "in neither ANNOTATIONS_MODEL_WRITTEN nor "
+            "ANNOTATIONS_PYTHON_WRITTEN, so nobody has decided whether the "
+            "guard has to read them")
+    if declared - defined:
+        failures.append(
+            f"{sorted(declared - defined)} are declared annotations and are "
+            "not defined in analyst, so the registry describes a module that "
+            "no longer exists")
+
+    write_report = next((node for node in _ast.walk(tree)
+                         if isinstance(node, _ast.FunctionDef)
+                         and node.name == "write_report"), None)
+    if write_report is None:
+        failures.append("analyst has no write_report to check the order of")
+        return
+
+    # Where the guard last reads the body, where a model written annotation is
+    # last applied, and where the file is written. The LAST of each, because
+    # enforcing mode legitimately rebuilds the body and then reads it again.
+    model_written = set(analyst.ANNOTATIONS_MODEL_WRITTEN) | {"_annotate_body"}
+    last_model = last_guard = first_write = None
+    for node in _ast.walk(write_report):
+        if not isinstance(node, _ast.Call):
+            continue
+        name = (node.func.attr if isinstance(node.func, _ast.Attribute)
+                else getattr(node.func, "id", None))
+        if name in model_written:
+            last_model = max(last_model or 0, node.lineno)
+        elif name == "_late_hits":
+            last_guard = max(last_guard or 0, node.lineno)
+        elif (isinstance(node.func, _ast.Attribute)
+              and node.func.attr == "write_text"
+              and getattr(node.func.value, "id", None) == "report_path"):
+            first_write = min(first_write or 10 ** 9, node.lineno)
+
+    if last_guard is None:
+        failures.append(
+            "write_report never calls _late_hits, so nothing reads the "
+            "finished body and every annotation ships unchecked")
+    elif last_model is None:
+        failures.append(
+            "write_report applies no model written annotation, which means "
+            "ANNOTATIONS_MODEL_WRITTEN describes something that is not "
+            "happening and this claim is checking an order that does not exist")
+    else:
+        if last_model > last_guard:
+            failures.append(
+                f"a model written annotation is applied at line {last_model}, "
+                f"after the last guard pass at line {last_guard}. Its prose is "
+                "generated at run time and no suite can check it in advance, "
+                "so it would ship unread")
+        if first_write is not None and last_guard > first_write:
+            failures.append(
+                f"the report is written at line {first_write} before the guard "
+                f"reads it at line {last_guard}, so the guard is reading an "
+                "intermediate rather than what ships")
+
+    # And the behaviour, because an order that is right and a scan that finds
+    # nothing would pass everything above.
+    body = ("# Morning report\n\n## Premarket gappers\n\n"
+            "| Ticker | Gap |\n| --- | --- |\n| AAA | 5.0 |\n\n"
+            "## Something else\n\nA closing line.\n")
+    loud = {"AAA.US": {
+        "why": "every one of these candidates gapped on earnings this morning",
+        "headline": "AAA reports", "state": "explained", "reason": None}}
+    annotated = analyst._annotate_body(body, {"candidates": []}, loud, None)
+    if "every one of these candidates" not in annotated:
+        failures.append(
+            "the model written explanation did not reach the body, so this "
+            "check proves nothing about whether the guard would have read it")
+    late = analyst._late_hits(annotated, [])
+    if not late:
+        failures.append(
+            "a model written explanation asserting 'every one of these "
+            "candidates' passed the final guard, which is the exact sentence "
+            "the guard exists to refuse")
+
+    # The subtraction must not swallow a real one, and must not re-raise a
+    # narrative flag that was already recorded and disclaimed.
+    known = analyst.quantifier_violations(annotated)
+    if analyst._late_hits(annotated, known):
+        failures.append(
+            "a violation already raised by the narrative pass is raised again "
+            "by the final pass, so warn mode would double count every flag it "
+            "publishes and the measured rate would be wrong")
+
+    print("  guard order  every annotation is declared model or python "
+          "written, the last guard pass runs after the last model written one "
+          "and before the file is written, and a quantifier inside the "
+          "explanation is found")
+
+
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     """Hard rule 4 is guarded by something other than good intentions.
 
@@ -12923,6 +13071,7 @@ def main() -> int:
     claim_a_lost_session_is_history_and_a_new_one_is_a_finding(failures)
     claim_every_production_read_of_picks_is_fenced(failures)
     claim_a_reconstruction_never_displaces_the_record(failures)
+    claim_the_guard_reads_what_ships(failures)
 
     if failures:
         for failure in failures:

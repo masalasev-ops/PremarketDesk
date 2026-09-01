@@ -888,6 +888,40 @@ OUTCOME_WARNED = "warned"
 GUARD_WARN = "warn"
 GUARD_ENFORCING = "enforcing"
 
+# A flag raised by the FINAL pass over the finished body rather than by the
+# loop over the narrative. Its own outcome because it is its own failure: the
+# narrative was clean and an annotation put the quantifier there, so nothing
+# about it can be fixed by regenerating the narrative.
+OUTCOME_ANNOTATED = "annotated"
+
+# EVERY ANNOTATION SPLICED INTO THE REPORT BODY, split by WHO WROTE THE WORDS.
+# This is not documentation. claim_the_guard_reads_what_ships reads these two
+# tuples, requires every annotate_ function in this module to appear in exactly
+# one of them, and requires no model written one to be called after the final
+# guard. The split is the whole distinction the guard turns on.
+#
+# PYTHON WRITTEN text is fixed at edit time. Its claims are true by
+# construction and a claim in the suite can check it once, for good, against
+# the guard's own word list. It is safe either side of the final pass.
+#
+# MODEL WRITTEN text is generated at run time and NO SUITE CAN CHECK IT IN
+# ADVANCE. It must sit inside the guarded body. annotate_gap_reasons was added
+# on 2026-09-01 splicing a second body of model prose in AFTER the guard, where
+# nothing read it; the comment beside it justified the position on the grounds
+# that annotations are this module's own text, which was true of the two
+# annotations it sat next to and false of itself.
+ANNOTATIONS_MODEL_WRITTEN = (
+    "annotate_gap_reasons",
+)
+ANNOTATIONS_PYTHON_WRITTEN = (
+    "annotate_job_health",
+    "annotate_score_bands",
+    "annotate_column_legends",
+    "annotate_glossary",
+    "annotate_warned_quantifiers",
+    "annotate_unvalidated",
+)
+
 
 def guard_mode() -> str:
     """warn or enforcing, from CRITERIA, with an unknown value failing closed.
@@ -1693,9 +1727,14 @@ def annotate_gap_reasons(report_text: str, records, error) -> str:
     a paragraph in the wrong place is recoverable and a silently missing one is
     not.
 
-    Written into the report AFTER the quantifier guard has had its say, like
-    every other annotation here, so nothing in it can cost a morning its
-    narrative.
+    [corrected 2026-09-01: this said "written into the report AFTER the
+    quantifier guard has had its say, like every other annotation here, so
+    nothing in it can cost a morning its narrative". Both halves were wrong
+    about this function specifically. It is not like every other annotation
+    here: it is the ONLY one whose words a model writes, and being after the
+    guard meant nothing checked them. It now runs inside _annotate_body and the
+    final pass in write_report reads it, so a quantified claim here does cost
+    this section, which is the point.]
     """
     if gap_reasons.HEADING in report_text:
         return report_text
@@ -1767,6 +1806,79 @@ def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------- runner
+
+def _annotate_body(report_text: str, packet: dict[str, Any],
+                   reason_records: Any, reason_error: Any) -> str:
+    """The finished report body, from the narrative and everything spliced in.
+
+    ONE FUNCTION SO IT CAN BE BUILT TWICE. The final guard runs over what this
+    returns, and when a model written annotation is what carried the violation
+    the only honest repair is to build the body again without it. Rebuilding
+    from the same base rather than editing the annotated text also means no
+    annotation here has to be idempotent to be correct.
+
+    Order inside is presentational and is explained at each step. Order
+    RELATIVE TO THE GUARD is not presentational and is checked by
+    claim_the_guard_reads_what_ships.
+    """
+    # Overdue scheduled steps, named before the report is written rather than
+    # after, so the deterministic fallback report carries the line too.
+    report_text = annotate_job_health(report_text, packet)
+
+    # Beside it and for the same reason. green, yellow and red were
+    # published in three tables with the meaning stated nowhere.
+    report_text = annotate_score_bands(report_text, packet)
+
+    # WHY EACH NAME MOVED, in plain language and grounded in that name's own
+    # headlines. THE ONLY MODEL WRITTEN ANNOTATION, so it sits inside the
+    # guarded body and the final pass reads it.
+    report_text = annotate_gap_reasons(report_text, reason_records, reason_error)
+
+    # Plain English, last, so the legends land under the tables as they finally
+    # stand and the glossary sits at the foot of the finished report.
+    report_text = annotate_column_legends(report_text)
+    report_text = annotate_glossary(report_text)
+    return report_text
+
+
+WITHHELD_EXPLANATION = (
+    "the explanation pass wrote a claim about the candidate set that the "
+    "quantifier guard refused, so it is withheld rather than published "
+    "unchecked")
+
+
+def _late_hits(report_text: str,
+               already: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Violations in the finished body that are NOT in the comparison body.
+
+    SUBTRACTED AGAINST THE SAME BODY BUILT WITHOUT THE MODEL WRITTEN SECTION,
+    not against the list the narrative loop raised, and the fallback report is
+    why. In warn mode a flagged narrative ships, so its sentences are found
+    again; that much a list would cover. But when the narrative is WITHHELD the
+    body is fallback_report, whose disclaimer QUOTES THE REJECTED SENTENCE on
+    purpose so a reader can see what was refused. That quote is a different
+    line from the one the loop raised, it carries the same quantifier, and
+    subtracting a list of raised hits does not remove it. Measured rather than
+    reasoned: test_containment went from 2 logged flags to 4 the moment the
+    final pass was added, and both extras were the fallback quoting itself.
+
+    Building the body twice and taking the difference answers the question
+    being asked, which is not "is this sentence new" but "did the MODEL WRITTEN
+    section put it there". Anything in both bodies came from text this file
+    wrote, and the guard's own docstring has always said that text is checked
+    once, for good, by the suite instead.
+
+    Keyed on (line text, quantifier, matched word) and never on line number,
+    because the two bodies differ in length wherever the section sits.
+    """
+    def key(hit: dict[str, Any]) -> tuple[Any, ...]:
+        return (str(hit.get("text") or ""), str(hit.get("quantifier") or ""),
+                str(hit.get("set_word") or ""))
+
+    seen = {key(hit) for hit in already}
+    return [hit for hit in quantifier_violations(report_text)
+            if key(hit) not in seen]
+
 
 def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # Local, because ops.quantifier_flags imports this module and a
@@ -1916,14 +2028,6 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             usage["quantifier_regenerated"] = True
     usage["quantifier_guard"] = GUARD_ENFORCING if enforcing else GUARD_WARN
 
-    # Overdue scheduled steps, named before the report is written rather than
-    # after, so the deterministic fallback report carries the line too.
-    report_text = annotate_job_health(report_text, packet)
-
-    # Beside it and for the same reason. green, yellow and red were
-    # published in three tables with the meaning stated nowhere.
-    report_text = annotate_score_bands(report_text, packet)
-
     # WHY EACH NAME MOVED, in plain language and grounded in that name's own
     # headlines. A second CLI call, deliberately separate from the narrative:
     # it runs whether or not the narrative survived, because the fallback
@@ -1936,15 +2040,68 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     if reason_error:
         usage["gap_reasons_error"] = reason_error
         print(f"analyst: the gap explanation pass failed: {reason_error}")
-    report_text = annotate_gap_reasons(report_text, reason_records, reason_error)
 
-    # Plain English, last, so the legends land under the tables as they finally
-    # stand and the glossary sits at the foot of the finished report. Both run
-    # after the quantifier guard has had its say, so nothing written here can
-    # cost a morning its narrative; the suite checks this module's own text
-    # against the guard instead.
-    report_text = annotate_column_legends(report_text)
-    report_text = annotate_glossary(report_text)
+    # THE BASE IS KEPT so the body can be built again without the annotation
+    # that carried a violation. Editing the annotated text instead would ask
+    # every annotation to be reversible, which none of them is.
+    base_text = report_text
+    # BUILT TWICE ON PURPOSE. See _late_hits: the difference between these two
+    # is exactly what the model wrote, and nothing else separates it cleanly
+    # from text this file wrote. The second build is also what ships when the
+    # guard refuses the first, so it costs nothing on the path that needs it.
+    without_model = _annotate_body(base_text, packet, {}, WITHHELD_EXPLANATION)
+    report_text = _annotate_body(base_text, packet, reason_records, reason_error)
+
+    # THE GUARD READS WHAT SHIPS. The loop above asked the quantifier question
+    # of the model's NARRATIVE, which is the right question there because a
+    # violation is answered by regenerating and only the narrative can be
+    # regenerated. It is not the whole question. annotate_gap_reasons splices a
+    # SECOND body of model written prose into the report, generated at run time
+    # by a separate call, and between 2026-09-01 and this change nothing read
+    # it: an explanation asserting "every one of these gapped on earnings"
+    # would have shipped in the section a reader is most likely to believe,
+    # and the flag log would have recorded nothing.
+    #
+    # So the finished body is scanned, and what the narrative already raised is
+    # subtracted, because in warn mode a flagged narrative ships and would be
+    # found twice. What is left was introduced by an annotation.
+    late = _late_hits(report_text, quantifier_violations(without_model))
+    if late:
+        late_ids = record_quantifier_flags(
+            late, session_date, report_path.name, attempt=1,
+            outcome=OUTCOME_ANNOTATED)
+        usage["quantifier_annotated"] = [
+            {**hit, "id": flag_id}
+            for hit, flag_id in zip(late, late_ids or [None] * len(late))]
+        print(f"analyst: the final pass over the finished report found "
+              f"{len(late)} quantifier claim(s) that the narrative pass did "
+              "not raise, so an annotation wrote them")
+        for hit in late:
+            print(f"analyst:   line {hit.get('line')}: {hit.get('text')}")
+        if enforcing:
+            # The comparison body IS the repair. It is this report without the
+            # model written section, and the section states why it is missing
+            # rather than vanishing, on the same argument annotate_gap_reasons
+            # already makes about a dropped paragraph.
+            report_text = without_model
+            still = _late_hits(report_text, quantifier_violations(without_model))
+            if still:
+                # Nothing left to withdraw. Said out loud rather than shipped
+                # quietly, because at this point the violation is in this
+                # module's own text and the suite is supposed to have caught it.
+                print("analyst: WITHDRAWING THE EXPLANATION DID NOT CLEAR THE "
+                      f"FINAL PASS; {len(still)} claim(s) remain and they are "
+                      "in text this file wrote")
+                report_text = _append_to_disclaimer(
+                    report_text,
+                    f"a final check found {len(still)} quantified claim(s) "
+                    "about the candidate set that were not validated")
+        else:
+            report_text = _append_to_disclaimer(
+                report_text,
+                f"a final check flagged {len(late)} quantified claim(s) "
+                "written by an explanation pass rather than by the narrative, "
+                "and the guard is in warn mode so they are published as written")
 
     report_path.write_text(report_text, encoding="utf-8")
     job_status.produced("report characters", len(report_text))
