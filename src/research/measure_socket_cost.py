@@ -21,6 +21,24 @@ while the tape is actually printing.
 
 Use --chaos-reconnects 3 for the flaky morning variant; compare its delta
 against a clean run's before believing a reconnect costs nothing.
+
+ANSWERED 2026-09-01, AND THIS WRITES INTO THE SESSION CAPTURE.
+
+The question is closed: 21,306 messages on a live regular hours tape moved
+the counter by zero. DECISIONS.md 2026-09-01 eighth carries the reading and
+the three part decomposition it settles. The scheduled task and
+tasks/job_probe_socket_cost.bat were deleted the same day.
+
+WHAT THIS COSTS IF YOU RUN IT ANYWAY. It launches collect_premarket, which
+writes to PREMARKET_DIR/<today>.jsonl with no argument saying otherwise. That
+is the same file the 07:20 collector fills, and CRITERIA calls it not
+reproducible at any price. The 2026-09-01 run put 932 regular hours bars into
+that day's premarket capture, every symbol's latest price then read 10:07, and
+the vintage guard refused a packet built from it until the file was arbitrated
+back to its pre run state. The .bat reasoned that 10:00 clears the socket cap,
+which is true, and said nothing about the file.
+
+So: back up the capture first, or expect to arbitrate it back afterwards.
 """
 
 from __future__ import annotations

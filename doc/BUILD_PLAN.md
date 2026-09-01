@@ -118,7 +118,7 @@ at the root and is gitignored along with .env.
   That last one carries the raw per session volumes and not only the
   derived table, so the study reruns offline: the 109.9 MB deleted on
   2026-08-21 is what that costs when it is not done
-- tasks/: eleven job .bat files, register_tasks.ps1, README.md. Eight of them
+- tasks/: ten job .bat files, register_tasks.ps1, README.md. Eight of them
   register as eleven scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on THREE
   triggers, a repeating weekday one from 07:25, monitor-midday from 12:25 and
@@ -165,7 +165,15 @@ at the root and is gitignored along with .env.
   number a reader takes off the table without the guards, the second is what
   data/research/capture_rate_study-2026-09-01.json publishes under
   residual_no_divisor_closes.
-  Armed 2026-08-31 for 2026-09-01 and NOT yet run.
+  RAN 2026-09-01 10:00:01 to 10:20:05 and the task and the .bat were deleted
+  the same day, which is what its own header said to do once the number was
+  written down. 21,306 messages on a live regular hours tape moved the vendor
+  counter by ZERO. The answer and the three part decomposition it settles are
+  in DECISIONS.md 2026-09-01 eighth. The module stays under src/research/,
+  because research/measure_bulk_cost.py imports read_counter from it, and it
+  now carries a warning: it launches collect_premarket, which writes to the
+  premarket session capture, and the 2026-09-01 run put 932 regular hours
+  bars in that file before they were arbitrated back out.
   job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
   2026-08-20 once both questions were answered and recorded in DECISIONS.md;
   their modules stay under src/research/

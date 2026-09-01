@@ -118,7 +118,10 @@ existing does not belong in a list of steps the watchdog expects. None is in
 the $jobs array, so a plain run of register_tasks.ps1 never resurrects one;
 each has its own dated flag, and `-Unregister` removes all three.
 
-- `job_probe_socket_cost.bat`, added 2026-08-31 and NOT yet run. It measures
+- `job_probe_socket_cost.bat`, added 2026-08-31, RUN on 2026-09-01 and DELETED
+  the same day with its task, which is what its own header said to do once the
+  number was written down. Kept here as a record of what it answered rather
+  than as something to arm. It measured
   the one number the websocket still owes: the per MESSAGE cost on a heavy live
   tape. Connecting, subscribing and reconnecting were measured at exactly zero
   on 2026-08-13, twice, across runs with 9 and 12 reconnects, but both rode the

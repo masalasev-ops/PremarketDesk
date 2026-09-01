@@ -15,6 +15,69 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, tenth: the socket cost probe is deleted, and the midday watchdog was never registered
+
+**The probe is gone, on its own instruction.** `tasks/job_probe_socket_cost.bat`
+opened with "Delete the task and this file once the number is written down."
+The number is written down, in DECISIONS 2026-09-01 eighth: 21,306 messages on
+a live regular hours tape moved the vendor counter by zero. The scheduled task
+is unregistered and the .bat is deleted. Ten job .bat files now, from eleven,
+and the two documents that state that count were corrected with it.
+
+Its trigger was one time and had already fired, so nothing was going to run
+again on a schedule. What is removed is the hand run route and the standing
+invitation of a .bat sitting in tasks/ looking armable.
+
+**The module stays**, and that is deliberate rather than an oversight.
+`research/measure_bulk_cost.py` imports `read_counter` from it, README names it
+as what reproduces the measurement, and deleting it would take a working
+instrument down with a spent one. It gains a warning instead, saying in its own
+header what it does to the session capture, because after today only a hand run
+can reach that hazard and the person doing it should meet the warning first.
+
+**register_tasks.ps1 is untouched**, also deliberately. Its `-SocketCost` block
+already prints "MISSING ... which is what was meant to happen once the number
+was written down" when the .bat is absent, and its `-Unregister` tail still
+names the task. Both behaviours are correct after this deletion, and editing
+either would erase the script's own account of what happened.
+
+### Found while checking the counts: the midday watchdog has no trigger
+
+The arc page says eight .bat files register as **eleven** scheduled tasks. The
+machine has **ten**. `register_tasks.ps1`'s `$jobs` array names eleven. The one
+that is missing is `monitor-midday`.
+
+    registered   collector, discover, meter-sampler, midday, monitor,
+                 monitor-night, morning-chain, nightly, nightly-catchup,
+                 universe
+    in $jobs     the same ten, plus monitor-midday at 12:25 repeating every
+                 30 minutes for an hour
+
+So the three pass midday window, 12:25, 12:55 and 13:25, exists in
+`ops/monitor_jobs.py`, is argued for in CRITERIA `[Monitor]`, is described in
+both architecture pages, and is driven by
+`claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one`. **It has never
+fired**, because the line that registers it was added to the script on
+2026-08-31 and the script has not been run since. Every registered task still
+carries a StartBoundary of 2026-08-31.
+
+The consequence is the exact gap that window was built to close: the 12:00
+midday job runs, and if it hangs or dies nothing looks at it until
+`monitor-night` at 22:45. The changelog entry that added the window said a
+midday failure was first named by the NEXT morning's watchdog, and that is
+still true today.
+
+Nothing is registered by this entry. Re-running the script would fix it in one
+command and it also rewrites every other trigger, which is a live schedule
+change on a trading day and belongs to an owner rather than to a cleanup.
+
+**A claim would not have caught this and still would not.**
+`claim_the_watchdog_reads_every_job_that_writes_a_log` compares the JOBS list
+against the .bat files, and `claim_a_hold_needs_a_pass_that_can_act` walks the
+pass grid, both from the tree. Neither can see Task Scheduler, and the gap is
+entirely between the script and the machine. That is a real blind spot in the
+suite and naming it is the honest half of finding it.
+
 ## 2026-09-01, ninth: three files, one incident, two verdicts each way
 
 **Answers the entry below, which said the 2026-09-01 disagreement was not
