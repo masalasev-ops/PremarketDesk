@@ -487,7 +487,36 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
     timed = [r for r in booked if r["minutes_to_trigger"] is not None]
     peaked = [r for r in booked if r["minutes_to_peak"] is not None
               and r["pnl_pct"] is not None]
-    never = [r for r in rows if not r["booked"] and not r["skip_reason"]]
+    # THREE STATES BELOW A BOOKED TRADE, not two. This read "booked=0 and no
+    # skip_reason" and called the result never_triggered, which also caught
+    # every row whose trigger DID fire and was then refused by position_size:
+    # that path sets exit_reason and returns with booked still 0 and
+    # skip_reason still unset (see simulate, the `if refused:` branch). The
+    # report quotes this count verbatim as "picks never reached their trigger
+    # at all", so a pick that reached its trigger would be published as one
+    # that did not.
+    #
+    # EXIT_NEVER is what the never-fired path actually writes, so it is what
+    # this asks. No live row has been mislabelled yet, because the sizing
+    # refusals need a zero or near zero stop distance and the smallest on
+    # record is 0.33, but the count is wrong by construction and the first
+    # row to hit it would be silent.
+    # Reached its trigger and bought nothing. A different fact from both
+    # neighbours: the screen found the setup and the SIZING declined it, so
+    # the fix is in [Paper] and not in the screen.
+    #
+    # Identified POSITIVELY, by an exit_reason that is present and is not
+    # EXIT_NEVER, rather than by "anything that is not EXIT_NEVER". A
+    # booked=0 row may legitimately carry a null exit_reason, and reading a
+    # null as a refusal would move rows into this bucket on the absence of
+    # evidence, which is the same mistake one level down.
+    unsized = [r for r in rows
+               if not r["booked"] and not r["skip_reason"]
+               and r["exit_reason"] and r["exit_reason"] != EXIT_NEVER]
+    unsized_keys = {(r["date"], r["ticker"]) for r in unsized}
+    never = [r for r in rows
+             if not r["booked"] and not r["skip_reason"]
+             and (r["date"], r["ticker"]) not in unsized_keys]
     skipped = [r for r in rows if r["skip_reason"]]
 
     def denom(held: list[dict[str, Any]]) -> dict[str, int]:
@@ -500,6 +529,12 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
         "rule_version": rule,
         "picks": denom(rows), "booked": denom(booked),
         "skipped": denom(skipped), "never_triggered": denom(never),
+        # Named even at zero. A count that appears only when it is non zero
+        # is a count nobody learns to read, and this one exists to be seen
+        # the first time it moves.
+        "triggered_but_unsized": denom(unsized),
+        "triggered_but_unsized_reasons": sorted(
+            {r["exit_reason"] for r in unsized if r["exit_reason"]}),
         "triggered_within_30_min": len(early),
         "triggered_total": len(timed),
         "peaked_within_10_min": len(fast_peak),
@@ -593,11 +628,19 @@ def ledger_report() -> None:
         picks = len({r["ticker"] + r["date"] for r in held})
         sessions = len({r["date"] for r in held})
         skipped = [r for r in held if r["skip_reason"]]
-        never = [r for r in held if not r["booked"] and not r["skip_reason"]]
+        # Same three way split as record_so_far, and for the same reason.
+        unsized = [r for r in held
+                   if not r["booked"] and not r["skip_reason"]
+                   and r["exit_reason"] and r["exit_reason"] != EXIT_NEVER]
+        unsized_keys = {(r["date"], r["ticker"]) for r in unsized}
+        never = [r for r in held
+                 if not r["booked"] and not r["skip_reason"]
+                 and (r["date"], r["ticker"]) not in unsized_keys]
         if not booked:
             print(f"paper: rule {version} booked NO trades across "
                   f"{picks} picks in {sessions} session(s). "
-                  f"{len(skipped)} skipped, {len(never)} never triggered.")
+                  f"{len(skipped)} skipped, {len(never)} never triggered, "
+                  f"{len(unsized)} triggered and could not be sized.")
             continue
         wins = [r for r in booked if r["pnl_pct"] > 0]
         drawdowns = [r["max_drawdown_pct"] for r in booked

@@ -192,13 +192,16 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
                 "reach it |",
                 "| --- | --- | --- | --- | --- | --- |"]
         for row in rows:
+            # `is None`, not falsiness: n/a is this column's word for a
+            # field the vendor did not carry, and a reported zero is a
+            # field it did carry.
             cap = row.get("market_cap")
             out.append(
                 f"| {_cell(row['symbol'])} "
                 f"| {_pct(row.get('move_pct'))} "
                 f"| {_num(row.get('day_rvol'))}x "
                 f"| {_num(row.get('last'))} "
-                f"| {(str(round(cap / 1e9, 2)) + 'B') if cap else 'n/a'} "
+                f"| {(str(round(cap / 1e9, 2)) + 'B') if cap is not None else 'n/a'} "
                 f"| {_cell(row['morning_reach'].replace('_', ' '))} |")
         out.append("")
         out += ["### Why each of them moved", ""]
@@ -220,6 +223,7 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
     counted = sum(tally.get(k, 0) for k in
                   ("refused", "named_this_morning", "no_last_price",
                    "no_previous_close", "no_average_volume", "no_volume",
+                   "zero_average_volume",
                    "below_price", "below_move", "below_rvol", "admitted"))
     out += ["### How this list was chosen", "",
             _cell(movers["selection_note"]) + ".", "",
@@ -228,8 +232,10 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
             f"{tally['named_this_morning']:,} were already named this morning, "
             f"{tally['below_move']:,} moved less than the floor, "
             f"{tally['below_rvol']:,} cleared the move and not the volume, "
-            f"{tally['below_price']:,} were under the price floor, and "
-            f"{tally['admitted']:,} cleared everything.", ""]
+            f"{tally['below_price']:,} were under the price floor, "
+            f"{tally.get('zero_average_volume', 0):,} have an average volume "
+            "the vendor reports as zero, so there is nothing to divide by, "
+            f"and {tally['admitted']:,} cleared everything.", ""]
     if counted != tally["quoted"]:
         out += [f"THE COUNTS ABOVE DO NOT ADD UP: they cover {counted:,} of "
                 f"{tally['quoted']:,} quoted names, so "

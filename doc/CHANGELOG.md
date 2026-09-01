@@ -15,6 +15,77 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31, sixth: five falsy values that were reading as answers
+
+One shape, five places, and the newest module carries four of them. A missing
+answer leaks wherever the missing thing has a falsy value rather than a null,
+which is what two thirds of the 2026-08-22 review turned out to be. These were
+found by going looking for it again in the code written since.
+
+**The paper ledger counted a refused SIZING as a trigger that never fired.**
+`record_so_far` defined `never_triggered` as `booked=0` with no `skip_reason`.
+`simulate` has a second path to `booked=0`: the trigger FIRES, `position_size`
+refuses to buy anything, and the row returns with `exit_reason` set to the
+refusal, `booked` still 0 and `skip_reason` still unset. Both landed in one
+count, and REPORT_TEMPLATE quotes it verbatim as "picks never reached their
+trigger at all", in the one section of the report whose whole argument is that
+every figure arrives with its denominator.
+
+No live row has been mislabelled: the sizing refusals need a zero or near zero
+stop distance and the smallest on record is 0.33. The count was wrong by
+construction and the first row to hit it would have been silent.
+
+`triggered_but_unsized` is its own count now, named on every pass whether or
+not there are any, with the refusals that produced it listed beside it. It is
+identified POSITIVELY, by an `exit_reason` that is present and is not
+`EXIT_NEVER`, so a row carrying no `exit_reason` at all still counts where it
+always did: reading a null as a refusal would be the same mistake one level
+down. The four states now partition the table and a claim holds that they do.
+
+**A vendor reported ZERO is a measurement, and midday was filing it under
+"never measured".** `rank_movers` tested `volume` and `average_volume` with
+`not q.get(...)`, so a halted name, or one that printed premarket and has not
+traded since, landed in the buckets the report describes as "the pass could not
+price them ... these names were never measured". The tests are `is None` now. A
+zero AVERAGE volume is a third state again, measured and with nothing to divide
+by, and it is counted apart from both the missing field and the floors.
+
+**`day_rvol` was the one null in the midday packet with no reason beside it.**
+Every other null this pass writes carries one. A reader of a carry through row
+could not tell a name the vendor never carried a volume for from one it measured
+at zero, in the record another pass will compare against.
+
+**A quote that was never sent was described as a quote missing a field.** A
+picks ticker absent from the payload fell through to `read_quote({})`, which
+took the branch for a quote carrying no `lastTradeTime` and published "the quote
+carried no lastTradeTime, so how old its prices are is unknown rather than
+merely large". The vendor sent nothing at all. It is reachable on any morning:
+`quote_delayed` chunks its requests and returns partial data when a chunk fails.
+
+**Midday's "subscribed" read discover's intent where the collector keeps the
+record.** `morning_reach` decided it from `watchlist.json`'s subscribed flag,
+which is what discover MEANT to subscribe at 07:15. CRITERIA [Monitor]'s stale
+watchlist note already settles this in one line: "The file is not the evidence.
+What the collector asked the socket for is."
+
+2026-08-24 is the morning that made the distinction and it is exactly the shape
+this would have misreported. A power cut collapsed the gap between the two jobs,
+the collector read the previous session's watchlist and subscribed to the eight
+context symbols alone, and by 12:00 the file on disk was today's and marked 42
+names subscribed. Every one of them would have been captioned "the collector was
+subscribed to this name and the 08:45 screen still did not publish it", for
+names no premarket tape was ever collected for.
+
+It reads `data/premarket/<date>-subscriptions.json` now, says which file it
+read, and names any name the watchlist marks subscribed that the socket was
+never asked for.
+
+**And a market cap of zero rendered as n/a**, which is that table's word for a
+field the vendor did not carry.
+
+Four claims in `test_midday`, one in `test_regressions`, and the midday suite is
+eighteen.
+
 ## 2026-08-31, fifth: a published median, a count nobody took, and a confound written early
 
 Three changes, and the first is publishing wrong numbers on the live page

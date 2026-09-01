@@ -48,6 +48,7 @@ import json
 import sys
 from typing import Any
 
+from core import config
 from core import criteria
 from core import ettime
 from midday import render_midday
@@ -416,6 +417,183 @@ def claim_the_breakdown_names_every_name_it_counted(failures: list[str]) -> None
           "against the quoted population, refusals included")
 
 
+def claim_a_vendor_zero_is_a_measurement(failures: list[str]) -> None:
+    """Zero volume is what the vendor said, not a field it failed to send.
+
+    The four unpriced buckets tested their fields with `not q.get(...)`, so a
+    vendor reported ZERO landed in no_volume or no_average_volume. Those are the
+    buckets the report describes as "the pass could not price them ... these
+    names were never measured", which is the opposite of what the vendor said. A
+    halted name, or one that printed premarket and has not traded since, is
+    exactly the case: measured, and measured at nothing.
+
+    A zero AVERAGE volume is a third state again. It is a measurement and there
+    is still nothing to divide by, so it is counted apart from both the missing
+    field and the floors rather than being folded into either.
+    """
+    quotes = {
+        "ZEROVOL.US": _quote(open=1.0, high=2.0, low=0.5, last=9.0,
+                             volume=0.0, average_volume=1000.0),
+        "ZEROAVG.US": _quote(open=1.0, high=2.0, low=0.5, last=9.0,
+                             volume=100.0, average_volume=0.0),
+        "NOVOL.US": _quote(open=1.0, high=2.0, low=0.5, last=9.0,
+                           volume=None, average_volume=1000.0),
+    }
+    _rows, tally = scan_midday.rank_movers(quotes, set(), set(), set())
+
+    if tally["no_volume"] != 1:
+        failures.append(
+            f"no_volume counted {tally['no_volume']}, expected only the name "
+            "the vendor sent no volume for. A reported zero belongs somewhere "
+            "that does not read as 'never measured'")
+    if tally["no_average_volume"]:
+        failures.append(
+            f"no_average_volume counted {tally['no_average_volume']} for a name "
+            "whose average volume the vendor reported as zero, so a measurement "
+            "is being published as a missing field")
+    if tally.get("zero_average_volume") != 1:
+        failures.append(
+            f"zero_average_volume counted {tally.get('zero_average_volume')}, so "
+            "a name with nothing to divide by is not counted apart from one the "
+            "vendor never answered for")
+    if "ZEROAVG.US" not in (tally.get("examples", {}).get("zero_average_volume") or []):
+        failures.append("the zero average volume bucket names no symbol, so the "
+                        "count cannot be chased")
+
+    print("  vendor zero  a reported zero is judged rather than counted as a "
+          "field the vendor never sent, and a zero denominator is its own state")
+
+
+def claim_the_midday_rvol_says_why_it_is_null(failures: list[str]) -> None:
+    """day_rvol was the one null in the packet with no reason beside it.
+
+    Every other null this pass writes carries a recorded reason. day_rvol did
+    not, so a reader of a carry through row could not tell a name the vendor
+    never carried a volume for from one it measured at zero, in the record
+    another pass will compare against.
+    """
+    pick = _pick()
+    measured = scan_midday.grade(pick, _quote(open=10.5, high=11.0, low=9.5,
+                                              last=10.8, volume=500.0,
+                                              average_volume=100.0))
+    if measured["day_rvol"] != 5.0 or measured["day_rvol_reason"]:
+        failures.append(
+            f"a measurable relative volume came back {measured['day_rvol']} with "
+            f"reason {measured['day_rvol_reason']!r}, expected 5.0 and no reason")
+
+    absent = scan_midday.grade(pick, _quote(open=10.5, high=11.0, low=9.5,
+                                            last=10.8, volume=None,
+                                            average_volume=100.0))
+    if absent["day_rvol"] is not None or "carried no volume" not in (
+            absent["day_rvol_reason"] or ""):
+        failures.append(
+            "a quote carrying no volume produced no reason naming the field, so "
+            f"the null cannot be chased: {absent['day_rvol_reason']!r}")
+
+    zero = scan_midday.grade(pick, _quote(open=10.5, high=11.0, low=9.5,
+                                          last=10.8, volume=500.0,
+                                          average_volume=0.0))
+    if zero["day_rvol"] is not None or "zero" not in (zero["day_rvol_reason"] or ""):
+        failures.append(
+            "a vendor reported average volume of zero did not say that it is a "
+            f"measurement with nothing to divide by: {zero['day_rvol_reason']!r}")
+
+    print("  rvol reason  a null relative volume names the field the vendor did "
+          "not carry, and a zero denominator says it was measured")
+
+
+def claim_a_name_the_vendor_never_answered_for_says_so(failures: list[str]) -> None:
+    """A missing row is not a row missing a field.
+
+    A picks ticker absent from the quote payload fell through to read_quote({}),
+    which took the branch for a quote carrying no lastTradeTime and published
+    "the quote carried no lastTradeTime, so how old its prices are is unknown
+    rather than merely large". That tells a reader the vendor sent a quote and
+    left one field out of it, when the vendor sent nothing at all.
+
+    It is reachable on any morning: quote_delayed chunks its requests and
+    returns partial data when a chunk fails, leaving those symbols out of the
+    result rather than losing the batch.
+    """
+    quote = scan_midday.read_quote({}, ettime.now_et(), "2026-08-28", 100.0)
+    quote["refused_reason"] = (
+        "us-quote-delayed returned no row for this symbol at all, so nothing "
+        "about its session is known. This is a name the vendor did not answer "
+        "for, not a quote missing a field")
+    row = scan_midday.grade(_pick(), quote)
+    if "did not answer" not in (row["state_reason"] or ""):
+        failures.append(
+            "a pick the vendor sent no row for does not say so in its verdict: "
+            f"{row['state_reason']!r}")
+    if row["state"] != scan_midday.UNKNOWN:
+        failures.append(f"a name with no quote graded as {row['state']} rather "
+                        "than unknown")
+
+    # And the wiring: build_packet must install that reason rather than letting
+    # the bare read_quote({}) reason stand.
+    source = (config.PROJECT_ROOT / "src" / "midday" / "scan_midday.py").read_text(
+        encoding="utf-8")
+    if "returned no row for this symbol at all" not in source:
+        failures.append(
+            "scan_midday no longer distinguishes a symbol the payload omitted "
+            "from one whose quote lacked a timestamp, so the carry through rows "
+            "can report a never-checked state as a checked one")
+
+    print("  no row       a pick the vendor sent no quote for says that, rather "
+          "than reporting a quote that was missing one field")
+
+
+def claim_reach_reads_what_the_collector_asked_for(failures: list[str]) -> None:
+    """"Subscribed" comes from the collector's record, not discover's intent.
+
+    morning_reach decided the subscribed state from watchlist.json's subscribed
+    flag. That is what discover MEANT to subscribe at 07:15. CRITERIA [Monitor]'s
+    stale watchlist note settles that the two are different facts and says which
+    one is evidence: "The file is not the evidence. What the collector asked the
+    socket for is."
+
+    2026-08-24 is the morning that made the distinction: a power cut collapsed
+    the gap between the jobs, the collector read the previous session's
+    watchlist and subscribed to the eight context symbols alone, and by 12:00
+    the file on disk was today's and marked 42 names subscribed. Every one would
+    have been captioned as a name the collector heard and the screen declined.
+    """
+    from collect import collect_premarket
+
+    day = "2026-05-11"
+    config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+    collect_premarket.subscriptions_path(day).write_text(
+        json.dumps({"symbols": ["HEARD.US"], "requested_count": 1,
+                    "socket_cap": 50, "dropped_to_fit_cap": [],
+                    "subscribed_at": f"{day}T07:20:02-04:00"}),
+        encoding="utf-8")
+    config.WATCHLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    config.WATCHLIST_PATH.write_text(
+        json.dumps({"generated_at": f"{day}T07:15:05-04:00", "symbols": [
+            {"symbol": "HEARD.US", "subscribed": True},
+            {"symbol": "MEANT.US", "subscribed": True},
+            {"symbol": "POOLED.US", "subscribed": False}]}),
+        encoding="utf-8")
+
+    context = scan_midday.morning_context(day)
+    if context["subscribed"] != ["HEARD.US"]:
+        failures.append(
+            f"subscribed reads {context['subscribed']}, expected only the name "
+            "the collector's own list carries. MEANT.US was discover's intent "
+            "and no tape was collected for it")
+    if not context.get("subscribed_source"):
+        failures.append("the packet does not say which file the subscribed set "
+                        "came from, so a reader cannot tell intent from record")
+    if "MEANT.US" not in (context.get("subscribed_reason") or ""):
+        failures.append(
+            "a name the watchlist marks subscribed and the socket was never "
+            "asked for is not named, so the 2026-08-24 shape stays invisible: "
+            f"{context.get('subscribed_reason')!r}")
+
+    print("  reach        subscribed is what the collector asked the socket for, "
+          "and a watchlist that disagrees is named")
+
+
 def claim_a_mover_says_how_far_the_morning_reached(failures: list[str]) -> None:
     """Three states, not two. Subscribed, pooled, and never seen.
 
@@ -634,6 +812,10 @@ CLAIMS = [
     claim_a_graded_row_says_which_levels_it_used,
     claim_an_unmeasured_name_is_named_not_counted,
     claim_the_breakdown_names_every_name_it_counted,
+    claim_a_vendor_zero_is_a_measurement,
+    claim_the_midday_rvol_says_why_it_is_null,
+    claim_a_name_the_vendor_never_answered_for_says_so,
+    claim_reach_reads_what_the_collector_asked_for,
     claim_a_mover_says_how_far_the_morning_reached,
     claim_a_mover_with_no_headline_stays_on_the_list,
     claim_a_headline_cannot_break_the_table_or_the_page,

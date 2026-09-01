@@ -41,6 +41,7 @@ import json
 import sys
 from typing import Any
 
+from collect import collect_premarket
 from core import artifacts
 from core import config
 from core import criteria
@@ -267,6 +268,7 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
         "volume": quote["volume"],
         "average_volume": quote["average_volume"],
         "day_rvol": None,
+        "day_rvol_reason": None,
         "move_pct": _pct(last, quote["prev_close"]),
         "state": UNKNOWN,
         "state_reason": None,
@@ -284,7 +286,21 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
                        "not the entry_ref_true and stop_ref_true the night "
                        "corrects them to. See CRITERIA [Midday]."),
     }
-    if quote["volume"] and quote["average_volume"]:
+    # Three states, and until 2026-08-31 this was the one null in the packet
+    # with no reason beside it. A reader could not tell a name the vendor
+    # never carried a volume for from one it measured at zero.
+    if quote["volume"] is None or quote["average_volume"] is None:
+        missing = [name for name in ("volume", "average_volume")
+                   if quote[name] is None]
+        out["day_rvol_reason"] = (
+            f"the quote carried no {' and no '.join(missing)}, so relative "
+            "volume was never computed rather than computed as nothing")
+    elif not quote["average_volume"]:
+        out["day_rvol_reason"] = (
+            "the vendor reports this name's average volume as zero, so there "
+            "is nothing to divide by. That is a measurement and not a "
+            "missing field")
+    else:
         out["day_rvol"] = round(quote["volume"] / quote["average_volume"], 4)
 
     if quote["refused_reason"]:
@@ -423,10 +439,12 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
     tally: dict[str, Any] = {
         "quoted": len(quotes), "refused": 0, "named_this_morning": 0,
         "no_last_price": 0, "no_previous_close": 0, "no_average_volume": 0,
-        "no_volume": 0, "below_price": 0, "below_move": 0, "below_rvol": 0,
+        "no_volume": 0, "zero_average_volume": 0,
+        "below_price": 0, "below_move": 0, "below_rvol": 0,
         "admitted": 0,
         "examples": {"refused": [], "no_last_price": [], "no_previous_close": [],
-                     "no_average_volume": [], "no_volume": []},
+                     "no_average_volume": [], "no_volume": [],
+                     "zero_average_volume": []},
         "unpriced_note": (
             "each of the four unpriced counts names the FIELD the vendor did "
             f"not carry, and the first {UNPRICED_EXAMPLES} symbols in each are "
@@ -460,11 +478,22 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
         if q["prev_close"] is None or q["prev_close"] == 0:
             lose("no_previous_close", symbol)
             continue
-        if not q.get("average_volume"):
+        # `is None`, NOT falsiness. A vendor reported ZERO is a measurement:
+        # a halted name, or one that printed premarket and has not traded
+        # since. Routing it into a bucket the report describes as "the pass
+        # could not price them, these names were never measured" says the
+        # opposite of what the vendor said.
+        if q.get("average_volume") is None:
             lose("no_average_volume", symbol)
             continue
-        if not q.get("volume"):
+        if q.get("volume") is None:
             lose("no_volume", symbol)
+            continue
+        # A zero average volume has nothing to divide by, and that is a
+        # THIRD state: measured, and no ratio exists. It is counted apart
+        # from both the missing field and the floors.
+        if not q.get("average_volume"):
+            lose("zero_average_volume", symbol)
             continue
         move = _pct(q["last"], q["prev_close"])
         if not price_rule.test(q["last"]):
@@ -496,6 +525,9 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
             "morning_reach": (
                 "subscribed" if symbol in subscribed else
                 "pooled_not_subscribed" if symbol in pooled else "not_pooled"),
+            "morning_reach_source": (
+                "the collector's own subscription list, written at subscribe "
+                "time, and not the watchlist discover wrote at 07:15"),
             "morning_reach_note": (
                 "the collector was subscribed to this name and the 08:45 screen "
                 "still did not publish it" if symbol in subscribed else
@@ -561,6 +593,8 @@ def morning_context(day: str) -> dict[str, Any]:
         "packet_found": False, "packet_reason": None,
         "named_this_morning": [], "pooled": [], "subscribed": [],
         "watchlist_reason": None,
+        "subscribed_source": None, "subscribed_reason": None,
+        "watchlist_marked_subscribed": [],
     }
     packet_path = config.RUNS_DIR / day / "packet.json"
     if packet_path.is_file():
@@ -586,7 +620,7 @@ def morning_context(day: str) -> dict[str, Any]:
             out["pooled"] = sorted(
                 {str(s.get("symbol") or s.get("code") or "").upper()
                  for s in rows} - {""})
-            out["subscribed"] = sorted(
+            out["watchlist_marked_subscribed"] = sorted(
                 {str(s.get("symbol") or s.get("code") or "").upper()
                  for s in rows if s.get("subscribed")} - {""})
         else:
@@ -597,6 +631,39 @@ def morning_context(day: str) -> dict[str, Any]:
                 "actually had")
     else:
         out["watchlist_reason"] = "watchlist.json is absent"
+
+    # WHAT THE COLLECTOR ASKED THE SOCKET FOR, which is the only evidence a
+    # name was listened to. This used to read watchlist.json's subscribed
+    # flag, which is discover's INTENT at 07:15 and is a different fact.
+    # CRITERIA [Monitor]'s stale watchlist note settles this: on 2026-08-24 a
+    # power cut collapsed the gap between the two jobs, the collector read
+    # the previous session's watchlist and subscribed to the eight context
+    # symbols alone, and by 12:00 the file on disk was today's and marked 42
+    # names subscribed. Every one of them would have been captioned here as a
+    # name the collector heard and the screen declined, which is exactly the
+    # reading that morning's fix was written to prevent. "The file is not the
+    # evidence. What the collector asked the socket for is."
+    subscriptions = collect_premarket.subscriptions_path(day)
+    if subscriptions.is_file():
+        payload = json.loads(subscriptions.read_text(encoding="utf-8"))
+        out["subscribed"] = sorted(
+            {str(s).upper() for s in (payload.get("symbols") or [])} - {""})
+        out["subscribed_source"] = subscriptions.name
+        drifted = sorted(set(out["watchlist_marked_subscribed"])
+                         - set(out["subscribed"]))
+        if drifted:
+            out["subscribed_reason"] = (
+                f"{len(drifted):,} name(s) the watchlist marks subscribed were "
+                f"never requested from the socket: {', '.join(drifted[:12])}. "
+                "The collector reads the watchlist once, at subscribe time, so "
+                "a file rewritten after that moment says nothing about what "
+                "was heard")
+    else:
+        out["subscribed_reason"] = (
+            f"{subscriptions.name} is absent, so what the collector actually "
+            "asked the socket for is unknown. Every mover is reported as "
+            "pooled_not_subscribed or not_pooled rather than being credited "
+            "to a subscription nothing recorded")
     return out
 
 
@@ -653,10 +720,23 @@ def build_packet(day: str | None = None,
     pooled = set(context["pooled"])
 
     picks = live_picks(day)
-    carry = [grade(pick, quotes.get(
-        pick["ticker"].upper(),
-        read_quote({}, now, expect_prior, closes.get(pick["ticker"].upper()))))
-        for pick in picks]
+    # A ticker the payload does not carry gets a refusal that SAYS the
+    # payload did not carry it. It used to fall through to read_quote({}),
+    # which then reported "the quote carried no lastTradeTime", telling a
+    # reader the vendor sent a quote missing one field when it sent no row
+    # at all. quote_delayed returns partial data when a chunk fails, so this
+    # is reachable on any morning a chunk is refused.
+    carry = []
+    for pick in picks:
+        symbol = pick["ticker"].upper()
+        quote = quotes.get(symbol)
+        if quote is None:
+            quote = read_quote({}, now, expect_prior, closes.get(symbol))
+            quote["refused_reason"] = (
+                "us-quote-delayed returned no row for this symbol at all, so "
+                "nothing about its session is known. This is a name the "
+                "vendor did not answer for, not a quote missing a field")
+        carry.append(grade(pick, quote))
 
     movers, tally = rank_movers(quotes, named, subscribed, pooled)
     movers = movers[:LIST_SIZE]

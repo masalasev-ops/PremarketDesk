@@ -9859,6 +9859,97 @@ def claim_the_floor_sweep_fits_edges_the_way_the_study_does(
           f"{high['rvol_target']['two_points']})")
 
 
+def claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not(
+        failures: list[str]) -> None:
+    """The ledger's three states below a booked trade stay three.
+
+    record_so_far defined never_triggered as booked=0 with no skip_reason. That
+    is two facts, not one. simulate has a second path to booked=0: the trigger
+    FIRES, position_size refuses to buy anything, and the row returns with
+    exit_reason set to the refusal, booked still 0 and skip_reason still unset.
+    Both landed in never_triggered.
+
+    REPORT_TEMPLATE quotes that count verbatim as "picks never reached their
+    trigger at all", so a pick that reached its trigger would have been
+    published as one that did not, in the one section of the report whose whole
+    argument is that every figure arrives with its denominator.
+
+    No live row has been mislabelled yet: the sizing refusals need a zero or
+    near zero stop distance and the smallest on record is 0.33. The count was
+    wrong by construction and the first row to hit it would have been silent,
+    which is the shape this project keeps finding rather than a new one.
+
+    Two directions. A refused SIZING must not be counted as a trigger that never
+    fired, and a row that genuinely never fired must still be counted where it
+    always was, including the fixture shape that records no exit_reason at all:
+    the new bucket is identified positively, by an exit_reason that is present
+    and is not EXIT_NEVER, so a null is not read as a refusal.
+    """
+    from night import paper_ledger
+
+    with conftest_activate() as _sandbox:
+        from core import store
+
+        day = "2026-03-09"
+        rows = [
+            # Fired, and the sizing declined it.
+            {"ticker": "UNSIZED.US", "booked": 0, "skip_reason": None,
+             "exit_reason": "the stop distance is zero, so risk sizing cannot "
+                            "divide by it"},
+            # Never fired.
+            {"ticker": "NEVER.US", "booked": 0, "skip_reason": None,
+             "exit_reason": paper_ledger.EXIT_NEVER},
+            # Never fired, and this row records no exit_reason at all.
+            {"ticker": "BARE.US", "booked": 0, "skip_reason": None,
+             "exit_reason": None},
+            # Declined on evidence before any of that.
+            {"ticker": "SKIPPED.US", "booked": 0,
+             "skip_reason": "fill_plausible is 'unknown'", "exit_reason": None},
+        ]
+        version = sorted(paper_ledger.rule_versions())[0]
+        with store.session() as connection:
+            store.init(connection)
+            for row in rows:
+                store.upsert(connection, "paper_trades",
+                             ["date", "ticker", "rule_version"],
+                             dict(row, date=day, rule_version=version))
+
+        before = paper_ledger.record_so_far(rule=version)
+
+    # Read the three buckets back as counts of the fixture only, by measuring
+    # against a run with the fixture absent would need a second sandbox, so
+    # assert the invariant that holds at any population size instead: the four
+    # states partition the rows, and the refusal is not in never_triggered.
+    total = (before["booked"]["rows"] + before["skipped"]["rows"]
+             + before["never_triggered"]["rows"]
+             + before["triggered_but_unsized"]["rows"])
+    if total != before["picks"]["rows"]:
+        failures.append(
+            f"the ledger's states cover {total} of {before['picks']['rows']} "
+            "rows, so a row is either counted twice or counted nowhere. Booked, "
+            "skipped, never triggered and triggered but unsized must partition "
+            "the table")
+    if not before["triggered_but_unsized"]["rows"]:
+        failures.append(
+            "a row whose trigger fired and whose sizing refused was not counted "
+            "as one, so it is still being reported as a pick that never reached "
+            "its trigger")
+    reasons = before.get("triggered_but_unsized_reasons") or []
+    if not any("stop distance" in reason for reason in reasons):
+        failures.append(
+            "the unsized bucket names no reason, so a reader cannot tell which "
+            f"sizing rule declined. Reasons were {reasons}")
+    if before["never_triggered"]["rows"] < 2:
+        failures.append(
+            "a row carrying EXIT_NEVER and a row carrying no exit_reason at all "
+            "must both still count as never triggered. The new bucket is "
+            "identified positively so that a null is not read as a refusal")
+
+    print("  three states a refused sizing is not a trigger that never fired, "
+          "a null exit reason still counts as one, and the four states "
+          "partition the table")
+
+
 def claim_the_score_watch_counts_a_pick_once_per_pick(failures: list[str]) -> None:
     """A second paper rule version does not double the score watch population.
 
@@ -11150,6 +11241,7 @@ def main() -> int:
     claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(failures)
     claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(failures)
     claim_the_score_watch_counts_a_pick_once_per_pick(failures)
+    claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not(failures)
 
     if failures:
         for failure in failures:

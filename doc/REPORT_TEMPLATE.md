@@ -535,7 +535,7 @@ were traded across `record_so_far.booked.sessions`. Then say, in one sentence,
 that the sample unit is the SESSION and not the pick, so this rests on that
 many observations rather than on the row count.
 
-Then these four, each as a bare count over its denominator:
+Then these five, each as a bare count over its denominator:
 
 - `record_so_far.triggered_within_30_min` of
   `record_so_far.triggered_total` trades reached their trigger within thirty
@@ -543,6 +543,15 @@ Then these four, each as a bare count over its denominator:
   `record_so_far.median_minutes_to_trigger` minutes.
 - `record_so_far.never_triggered.rows` picks never reached their trigger at
   all, across `record_so_far.never_triggered.sessions` sessions.
+- `record_so_far.triggered_but_unsized.rows` picks reached their trigger and
+  the sizing rule declined to buy anything, across
+  `record_so_far.triggered_but_unsized.sessions` sessions. Give this figure
+  even when it is zero, and write it as the digit rather than as a word,
+  because a count that appears only when it is non zero is a count nobody
+  learns to read. It is a fact about CRITERIA [Paper] sizing and not about
+  the screen: these picks were found and the position rule refused them.
+  Until 2026-08-31 they were counted in the line above, which reports picks
+  that never reached their trigger at all.
 - `record_so_far.peaked_within_10_min_closed_red` of
   `record_so_far.peaked_within_10_min` trades that made their best price
   within ten minutes of entry went on to close below their entry.
