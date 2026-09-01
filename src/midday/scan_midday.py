@@ -39,6 +39,7 @@ import datetime as dt
 import html
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from collect import collect_premarket
@@ -608,6 +609,29 @@ def attach_news(api: eodhd.EodhdClient, rows: list[dict[str, Any]],
     return fetched
 
 
+def _read_json_dict(path: Path) -> dict[str, Any] | None:
+    """A JSON object off disk, or None when there is not one to read.
+
+    The same shape as collect_premarket.read_subscriptions, and for the reason
+    the subscriptions comment below already spells out: every read in
+    morning_context happens AFTER the universe sweep and the bulk day are paid
+    for, roughly 2,900 shared credits, so a sidecar truncated by a power cut
+    mid write must not take the whole 12:00 pass down with a traceback. That
+    argument was applied to subscriptions.json and not to the two files read
+    beside it, which is what this closes.
+
+    None means "there is nothing here to read" and never "this file says
+    nothing". Every caller turns it into a written reason rather than an empty
+    answer, because an empty named_this_morning would report every mover as new
+    and an empty pool would caption every one of them not_pooled.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def morning_context(day: str) -> dict[str, Any]:
     """What the 08:45 report named, read off disk. No vendor call."""
     out: dict[str, Any] = {
@@ -618,8 +642,8 @@ def morning_context(day: str) -> dict[str, Any]:
         "watchlist_marked_subscribed": [],
     }
     packet_path = config.RUNS_DIR / day / "packet.json"
-    if packet_path.is_file():
-        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    packet = _read_json_dict(packet_path) if packet_path.is_file() else None
+    if packet is not None:
         out["packet_found"] = True
         named = {str(c.get("symbol") or "").upper()
                  for c in (packet.get("candidates") or [])}
@@ -627,14 +651,23 @@ def morning_context(day: str) -> dict[str, Any]:
         named |= {str(r.get("symbol") or "").upper()
                   for r in (notable.get("rows") or [])}
         out["named_this_morning"] = sorted(s for s in named if s)
+    elif packet_path.is_file():
+        out["packet_reason"] = (
+            f"the packet at {packet_path.name} for {day} is on disk and could "
+            "not be read as JSON, so what the morning named is unknown and "
+            "every name in the movers list is reported as new when some may "
+            "not be. A packet truncated mid write is how this happens, and it "
+            "is reported rather than raised because this pass has already paid "
+            "for the sweep by the time it reads")
     else:
         out["packet_reason"] = (
             f"no packet at {packet_path.name} for {day}, so the movers list "
             "cannot exclude what the morning named and every name in it is "
             "reported as new when some may not be")
 
-    if config.WATCHLIST_PATH.is_file():
-        watchlist = json.loads(config.WATCHLIST_PATH.read_text(encoding="utf-8"))
+    watchlist = (_read_json_dict(config.WATCHLIST_PATH)
+                 if config.WATCHLIST_PATH.is_file() else None)
+    if watchlist is not None:
         generated = str(watchlist.get("generated_at") or "")
         if generated.startswith(day):
             rows = watchlist.get("symbols") or []
@@ -650,6 +683,11 @@ def morning_context(day: str) -> dict[str, Any]:
                 f"and this run is for {day}, so it is another session's file and "
                 "every mover is reported as not_pooled whatever discover "
                 "actually had")
+    elif config.WATCHLIST_PATH.is_file():
+        out["watchlist_reason"] = (
+            f"{config.WATCHLIST_PATH.name} is on disk and could not be read as "
+            "JSON, so what discover pooled at 07:15 is unknown and every mover "
+            "is reported as not_pooled whatever discover actually had")
     else:
         out["watchlist_reason"] = "watchlist.json is absent"
 
