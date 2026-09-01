@@ -40,8 +40,17 @@ component table from 44 rows to 56.
 runs/2026-08-21/packet.json is a 762 byte stub. It carries one candidate, no
 score components, and `stub` in its build commit field, while picks holds
 twelve rows for that session. The backup holds the identical stub, so the
-stub was already in place when the 22:15 backup ran that night and the real
-packet of 2026-08-21 was never captured by anything.
+stub was already in place when the 22:15 backup ran that night.
+
+[corrected 2026-09-01: this ended "and the real packet of 2026-08-21 was
+never captured by anything", which reads as an open question and is not one.
+CRITERIA [Backup] and backup_evidence.py both record the cause on their own
+pages: on 2026-08-21 at 15:46 a sweep that invoked every claim directly wrote
+fixture data over 29 files, including that morning's capture and its packet,
+and both are gone permanently. The 762 bytes over a 125 KB packet that
+CRITERIA names is this exact file. That incident is why backup_evidence.py
+exists, so reporting its casualty as a mystery while reading its own
+docstring is the reverse of the point.]
 
 No number is published wrong by it and nothing is being changed. build_archive
 already refuses to present it as a morning: _fixture_reason returns "its packet

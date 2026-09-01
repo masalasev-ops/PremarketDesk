@@ -10166,8 +10166,9 @@ def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
     core/artifacts.py exists for the operator path: a human reproducing a bug
     points a tool at a run directory, the tool writes where it always writes,
     and a frozen artifact is gone with nothing said. Nine call sites route
-    through it. morning/scan.py was not one of them, and it writes BOTH of the
-    files night/backup_evidence.py names as having no route back.
+    through it. morning/scan.py was not one of them, and it writes the packet
+    that night/backup_evidence.py names as having no route back, plus the run
+    directory's copy of the capture, which it does not name.
 
     IT HAS ALREADY HAPPENED. runs/2026-08-21/packet.json is stamped 15:46:38
     and holds one candidate, AAPL.US, beside twelve picks rows written that
@@ -10226,7 +10227,7 @@ def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
         if frozen_packet.read_bytes() != packet_before:
             failures.append(
                 "a hand run of scan.write_packet replaced a frozen packet.json, "
-                "which is one of the two artifacts backup_evidence names as "
+                "which is one of the four artifacts backup_evidence names as "
                 "having no route back")
         if written == frozen_packet or artifacts.SPARED_INFIX not in written.name:
             failures.append(
@@ -10237,8 +10238,11 @@ def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
         if frozen_snapshot.read_bytes() != snapshot_before:
             failures.append(
                 "a hand run of scan promoted its collector copy over the frozen "
-                "premarket_snapshot.jsonl, which is the other artifact with no "
-                "route back and the one destroyed on 2026-08-14")
+                "premarket_snapshot.jsonl, the run directory's copy of the "
+                "capture and the one destroyed on 2026-08-14. backup_evidence "
+                "does NOT name this file, only data/premarket/<date>.jsonl that "
+                "it is promoted from, so the bars have a route back and this "
+                "copy of them does not")
         beside = list(run_dir.glob(f"premarket_snapshot.{artifacts.SPARED_INFIX}*"))
         if not beside:
             failures.append(

@@ -406,7 +406,14 @@ tbody tr:hover{background:var(--ground)}
         <p>The morning is finished and nothing after this point changes the report that went out at
         08:49. Until 2026-08-31 that was the whole trading day and this row read "the system has
         already finished". The 12:00 pass below now reads the session this bell opens, into a packet
-        of its own that never touches the morning's.</p>
+        of its own that never touches the morning's. That is proved rather than trusted: the two
+        passes share a run directory and both resolve through C52, which at 12:00 grants the
+        scheduler ownership of the day, so nothing but disjoint filenames keeps them apart. Both
+        steps were driven with PMD_JOB set, the dangerous configuration and not the safe one, with
+        every file hashed before and after: all six morning artifacts came back byte identical.
+        claim_the_midday_pass_never_touches_the_morning holds both halves, the hashes and the
+        filename sets, so a one word edit to either constant fails the suite instead of a
+        session.</p>
         <div class="ids">none</div>
       </div>
 
@@ -448,8 +455,12 @@ tbody tr:hover{background:var(--ground)}
       <div class="t"><b>22:15</b>ET</div>
       <div class="c night">
         <h5>Write down what was really true</h5>
-        <p>Ten steps in one order, and the order is the argument. C62 copies the two artifacts that
-        cannot be rebuilt, first, before anything else touches the tree. Then EODHD has published the
+        <p>Ten steps in one order, and the order is the argument. C62 copies the four artifacts
+        that cannot be rebuilt, first, before anything else touches the tree.
+        <span class="corr">[corrected 2026-09-01: read two. The catalogue entry for C62 was
+        corrected earlier the same day and carries its own marker; this row was left saying the
+        old number, which is how a count that is wrong in one module travels into three
+        documents and then survives its own correction.]</span> Then EODHD has published the
         full 04:00 to 09:30 intraday bars, so C20 widens this morning's rows with the true premarket
         levels, beside the live values and never over them, and C21 returns to older rows once one and
         five sessions have elapsed. Those two are the whole of the 07:00 catch-up firing; everything

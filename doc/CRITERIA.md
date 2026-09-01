@@ -2096,22 +2096,41 @@ refresh_after_days            = 7
 
 ## Backup
 
-A copy of the two artifacts that cannot be rebuilt, taken by the nightly and
+A copy of the four artifacts that cannot be rebuilt, taken by the nightly and
 read by nothing. night/backup_evidence.py.
 
-**Why only two.** Everything else in this system has a route back. The universe
+[corrected 2026-09-01: this said TWO and named two, while _ARTIFACTS has copied
+four since the collector's two sidecars joined it. This page is the authority
+the others were echoing, so the count travelled from here into both architecture
+pages, a docstring in morning/scan.py and the module's own headline. Those were
+corrected first and this was not, which is backwards.]
+
+**Why only four.** Everything else in this system has a route back. The universe
 rebuilds weekly. The closes re-fetch. Reports render from packets. The database
-refuses test code through store.guard_live_database. Two things have no route:
+refuses test code through store.guard_live_database. Four things have no route:
 
   data/premarket/<date>.jsonl   the collector's socket capture, a recording of
                                 a tape that no longer exists
   runs/<date>/packet.json       the frozen evidence a morning was judged on
+  data/premarket/<date>-stats.jsonl
+                                one line per collector run: connections,
+                                reconnects, the drops it survived. There is no
+                                second copy of a connection that has closed
+  data/premarket/<date>-subscriptions.json
+                                what the collector asked the socket for, at
+                                subscribe time. The stale watchlist note calls
+                                this the ONLY evidence of what was listened to,
+                                because the watchlist beside it can be rewritten
+                                after the socket has already read it
 
-Both live under gitignored directories, and on 2026-08-21 at 15:46 a sweep that
-invoked every claim directly wrote 258 fixture bars over roughly 3,200 real ones
-and 762 bytes over a 125 KB packet. That session is gone. A list that grows past
-these two without remaking the argument above is a backup of everything, which
-is a weaker promise that nobody checks.
+All four live under gitignored directories, and on 2026-08-21 at 15:46 a sweep
+that invoked every claim directly wrote fixture data over 29 files, including
+258 fixture bars over roughly 3,200 real ones and 762 bytes over a 125 KB
+packet. That session is gone, and runs/2026-08-21/packet.json is still that 762
+byte stub today: one candidate where picks holds twelve, and `stub` where a
+commit belongs. build_archive refuses to present it as a morning. A list that
+grows past these four without remaking the argument above is a backup of
+everything, which is a weaker promise that nobody checks.
 
 root                          = %LOCALAPPDATA%\PremarketDesk\evidence   # expanded through the environment. OUTSIDE the working tree on purpose: a copy inside the directory that gets deleted is not a copy
 catchup_sessions              = 10         # recent sessions checked each night, so a night the machine was off is caught up rather than lost. Ten covers a fortnight of weekdays
