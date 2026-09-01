@@ -15,6 +15,64 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, fifteenth: a phantom win the notional rule could have booked
+
+From a read through the production tree. One defect, and a list of what was
+read and found sound so the next pass does not re-derive it.
+
+### The defect
+
+position_size refused a stop at or above the entry in the RISK branch only.
+That branch was forced into it: it divides by the stop distance, so a
+non positive distance is a division it cannot perform, and the refusal was
+written as a fact about division rather than as a fact about the trade.
+
+Notional sizing divides by nothing. It sized the position happily, and
+simulate then read the first bar, found low <= stop_level because the stop sat
+at or above the entry, and exited AT THE STOP. The row books exit_reason
+"stop" carrying a NON NEGATIVE P&L: a phantom win wearing the name of a loss.
+That is the one disguise that survives every summary this table feeds, because
+nothing that sums losses expects them to come out positive.
+
+A guard rather than a repair, and said plainly: no pick has ever carried such
+a pair. All 80 rows with both sampled levels are ordered correctly and the
+smallest true gap on the 56 rows carrying both corrected levels is 0.33. But
+the night measures entry_ref_true and stop_ref_true INDEPENDENTLY off the
+tape, and nothing between there and paper_ledger checked that they were still
+in the order the morning published them in.
+
+The check now sits above the mode branch, after the mode itself is validated
+so an unknown mode still raises. The claim was testing SIZING_RISK alone and
+now runs both modes against a stop at the entry and a stop above it.
+
+### Read and found sound
+
+Named so the next pass does not spend the time again. The November fold in
+ettime, where _USEasternFallback.fromutc decides on the UTC instant. Rule.test
+returning False for None, which is what the whole of evaluate_eligibility
+stands on. The SQL identifier guards in store. BarBuilder's write failure
+split, its replay tagging and its torn tail repair, all three correct
+including the case where a fault lands mid batch. simulate booking the same
+minute case as a loss. The rate division in weekly_page. fill_true_excursions
+using truthiness on entry and stop, which is right there because it is
+guarding a divisor. The collector's gap_pct or 0, removed at d224837.
+
+The watchdog was checked against a live failure rather than a fixture: it
+caught this morning's analyst step, printed STEP FAILED with the reason and
+the flag id, surfaced the flag backlog and exited 1.
+
+A tree wide check for stray control characters and mixed line endings found
+no control characters and four files with mixed endings, which is the state
+the line ending note already describes and is left alone.
+
+### Not read
+
+Being explicit about the edge of this pass. Most of morning/scan.py past the
+screen and the score, analyst.py past the quantifier guard, true_volume.py,
+weekly_page.py, universe.py, discover.py, and the whole of research/.
+
+Suite green, 1,755 paths, no drift.
+
 ## 2026-09-01, fourteenth: the midday report is typeset, and stops shouting
 
 Raised by the owner on reading the 12:00 edition: "so badly formatted. Small

@@ -8298,13 +8298,19 @@ def claim_the_two_sizings_differ_only_in_how_much_they_buy(
             f"{cap:,.0f} cap. Uncapped, risk sizing quietly becomes a leverage "
             f"rule: this position would be {budget * 100:,.0f} dollars")
 
-    # A stop at or above the entry risks nothing and cannot be risk sized.
-    broken = paper_ledger.position_size(paper_ledger.SIZING_RISK, 100.0, 100.0)
-    if broken[0] != 0 or not broken[1]:
-        failures.append(
-            f"a stop at the entry price sized {broken!r} rather than refusing. "
-            "The position is the budget over a zero distance and there is no "
-            "answer to give")
+    # A stop at or above the entry risks nothing, in EVERY mode. Risk sizing
+    # was forced to refuse because it divides by the distance. Notional sizing
+    # divides by nothing, sized the trade, and simulate then exited at a stop
+    # sitting above the entry and booked the gain as a loss.
+    for _mode in paper_ledger.SIZING_MODES:
+        for _stop in (100.0, 101.0):
+            broken = paper_ledger.position_size(_mode, 100.0, _stop)
+            if broken[0] != 0 or not broken[1]:
+                failures.append(
+                    f"under {_mode} sizing a stop of {_stop} against a 100.0 "
+                    f"entry sized {broken!r} rather than refusing. The trade "
+                    "risks nothing, and a position taken here exits at its "
+                    "stop on the first bar and books that exit as a gain")
 
     modes = paper_ledger.rule_versions()
     if set(modes.values()) - set(paper_ledger.SIZING_MODES):

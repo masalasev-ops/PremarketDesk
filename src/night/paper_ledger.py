@@ -162,22 +162,37 @@ def position_size(mode: str, entry_price: float, stop_level: float,
     rather than rounding up to one and inventing a position the budget does not
     cover.
     """
+    if mode not in SIZING_MODES:
+        raise criteria.CriteriaError(
+            f"sizing mode {mode!r} is not one of {sorted(SIZING_MODES)}")
+    # A STOP AT OR ABOVE THE ENTRY IS REFUSED IN EVERY MODE. This lived inside
+    # the risk branch alone, where it was forced: that branch divides by the
+    # stop distance. Notional sizing divides by nothing, so it sized the
+    # position happily and handed it to simulate, whose very first bar then
+    # reads low <= stop_level and exits AT THE STOP, a price at or above the
+    # entry. The row books exit_reason "stop" carrying a NON NEGATIVE P&L: a
+    # phantom win wearing the name of a loss, which is the one disguise that
+    # would survive every summary this table feeds, because nothing sums
+    # losses expecting them to be positive.
+    #
+    # A guard rather than a repair. No pick has ever carried such a pair, and
+    # the smallest true gap on the 56 rows carrying both is 0.33. But the
+    # night measures entry_ref_true and stop_ref_true INDEPENDENTLY off the
+    # tape, and nothing between there and here checks that they are still in
+    # the order the morning published them in.
+    if entry_price - stop_level <= 0:
+        return 0, (
+            f"the stop {stop_level:g} is at or above the entry "
+            f"{entry_price:g}, so the trade risks nothing and no sizing mode "
+            "has an answer. Nothing is booked: a position sized here would "
+            "exit at its stop on the first bar and book that exit as a gain")
     if mode == SIZING_NOTIONAL:
         notional = _CRIT.number("paper", "position_notional")
-    elif mode == SIZING_RISK:
+    else:
         risk = entry_price - stop_level
-        if risk <= 0:
-            return 0, (
-                f"the stop {stop_level:g} is at or above the entry "
-                f"{entry_price:g}, so the trade risks nothing and a risk sized "
-                "position is undefined. Nothing is booked rather than sizing "
-                "it off a division this rule cannot perform")
         budget = _CRIT.number("paper", "risk_notional")
         cap = _CRIT.number("paper", "max_position_notional")
         notional = min(budget * entry_price / risk, cap)
-    else:
-        raise criteria.CriteriaError(
-            f"sizing mode {mode!r} is not one of {sorted(SIZING_MODES)}")
     shares = int(notional // entry_price)
     if shares < 1:
         return 0, (
