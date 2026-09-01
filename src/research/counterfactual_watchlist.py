@@ -499,7 +499,14 @@ def outcome_table(records: list[dict[str, Any]]) -> dict[str, Any]:
             if value is None:
                 reason = record["raw"].get("day5_refused_reason" if column == "day5_close"
                                            else "next_day_refused_reason")
-                refused[record["ticker"]] = reason or "not filled yet, and no refusal recorded"
+                # Keyed on the PAIR, like every other identity in this
+                # file. On ticker alone two sessions of one symbol collapse
+                # and the earlier reason is discarded with no count moving,
+                # which is a recorded reason disappearing silently. Written
+                # as one string rather than a tuple because this dict is
+                # serialised into the payload and JSON has no tuple key.
+                refused[f"{record['date']} {record['ticker']}"] = (
+                    reason or "not filled yet, and no refusal recorded")
                 continue
             values.append(value)
             sessions.add(record["date"])
@@ -718,7 +725,20 @@ def build_payload(records: list[dict[str, Any]], sessions: list[dict[str, Any]])
             "rows_replayed": sum(1 for r in records if r["baseline"] is not None),
             "disagreements": [
                 {"date": r["date"], "ticker": r["ticker"], "drift": r["drift"],
-                 "would_have_been": (r["state"] if r["state"] != "criteria_drifted" else None)}
+                 # INVERTED WHEN WRITTEN, so this was always null. build_rows tests
+            # the drift branch FIRST, so every disagreement carrying a
+            # counterfactual is state == "criteria_drifted" by construction
+            # and the old condition excluded exactly the rows it existed
+            # for. The archive then contradicted the write-up, which says
+            # NSSC.US would have gained: the field meant to carry that fact
+            # reported nothing.
+            "would_have_been": (
+                "gained" if (r.get("counterfactual") or {}).get("day_eligible")
+                and not (r.get("baseline") or {}).get("day_eligible")
+                else "lost" if (r.get("baseline") or {}).get("day_eligible")
+                and not (r.get("counterfactual") or {}).get("day_eligible")
+                else "unchanged" if r.get("counterfactual") is not None
+                else None)}
                 for r in records if r["drift"] is not None],
         },
         "substitution": substitution_report(records),
@@ -824,8 +844,13 @@ def report(payload: dict[str, Any]) -> None:
 
     print("")
     print("THE GAINED NAMES, ONE ROW EACH")
-    print("  Printed whole because eleven rows is a sample a reader can hold, and "
-          "every")
+    # Counted off the payload, not frozen at today's answer. This read
+    # "eleven rows" in a report whose own charter is that re-running it
+    # costs nothing, so the twelfth gain would have printed a sample size
+    # the table beneath it did not show.
+    gained_count = sum(1 for r in payload["rows"] if r["state"] == "gained")
+    print(f"  Printed whole because {gained_count} rows is a sample a reader "
+          f"can hold, and every")
     print("  median below rests on some subset of exactly these rows.")
     print(f"    {'session':<11} {'name':<9} {'pm_rvol':>9} {'pm_rvol_true':>13}  "
           f"{'score':<13} {'fill':<12} {'mfe_true':>9} {'mae_true':>9} {'broke':>6}")

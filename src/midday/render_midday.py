@@ -100,6 +100,8 @@ UNJUDGED_WORDS = {
     "no_volume": "carried no volume",
     "zero_average_volume": "carry an average volume the vendor reports as "
                            "zero, so there is nothing to divide by",
+    "zero_previous_close": "carry a previous close the vendor reports as "
+                           "zero, so there is no denominator for a move",
 }
 UNJUDGED_LABELS = {
     "refused": "refused quote",
@@ -108,6 +110,7 @@ UNJUDGED_LABELS = {
     "no_average_volume": "average volume",
     "no_volume": "volume",
     "zero_average_volume": "zero average volume",
+    "zero_previous_close": "zero previous close",
 }
 
 
@@ -226,7 +229,7 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
     counted = sum(tally.get(k, 0) for k in
                   ("refused", "named_this_morning", "no_last_price",
                    "no_previous_close", "no_average_volume", "no_volume",
-                   "zero_average_volume",
+                   "zero_average_volume", "zero_previous_close",
                    "below_price", "below_move", "below_rvol", "admitted"))
     out += ["### How this list was chosen", "",
             _cell(movers["selection_note"]) + ".", "",
@@ -252,7 +255,8 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
     # two lines under a count of names that were dropped before the floors.
     unpriced = {k: tally[k] for k in
                 ("refused", "no_last_price", "no_previous_close",
-                 "no_average_volume", "no_volume", "zero_average_volume")
+                 "no_average_volume", "no_volume", "zero_average_volume",
+                 "zero_previous_close")
                 if tally.get(k)}
     if unpriced:
         parts = ", ".join(f"{count:,} {UNJUDGED_WORDS[name]}"

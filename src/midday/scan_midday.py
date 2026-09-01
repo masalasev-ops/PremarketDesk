@@ -439,12 +439,12 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
     tally: dict[str, Any] = {
         "quoted": len(quotes), "refused": 0, "named_this_morning": 0,
         "no_last_price": 0, "no_previous_close": 0, "no_average_volume": 0,
-        "no_volume": 0, "zero_average_volume": 0,
+        "no_volume": 0, "zero_average_volume": 0, "zero_previous_close": 0,
         "below_price": 0, "below_move": 0, "below_rvol": 0,
         "admitted": 0,
         "examples": {"refused": [], "no_last_price": [], "no_previous_close": [],
                      "no_average_volume": [], "no_volume": [],
-                     "zero_average_volume": []},
+                     "zero_average_volume": [], "zero_previous_close": []},
         "unpriced_note": (
             "six buckets hold names that were NOT JUDGED, and they are not one "
             "kind. Four name the FIELD the vendor did not carry. refused is a "
@@ -479,8 +479,17 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
         if q["last"] is None:
             lose("no_last_price", symbol)
             continue
-        if q["prev_close"] is None or q["prev_close"] == 0:
+        # `is None` for the missing field, and a separate branch for a
+        # reported zero, on the same argument as the two volume tests below:
+        # prior_closes keeps any close that is not None, so 0.0 reaches here
+        # with prev_close_source set to eod-bulk-last-day. Filing it under
+        # "carried no previous close" tells a reader the vendor sent nothing
+        # for a name it measured at zero.
+        if q["prev_close"] is None:
             lose("no_previous_close", symbol)
+            continue
+        if not q["prev_close"]:
+            lose("zero_previous_close", symbol)
             continue
         # `is None`, NOT falsiness. A vendor reported ZERO is a measurement:
         # a halted name, or one that printed premarket and has not traded

@@ -1,6 +1,6 @@
 {
   "instrument": "src/research/counterfactual_watchlist.py",
-  "generated_at": "2026-09-01T00:23:56-04:00",
+  "generated_at": "2026-09-01T01:24:38-04:00",
   "question": "what each morning's day watchlist would have been if the [Day setup] premarket_rvol floor had been applied to the measured pm_rvol_true instead of to the published estimate",
   "vendor_calls": 0,
   "criteria_read": {
@@ -343,7 +343,7 @@
             }
           }
         },
-        "would_have_been": null
+        "would_have_been": "gained"
       },
       {
         "date": "2026-08-26",
@@ -362,7 +362,7 @@
             }
           }
         },
-        "would_have_been": null
+        "would_have_been": "unchanged"
       }
     ]
   },
@@ -646,10 +646,10 @@
           "median": null,
           "is_price_level": false,
           "unfilled": {
-            "BE.US": "not filled yet, and no refusal recorded",
-            "NVTS.US": "not filled yet, and no refusal recorded",
-            "ANF.US": "not filled yet, and no refusal recorded",
-            "DG.US": "not filled yet, and no refusal recorded"
+            "2026-08-25 BE.US": "not filled yet, and no refusal recorded",
+            "2026-08-25 NVTS.US": "not filled yet, and no refusal recorded",
+            "2026-08-26 ANF.US": "not filled yet, and no refusal recorded",
+            "2026-08-27 DG.US": "not filled yet, and no refusal recorded"
           }
         }
       }
@@ -738,10 +738,10 @@
           "median": null,
           "is_price_level": false,
           "unfilled": {
-            "BE.US": "not filled yet, and no refusal recorded",
-            "NVTS.US": "not filled yet, and no refusal recorded",
-            "ANF.US": "not filled yet, and no refusal recorded",
-            "DG.US": "not filled yet, and no refusal recorded"
+            "2026-08-25 BE.US": "not filled yet, and no refusal recorded",
+            "2026-08-25 NVTS.US": "not filled yet, and no refusal recorded",
+            "2026-08-26 ANF.US": "not filled yet, and no refusal recorded",
+            "2026-08-27 DG.US": "not filled yet, and no refusal recorded"
           }
         }
       }
@@ -1076,10 +1076,10 @@
           "median": null,
           "is_price_level": false,
           "unfilled": {
-            "BE.US": "not filled yet, and no refusal recorded",
-            "NVTS.US": "not filled yet, and no refusal recorded",
-            "ANF.US": "not filled yet, and no refusal recorded",
-            "DG.US": "not filled yet, and no refusal recorded"
+            "2026-08-25 BE.US": "not filled yet, and no refusal recorded",
+            "2026-08-25 NVTS.US": "not filled yet, and no refusal recorded",
+            "2026-08-26 ANF.US": "not filled yet, and no refusal recorded",
+            "2026-08-27 DG.US": "not filled yet, and no refusal recorded"
           }
         }
       }

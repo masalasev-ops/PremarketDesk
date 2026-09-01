@@ -93,9 +93,18 @@ invent it.}
 
 ## Summary
 
-{Three to six sentences. The market tone from the snapshot, then the counts,
-then the strongest conviction names by bucket, then anything in gaps_to_fill
-that materially weakens this morning's evidence.
+{Six to nine sentences. The market tone from the snapshot, then the counts,
+then the strongest conviction names by bucket, then the unsigned score
+sentence, then anything in gaps_to_fill that materially weakens this
+morning's evidence.
+
+THE BUDGET COUNTS THE MANDATORY ITEMS. It read three to six while the
+items below already required seven: the tone, the quoted ranking sentence,
+the eligibility counts, the bucket roll, the two sentence
+score_roll.text.direction quote, and the gaps_to_fill weakness. A budget
+smaller than its own requirements makes the model choose which rule to
+break, and the cheapest thing to drop is the verbatim quote, which nothing
+mechanical checks for.
 
 THE COUNTS ARE QUOTED, NEVER COUNTED. Every number in this sentence is already
 in the packet, so write it as:
