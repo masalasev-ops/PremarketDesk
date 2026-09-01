@@ -237,7 +237,14 @@ def day_screen(rows: list[dict[str, Any]], rate_for: Any,
             continue
         entry = {"date": row["date"], "ticker": row["ticker"],
                  "pm_rvol": rvol, "capture_share": round(share, 6),
-                 "share_source": share_why}
+                 "share_source": share_why,
+                 # A row whose morning predates the capture correction is a
+                 # COUNTERFACTUAL here: that screen ran on the raw socket
+                 # numerator and admitted nobody on this line. Counted apart,
+                 # because six of nine in the current record come from one
+                 # such session and a bare nine would read as nine mornings.
+                 "morning_ran_the_correction": bool(
+                     row.get("pm_capture_share_packet"))}
         cleared.append(entry)
         failed = row.get("day_failed_conditions")
         if failed is None:
@@ -257,6 +264,8 @@ def day_screen(rows: list[dict[str, Any]], rate_for: Any,
             "floor": RVOL_FLOOR.describe(),
             "rows": len(cleared),
             "sessions": len({e["date"] for e in cleared}),
+            "counterfactual_rows": sum(
+                1 for e in cleared if not e["morning_ran_the_correction"]),
             "names": [f"{e['date']} {e['ticker']}" for e in cleared],
         },
         "reached_the_day_watchlist": {
@@ -265,6 +274,8 @@ def day_screen(rows: list[dict[str, Any]], rate_for: Any,
                      "membership"),
             "rows": len(reached),
             "sessions": len({e["date"] for e in reached}),
+            "counterfactual_rows": sum(
+                1 for e in reached if not e["morning_ran_the_correction"]),
             "names": [f"{e['date']} {e['ticker']}" for e in reached],
         },
         "membership_undecidable": undecidable,
@@ -646,7 +657,8 @@ def _screen_line(label: str, screen: dict[str, Any]) -> str:
     return (f"    {label:<14} median pm_rvol {median}  "
             f"cleared the floor {cleared['rows']:>2} row(s) over "
             f"{cleared['sessions']} session(s), reached the watchlist "
-            f"{reached['rows']:>2} over {reached['sessions']}, "
+            f"{reached['rows']:>2} over {reached['sessions']} "
+            f"({reached['counterfactual_rows']} counterfactual), "
             f"{screen['rvol_unmeasurable']['rows']} unmeasurable, "
             f"{len(screen['membership_undecidable'])} undecidable")
 
