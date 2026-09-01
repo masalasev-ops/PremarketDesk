@@ -56,6 +56,7 @@ All times are US Eastern, which the machine is expected to keep locally.
 | 07:20 to 09:25 | collector | Websocket trades to one minute bars on disk, one file per day |
 | 07:25, every 30 min | monitor | The watchdog: checks each job fired and finished, reruns what is safe |
 | 08:45 | morning chain | scan, analyst, render, verify, deliver, archive, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
+| 12:00 | midday | The two questions the morning cannot answer, because at 08:45 the session had not opened: what every one of today's picks did against the levels the morning published, and what else moved that the morning never named. Then a second report, rendered straight from the packet. No model and no narrative pass, because midday asks closed questions: a pick triggered or it did not. 12:00 and not another hour because us-quote-delayed's regular hours behaviour is what was measured, and it never writes to picks or paper_trades, which are records of what an earlier pass claimed |
 | 22:15 | nightly | Ten steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the two artifacts that cannot be rebuilt, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each |
 | 22:45 | monitor-night | The watchdog once more, over the nightly |
 | Every 30 min, all day, every day | meter-sampler | One reading of the shared EODHD quota counter into `logs/meter-<quota day>.log`, 48 a day, weekends included. Not a pipeline step: an instrument. The job trail says which step spent what and cannot say when, and nothing at all runs between 22:45 and 07:00, which is exactly where a sibling project draining the shared key would hide |
@@ -78,6 +79,8 @@ flowchart LR
     T[true_volume.py<br>Alpaca SIP tape] --> B
     P[pool_recall.py<br>what the pool missed] -. reads .-> B
     B -. reads .-> WK[weekly_page.py<br>did the week work]
+    S -. picks .-> MD[scan_midday.py<br>12:00 carry through]
+    MD --> MR[render_midday.py<br>midday report, no model]
     J[(job-status.jsonl)]
     S -. records .-> J
     C -. records .-> J
@@ -104,11 +107,11 @@ everything else using the token and rolls at midnight UTC, so a day this market
 is closed is exactly a day a drain would otherwise go unrecorded.
 
 That table is the whole recurring schedule. One off measurement tasks are
-registered separately and on purpose, by `tasks/register_tasks.ps1 -Probe` and
-`-Capture` with a date, because they are meant to be deleted once the question
-they were armed for has an answer in `doc/DECISIONS.md`. A plain run of the
-register script never resurrects them. `tasks/README.md` says what each one
-measures.
+registered separately and on purpose, by `tasks/register_tasks.ps1 -Probe`,
+`-Capture` or `-SocketCost` with a date, because they are meant to be deleted
+once the question they were armed for has an answer in `doc/DECISIONS.md`. A
+plain run of the register script never resurrects them, and `-Unregister`
+removes all three. `tasks/README.md` says what each one measures.
 
 ## What you actually see, and how to read it
 
@@ -691,15 +694,17 @@ Other documents:
   across everything using your token and resets at midnight UTC.
 - **Claude:** one non agentic completion per market day (plus at most one
   retry), on the subscription. Measured at 48.4, 98.5, 178.9 and 226.1 seconds
-  of CLI time on the four scheduled mornings of 2026-08-17 to 2026-08-20, opus
-  at medium reasoning effort. Nothing has timed out. The rule behind the 537
-  second timeout in `doc/CRITERIA.md` has always been three times the slowest
-  run on record, and on 2026-08-20 what counts as a run on record moved from
-  the five dry runs of 2026-08-14 to the scheduled mornings that overtook them.
-  537 is three times the 178.9s that was the slowest when it was set, and 2.4
-  times the 226.1s since; the timeout note there says why it stays rather
-  than chasing each new high. If the CLI fails or times out, the morning
-  still ships:
+  of CLI time on the four scheduled mornings of 2026-08-17 to 2026-08-20, and
+  at 335.7 seconds on 2026-08-27, which is the slowest on record. Opus at
+  medium reasoning effort. Nothing has timed out. The rule behind the timeout
+  in `doc/CRITERIA.md` has always been three times the slowest run on record,
+  and the evidence under it has moved twice while the rule has not: from the
+  five dry runs of 2026-08-14 to the scheduled mornings that overtook them,
+  and again on 2026-08-29. It is 1007 seconds, three times 335.7. The
+  watchdog's `job_log_stale_after_s` is derived from it and moved with it, to
+  2200, because a healthy analyst step is the longest silence in the tree and
+  raising one without the other makes a working job read as a dead one. If the
+  CLI fails or times out, the morning still ships:
   `analyst.py` falls back to a plain table report built from the packet and
   says so in the report itself.
 

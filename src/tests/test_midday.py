@@ -352,6 +352,70 @@ def claim_an_unmeasured_name_is_named_not_counted(failures: list[str]) -> None:
           "symbols behind it")
 
 
+def claim_the_breakdown_names_every_name_it_counted(failures: list[str]) -> None:
+    """The rendered breakdown covers the whole quoted population.
+
+    The tally has ten buckets and the sentence named five of them. The one it
+    left out is refused, which counts the quotes read_quote declined for a
+    stale price, an absent lastTradeTime or a prior session with no close, and
+    it was also the only bucket with no example list. Both holes were invisible
+    on 2026-08-31 because that session refused nothing, so the five printed
+    numbers happened to add to the quoted count and the line reconciled by
+    luck.
+
+    On a session where the vendor serves stale prices, refused is the LARGEST
+    bucket in the tally. A reader would have been handed a population that does
+    not add up, with nothing in the report naming where the difference went,
+    which is the shape of every defect this pass was written to avoid.
+
+    Two directions, because a sentence that names the bucket and a tally that
+    reconciles are different properties: the second can hold while the first
+    fails, and it did.
+    """
+    quotes = {
+        "STALE.US": _quote(refused_reason="its last trade is 9,000 seconds old"),
+        "MOVER.US": _quote(open=100.0, high=130.0, low=99.0, last=130.0,
+                           volume=1_000_000, average_volume=100_000),
+    }
+    _rows, tally = scan_midday.rank_movers(quotes, set(), set(), set())
+    if tally["refused"] != 1:
+        failures.append(f"a refused quote did not land in the refused bucket, "
+                        f"which counted {tally['refused']}")
+    if "STALE.US" not in (tally.get("examples", {}).get("refused") or []):
+        failures.append("the refused bucket counted STALE.US and did not name "
+                        "it, so a session of stale prices cannot be chased to "
+                        "the symbols it lost")
+
+    text = "\n".join(render_midday.movers_section({
+        "movers": {"rows": [], "tally": tally, "list_size": 15,
+                   "rank_by": "move", "news_calls": 0,
+                   "selection_note": "selection is on price",
+                   "floors": {"min_move_pct": ">= 5", "min_day_rvol": ">= 3",
+                              "min_price": ">= 3"}}}))
+    if "1 carried a quote this pass refused" not in text:
+        failures.append("the rendered breakdown does not name the refused "
+                        "count, so a reader cannot reconcile it against the "
+                        "quoted population")
+    if "DO NOT ADD UP" in text:
+        failures.append("a tally that reconciles was reported as one that does "
+                        "not, so the guard fires on healthy sessions")
+
+    # And the guard itself, on a tally that really has lost a name.
+    broken = dict(tally, quoted=tally["quoted"] + 7)
+    if "DO NOT ADD UP" not in "\n".join(render_midday.movers_section({
+            "movers": {"rows": [], "tally": broken, "list_size": 15,
+                       "rank_by": "move", "news_calls": 0,
+                       "selection_note": "selection is on price",
+                       "floors": {"min_move_pct": ">= 5",
+                                  "min_day_rvol": ">= 3",
+                                  "min_price": ">= 3"}}})):
+        failures.append("seven names went missing from the tally and the "
+                        "breakdown printed as though it covered them")
+
+    print("  breakdown    every bucket is named and the counts reconcile "
+          "against the quoted population, refusals included")
+
+
 def claim_a_mover_says_how_far_the_morning_reached(failures: list[str]) -> None:
     """Three states, not two. Subscribed, pooled, and never seen.
 
@@ -569,6 +633,7 @@ CLAIMS = [
     claim_a_stale_quote_is_refused_with_its_age,
     claim_a_graded_row_says_which_levels_it_used,
     claim_an_unmeasured_name_is_named_not_counted,
+    claim_the_breakdown_names_every_name_it_counted,
     claim_a_mover_says_how_far_the_morning_reached,
     claim_a_mover_with_no_headline_stays_on_the_list,
     claim_a_headline_cannot_break_the_table_or_the_page,

@@ -87,6 +87,27 @@ STOP_WORDS = {
 }
 
 
+# What each unjudged bucket is called in prose. A bucket name is a packet key
+# and reads as one; these are the reader's words for it. Spelled out rather
+# than derived by stripping "no_" off the key, which produced "carried no
+# refused" the moment a bucket that is not a missing field joined the set.
+UNJUDGED_WORDS = {
+    "refused": "carried a quote this pass refused as stale, undated or "
+               "without a prior close",
+    "no_last_price": "carried no last price",
+    "no_previous_close": "carried no previous close",
+    "no_average_volume": "carried no average volume",
+    "no_volume": "carried no volume",
+}
+UNJUDGED_LABELS = {
+    "refused": "refused quote",
+    "no_last_price": "last price",
+    "no_previous_close": "previous close",
+    "no_average_volume": "average volume",
+    "no_volume": "volume",
+}
+
+
 def _pct(value: Any, places: int = 2) -> str:
     return f"{value:+.{places}f}%" if isinstance(value, (int, float)) else "n/a"
 
@@ -190,31 +211,51 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
                 out.append(f"- {_cell(row['news_reason'])}.")
             out.append("")
 
+    # EVERY BUCKET, so the line adds up to the quoted count. It used to name
+    # five of the ten and the refused one was not among them, which was
+    # invisible only because it read zero on the session this shipped against.
+    # A reader cannot tell a name that failed a floor from one nothing measured
+    # unless the counts reconcile, so the arithmetic is stated rather than left
+    # to be attempted.
+    counted = sum(tally.get(k, 0) for k in
+                  ("refused", "named_this_morning", "no_last_price",
+                   "no_previous_close", "no_average_volume", "no_volume",
+                   "below_price", "below_move", "below_rvol", "admitted"))
     out += ["### How this list was chosen", "",
             _cell(movers["selection_note"]) + ".", "",
             f"Of {tally['quoted']:,} universe names quoted: "
+            f"{tally.get('refused', 0):,} carried a quote this pass refused, "
             f"{tally['named_this_morning']:,} were already named this morning, "
             f"{tally['below_move']:,} moved less than the floor, "
             f"{tally['below_rvol']:,} cleared the move and not the volume, "
             f"{tally['below_price']:,} were under the price floor, and "
             f"{tally['admitted']:,} cleared everything.", ""]
+    if counted != tally["quoted"]:
+        out += [f"THE COUNTS ABOVE DO NOT ADD UP: they cover {counted:,} of "
+                f"{tally['quoted']:,} quoted names, so "
+                f"{tally['quoted'] - counted:,} went somewhere this report "
+                "cannot name. Read the tally in the packet rather than this "
+                "line.", ""]
 
     unpriced = {k: tally[k] for k in
-                ("no_last_price", "no_previous_close", "no_average_volume",
-                 "no_volume") if tally.get(k)}
+                ("refused", "no_last_price", "no_previous_close",
+                 "no_average_volume", "no_volume") if tally.get(k)}
     if unpriced:
-        parts = ", ".join(f"{count:,} carried no {name.replace('no_', '').replace('_', ' ')}"
+        parts = ", ".join(f"{count:,} {UNJUDGED_WORDS[name]}"
                           for name, count in unpriced.items())
+        # .get on examples, because a packet written before the refused bucket
+        # gained a sample list carries every other key and not that one, and a
+        # re-render of an archived session must not raise on it.
         examples = "; ".join(
-            f"{name.replace('no_', '').replace('_', ' ')}: "
-            f"{', '.join(tally['examples'][name][:6])}"
+            f"{UNJUDGED_LABELS[name]}: "
+            f"{', '.join(tally['examples'].get(name) or ['none recorded'])}"
             for name in unpriced)
-        out += [f"NOT JUDGED, because the vendor did not carry a field they "
-                f"needed: {parts}. These names did not fail a floor, they were "
-                f"never measured. Examples, {examples}.", ""]
+        out += [f"NOT JUDGED, because the pass could not price them: {parts}. "
+                f"These names did not fail a floor, they were never measured. "
+                f"Examples, {examples}.", ""]
     else:
-        out += ["Every quoted name carried the fields it needed, so nothing in "
-                "this population went unmeasured.", ""]
+        out += ["Every quoted name was priced and carried the fields it needed, "
+                "so nothing in this population went unmeasured.", ""]
     return out
 
 

@@ -15,6 +15,64 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31, third: three things that were counted and not said
+
+**What this was.** A read of the whole tree against what it claims, prompted by
+nothing breaking. The suite was green before it and is green after it. Three
+findings, and what they have in common is the shape rather than the subject:
+each one was a fact the system already held and did not put in front of a
+reader.
+
+**One. `-Unregister` left `probe-socket-cost` armed.** The three one off probes
+are deliberately kept out of `$jobs`, which is what stops a plain run of
+`register_tasks.ps1` resurrecting a probe meant to be deleted. It costs each
+probe its name written out twice, once in its own block and once in the
+`-Unregister` tail, and `probe-socket-cost` was added on 2026-08-31 with only
+the first. A full removal would have taken away the ten recurring tasks and the
+two older probes and left it registered, in a folder the script had just
+reported as emptied. The script's own comment on that tail says why that is
+worse than removing nothing.
+
+Fixed, and the second copy of the name is no longer what holds it:
+`claim_unregister_removes_every_probe_register_can_create` reads both verbs off
+the file and fails on any task name the script can create and cannot remove, so
+a fourth probe is covered the moment it is written.
+
+**Two. The midday movers breakdown named five of its ten buckets.** The one it
+left out is `refused`, which counts the quotes `read_quote` declined for a
+stale price, an absent `lastTradeTime` or a prior session carrying no close.
+It was also the only bucket in the tally with no example list, so a refused
+name could not be chased to a symbol.
+
+Both holes were invisible on 2026-08-31 because that session refused nothing:
+the five printed numbers added to 2,751 and the line reconciled by luck. On a
+session where the vendor serves stale prices `refused` is the LARGEST bucket
+here, and a reader would have been handed a population that does not add up
+with nothing naming where the difference went. That is the defect this pass was
+written to avoid, reached through the one bucket that was not a missing field.
+
+The breakdown now names every bucket, `refused` carries examples like the four
+beside it, and the renderer states the arithmetic rather than leaving it to be
+attempted: a tally that does not cover the quoted count says so in the report
+and sends the reader to the packet. `claim_the_breakdown_names_every_name_it_counted`
+holds all three directions, including that the guard stays quiet on a healthy
+session.
+
+**Three. README drift, on three facts a reader uses to check the rest.** The
+schedule table omitted the 12:00 midday job while the sentence under it said
+"that table is the whole recurring schedule", and the flowchart omitted it too.
+The one off probes were given as `-Probe` and `-Capture`, two of three. And the
+analyst timeout was still reported as 537 seconds with the derivation that
+produced it, when CRITERIA has read 1007 since 2026-08-29 and the slowest
+morning on record is the 335.7 seconds of 2026-08-27, not the 226.1 the file
+named. All three corrected, and the timeout paragraph now also carries
+`job_log_stale_after_s`, because that number is derived from the timeout and
+moving one without the other makes a healthy analyst step read as a dead job.
+
+**What none of this touches.** No published number changes. The midday packet
+already carried the refused count; what changed is that the report prints it.
+`data/UNVERIFIED` is still in place and delivery is still gated.
+
 ## 2026-08-31, second: a midday pass, and the field it must never divide by
 
 **What changed.** A tenth scheduled task at 12:00, two new modules under

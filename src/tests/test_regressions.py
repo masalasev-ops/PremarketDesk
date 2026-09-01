@@ -9851,6 +9851,66 @@ def claim_the_floor_sweep_fits_edges_the_way_the_study_does(
           f"{high['rvol_target']['two_points']})")
 
 
+def claim_unregister_removes_every_probe_register_can_create(
+        failures: list[str]) -> None:
+    """-Unregister removes every one off task the script can register.
+
+    The one off probes are deliberately kept out of $jobs, so the loop that
+    registers and unregisters the recurring schedule never touches them. That
+    buys the property the script exists for, which is that a plain run cannot
+    resurrect a probe meant to be deleted, and it costs one: each probe needs
+    its name written out TWICE, once in its own -Probe, -Capture or -SocketCost
+    block and once in the -Unregister tail.
+
+    probe-socket-cost was added on 2026-08-31 with only the first. A full
+    -Unregister run then removed the ten recurring tasks and the two older
+    probes and left it behind, registered and armed, in a folder the script had
+    just reported as emptied. The script's own comment on that tail says why
+    that is worse than not removing anything: the GUI listing people actually
+    read looks empty, so nobody goes back.
+
+    Read off the file rather than from a list here, so a fourth probe added
+    tomorrow is covered by this the moment it is written.
+    """
+    import re
+
+    path = config.PROJECT_ROOT / "tasks" / "register_tasks.ps1"
+    if not path.is_file():
+        failures.append("tasks/register_tasks.ps1 is gone, and it is the only "
+                        "supported way any scheduled task in this project is "
+                        "created or removed")
+        return
+    text = path.read_text(encoding="utf-8")
+
+    # Every PowerShell variable the file hands to -TaskName, which is every
+    # task name the script can act on under either verb.
+    registered = set(re.findall(
+        r"Register-ScheduledTask\s+-TaskName\s+(\$\w+)", text))
+    unregistered = set(re.findall(
+        r"Unregister-ScheduledTask\s+-TaskName\s+(\$\w+)", text))
+
+    if not registered:
+        failures.append("register_tasks.ps1 registers no task by a named "
+                        "variable, so this claim is reading the wrong file or "
+                        "the wrong syntax and is guarding nothing")
+        return
+
+    # $job.Name is the recurring loop, which unregisters itself in the same
+    # loop. Everything else is a one off and needs its own line in the tail.
+    orphans = sorted(name for name in registered - unregistered
+                     if not name.startswith("$job"))
+    if orphans:
+        failures.append(
+            "register_tasks.ps1 can register " + ", ".join(orphans) +
+            " and -Unregister never removes " +
+            ("them" if len(orphans) > 1 else "it") +
+            ", so a full removal leaves a task armed in a folder the script "
+            "has just reported as emptied")
+
+    print(f"  unregister   every one of the {len(registered)} task names the "
+          f"script registers is also removed by -Unregister")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -10798,6 +10858,7 @@ def main() -> int:
     claim_the_two_unrebuildable_artifacts_are_held_twice(failures)
     claim_both_volume_ratios_divide_the_same_tape(failures)
     claim_a_watchlist_from_another_session_never_reaches_the_socket(failures)
+    claim_unregister_removes_every_probe_register_can_create(failures)
 
     if failures:
         for failure in failures:

@@ -405,6 +405,16 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
     because 358 names in an unpriced bucket on 2026-08-31 could not be chased
     to a cause from the packet alone, which is the silence this project keeps
     losing measurements to.
+
+    THE REFUSED BUCKET IS ONE OF THEM and was not treated as one until
+    2026-08-31. It counts the quotes read_quote declined, for a stale price, an
+    absent lastTradeTime or a prior session that carried no close, and it was
+    the only bucket here with no example list and the only one the rendered
+    report never printed. It read zero on the one session that existed when
+    this shipped, so the breakdown reconciled and the hole was invisible. On a
+    session where the vendor serves stale prices it is the largest bucket in
+    the tally, and a reader would have seen a population that does not add up
+    with nothing saying where the difference went.
     """
     move_rule = _CRIT.rule("midday", "min_move_pct")
     rvol_rule = _CRIT.rule("midday", "min_day_rvol")
@@ -415,12 +425,20 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
         "no_last_price": 0, "no_previous_close": 0, "no_average_volume": 0,
         "no_volume": 0, "below_price": 0, "below_move": 0, "below_rvol": 0,
         "admitted": 0,
-        "examples": {"no_last_price": [], "no_previous_close": [],
+        "examples": {"refused": [], "no_last_price": [], "no_previous_close": [],
                      "no_average_volume": [], "no_volume": []},
         "unpriced_note": (
             "each of the four unpriced counts names the FIELD the vendor did "
             f"not carry, and the first {UNPRICED_EXAMPLES} symbols in each are "
             "listed. A name here was not judged and did not fail a floor"),
+        "refused_note": (
+            "refused counts the quotes read_quote declined outright: a price "
+            "older than [Midday] max_quote_age_seconds, a quote carrying no "
+            "lastTradeTime so its age is unknown rather than large, or a prior "
+            "session that carried no close to divide by. Like the four above it "
+            "is a name that was NOT judged, and it is named here for the same "
+            "reason: on a session where the vendor serves stale prices it is "
+            "the largest bucket in this tally"),
     }
 
     def lose(bucket: str, symbol: str) -> None:
@@ -431,7 +449,7 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
     rows: list[dict[str, Any]] = []
     for symbol, q in quotes.items():
         if q["refused_reason"]:
-            tally["refused"] += 1
+            lose("refused", symbol)
             continue
         if symbol in named_this_morning:
             tally["named_this_morning"] += 1

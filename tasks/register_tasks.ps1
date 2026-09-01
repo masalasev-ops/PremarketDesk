@@ -341,9 +341,12 @@ foreach ($job in $jobs) {
 }
 
 if ($Unregister) {
-    # The probe is not in $jobs, so the loop above cannot have reached it. A
-    # removal that leaves one task behind is worse than no removal, because
-    # the folder then looks empty in the GUI listing people actually read.
+    # None of the one off probes is in $jobs, so the loop above cannot have
+    # reached any of them. A removal that leaves one task behind is worse than
+    # no removal, because the folder then looks empty in the GUI listing people
+    # actually read. Every -Probe, -Capture or -SocketCost block above adds a
+    # name here as well, and probe-socket-cost was added on 2026-08-31 without
+    # one, which left it registered through a full -Unregister run.
     try {
         Unregister-ScheduledTask -TaskName $probeName -TaskPath "\PremarketDesk\" `
             -Confirm:$false -ErrorAction Stop
@@ -357,6 +360,13 @@ if ($Unregister) {
         Write-Output "removed   PremarketDesk\$captureName"
     } catch {
         Write-Output "not found PremarketDesk\$captureName"
+    }
+    try {
+        Unregister-ScheduledTask -TaskName $socketCostName -TaskPath "\PremarketDesk\" `
+            -Confirm:$false -ErrorAction Stop
+        Write-Output "removed   PremarketDesk\$socketCostName"
+    } catch {
+        Write-Output "not found PremarketDesk\$socketCostName"
     }
 }
 
