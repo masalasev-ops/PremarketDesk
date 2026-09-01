@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty one claims, a count read off
+and the two pages. It now carries one hundred and thirty two claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -10534,6 +10534,110 @@ _DOC_PAYLOAD_EXEMPT = {
 }
 
 
+def claim_the_socket_probe_cannot_write_the_session_capture(
+        failures: list[str]) -> None:
+    """A live socket instrument must not be able to reach the morning's file.
+
+    On 2026-09-01 research/measure_socket_cost.py launched collect_premarket,
+    which writes wherever config.PREMARKET_DIR points, and put 932 regular
+    hours bars into that morning's premarket capture. Every symbol's latest
+    price then read 10:07, the vintage guard refused a packet built from it,
+    and the file had to be arbitrated back to its pre run state. CRITERIA calls
+    that file not reproducible at any price.
+
+    Deleting the scheduled task removed the schedule and NOT the hazard: the
+    module stays, because measure_bulk_cost imports read_counter from it and a
+    shipped measurement should stay reproducible, and a hand run reproduced the
+    incident exactly.
+
+    So the condition is on the module and not on the task. Three properties:
+
+      it REFUSES with no --out-dir, rather than defaulting to a directory it
+      chose, because a default is a decision the next reader cannot see;
+
+      it refuses an --out-dir inside PREMARKET_DIR, the directory being the
+      one place it must not write, and equally for the directory itself and
+      for anything under it;
+
+      and when it does run, the path REACHES the collector, because a guard
+      that only prints a warning while the child writes where it always did
+      would read as fixed and not be.
+    """
+    import pathlib as _pathlib
+    import subprocess as _subprocess
+
+    from research import measure_socket_cost as probe
+
+    capture = config.PREMARKET_DIR.resolve()
+
+    # 1 and 2. Every refusal, before any network call. A non 2 exit here would
+    # mean the guard let the run start.
+    for label, argv in (
+            ("no --out-dir at all", []),
+            ("--out-dir at the capture itself", ["--out-dir", str(capture)]),
+            ("--out-dir under the capture", ["--out-dir", str(capture / "probe")]),
+    ):
+        code = probe.main(argv)
+        if code != 2:
+            failures.append(
+                f"measure_socket_cost with {label} returned {code}, not 2, so "
+                "the guard let a live socket run start against the session "
+                "capture. That is the 2026-09-01 incident with the task gone")
+
+    # 3. The accepted path has to reach the child, or the guard is decorative.
+    seen: dict[str, object] = {}
+
+    def fake_run(command, **kwargs):
+        seen["command"] = list(command)
+
+        class _Done:
+            returncode = 0
+        return _Done()
+
+    real_run = _subprocess.run
+    real_counter = probe.read_counter
+    real_session = probe.eodhd.build_session
+    _subprocess.run = fake_run
+    probe.read_counter = lambda session: (0, 100000)
+    probe.eodhd.build_session = lambda: None
+    try:
+        out = config.PROJECT_ROOT / "data" / "socket-cost-probe"
+        probe.main(["--out-dir", str(out), "--minutes", "0.01"])
+    except Exception as exc:  # noqa: BLE001
+        failures.append(f"measure_socket_cost raised on an accepted --out-dir: "
+                        f"{type(exc).__name__}: {exc}")
+    finally:
+        _subprocess.run = real_run
+        probe.read_counter = real_counter
+        probe.eodhd.build_session = real_session
+
+    command = seen.get("command")
+    if not command:
+        failures.append("measure_socket_cost never launched the collector on an "
+                        "accepted --out-dir, so this claim cannot see where it "
+                        "would have written")
+    else:
+        text = [str(part) for part in command]
+        if "--premarket-dir" not in text:
+            failures.append(
+                "the collector was launched without --premarket-dir, so it "
+                "writes to config.PREMARKET_DIR and the guard above only "
+                "printed a refusal it then did not enforce")
+        else:
+            given = text[text.index("--premarket-dir") + 1]
+            if _pathlib.Path(given).resolve() != out.resolve():
+                failures.append(
+                    f"the collector was pointed at {given!r} and not at the "
+                    f"--out-dir it was given, {out}")
+            if _pathlib.Path(given).resolve() == capture or capture in _pathlib.Path(given).resolve().parents:
+                failures.append(
+                    f"the collector was pointed inside the session capture at "
+                    f"{given!r} despite the guard accepting the run")
+
+    print("  probe guard  three refusals before any network call, and an "
+          "accepted run points the collector at the directory it was given")
+
+
 def claim_a_held_backup_yields_only_to_a_recorded_verdict(
         failures: list[str]) -> None:
     """Write once protects a good backup and a bad one just as firmly.
@@ -12063,6 +12167,7 @@ def main() -> int:
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
     claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(failures)
+    claim_the_socket_probe_cannot_write_the_session_capture(failures)
     claim_a_held_backup_yields_only_to_a_recorded_verdict(failures)
     claim_doc_carries_findings_and_not_payloads(failures)
     claim_the_midday_pass_never_touches_the_morning(failures)

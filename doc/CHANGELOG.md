@@ -15,6 +15,104 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, eleventh: monitor-midday registered by hand, and the blind spot it came from closed
+
+### 1. The task, created singly
+
+`register_tasks.ps1` was NOT re-run. It rewrites every trigger, and today is a
+trading day with a 12:00 job already scheduled. `monitor-midday` was created on
+its own, built from the same calls the `$jobs` loop makes rather than retyped:
+
+    New-ScheduledTaskAction -Execute job_monitor.bat -WorkingDirectory <root>
+    New-ScheduledTaskTrigger -Weekly -DaysOfWeek <weekdays> -At 12:25
+    repetition borrowed from a -Once trigger, 30 minutes for 1 hour
+    New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit 4h
+
+**Verified by querying it back, not by trusting the exit code.** Against the
+live `monitor`, which runs the same .bat from the same `$jobs` loop, twelve
+fields were compared and ten are identical: Execute, Arguments, WorkingDirectory,
+DaysOfWeek 62, repeat interval PT30M, StartWhenAvailable, WakeToRun,
+DisallowStartIfOnBatteries, StopIfGoingOnBatteries and ExecutionTimeLimit PT4H.
+The two that differ are the two `$jobs` says differ: StartBoundary at 12:25
+against 07:25, and repeat duration PT1H against PT2H, from `Start = "12:25"` and
+`RepeatHours = 1`.
+
+**One correction to the instruction.** `-WakeToRun` was asked for and is NOT
+set, because the `$jobs` loop does not set it. That flag appears only in the one
+off probe blocks. Matching the array means WakeToRun false, which is what every
+other recurring task carries, and setting it here would have created the
+divergence a later full re-registration is meant not to find.
+
+**Nothing else moved.** Every trigger was snapshotted before and after: eleven
+tasks now, exactly one line added, none removed, no other StartBoundary changed.
+
+`register_tasks.ps1` should still be run in full at the next window after the
+close, or at a weekend. This entry is a repair, not a substitute for it.
+
+### 2. The class it belongs to, closed
+
+Every guard in this project reads the tree. **Task Scheduler is state outside
+the tree**, and this was the second gap to live there. The first was
+`-WakeToRun`, set in the script and absent from the live tasks. The second was
+`monitor-midday`, in `$jobs` since 2026-08-31 and never registered, so the three
+pass midday window existed in `monitor_jobs.py`, in CRITERIA, in both
+architecture pages and in a claim, and never fired once. Both were found by
+hand, by someone happening to count.
+
+`ops/monitor_jobs.reconcile_schedule` now reads the `$jobs` array out of the
+script and queries `schtasks` for the folder, and reports four things: a name in
+`$jobs` and not on the machine, a name on the machine and not in `$jobs`, a
+start or repetition that disagrees, and a row whose repetition it could not
+parse. It runs in `check_all`, which already fires several times a day and
+already reports problems.
+
+**It degrades honestly.** If either side cannot be read the result is
+`checked=False` with the reason and the pass prints NOT CHECKED, which counts as
+a problem. It never reports agreement it did not establish, and the failure
+result carries no comparison keys at all, so there is nothing an empty answer
+could be mistaken for. That was checked by making the query fail rather than by
+reading the code.
+
+**It is a monitor check and not a claim, and the code says so where it is
+written.** No test can see the scheduler: the suite runs in a sandbox with none
+in it. A claim that passes because it cannot see the machine is worse than no
+claim.
+
+Exercised in all four states before shipping: a dropped task reported MISSING, an
+unknown task reported UNKNOWN, a bent start time reported DIFFERS with both
+values, and a failed query reported NOT CHECKED. Against the real machine it
+reports eleven matching eleven.
+
+### 3. The probe cannot reach the session capture
+
+`research/measure_socket_cost.py` still writes through `collect_premarket`, and
+with the scheduled task gone a hand run was the only path left to the hazard,
+which is exactly the path a header warning does not block.
+
+It now refuses unless given `--out-dir`, and refuses again if that path is the
+session capture or inside it. Both refusals name the directory they would not
+write to and both happen before the counter is read, so a refusal costs nothing.
+Refused rather than defaulted: a default output path is a decision the next
+reader cannot see, and being made to name it is the point.
+
+The redirect is real rather than advisory. `collect_premarket` gained
+`--premarket-dir`, which rebinds `config.PREMARKET_DIR` after parse_args, and
+that moves the capture, the stats sidecar and the subscription list together
+because all three path helpers read the attribute at call time. Threading a
+parameter through each would have been three chances to miss one.
+
+The script is NOT deleted: `measure_bulk_cost` imports `read_counter` from it,
+verified importing cleanly after the change, and README names it as what
+reproduces the shipped measurement. The header warning stays and now explains
+the refusal rather than standing in for one.
+
+`claim_the_socket_probe_cannot_write_the_session_capture` drives all three
+refusals and then asserts the accepted run actually points the collector at the
+directory it was given, because a guard that refuses loudly while the child
+writes where it always did would read as fixed and not be.
+
+Suite green, 132 claims, 1,675 paths, no drift.
+
 ## 2026-09-01, tenth: the socket cost probe is deleted, and the midday watchdog was never registered
 
 **The probe is gone, on its own instruction.** `tasks/job_probe_socket_cost.bat`

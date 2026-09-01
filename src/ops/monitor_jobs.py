@@ -681,6 +681,175 @@ def _collector_has_subscribed(day: str) -> bool:
     return collect_premarket.subscriptions_path(day).is_file()
 
 
+# ------------------------------------------------- schedule reconciliation
+
+# THIS IS A MONITOR CHECK AND IT CANNOT BE A CLAIM. Every guard in this
+# project reads the tree. Task Scheduler is state OUTSIDE the tree, and the
+# suite runs in a sandbox with no scheduler in it at all, so no test can see
+# what is registered. Do not move this into test_regressions: a claim that
+# passes because it cannot see the machine is worse than no claim.
+#
+# It exists because this is the SECOND gap that has lived in that blind spot.
+# The first was -WakeToRun, set in the script and absent from the live tasks.
+# The second was monitor-midday, in the $jobs array since 2026-08-31 and never
+# registered, so the three pass midday window existed in ops/monitor_jobs.py,
+# in CRITERIA [Monitor], in both architecture pages and in a claim, and never
+# fired once. Both were found by hand, months apart, by someone happening to
+# count.
+#
+# The script is the specification and the machine is the fact. Disagreement in
+# EITHER direction is a finding: a name the script knows and the machine lacks
+# never runs, and a name the machine carries and the script does not is a task
+# a full re-registration will not maintain and -Unregister may not remove.
+
+REGISTER_SCRIPT = config.PROJECT_ROOT / "tasks" / "register_tasks.ps1"
+
+# One $jobs entry. Start is required; the repetition pair is optional and is
+# absent for the tasks that fire once.
+_JOBS_ENTRY = re.compile(
+    r'@\{\s*Name\s*=\s*"(?P<name>[^"]+)"(?P<rest>[^}]*)\}')
+_FIELD_START = re.compile(r'Start\s*=\s*"(?P<value>\d{1,2}:\d{2})"')
+_FIELD_REPEAT_MIN = re.compile(r'RepeatMin\s*=\s*(?P<value>\d+)')
+_FIELD_REPEAT_HOURS = re.compile(r'RepeatHours\s*=\s*(?P<value>\d+)')
+
+# schtasks renders a duration as "0 Hour(s), 30 Minute(s)", or the string
+# Disabled when there is none. Locale dependent, which is why a parse failure
+# reports NOT CHECKED rather than a disagreement.
+_DURATION = re.compile(r"(?P<hours>\d+)\s*Hour\(s\),\s*(?P<minutes>\d+)\s*Minute\(s\)")
+
+
+def _duration_minutes(text: str | None) -> int | None:
+    """Minutes, 0 for Disabled, or None when the string is not understood."""
+    if text is None:
+        return None
+    cleaned = text.strip()
+    if not cleaned or cleaned.lower() == "disabled":
+        return 0
+    found = _DURATION.search(cleaned)
+    if not found:
+        return None
+    return int(found.group("hours")) * 60 + int(found.group("minutes"))
+
+
+def _clock_minutes(text: str | None) -> int | None:
+    """Minutes past midnight from schtasks' "12:25:00 PM", or None."""
+    if not text:
+        return None
+    for form in ("%I:%M:%S %p", "%H:%M:%S", "%I:%M %p", "%H:%M"):
+        try:
+            parsed = dt.datetime.strptime(text.strip(), form)
+        except ValueError:
+            continue
+        return parsed.hour * 60 + parsed.minute
+    return None
+
+
+def script_jobs() -> tuple[dict[str, dict[str, Any]], str | None]:
+    """The $jobs array as the script declares it, or a reason it is unknown."""
+    if not REGISTER_SCRIPT.is_file():
+        return {}, f"{REGISTER_SCRIPT} is not on disk"
+    try:
+        text = REGISTER_SCRIPT.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {}, f"{REGISTER_SCRIPT} could not be read: {exc}"
+    out: dict[str, dict[str, Any]] = {}
+    for entry in _JOBS_ENTRY.finditer(text):
+        rest = entry.group("rest")
+        start = _FIELD_START.search(rest)
+        if not start:
+            # A one off probe block, not a $jobs entry. Those are deliberately
+            # outside the array so a plain run cannot resurrect them.
+            continue
+        hour, _, minute = start.group("value").partition(":")
+        repeat_min = _FIELD_REPEAT_MIN.search(rest)
+        repeat_hours = _FIELD_REPEAT_HOURS.search(rest)
+        out[entry.group("name")] = {
+            "start_minute": int(hour) * 60 + int(minute),
+            "start_text": start.group("value"),
+            "repeat_every_minutes": int(repeat_min.group("value")) if repeat_min else 0,
+            "repeat_for_minutes": int(repeat_hours.group("value")) * 60 if repeat_hours else 0,
+        }
+    if not out:
+        return {}, (f"no $jobs entries parsed out of {REGISTER_SCRIPT.name}, so "
+                    "the specification could not be read")
+    return out, None
+
+
+def registered_tasks() -> tuple[dict[str, dict[str, Any]], str | None]:
+    """Every task under the folder, from schtasks, or a reason it is unknown."""
+    try:
+        proc = subprocess.run(
+            ["schtasks", "/Query", "/TN", TASK_FOLDER, "/FO", "CSV", "/V"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=60)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return {}, f"schtasks did not answer: {type(exc).__name__}: {exc}"
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        return {}, (f"schtasks exited {proc.returncode}"
+                    + (f": {detail[0]}" if detail else ""))
+    try:
+        rows = list(csv.DictReader(io.StringIO(proc.stdout)))
+    except csv.Error as exc:
+        return {}, f"schtasks output did not parse as CSV: {exc}"
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        name = (row.get("TaskName") or "").strip()
+        if not name.startswith(TASK_FOLDER):
+            continue
+        out[name[len(TASK_FOLDER):]] = {
+            "start_minute": _clock_minutes(row.get("Start Time")),
+            "start_text": (row.get("Start Time") or "").strip(),
+            "repeat_every_minutes": _duration_minutes(row.get("Repeat: Every")),
+            "repeat_for_minutes": _duration_minutes(row.get("Repeat: Until: Duration")),
+        }
+    if not out:
+        return {}, (f"schtasks returned no task under {TASK_FOLDER}, which is "
+                    "either an empty folder or a query this could not read. "
+                    "Those are different and this cannot tell them apart")
+    return out, None
+
+
+def reconcile_schedule() -> dict[str, Any]:
+    """What the script says against what the machine has.
+
+    NEVER reports agreement it did not establish. If either side could not be
+    read the result is checked=False with the reason, and the caller prints NOT
+    CHECKED. An empty result reading as "no differences" is the exact failure
+    this project keeps finding.
+    """
+    spec, spec_error = script_jobs()
+    if spec_error:
+        return {"checked": False, "reason": spec_error}
+    live, live_error = registered_tasks()
+    if live_error:
+        return {"checked": False, "reason": live_error}
+
+    missing = sorted(set(spec) - set(live))
+    extra = sorted(set(live) - set(spec))
+    differs: list[str] = []
+    unreadable: list[str] = []
+    for name in sorted(set(spec) & set(live)):
+        want, got = spec[name], live[name]
+        fields = ("start_minute", "repeat_every_minutes", "repeat_for_minutes")
+        if any(got[field] is None for field in fields):
+            unreadable.append(
+                f"{name}: schtasks gave a start of {got['start_text']!r} and a "
+                "repetition this could not parse, so it is NOT being reported "
+                "as agreeing")
+            continue
+        for field, label in (("start_minute", "start"),
+                             ("repeat_every_minutes", "repeat every"),
+                             ("repeat_for_minutes", "repeat for")):
+            if want[field] != got[field]:
+                differs.append(
+                    f"{name}: {label} is {got[field]} minute(s) on the machine "
+                    f"and {want[field]} in $jobs")
+    return {"checked": True, "reason": None, "missing": missing,
+            "extra": extra, "differs": differs, "unreadable": unreadable,
+            "spec_count": len(spec), "live_count": len(live)}
+
+
 def check_all(now: dt.datetime, dry_run: bool) -> int:
     day = now.date().isoformat()
     now_m = now.hour * 60 + now.minute
@@ -1187,6 +1356,42 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                f"the oldest {backlog['oldest_days']:.0f} day(s) old, inside the "
                f"{backlog_after} day judging window: "
                f"{quantifier_flags.RUN_PREFIX} --pending")
+
+    # The script against the machine. See the note above reconcile_schedule
+    # for why this is here and not in the suite.
+    schedule = reconcile_schedule()
+    if not schedule["checked"]:
+        report("schedule", "NOT CHECKED", schedule["reason"] +
+               ". No agreement is being claimed either way")
+        problems += 1
+    else:
+        trouble = (schedule["missing"] + schedule["extra"]
+                   + schedule["differs"] + schedule["unreadable"])
+        if not trouble:
+            report("schedule", "OK",
+                   f"{schedule['live_count']} registered task(s) match the "
+                   f"{schedule['spec_count']} in register_tasks.ps1 $jobs on "
+                   "name, start and repetition")
+        else:
+            for name in schedule["missing"]:
+                report("schedule", "MISSING",
+                       f"{name} is in $jobs and NOT registered, so it never "
+                       "fires. monitor-midday sat like this from 2026-08-31 "
+                       "to 2026-09-01")
+                problems += 1
+            for name in schedule["extra"]:
+                report("schedule", "UNKNOWN",
+                       f"{name} is registered and NOT in $jobs, so a full "
+                       "re-registration will not maintain it. A one off "
+                       "probe armed on purpose looks like this and is still "
+                       "worth naming")
+                problems += 1
+            for line in schedule["differs"]:
+                report("schedule", "DIFFERS", line)
+                problems += 1
+            for line in schedule["unreadable"]:
+                report("schedule", "NOT CHECKED", line)
+                problems += 1
 
     print(f"monitor: {problems} problem(s), {actions} action(s) taken, "
           f"{len(JOBS)} job(s) checked")

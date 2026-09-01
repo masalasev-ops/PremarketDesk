@@ -48,6 +48,7 @@ import json
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 from core import config
@@ -77,7 +78,39 @@ def main(argv: list[str] | None = None) -> int:
                         help="Collector run length. The measured fact used 20.")
     parser.add_argument("--chaos-reconnects", type=int, default=0, metavar="N",
                         help="Force N socket drops during the run.")
+    parser.add_argument("--out-dir", default=None, metavar="PATH",
+                        help="REQUIRED. Where the collector writes its bars. "
+                             "Must be outside data/premarket.")
     args = parser.parse_args(argv)
+
+    # THE ONE CONDITION, and it is checked before the counter is read so a
+    # refusal costs nothing. This script runs a real socket for twenty
+    # minutes and the collector it launches writes wherever
+    # config.PREMARKET_DIR points. On 2026-09-01 that was the session
+    # capture, and 932 regular hours bars went into a file CRITERIA calls
+    # not reproducible at any price. Deleting the scheduled task removed the
+    # schedule and not the hazard: a hand run reproduced it exactly.
+    #
+    # Refused rather than defaulted. A default output path would be a
+    # sensible directory this script chose, and the next reader would not
+    # know a choice had been made. Being made to name it is the point.
+    if not args.out_dir:
+        print("measure: REFUSED. --out-dir is required and must be outside "
+              f"{config.PREMARKET_DIR}.")
+        print("  This runs a live socket for minutes at a time and the "
+              "collector writes wherever it is pointed. Pointed at the "
+              "session capture it mixes an instrument's bars into a "
+              "morning's evidence, which happened on 2026-09-01 and had to "
+              "be arbitrated back out.")
+        print("  Try: --out-dir data/socket-cost-probe")
+        return 2
+    out_dir = Path(args.out_dir).expanduser().resolve()
+    capture = config.PREMARKET_DIR.resolve()
+    if out_dir == capture or capture in out_dir.parents:
+        print(f"measure: REFUSED. --out-dir {out_dir} is inside the session "
+              f"capture at {capture}, which is the one place this must not "
+              "write.")
+        return 2
 
     session = eodhd.build_session()
     before, limit = read_counter(session)
@@ -89,6 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     command = [
         sys.executable, str(config.SRC_DIR / "collect" / "collect_premarket.py"),
         "--minutes", str(args.minutes),
+        "--premarket-dir", str(out_dir),
     ]
     if args.chaos_reconnects:
         command += ["--chaos-reconnects", str(args.chaos_reconnects)]

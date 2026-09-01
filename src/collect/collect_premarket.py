@@ -1458,6 +1458,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Collect the premarket price path.")
     parser.add_argument("--poll", action="store_true",
                         help="Fall back to Live v1 polling for a day the socket is down.")
+    # FOR INSTRUMENTS, and there is exactly one. A research run that wants a
+    # live socket must not land in the session capture: on 2026-09-01
+    # measure_socket_cost put 932 regular hours bars into that morning's
+    # premarket file, every symbol's latest price then read 10:07, and the
+    # vintage guard refused a packet built from it. Absent, nothing changes
+    # and the scheduled collector writes where it always has.
+    parser.add_argument("--premarket-dir", default=None, metavar="PATH",
+                        help="Write the capture, its stats and its "
+                             "subscription list here instead of "
+                             "data/premarket. For instruments only.")
     parser.add_argument("--minutes", type=float, default=None,
                         help="Run for this many minutes instead of until the CRITERIA.md stop time.")
     parser.add_argument("--chaos-reconnects", type=int, default=0, metavar="N",
@@ -1485,6 +1495,17 @@ def main(argv: list[str] | None = None) -> int:
                              "inside the collector window. See CRITERIA [Monitor], "
                              "the stale watchlist note. Not for hand runs.")
     args = parser.parse_args(argv)
+
+    # REBOUND, not passed down. bar_path, stats_path and subscriptions_path
+    # all read config.PREMARKET_DIR at call time, so moving the attribute
+    # moves all three together and cannot leave one of them behind in the
+    # real directory. Threading a parameter through each would be three
+    # chances to miss one.
+    if args.premarket_dir:
+        config.PREMARKET_DIR = Path(args.premarket_dir).expanduser().resolve()
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        print(f"collector: writing to {config.PREMARKET_DIR} rather than the "
+              "session capture, because --premarket-dir was given")
 
     if args.snapshot:
         day = ettime.today_str() if args.snapshot == "today" else args.snapshot
