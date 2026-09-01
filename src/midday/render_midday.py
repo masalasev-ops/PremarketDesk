@@ -98,6 +98,8 @@ UNJUDGED_WORDS = {
     "no_previous_close": "carried no previous close",
     "no_average_volume": "carried no average volume",
     "no_volume": "carried no volume",
+    "zero_average_volume": "carry an average volume the vendor reports as "
+                           "zero, so there is nothing to divide by",
 }
 UNJUDGED_LABELS = {
     "refused": "refused quote",
@@ -105,6 +107,7 @@ UNJUDGED_LABELS = {
     "no_previous_close": "previous close",
     "no_average_volume": "average volume",
     "no_volume": "volume",
+    "zero_average_volume": "zero average volume",
 }
 
 
@@ -233,9 +236,8 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
             f"{tally['below_move']:,} moved less than the floor, "
             f"{tally['below_rvol']:,} cleared the move and not the volume, "
             f"{tally['below_price']:,} were under the price floor, "
-            f"{tally.get('zero_average_volume', 0):,} have an average volume "
-            "the vendor reports as zero, so there is nothing to divide by, "
-            f"and {tally['admitted']:,} cleared everything.", ""]
+            f"and {tally['admitted']:,} cleared everything. The rest were not "
+            "judged and are named below.", ""]
     if counted != tally["quoted"]:
         out += [f"THE COUNTS ABOVE DO NOT ADD UP: they cover {counted:,} of "
                 f"{tally['quoted']:,} quoted names, so "
@@ -243,9 +245,15 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
                 "cannot name. Read the tally in the packet rather than this "
                 "line.", ""]
 
+    # zero_average_volume belongs here too. Leaving it out made it the one
+    # unjudged bucket printed as a bare count with no symbols, in the section
+    # built to make a count chaseable, and it let the all clear sentence below
+    # fire while it was non zero: "nothing in this population went unmeasured"
+    # two lines under a count of names that were dropped before the floors.
     unpriced = {k: tally[k] for k in
                 ("refused", "no_last_price", "no_previous_close",
-                 "no_average_volume", "no_volume") if tally.get(k)}
+                 "no_average_volume", "no_volume", "zero_average_volume")
+                if tally.get(k)}
     if unpriced:
         parts = ", ".join(f"{count:,} {UNJUDGED_WORDS[name]}"
                           for name, count in unpriced.items())

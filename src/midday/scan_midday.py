@@ -407,7 +407,7 @@ UNPRICED_EXAMPLES = 12
 
 def rank_movers(quotes: dict[str, dict[str, Any]],
                 named_this_morning: set[str],
-                subscribed: set[str],
+                subscribed: set[str] | None,
                 pooled: set[str]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Everything clearing all three floors, ranked, with the tally behind it.
 
@@ -446,9 +446,13 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
                      "no_average_volume": [], "no_volume": [],
                      "zero_average_volume": []},
         "unpriced_note": (
-            "each of the four unpriced counts names the FIELD the vendor did "
-            f"not carry, and the first {UNPRICED_EXAMPLES} symbols in each are "
-            "listed. A name here was not judged and did not fail a floor"),
+            "six buckets hold names that were NOT JUDGED, and they are not one "
+            "kind. Four name the FIELD the vendor did not carry. refused is a "
+            "quote this pass declined as stale, undated or without a prior "
+            "close. zero_average_volume is the opposite of a missing field: "
+            "the vendor measured it and there is nothing to divide by. The "
+            f"first {UNPRICED_EXAMPLES} symbols in each are listed. A name in "
+            "any of the six was not judged and did not fail a floor"),
         "refused_note": (
             "refused counts the quotes read_quote declined outright: a price "
             "older than [Midday] max_quote_age_seconds, a quote carrying no "
@@ -523,12 +527,20 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
             # "discover had it" and "the morning could have priced it" are
             # different facts and collapsing them would overstate the second.
             "morning_reach": (
+                "unknown" if subscribed is None else
                 "subscribed" if symbol in subscribed else
                 "pooled_not_subscribed" if symbol in pooled else "not_pooled"),
             "morning_reach_source": (
                 "the collector's own subscription list, written at subscribe "
-                "time, and not the watchlist discover wrote at 07:15"),
+                "time, and not the watchlist discover wrote at 07:15"
+                if subscribed is not None else
+                "NOT READ. The collector's subscription list for this session "
+                "is absent or unreadable, so how far the morning reached is "
+                "unknown rather than none"),
             "morning_reach_note": (
+                "whether the collector heard this name is unknown: the "
+                "subscription list for this session was never read"
+                if subscribed is None else
                 "the collector was subscribed to this name and the 08:45 screen "
                 "still did not publish it" if symbol in subscribed else
                 "discover ranked this name into the pool at 07:15 and the "
@@ -643,9 +655,17 @@ def morning_context(day: str) -> dict[str, Any]:
     # name the collector heard and the screen declined, which is exactly the
     # reading that morning's fix was written to prevent. "The file is not the
     # evidence. What the collector asked the socket for is."
+    # THROUGH read_subscriptions, which swallows OSError and ValueError and
+    # refuses a payload that is not a dict. A bare json.loads here would take
+    # the whole 12:00 pass down with a traceback AFTER the universe sweep and
+    # the bulk day have been paid for, roughly 2,900 shared credits, because a
+    # sidecar used for one per row caption could not be parsed. The collector
+    # killed mid write by the same power cut this comment cites is exactly how
+    # that file gets truncated, and the else branch below is already the right
+    # answer for it.
     subscriptions = collect_premarket.subscriptions_path(day)
-    if subscriptions.is_file():
-        payload = json.loads(subscriptions.read_text(encoding="utf-8"))
+    payload = collect_premarket.read_subscriptions(day)
+    if payload is not None:
         out["subscribed"] = sorted(
             {str(s).upper() for s in (payload.get("symbols") or [])} - {""})
         out["subscribed_source"] = subscriptions.name
@@ -659,11 +679,18 @@ def morning_context(day: str) -> dict[str, Any]:
                 "a file rewritten after that moment says nothing about what "
                 "was heard")
     else:
+        # UNKNOWN, not empty. Reading an unreadable or absent sidecar as "the
+        # collector subscribed to nothing" is the mirror image of the defect
+        # this whole read was written to fix: it stopped OVERSTATING
+        # subscriptions from the watchlist and would then UNDERSTATE them from
+        # a file it did not read. The reach state says so per row rather than
+        # asserting the cap cut a name whose bars are on disk beside it.
+        out["subscribed"] = None
         out["subscribed_reason"] = (
-            f"{subscriptions.name} is absent, so what the collector actually "
-            "asked the socket for is unknown. Every mover is reported as "
-            "pooled_not_subscribed or not_pooled rather than being credited "
-            "to a subscription nothing recorded")
+            f"{subscriptions.name} is absent or unreadable, so what the "
+            "collector asked the socket for is unknown. No mover is credited "
+            "to a subscription and none is said to have been cut by the cap: "
+            "both would be claims about a file that was never read")
     return out
 
 
@@ -716,7 +743,11 @@ def build_packet(day: str | None = None,
 
     context = morning_context(day)
     named = set(context["named_this_morning"])
-    subscribed = set(context["subscribed"])
+    # None survives, and means the list was never read. set() would mean the
+    # collector asked for nothing, which is a different and much stronger
+    # claim than the one the evidence supports.
+    subscribed = (None if context["subscribed"] is None
+                  else set(context["subscribed"]))
     pooled = set(context["pooled"])
 
     picks = live_picks(day)

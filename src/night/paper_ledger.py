@@ -189,6 +189,12 @@ def position_size(mode: str, entry_price: float, stop_level: float,
 EXIT_STOP = "stop"
 EXIT_CLOSE = "session close"
 EXIT_NEVER = "trigger never fired"
+# The third exit_reason a booked=0 row can carry, and it is NOT a sizing
+# refusal: the trade was sized, it entered, and the window ran out before a
+# readable close. Named here so the three way split can tell it apart from
+# the two position_size refusals rather than sweeping it in with them.
+EXIT_OPEN_AT_END = ("the session's minutes end with the position still open, "
+                    "so there is no exit price and the trade is not booked")
 
 
 def _as_float(value: Any) -> float | None:
@@ -303,9 +309,7 @@ def simulate(bars: list[dict[str, Any]], entry_level: float, stop_level: float,
     if exit_price is None:
         # Entered on a bar with no readable close and nothing after it. The
         # trade is open at the end of the data, which is not a result.
-        out["exit_reason"] = (
-            "the session's minutes end with the position still open, so there "
-            "is no exit price and the trade is not booked")
+        out["exit_reason"] = EXIT_OPEN_AT_END
         return out
 
     out.update({
@@ -510,13 +514,23 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
     # booked=0 row may legitimately carry a null exit_reason, and reading a
     # null as a refusal would move rows into this bucket on the absence of
     # evidence, which is the same mistake one level down.
+    # FIVE STATES, because simulate reaches booked=0 by three different
+    # roads and only two of them are a refusal to buy. EXIT_OPEN_AT_END is
+    # the third: that row WAS sized and DID enter, and the window ran out
+    # before a readable close. Counting it as unsized would have the report
+    # publish it under "the sizing rule declined to buy anything", which is
+    # false about it, and print a reason that says nothing about sizing.
     unsized = [r for r in rows
                if not r["booked"] and not r["skip_reason"]
-               and r["exit_reason"] and r["exit_reason"] != EXIT_NEVER]
-    unsized_keys = {(r["date"], r["ticker"]) for r in unsized}
+               and r["exit_reason"]
+               and r["exit_reason"] not in (EXIT_NEVER, EXIT_OPEN_AT_END)]
+    open_at_end = [r for r in rows
+                   if not r["booked"] and not r["skip_reason"]
+                   and r["exit_reason"] == EXIT_OPEN_AT_END]
+    accounted = {(r["date"], r["ticker"]) for r in unsized + open_at_end}
     never = [r for r in rows
              if not r["booked"] and not r["skip_reason"]
-             and (r["date"], r["ticker"]) not in unsized_keys]
+             and (r["date"], r["ticker"]) not in accounted]
     skipped = [r for r in rows if r["skip_reason"]]
 
     def denom(held: list[dict[str, Any]]) -> dict[str, int]:
@@ -535,6 +549,9 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
         "triggered_but_unsized": denom(unsized),
         "triggered_but_unsized_reasons": sorted(
             {r["exit_reason"] for r in unsized if r["exit_reason"]}),
+        # Entered and never resolved. Named at zero for the same reason as
+        # the bucket above it.
+        "open_at_session_end": denom(open_at_end),
         "triggered_within_30_min": len(early),
         "triggered_total": len(timed),
         "peaked_within_10_min": len(fast_peak),
@@ -631,16 +648,21 @@ def ledger_report() -> None:
         # Same three way split as record_so_far, and for the same reason.
         unsized = [r for r in held
                    if not r["booked"] and not r["skip_reason"]
-                   and r["exit_reason"] and r["exit_reason"] != EXIT_NEVER]
-        unsized_keys = {(r["date"], r["ticker"]) for r in unsized}
+                   and r["exit_reason"]
+                   and r["exit_reason"] not in (EXIT_NEVER, EXIT_OPEN_AT_END)]
+        open_at_end = [r for r in held
+                       if not r["booked"] and not r["skip_reason"]
+                       and r["exit_reason"] == EXIT_OPEN_AT_END]
+        accounted = {(r["date"], r["ticker"]) for r in unsized + open_at_end}
         never = [r for r in held
                  if not r["booked"] and not r["skip_reason"]
-                 and (r["date"], r["ticker"]) not in unsized_keys]
+                 and (r["date"], r["ticker"]) not in accounted]
         if not booked:
             print(f"paper: rule {version} booked NO trades across "
                   f"{picks} picks in {sessions} session(s). "
                   f"{len(skipped)} skipped, {len(never)} never triggered, "
-                  f"{len(unsized)} triggered and could not be sized.")
+                  f"{len(unsized)} triggered and could not be sized, "
+                  f"{len(open_at_end)} still open at the session end.")
             continue
         wins = [r for r in booked if r["pnl_pct"] > 0]
         drawdowns = [r["max_drawdown_pct"] for r in booked
@@ -664,8 +686,14 @@ def ledger_report() -> None:
               f"{picks} picks across {sessions} session(s): median "
               f"{statistics.median(r['pnl_pct'] for r in booked):+.2f}%, "
               f"win rate {len(wins)}/{len(booked)}{worst}")
+        # EVERY state, so the printed counts reconcile against picks. This
+        # branch computed unsized and never printed it, so the first sizing
+        # refusal on a version that had booked anything would have left an
+        # unexplained shortfall in the one place a reader tallies the record.
         print(f"  not traded: {len(skipped)} skipped on evidence, "
-              f"{len(never)} never reached the trigger")
+              f"{len(never)} never reached the trigger, "
+              f"{len(unsized)} triggered and could not be sized, "
+              f"{len(open_at_end)} still open at the session end")
         stopped = [r for r in booked if r["exit_reason"] == EXIT_STOP]
         print(f"  exits: {len(stopped)} stopped, "
               f"{len(booked) - len(stopped)} held to the close")

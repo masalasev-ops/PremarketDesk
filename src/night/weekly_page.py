@@ -480,7 +480,8 @@ def _trigger_state(row: dict[str, Any]) -> str:
 
 
 def _group(rows: list[dict[str, Any]], minimum_rows: int,
-           minimum_sessions: int) -> dict[str, Any]:
+           minimum_sessions: int,
+           trigger_rows: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """n, sessions, three medians and a trigger rate, each withheld on its own.
 
     SUPPRESSION IS PER METRIC. The ledger reaches fewer rows than the outcome
@@ -543,12 +544,25 @@ def _group(rows: list[dict[str, Any]], minimum_rows: int,
     booked = [r for r in rows if r.get("pnl_pct") is not None]
     favourable = [r for r in rows if r.get("mfe_pct_true") is not None]
     adverse = [r for r in rows if r.get("mae_pct_true") is not None]
-    # Classified once, so the three lists below cannot come from three
-    # different readings of the same row.
-    states = [_trigger_state(row) for row in rows]
-    evaluated = [row for row, state in zip(rows, states)
+    # THE TRIGGER RATE READS ITS OWN POPULATION, and this is the whole point
+    # of the argument the rate exists to support. `rows` is the MEDIANS'
+    # population: a pick is in it when it carries an outcome OR a booked
+    # trade. A pick the ledger evaluated and that did NOT fire is in it only
+    # through the outcome branch; one that DID fire is in it through the
+    # booked branch as well. So wherever mfe_pct_true is missing, non firing
+    # rows drop out and firing rows stay, and the rate is biased UPWARD by
+    # exactly the selection it exists to expose.
+    #
+    # Guaranteed on the newest session on every rendering: job_nightly books
+    # session N and then renders this page, and fill_outcomes cannot fill
+    # mfe_pct_true for date N until the session after it. Measured before the
+    # fix: green published 33.3 percent over 18 evaluated rows where the rows
+    # the rule was actually applied to give 30.0 over 20.
+    trigger_rows = trigger_rows if trigger_rows is not None else rows
+    states = [_trigger_state(row) for row in trigger_rows]
+    evaluated = [row for row, state in zip(trigger_rows, states)
                  if state in TRIGGER_EVALUATED]
-    fired = [row for row, state in zip(rows, states)
+    fired = [row for row, state in zip(trigger_rows, states)
              if state in TRIGGER_FIRED]
     trigger = rate(fired, evaluated)
     # WHY THE DENOMINATOR IS SMALLER THAN THE GROUP, carried beside the rate
@@ -558,6 +572,14 @@ def _group(rows: list[dict[str, Any]], minimum_rows: int,
         state: sum(1 for held in states if held == state)
         for state in (STATE_SKIPPED, STATE_ABSENT)
         if any(held == state for held in states)}
+    # THE RATE'S OWN POPULATION AND ITS OWN SESSION COUNT, carried so the
+    # cell can say what it divided into rather than leaving a reader to
+    # reconcile it against the group row count beside it. The two are
+    # deliberately different populations and the arithmetic does not close
+    # between them: the medians read the picks carrying an outcome or a
+    # booked trade, and this reads the picks the rule was applied to.
+    trigger["population_rows"] = len(trigger_rows)
+    trigger["population_sessions"] = len({r["date"] for r in trigger_rows})
     return {
         "rows": len(rows), "sessions": sessions,
         "trigger": trigger,
@@ -669,6 +691,20 @@ def how_did_the_score_do() -> dict[str, Any]:
             "  AND (k.mfe_pct_true IS NOT NULL "
             "       OR (p.booked = 1 AND p.pnl_pct IS NOT NULL))",
             (primary_rule,))]
+        # EVERY LIVE PICK THE LEDGER REACHED, which is the population the
+        # trigger rate belongs to. An INNER join: a pick with no ledger row
+        # had the rule applied to it by nothing and must not sit in a rate
+        # about what the rule did. Separate from `rows` above, which selects
+        # on carrying an outcome or a booked trade and therefore selects on
+        # firing.
+        applied_rows = [dict(row) for row in connection.execute(
+            "SELECT k.date, k.ticker, k.conviction, "
+            "p.rule_version AS ledger_rule, p.booked, "
+            "p.skip_reason, p.exit_reason "
+            "FROM picks k JOIN paper_trades p "
+            "  ON p.date = k.date AND p.ticker = k.ticker "
+            "     AND p.rule_version = ? "
+            "WHERE k.source = 'live'", (primary_rule,))]
         # The same split over the rows record_so_far itself reads, so the
         # comparison below is of the PREDICATES and not of a join.
         ledger_rows = [dict(row) for row in connection.execute(
@@ -712,23 +748,36 @@ def how_did_the_score_do() -> dict[str, Any]:
         held = [r for r in rows if r["conviction"] == name]
         if not held:
             continue
+        applied = [r for r in applied_rows if r["conviction"] == name]
         buckets.append({"bucket": name or "unscored",
-                        **_group(held, minimum_rows, minimum_sessions)})
+                        **_group(held, minimum_rows, minimum_sessions,
+                                 applied)})
 
     by_component: list[dict[str, Any]] = []
     for component in SCORE_COMPONENTS:
         awarded: dict[float, list[dict[str, Any]]] = {}
+        # The trigger population, split the same way. Keyed on the packet's
+        # awarded points like the medians are, so a level's rate is over the
+        # rows the rule reached AT THAT LEVEL and not over the ones that
+        # happen to carry an outcome.
+        awarded_applied: dict[float, list[dict[str, Any]]] = {}
         for row in rows:
             points = (components.get((row["date"], row["ticker"])) or {}).get(component)
             if points is None:
                 continue
             awarded.setdefault(float(points), []).append(row)
+        for row in applied_rows:
+            points = (components.get((row["date"], row["ticker"])) or {}).get(component)
+            if points is None:
+                continue
+            awarded_applied.setdefault(float(points), []).append(row)
         if not awarded:
             continue
         by_component.append({
             "component": component,
             "levels": [{"points": points,
-                        **_group(held, minimum_rows, minimum_sessions)}
+                        **_group(held, minimum_rows, minimum_sessions,
+                                 awarded_applied.get(points, []))}
                        for points, held in sorted(awarded.items(),
                                                   reverse=True)],
         })
@@ -772,12 +821,24 @@ def _rate_cell(metric: dict[str, Any]) -> str:
                       for state, count in metric["not_evaluated"].items())
     aside = (f"<div class=note>{_esc(aside)}, so not evaluated</div>"
              if aside else "")
+    # The population is NAMED, because it is not the group's row count and
+    # the two do not add up to each other. A rate taken over the rows that
+    # carry an outcome would select on firing, so it reads its own set: the
+    # live picks the primary rule was applied to.
+    population = (
+        f"<div class=note>of {_n(metric.get('population_rows'))} pick(s) the "
+        f"rule reached over {metric.get('population_sessions')} session(s), "
+        "which is not the row count beside it: a rate over the rows carrying "
+        "an outcome would select on firing</div>"
+        if metric.get("population_rows") is not None else "")
     if metric["withheld"]:
         return (f"<span class=null>withheld</span>"
-                f"<div class=note>{_esc(metric['withheld'])}</div>{aside}")
+                f"<div class=note>{_esc(metric['withheld'])}</div>"
+                f"{aside}{population}")
     return (f"{metric['value'] * 100:.1f}%"
             f"<div class=note>{_n(metric['fired'])} of {_n(metric['rows'])} "
-            f"evaluated over {metric['sessions']} session(s)</div>{aside}")
+            f"evaluated over {metric['sessions']} session(s)</div>"
+            f"{aside}{population}")
 
 
 def _render_score_watch(add, score: dict[str, Any]) -> None:
