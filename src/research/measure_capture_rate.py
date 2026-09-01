@@ -106,6 +106,12 @@ MINUTES_UNRECORDED = (
     f"min_capture_minutes of {MIN_MINUTES} is therefore NOT APPLIED on this "
     "record rather than passed")
 
+NO_CANDIDATE = (
+    "no candidate with this symbol survives in the packet for this session, "
+    "so NOTHING the packet would have carried for this row was looked up: "
+    "every packet field on this row is null because it was never read, which "
+    "is not the state of a field the morning looked at and left empty")
+
 
 # ------------------------------------------------------------------ guarding
 
@@ -342,19 +348,38 @@ def packet_fields(candidate: dict[str, Any] | None) -> dict[str, Any]:
     recomputed: a capture rate cannot move a market cap or a prior high, and
     re-implementing four screens to leave them unchanged is how a research
     file starts disagreeing with production.
+
+    NULL WITH A REASON ON BOTH BRANCHES. Where the packet holds no candidate
+    for this symbol, nothing below was read at all, and a bare null publishes
+    that never checked state in the shape of a checked and empty one.
+    sweep_capture_rate reads these fields on their own, without the packet
+    beside them, so the row is the only place that can say which state it is
+    in. [corrected 2026-09-01: the no candidate branch carried its reason on
+    avg_volume_20d alone and returned the other thirteen fields as bare nulls,
+    pm_rvol_reason among them, which is itself a reason field.
+    sweep_capture_rate.rvol_under read that null, fell through to its baseline
+    branch, and reported "the packet carries no usable baseline median for
+    this name" about a row whose packet held no candidate at all.]
     """
     if candidate is None:
+        # ONE reason for the whole branch, because there is one fact here: the
+        # lookup found nothing. It is echoed onto the three reason shaped
+        # fields the sweep reads on their own, so a reader holding only one of
+        # them still gets the true story rather than a null that reads as an
+        # answer.
         return {
+            "packet_candidate_found": False,
+            "packet_candidate_reason": NO_CANDIDATE,
             "avg_volume_20d": None,
-            "avg_volume_20d_reason": ("no candidate with this symbol survives "
-                                      "in the packet for this session"),
+            "avg_volume_20d_reason": NO_CANDIDATE,
             "baseline_median": None,
+            "baseline_median_reason": NO_CANDIDATE,
             "baseline_sessions_used": None,
             "baseline_computed_at": None,
             "baseline_age_days": None,
             "pm_volume_packet": None,
             "pm_rvol_packet": None,
-            "pm_rvol_reason": None,
+            "pm_rvol_reason": NO_CANDIDATE,
             "pm_capture_share_packet": None,
             "pm_capture_basis_packet": None,
             "day_eligible_packet": None,
@@ -364,12 +389,23 @@ def packet_fields(candidate: dict[str, Any] | None) -> dict[str, Any]:
         }
     baseline = candidate.get("baseline") or {}
     volume = candidate.get("avg_volume_20d")
+    median = baseline.get("median_volume")
     return {
+        "packet_candidate_found": True,
+        "packet_candidate_reason": None,
         "avg_volume_20d": volume,
         "avg_volume_20d_reason": (None if volume is not None else
                                   "the packet candidate carries no "
                                   "avg_volume_20d"),
-        "baseline_median": baseline.get("median_volume"),
+        "baseline_median": median,
+        # Falsiness and not None, because runs/2026-08-20/packet.json carries
+        # median_volume 0.0 for SCSC.US and a zero denominator is refused
+        # downstream exactly where a missing one is. Both states earn the
+        # recorded reason, and this branch is the CHECKED and empty one.
+        "baseline_median_reason": (
+            None if median else
+            f"the packet candidate's baseline carries {median!r} for "
+            "median_volume, which is zero or absent and is no denominator"),
         "baseline_sessions_used": baseline.get("sessions_used"),
         "baseline_computed_at": baseline.get("computed_at"),
         "baseline_age_days": baseline.get("age_days"),

@@ -473,8 +473,17 @@ def _next_pass_minute(now_m: int) -> int | None:
     values, because a schedule literal in this module is exactly as unowned as
     a threshold literal would be. The weekday monitor starts at first_pass and
     repeats every pass_interval_min through last_pass, which is 07:25, 07:55,
-    08:25, 08:55 and 09:25, and monitor-night is one firing at night_pass with
-    no repetition after it.
+    08:25, 08:55 and 09:25; monitor-midday starts at midday_first_pass and
+    repeats on the same interval through midday_last_pass, which is 12:25,
+    12:55 and 13:25; and monitor-night is one firing at night_pass with no
+    repetition after it.
+
+    [corrected 2026-09-01: the paragraph above named only the morning grid and
+    ran straight from 09:25 to night_pass. It went on saying that after the
+    body below gained midday_first_pass and midday_last_pass, and it is the
+    schedule of record inside this module, so the next pass after 09:25 read
+    as 22:45 in the prose where the body returns 12:25. Every verdict that
+    defers work to "the next pass" is priced off that number.]
 
     Tomorrow's first_pass is deliberately not a successor. Every log this
     module reads is dated, so by tomorrow the job a deferred verdict was about
@@ -675,10 +684,17 @@ def _collector_has_subscribed(day: str) -> bool:
 def check_all(now: dt.datetime, dry_run: bool) -> int:
     day = now.date().isoformat()
     now_m = now.hour * 60 + now.minute
-    # Read once and consulted by three branches. Any verdict that defers work
+    # Read here and consulted by three branches. Any verdict that defers work
     # to a later pass has to know whether there is one, because the chain, the
     # nightly and a held collector each have windows that outlast at most one
     # more firing of this task.
+    #
+    # Those three, and NOT every consumer of a next pass in this function. The
+    # midday branch takes its own reading under its own name, so that giving
+    # midday a clock of its own later cannot reach these three.
+    # [corrected 2026-09-01: this opened "Read once" and claimed the three
+    # were all of them. Midday had already added a second call, and that call
+    # was binding this same name out from under the nightly.]
     next_pass = _next_pass_minute(now_m)
     reruns_done = _load_state(day)
     max_reruns = _CRIT.integer("monitor", "max_reruns_per_job_per_day")
@@ -1041,8 +1057,16 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         verdict = log_verdict("midday", JOBS["midday"][3], day)
         task = query_task(JOBS["midday"][0])
         alive, settled = _job_alive("midday", now, task)
-        next_pass = _next_pass_minute(now_m)
-        revisited = next_pass is not None and next_pass <= midday_last
+        # Its OWN name. The shared next_pass read at the top of check_all is
+        # still live here and the nightly branch below reads it, so binding
+        # this to `next_pass` handed the nightly whatever midday computed.
+        # Nothing differed today: now_m has not moved between the two calls
+        # and _next_pass_minute is pure, so both return the same minute. That
+        # is the whole reason to close it now, while it is still a trap for
+        # the edit that gives midday a clock of its own rather than a bug.
+        midday_next_pass = _next_pass_minute(now_m)
+        revisited = (midday_next_pass is not None
+                     and midday_next_pass <= midday_last)
         if verdict in ("finished", "skipped_closed"):
             if steps_ok("midday"):
                 report("midday", "OK", verdict)
@@ -1201,7 +1225,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--at", metavar="HH:MM", default=None,
                         help="Evaluate as if the clock read this ET time today, for testing.")
     parser.add_argument("--dry-run", action="store_true",
-                        help="Decide and report, launch nothing, record nothing.")
+                        help="Decide and report, launch nothing. It still writes its "
+                             "own job status record, marked manual like any "
+                             "hand run, because job_status.run wraps main and "
+                             "cannot see this flag.")
     args = parser.parse_args(argv)
 
     now = ettime.now_et()

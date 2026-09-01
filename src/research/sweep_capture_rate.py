@@ -59,6 +59,14 @@ day_failed_conditions and asks only whether premarket_rvol was the last thing
 in the way. Re-implementing four screens in order to leave them unchanged is
 how a research file starts quietly disagreeing with production.
 
+BOTH DENOMINATORS ON EVERY COUNT, rows and sessions. Twelve names off one
+morning share a tape and are one observation, which is why the withholding
+rule below counts both and why every screen line prints both. [corrected
+2026-09-01: candidate D's conservative ladder reported its two screen costs as
+bare row counts and report() printed that table with a rows only column pair,
+which was the one place in these two files that stated a screen cost without
+its session denominator.]
+
 AND THE RESIDUAL NO DIVISOR CLOSES is printed at the end of every run. The
 capture rate corrects the FEED. The 07:20 start is a different shortfall with
 a different fix, and no value of this key reaches it.
@@ -174,19 +182,34 @@ def quantile_of(values: list[float], target: float) -> float:
 # ------------------------------------------------------------ the day screen
 
 def rvol_under(row: dict[str, Any], share: float | None) -> tuple[float | None, str | None]:
-    """pm_rvol under one capture share, or null with the morning's own reason.
+    """pm_rvol under one capture share, or null with the row's own reason.
 
     Nothing is substituted. A denominator the morning refused is refused here
-    with the sentence the morning wrote, because a capture rate cannot rescue
-    a baseline: the correction is entirely in the numerator.
+    with the sentence the morning wrote, and a row whose packet held no
+    candidate at all is refused with the sentence the pairing wrote, because a
+    capture rate cannot rescue a baseline: the correction is entirely in the
+    numerator.
+
+    [corrected 2026-09-01: this said "null with the morning's own reason" and
+    the baseline branch below returned "the packet carries no usable baseline
+    median for this name" whatever the row was. On a row whose packet holds no
+    candidate, no baseline was ever looked for, and that sentence dressed a
+    never checked state as a checked and empty one.
+    measure_capture_rate.packet_fields now records a reason on that branch and
+    this reads it.]
     """
     reason = row.get("pm_rvol_reason")
     if reason:
         return None, reason
     median = row.get("baseline_median")
     if not median:
-        return None, ("the packet carries no usable baseline median for this "
-                      "name, so there is no denominator to divide into")
+        # The row's own recorded reason first, always. Nothing here can see a
+        # packet, so nothing here may narrate why a field is empty.
+        return None, (row.get("baseline_median_reason") or
+                      ("this row carries no baseline median and no reason for "
+                       "its absence, so it was archived before "
+                       "measure_capture_rate recorded one and whether a "
+                       "baseline was ever looked for cannot be read off it"))
     volume = row.get("pm_volume")
     if volume is None:
         return None, row.get("pm_volume_source")
@@ -354,6 +377,20 @@ def both_arms(rows: list[dict[str, Any]], rate_for: Any) -> dict[str, Any]:
         "as_fallback": day_screen(rows, rate_for, every_row=False),
         "to_every_row": day_screen(rows, rate_for, every_row=True),
     }
+
+
+def screen_pair(screen: dict[str, Any], key: str) -> dict[str, Any]:
+    """One screen set, both arms, and BOTH denominators on each arm.
+
+    The compact shape candidate D's ladder carries per rung. Rows and sessions
+    travel together and neither is published without the other: a rung that
+    reported six names off one morning as six would be reporting one
+    observation as six, which is the whole reason [Score watch] counts
+    sessions at all.
+    """
+    return {arm: {"rows": screen[arm][key]["rows"],
+                  "sessions": screen[arm][key]["sessions"]}
+            for arm in ("as_fallback", "to_every_row")}
 
 
 # ------------------------------------------------------------- the candidates
@@ -565,16 +602,13 @@ def candidate_d(rows: list[dict[str, Any]],
             "quantile": share,
             "capture_rate": value,
             "versus_shipped": round(value - SHIPPED_RATE, 6),
-            "cleared_the_volume_floor": {
-                "as_fallback": screen["as_fallback"][
-                    "cleared_the_volume_floor"]["rows"],
-                "to_every_row": screen["to_every_row"][
-                    "cleared_the_volume_floor"]["rows"]},
-            "reached_the_day_watchlist": {
-                "as_fallback": screen["as_fallback"][
-                    "reached_the_day_watchlist"]["rows"],
-                "to_every_row": screen["to_every_row"][
-                    "reached_the_day_watchlist"]["rows"]},
+            # [corrected 2026-09-01: these two carried the row count of each
+            # arm and nothing else, so a rung stated a screen cost in the one
+            # unit the rest of these files never state alone.]
+            "cleared_the_volume_floor": screen_pair(
+                screen, "cleared_the_volume_floor"),
+            "reached_the_day_watchlist": screen_pair(
+                screen, "reached_the_day_watchlist"),
             "day_screen": screen,
         })
 
@@ -663,6 +697,18 @@ def _screen_line(label: str, screen: dict[str, Any]) -> str:
             f"{len(screen['membership_undecidable'])} undecidable")
 
 
+def _ladder_cell(pair: dict[str, Any]) -> str:
+    """One ladder cell: both arms, and both denominators on each of them.
+
+    rows(sessions), twice. _screen_line above spells the same two counts out
+    in words and this spells them in a column, because a ladder is a table and
+    a table needs one, but neither may print the rows without the sessions.
+    """
+    fallback, every = pair["as_fallback"], pair["to_every_row"]
+    return (f"{fallback['rows']}({fallback['sessions']})"
+            f" / {every['rows']}({every['sessions']})")
+
+
 def report(result: dict[str, Any]) -> None:
     print("sweep_capture_rate: arithmetic on "
           f"{result['payload']}, zero vendor calls and no database read")
@@ -736,21 +782,19 @@ def report(result: dict[str, Any]) -> None:
           "medians")
     print(f"   per symbol quantiles: {block['per_symbol_quantiles']}")
     print(f"   {'quantile':>9} {'rate':>9} {'vs shipped':>11} "
-          f"{'cleared':>18} {'watchlist':>18}")
+          f"{'cleared':>19} {'watchlist':>19}")
     shipped = block["at_the_shipped_rate"]
+    cleared = _ladder_cell(screen_pair(shipped, "cleared_the_volume_floor"))
+    reached = _ladder_cell(screen_pair(shipped, "reached_the_day_watchlist"))
     print(f"   {'shipped':>9} {SHIPPED_RATE:>9} {0.0:>11} "
-          f"{shipped['as_fallback']['cleared_the_volume_floor']['rows']:>9}"
-          f" / {shipped['to_every_row']['cleared_the_volume_floor']['rows']:<6}"
-          f"{shipped['as_fallback']['reached_the_day_watchlist']['rows']:>9}"
-          f" / {shipped['to_every_row']['reached_the_day_watchlist']['rows']:<6}")
+          f"{cleared:>19} {reached:>19}")
     for step in block["conservative_ladder"]:
         print(f"   {step['quantile']:>9} {step['capture_rate']:>9} "
               f"{step['versus_shipped']:>+11} "
-              f"{step['cleared_the_volume_floor']['as_fallback']:>9}"
-              f" / {step['cleared_the_volume_floor']['to_every_row']:<6}"
-              f"{step['reached_the_day_watchlist']['as_fallback']:>9}"
-              f" / {step['reached_the_day_watchlist']['to_every_row']:<6}")
-    print("   two numbers per cell: as fallback, then applied to every row")
+              f"{_ladder_cell(step['cleared_the_volume_floor']):>19} "
+              f"{_ladder_cell(step['reached_the_day_watchlist']):>19}")
+    print("   two numbers per cell, as fallback then applied to every row, "
+          "and each is rows(sessions)")
     print(f"   {block['direction_note']}")
 
     residual = result["residual_no_divisor_closes"]

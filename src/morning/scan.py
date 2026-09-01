@@ -5238,8 +5238,10 @@ def _promote_snapshot(pending: str | None, overwrite: bool = False) -> Path | No
     frozen capture and until 2026-08-31 this was a bare os.replace onto it.
 
     [corrected 2026-09-01: this said the name is "one of the two artifacts the
-    nightly backup holds as having no route back". It is not. That backup
-    holds data/premarket/<date>.jsonl and runs/<date>/packet.json, and this
+    nightly backup holds as having no route back". It is wrong on both halves:
+    that backup copies FOUR artifacts, and this file is not among them. It
+    holds data/premarket/<date>.jsonl, that file's two sidecars, and
+    runs/<date>/packet.json, and this
     file is a byte prefix of the first, truncated at the last complete bar the
     packet records, so it is reconstructible from a file the backup does hold.
     Guarding it is still right, because reconstructing it needs the raw
@@ -5383,7 +5385,7 @@ def write_packet(payload: dict[str, Any], overwrite: bool = False) -> Any:
     them, and it is the one artifact whose own docstring, three lines down,
     says everything after this step reads it and a re-read of a past session
     reads it rather than picks. The nightly backup does hold it, as one of
-    the two files it names.
+    the four artifacts it copies.
 
     The atomic write below is kept and is a different guarantee: it stops a
     run interrupted mid write from leaving a packet that parses as nothing.

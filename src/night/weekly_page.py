@@ -856,13 +856,23 @@ def _render_score_watch(add, score: dict[str, Any]) -> None:
     # stale and this page renders nightly; the split itself belongs in the
     # pre-registration, which commits to reporting it when either point is
     # judged, and not in a standing table that invites eyeballing it at n=11.
+    # [corrected 2026-09-01: this read "so each bucket holds rows that gapped
+    # up and rows that gapped down, and a median over one of them is a median
+    # over both". An absolute gap component licenses CAN, not DOES, and the
+    # "so" carried the page from a property of the score to a claim about the
+    # composition of the table printed beneath it. Nothing here selects
+    # picks.gap_pct, which picks carries, so that composition is not something
+    # this page has established. Stating the property is what the note above
+    # already asks for.]
     add("<p class=sub>THE SCORE IS UNSIGNED and every quantity below is "
-        "measured from a long. Its gap component weighs the ABSOLUTE gap, "
-        "so each bucket holds rows that gapped up and rows that gapped "
-        "down, and a median over one of them is a median over both. A "
-        "bucket holding more falling names is losing a race it was never "
-        "entered in. See the gap direction confound in "
-        "doc/research/SCORE_INVERSION.md.</p>")
+        "measured from a long. Its gap component weighs the ABSOLUTE gap, so "
+        "a name down 20 percent and a name up 20 percent earn the same "
+        "points. A bucket can therefore hold both, and a median below can be "
+        "taken over both, which is what would let a bucket holding more "
+        "falling names lose a race it was never entered in. Whether any "
+        "bucket does is not measured on this page: the split belongs to the "
+        "gap direction confound in doc/research/SCORE_INVERSION.md, which "
+        "commits to reporting it when either point is judged.</p>")
     add("<p class=sub>Booked P&amp;L is the CRITERIA [Paper] rule on the "
         "pick's own session. The two excursions come from [Outcomes], which "
         "measures the session AFTER it. They are different days and are shown "

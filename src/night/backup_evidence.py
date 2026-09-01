@@ -1,11 +1,20 @@
-"""Copy the two artifacts that cannot be rebuilt, to somewhere outside the tree.
+"""Copy the artifacts that cannot be rebuilt, to somewhere outside the tree.
 
 NOT A FEATURE. A COPY. It computes nothing, decides nothing, and no module in
 the pipeline reads what it writes. If this file were deleted the morning would
 run exactly as it does now, which is the whole design: a backup that anything
 depends on is a second input, and a second input is a second thing to be wrong.
 
-WHY THESE TWO AND NOTHING ELSE. Everything in this system regenerates except:
+WHY THESE FOUR AND NOTHING ELSE. Everything in this system regenerates except:
+
+[corrected 2026-09-01: this said TWO and named two, while _ARTIFACTS has
+copied four since the collector's two sidecars joined it. The comment above
+that tuple is why it matters: a list that grows without that argument being
+remade is a backup of everything, which is a different and much weaker
+promise. The list grew and the argument was not remade, so the two that
+joined are argued for below beside the other two. The count travelled: both
+architecture pages and a docstring in morning/scan.py said two on this
+file's authority.]
 
   data/premarket/<date>.jsonl   the collector's own socket capture. A recording
                                 of a tape that no longer exists. CRITERIA's
@@ -16,10 +25,24 @@ WHY THESE TWO AND NOTHING ELSE. Everything in this system regenerates except:
                                 is measured against the window it records, and
                                 a re-read of a past session reads it rather
                                 than picks.
+  data/premarket/<date>-stats.jsonl
+                                one line per collector run: connections,
+                                reconnects, the drops it survived. A record of
+                                how the capture went, and there is no second
+                                copy of a connection that has closed.
+  data/premarket/<date>-subscriptions.json
+                                what the collector asked the socket for, at
+                                subscribe time. CRITERIA's stale watchlist note
+                                calls this the ONLY evidence of what was
+                                listened to, because the watchlist beside it
+                                can be rewritten after the socket has read it.
+                                2026-08-24 is the case: by 12:00 the watchlist
+                                on disk was today's and the socket had spent
+                                the morning on eight context tickers.
 
 The universe rebuilds. The closes re-fetch. Reports render from packets. The
-database has store.guard_live_database. Those all have a route back; these two
-have none, and both live under gitignored directories.
+database has store.guard_live_database. Those all have a route back; these
+four have none, and every one of them lives under a gitignored directory.
 
 WHAT PROMPTED IT. On 2026-08-21 at 15:46 a sweep that invoked every claim
 directly wrote fixture data over 29 files, including that morning's capture

@@ -233,11 +233,15 @@ tbody tr:hover{background:var(--ground)}
   shared vendor counter every thirty minutes of every day, weekends included, because the job trail
   can say which step spent what and cannot say when, and the overnight silence between 22:45 and
   07:00 is exactly where a sibling project draining the shared key would hide.
-  Both counts moved on 2026-08-31, when job_midday.bat and the watchdog window over it were
-  registered: seven scripts and nine tasks the day before, which is what the line below said and
-  what this paragraph did not. It read eight and ten, and it numbered the meter sampler seventh
-  alongside the watchdog, so the enumeration closed on nothing. Those two were wrong when written
-  rather than overtaken, and are corrected here.
+  Both counts moved on 2026-08-31, in two steps hours apart: registering job_midday.bat took
+  seven scripts and nine tasks to eight and ten, and the watchdog window over that job then took
+  ten tasks to eleven. The line below read "7 job scripts, 9 tasks" and this paragraph read eight
+  and ten; each was right when it was written and each was then overtaken rather than wrong, and
+  both now read off register_tasks.ps1. What was wrong when written is the numbering: the same
+  edit that added the midday pass renumbered the watchdog from sixth to seventh and left the
+  meter sampler numbered seventh beside it, so two items were seventh and the enumeration closed
+  on nothing. That is what is corrected here. Until 2026-09-01 this note had the history
+  backwards, calling the meta line the value that was right and eight and ten the mistake.
   The schedule is the architecture.</p>
   <div class="meta">
     <span>69 components</span><span>8 job scripts, 11 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
@@ -588,7 +592,7 @@ tbody tr:hover{background:var(--ground)}
 
   <figure>
     <div class="relay">
-      <div class="box morn"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 21:00. Common stock only, 2,754 names.</span></div>
+      <div class="box morn"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 21:00. Common stock only, 2,751 names, 2,754 until the 2026-08-30 rebuild.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">07:15. Four priors unioned, ranked by tier then gap propensity, 42 subscribed with 4 slots floored per tier.</span></div>
       <div class="ar">&rarr;</div>
@@ -1113,7 +1117,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C59 true_volume<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>The measured volume, the measured reference levels and the fill verdict for that date.</td><td>Nothing today is affected and nothing in the morning path reads any of it. It fills by query rather than by date, so a missed night is picked up by the next run. A row it cannot measure is left null WITH <code>truth_reason</code> written, and <code>fill_plausible</code> is separately marked <code>unknown</code> rather than left null, because a null verdict would be a fourth state the column does not have and would read downstream as a row nobody asked about rather than a row nobody could answer.</td><td>Already sent</td></tr>
       <tr><td class="nm">C60 paper_ledger<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, after C59</span></td><td>That night's ledger rows, for every rule version.</td><td>Nothing is affected. It is keyed on <code>(date, ticker, rule_version)</code> and re-books what is missing, so a missed night self-heals and a rerun is the same as a run. If C59 failed first, every row that night is SKIPPED with its reason rather than booked against the sampled levels, which is the whole design: a ledger built on a level that was never available books a P&amp;L that is wrong from its first row. The morning's record block then reads a table one night short and says so, because every count it prints carries its own denominator.</td><td>Already sent</td></tr>
       <tr><td class="nm">C61 weekly_page<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, last of the reading steps</span></td><td>site/Weekly.html for that week.</td><td>Nothing reads it. It renders from what is already on disk, takes no vendor call and adds no measurement of its own, so a failed run costs a page that the next run rebuilds whole. It runs last so every source it reads is current.</td><td>Already sent</td></tr>
-      <tr><td class="nm">C62 backup_evidence<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, first</span></td><td>That night's copy of the two artifacts that cannot be rebuilt.</td><td>Never fails the chain, and nothing in the pipeline reads what it writes: a backup anything depends on is a second input. A dated backup is never overwritten, and if the working copy no longer matches one already taken that is reported as a DISAGREEMENT rather than resolved in either direction, because a stale backup and a corrupted working copy look identical from here.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C62 backup_evidence<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, first</span></td><td>That night's copy of the four artifacts that cannot be rebuilt: the collector capture, its two sidecars and the packet. [corrected 2026-09-01: read two, echoing that module's own headline, which said two while its _ARTIFACTS tuple has copied four since the collector's sidecars joined it.]</td><td>Never fails the chain, and nothing in the pipeline reads what it writes: a backup anything depends on is a second input. A dated backup is never overwritten, and if the working copy no longer matches one already taken that is reported as a DISAGREEMENT rather than resolved in either direction, because a stale backup and a corrupted working copy look identical from here.</td><td>Already sent</td></tr>
       <tr><td class="nm">C63 prune_data<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Nothing. Unfreed disk.</td><td>Never fails the chain. What it may delete is a WHITELIST naming exactly one file class, <code>universe-closes-*.json</code>, not a rule about age: a sweeper that deletes whatever looks stale is one careless pattern away from taking the only copy of something, and data\ holds several only copies. C28, the collector's own socket capture, is a recording of a tape that no longer exists and is never a candidate at any age. The age comes from the FILENAME rather than the mtime, so a file a backup happened to touch is not spared and one it did not is not taken. A file matching the glob whose name carries no readable date is kept and reported.</td><td>Already sent</td></tr>
     </tbody>
   </table>
@@ -1213,9 +1217,12 @@ tbody tr:hover{background:var(--ground)}
     <b>night</b> (backup_evidence, backfill_premarket, fill_outcomes, true_volume, paper_ledger,
     pool_recall, prune_data, weekly_page, build_archive, in the order the nightly runs them),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
-    vwap_gappers, sweep_baseline_floor, cutoff_0830, four probe_ scripts and three measure_ scripts,
-    instruments, not pipeline; this read three probe_ and two measure_ scripts until 2026-08-31 and
-    had never named the other two modules at all),
+    vwap_gappers, cutoff_0830, counterfactual_watchlist, four probe_ scripts, four measure_ scripts
+    and two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate: seventeen modules in all,
+    counted off the directory, instruments, not pipeline. This read three probe_ and two measure_
+    scripts until 2026-08-31, and named neither counterfactual_watchlist nor sweep_capture_rate
+    until 2026-09-01, when both landed beside measure_capture_rate and took the measure_ count
+    from three to four),
     <b>tests</b> (conftest, run_tests and fourteen test_ modules). One file sits at the root beside the
     packages, probe_alpaca.py, the shared Alpaca client. It was research only until 2026-08-29 and is
     now imported by two night steps as well, both of them after the close and neither of them able to
@@ -1229,9 +1236,11 @@ tbody tr:hover{background:var(--ground)}
     notable movers landed on 2026-08-20 and the record block on 2026-08-29), BUILD_PLAN.md,
     CHANGELOG.md, DECISIONS.md, ALPACA_PROBE.md, sample_report.html, this page, the day run arc page
     beside it, and <b>research\</b> holding the written up studies: COLLECTOR_VOLUME.md,
-    VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and SCORE_INVERSION.md, which pre-registers what would
+    VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, which pre-registers what would
     have to be true for the conviction score to be ordering outcomes and what counts as no
-    relationship, written while the record was too small to judge on purpose, beside the tracked
+    relationship, written while the record was too small to judge on purpose, and
+    COUNTERFACTUAL_WATCHLIST.md, the fifth, which landed 2026-09-01 and which this list read four
+    studies without until then, beside the tracked
     float rotation study payloads DECISIONS.md cites
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
@@ -1258,7 +1267,10 @@ tbody tr:hover{background:var(--ground)}
     <dt>data\</dt>
     <dd>universe.json, watchlist.json, universe-closes-&lt;date&gt;.json,
     premarket\&lt;date&gt;.jsonl beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json,
-    premarketdesk.db (baseline, picks, gap_stats, paper_trades), job-status.jsonl, exchange-details.json,
+    premarketdesk.db (baseline, picks, gap_stats, gap_sweeps, paper_trades; this listed four tables
+    and left out gap_sweeps until 2026-09-01, which was wrong when written rather than overtaken,
+    because the table shipped 2026-08-22 and this row was written on 2026-08-29),
+    job-status.jsonl, exchange-details.json,
     monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard fires live,
     UNVERIFIED, backtest\
     <span style="color:var(--ink-3)">(C26-C28, C30, C31, C33, C41, C56-C58)</span></dd>
