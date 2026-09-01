@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, ninth: three files, one incident, two verdicts each way
+
+**Answers the entry below, which said the 2026-09-01 disagreement was not
+arbitrated. It was, on the owner's word, once the probe had stopped writing and
+the separation had been checked rather than assumed.**
+
+One incident left three files disagreeing with their backups and they did not
+all resolve the same way. That is the whole reason the door takes a verdict and
+sources instead of a preference for the newer file or the older one.
+
+| file | verdict | why |
+| --- | --- | --- |
+| `2026-09-01/premarket` | **backup** | the probe interleaved 932 open market bars into the session's evidence |
+| `2026-09-01/subscriptions` | **backup** | the probe rewrote it in place, dating the morning's subscription at 10:00:04 |
+| `2026-09-01/premarket-stats` | **working** | the probe APPENDED. The morning's line is byte identical to the backup and the second line is the only record of the probe's run |
+
+**The capture.** `data/job-status.jsonl` holds two collector runs today: the
+scheduled one 07:20:02 to 09:25:00 producing 3,289 minutes, and one under job
+`manual` 10:00:02 to 10:20:05 producing **932** minutes. The working copy was
+the backup byte for byte plus exactly **932** bars. An independent record and a
+file difference agreeing on the same number is what made this decidable. By
+`market_status`, written per bar, the backup held 3,338 bars every one of them
+extended-hours and the 932 extra were every one of them **open**, earliest
+09:53, after the bell. Restored: 3,338 bars, hours 07, 08 and 09 only, no open
+bar left.
+
+**The subscriptions.** Both files carried the identical fifty symbols, the same
+requested count and the same cap. Only `subscribed_at` differed: 07:20:02 in
+the backup against 10:00:04 in the working copy. CRITERIA calls this sidecar
+the only evidence of what the socket was listening to, and the working copy had
+come to date the morning's subscription at an hour the morning was over.
+Restored to 07:20:02, and no symbol information was in dispute at any point.
+
+**The stats sidecar went the other way, and the difference is the file's
+shape.** Its contract is one line per collector run. Two runs happened, so two
+lines is the complete record and one is the incomplete one. The morning's line
+is byte identical to the backup, so nothing was overwritten, and the second
+line carries the 21,306 messages and 932 minutes that ARE the socket cost
+measurement reported today. Keeping the backup there would have destroyed the
+record of a measurement rather than protected one.
+
+**Zero disagreements outstanding**, 39 files held, and the suite is green again
+at 1,650 paths with no drift. The two suites that were red were red because the
+vintage guard refused a packet built from the contaminated capture, which was
+the guard working, and they went green when the capture stopped being
+contaminated rather than when anything was relaxed.
+
+**The defect itself is untouched.** `research/measure_socket_cost.py` still
+launches `collect_premarket`, which still writes to
+`PREMARKET_DIR/<today>.jsonl`. Today's contamination is cleaned; the next run of
+that probe would do it again. The probe is a one off whose .bat says to delete
+it once the number is written down, and the number is now written down, so the
+cheapest correct action is deleting the task rather than teaching the collector
+a second output path. That is an owner's call and is not taken here.
+
 ## 2026-09-01, eighth: the freeze is amended rather than withdrawn
 
 **Eighty commits have been judged against a rule that did not describe them.**
