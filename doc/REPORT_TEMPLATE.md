@@ -199,6 +199,15 @@ A candidate whose score is null gets the word unscored in the conviction
 column, never a bucket color. Membership is decided by the day_eligible
 boolean alone.
 
+DO NOT DEFINE THE BANDS. What green, yellow and red mean is inserted under
+this table deterministically by analyst.annotate_score_bands, read from the
+packet's own criteria_summary.score_buckets, on the same argument as the
+job health line: a definition the model writes is a definition that can be
+forgotten on an off morning, and that is the morning it matters. Writing a
+second one puts two definitions on the page that can disagree. Say which
+bucket a name is in as much as the section needs; do not say what the
+bucket means.
+
 The Premarket RVOL column is an ESTIMATE and the report says so once, in one
 sentence directly under the table, whenever the packet carries a
 capture_correction block. Write exactly this, filling the two numbers from

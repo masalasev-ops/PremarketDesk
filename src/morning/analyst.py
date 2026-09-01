@@ -1615,6 +1615,66 @@ def annotate_warned_quantifiers(
     )
 
 
+def _bucket_legend(packet: dict[str, Any]) -> str | None:
+    """What green, yellow and red mean, from the packet that used them.
+
+    FROM THE PACKET, NOT FROM CRITERIA. criteria_summary.score_buckets is the
+    frozen copy of the bands the run actually scored against, and a report
+    describes its own run: reading CRITERIA here would let a threshold edited
+    afterwards rewrite the meaning of a number already published.
+
+    Returns None when the packet carries no bands, because a legend invented
+    where the evidence is absent is the defect this file exists to avoid.
+    """
+    bands = ((packet.get("criteria_summary") or {}).get("score_buckets") or [])
+    bands = [str(band) for band in bands if str(band).strip()]
+    if not bands:
+        return None
+    unscored = ((packet.get("score_roll") or {}).get("unscored") or [])
+    return (
+        "Conviction is a band on the score and the band is its whole "
+        "definition, first match wins: " + ", ".join(bands) + ", on a total "
+        "that runs 0 to 10. A null score is unscored rather than red, because "
+        "at least one component input was never observed, and unscored rows "
+        "are excluded from threshold work rather than folded into red: "
+        f"{len(unscored)} such rows today. Whether these bands rank outcomes "
+        "in the right order is open rather than settled, and the score watch "
+        "is what measures it.")
+
+
+def annotate_score_bands(report_text: str, packet: dict[str, Any]) -> str:
+    """Define the conviction bands under the first table that shows them.
+
+    Written in Python rather than asked of the model for the same reason
+    annotate_job_health is: the model narrates, it does not define. Both paths
+    run through here, so the definition cannot be present on the mornings the
+    model behaved and missing on the mornings it did not.
+
+    Located by the header rather than by section title, so a renamed section
+    keeps its legend and a table added later that carries Conviction gets one
+    if it comes first. Inserted after the blank line that closes the table,
+    never against the last row: prose written straight after a row is parsed
+    as another row, which is the 2026-09-01 glossary defect.
+    """
+    legend = _bucket_legend(packet)
+    if not legend or legend in report_text:
+        return report_text
+    lines = report_text.splitlines()
+    for index, line in enumerate(lines):
+        if not (line.lstrip().startswith("|") and "Conviction" in line):
+            continue
+        end = index
+        while end < len(lines) and lines[end].lstrip().startswith("|"):
+            end += 1
+        # end is the first line after the table. Keep the blank line that
+        # closes it and put the legend after that, with its own blank line.
+        while end < len(lines) and not lines[end].strip():
+            end += 1
+        lines[end:end] = [legend, ""]
+        return "\n".join(lines) + ("\n" if report_text.endswith("\n") else "")
+    return report_text
+
+
 def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
     """Name any scheduled step that has not succeeded inside its window.
 
@@ -1784,6 +1844,10 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # Overdue scheduled steps, named before the report is written rather than
     # after, so the deterministic fallback report carries the line too.
     report_text = annotate_job_health(report_text, packet)
+
+    # Beside it and for the same reason. green, yellow and red were
+    # published in three tables with the meaning stated nowhere.
+    report_text = annotate_score_bands(report_text, packet)
 
     report_path.write_text(report_text, encoding="utf-8")
     job_status.produced("report characters", len(report_text))

@@ -29,6 +29,7 @@ from typing import Any
 from morning import analyst
 from tests import conftest
 from core import config
+from core import criteria
 
 ROOT_RUNS = config.PROJECT_ROOT / "runs"
 
@@ -42,6 +43,18 @@ def build_packet_text() -> str:
             {"symbol": "ARX.US", "conviction": "green", "day_eligible": True},
         ],
         "market_snapshot": [{"label": "spy", "symbol": "SPY.US"}],
+        # The bands every real packet carries, read from criteria rather
+        # than typed out here, and by the same call scan.py makes when it
+        # stamps them. A fixture that states the bands on its own authority
+        # can disagree with the file the run reads, and then the claim
+        # passes while the page is wrong. Same argument as _FROZEN_UNIVERSE
+        # below, reached from the other direction: that one is frozen
+        # BECAUSE the live file moves under it, this one is live because
+        # the whole point is agreeing with what scan writes.
+        "criteria_summary": {
+            "score_buckets": [band.describe() for band
+                              in criteria.load().bands("score_buckets")],
+        },
     }
     return json.dumps(packet)
 
@@ -888,6 +901,102 @@ def claim_the_instructions_cannot_ask_for_what_the_guard_forbids(
           "exemption and a wrapped instruction still caught")
 
 
+def claim_the_conviction_bands_are_defined_where_they_are_first_shown(
+        failures: list[str]) -> None:
+    """green, yellow and red meant nothing on the page until 2026-09-01.
+
+    Conviction is published in three tables, the day watchlist, the swing
+    watchlist and technical signals, and until this claim was written the
+    report never said anywhere what the three words meant. A reader could see
+    that a row was red and had no way to learn that red is a score under 4 on a
+    scale to 10, or that unscored is a fourth state that is not a low one.
+
+    Three properties, and the second and third matter more than the first.
+
+    The arithmetic comes from criteria_summary.score_buckets, which is the
+    packet's own frozen copy of the bands that scored THAT run. Reading CRITERIA
+    at render time instead would let a threshold edited next week rewrite the
+    meaning of a number published today.
+
+    The legend appears under the FIRST table carrying the word, because a
+    definition printed after its third use is not a definition. And it appears
+    exactly once: two legends on one page can disagree.
+
+    A packet with no bands gets NO legend rather than an invented one, which is
+    the same rule every other null in this file follows.
+    """
+    packet = json.loads(build_packet_text())
+
+    rendered = analyst.annotate_score_bands(
+        analyst.fallback_report(packet, "the narrative pass was stubbed out"),
+        packet)
+    legend = analyst._bucket_legend(packet)
+
+    if not legend:
+        failures.append(
+            "the fixture packet carries no criteria_summary.score_buckets, so "
+            "this claim is asserting placement for a legend that was never "
+            "built. Fixture and renderer have decoupled.")
+        return
+
+    if rendered.count(legend) != 1:
+        failures.append(
+            f"the conviction legend appears {rendered.count(legend)} times, "
+            "where two definitions of the same three words can disagree with "
+            "each other and one is no definition at all")
+
+    # Every band the packet scored against has to reach the page. A legend
+    # quoting two of three bands is worse than none: it reads complete.
+    for band in (packet.get("criteria_summary") or {}).get("score_buckets") or []:
+        if str(band) not in legend:
+            failures.append(
+                f"the packet scored against band {str(band)!r} and the legend "
+                "does not carry it, so the page defines fewer buckets than it "
+                "prints")
+
+    lines = rendered.splitlines()
+    headers = [n for n, line in enumerate(lines)
+               if line.lstrip().startswith("|") and "Conviction" in line]
+    placed = next((n for n, line in enumerate(lines) if legend in line), None)
+    if not headers:
+        failures.append("the fallback published no table carrying Conviction, "
+                        "so this claim is not reading the report it thinks")
+    elif placed is None:
+        failures.append("the conviction legend reached no line of the report")
+    else:
+        if placed < headers[0]:
+            failures.append(
+                "the conviction legend is printed above the first table that "
+                "uses the words, where a reader meets the definition before "
+                "the thing it defines")
+        if len(headers) > 1 and placed > headers[1]:
+            failures.append(
+                f"the conviction legend sits after the second table carrying "
+                f"the word, at line {placed + 1} against a header at line "
+                f"{headers[1] + 1}. A definition printed after its second use "
+                "is not doing the job")
+
+    # The prose ships through the same guard as the rest of the report.
+    for hit in analyst.quantifier_violations(legend):
+        failures.append(
+            f"the conviction legend trips the guard it ships beside: "
+            f"{hit['quantifier']!r} near {hit['set_word']!r}. A deterministic "
+            "line that fails containment would withhold the report it is "
+            "meant to explain")
+
+    # And the null case: no bands in the packet, no legend on the page.
+    bare = {"session_date": "2026-01-02", "candidates": []}
+    if analyst._bucket_legend(bare) is not None:
+        failures.append(
+            "a packet carrying no score_buckets still produced a legend, so "
+            "the report would state bands that nothing in the run was scored "
+            "against")
+
+    print(f"  bucket legend  {len(headers)} table(s) carry Conviction, the "
+          f"legend is defined once under the first of them, and a packet with "
+          f"no bands gets none")
+
+
 def claim_the_fallback_closes_every_table_it_opens(failures: list[str]) -> None:
     """A markdown table runs until a blank line, and prose after a row joins it.
 
@@ -1206,6 +1315,7 @@ def _checks() -> int:
 
     claim_the_instructions_cannot_ask_for_what_the_guard_forbids(failures)
 
+    claim_the_conviction_bands_are_defined_where_they_are_first_shown(failures)
     claim_the_fallback_closes_every_table_it_opens(failures)
     claim_a_form_designator_is_not_a_ticker_claim(failures)
 

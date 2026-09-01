@@ -15,6 +15,68 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, fifth: conviction is defined, and today's report was rebuilt
+
+**Two defects in the same document, both raised by a reader looking at it.**
+
+**The bands were published with the meaning stated nowhere.** green, yellow and
+red appear in three tables, the day watchlist, the swing watchlist and technical
+signals, and the report never said what any of them meant. A reader could see
+that a row was red and had no way to learn that red is a score under 4 on a
+scale that runs to 10, or that unscored is a fourth state and not a low one.
+
+`analyst.annotate_score_bands` now places the definition under the first table
+that carries the word. Three choices in it are load bearing.
+
+It reads `criteria_summary.score_buckets`, the packet's own frozen copy of the
+bands that scored THAT run, and not CRITERIA at render time. A threshold edited
+next week would otherwise rewrite the meaning of a number already published.
+
+It sits beside `annotate_job_health` and runs on BOTH paths, so the definition
+cannot be present on the mornings the model behaved and missing on the mornings
+it did not. REPORT_TEMPLATE.md now tells the model not to write its own, on that
+module's existing argument: the model narrates, it does not define, and a
+definition a model writes is one that can be forgotten on an off morning.
+
+It says the ordering is open rather than settled. CRITERIA's score watch note
+records that over the first fifty filled rows these bands ordered outcomes
+BACKWARDS, yellow beating green at twenty five rows each. A legend implying
+green means confidence would be the report overclaiming its own instrument.
+
+A packet carrying no bands gets no legend rather than an invented one.
+
+**And the table the fallback opened and never closed.** A markdown table runs
+until a blank line. `fallback_report` wrote the notable movers rows and then,
+with nothing between them, the sentence naming each instrument, so every
+renderer parsed that paragraph as one more row: eighteen "TICKER is Company."
+sentences collapsed into a single first column cell beside nine empty ones.
+Latent since names began being carried on 2026-08-24 and first rendered today,
+because only a rejected analyst reaches that function and this was the first
+morning one was. The renderer that runs when something has already gone wrong
+was the one emitting malformed markdown.
+
+**Today's report was rebuilt rather than left standing.** Nothing was
+re-fetched and packet.json was not touched: the same deterministic fallback was
+rebuilt from it through the same two annotators, with the disclaimer reason
+lifted out of the shipped document rather than reconstructed, so the two differ
+only where the fixes land. Three added lines, no deletions, containment
+re-examined at 45 claims with nothing invented and nothing missing. The
+originals are preserved as runs/2026-09-01/report.0845.md and report.0845.html,
+on the precedent of the 2026-08-20 amendment.
+
+The 08:49 email carries the version that shipped. That cannot be recalled, and
+tonight's build_archive will rebuild the site from the corrected file.
+
+Two claims, both in test_containment. One states the placement rule
+structurally, that any line after a table row is another row or is blank,
+anywhere in the document, so a section added later cannot reintroduce the
+shape. The other pins the legend: defined once, under the first table that uses
+the words, carrying every band the packet scored against, passing the
+quantifier guard it ships beside, and absent entirely when the packet has no
+bands. The fixture gained the bands by the same criteria call scan makes, since
+a fixture stating them on its own authority can disagree with the file the run
+reads and then the claim passes while the page is wrong.
+
 ## 2026-09-01, fourth: the 2026-08-20 packet is back, and 08-21 never had one
 
 **Answers the entry below, which said the restore was worth considering and
