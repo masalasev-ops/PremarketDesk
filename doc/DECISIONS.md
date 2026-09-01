@@ -5708,3 +5708,116 @@ WHAT WOULD REFUTE SHAPE B BEING BENIGN: a shape B flag that turns out to be a
 true positive, which is exactly what id4 is under a different reading of
 checkability. If the ratio moves, the guard is doing its job and the false
 positive rate is the wrong number to be watching.
+
+## 2026-09-01, tenth: the macro tag list, measured on 195 articles, and the one case it does not close
+
+WHAT WAS ASKED. Draft a macro tag list that separates a market wrap from a
+company release, starting from INFLATION, RATES, TREASURIES and
+GEOPOLITICAL-RISKS, adding candidates FROM THE CORPUS rather than from
+reasoning, and reporting the distribution before adopting anything. If the
+distribution has no gap, say so and stop rather than picking a number inside a
+continuum.
+
+THE CORPUS. Every article any packet has ever carried: 195 over the fourteen
+sessions 2026-08-13 to 2026-09-01, deduped per session by link. That is more
+than the 121 measured on 2026-08-31, which read the nine sessions still in
+runs/; the backup holds five more, including the six sessions whose rendered
+reports are gone. Labelled wrap or company release by TITLE ONLY, never by
+tags, so the labelling cannot be circular with the rule being tested: 71 wrap,
+40 release, 84 left unlabelled.
+
+THE DISTRIBUTION, macro tags per article:
+
+    macro tags   wrap   release   unlabelled   all
+        0          50      40         83       173
+        1          12       0          1        13
+        2           8       0          0         8
+        3           1       0          0         1
+
+THE GAP IS AT ZERO. 173 articles carry none, 22 carry one or more, and of those
+22 there are 21 labelled wraps and one policy story, "Trump pushes Clarity Act
+at White House crypto meeting", which is not a company release either. Across
+the 124 articles NOT labelled a wrap, exactly one carries a macro tag and it is
+that policy story. So the threshold is PRESENCE. Nothing was picked inside a
+continuum, which is the condition the instruction set.
+
+That is evidence and not proof, and the size of the denominator is the reason.
+A tag sitting on one release in twenty would be missed at n=40 about one time
+in eight. The list is a SEED.
+
+THE TEST IS ORTHOGONAL TO THE TWO ALREADY THERE, which is the finding that
+matters most and it is not what the premise expected. The instruction read
+"start from what the wraps carry and the release does not". The wraps the
+existing rule was written for carry NO macro tags at all: all eight of the big
+CNBC and Fox movers pieces, 33 to 50 tags each, score zero on this list. What
+the list catches instead is a shape neither existing count can see, the NARROW
+market piece. All 22 articles it catches are invisible to the tag count and the
+sharing count; the overlap between old and new is exactly zero, in both
+directions.
+
+That shape is what the owner reported on 2026-09-01. "Palantir Leads Tech
+Stocks as Nasdaq Rebounds" carries five tags and the feed gave it to one
+candidate, so it sits well inside both limits, and EARNINGS is one of the five.
+It paid MSTR class earnings. "US Stock Market Today: S&P 500 Futures Edge Lower
+As Inflation Concerns Resurface", five tags, one candidate, paid CRCL the same.
+
+WHAT WAS MEASURED AND LEFT OFF. Ten tags were mined by the test "appears on a
+labelled wrap, on no labelled release and on no unlabelled article". Six of the
+ten earn a catch nothing else makes; four are on the list only because they
+never sit on a release, and are marked as such in CRITERIA.
+
+  Sector tags are disqualified by the measurement, which was the specific
+  question asked. They sit on company releases: SEMICONDUCTORS on 2, TECH on 3,
+  AI on 3, RETAIL on 7, FINANCIALS on 2, ENERGY on 1, UTILITIES on 1. None
+  belongs on the list.
+
+  Desk section tags look strongest of all and are refused. STOCKS, MARKETS,
+  STOCK MARKETS, US MARKETS, FINANCE and BUSINESS sit on 6 to 12 wraps each and
+  on no release, but they are CNBC section names. A list built on them is a
+  rule about who published an article, and every catch they make is already
+  made by the tag count.
+
+  ECONOMY, UNITED STATES, WALL STREET and TRADE-NEGOTIATIONS are clean on
+  releases too, and every article they catch is already caught by the tag
+  count. Broad enough that 40 releases is too thin to trust them on.
+
+  GEOPOLITICS, CREDIT, DEBT, SELLOFF, EQUITIES, REGULATION and LEGISLATION each
+  sit on a single company story, so the same test that admitted the others
+  rejects them. GEOPOLITICS is worth naming because GEOPOLITICAL-RISKS is on
+  the list and reads like the same tag. The vendor uses them differently and
+  the corpus is the reason to believe that, not the spelling.
+
+THE CASE THIS DOES NOT CLOSE, recorded rather than quietly dropped. Of the
+three cases named in the instruction, MSTR and CRCL are fixed and PURR is not.
+
+MSTR falls off earnings; it now classes analyst_action off PRICE-TARGET on an
+article genuinely about MSTR, which is the right answer rather than a lucky
+one. CRCL falls to none.
+
+PURR does not. Its leveraged ETF wrap IS set aside, on RATES and TREASURIES.
+But PURR carried a second article that morning, "Energy stocks lead in subdued
+final trading day of August, utilities under pressure", tagged EARNINGS,
+ENERGY, SEMICONDUCTORS, TECH, UTILITIES. Five tags, one candidate, no macro
+tag: invisible to all three tests, and it still pays PURR class earnings.
+
+IT CANNOT BE FIXED WITH A TAG LIST, and the reason is the measurement above.
+The only tags separating that article from a company release are sector tags,
+and sector tags sit on releases. The one thing that would separate it is
+SECTOR BREADTH: it names four sectors, where a release names one or two. That
+distribution was measured too, distinct sector tags per article:
+
+    sectors      0    1    2    3    4
+    all         86   71   29    7    2
+    release     18   15    7    0    0
+
+A cut at three would set aside 9 articles, 7 wraps and 2 multi company think
+pieces, and no release. It would catch the PURR article. IT IS NOT ADOPTED,
+because 86, 71, 29, 7, 2 is a smooth continuum with no gap anywhere, and
+choosing three would be exactly the thing the instruction forbids. The rule
+that refused a threshold here is the same rule that licensed the one at zero,
+and it does not get to apply only when convenient.
+
+Left open deliberately, named in CRITERIA and pinned in the suite claim so it
+cannot be forgotten. What would settle it: a corpus large enough for the sector
+count to show a gap, or a different signal entirely.
+

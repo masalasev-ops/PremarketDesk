@@ -15,6 +15,58 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty first: a third breadth test, for the market piece that is too narrow to be a roundup
+
+The two counts in [Score catalyst tags] measure how WIDE an article is, and
+both are blind to the article that is about the session rather than about any
+company. "US Stock Market Today: S&P 500 Futures Edge Lower As Inflation
+Concerns Resurface" carries five tags and the feed handed it to one candidate,
+so it sits well inside both limits. EARNINGS is one of the five, and it paid
+CRCL class earnings on 2026-09-01. "Palantir Leads Tech Stocks as Nasdaq
+Rebounds" did the same to MSTR, which is the report the owner read and asked
+about.
+
+### Measured before adopted, and the premise did not survive the measurement
+
+195 articles, every one any packet has carried over the fourteen sessions to
+2026-09-01, labelled wrap or release by TITLE ONLY so the labelling cannot be
+circular with the tag rule. 173 carry no macro tag, 22 carry one or more, and
+of those 22 there are 21 wraps and one policy story. No company release in the
+corpus carries one. THE GAP IS AT ZERO, so the threshold is presence and not a
+number chosen inside a continuum.
+
+The premise was that the macro tags would separate the wraps from the releases.
+They do, but not the wraps anybody had in mind: all eight of the big movers
+roundups, 33 to 50 tags, carry NO macro tag at all. The overlap between what
+this test catches and what the other two catch is exactly zero, both ways. It
+is a third shape, not a better reading of the first two.
+
+Sector tags were measured and refused, which was the specific question asked:
+they sit on releases. Desk section tags look strongest of all and are refused
+too, because they are CNBC section names and a rule built on them is a rule
+about who published an article.
+
+### Every class now names the tags behind it
+
+Including the classes that pay nothing. A reason saying which tag matched
+cannot be checked against a packet without going and finding the article, and a
+reason saying an article was set aside did not say what was on it. Both now
+carry the tag list the call was made on. The suite claim is what caught that
+the set aside branch did not, which is the claim doing its job.
+
+### The case it does not close
+
+MSTR and CRCL are fixed. PURR is not: a second article, "Energy stocks lead in
+subdued final trading day of August", carries five tags, one candidate, no
+macro tag, and still pays it earnings. It cannot be fixed with a tag list
+because the only tags separating it from a release are sector tags. Sector
+BREADTH would separate it at a cut of three, but that distribution runs 86, 71,
+29, 7, 2 with no gap, so adopting it would be picking a number inside a
+continuum. Refused on the same rule that licensed the threshold at zero. Left
+open, named in CRITERIA and DECISIONS, and pinned in the claim.
+
+Suite green, 137 claims, 1,846 paths, no drift.
+
 ## 2026-09-01, twentieth: a hole in the held set is history, not a nightly finding
 
 The change that added the reports left the nightly naming 2026-08-19/report and

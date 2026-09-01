@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty six claims, a count read off
+and the two pages. It now carries one hundred and thirty seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -3314,6 +3314,147 @@ def claim_a_roundup_classifies_nobody(failures: list[str]) -> None:
 
     print("  roundup      a multi company roundup classifies none of the names "
           "it lists, and a single company release still does")
+
+def claim_a_market_piece_classifies_nobody(failures: list[str]) -> None:
+    """An article about the session confers its class on no company in it.
+
+    The third breadth test, and it catches what neither count above it can
+    see. The two counts measure how WIDE an article is, and both are blind to
+    the NARROW market piece: "US Stock Market Today: S&P 500 Futures Edge Lower
+    As Inflation Concerns Resurface" carries five tags and the feed gave it to
+    one candidate, so it sits well inside both limits. EARNINGS is one of those
+    five, and on 2026-09-01 it paid CRCL class earnings. The article is not
+    about a company at all. The same shape put "Palantir Leads Tech Stocks as
+    Nasdaq Rebounds" under MSTR the same morning, which is the report the owner
+    read and asked about.
+
+    MEASURED BEFORE ADOPTED, on all 195 articles any packet has carried over
+    the fourteen sessions to 2026-09-01, labelled by TITLE ONLY so the
+    labelling cannot be circular with the tag rule being tested. 173 articles
+    carry no macro tag and 22 carry one or more; of those 22, 21 are labelled
+    wraps and one is a policy story, and no company release in the corpus
+    carries one. The distribution's gap is at zero, so the threshold is
+    PRESENCE and not a number picked inside a continuum. CRITERIA.md holds the
+    table and the list of what was measured and left off.
+
+    DQ IS THE CONTROL and it is a true positive: "DAQO New Energy Non-GAAP
+    EPADS misses" really is about DQ, it is simply not on the calendar, and it
+    must still classify. Its tags are EARNINGS, EARNINGS NEWS and RATINGS, and
+    nothing on the macro list may ever touch a list like that.
+
+    PURR IS THE KNOWN RESIDUAL and it is recorded here rather than hidden. Its
+    leveraged ETF wrap is set aside below, which is what this claim pins. Its
+    OTHER article that morning, "Energy stocks lead in subdued final trading
+    day of August, utilities under pressure", carries EARNINGS, ENERGY,
+    SEMICONDUCTORS, TECH and UTILITIES: five tags, one candidate, no macro tag,
+    so PURR still classifies earnings off a sector wrap. It cannot be fixed
+    with a tag list, because the only tags separating it from a company release
+    are SECTOR tags and those sit on releases (SEMICONDUCTORS on 2, TECH on 3,
+    RETAIL on 7 in this corpus). A count of distinct sector tags would catch it
+    at a cut of three, but that distribution runs 86, 71, 29, 7, 2 with no gap
+    anywhere, so choosing three would be picking a number inside a continuum.
+    Left open deliberately. See DECISIONS.md.
+    """
+    from morning import scan
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    # The real 2026-09-01 tag lists. Every one of these articles paid class
+    # earnings to the name beside it that morning.
+    palantir_tags = ["EARNINGS", "GEOPOLITICAL-RISKS", "INFLATION", "RATES", "TECH"]
+    futures_tags = ["CYBERSECURITY", "EARNINGS", "INFLATION", "TREASURIES", "UTILITIES"]
+    etf_tags = ["CRYPTO", "EARNINGS", "EARNINGS REPORT", "ETF", "RATES",
+                "REVENUE GROWTH", "SHARE PRICE", "SHAREHOLDER", "TREASURIES"]
+    release_tags = ["EARNINGS", "EARNINGS NEWS", "RATINGS"]
+
+    now = ettime.now_et()
+
+    def article(title: str, tags: list[str], link: str) -> dict[str, Any]:
+        return {"date": (now - dt.timedelta(minutes=30)).isoformat(),
+                "title": title, "link": link, "sentiment": {"polarity": 0.1},
+                "tags": list(tags), "symbols": []}
+
+    feed = {
+        "MSTR.US": [article("Palantir Leads Tech Stocks as Nasdaq Rebounds",
+                            palantir_tags, "https://example.test/pltr")],
+        "CRCL.US": [article("US Stock Market Today: S&P 500 Futures Edge Lower "
+                            "As Inflation Concerns Resurface",
+                            futures_tags, "https://example.test/futures")],
+        "PURR.US": [article("Best-Performing Leveraged ETFs of August",
+                            etf_tags, "https://example.test/etf")],
+        "DQ.US": [article("DAQO New Energy Non-GAAP EPADS of -$1.20 misses by "
+                          "$0.63, revenue of $62.66M beats by $6.6M",
+                          release_tags, "https://example.test/daqo")],
+    }
+
+    class FeedApi:
+        def news(self, symbol, start=None, end=None):
+            return [dict(row) for row in feed[symbol]], None
+
+    candidates = [{"symbol": symbol} for symbol in feed]
+    scan.attach_catalysts(FeedApi(), candidates, Sink())
+
+    for candidate in candidates:
+        symbol = candidate["symbol"]
+        got, why = scan.classify_catalyst(candidate, set())
+        scope = (candidate["headlines"][0].get("article_scope") or {})
+        if symbol == "DQ.US":
+            # The control. A company release must be untouched by all of this.
+            if got != "earnings":
+                failures.append(
+                    f"the DQ control classified {got!r} rather than 'earnings'. "
+                    "A single company release carrying EARNINGS, EARNINGS NEWS "
+                    f"and RATINGS must still pay its class: {why}")
+            if scope.get("macro_tags"):
+                failures.append(
+                    "the DQ control was read as carrying macro tag(s) "
+                    f"{scope.get('macro_tags')}, so the list has reached a tag "
+                    "that sits on company releases and the corpus says none of "
+                    "it may")
+            continue
+        # A market piece must be set aside, and must be set aside FOR BEING A
+        # MARKET PIECE. All three sit inside the tag count and the sharing
+        # count, so if the macro tags stopped being read they would classify
+        # again and nothing else would catch them.
+        if not scope.get("macro_tags"):
+            failures.append(
+                f"{symbol}'s market piece was read as carrying no macro tag, so "
+                "the list has stopped catching it. Its tags are "
+                f"{[t for t in feed[symbol][0]['tags']]}")
+        if scope.get("about_this_name") is not False:
+            failures.append(
+                f"{symbol}'s market piece counts as an article about {symbol}, "
+                f"so its tags classify the name: {scope.get('why')}")
+        if got == "earnings":
+            failures.append(
+                f"{symbol} classified 'earnings' off a market piece, which is "
+                f"3 of the score's 10 points on a catalyst it does not have: {why}")
+        if scope.get("tag_count", 99) > 20 or scope.get("returned_for_candidates", 9) > 2:
+            failures.append(
+                f"{symbol}'s market piece is wide enough for the tag count or "
+                "the sharing count to catch anyway, so this claim does not "
+                f"prove the macro test: {scope}")
+
+    # Every class names the tags behind it, the paid ones and the empty ones,
+    # because a why that cannot be checked against the packet is not evidence.
+    for candidate in candidates:
+        _, why = scan.classify_catalyst(candidate, set())
+        for tag in feed[candidate["symbol"]][0]["tags"]:
+            if tag not in why:
+                failures.append(
+                    f"{candidate['symbol']}'s reason does not name the tag "
+                    f"{tag!r} that was on the article it was decided from: {why}")
+                break
+
+    print("  market piece an article about the session classifies none of the "
+          "names it mentions, a company release still classifies, and every "
+          "class names the tags behind it")
+
 
 def claim_the_trap_balance_reads_the_whole_window(failures: list[str]) -> None:
     """The balance is counted over the window, not over the three on display.
@@ -11396,6 +11537,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         134: "one hundred and thirty four",
         135: "one hundred and thirty five",
         136: "one hundred and thirty six",
+        137: "one hundred and thirty seven",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -12468,6 +12610,7 @@ def main() -> int:
     claim_an_abbreviation_is_not_a_ticker_claim(failures)
     claim_the_two_documents_agree_on_who_decides_a_trap(failures)
     claim_a_roundup_classifies_nobody(failures)
+    claim_a_market_piece_classifies_nobody(failures)
     claim_the_trap_balance_reads_the_whole_window(failures)
     claim_the_volume_check_carries_its_sign(failures)
     claim_a_skipped_quote_is_not_a_missing_float(failures)

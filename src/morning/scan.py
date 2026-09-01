@@ -2134,6 +2134,20 @@ def _scope_articles(
                     against a maximum of 7 on the single company releases the
                     same morning. This is the count that catches a roundup
                     even on a morning where only one candidate was handed it.
+      macro_tags    how many tags the article carries that CRITERIA.md's
+                    [Score catalyst tags] macro_tag list names. This is the
+                    only one of the three that catches the NARROW market
+                    piece, and neither count above can see it. "US Stock
+                    Market Today: S&P 500 Futures Edge Lower As Inflation
+                    Concerns Resurface" carries five tags and went to one
+                    candidate, so it sits well inside both limits, and it is
+                    not about a company at all. That shape put "Palantir Leads
+                    Tech Stocks as Nasdaq Rebounds" under MSTR on 2026-09-01.
+                    The list was mined from every article any packet has
+                    carried and the distribution behind it is in CRITERIA.md;
+                    the short version is that no company release in that
+                    corpus carries one of these tags, and the threshold is
+                    presence rather than a count.
       returned_for  how many of this morning's candidates the feed handed this
                     same article to. A story given to seven of twelve names is
                     not about any one of them, and this is the only count that
@@ -2156,6 +2170,7 @@ def _scope_articles(
     """
     max_tags = _CRIT.integer("score_catalyst_tags", "max_tags_for_one_company")
     max_sharing = _CRIT.integer("score_catalyst_tags", "max_candidates_sharing_article")
+    macro_map = _CRIT.pair_map("score_catalyst_tags", "macro_tag")
 
     returned_for: dict[str, set[str]] = {}
     for symbol, articles in fetched.items():
@@ -2184,22 +2199,37 @@ def _scope_articles(
     for symbol, articles in fetched.items():
         for article in articles:
             shared = len(returned_for.get(_article_key(article)) or {symbol})
-            tags = len(article.get("tags") or [])
+            names = [str(tag).strip() for tag in (article.get("tags") or [])]
+            tags = len(names)
+            # Normalised the same way the class map reads a tag, so a vendor
+            # writing GEOPOLITICAL-RISKS and a CRITERIA line writing
+            # "geopolitical risks" are the same tag.
+            macro = sorted({name for name in names
+                            if name.lower().replace("-", " ") in macro_map})
             wide_tags = tags > max_tags
             wide_feed = shared > max_sharing
-            if wide_tags and wide_feed:
-                why = (f"a roundup on both counts: {tags} tags, above {max_tags}, "
-                       f"and returned for {shared} of the {checked} candidate(s) "
-                       f"whose news was checked, above {max_sharing}{floor}")
-            elif wide_tags:
-                why = (f"a roundup: {tags} tags, above the {max_tags} a single "
-                       "company article carries, so its tags name the issuers it "
-                       "lists rather than this one")
-            elif wide_feed:
-                why = (f"a roundup: the feed returned it for {shared} of the "
-                       f"{checked} candidate(s) whose news was checked, above "
-                       f"{max_sharing}, so its tags are not about any one of "
-                       f"them{floor}")
+            # Three tests, so eight combinations, and spelling each one out was
+            # already unreadable at four. Each test that fires says its own
+            # piece and they are joined, so a reader is told every reason the
+            # article was set aside rather than the first one.
+            reasons = []
+            if wide_tags:
+                reasons.append(
+                    f"{tags} tags, above the {max_tags} a single company "
+                    "article carries, so its tags name the issuers it lists "
+                    "rather than this one")
+            if wide_feed:
+                reasons.append(
+                    f"the feed returned it for {shared} of the {checked} "
+                    f"candidate(s) whose news was checked, above {max_sharing}, "
+                    "so its tags are not about any one of them")
+            if macro:
+                reasons.append(
+                    f"it carries {len(macro)} macro tag(s), {', '.join(macro)}, "
+                    "which are about the session rather than about any company")
+            if reasons:
+                why = ("not about this name: " + "; and ".join(reasons)
+                       + (floor if wide_feed else ""))
             else:
                 why = (f"about this name: {tags} tag(s), returned for {shared} of "
                        f"the {checked} candidate(s) whose news was checked{floor}")
@@ -2208,7 +2238,9 @@ def _scope_articles(
                 "returned_for_candidates": shared,
                 "candidates_checked": checked,
                 "candidates_in_packet": candidate_count,
-                "about_this_name": not (wide_tags or wide_feed),
+                "macro_tags": macro,
+                "tags_seen": names,
+                "about_this_name": not (wide_tags or wide_feed or macro),
                 "why": why,
             }
 
@@ -2719,6 +2751,12 @@ def classify_catalyst(
     why below names the article that paid, and how wide it was, so a reader
     can audit the call rather than take it.
 
+    EVERY CLASS NAMES THE TAGS BEHIND IT, including the classes that pay
+    nothing. A why saying only which tag matched cannot be checked against a
+    packet without going and finding the article, and a why saying only that
+    an article was set aside does not say what was on it. Both now carry the
+    article's whole tag list, which is the evidence the call was made on.
+
     catalyst_found None means the news feed was never successfully checked
     (call failed, or skipped for quota). That is unknown, not absent: the
     class is None, the why names the real reason, and nothing downstream may
@@ -2742,14 +2780,34 @@ def classify_catalyst(
     matched_tag = None
     matched_article: dict[str, Any] | None = None
     roundups = 0
+    macro_pieces = 0
+    macro_seen: list[str] = []
+    aside_seen: list[str] = []
     widest: tuple[int, Any, Any] | None = None
     for headline in kept:
         scope = headline.get("article_scope") or {}
-        # An article naming dozens of issuers classifies none of them. A
+        # An article naming dozens of issuers classifies none of them, and
+        # neither does one about the session rather than about any company. A
         # headline carrying no scope at all is read as before, because a packet
         # written before _scope_articles existed must still rescore.
         if scope and not scope.get("about_this_name", True):
             roundups += 1
+            macro = list(scope.get("macro_tags") or [])
+            if macro:
+                # Counted apart from the roundups because it is a different
+                # thing. A roundup is about too many companies; a market piece
+                # is about none, and calling it a roundup in the why would
+                # send a reader looking for a list of issuers that is not
+                # there.
+                macro_pieces += 1
+                macro_seen.extend(tag for tag in macro if tag not in macro_seen)
+            # The whole tag list, not only the macro ones. A reason saying an
+            # article was set aside without saying what was on it cannot be
+            # checked against the packet, and the tag that WOULD have paid is
+            # the one a reader most wants to see.
+            for tag in (scope.get("tags_seen") or headline.get("tags") or []):
+                if str(tag) not in aside_seen:
+                    aside_seen.append(str(tag))
             shared = int(scope.get("returned_for_candidates") or 0)
             if widest is None or shared > widest[0]:
                 widest = (shared, scope.get("tag_count"), headline.get("title"))
@@ -2779,22 +2837,37 @@ def classify_catalyst(
             breadth = (f", an article carrying {scope.get('tag_count')} tag(s) and "
                        f"returned for {scope.get('returned_for_candidates')} of "
                        f"this morning's {denominator} candidates")
+        seen = list((scope.get("tags_seen") or article.get("tags") or []))
+        carried = f". Its tags: {', '.join(str(tag) for tag in seen)}" if seen else ""
         return best_class, (
             f"EODHD news tag {matched_tag!r} mapped through CRITERIA.md, from "
-            f"{str(article.get('title') or 'an untitled headline')!r}{breadth}")
+            f"{str(article.get('title') or 'an untitled headline')!r}{breadth}"
+            f"{carried}")
     if roundups and candidate.get("catalyst_found"):
         detail = ""
         if widest:
             detail = (f". The widest was {str(widest[2] or 'an untitled headline')!r}, "
                       f"carrying {widest[1]} tag(s) and returned for {widest[0]} of "
                       "this morning's candidates")
+        market = ""
+        if macro_pieces:
+            market = (f", and {macro_pieces} of them are about the session rather "
+                      f"than about any company, on macro tag(s) "
+                      f"{', '.join(macro_seen)}")
+        carried = (f". The tags on the article(s) set aside: "
+                   f"{', '.join(aside_seen)}" if aside_seen else "")
         return "none", (
             "no tag from an article about this name maps to a known class. "
-            f"Roundups set aside: {roundups} of the {len(kept)} kept article(s), "
+            f"Articles set aside: {roundups} of the {len(kept)} kept article(s), "
             "whose tags name the issuers they list rather than this one"
-            + detail)
+            + market + detail + carried)
     if candidate.get("catalyst_found"):
-        return "none", "news carries the symbol tag but no tag maps to a known class"
+        seen = sorted({str(tag) for headline in kept
+                       for tag in (headline.get("tags") or [])})
+        carried = (f". The tags it did carry: {', '.join(seen)}" if seen
+                   else ". Its articles carried no tags at all")
+        return "none", ("news carries the symbol tag but no tag maps to a known "
+                        "class" + carried)
     return "none", "no news carried the symbol tag in the window"
 
 

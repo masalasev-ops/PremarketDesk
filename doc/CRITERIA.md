@@ -2888,6 +2888,100 @@ catalyst_found still true, which says the window was checked and paid nothing,
 where null would say it was never checked. Both numbers are seeds and the
 header of this file applies to them.
 
+### The macro tag note
+
+A THIRD breadth test, and it catches a shape neither count above can see. The
+two counts measure how WIDE an article is: how many issuers it tags, how many
+candidates the feed gave it to. Both are blind to the narrow market piece. "US
+Stock Market Today: S&P 500 Futures Edge Lower As Inflation Concerns Resurface"
+carries five tags and went to one candidate, so it sits well inside both limits
+and its tags were read as tags about that candidate. It is not about any
+company at all. It is about the session.
+
+That is the shape that put "Palantir Leads Tech Stocks as Nasdaq Rebounds"
+under MSTR on 2026-09-01: five tags, one candidate, invisible to both counts.
+
+MEASURED FIRST, on every article any packet has carried: 195 articles over the
+fourteen sessions 2026-08-13 to 2026-09-01, labelled wrap or company release by
+TITLE ONLY so the labelling cannot be circular with the tag rule being tested.
+71 labelled wrap, 40 labelled company release, 84 left unlabelled.
+
+Macro tags carried, per article:
+
+    macro tags   wrap   release   unlabelled   all
+        0          50      40         83       173
+        1          12       0          1        13
+        2           8       0          0         8
+        3           1       0          0         1
+
+THE DISTRIBUTION HAS A GAP AND IT IS AT ZERO, so the threshold is presence and
+not a number chosen inside a continuum. 173 articles carry none. The 22 that
+carry any are 21 labelled wraps and one policy story, "Trump pushes Clarity Act
+at White House crypto meeting", which is not a company release either. Across
+the 124 articles NOT labelled a wrap, exactly one carries a macro tag, and it
+is that policy story. No company release in the corpus carries one.
+
+That is evidence and not proof. 40 labelled releases is a thin denominator: a
+tag that truly sat on one release in twenty would be missed here about one time
+in eight. The list below is a SEED for that reason and the header of this file
+applies to it.
+
+THIS TEST IS ORTHOGONAL TO THE OTHER TWO, which is the point of adding it. All
+22 articles it catches are invisible to the tag count and the sharing count;
+the overlap is zero. The reverse holds too: all eight of the big issuer
+roundups, 33 to 50 tags, carry no macro tag at all, so this list would not have
+caught the CNBC piece the other two were written for.
+
+WHERE THE LIST CAME FROM. Every tag on it appears in the corpus, on at least
+one labelled wrap and on no labelled release and no unlabelled article. Four
+were the starting point and ten more were mined from the corpus by that test.
+Six earned a catch nothing else makes; four are on the list on the strength of
+never sitting on a release, and caught nothing new in these fourteen sessions.
+Both kinds are marked below.
+
+WHAT WAS MEASURED AND LEFT OFF, so the next reader does not re-propose it:
+
+  Sector tags do not belong here. They sit on company releases, which is what
+  disqualifies them: SEMICONDUCTORS on 2 releases, TECH on 3, AI on 3, RETAIL
+  on 7, FINANCIALS on 2, ENERGY on 1, UTILITIES on 1. A sector tag says what a
+  company does, not that an article is about the market.
+
+  Desk section tags are a publisher's filing system, not a topic. STOCKS,
+  MARKETS, STOCK MARKETS, US MARKETS, FINANCE and BUSINESS sit on 6 to 12
+  wraps each and on no release, which looks strong until you notice they are
+  CNBC section names. A list built on them is a rule about who published an
+  article, and every catch they make here is already made by the tag count.
+
+  ECONOMY, UNITED STATES, WALL STREET and TRADE-NEGOTIATIONS sit on no release
+  either, and every article they catch is already caught by the tag count. They
+  are also broad enough that 40 releases is too thin a denominator to trust
+  them on. Left off, reconsider when the corpus is larger.
+
+  GEOPOLITICS, CREDIT, DEBT, SELLOFF, EQUITIES, REGULATION and LEGISLATION each
+  sit on a single company story in this corpus, so each one is disqualified by
+  the same test that admitted the others. GEOPOLITICS is worth naming twice
+  because GEOPOLITICAL-RISKS is on the list and reads like the same tag: the
+  vendor uses them differently, and the corpus is the reason to trust that
+  rather than the spelling.
+
+An article carrying any tag below classifies no candidate. The cost of being
+wrong is the same as for the other two counts, a class withheld rather than a
+class invented, and catalyst_found stays true.
+
+# Each earned a catch that neither of the counts above makes.
+macro_tag = inflation : consumer price inflation, the session's subject
+macro_tag = rates : the interest rate path, the session's subject
+macro_tag = treasuries : government bond yields, the session's subject
+macro_tag = geopolitical risks : conflict and sanctions moving the whole tape
+macro_tag = cpi : the inflation print itself
+macro_tag = ppi : the producer price print itself
+macro_tag = labor market : the employment print itself
+# On the list because it never sits on a release, but it caught nothing in
+# these fourteen sessions that a tag above did not already catch.
+macro_tag = fed : the central bank, whose decisions move every name
+macro_tag = bonds : the bond market as a market
+macro_tag = sovereign bonds : government debt as a market
+
 tag = earnings : earnings
 tag = earnings report : earnings
 tag = earnings call : earnings
