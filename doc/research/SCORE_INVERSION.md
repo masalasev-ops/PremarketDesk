@@ -10,6 +10,16 @@ below is far beyond that, on purpose: this is written now precisely because the
 count is too small to judge, and a rule written after the numbers are in is not
 a rule.
 
+Amended 2026-08-31, with the record at 68 live picks across 8 sessions, 53
+carrying an excursion and 17 a booked trade. Every judging point below is
+still far beyond that. Gap direction was added to "Known confounds, written
+down now". The mechanism was true when this file was written and was simply
+not written down. An amendment made before either judging point is reached is
+still a pre-registration; one made after the numbers are in is a
+rationalisation, and the date on this line, against the commit that carries
+it, is the only thing that separates the two. Nothing else in this file
+changed.
+
 Nothing in this file is a result. `night/weekly_page.py` renders the groups
 every night and concludes nothing; the judging described here is a separate act
 performed against the rules written below.
@@ -125,3 +135,31 @@ over a survivor set. The trigger rate per bucket is therefore reported beside
 the medians when the primary is judged, and a bucket whose trigger rate differs
 by more than half from another's makes the comparison unsafe to read as a
 statement about the score.
+
+**The score is unsigned and every quantity above is measured from a long.**
+The gap component scores the ABSOLUTE gap, so a name down 20 percent and a
+name up 20 percent earn the same points, while `pnl_pct` books the CRITERIA
+[Paper] long and both excursions are taken around `entry_ref`, which is the
+premarket high. A bucket holding more falling names is losing a race it was
+never entered in. Measured 2026-08-31 over the live rows carrying an
+excursion: green gapping up n=11 across 4 sessions, median favourable -4.24
+percent; green gapping down n=11 across 6 sessions, median -8.69 percent. An
+ordering that holds inside both signs is a result about the score. An
+ordering that appears only in the pooled medians is a result about which
+bucket held the falling names. The share of each bucket gapping down is
+therefore reported beside the medians when either point is judged, split on
+the sign of `gap_pct` in `picks` with zero counted as gapping up, which is
+`scan.score_roll`'s own rule, and a null `gap_pct` is its own group rather
+than being folded into a sign it was never measured to have. A bucket whose
+gapping down share differs by more than half from another's makes the
+comparison unsafe to read as a statement about the score.
+
+The split does not need CRITERIA [Score watch] to move and must not be used
+to argue that it should. Measured the same night, both halves of green clear
+`min_group_rows` at 11 and 11 and `min_group_sessions` at 4 and 6, and both
+halves of yellow clear them at 12 and 11 across 4 and 5. Red's halves are
+withheld at 4 and 4, which is the withholding rule working rather than an
+argument for weakening it: those two minimums are read by every group on the
+weekly page, and lowering them so one new split publishes would change
+numbers already published in order to serve it, on the single page built to
+watch for a threshold turned until the output looks the way somebody wanted.

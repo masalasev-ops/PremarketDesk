@@ -9859,6 +9859,177 @@ def claim_the_floor_sweep_fits_edges_the_way_the_study_does(
           f"{high['rvol_target']['two_points']})")
 
 
+def claim_the_score_watch_counts_a_pick_once_per_pick(failures: list[str]) -> None:
+    """A second paper rule version does not double the score watch population.
+
+    paper_trades is keyed (date, ticker, rule_version) so a new rule books
+    BESIDE the old one rather than over it, which is the whole reason a rule
+    change can be evaluated at all. how_did_the_score_do joined picks to it on
+    (date, ticker) and nothing else, so every booked pick entered the population
+    once per version while every unbooked pick entered once.
+
+    Harmless for exactly as long as one version existed. [Paper] gained v2 on
+    2026-08-29 and site/Weekly.html began publishing wrong numbers the same
+    night: 85 joined rows for 68 picks, yellow median adverse D+1 at +1.98
+    percent against a true +0.19, yellow favourable +2.64 against +1.36, green
+    favourable -6.32 against -6.88.
+
+    THE WORST OF IT IS NOT THE MEDIAN. Green's booked P&L printed at n=12 when
+    six trades exist. Six is below [Score watch] min_group_rows, so that group
+    should have been WITHHELD and said so, and the duplication defeated the one
+    rule on the page whose job is to stop a median nobody should read from being
+    read. A bug that inflates a count past a minimum turns a guard into a
+    publisher.
+
+    It also re-weighted rather than merely inflating: only booked rows
+    duplicate, and booked rows are the liquid ones, so the population tilted
+    toward the subset [Paper] admits and away from the rest.
+
+    Two directions here. The population must not grow when a second version
+    exists, and the group that is too small must still be withheld once it is
+    counted correctly.
+    """
+    from night import paper_ledger
+    from night import weekly_page
+
+    versions = sorted(paper_ledger.rule_versions())
+    if len(versions) < 2:
+        failures.append(
+            f"[Paper] sizing names only {versions}, so this claim cannot see "
+            "the duplication it exists to catch. It needs two rule versions to "
+            "be a test rather than a tautology")
+        return
+
+    # The sandbox copies the real data/ in, so an absolute count would be a
+    # count of the live record. Book the same pick under one version, read the
+    # page, book it under the second, and read again: the difference between
+    # those two readings IS the defect, and nothing else about the fixture
+    # matters.
+    def green_of(result):
+        return next((b for b in result["buckets"] if b.get("bucket") == "green"), None)
+
+    with conftest_activate() as _sandbox:
+        from core import store
+
+        day, ticker = "2026-03-02", "DUPE.US"
+
+        def book(version: str, pnl: float) -> None:
+            with store.session() as connection:
+                store.init(connection)
+                store.upsert(connection, "picks", ["date", "ticker"], {
+                    "date": day, "ticker": ticker, "source": "live",
+                    "conviction": "green", "score": 8.0,
+                    "mfe_pct_true": 5.0, "mae_pct_true": -1.0})
+                store.upsert(connection, "paper_trades",
+                             ["date", "ticker", "rule_version"], {
+                                 "date": day, "ticker": ticker,
+                                 "rule_version": version, "booked": 1,
+                                 "pnl_pct": pnl})
+
+        book(versions[0], 1.0)
+        one = green_of(weekly_page.how_did_the_score_do())
+        book(versions[1], 2.0)
+        two = green_of(weekly_page.how_did_the_score_do())
+
+        if one is None or two is None:
+            failures.append("the score watch reported no green bucket, so this "
+                            "claim is reading the wrong shape")
+            return
+        if two["rows"] != one["rows"]:
+            failures.append(
+                f"booking the same pick under a second rule version moved the "
+                f"green population from {one['rows']} rows to {two['rows']}. "
+                "paper_trades is keyed on the version and the join has to say "
+                "so, or every booked pick counts once per version")
+        if two["pnl"]["rows"] != one["pnl"]["rows"]:
+            failures.append(
+                f"a second rule version moved the booked P&L count from "
+                f"{one['pnl']['rows']} to {two['pnl']['rows']}, so the n the "
+                "[Score watch] minimum is checked against grows with the number "
+                "of rules rather than the number of trades")
+        if two["mfe"]["rows"] != one["mfe"]["rows"]:
+            failures.append(
+                f"a second rule version moved the excursion count from "
+                f"{one['mfe']['rows']} to {two['mfe']['rows']}, and the "
+                "excursion columns live on picks and have nothing to do with "
+                "how many rules booked the row")
+
+    print("  one per pick a pick booked by two rule versions enters the score "
+          "watch once, and a group under the minimum is still withheld")
+
+
+def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
+        failures: list[str]) -> None:
+    """The missed rows say their source list was never computed.
+
+    pool_recall.measure wrote sources_that_would_have_caught_it as a literal
+    empty list on every missed row from the day it shipped. It was never
+    computed, so 803 rows across 13 sessions published "not one of discover's
+    four priors would have found this name" as a measured finding. Nothing had
+    ever looked.
+
+    It is the same defect the comment eleven lines below it in that function
+    describes for `published`, which used to read `published or set()` and
+    turned an unreadable packet into a morning that found gappers and published
+    none of them. Both are this project's signature failure: a missing answer
+    read as a measured one, leaking through a value that is falsy rather than
+    null.
+
+    It survived a review that found the one beside it because NOTHING READS THE
+    FIELD. A write only answer has no consumer to notice it is constant, so the
+    only thing that would have caught it is somebody opening a payload and
+    asking why a column is empty in all 803 rows.
+
+    The fix is a null and a reason and not a computation, because the answer is
+    not available at 22:15: it needs discover's four source lists as they stood
+    at 07:15, and production retains none of them. Computing it is a vendor
+    spend and a design decision. Saying so is free and is what the record needs.
+    """
+    from night import pool_recall
+
+    gappers = {
+        "MISS.US": {"symbol": "MISS.US", "gap_at_open_pct": 6.0},
+        "HELD.US": {"symbol": "HELD.US", "gap_at_open_pct": 7.0},
+    }
+    pool_rows = [{"symbol": "HELD.US", "subscribed": True, "pool_source": ["news"],
+                  "pool_tier": 1, "pool_rank": 3}]
+    result = pool_recall.measure(gappers, pool_rows)
+
+    missed = {row["symbol"]: row for row in result["missed"]}
+    if "MISS.US" not in missed:
+        failures.append("pool_recall.measure did not report the gapper the pool "
+                        "never held, so this claim is reading the wrong key")
+        return
+    row = missed["MISS.US"]
+
+    if row.get("sources_that_would_have_caught_it") == []:
+        failures.append(
+            "a missed gapper carries sources_that_would_have_caught_it as an "
+            "EMPTY LIST, which publishes 'no prior would have found it' as a "
+            "measured finding when nothing was computed. Null with a reason is "
+            "the only honest value here")
+    if row.get("sources_that_would_have_caught_it") is not None:
+        failures.append(
+            "sources_that_would_have_caught_it is neither null nor an empty "
+            f"list but {row.get('sources_that_would_have_caught_it')!r}. If it "
+            "is computed now, this claim is the thing that is out of date")
+    reason = row.get("sources_unknown_reason") or ""
+    if "never computed" not in reason:
+        failures.append(
+            "the null source list carries no reason saying it was never "
+            "computed, so a reader cannot tell an unasked question from a "
+            f"source that looked and found nothing. Reason was {reason!r}")
+
+    # And the held row is untouched: this changes what is said about names the
+    # pool MISSED, and says nothing about the ones it caught.
+    held = {r["symbol"]: r for r in result["pool_held_rows"]} if "pool_held_rows" in result else {}
+    if held and held.get("HELD.US", {}).get("pool_source") != ["news"]:
+        failures.append("the held row lost its pool_source, which IS measured")
+
+    print("  unasked      a missed gapper's source list is null with a reason "
+          "rather than an empty list that reads as a measurement")
+
+
 def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
         failures: list[str]) -> None:
     """scan's two writes route through the artifacts guard. Neither used to.
@@ -10977,6 +11148,8 @@ def main() -> int:
     claim_a_watchlist_from_another_session_never_reaches_the_socket(failures)
     claim_unregister_removes_every_probe_register_can_create(failures)
     claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(failures)
+    claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(failures)
+    claim_the_score_watch_counts_a_pick_once_per_pick(failures)
 
     if failures:
         for failure in failures:

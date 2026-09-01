@@ -493,9 +493,36 @@ def how_did_the_score_do() -> dict[str, Any]:
 
     Reads picks, paper_trades and the packets. No vendor call, no new table,
     no measurement of its own, which is this module's standing constraint.
+
+    ONE ROW PER PICK, and the join predicate has to say so. paper_trades is
+    keyed (date, ticker, rule_version), and this join named only the first
+    two. That was harmless for exactly as long as one rule version existed.
+    [Paper] gained v2 on 2026-08-29, the table went to two rows per pick, and
+    every booked pick started entering this population TWICE while every
+    unbooked one entered once.
+
+    What that published, measured on 2026-08-31 before the fix: 85 joined
+    rows for 68 picks, yellow median adverse D+1 at +1.98 percent against a
+    true +0.19, yellow favourable +2.64 against +1.36, green favourable -6.32
+    against -6.88, and a green booked P&L median printed at n=12 when six
+    trades exist, which is under [Score watch] min_group_rows and should have
+    been withheld. The duplication did not merely add noise, it re-weighted
+    the population toward the rows that booked, which are the liquid ones,
+    and then defeated the withholding rule that exists to catch a group this
+    small.
+
+    The version read is sorted(rule_versions())[0], which is the same
+    expression paper_ledger.record_so_far uses for the same question, so the
+    page and the morning report cannot come to rest on different rules.
+    doc/research/SCORE_INVERSION.md names v1 as the primary and that is what
+    this returns today. It is read rather than written down here because a
+    second copy of a version list is a second thing to keep in step.
     """
+    from night import paper_ledger
+
     minimum_rows = _CRIT.integer("score_watch", "min_group_rows")
     minimum_sessions = _CRIT.integer("score_watch", "min_group_sessions")
+    primary_rule = sorted(paper_ledger.rule_versions())[0]
     with store.session() as connection:
         store.init(connection)
         rows = [dict(row) for row in connection.execute(
@@ -503,8 +530,10 @@ def how_did_the_score_do() -> dict[str, Any]:
             "k.mfe_pct_true, k.mae_pct_true, p.pnl_pct "
             "FROM picks k LEFT JOIN paper_trades p "
             "  ON p.date = k.date AND p.ticker = k.ticker AND p.booked = 1 "
+            "     AND p.rule_version = ? "
             "WHERE k.source = 'live' "
-            "  AND (k.mfe_pct_true IS NOT NULL OR p.pnl_pct IS NOT NULL)")]
+            "  AND (k.mfe_pct_true IS NOT NULL OR p.pnl_pct IS NOT NULL)",
+            (primary_rule,))]
 
     components = _score_components_by_row()
     buckets: list[dict[str, Any]] = []

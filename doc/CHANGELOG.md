@@ -15,6 +15,84 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31, fifth: a published median, a count nobody took, and a confound written early
+
+Three changes, and the first is publishing wrong numbers on the live page
+tonight.
+
+**The score watch counted every booked pick once per paper rule version.**
+`night/weekly_page.py`'s `how_did_the_score_do` joins picks to paper_trades,
+which is keyed `(date, ticker, rule_version)`, and the predicate named only the
+first two. That was harmless for exactly as long as one version existed.
+`[Paper]` gained v2 on 2026-08-29 and the population went to 85 joined rows for
+68 picks the same night, with only the BOOKED rows duplicating, so it
+re-weighted toward the liquid subset rather than merely inflating.
+
+What `site/Weekly.html` has been publishing since: yellow median adverse D+1
++1.98 percent against a true +0.19, yellow favourable +2.64 against +1.36, green
+favourable -6.32 against -6.88. `README.md` still carries the pre-v2 readings and
+its yellow +1.36 matches the corrected figure exactly, which dates the
+regression to the v2 commit.
+
+The worst of it is not a median. Green's booked P&L printed at n=12 when six
+trades exist. Six is below `[Score watch] min_group_rows`, so that group should
+have been WITHHELD and said so. A defect that inflates a count past a minimum
+turns a guard into a publisher, and this one defeated the single rule on that
+page whose job is to stop a median nobody should read from being read. It reads
+withheld now, with its six rows and five sessions named.
+
+The version comes from `sorted(paper_ledger.rule_versions())[0]`, the same
+expression `record_so_far` already uses, so the page and the morning report
+cannot come to rest on different rules.
+`doc/research/SCORE_INVERSION.md` names v1 as the primary and that is what it
+returns today.
+
+**`sources_that_would_have_caught_it` was a literal empty list.**
+`night/pool_recall.py` wrote `[]` on every missed row from the day it shipped and
+never computed it, so 803 rows across 13 sessions published "not one of
+discover's four priors would have found this name" as a measured finding. It is
+the same defect the comment eleven lines below it in the same function describes
+for `published`, and it survived a review that found that one because NOTHING
+READS THE FIELD: a write only answer has no consumer to notice it is constant.
+
+It is null with a reason now, and not computed, because the answer is not
+available at 22:15. It needs discover's four source lists as they stood at
+07:15, and production retains none of them: the watchlist carries `pool_source`
+only for names that made the pool, and a missed name is by definition not in it.
+Answering it properly costs a re-fetch of the prior session movers, the news
+window and the earnings calendar, which is a design decision and a vendor spend
+rather than a fix.
+
+**`doc/research/SCORE_INVERSION.md` gains a fourth confound: gap direction.**
+The score is unsigned, its gap component scores the ABSOLUTE gap, and every
+quantity that file measures is taken from a long, so a bucket holding more
+falling names is losing a race it was never entered in. Measured the same night
+over the live rows carrying an excursion: green gapping up n=11 across 4
+sessions, median favourable -4.24 percent; green gapping down n=11 across 6
+sessions, median -8.69.
+
+The mechanism was true on 2026-08-29 when that file was written and was simply
+not written down. Adding it now, with both judging points still 200 rows away,
+keeps it a pre-registration; adding it after either point is reached would make
+it a rationalisation, and the date on the amendment line against the commit that
+carries it is the only thing that separates the two. No judging rule moved and
+no threshold moved.
+
+`[Score watch]` does NOT move and the new paragraph says so explicitly, because
+the obvious next argument is that a split halves every group under the minimum
+and it does not: both halves of green clear at 11 and 11 across 4 and 6, both
+halves of yellow at 12 and 11 across 4 and 5. Red's halves are withheld at 4 and
+4, which is the withholding rule working. Those two minimums govern every group
+on the weekly page, and lowering them so one new split publishes would change
+numbers already published in order to serve it, on the one page built to watch
+for a threshold turned until the output looks the way somebody wanted.
+
+`night/weekly_page.py` does not render the split. The confound directly above
+the new one commits to being reported when the primary is judged and is rendered
+nowhere either, and `gap_pct` is a picks column outside `prune_data.py`'s
+whitelist, so the split is recomputable on the day it is judged from evidence
+already kept.
+
 ## 2026-08-31, fourth: the two files with no route back were the two nothing guarded
 
 **What was wrong.** `morning/scan.py` wrote both of the artifacts

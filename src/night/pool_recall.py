@@ -311,7 +311,30 @@ def measure(
         if row is None:
             missed.append({
                 **gapper,
-                "sources_that_would_have_caught_it": [],
+                # NULL, NEVER AN EMPTY LIST. This read `[]` from the day it
+                # shipped and was never computed, so 803 missed rows across
+                # 13 sessions published "no source would have caught it" as
+                # a measured finding. It is the same defect the comment
+                # eleven lines below describes for `published`, in the same
+                # function, and it survived because nothing reads this field:
+                # a write only answer has no consumer to notice it is
+                # constant.
+                #
+                # It is not computed here rather than being computed wrongly.
+                # Answering it needs discover's four source lists as they
+                # stood at 07:15, and production retains none of them: the
+                # watchlist carries pool_source only for names that made the
+                # pool, and a missed name is by definition not in it. So the
+                # answer costs a re-fetch at 22:15 of the prior session
+                # movers, the news window and the earnings calendar, which is
+                # a design decision and a vendor spend, not a fix.
+                "sources_that_would_have_caught_it": None,
+                "sources_unknown_reason": (
+                    "never computed. Which of discover's priors would have "
+                    "found this name needs the four source lists as they "
+                    "stood at 07:15, and nothing retains them past that run. "
+                    "This is an unasked question, not a source that looked "
+                    "and found nothing"),
             })
             continue
         subscribed = bool(row.get("subscribed", True))
