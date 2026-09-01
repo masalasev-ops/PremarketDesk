@@ -15,6 +15,184 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, eighth: the freeze is amended rather than withdrawn
+
+**Eighty commits have been judged against a rule that did not describe them.**
+DECISIONS 2026-08-21 seventh said a change is in scope only if it makes a
+published number wrong or makes the record readable. Since that entry the tree
+has grown by 19,446 lines of Python and a second daily report pass was added,
+and a recorded discipline nobody applies is worse than none, because it gets
+cited against the wrong changes.
+
+**Amended in place, not withdrawn**, because the route to more code genuinely
+does still run through a published number being wrong, and most of the work has
+gone that way. What was wrong when written is narrower and more useful than
+"nobody follows it": the rule described the pipeline and nothing else, while
+the two things that would inevitably grow, the claims that pin a fix and the
+instruments that find one, match neither clause. A reader would have had to
+break the rule to do the work correctly.
+
+**The counts are in the entry**, measured from 5867e6e, whose subject is
+"freeze the tree", rather than remembered.
+
+  Python src/            42,949 -> 62,395   +19,446
+    src/tests/           16,624 -> 24,259   +7,635
+    src/research/         5,634 -> 10,427   +4,793
+    src/night/            2,936 ->  6,211   +3,275
+    src/morning/          7,269 ->  8,754   +1,485
+    src/midday/               0 ->  1,365   +1,365
+    core, ops, collect    7,174 ->  7,911     +737
+  Tracked markdown       15,075 -> 22,063   +6,988
+  doc/ all files         24,941 -> 27,140   +2,199
+  claims                     74 ->    131      +57
+  CRITERIA thresholds       260 ->    299      +39
+
+**The headline is the smallest row.** The midday pass is 7 percent of the
+growth. Two thirds is tests and research instruments. Blaming the second report
+pass for the size of this tree would be reading the smallest number on the page,
+and that is exactly what an unamended entry invited a reader to do.
+
+**Two clauses added, describing what was already happening.** A claim that pins
+a fix travels with that fix and is not separate work, because a fix nothing
+holds in place comes back and this project has watched it: the artifact count
+travelled through five documents after the module was corrected. And an
+instrument that measures whether a published number is wrong is in scope,
+which is the clause research/ needed while growing 4,793 lines without one.
+
+**The midday pass is named as the one accepted exception, with its reason.** It
+is out of scope under every clause and was built anyway, because the morning
+cannot answer what the picks did and the outcome rows the whole freeze waits
+for are what it grades. It buys the evidence the freeze exists to accumulate.
+Named as an exception and explicitly not a precedent: a second needs its own
+entry first.
+
+**And what stays out**, so this reads as a rule and not a permission slip: a
+refactor, a feature nobody asked for, a second vendor in the published path,
+widening the socket cap, an instrument whose question is not whether a
+published number is wrong, and a third report pass.
+
+The heading carries an amendment marker, because a reader scanning headings
+would otherwise take the two clause rule and never open the entry.
+
+## 2026-09-01, seventh: the 2026-08-24 backup is the partial file, arbitrated
+
+**Verdict: the working copies are intact and the backups captured a partial
+file.** Neither of the two files could settle it, because each was the thing in
+question. Three records that predate both and were written by different code
+all describe the same session, and it is not the one the backup holds.
+
+**Source one, the collector's own stats sidecar**, written at 09:25 by the
+collector and not by either file: `minutes_written` 2003, `messages` 19576,
+`trades_folded` 19576, `connections` 1, `reconnects` 0, `write_failures` 0.
+One connection, one session, no losses.
+
+**Source two, data/job-status.jsonl**, written by the job_status wrapper around
+every step. The collector step ran **08:09:34 to 09:25:00**, status ok, exit 0,
+producing 2003 minutes written. The rest of that day's timeline is the finding:
+every job fired at **07:55** rather than at 07:00, 07:15 and 07:20. The machine
+was late. `discover` ran 07:55:12 to 07:55:25 producing 42 names subscribed,
+and warmed 50 tickers by 07:55:43.
+
+**Source three, runs/2026-08-24/packet.json**, written by scan at 08:45:
+`collector_snapshot.bars_total` 991 with `last_complete_bar_et` 08:43. A mid
+session reading, consistent with 2,089 bars by 09:25 and consistent with
+nothing near 5.
+
+**What the two files hold.** The working capture has 2,089 bars across 53
+symbols; the backup has 5 bars across 5. The working subscription list has 50
+screened names; the backup has 11, and those 11 are exactly the context
+proxies.
+
+**What happened.** The nightly's own catch up ran at **07:55:13** and copied
+the two files that existed at that moment: a proxies only capture and a proxies
+only subscription list, left by a collector attempt that started before
+discover had produced a watchlist. That is the same discover to collector gap
+the outage note describes. The real collector then ran 08:09:34 to 09:25:00 and
+resubscribed once, which the stats sidecar records as `resubscriptions` 1 on a
+single connection. At 22:15 the nightly found both working copies had grown,
+correctly refused to overwrite, and reported it.
+
+**Which record is now believed wrong: the backup.** It is a partial file, not a
+stale one, and it was partial the moment it was taken.
+
+**This is NOT a second incident of the 2026-08-21 class.** Nothing overwrote a
+working copy. That distinction is the whole reason the disagreement was
+arbitrated rather than resolved by preference, and it is why the entry says
+what happened rather than which file was chosen.
+
+**The alarm fired the same night.** Line 115 of logs/nightly-2026-08-24.log,
+22:15, naming both files and their byte counts. It has fired every night since
+and nobody read it for eight days. The tripwire worked; the reading of it did
+not.
+
+### Write once had no door, and now has a narrow one
+
+Write once protects a good backup from a corrupted working copy and protects a
+corrupted backup from a good working copy exactly as firmly. A truncated
+capture was therefore held permanently with no route in for the intact one.
+
+`--arbitrate DAY/LABEL` is that route and it is not a relaxation. The default
+path is unchanged: it still refuses and reports, and no scheduled step calls
+this. The door opens only on `--verdict`, at least `[Backup] MIN_SOURCES` of
+two `--source` citations, and a `--why`, and it refuses separately when the
+artifact is not one this module backs up, when either copy is missing, and when
+the two agree. Each refusal keeps its own message, because "refused" alone
+sends a reader to the wrong file at the wrong hour.
+
+The verdict is appended to `arbitrations.jsonl` in the BACKUP root, not under
+data/, so it travels with the evidence it describes; a verdict kept beside the
+working tree is lost by the same event that makes a working tree doubtful. It
+carries both digests, both byte counts, the sources and the reason, and it is
+written BEFORE the replacement. A recorded verdict with no replacement is a
+readable state somebody can finish. A replacement with no record is what this
+module exists to prevent.
+
+`claim_a_held_backup_yields_only_to_a_recorded_verdict` drives five refusals,
+asserts none of them writes the ledger, and asserts the recorded verdict exists
+with its sources before the one replacement it permits.
+
+### The same alarm on 2026-09-01, pointing the other way, and it is my defect
+
+Tonight's disagreement on 2026-09-01 has the opposite verdict, and finding out
+why turned up a defect in the socket cost probe that this entry has to name.
+
+**The probe writes into the premarket session capture.**
+`research/measure_socket_cost.py` launches `collect/collect_premarket.py` as a
+subprocess, and that module writes to `PREMARKET_DIR/<today>.jsonl` with no
+argument saying otherwise. It is the same file the 07:20 collector fills. The
+probe was scheduled for 10:00 on the reasoning written into its own .bat, that
+10:00 is past the 09:25 stop so the 50 symbol account wide cap is free and it
+cannot starve the morning. That reasoning is correct about the cap and silent
+about the file.
+
+Measured at 10:06 while the probe was still running,
+`data/premarket/2026-09-01.jsonl` held 3,670 bars: 978 in the 07 hour, 1,628 in
+the 08, 742 in the 09, and **322 in the 10**. By `market_status`, 3,338
+extended-hours and **332 open**. The collector's window is 07:20 to 09:25 and
+every bar it writes is extended-hours. The 10 hour bars are the probe's, and
+they are regular session trading written into the file CRITERIA calls not
+reproducible at any price and that `_ARTIFACTS` backs up as one of four with no
+route back.
+
+**The vintage guard caught it.** Two suites went red on
+`StaleDataError: 17 vintage violation(s) in the 2026-09-01 packet`, from a claim
+that builds a packet against the live capture. That is the guard doing exactly
+its job: the file no longer describes only today's premarket.
+
+**Which inverts the backup question.** `backup_evidence` was run by hand at
+09:44, after the collector stopped at 09:25 and before the probe started at
+10:00, so the backup holds the CLEAN premarket only capture at 837,907 bytes
+and the working copy is the contaminated one. On 2026-08-24 the working copy
+was right; here it is the backup. That is the whole reason the door built above
+takes a verdict and sources rather than a preference for one side.
+
+**Not arbitrated and nothing changed.** The probe is still running, a verdict
+taken against a moving file is worth nothing, and the remedy discards data,
+which is a decision for an owner rather than a defect to be quietly repaired.
+The probe's own measurement, which is a vendor counter delta and not these
+bars, is unaffected. Recorded here so the next reader of that capture knows the
+10 hour bars are an instrument's and not a session's.
+
 ## 2026-09-01, sixth: study payloads leave doc/, and the finding stays
 
 **doc/ held 91,132 committed lines and 67,470 of them were nine machine written

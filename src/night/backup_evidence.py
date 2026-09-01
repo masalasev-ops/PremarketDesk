@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import shutil
 import sys
@@ -74,6 +75,7 @@ from typing import Any
 
 from core import config
 from core import criteria
+from core import ettime
 from ops import job_status
 
 _CRIT = criteria.load()
@@ -279,6 +281,117 @@ def report(result: dict[str, Any]) -> None:
 
 # The exit codes that mean this step did its job. Declared at module level so
 # the __main__ line below and the entrypoint test harness read the same value.
+# One line per arbitration, appended and never rewritten, and it lives in the
+# BACKUP ROOT rather than under data/ so it travels with the evidence it
+# describes. A verdict kept beside the working tree would be lost by the same
+# event that makes a working tree doubtful.
+ARBITRATION_LOG = "arbitrations.jsonl"
+
+# The minimum number of sources an arbitration must cite. Two, because one
+# source is an assertion with a citation attached: the whole method here is
+# that records written by DIFFERENT code at DIFFERENT times have to agree
+# before either of the two files in question is touched.
+MIN_SOURCES = 2
+
+
+def arbitration_log_path() -> Path:
+    return backup_root() / ARBITRATION_LOG
+
+
+def record_arbitration(entry: dict[str, Any]) -> Path:
+    """Append the verdict. Written BEFORE anything is replaced.
+
+    Order matters. If the replacement fails halfway, a recorded verdict with no
+    replacement is a readable state and someone can finish it. A replacement
+    with no record is the thing this whole module exists to prevent.
+    """
+    path = arbitration_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    return path
+
+
+def arbitrate(day: str, label: str, verdict: str, sources: list[str],
+              why: str, dry_run: bool = False) -> dict[str, Any]:
+    """Close ONE disagreement with evidence from outside both files.
+
+    REFUSES unless everything below holds, and each refusal is a different
+    mistake:
+
+      the artifact is named by _ARTIFACTS          or there is nothing to judge
+      both copies exist                            or this is a copy, not a
+                                                   disagreement, and the
+                                                   ordinary path handles it
+      they actually differ                         or there is no dispute and
+                                                   replacing would be a write
+                                                   for its own sake
+      the verdict is working or backup             the only two readings
+      at least MIN_SOURCES sources                 the method, not a formality
+      a reason is given                            the entry has to say what
+                                                   happened, not which file won
+
+    Exactly one artifact moves, in the direction the verdict names, and the
+    entry records both digests so a later reader can tell what was replaced
+    without trusting this function's own account of it.
+    """
+    located = dict(_ARTIFACTS).get(label)
+    if located is None:
+        return {"ok": False, "why": f"{label!r} is not an artifact this module "
+                f"backs up. Known: {', '.join(name for name, _ in _ARTIFACTS)}"}
+    source = located(day)
+    target = _target(day, label, source)
+    if not source.is_file():
+        return {"ok": False, "why": f"no working copy at {source}, so there is "
+                "no disagreement here, only an absence"}
+    if not target.is_file():
+        return {"ok": False, "why": f"no backup at {target}, so this is a copy "
+                "the ordinary path already makes and not a dispute"}
+    working_digest, backup_digest = _digest(source), _digest(target)
+    if working_digest == backup_digest:
+        return {"ok": False, "why": "the two copies agree, so there is nothing "
+                "to arbitrate and replacing one would be a write for its own sake"}
+    if verdict not in ("working", "backup"):
+        return {"ok": False, "why": f"verdict {verdict!r} is neither 'working' "
+                "nor 'backup', and those are the only two readings"}
+    if len(sources) < MIN_SOURCES:
+        return {"ok": False, "why": f"{len(sources)} source(s) cited and "
+                f"{MIN_SOURCES} are required. Neither of the two files counts: "
+                "cite records written by different code at different times, "
+                "such as the collector stats sidecar, the job status rows, or "
+                "the packet's own collector_snapshot"}
+    if not (why or "").strip():
+        return {"ok": False, "why": "no reason given. The entry has to say what "
+                "happened, not which file was picked"}
+
+    entry = {
+        "at": ettime.stamp(ettime.now_et()),
+        "day": day,
+        "label": label,
+        "verdict": verdict,
+        "sources": sources,
+        "why": why.strip(),
+        "working_sha256": working_digest,
+        "backup_sha256": backup_digest,
+        "working_bytes": source.stat().st_size,
+        "backup_bytes": target.stat().st_size,
+        "dry_run": bool(dry_run),
+    }
+    if dry_run:
+        return {"ok": True, "entry": entry, "replaced": None, "dry_run": True,
+                "log": arbitration_log_path()}
+
+    log = record_arbitration(entry)
+    if verdict == "working":
+        shutil.copy2(source, target)
+        replaced = f"backup {target}"
+    else:
+        shutil.copy2(target, source)
+        replaced = f"working copy {source}"
+    return {"ok": True, "entry": entry, "replaced": replaced, "dry_run": False,
+            "log": log}
+
+
 OK_CODES = (0,)
 
 
@@ -293,6 +406,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="Copy a session back into the working tree.")
     parser.add_argument("--force", action="store_true",
                         help="With --restore, overwrite a differing working copy.")
+    parser.add_argument("--arbitrate", default=None, metavar="DAY/LABEL",
+                        help="Close one DISAGREES by evidence, e.g. "
+                             "2026-08-24/premarket. Needs --verdict, at "
+                             "least two --source and a --why.")
+    parser.add_argument("--verdict", default=None,
+                        choices=("working", "backup"),
+                        help="Which copy the outside evidence supports.")
+    parser.add_argument("--source", action="append", default=[],
+                        metavar="TEXT",
+                        help="A record that is NEITHER of the two files. "
+                             "Repeatable and at least two are required.")
+    parser.add_argument("--why", default=None,
+                        help="What happened. Not which file was picked.")
     args = parser.parse_args(argv)
 
     if args.list:
@@ -300,6 +426,35 @@ def main(argv: list[str] | None = None) -> int:
         print(f"backup: {backup_root()} holds {len(sessions)} session(s)")
         for day in sessions:
             print(f"  {day}")
+        return 0
+
+    if args.arbitrate:
+        if "/" not in args.arbitrate:
+            print("backup: --arbitrate takes DAY/LABEL, e.g. 2026-08-24/premarket")
+            return 2
+        day, _, label = args.arbitrate.partition("/")
+        outcome = arbitrate(day, label, args.verdict or "", list(args.source),
+                            args.why or "", dry_run=args.dry_run)
+        if not outcome["ok"]:
+            print(f"backup: REFUSED to arbitrate {args.arbitrate}: {outcome['why']}")
+            print("  Write once is not relaxed. Nothing was changed.")
+            return 2
+        entry = outcome["entry"]
+        verb = "would record" if outcome["dry_run"] else "recorded"
+        print(f"backup: {verb} an arbitration for {day}/{label}, verdict "
+              f"{entry['verdict']}, on {len(entry['sources'])} source(s)")
+        for line in entry["sources"]:
+            print(f"    source: {line}")
+        print(f"    why: {entry['why']}")
+        print(f"    working {entry['working_bytes']:,} bytes "
+              f"sha {entry['working_sha256'][:12]}")
+        print(f"    backup  {entry['backup_bytes']:,} bytes "
+              f"sha {entry['backup_sha256'][:12]}")
+        if outcome["dry_run"]:
+            print("  --dry-run: nothing recorded and nothing replaced.")
+            return 0
+        print(f"  replaced {outcome['replaced']}")
+        print(f"  verdict appended to {outcome['log']}")
         return 0
 
     if args.restore:

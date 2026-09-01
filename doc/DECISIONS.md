@@ -1182,7 +1182,7 @@ capture ran 0.0288 to 0.4231 on the socket's own window; window share ran
 is now published rather than left for a reader to compute. Table in
 doc/research/COLLECTOR_VOLUME.md.
 
-## 2026-08-21, seventh: the code is frozen except for defects that make published numbers wrong
+## 2026-08-21, seventh: the code is frozen except for defects that make published numbers wrong [amended 2026-09-01, four clauses now, see the amendment inside]
 
 **THE RULE.** From this entry forward a change is in scope if, and only if, it
 does one of two things:
@@ -1197,6 +1197,92 @@ Everything else waits for the outcome rows. Not "is deferred", not "is lower
 priority": waits. There is no evidence yet that any of it is worth having,
 because the thing this project exists to test, whether the screen picks names
 that go on to do something, has zero settled outcomes behind it.
+
+**[amended 2026-09-01: the two clauses above were incomplete when written and
+eighty commits have been judged against a rule that did not describe them.**
+The freeze is KEPT, not withdrawn: the route to more code still runs through a
+published number being wrong. What was missing is that the two things which
+would inevitably grow, the claims that pin a fix and the instruments that find
+one, match neither clause as written. They grew anyway, and a rule that a
+reader would have to break to do the work correctly is a rule that gets cited
+against the wrong changes.
+
+**Measured, not remembered.** From 5867e6e, whose subject is "freeze the
+tree", to 2026-09-01, eighty commits later:
+
+| | 2026-08-21 | 2026-09-01 | change |
+| --- | ---: | ---: | ---: |
+| Python, src/ | 42,949 | 62,395 | +19,446 |
+| of which src/tests/ | 16,624 | 24,259 | +7,635 |
+| of which src/research/ | 5,634 | 10,427 | +4,793 |
+| of which src/night/ | 2,936 | 6,211 | +3,275 |
+| of which src/morning/ | 7,269 | 8,754 | +1,485 |
+| of which src/midday/ | 0 | 1,365 | +1,365 |
+| of which core, ops, collect | 7,174 | 7,911 | +737 |
+| Tracked markdown | 15,075 | 22,063 | +6,988 |
+| doc/ committed, all files | 24,941 | 27,140 | +2,199 |
+| claims in test_regressions.py | 74 | 131 | +57 |
+| test modules | 13 | 14 | +1 |
+| CRITERIA thresholds | 260 | 299 | +39 |
+
+The table's own headline: **the midday pass is 7 percent of the growth.** Two
+thirds is tests and research instruments. Blaming the second report pass for
+the size of this tree would be reading the smallest number on the page.
+
+The doc/ row moved twice and both numbers matter. Tracked markdown grew by
+6,988 while doc/ as a whole grew by only 2,199, because on 2026-09-01 nine
+machine written study payloads totalling 67,470 lines were moved out to
+data/research. At its peak doc/ held 91,132 committed lines. The prose grew
+and the bulk left.
+
+**THE RULE AS IT NOW STANDS.** Clauses 1 and 2 above are unchanged. Two more,
+which describe what was already happening:
+
+  3. A CLAIM THAT PINS A FIX made under clause 1 or 2 is in scope with that
+     fix, and is not separate work. A fix nothing holds in place is a fix that
+     comes back, and this project has watched that happen: the capture rate
+     was corrected twice and the count of backed up artifacts travelled
+     through five documents after its own module was corrected. The claim is
+     part of the fix, not an improvement on it.
+  4. AN INSTRUMENT THAT MEASURES WHETHER A PUBLISHED NUMBER IS WRONG is in
+     scope. It writes to data/ and doc/research, is run by hand, and no
+     scheduled step imports it. This is the clause the record most needed:
+     research/ grew by 4,793 lines under a rule that had no room for it, and
+     every one of those instruments existed to answer whether a shipped number
+     was right. measure_capture_rate found the divisor understating by up to
+     nineteen times; counterfactual_watchlist found the RVOL window gap was
+     2.53 window against 1.39 feed and corrected a claim of fifteen withheld
+     rows to eleven across four sessions.
+
+**THE ONE ACCEPTED EXCEPTION, NAMED.** The 12:00 midday pass, shipped
+2026-08-31, is out of scope under every clause here and was built anyway. The
+reason, recorded rather than reconstructed: the morning cannot answer what the
+picks did, because at 08:45 the session it is about has not opened, and the
+outcome rows the whole freeze is waiting for are exactly what that pass
+grades. It buys the evidence the freeze exists to accumulate. It publishes no
+number the morning publishes, writes to no table, runs no model, and its
+isolation from the morning is pinned by a claim. That is the argument. It is
+an exception and it is not a precedent: a second one needs its own entry
+saying why, before it is written.
+
+**WHAT IS STILL OUT OF SCOPE**, stated so this is a rule and not a permission
+slip. A refactor. A feature that publishes a number nobody asked whether they
+needed. A second vendor in the published path. Widening the socket beyond the
+50 symbol cap, which is an account purchase and has been declined twice. Any
+instrument whose question is not "is a published number wrong". And a third
+report pass.
+
+**Checked against the last nineteen commits rather than asserted.** Every one
+of them is judgeable under the four clauses: eight under clause 1, eight under
+clause 2, one under clause 3, and THREE under clause 4, 7528cbd, b1be621 and
+adb6e92, all of them capture rate and counterfactual instruments. Those three
+were out of scope under the two clause rule while being the work that found
+the divisor wrong. That is the amendment in one line.
+
+The original test still applies first and is still the one to answer before
+writing anything: which published number is wrong today, and where would a
+reader see it. Clauses 3 and 4 do not replace that question, they say who else
+may travel with the answer.]**
 
 **WHY, IN NUMBERS THAT WERE COUNTED RATHER THAN REMEMBERED.**
 

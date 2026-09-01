@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty claims, a count read off
+and the two pages. It now carries one hundred and thirty one claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -10534,6 +10534,121 @@ _DOC_PAYLOAD_EXEMPT = {
 }
 
 
+def claim_a_held_backup_yields_only_to_a_recorded_verdict(
+        failures: list[str]) -> None:
+    """Write once protects a good backup and a bad one just as firmly.
+
+    That is the gap 2026-08-24 exposed. The 07:55 catch up copied a proxies
+    only stub of 5 bars, the real collector then wrote 2,003 minutes, and write
+    once held the stub against every nightly for eight days while the alarm
+    fired unread. Nothing was wrong with the refusal. What was missing was any
+    way to close the question that was not somebody's judgement.
+
+    So the door exists and it is narrow. Every refusal below is a DIFFERENT
+    mistake and each has to keep its own message, because "refused" alone sends
+    a reader to the wrong file at the wrong hour.
+
+    The order matters and is asserted: the verdict is written BEFORE the
+    replacement. A recorded verdict with no replacement is a readable state
+    somebody can finish. A replacement with no record is the thing this module
+    exists to prevent.
+    """
+    import pathlib as _pathlib
+    import shutil as _shutil
+    import tempfile
+
+    from night import backup_evidence as _backup
+
+    box = _pathlib.Path(tempfile.mkdtemp(prefix="pmd-arb-"))
+    real_root = _backup.backup_root
+    try:
+        _backup.backup_root = lambda: box / "evidence"
+
+        day = "2026-04-06"
+        source = config.PREMARKET_DIR / f"{day}.jsonl"
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text("working copy, the long one\n", encoding="utf-8")
+        target = _backup._target(day, "premarket", source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("stub\n", encoding="utf-8")
+
+        good = ["the collector stats sidecar", "the job status rows"]
+
+        # Each refusal, and the message has to name its own cause.
+        refusals = [
+            ("no verdict", dict(verdict="", sources=good, why="x"), "verdict"),
+            ("one source", dict(verdict="working", sources=good[:1], why="x"),
+             "source"),
+            ("no reason", dict(verdict="working", sources=good, why="   "),
+             "reason"),
+        ]
+        for label, kwargs, wanted in refusals:
+            outcome = _backup.arbitrate(day, "premarket", **kwargs)
+            if outcome.get("ok"):
+                failures.append(
+                    f"arbitrate accepted a {label} arbitration and replaced a "
+                    "held backup, so a disagreement can be closed by asserting "
+                    "a conclusion instead of citing evidence for it")
+            elif wanted not in (outcome.get("why") or ""):
+                failures.append(
+                    f"the refusal for {label} does not say {wanted!r}: "
+                    f"{outcome.get('why')!r}. A reader at 3am gets sent to the "
+                    "wrong file by a message that does not name its own cause")
+
+        # An unknown artifact, and two copies that agree. Neither is a dispute.
+        if _backup.arbitrate(day, "nosuch", verdict="working", sources=good,
+                             why="x").get("ok"):
+            failures.append("arbitrate accepted an artifact name the module "
+                            "does not back up")
+        _shutil.copy2(source, target)
+        if _backup.arbitrate(day, "premarket", verdict="working", sources=good,
+                             why="x").get("ok"):
+            failures.append(
+                "arbitrate accepted two copies that already agree, which is a "
+                "write for its own sake against a file the module promises not "
+                "to rewrite")
+
+        # Nothing so far may have written the ledger.
+        ledger = _backup.arbitration_log_path()
+        if ledger.exists():
+            failures.append(
+                "a refused arbitration still wrote the ledger, so the record "
+                "of verdicts carries entries that decided nothing")
+
+        # And the one that should work.
+        target.write_text("stub\n", encoding="utf-8")
+        outcome = _backup.arbitrate(
+            day, "premarket", verdict="working", sources=good,
+            why="the stats sidecar and the job rows both describe a full session")
+        if not outcome.get("ok"):
+            failures.append(f"a fully evidenced arbitration was refused: "
+                            f"{outcome.get('why')}")
+        elif source.read_bytes() != target.read_bytes():
+            failures.append("the arbitration reported success and the backup "
+                            "still differs from the copy the verdict named")
+        elif not ledger.is_file():
+            failures.append("the replacement happened and no verdict was "
+                            "recorded, which is the state this door exists to "
+                            "make impossible")
+        else:
+            written = json.loads(ledger.read_text(encoding="utf-8").splitlines()[0])
+            for key in ("verdict", "sources", "why", "working_sha256",
+                        "backup_sha256", "at"):
+                if not written.get(key):
+                    failures.append(f"the recorded verdict carries no {key!r}, "
+                                    "so it cannot be audited later")
+            if len(written.get("sources") or []) < _backup.MIN_SOURCES:
+                failures.append("the recorded verdict cites fewer sources than "
+                                "the module requires to accept one")
+
+        print(f"  arbitration  {len(refusals) + 2} refusals each naming its own "
+              f"cause, none of them writing the ledger, and one evidenced "
+              f"verdict recorded before the single replacement it permitted")
+    finally:
+        _backup.backup_root = real_root
+        _shutil.rmtree(box, ignore_errors=True)
+
+
 def claim_doc_carries_findings_and_not_payloads(failures: list[str]) -> None:
     """No committed file under doc/ is machine written bulk.
 
@@ -11948,6 +12063,7 @@ def main() -> int:
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
     claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(failures)
+    claim_a_held_backup_yields_only_to_a_recorded_verdict(failures)
     claim_doc_carries_findings_and_not_payloads(failures)
     claim_the_midday_pass_never_touches_the_morning(failures)
     claim_the_unsigned_score_says_so_wherever_it_is_named(failures)
