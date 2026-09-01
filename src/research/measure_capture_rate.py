@@ -316,7 +316,13 @@ def picks_rows() -> list[dict[str, Any]]:
     table and night/paper_ledger.py owns the other one.
     """
     with store.session() as connection:
-        store.init(connection)
+        # store.init() is deliberately NOT called, on
+        # counterfactual_watchlist's precedent: it runs executescript over the
+        # schema, ALTER TABLEs both protected tables and commits an UPDATE
+        # against picks. Nothing in research may write to picks; scan.py owns
+        # it. This reads columns that already exist, and if they do not, the
+        # right answer is a loud SELECT failure rather than a research tool
+        # migrating the live record.
         return [dict(row) for row in connection.execute(
             "SELECT date, ticker, capture_observed, true_volume_socket_window, "
             "collector_window_share, pm_volume, pm_volume_true, true_bars, "

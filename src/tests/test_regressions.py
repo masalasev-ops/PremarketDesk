@@ -10259,8 +10259,52 @@ def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
         if saved is not None:
             os.environ[job_status.JOB_ENV_VAR] = saved
 
-    print("  scan guard   a hand run spares the packet and the collector copy "
-          "and writes beside them, a scheduled run still replaces both")
+    # AND THE PAIR MUST STAY A PAIR. The two writes resolve independently, so
+    # a spared run lands the capture at premarket_snapshot.handrun.jsonl while
+    # the packet lands at packet.handrun.json, and every number in the
+    # packet's collector_snapshot block was counted off the former. A packet
+    # naming a file it does not describe is the pairing failure the pending
+    # and promote design exists to prevent, reached again on the new path.
+    saved = os.environ.get(job_status.JOB_ENV_VAR)
+    try:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+        promoted = scan._promote_snapshot(pending())
+        if promoted is None:
+            failures.append("_promote_snapshot returned nothing, so a caller "
+                            "cannot know which file the packet should name")
+        else:
+            paired = dict(payload, collector_snapshot={"file": promoted.name})
+            written = pathlib.Path(scan.write_packet(paired))
+            named = json.loads(written.read_text(encoding="utf-8"))
+            named = (named.get("collector_snapshot") or {}).get("file")
+            if named != promoted.name:
+                failures.append(
+                    f"the spared packet {written.name} names {named!r} while its "
+                    f"capture landed at {promoted.name!r}, so every count in its "
+                    "collector_snapshot block describes a file it does not name")
+            if artifacts.SPARED_INFIX not in promoted.name:
+                failures.append("the spared run promoted its capture over the "
+                                f"frozen name: {promoted.name}")
+    finally:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+        if saved is not None:
+            os.environ[job_status.JOB_ENV_VAR] = saved
+
+    # THE PICKS TABLE IS THE THIRD ARTIFACT OF THAT MORNING, and sparing the
+    # packet while rewriting it is what splits the record: write_picks upserts
+    # on (date, ticker) with source among the updated columns, and every
+    # nightly consumer filters on source='live'.
+    source = (config.PROJECT_ROOT / "src" / "morning" / "scan.py").read_text(
+        encoding="utf-8")
+    if "REFUSED to rewrite the picks table" not in source:
+        failures.append(
+            "a hand run whose packet was spared still rewrites the picks table, "
+            "so that morning's rows flip to test while the spared packet on "
+            "disk still names them and the nightly consumers drop them")
+
+    print("  scan guard   a hand run spares the packet and the collector copy, "
+          "the spared packet names the copy it describes, picks is left "
+          "alone, and a scheduled run still replaces everything")
 
 
 def claim_unregister_removes_every_probe_register_can_create(

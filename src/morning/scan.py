@@ -5231,7 +5231,7 @@ def thinner_than(fresh: dict[str, int], prior: dict[str, int]) -> list[str]:
     return sorted(key for key in prior if fresh[key] < prior[key])
 
 
-def _promote_snapshot(pending: str | None, overwrite: bool = False) -> None:
+def _promote_snapshot(pending: str | None, overwrite: bool = False) -> Path | None:
     """Move this run's collector copy into the name the packet names.
 
     THROUGH THE GUARD, because the name this promotes INTO is one of the two
@@ -5260,14 +5260,19 @@ def _promote_snapshot(pending: str | None, overwrite: bool = False) -> None:
     and waves through the one that is.
     """
     if not pending:
-        return
+        return None
     source = Path(pending)
     if not source.is_file():
-        return
+        return None
     destination, _spared = artifacts.resolve(
         source.with_name("premarket_snapshot.jsonl"),
         overwrite or artifacts.scheduled_run(), what="scan snapshot")
     os.replace(source, destination)
+    # The DESTINATION, so the caller can stamp it into the packet. A spared
+    # run lands the capture beside the frozen one and the packet has to name
+    # the file it actually describes; every number in its collector_snapshot
+    # block was counted off this copy.
+    return destination
 
 
 def _demote_snapshot(pending: str | None) -> None:
@@ -5576,9 +5581,36 @@ def main(argv: list[str] | None = None) -> int:
         eodhd.print_call_report()
         return 0
 
-    _promote_snapshot(pending, args.overwrite)
+    # THE PACKET NAMES THE COPY IT DESCRIBES. Both writes resolve through the
+    # guard independently, so on a spared run the capture lands at
+    # premarket_snapshot.handrun.jsonl while the packet lands at
+    # packet.handrun.json, and the block inside it counted bars off the
+    # former. A packet naming a file it did not describe is the pairing
+    # failure the pending and promote design exists to prevent, reached again
+    # on the new path.
+    promoted = _promote_snapshot(pending, args.overwrite)
+    if promoted is not None and isinstance(payload.get("collector_snapshot"), dict):
+        payload["collector_snapshot"]["file"] = promoted.name
     path = write_packet(payload, args.overwrite)
-    write_picks(payload, force_test=args.test)
+    # Spared is readable off the name rather than threaded back through the
+    # return, which four call sites unpack as a single value.
+    spared = Path(path).name != "packet.json"
+    # AND THE PICKS TABLE IS THE THIRD ARTIFACT OF THAT MORNING. write_picks
+    # upserts on (date, ticker) with source among the updated columns, so a
+    # hand run outside the [picks] live window rewrites the morning's rows and
+    # flips them to test. Every nightly consumer filters on source='live', so
+    # those names drop out of the ledger, the outcome fill and the weekly page
+    # while the spared packet still lists them. Before the packet was spared
+    # the two moved together and the record stayed self consistent; sparing
+    # one and rewriting the other is what splits it.
+    if spared:
+        print("scan: REFUSED to rewrite the picks table. The packet was "
+              "spared, so the rows on disk belong to the run that wrote the "
+              "packet beside them, and upserting over them would flip that "
+              "morning's source to test while its packet still names them. "
+              "Pass --overwrite to replace both together.")
+    else:
+        write_picks(payload, force_test=args.test)
     job_status.produced("candidates", len(payload["candidates"]))
     print("")
     print(f"scan: wrote {path}")
