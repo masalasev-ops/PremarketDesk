@@ -52,9 +52,10 @@ TERMS: tuple[tuple[str, str], ...] = (
      "can be minutes old."),
     ("Market cap",
      "What the whole company is worth at its current share price, roughly the "
-     "price of one share multiplied by the number of shares that exist. B means "
-     "billion. It is a rough guide to size: a 2 billion company and a 200 "
-     "billion company behave very differently on the same piece of news."),
+     "price of one share multiplied by the number of shares that exist. Sizes "
+     "on this page are written in billions. It is a rough guide to size: a 2 "
+     "billion company and a 200 billion company behave very differently on "
+     "the same piece of news."),
     ("Volume",
      "The number of shares that changed hands. On its own it says little, "
      "because a large company trades more shares than a small one on a quiet "
@@ -85,8 +86,8 @@ TERMS: tuple[tuple[str, str], ...] = (
      "wider market can sometimes be attached to a single company."),
     ("Score",
      "This system's own rating, from 0 to 10, of how many favourable conditions "
-     "line up on one share at the same moment. IT IS NOT A PREDICTION AND IT "
-     "HAS NOT BEEN SHOWN TO WORK. The thresholds behind it are starting guesses "
+     "line up on one share at the same moment. **It is not a prediction and it "
+     "has not been shown to work.** The thresholds behind it are starting guesses "
      "that are still being tested, and the project's own records currently show "
      "the highest scoring group performing worse than the lowest."),
     ("Conviction, green, yellow and red",
@@ -139,8 +140,8 @@ COLUMNS: dict[str, str] = {
     "Last": "the most recent price seen",
     "Prior close": "the price it finished at when the market last closed",
     "Prior high": "the highest price it reached during the last full day",
-    "Mkt cap": "roughly what the whole company is worth, B meaning billion",
-    "Market cap": "roughly what the whole company is worth, B meaning billion",
+    "Mkt cap": "roughly what the whole company is worth, shown in billions",
+    "Market cap": "roughly what the whole company is worth, shown in billions",
     "Catalyst": "the kind of news that may explain the move",
     "Top headline": "the most recent story the news provider tagged to it",
     "Premarket RVOL": "how busy trading is against this share's own normal, "

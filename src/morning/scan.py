@@ -2332,6 +2332,19 @@ def attach_catalysts(
                             "not the news_keep displayed beside it")
         candidate["headline_polarity"] = counts
         candidate["headlines"] = recent[:keep]
+        # THE WHOLE WINDOW, TITLES ONLY, FOR THE EXPLANATION AND NOTHING ELSE.
+        # news_keep is 3 and MSTR carried 14 articles on 2026-09-01, so the
+        # displayed three are a thin basis for saying what moved a name. This
+        # list feeds gap_reasons and is deliberately NOT read by
+        # classify_catalyst: widening the class to the whole window would give
+        # a market wrap more chances to win the highest scoring tag, not
+        # fewer, because the class takes the best tag it can find. Explaining
+        # a move and scoring one are different jobs and this serves only the
+        # first.
+        candidate["headlines_all"] = [
+            {"title": row.get("title"), "published_at": row.get("published_at")}
+            for row in recent
+        ]
         candidate["catalyst_found"] = bool(recent)
         candidate["news_in_window"] = len(recent)
         candidate["headlines_note"] = (

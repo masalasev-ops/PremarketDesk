@@ -15,6 +15,65 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, seventeenth: why each name moved, from its own headlines
+
+Owner feedback on the Top headline column: it is making no improvement. What is
+wanted is an analysis of what caused the gap.
+
+### What the column actually answered
+
+Top headline is the NEWEST story the feed tagged to a symbol and nothing more.
+On 2026-09-01 that put "Palantir Leads Tech Stocks as Nasdaq Rebounds" against
+MSTR, a market wrap about a different company, while ELEVEN other MSTR stories
+sat unread in the same window because news_keep caps the kept list at three.
+The reader asks why a name moved and the column answers what was published most
+recently, which is a different question.
+
+### morning/gap_reasons.py
+
+A second CLI call, separate from the narrative, that is handed each name's own
+headlines and asked what they say moved it, in one or two sentences with no
+finance background assumed. It runs whether or not the narrative survived,
+because a fallback morning needs the explanation at least as much as a narrated
+one, and its failure costs this section and nothing else.
+
+THE GROUNDING RULE is the whole of the safety. The model must copy the exact
+title of the headline it relied on, and an answer naming a headline that was not
+supplied FOR THAT SYMBOL is discarded rather than published unsourced. A
+confident sentence about why a stock moved is the most persuasive shape a
+fabrication can take. A name the headlines do not explain gets a written saying
+so, which is a real answer: it says the move was not news driven, or that the
+feed missed it. On the first live run 1 of 12 was explained and 7 said plainly
+that the stories tagged to them do not account for the move.
+
+It is prose for a human and it touches no score. The catalyst class stays
+structured data read from vendor tags. A sentence a model wrote must never
+become a number the screen acts on.
+
+scan.py now keeps headlines_all, the whole window as titles, for this and only
+this. classify_catalyst still reads the display capped three: widening the class
+to the whole window would give a market wrap MORE chances to win the highest
+scoring tag, not fewer, because the class takes the best tag it can find.
+
+### Two things the suite caught, both mine
+
+The explanation pass shells out, and the suite stubs analyst.invoke_claude and
+knew nothing about a second call. The first claim to reach write_report would
+have started a real model subprocess and the suite would have stopped being
+hermetic without anybody deciding it should. gap_reasons refuses to start a
+subprocess while a tests module is loaded, guarded by the import graph rather
+than by a flag somebody has to remember, which is the argument
+store.guard_live_database already makes for the database.
+
+And the glossary broke containment. It said "B means billion" and spelled a
+disclaimer in capitals; B, HAS and IT are all real tickers, so the check refused
+the whole report over the text added to explain it. An uppercase word in a
+sentence is a ticker to a checker that cannot read English. Reworded, and the
+claim now runs the glossary through check_report so the next author cannot
+reintroduce it.
+
+Suite green, 135 claims, 1,792 paths, no drift.
+
 ## 2026-09-01, sixteenth: the reports explain themselves
 
 Owner feedback on the morning page: it is financially dense and useless to

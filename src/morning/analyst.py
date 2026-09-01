@@ -33,6 +33,8 @@ from core import ettime
 from core import glossary
 from ops import job_status
 
+from morning import gap_reasons
+
 _CRIT = criteria.load()
 
 # One to six characters. It was two to six until 2026-08-14, which made every
@@ -1676,6 +1678,45 @@ def annotate_score_bands(report_text: str, packet: dict[str, Any]) -> str:
     return report_text
 
 
+def annotate_gap_reasons(report_text: str, records, error) -> str:
+    """Put "Why these gapped" under the gappers table, before the next section.
+
+    THE COLUMN IT ANSWERS FOR. Top headline is the NEWEST story the feed tagged
+    to a symbol, which on 2026-09-01 put a market wrap about Palantir against
+    MSTR while eleven other MSTR stories sat unread in the same window. The
+    reader is asking why a name moved and the column answers what was published
+    most recently, which is a different question.
+
+    Placed by SECTION rather than by table header, so the explanations sit with
+    the gappers they explain even if that table gains or loses a column. If the
+    heading is not found the section goes at the end rather than being dropped:
+    a paragraph in the wrong place is recoverable and a silently missing one is
+    not.
+
+    Written into the report AFTER the quantifier guard has had its say, like
+    every other annotation here, so nothing in it can cost a morning its
+    narrative.
+    """
+    if gap_reasons.HEADING in report_text:
+        return report_text
+    block = gap_reasons.section(records, error)
+    lines = report_text.splitlines()
+    start = None
+    for index, line in enumerate(lines):
+        if line.strip().lower().startswith("## premarket gappers"):
+            start = index
+            break
+    if start is None:
+        body = "\n".join(block).rstrip("\n")
+        joiner = "" if report_text.endswith("\n") else "\n"
+        return f"{report_text}{joiner}\n{body}\n"
+    end = start + 1
+    while end < len(lines) and not lines[end].startswith("## "):
+        end += 1
+    lines[end:end] = block
+    return "\n".join(lines) + ("\n" if report_text.endswith("\n") else "")
+
+
 def annotate_column_legends(report_text: str) -> str:
     """One plain English line under every table, naming what its columns mean.
 
@@ -1882,6 +1923,20 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # Beside it and for the same reason. green, yellow and red were
     # published in three tables with the meaning stated nowhere.
     report_text = annotate_score_bands(report_text, packet)
+
+    # WHY EACH NAME MOVED, in plain language and grounded in that name's own
+    # headlines. A second CLI call, deliberately separate from the narrative:
+    # it runs whether or not the narrative survived, because the fallback
+    # morning needs the explanation at least as much as a narrated one does,
+    # and its failure costs this section and nothing else.
+    reason_records, reason_usage, reason_error = gap_reasons.explain(
+        packet.get("candidates") or [])
+    if reason_usage:
+        usage["gap_reasons"] = reason_usage
+    if reason_error:
+        usage["gap_reasons_error"] = reason_error
+        print(f"analyst: the gap explanation pass failed: {reason_error}")
+    report_text = annotate_gap_reasons(report_text, reason_records, reason_error)
 
     # Plain English, last, so the legends land under the tables as they finally
     # stand and the glossary sits at the foot of the finished report. Both run

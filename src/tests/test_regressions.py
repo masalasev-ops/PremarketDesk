@@ -11910,7 +11910,23 @@ def claim_every_printed_column_has_plain_english(failures: list[str]) -> None:
             f"{missing}. A reader with no finance background meets them with "
             "nothing to go on")
 
-    hits = analyst.quantifier_violations("\n".join(glossary.section()))
+    # THE GLOSSARY IS PROSE IN THE REPORT AND CONTAINMENT SCANS IT. The
+    # first version said "B means billion" and spelled a disclaimer in
+    # capitals, and B, HAS and IT are all real tickers, so the containment
+    # check refused the whole report over the text added to explain it. An
+    # uppercase word in a sentence is a ticker to a checker that cannot
+    # read English, and this is the shape of that mistake.
+    section_text = "\n".join(glossary.section())
+    invented, _missing, _coverage = analyst.check_report(
+        section_text,
+        json.dumps({"candidates": [], "session_date": "2026-04-06"}))
+    if invented:
+        failures.append(
+            f"the glossary's own words read as ticker(s) {invented} to the "
+            "containment check, which would refuse the report over the "
+            "text added to make it readable")
+
+    hits = analyst.quantifier_violations(section_text)
     if hits:
         failures.append(
             f"the glossary itself trips the quantifier guard on "
