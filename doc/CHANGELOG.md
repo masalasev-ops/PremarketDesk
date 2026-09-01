@@ -15,6 +15,51 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, sixteenth: the reports explain themselves
+
+Owner feedback on the morning page: it is financially dense and useless to
+anybody without a finance background, and it may grow as much as it needs to in
+order to fix that.
+
+### One definition, two reports
+
+core/glossary.py holds the plain English for every term the pages print, and
+both reports draw from it. The same argument as analyst.banned_words: a
+definition with two copies has two chances to drift, and Gap, RVOL, VWAP and
+Market cap are printed by both pages.
+
+Two things it does NOT do. It removes nothing: the technical header stays where
+it was and the plain sentence goes underneath, because replacing "Premarket
+RVOL" with "how busy" would cost the owner the precision the column exists for
+in order to help somebody reading the page once. And it writes no quantifier
+near a set word, because this text is rendered into the very report the
+quantifier guard scans, so a definition reading "every candidate" would have
+cost a morning its narrative. The claim checks that against the guard rather
+than trusting the author to remember a six word window.
+
+### What a reader now gets
+
+A line under every table naming what its columns mean, and a glossary at the
+foot of the page. The glossary sits at the end so a reader who does not need it
+is not made to scroll past it.
+
+Written in Python and applied after the guard has had its say, on the same
+argument as annotate_score_bands and annotate_job_health: the model narrates,
+it does not define. Both the narrative path and the deterministic fallback run
+through the same two calls, so an explanation cannot be present on the mornings
+the model behaved and missing on the mornings it did not. Applying it twice
+changes nothing, which matters because the morning writes its report twice on
+the path where containment examined nothing.
+
+### The claim
+
+claim_every_printed_column_has_plain_english reads the headers the renderers
+actually wrote into the reports on disk, not a copied list, so a column renamed
+in either page fails here rather than quietly losing its explanation in front
+of a reader. Seven tables on the morning page and two at midday are covered.
+
+Suite green, 135 claims, 1,768 paths, no drift.
+
 ## 2026-09-01, fifteenth: a phantom win the notional rule could have booked
 
 From a read through the production tree. One defect, and a list of what was

@@ -30,6 +30,7 @@ from core import artifacts
 from core import config
 from core import criteria
 from core import ettime
+from core import glossary
 from ops import job_status
 
 _CRIT = criteria.load()
@@ -1675,6 +1676,39 @@ def annotate_score_bands(report_text: str, packet: dict[str, Any]) -> str:
     return report_text
 
 
+def annotate_column_legends(report_text: str) -> str:
+    """One plain English line under every table, naming what its columns mean.
+
+    THE REPORT IS READ BY PEOPLE WHO DO NOT TRADE. A row of Gap, RVOL, VWAP and
+    Sigma is a wall to them, and the instruction was that this be accessible
+    with no finance background assumed. Nothing is taken away: the technical
+    header stays exactly where it was and the plain sentence goes underneath,
+    because replacing the header would cost the owner the precision the column
+    exists for in order to help somebody reading it once.
+
+    Written in Python rather than asked of the model, on the same argument as
+    annotate_score_bands and annotate_job_health: the model narrates, it does
+    not define. Both paths run through here, so a legend cannot be present on
+    the mornings the model behaved and missing on the mornings it did not.
+
+    Inserted AFTER the blank line that closes each table, never against the
+    last row. Prose written straight after a row is parsed as one more row and
+    collapses into a single first column cell, which is the 2026-09-01 glossary
+    defect that annotate_score_bands already carries the warning for.
+    """
+    return glossary.annotate_tables(report_text)
+
+
+def annotate_glossary(report_text: str) -> str:
+    """Append the plain English glossary, once.
+
+    At the END rather than the top, because the reader who needs no glossary
+    should not have to scroll past one to reach the numbers, and the reader who
+    does need it is told at the first table that the words are explained below.
+    """
+    return glossary.append_section(report_text)
+
+
 def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
     """Name any scheduled step that has not succeeded inside its window.
 
@@ -1848,6 +1882,14 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # Beside it and for the same reason. green, yellow and red were
     # published in three tables with the meaning stated nowhere.
     report_text = annotate_score_bands(report_text, packet)
+
+    # Plain English, last, so the legends land under the tables as they finally
+    # stand and the glossary sits at the foot of the finished report. Both run
+    # after the quantifier guard has had its say, so nothing written here can
+    # cost a morning its narrative; the suite checks this module's own text
+    # against the guard instead.
+    report_text = annotate_column_legends(report_text)
+    report_text = annotate_glossary(report_text)
 
     report_path.write_text(report_text, encoding="utf-8")
     job_status.produced("report characters", len(report_text))

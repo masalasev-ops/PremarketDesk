@@ -27,6 +27,7 @@ from typing import Any
 from core import artifacts
 from core import config
 from core import criteria
+from core import glossary
 from ops import job_status
 
 from midday import scan_midday
@@ -366,7 +367,13 @@ def to_markdown(packet: dict[str, Any]) -> str:
         f"Generated {packet['generated_at']}. "
         f"{packet.get('api_calls', 0)} vendor calls.", "",
     ]
-    return "\n".join(lines) + "\n"
+    # PLAIN ENGLISH LAST, over the finished markdown, so the legends land under
+    # the tables as they finally stand. The same two calls the morning report
+    # makes, against the same definitions, so a column printed by both pages is
+    # explained the same way on each.
+    text = "\n".join(lines) + "\n"
+    text = glossary.annotate_tables(text)
+    return glossary.append_section(text)
 
 
 def to_html(markdown_text: str, title: str) -> str:

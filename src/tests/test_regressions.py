@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty four claims, a count read off
+and the two pages. It now carries one hundred and thirty five claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11385,6 +11385,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         131: "one hundred and thirty one", 132: "one hundred and thirty two",
         133: "one hundred and thirty three",
         134: "one hundred and thirty four",
+        135: "one hundred and thirty five",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -11853,6 +11854,89 @@ def claim_no_python_here_runs_a_git_fetch(failures: list[str]) -> None:
 
     print(f"  fetch guard  {seen} git invocations, none of them a fetch, all of "
           "them holding .git/index still")
+
+
+def claim_every_printed_column_has_plain_english(failures: list[str]) -> None:
+    """A column a report prints is a column the glossary explains.
+
+    THE POINT IS THE READER WHO DOES NOT TRADE. Gap, RVOL, VWAP and Sigma in one
+    row is a wall to them, and the report is forwarded to people with no finance
+    background. The legend is the answer, and a legend is only worth having if
+    it covers what is actually on the page.
+
+    Checked against the HEADERS THE RENDERERS WRITE rather than a copied list,
+    so a column renamed in either report fails here rather than silently losing
+    its explanation in front of a reader. Both reports are read, because they
+    print several of the same columns and the whole reason the definitions live
+    in one module is that they must not drift apart.
+
+    The glossary's own text is scanned by the quantifier guard too. It is
+    rendered into the same report the guard polices, so a definition reading
+    "every candidate" or "no name" would cost a morning its narrative, and the
+    author cannot be trusted to remember a six word window.
+    """
+    from core import glossary
+    from morning import analyst
+
+    printed: set[str] = set()
+    for source, label in ((analyst.NOTABLE_HEADER, "analyst.NOTABLE_HEADER"),):
+        if isinstance(source, str):
+            printed |= {c.strip() for c in source.strip().strip("|").split("|")}
+
+    # The report on disk is the honest source for the rest: it is what a reader
+    # actually received this morning.
+    for name in ("report.md", "report_midday.md"):
+        for run in sorted(config.RUNS_DIR.glob("*")):
+            path = run / name
+            if not path.is_file():
+                continue
+            for line in path.read_text(encoding="utf-8").splitlines():
+                if not line.lstrip().startswith("|"):
+                    continue
+                cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                if all(set(c) <= set("-: ") for c in cells):
+                    continue
+                # Only a header row, which is the row whose cells are all
+                # known headers or all non numeric. Data rows carry prices.
+                if any(c in glossary.COLUMNS for c in cells):
+                    printed |= {c for c in cells if c}
+            break
+
+    missing = sorted(c for c in glossary.unexplained(sorted(printed))
+                     if c and not any(ch.isdigit() for ch in c))
+    if missing:
+        failures.append(
+            f"these printed column(s) have no plain English in core/glossary: "
+            f"{missing}. A reader with no finance background meets them with "
+            "nothing to go on")
+
+    hits = analyst.quantifier_violations("\n".join(glossary.section()))
+    if hits:
+        failures.append(
+            f"the glossary itself trips the quantifier guard on "
+            f"{[h['quantifier'] for h in hits]}, so the morning it is rendered "
+            "the narrative is withheld over the text added to explain it")
+
+    legend = glossary.legend(["Ticker", "Gap %", "Score"])
+    if not legend or not legend.startswith(glossary.LEGEND_PREFIX):
+        failures.append(f"a legend for known headers came back {legend!r}")
+    if glossary.legend(["Nothing", "Unknown"]) is not None:
+        failures.append("a table of unknown headers was given a legend anyway, "
+                        "so a reader is told the columns are explained when "
+                        "they are not")
+
+    # Applied twice, because the morning writes its report twice on the path
+    # where containment examined nothing.
+    once = glossary.append_section(glossary.annotate_tables(
+        "## T\n\n| Ticker | Score |\n| --- | --- |\n| AAA | 1 |\n"))
+    twice = glossary.append_section(glossary.annotate_tables(once))
+    if once != twice:
+        failures.append("the plain English layer is not idempotent, so a "
+                        "report written twice carries two glossaries")
+
+    print("  plain english every column both reports print is explained, the "
+          "glossary passes the guard that would withhold the narrative over "
+          "it, and applying it twice changes nothing")
 
 
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
@@ -12388,6 +12472,7 @@ def main() -> int:
     claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(failures)
     claim_the_score_watch_counts_a_pick_once_per_pick(failures)
     claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not(failures)
+    claim_every_printed_column_has_plain_english(failures)
 
     if failures:
         for failure in failures:
