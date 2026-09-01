@@ -15,6 +15,82 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, thirteenth: two readers that could not fail safely
+
+A review pass over the tree, taken against the 12:00 job's dependency closure
+first because that job was about to fire. Two defects, both the shape this
+project keeps finding: a reader that answers confidently about a file it did
+not manage to read.
+
+### 1. The midday pass could die after paying for itself
+
+morning_context reads three files. subscriptions.json goes through
+collect_premarket.read_subscriptions, and the comment above that call already
+says why: a bare json.loads there "would take the whole 12:00 pass down with a
+traceback AFTER the universe sweep and the bulk day have been paid for,
+roughly 2,900 shared credits".
+
+packet.json and watchlist.json are read in the same function, after the same
+spend, and used a bare json.loads. The argument was written once and applied
+to one of the three readers it covers.
+
+Reproduced rather than argued: today's real packet truncated at half its
+length raises JSONDecodeError straight out of build_packet. scan_midday.main
+catches QuotaRefusal, PriorSessionUnknown and PriorClosesUnusable and nothing
+else, so it reaches the .bat as a traceback with the sweep already bought.
+This session's preflight priced that sweep at 2,892 credits.
+
+Both now go through _read_json_dict, the same shape as read_subscriptions. An
+unreadable file becomes a written reason and never an empty answer, on the
+rule this project has been burned by before: an empty named_this_morning would
+report every mover as new, and an empty pool would caption every one of them
+not_pooled. Reading intact files is unchanged, checked against today's
+runs/2026-09-01/packet.json, which still reads 28 named, 499 pooled and 50
+subscribed.
+
+### 2. A restarted morning's capture was never backed up
+
+collector_finished returned False on the FIRST unended collector row it saw
+and did not look at the rest of the day. A morning the watchdog restarts
+leaves the killed run's row open forever and records the completed run after
+it, so that day was refused on every nightly until it fell out of the ten
+session catch up window, after which the capture this module's own docstring
+calls irreplaceable had never been copied at all.
+
+Not hypothetical in shape. 2026-08-18 and 2026-08-19 are both restarted
+mornings in data/job-status.jsonl, and they survive only because their failed
+first runs recorded an end. A process killed by the power cut this module
+keeps citing records none, and that is the row that was fatal.
+
+An open row is now read IN ORDER against the completed runs beside it. Only a
+run that started after the last completed one can still be appending to the
+capture, so only that one refuses, which keeps the 2026-08-24 defect closed. A
+run that started before it is a corpse and says nothing about a session that
+went on to finish.
+
+The claim gains both orders and went from four unfinished shapes to five: a
+restarted morning whose second run finished is accepted, and a run still open
+after a completed one is still refused. The four original shapes are unchanged.
+
+### What was checked and found sound
+
+Named here so they are not re-reported. The November fold in ettime, which
+_USEasternFallback.fromutc already decides on the UTC instant rather than on a
+standard clock. The rate division in weekly_page, guarded by its own "nothing
+to divide is not a group that is nearly there" branch. float(row.get("gap_pct")
+or 0) in the collector, removed at d224837, which now prints tier and rank. And
+the SQL identifier guards in store.
+
+The standing review's "the watchdog does not watch the midday job" was already
+closed before this pass: monitor_jobs.JOBS carries five entries and midday is
+keyed on the render marker.
+
+Not touched, because neither is a code defect. The RVOL window mismatch and the
+score inversion are threshold and pre-registration questions, and thresholds
+live in CRITERIA.
+
+Suite green on both fixes, 1,720 paths, no drift.
+
 ## 2026-09-01, twelfth: the child is tested too, and an unfinished session is not backed up
 
 Both of these were raised as things to VERIFY before acting. Both hold, and the
