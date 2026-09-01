@@ -757,6 +757,12 @@ def claim_operator_tools_spare_artifacts(failures: list[str]) -> None:
         ("night.pool_recall", "pool_recall.json"),
         ("night.backfill_premarket", "verify_intraday.json"),
         ("collect.collect_premarket", "premarket_snapshot.jsonl"),
+        # Added 2026-08-31. scan writes BOTH artifacts backup_evidence
+        # names as unrebuildable and was absent from this list, so the
+        # one module that could destroy a morning outright was the one
+        # module nothing here asked about. A source grep is also not
+        # enough for it: see the claim in test_regressions.
+        ("morning.scan", "packet.json and premarket_snapshot.jsonl"),
     ):
         source = Path(importlib.import_module(module_name).__file__).read_text(encoding="utf-8")
         if "artifacts.resolve" not in source:
@@ -1345,7 +1351,7 @@ def claim_packet_names_its_build(failures: list[str]) -> None:
         # working. Build a payload straight from the writer instead, so the
         # claim is still exercised rather than silently skipped.
         payload = {"session_date": day, "build": config.build_identifier()}
-        path = scan.write_packet(payload)
+        path = scan.write_packet(payload, overwrite=True)
 
     written = json.loads(path.read_text(encoding="utf-8"))
     if "build" not in written:
@@ -1458,7 +1464,7 @@ def claim_scan_survives_an_empty_pool(failures: list[str]) -> None:
                     failures.append("the section reported on legs "
                                     f"{sorted(legs)} rather than the three it "
                                     "emits")
-            written = scan.write_packet(payload)
+            written = scan.write_packet(payload, overwrite=True)
             if not written.is_file():
                 failures.append(f"an {label} watchlist wrote no packet to disk")
         print("  empty pool   an absent and an empty watchlist both write a zero "

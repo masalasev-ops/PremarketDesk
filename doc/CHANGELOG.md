@@ -15,6 +15,67 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31, fourth: the two files with no route back were the two nothing guarded
+
+**What was wrong.** `morning/scan.py` wrote both of the artifacts
+`night/backup_evidence.py` names as unrebuildable, and routed neither through
+`core/artifacts.py`. Nine call sites in the tree resolve through that guard. The
+one module that could destroy a morning outright was not among them.
+
+**How it hid.** Two ways, and the second is the more interesting.
+
+`write_packet` looked guarded because it is careful: it writes through a temp
+sibling and `os.replace`, and its docstring explains at length why. That is a
+real guarantee and it is a different one. It stops a run interrupted mid write
+from leaving a packet that parses as nothing. It has never stopped a COMPLETE
+run from replacing a frozen one.
+
+The snapshot half is subtler. `snapshot_bars` DOES resolve through the guard, so
+`collect_premarket` reads as protected and the source grep in
+`test_entrypoints.claim_operator_tools_spare_artifacts` passes it. What that
+call guards is `premarket_snapshot.pending.jsonl`, a name only that run writes
+and which therefore has nothing to spare; scan passes `overwrite=True` there and
+is right to. The frozen artifact is the name `_promote_snapshot` moves the
+pending file INTO, and that was a bare `os.replace`. A guard on the wrong name
+reads exactly like a guard.
+
+`thin_rerun_stands_down` is not this either. It refuses a rerun carrying LESS
+evidence. A hand run on a live tape hours after the open carries MORE, the whole
+session against the premarket window, so it stands down on the harmless case and
+waves through the one that destroys the record.
+
+**It has already happened, and the evidence is still on disk.**
+`runs/2026-08-21/packet.json` is stamped 15:46:38 and holds one candidate,
+AAPL.US, beside twelve picks rows written that morning naming none of it. That
+session's 08:45 evidence is gone. The nightly backup exists because of that
+morning and says so in its own docstring, and a backup reports a loss rather
+than preventing one.
+
+**What changed.** Both writes resolve against `overwrite or scheduled_run()`, on
+the precedent every other writer already follows, and `scan` gains
+`--overwrite`. Production is unaffected: `job_morning_chain.bat` sets `PMD_JOB`,
+so a scheduled scan and a watchdog rerun own today's artifacts and replace them
+exactly as before. Only the operator path changes, and it now says what it
+spared and where it wrote instead.
+
+**Two claims, because a source grep was what missed this.**
+`claim_a_hand_run_of_scan_spares_the_morning_it_would_replace` drives the
+BEHAVIOUR in both directions: a hand run spares the packet and the collector
+copy and writes beside them, and a scheduled run still replaces both, because a
+rule that spared them would break the schedule rather than protect it. And
+`morning.scan` joins the hand maintained list in
+`claim_operator_tools_spare_artifacts`, which never asked about it.
+
+**Two existing claims now say which path they exercise.** The 09:25 rerun claim
+and the interrupted write claim both pass `overwrite=True`, because both are
+about the scheduled path and neither was explicit about it.
+
+**A note for whoever writes the next comment in this module.** `scan.py`
+deliberately does not spell the recall filename or the backup module's name. The
+notable movers scope fence and the backup reader check both grep this file for
+them, and both are blunt on purpose. Naming either in prose fails the suite. The
+wording in place says so where it matters.
+
 ## 2026-08-31, third: three things that were counted and not said
 
 **What this was.** A read of the whole tree against what it claims, prompted by

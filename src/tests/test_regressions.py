@@ -242,7 +242,10 @@ def claim_a_thinner_rerun_stands_down(failures: list[str]) -> None:
                 for n in range(12)
             ],
         }
-        scan.write_packet(full)
+        # overwrite=True: this claim is about the 09:25 WATCHDOG rerun,
+        # which runs under PMD_JOB and owns today's artifacts. The hand
+        # run path is a different claim and spares instead.
+        scan.write_packet(full, overwrite=True)
 
         # The 09:25 rerun: same names, same prices, no RVOL, nothing scored.
         thin = {
@@ -626,7 +629,10 @@ def claim_an_interrupted_packet_write_leaves_no_half_packet(failures: list[str])
             "candidates": [{"symbol": "AAA.US", "gap_pct": 4.0}]}
 
     with conftest_activate() as _sandbox:
-        first = scan.write_packet(dict(good))
+        # overwrite=True throughout: the failure this installs is an
+        # interrupted SCHEDULED write, and a spared write would land on a
+        # fresh name where there is nothing to truncate.
+        first = scan.write_packet(dict(good), overwrite=True)
         before = first.read_text(encoding="utf-8")
 
         real_write = pathlib.Path.write_text
@@ -640,7 +646,8 @@ def claim_an_interrupted_packet_write_leaves_no_half_packet(failures: list[str])
 
         pathlib.Path.write_text = die_partway
         try:
-            scan.write_packet(dict(good, generated_at="2026-08-22T09:10:00-04:00"))
+            scan.write_packet(dict(good, generated_at="2026-08-22T09:10:00-04:00"),
+                              overwrite=True)
         except OSError:
             pass  # the caller sees it; what matters is what is left on disk
         finally:
@@ -664,7 +671,8 @@ def claim_an_interrupted_packet_write_leaves_no_half_packet(failures: list[str])
 
         # And the ordinary write still lands, so the guard cannot be satisfied
         # by a writer that never writes.
-        scan.write_packet(dict(good, generated_at="2026-08-22T09:20:00-04:00"))
+        scan.write_packet(dict(good, generated_at="2026-08-22T09:20:00-04:00"),
+                          overwrite=True)
         landed = json.loads(first.read_text(encoding="utf-8"))
         if landed.get("generated_at") != "2026-08-22T09:20:00-04:00":
             failures.append("an ordinary packet write did not land, so the "
@@ -9851,6 +9859,115 @@ def claim_the_floor_sweep_fits_edges_the_way_the_study_does(
           f"{high['rvol_target']['two_points']})")
 
 
+def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
+        failures: list[str]) -> None:
+    """scan's two writes route through the artifacts guard. Neither used to.
+
+    core/artifacts.py exists for the operator path: a human reproducing a bug
+    points a tool at a run directory, the tool writes where it always writes,
+    and a frozen artifact is gone with nothing said. Nine call sites route
+    through it. morning/scan.py was not one of them, and it writes BOTH of the
+    files night/backup_evidence.py names as having no route back.
+
+    IT HAS ALREADY HAPPENED. runs/2026-08-21/packet.json is stamped 15:46:38
+    and holds one candidate, AAPL.US, beside twelve picks rows written that
+    morning naming none of it. The 08:45 evidence for that session is gone.
+    backup_evidence.py was written because of that morning and says so in its
+    own docstring, but a backup reports a loss and does not prevent one.
+
+    THE SNAPSHOT HALF IS SUBTLER, and it is why the source grep in
+    test_entrypoints did not catch this. snapshot_bars DOES resolve, so the
+    module reads as guarded. What it guards is premarket_snapshot.pending.jsonl,
+    a name only that run writes and which therefore has nothing to spare; scan
+    passes overwrite=True there and is right to. The frozen artifact is the name
+    _promote_snapshot moves the pending file INTO, and that was a bare
+    os.replace. A guard on the wrong name reads exactly like a guard.
+
+    THIN_RERUN_STANDS_DOWN IS NOT THIS, and the same morning shows why. It
+    refuses a rerun carrying LESS evidence. A hand run on a live tape hours
+    after the open carries MORE, the whole session against the premarket
+    window, so it stands down on the harmless case and waves through the one
+    that destroys the record.
+
+    Behaviour, not a source grep, in both directions: a hand run must spare and
+    a scheduled run must still replace, because the watchdog's rerun of the
+    morning chain owns today's artifacts and a rule that spared them would break
+    the schedule rather than protect it.
+    """
+    from core import artifacts
+    from morning import scan
+    from ops import job_status
+
+    day = "2026-04-06"
+    run_dir = config.run_dir(day)
+    frozen_packet = run_dir / "packet.json"
+    frozen_packet.write_text(
+        '{"session_date": "' + day + '", "candidates": ["FROZEN"]}\n',
+        encoding="utf-8")
+    packet_before = frozen_packet.read_bytes()
+
+    frozen_snapshot = run_dir / "premarket_snapshot.jsonl"
+    frozen_snapshot.write_text('{"symbol":"FROZEN.US","minute_epoch":1}\n',
+                               encoding="utf-8")
+    snapshot_before = frozen_snapshot.read_bytes()
+
+    def pending() -> str:
+        path = run_dir / "premarket_snapshot.pending.jsonl"
+        path.write_text('{"symbol":"HANDRUN.US","minute_epoch":2}\n',
+                        encoding="utf-8")
+        return str(path)
+
+    payload = {"session_date": day, "candidates": []}
+    saved = os.environ.get(job_status.JOB_ENV_VAR)
+    try:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+
+        written = pathlib.Path(scan.write_packet(payload))
+        if frozen_packet.read_bytes() != packet_before:
+            failures.append(
+                "a hand run of scan.write_packet replaced a frozen packet.json, "
+                "which is one of the two artifacts backup_evidence names as "
+                "having no route back")
+        if written == frozen_packet or artifacts.SPARED_INFIX not in written.name:
+            failures.append(
+                f"scan.write_packet wrote {written.name} on a hand run, expected "
+                f"a sibling carrying {artifacts.SPARED_INFIX!r}")
+
+        scan._promote_snapshot(pending())
+        if frozen_snapshot.read_bytes() != snapshot_before:
+            failures.append(
+                "a hand run of scan promoted its collector copy over the frozen "
+                "premarket_snapshot.jsonl, which is the other artifact with no "
+                "route back and the one destroyed on 2026-08-14")
+        beside = list(run_dir.glob(f"premarket_snapshot.{artifacts.SPARED_INFIX}*"))
+        if not beside:
+            failures.append(
+                "the spared collector copy went nowhere, so a hand run lost its "
+                "own evidence rather than the morning's")
+
+        # The owner path. A scheduled run must still replace both.
+        os.environ[job_status.JOB_ENV_VAR] = "morning-chain"
+        replaced = pathlib.Path(scan.write_packet(payload))
+        if replaced != frozen_packet:
+            failures.append(
+                f"a SCHEDULED run wrote {replaced.name} instead of packet.json, "
+                "so a watchdog rerun of the morning chain would leave the chain "
+                "reading a packet it did not write")
+        scan._promote_snapshot(pending())
+        if frozen_snapshot.read_bytes() == snapshot_before:
+            failures.append(
+                "a SCHEDULED run refused to promote its collector copy, so a "
+                "rerun would publish a packet describing a snapshot from the "
+                "run before it")
+    finally:
+        os.environ.pop(job_status.JOB_ENV_VAR, None)
+        if saved is not None:
+            os.environ[job_status.JOB_ENV_VAR] = saved
+
+    print("  scan guard   a hand run spares the packet and the collector copy "
+          "and writes beside them, a scheduled run still replaces both")
+
+
 def claim_unregister_removes_every_probe_register_can_create(
         failures: list[str]) -> None:
     """-Unregister removes every one off task the script can register.
@@ -10859,6 +10976,7 @@ def main() -> int:
     claim_both_volume_ratios_divide_the_same_tape(failures)
     claim_a_watchlist_from_another_session_never_reaches_the_socket(failures)
     claim_unregister_removes_every_probe_register_can_create(failures)
+    claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(failures)
 
     if failures:
         for failure in failures:

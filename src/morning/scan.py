@@ -32,6 +32,7 @@ from urllib.parse import urlparse
 
 from collect import baseline
 from collect import collect_premarket
+from core import artifacts
 from core import config
 from core import criteria
 from selection import discover
@@ -5155,14 +5156,42 @@ def thinner_than(fresh: dict[str, int], prior: dict[str, int]) -> list[str]:
     return sorted(key for key in prior if fresh[key] < prior[key])
 
 
-def _promote_snapshot(pending: str | None) -> None:
-    """Move this run's collector copy into the name the packet names."""
+def _promote_snapshot(pending: str | None, overwrite: bool = False) -> None:
+    """Move this run's collector copy into the name the packet names.
+
+    THROUGH THE GUARD, because the name this promotes INTO is one of the two
+    artifacts the nightly backup holds as having no route back, and until
+    2026-08-31 this was a bare os.replace onto it.
+
+    snapshot_bars already resolves through artifacts, and reading that as
+    cover was the mistake: what it guards is
+    premarket_snapshot.pending.jsonl, a name only this run writes and which
+    therefore has nothing to spare. scan passes overwrite=True there for
+    exactly that reason. The frozen artifact is the name PROMOTED into, and
+    this line reached it with no guard at all, so the protection added on
+    2026-08-15 stopped at the caller it was written for.
+
+    The failure it was written for is on record twice. A hand run of
+    snapshot_bars replaced the frozen 08:45 snapshot for 2026-08-14 with the
+    whole trading day, and it was noticed only because test_repricing reads
+    that file. A hand run of THIS module at 15:46 on 2026-08-21 replaced that
+    morning's capture and its packet, and both are gone permanently; the
+    backup exists because of it and can only report the loss afterwards.
+
+    thin_rerun_stands_down is not the answer either, and the same morning is
+    why. It refuses a rerun carrying LESS evidence, and a hand run on a live
+    tape hours after the open carries MORE: the whole session against the
+    premarket window. It stands down on the case that was never dangerous
+    and waves through the one that is.
+    """
     if not pending:
         return
     source = Path(pending)
     if not source.is_file():
         return
-    destination = source.with_name("premarket_snapshot.jsonl")
+    destination, _spared = artifacts.resolve(
+        source.with_name("premarket_snapshot.jsonl"),
+        overwrite or artifacts.scheduled_run(), what="scan snapshot")
     os.replace(source, destination)
 
 
@@ -5244,8 +5273,35 @@ def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
     return True
 
 
-def write_packet(payload: dict[str, Any]) -> Any:
+def write_packet(payload: dict[str, Any], overwrite: bool = False) -> Any:
     """Every run gets its own dated directory. Nothing is overwritten across days.
+
+    ACROSS DAYS was the whole of the protection until 2026-08-31, and the
+    hazard was never a second day. It is a second RUN of the same day, which
+    is the operator path core/artifacts.py was written for and which this
+    file was the last writer of an artifact not to be routed through.
+
+    Nine call sites resolve through that guard: the collector snapshot, the
+    midday packet and both midday renders, report.md, analyst_usage.json,
+    report.html, verify_intraday.json and the nightly's recall file, which
+    is not named here because the notable movers scope fence greps this
+    module for it and is right to stay blunt. packet.json was not among
+    them, and it is the one artifact whose own docstring, three lines down,
+    says everything after this step reads it and a re-read of a past session
+    reads it rather than picks. The nightly backup names it as one of the
+    two files in the tree with no route back.
+
+    The atomic write below is kept and is a different guarantee: it stops a
+    run interrupted mid write from leaving a packet that parses as nothing.
+    It has never stopped a complete run from replacing a frozen one, and on
+    2026-08-21 a hand run at 15:46 did exactly that. runs/2026-08-21 still
+    carries the result: a packet stamped 15:46:38 holding one candidate,
+    AAPL.US, beside twelve picks rows from that morning naming none of it.
+
+    A scheduled run owns today and overwrites freely, because a watchdog
+    rerun of the morning chain is supposed to produce a fresh packet. A hand
+    run is spared by default and writes beside, and --overwrite is how an
+    operator says otherwise.
 
     Through a temp sibling and os.replace, on universe.write_atomically's
     precedent, because this is one of the two files CRITERIA [Backup] says has
@@ -5262,7 +5318,9 @@ def write_packet(payload: dict[str, Any]) -> Any:
     sessions.
     """
     run_directory = config.run_dir(payload["session_date"])
-    path = run_directory / "packet.json"
+    path, _spared = artifacts.resolve(
+        run_directory / "packet.json",
+        overwrite or artifacts.scheduled_run(), what="scan")
     temporary = path.with_name(path.name + ".partial")
     try:
         temporary.write_text(json.dumps(payload, indent=2, sort_keys=True),
@@ -5396,6 +5454,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--test", action="store_true",
                         help="Force picks rows to source='test'. Off clock runs "
                              "are marked test automatically.")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="Replace this session's packet and collector copy "
+                             "rather than writing beside them. A scheduled run "
+                             "does this anyway and owns today's artifacts; a "
+                             "hand run is spared by default.")
     args = parser.parse_args(argv)
 
     if args.rescore:
@@ -5438,8 +5501,8 @@ def main(argv: list[str] | None = None) -> int:
         eodhd.print_call_report()
         return 0
 
-    _promote_snapshot(pending)
-    path = write_packet(payload)
+    _promote_snapshot(pending, args.overwrite)
+    path = write_packet(payload, args.overwrite)
     write_picks(payload, force_test=args.test)
     job_status.produced("candidates", len(payload["candidates"]))
     print("")
