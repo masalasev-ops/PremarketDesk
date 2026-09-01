@@ -2191,6 +2191,12 @@ chain_due                     = 09:00      # a healthy chain is done by about 08
                                            # 09:00 is unchanged and still correct: the only pass inside
                                            # [chain_due, rerun_chain_until] is 09:25, and the worst case now finishes six
                                            # minutes before it rather than twenty-two.]
+midday_due                    = 12:20      # [Midday] run_time plus twenty. DERIVED, not chosen: the only recorded run of the
+                                           # scan step took 20.5 seconds and the render makes no vendor and no model call, so a
+                                           # healthy pass is over by about 12:01. The upper bound is the SCHEDULE and not the job:
+                                           # a due time later than the first pass that can judge it slips the verdict by a whole
+                                           # pass_interval_min, so due must land at or before 12:25. Thirty, matching nightly_due,
+                                           # would have put it at 12:30 and cost the reader half an hour for nothing.
 nightly_due                   = 22:45      # the 22:15 nightly is minutes long
 rerun_chain_until             = 09:30      # after the open a premarket report is history, report only
 collector_stale_after_s       = 180        # no bar file write for this long inside the window means dead
@@ -2207,6 +2213,16 @@ pass_interval_min             = 30         # register_tasks.ps1: the monitor tas
 first_pass                    = 07:25      # register_tasks.ps1: the weekday monitor trigger, and what its repetition counts from
 last_pass                     = 09:25      # first_pass plus the two hour repetition duration in register_tasks.ps1
 night_pass                    = 22:45      # register_tasks.ps1: monitor-night, one firing with no repetition
+midday_first_pass             = 12:25      # register_tasks.ps1: monitor-midday, and what its repetition counts from. The first slot
+                                           # on the existing :25 and :55 grid at or after midday_due, so there is one fact about when
+                                           # the watchdog fires rather than two.
+midday_last_pass              = 13:25      # midday_first_pass plus the one hour repetition duration in register_tasks.ps1, so the
+                                           # firings are 12:25, 12:55 and 13:25. MORE THAN ONE PASS IS ARITHMETIC, not caution:
+                                           # job_log_stale_after_s is 2200, so a midday that hung after writing its log at 12:00 is
+                                           # still warm at 12:25 and cannot be told from a live job, and is 3,300 seconds cold by
+                                           # 12:55. One pass could only ever report UNRESOLVED on that state. The third is margin for
+                                           # Task Scheduler's repetition endpoint, which the morning trigger's five firings imply is
+                                           # inclusive and which nothing here has verified.
 
 ### The liveness note
 
@@ -2261,7 +2277,9 @@ the 08:55 pass and as dead at 09:25, still inside rerun_chain_until." That
 inference needs a LATER pass to exist, and for the two jobs the gate guards
 there is none. register_tasks.ps1 fires the weekday monitor at first_pass and
 repeats it every pass_interval_min through last_pass, which is 07:25, 07:55,
-08:25, 08:55 and 09:25, and fires monitor-night once at night_pass. chain_due
+08:25, 08:55 and 09:25, fires monitor-midday at midday_first_pass and repeats
+it through midday_last_pass, which is 12:25, 12:55 and 13:25, and fires
+monitor-night once at night_pass. chain_due
 is 09:00, so the 08:55 pass reads NOT DUE, exactly as the [Analyst] timeout
 note already says, and the chain is judged by ONE pass inside
 [chain_due, rerun_chain_until]: 09:25. The nightly is judged by one pass too,

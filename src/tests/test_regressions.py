@@ -9,10 +9,15 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries ninety six claims, a count read off the file rather
-than remembered, because it said forty four for a while after it held fifty
-seven and a suite that miscounts itself is the first thing a reader stops
-trusting.
+and the two pages. It now carries one hundred and twenty six claims, a count read off
+the file rather than remembered, because it said forty four for a while
+after it held fifty seven and a suite that miscounts itself is the first
+thing a reader stops trusting.
+[corrected 2026-08-31: was ninety six, against one hundred and twenty six
+defined and one hundred and twenty six called. The sentence above argues
+that this number must be read off the file, and it had been remembered for
+long enough to be wrong by twenty eight. It is machine checked now, by
+claim_the_suite_can_count_itself, so the next reader does not have to.]
 
 They have nothing in common except how they were found, which is why they are
 grouped by that rather than scattered across the themed suites: a reader asking
@@ -4935,11 +4940,23 @@ def claim_a_hold_needs_a_pass_that_can_act(failures: list[str]) -> None:
 
     # The schedule the hold reasons about, read from CRITERIA rather than
     # assumed: register_tasks.ps1 fires the monitor at first_pass and repeats
-    # it every pass_interval_min through last_pass, and monitor-night once.
+    # it every pass_interval_min through last_pass, monitor-midday from
+    # midday_first_pass through midday_last_pass, and monitor-night once.
+    #
+    # The midday firings were added on 2026-08-31 and they move this grid
+    # without moving the property below it: the pass after 09:25 is 12:25
+    # rather than 22:45. hold_is_answerable tests next_pass < collector_stop
+    # and not merely that a next pass EXISTS, so a pass three hours after the
+    # collector window closed still cannot answer a hold. That distinction is
+    # the whole claim and it is asserted directly below the walk, because a
+    # grid this claim only reads is a grid it stops defending the moment the
+    # schedule changes again.
     for now_m, expected in ((7 * 60 + 25, 7 * 60 + 55),
                             (8 * 60 + 25, 8 * 60 + 55),
                             (8 * 60 + 55, 9 * 60 + 25),
-                            (9 * 60 + 25, 22 * 60 + 45),
+                            (9 * 60 + 25, 12 * 60 + 25),
+                            (12 * 60 + 25, 12 * 60 + 55),
+                            (13 * 60 + 25, 22 * 60 + 45),
                             (22 * 60 + 45, None)):
         got = monitor_jobs._next_pass_minute(now_m)
         if got != expected:
@@ -4990,6 +5007,22 @@ def claim_a_hold_needs_a_pass_that_can_act(failures: list[str]) -> None:
                     f"the {where} pass "
                     f"{'started' if started else 'did not start'} the collector; "
                     f"it launched {launched or 'nothing'}")
+    # THE PROPERTY, stated apart from the grid. A pass outside the collector
+    # window cannot answer a hold however close it is, and after 2026-08-31
+    # there IS a pass after 09:25 for the first time.
+    stop = monitor_jobs._minutes(monitor_jobs._CRIT.clock("collector", "stop_time"))
+    after_last_morning_pass = monitor_jobs._next_pass_minute(9 * 60 + 25)
+    if after_last_morning_pass is None:
+        failures.append("there is no pass at all after 09:25, so this half of "
+                        "the claim is checking nothing")
+    elif after_last_morning_pass < stop:
+        failures.append(
+            f"the pass after 09:25 is "
+            f"{after_last_morning_pass // 60:02d}:{after_last_morning_pass % 60:02d}, "
+            "which is INSIDE the collector window, so a hold at the last "
+            "morning pass would now be deferred to it and the morning could "
+            "again end with no collector at all")
+
     print("  hold gate    a collector is held only where a later pass inside the "
           "window can start it, and started rather than stranded after that")
 
@@ -10290,6 +10323,170 @@ def claim_unregister_removes_every_probe_register_can_create(
           f"script registers is also removed by -Unregister")
 
 
+def claim_the_watchdog_reads_every_job_that_writes_a_log(failures: list[str]) -> None:
+    """Every scheduled job with a dated log of its own is in the watchdog's list.
+
+    ops/monitor_jobs.JOBS held four entries for as long as there were four jobs
+    writing dated logs. job_midday.bat shipped on 2026-08-31, wrote
+    logs/midday-<date>.log from its first firing, and was watched by nothing:
+    the weekday monitor stops at [Monitor] last_pass and monitor-night is at
+    22:45, so a 12:00 failure was first named by job_status.overdue in the NEXT
+    morning's packet, about eighteen hours later, and was never rerun.
+
+    CRITERIA [Job status steps] already carried midday and midday_render, so the
+    overdue path worked and only the watchdog was blind. That is the gap this
+    checks: the two lists are maintained by hand in different files and nothing
+    compared them.
+
+    Read off the .bat files rather than from a list here, so the next scheduled
+    job is covered the day it is written. A .bat that sets PMD_JOB and writes a
+    dated log is a job the watchdog can read; one that deliberately does neither,
+    like the meter sampler, is an instrument and is correctly absent.
+    """
+    import re
+
+    from ops import monitor_jobs
+
+    tasks = config.PROJECT_ROOT / "tasks"
+    if not tasks.is_dir():
+        failures.append("tasks/ is gone, and it is where the schedule lives")
+        return
+
+    watched = {entry[1] for entry in monitor_jobs.JOBS.values()}
+    # Two jobs stamp PMD_JOB and are correctly absent, each for its own
+    # reason. Named here rather than inferred, so adding a third is a
+    # deliberate act with a sentence attached to it.
+    exempt = {
+        "job_monitor.bat": "the watchdog cannot watch itself. Its own health "
+                           "is Task Scheduler's Last Result column and the "
+                           "job status record its run wrapper writes",
+        "job_universe.bat": "checked by AGE rather than by log. The Sunday "
+                            "rebuild is judged against [Monitor] "
+                            "universe_rerun_after_days off universe.json's "
+                            "own timestamp, which survives a week of dated "
+                            "logs rolling over, and it IS rerun on a weekday "
+                            "when the Sunday build was missed",
+    }
+    missing = []
+    for bat in sorted(tasks.glob("job_*.bat")):
+        body = bat.read_text(encoding="utf-8", errors="replace")
+        # A one off probe is armed a morning at a time and deliberately sets no
+        # PMD_JOB, which is also what makes it not a step. The meter sampler
+        # says so in a comment for the same reason.
+        if not re.search(r"^\s*set PMD_JOB=", body, re.MULTILINE):
+            continue
+        if bat.name in watched or bat.name in exempt:
+            continue
+        missing.append(bat.name)
+
+    # An exemption for a job that no longer exists is an exemption nobody
+    # will notice has stopped applying.
+    for name in sorted(exempt):
+        if not (tasks / name).is_file():
+            failures.append(f"{name} is exempted from the watchdog list and "
+                            "is not in tasks/, so the exemption is stale")
+        elif name in watched:
+            failures.append(f"{name} is both exempted here and present in "
+                            "monitor_jobs.JOBS, so one of the two is wrong")
+
+    if missing:
+        failures.append(
+            "these scheduled jobs stamp PMD_JOB and write a dated log and are "
+            f"not in monitor_jobs.JOBS, so nothing watches them: "
+            f"{', '.join(missing)}")
+
+    # And the other direction: a JOBS entry naming a .bat that no longer exists
+    # would make the watchdog report a job that cannot run.
+    for key, (_task, bat, _prefix, _marker) in monitor_jobs.JOBS.items():
+        if not (tasks / bat).is_file():
+            failures.append(f"monitor_jobs.JOBS['{key}'] names {bat}, which is "
+                            "not in tasks/, so the watchdog is checking a job "
+                            "that cannot fire")
+        if key not in monitor_jobs.JOB_STATUS_NAMES:
+            failures.append(
+                f"monitor_jobs.JOBS['{key}'] has no JOB_STATUS_NAMES entry, so "
+                "the step records that job's steps write are never read and the "
+                "watchdog silently falls back to the final marker alone")
+
+    print(f"  watched      every one of the {len(monitor_jobs.JOBS)} scheduled "
+          "jobs that stamps PMD_JOB is in the watchdog's list, and every entry "
+          "names a .bat that exists")
+
+
+def claim_the_suite_can_count_itself(failures: list[str]) -> None:
+    """The claim count in this file's docstring is the count in this file.
+
+    The docstring already argues the case: it says the number must be read off
+    the file rather than remembered, "because it said forty four for a while
+    after it held fifty seven and a suite that miscounts itself is the first
+    thing a reader stops trusting". On 2026-08-31 it said ninety six against one
+    hundred and twenty four.
+
+    A sentence that argues for a discipline is not the discipline. This is, and
+    it costs one AST parse of a file the suite has already imported.
+
+    It also catches the two failures a bare count cannot: a claim defined and
+    never wired into main(), which passes silently forever, and a claim called
+    twice, which inflates the count without adding coverage.
+    """
+    import ast
+
+    path = config.PROJECT_ROOT / "src" / "tests" / "test_regressions.py"
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    defined = [node.name for node in tree.body
+               if isinstance(node, ast.FunctionDef) and node.name.startswith("claim_")]
+    main_def = next((node for node in tree.body
+                     if isinstance(node, ast.FunctionDef) and node.name == "main"), None)
+    if main_def is None:
+        failures.append("test_regressions has no main(), so nothing runs the claims")
+        return
+    called = [node.func.id for node in ast.walk(main_def)
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+              and node.func.id.startswith("claim_")]
+
+    orphaned = sorted(set(defined) - set(called))
+    if orphaned:
+        failures.append(
+            f"{len(orphaned)} claim(s) are defined and never called from main(), "
+            f"so they have never run and never will: {', '.join(orphaned[:6])}")
+    twice = sorted({name for name in called if called.count(name) > 1})
+    if twice:
+        failures.append(
+            f"{len(twice)} claim(s) are called more than once from main(), which "
+            f"inflates the count without adding coverage: {', '.join(twice[:6])}")
+
+    words = {
+        44: "forty four", 57: "fifty seven", 96: "ninety six",
+        120: "one hundred and twenty", 121: "one hundred and twenty one",
+        122: "one hundred and twenty two", 123: "one hundred and twenty three",
+        124: "one hundred and twenty four", 125: "one hundred and twenty five",
+        126: "one hundred and twenty six", 127: "one hundred and twenty seven",
+        128: "one hundred and twenty eight", 129: "one hundred and twenty nine",
+        130: "one hundred and thirty",
+    }
+    count = len(defined)
+    spelled = words.get(count)
+    if spelled is None:
+        failures.append(
+            f"this file holds {count} claims and the word list here does not "
+            "reach that number, so the docstring cannot be checked. Extend the "
+            "list rather than deleting the check")
+        return
+    docstring = ast.get_docstring(tree) or ""
+    if f"carries {spelled} claims" not in docstring:
+        stale = [word for number, word in words.items()
+                 if number != count and f"carries {word} claims" in docstring]
+        failures.append(
+            f"the module docstring does not say it carries {spelled} claims"
+            + (f", it says {stale[0]!r}" if stale else "")
+            + f". There are {count} defined and {len(called)} called")
+
+    print(f"  self count   the docstring, the {count} definitions and the "
+          f"{len(called)} call sites in main() all agree")
+
+
 def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None:
     """Three documents count the same three things, and nothing was checking them.
 
@@ -11205,6 +11402,8 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
+    claim_the_watchdog_reads_every_job_that_writes_a_log(failures)
+    claim_the_suite_can_count_itself(failures)
     claim_the_documents_count_what_is_actually_here(failures)
     claim_the_night_refuses_the_floats_the_morning_refuses(failures)
     claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)

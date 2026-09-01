@@ -70,6 +70,12 @@ at the root and is gitignored along with .env.
              baseline its RVOL is measured against.
   - morning/ scan, vintage, analyst, render_report, verify_morning, deliver.
              The 08:45 chain in order.
+  - midday/  scan_midday, render_midday. The 12:00 pass, which answers the two
+             questions the 08:45 report cannot because the session it is about
+             has not opened yet: what today's picks did against the levels the
+             morning published, and what else moved that the morning never
+             named. No model and no narrative pass, because midday asks closed
+             questions. It writes to nothing the morning owns.
   - night/   backfill_premarket, fill_outcomes, true_volume, pool_recall,
              prune_data, weekly_page, build_archive. What runs once the vendor
              has published the full day. true_volume is the only module in the
@@ -110,15 +116,22 @@ at the root and is gitignored along with .env.
   derived table, so the study reruns offline: the 109.9 MB deleted on
   2026-08-21 is what that costs when it is not done
 - tasks/: eleven job .bat files, register_tasks.ps1, README.md. Eight of them
-  register as ten scheduled tasks: job_nightly runs twice, at
-  22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on a
-  repeating weekday trigger and once more at 22:45. job_midday joined them on
+  register as eleven scheduled tasks: job_nightly runs twice, at
+  22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on THREE
+  triggers, a repeating weekday one from 07:25, monitor-midday from 12:25 and
+  monitor-night once at 22:45. job_midday joined them on
   2026-08-31 at 12:00. Three further .bat files
-  sit here and are not among those ten, all of them one offs armed a morning
-  at a time and both meant to be deleted once their question is answered. A
-  plain run of the script registers neither, because a probe that is meant to
-  be deleted must not come back every time the schedule is refreshed, and
-  `-Unregister` removes them if they are there.
+  sit here and are not among those eleven, all of them one offs armed a
+  morning at a time and all three meant to be deleted once their question is
+  answered. A
+  plain run of the script registers none of them, because a probe that is
+  meant to be deleted must not come back every time the schedule is
+  refreshed, and `-Unregister` removes all three if they are there.
+  [corrected 2026-08-31: was "register as ten scheduled tasks", "not among
+  those ten", "both meant to be deleted" of three files, and "registers
+  neither". monitor-midday was added on 2026-08-31 and takes the count to
+  eleven. The "both" predates job_probe_socket_cost, which was added on
+  2026-08-31 and which -Unregister did not remove until the same day.]
   job_probe_socket_cap is the instrument for the open collector volume
   question, armed by `register_tasks.ps1 -Probe YYYY-MM-DD` at 06:30. It ran
   on 2026-08-21 and its task was removed the same day. The .bat and the module
@@ -128,9 +141,23 @@ at the root and is gitignored along with .env.
   job_probe_capture is the Alpaca live capture test, armed by
   `register_tasks.ps1 -Capture YYYY-MM-DD` at 08:45, which is [Scan] run_time
   and not a chosen number: the question is what the free tier serves at the
-  clock production asks it. It is armed for 2026-08-24, so ten tasks stand
-  today and `Get-ScheduledTask -TaskPath \PremarketDesk\*` returns ten until
-  it is deleted. See DECISIONS.md 2026-08-22.
+  clock production asks it. See DECISIONS.md 2026-08-22.
+  [corrected 2026-08-31: this said "It is armed for 2026-08-24, so ten tasks
+  stand today and `Get-ScheduledTask -TaskPath \PremarketDesk\*` returns ten
+  until it is deleted". Every part of that had gone stale. probe-capture is
+  no longer registered; probe-socket-cost is, armed for 2026-09-01 10:00; and
+  the recurring count is eleven rather than ten. A sentence naming a live
+  count is a sentence that goes wrong the next time the schedule moves, so
+  the count is not restated here: run the command and read it.]
+  job_probe_socket_cost is the per message websocket cost probe, armed by
+  `register_tasks.ps1 -SocketCost YYYY-MM-DD` at 10:00, inside regular hours
+  and clear of both the collector's 09:25 stop and the 12:00 midday job. It
+  measures the ONE number the socket still owes, and that number gates moving
+  [Collector] stop_time past the open AND moving start_time earlier than
+  07:20, which is the larger of the two prizes: the RVOL numerator starts at
+  07:20 and its baseline denominator accumulates from 04:00, and
+  collector_window_share puts the median cost of that mismatch at 0.366.
+  Armed 2026-08-31 for 2026-09-01 and NOT yet run.
   job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
   2026-08-20 once both questions were answered and recorded in DECISIONS.md;
   their modules stay under src/research/
@@ -161,13 +188,18 @@ at the root and is gitignored along with .env.
   class; premarket/, backtest/eod, backtest/sessions and runs/ are not in it
   and claim 72 holds that. See CRITERIA's closes retention note.]
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
-  report.html, analyst_usage.json, and once the nightly job has run,
+  report.html, analyst_usage.json, midday_packet.json, report_midday.md and
+  report_midday.html from the 12:00 pass, and once the nightly job has run,
   verify_intraday.json and pool_recall.json
 - site/Weekly.html: one page saying whether the week worked, rendered by
-  night/weekly_page.py at the end of the 22:15 nightly. Four sections: did it
-  run, is the data trustworthy, what did it publish, what did it cost. It reads
+  night/weekly_page.py at the end of the 22:15 nightly. Five sections: did it
+  run, is the data trustworthy, what did it publish, what did it cost, and
+  does the score order anything. It reads
   job-status.jsonl, the meter trail, quantifier-flags.jsonl,
-  runs/<date>/verify_intraday.json and the picks table, and writes this file.
+  runs/<date>/verify_intraday.json, the packets' score components, and the
+  picks and paper_trades tables, and writes this file.
+  [corrected 2026-08-31: was "Four sections" and named four. The score watch
+  shipped as a fifth and README.md already said five.]
   No vendor call, no new table, no measurement of its own. Gitignored with the
   rest of site/
 - site/PremarketDesk.html: the single file report archive, rebuilt from

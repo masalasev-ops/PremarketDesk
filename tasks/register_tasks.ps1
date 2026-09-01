@@ -85,8 +85,27 @@ $jobs = @(
     # apiRequestsDate on every reading and a roll is visible rather than
     # inferred.
     @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "21:00" },
-    # The watchdog: repeats through the morning window, once after the nightly.
+    # The watchdog: repeats through the morning window, three times over the
+    # midday job, once after the nightly.
     @{ Name = "monitor";       Bat = "job_monitor.bat";       Days = $weekdays;    Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
+    # 12:25, 12:55 and 13:25, from CRITERIA [Monitor] midday_first_pass and
+    # midday_last_pass. Added 2026-08-31, when the 12:00 job had been running
+    # watched by nothing: the morning trigger stops at 09:25 and monitor-night
+    # is at 22:45, so a midday failure was first named by the NEXT morning's
+    # report, about eighteen hours later.
+    #
+    # MORE THAN ONE PASS IS ARITHMETIC. [Monitor] job_log_stale_after_s is
+    # 2200, so a midday that hung after writing its log at 12:00 is still warm
+    # at 12:25 and cannot be told from a live job. A single pass could only
+    # ever report UNRESOLVED on that state; by 12:55 the log is 3,300 seconds
+    # cold and the verdict is decidable. The third is margin for Task
+    # Scheduler's repetition endpoint, which the morning trigger's five
+    # firings imply is inclusive and which nothing here has verified.
+    #
+    # The midday job is NOT rerun by these passes. See the branch in
+    # ops/monitor_jobs.py: the sweep spends about 2,902 credits on the shared
+    # key and a relaunch would replace the packet it may already have written.
+    @{ Name = "monitor-midday"; Bat = "job_monitor.bat";      Days = $weekdays;    Start = "12:25"; RepeatMin = 30; RepeatHours = 1 },
     @{ Name = "monitor-night"; Bat = "job_monitor.bat";       Days = $weekdays;    Start = "22:45" },
     # Every day including weekends, every thirty minutes, all twenty four
     # hours. Not a step: an instrument. The job trail says which step spent

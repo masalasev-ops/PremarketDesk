@@ -77,6 +77,14 @@ JOBS = {
               r"===== archive finished rc=0"),
     "nightly": ("\\PremarketDesk\\nightly", "job_nightly.bat", "nightly",
                 r"===== archive finished rc=0"),
+    # The 12:00 pass. Added 2026-08-31, having run since that morning watched
+    # by nothing: the weekday monitor stops at last_pass and monitor-night is
+    # at 22:45, so a midday failure was first named by job_status.overdue in
+    # the NEXT morning's packet, about eighteen hours later, and never rerun.
+    # The marker is the LAST step job_midday.bat writes, the render, because a
+    # scan that succeeded and a render that failed is still a failed job.
+    "midday": ("\\PremarketDesk\\midday", "job_midday.bat", "midday",
+               r"===== midday render finished rc=0"),
 }
 
 # This module's job key -> the PMD_JOB name the .bat stamps on every status
@@ -89,6 +97,7 @@ JOB_STATUS_NAMES = {
     "collector": "collector",
     "chain": "morning-chain",
     "nightly": "nightly",
+    "midday": "midday",
 }
 
 # What Task Scheduler puts in the Last Result column while a task is still
@@ -475,14 +484,18 @@ def _next_pass_minute(now_m: int) -> int | None:
     first = _minutes(_CRIT.clock("monitor", "first_pass"))
     last = _minutes(_CRIT.clock("monitor", "last_pass"))
     night = _minutes(_CRIT.clock("monitor", "night_pass"))
+    midday_first = _minutes(_CRIT.clock("monitor", "midday_first_pass"))
+    midday_last = _minutes(_CRIT.clock("monitor", "midday_last_pass"))
     every = _CRIT.integer("monitor", "pass_interval_min")
     if every <= 0:
-        # A monitor registered without a repetition has only its two triggers.
+        # A monitor registered without a repetition has only its triggers.
         # Reading it that way is the safe direction: every caller then acts now
         # rather than deferring to a pass that is not going to come.
-        candidates = [first, night]
+        candidates = [first, midday_first, night]
     else:
-        candidates = list(range(first, last + 1, every)) + [night]
+        candidates = (list(range(first, last + 1, every))
+                      + list(range(midday_first, midday_last + 1, every))
+                      + [night])
     later = [minute for minute in candidates if minute > now_m]
     return min(later) if later else None
 
@@ -1004,6 +1017,54 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                        f"{_CRIT.clock_text('monitor', 'rerun_chain_until')} ET, a premarket "
                        "report is history; run tasks\\job_morning_chain.bat by hand if "
                        "still wanted.")
+
+    # ---- midday
+    #
+    # REPORT ONLY, and deliberately. Every other job here is rerun when it is
+    # safe to rerun, and this one is not, for two reasons that point the same
+    # way. The 12:00 sweep spends a measured 2,902 credits on a key shared with
+    # another project, and job_midday.bat sets PMD_JOB, so a relaunch resolves
+    # through artifacts as the owner of today and REPLACES the 12:00 packet
+    # with a later measurement. That is worst in the case most likely to bring
+    # the watchdog here: a scan that wrote its packet and a render that failed,
+    # where a rerun spends the whole sweep again to redo a step that makes no
+    # vendor call, and overwrites the good half on the way.
+    #
+    # The midday report is also not time critical the way the morning is.
+    # CRITERIA [Midday] asks closed questions about a session already open, so a
+    # named failure a human can act on beats an automatic second attempt.
+    midday_due = _minutes(_CRIT.clock("monitor", "midday_due"))
+    midday_last = _minutes(_CRIT.clock("monitor", "midday_last_pass"))
+    if now_m < midday_due:
+        report("midday", "NOT DUE", "")
+    else:
+        verdict = log_verdict("midday", JOBS["midday"][3], day)
+        task = query_task(JOBS["midday"][0])
+        alive, settled = _job_alive("midday", now, task)
+        next_pass = _next_pass_minute(now_m)
+        revisited = next_pass is not None and next_pass <= midday_last
+        if verdict in ("finished", "skipped_closed"):
+            if steps_ok("midday"):
+                report("midday", "OK", verdict)
+        elif alive and (settled or revisited):
+            report("midday", "RUNNING", f"{alive}; no clean finish recorded yet, "
+                   "which is what a midday in progress looks like rather than "
+                   "one that failed")
+        elif alive:
+            problems += 1
+            report("midday", "UNRESOLVED", f"{alive}, which is the same reading "
+                   "for a midday still working as for one that died just before "
+                   "this pass, and no later pass falls inside the midday window "
+                   f"to read it again. Read logs\\midday-{day}.log.")
+        else:
+            problems += 1
+            exited = _exit_marker("midday", day)
+            reason = verdict if not exited else f"{verdict}, and {exited}"
+            report("midday", "FAILED", reason + ". REPORT ONLY, not rerun: the "
+                   "12:00 sweep spends about 2,902 credits on the shared key and "
+                   "a relaunch would replace the packet it may already have "
+                   "written. Run tasks\\job_midday.bat by hand if it is still "
+                   "wanted")
 
     # ---- nightly
     nightly_due = _minutes(_CRIT.clock("monitor", "nightly_due"))

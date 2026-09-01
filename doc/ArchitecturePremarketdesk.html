@@ -20,6 +20,7 @@
   --sched:#5B6B7A;
   --found:#1F6E6A;
   --morn:#2C5FA8;
+  --mid:#AF4B1E;
   --night:#A87308;
   --conf:#75409B;
   --store:#33763A;
@@ -28,6 +29,7 @@
   --sched-bg:#EEF1F4;
   --found-bg:#E7F2F1;
   --morn-bg:#E9F0FA;
+  --mid-bg:#FAEAE2;
   --night-bg:#FAF2DF;
   --conf-bg:#F2EBF8;
   --store-bg:#EAF3EA;
@@ -78,6 +80,7 @@ code{font-family:var(--mono);font-size:.885em;background:var(--rule-2);padding:1
 .lg.sched{border-color:var(--sched);background:var(--sched-bg);color:var(--sched)}
 .lg.found{border-color:var(--found);background:var(--found-bg);color:var(--found)}
 .lg.morn{border-color:var(--morn);background:var(--morn-bg);color:var(--morn)}
+.lg.mid{border-color:var(--mid);background:var(--mid-bg);color:var(--mid)}
 .lg.night{border-color:var(--night);background:var(--night-bg);color:var(--night)}
 .lg.conf{border-color:var(--conf);background:var(--conf-bg);color:var(--conf)}
 .lg.store{border-color:var(--store);background:var(--store-bg);color:var(--store)}
@@ -96,6 +99,7 @@ figcaption b{color:var(--ink-2);font-weight:600}
 .box.sched{border-top-color:var(--sched)} .box.sched .cid{color:var(--sched)}
 .box.found{border-top-color:var(--found)} .box.found .cid{color:var(--found)}
 .box.morn{border-top-color:var(--morn)}  .box.morn .cid{color:var(--morn)}
+.box.mid{border-top-color:var(--mid)}   .box.mid .cid{color:var(--mid)}
 .box.night{border-top-color:var(--night)} .box.night .cid{color:var(--night)}
 .box.conf{border-top-color:var(--conf)}  .box.conf .cid{color:var(--conf)}
 .box.store{border-top-color:var(--store)} .box.store .cid{color:var(--store)}
@@ -115,6 +119,7 @@ figcaption b{color:var(--ink-2);font-weight:600}
 .rail .c{padding:14px 0 14px 20px;position:relative;border-right:0}
 .rail .c::before{content:"";position:absolute;left:-6px;top:22px;width:10px;height:10px;background:var(--panel);border:2px solid var(--sched);border-radius:50%}
 .rail .c.morn::before{border-color:var(--morn)}
+.rail .c.mid::before{border-color:var(--mid)}
 .rail .c.night::before{border-color:var(--night)}
 .rail .c.conf::before{border-color:var(--conf)}
 .rail .c.open::before{border-color:var(--ink);background:var(--ink)}
@@ -152,6 +157,7 @@ tbody tr:hover{background:var(--ground)}
 .lay.sched{background:var(--sched-bg);color:var(--sched)}
 .lay.found{background:var(--found-bg);color:var(--found)}
 .lay.morn{background:var(--morn-bg);color:var(--morn)}
+.lay.mid{background:var(--mid-bg);color:var(--mid)}
 .lay.night{background:var(--night-bg);color:var(--night)}
 .lay.conf{background:var(--conf-bg);color:var(--conf)}
 .lay.store{background:var(--store-bg);color:var(--store)}
@@ -216,18 +222,25 @@ tbody tr:hover{background:var(--ground)}
   <div class="eyebrow">doc / architecture</div>
   <h1>PremarketDesk</h1>
   <p class="sub">There is no server, no queue, and no service. PremarketDesk is eight Windows Task Scheduler
-  job scripts on one machine, registered as ten tasks: the nightly runs twice (22:15, and again at
-  07:00 as nightly-catchup) and the watchdog runs twice (07:25, repeating every 30 minutes for two
-  hours, and once at 22:45). Six of the scripts wake on their clock time, read the files the earlier
-  jobs left behind, and leave files for the next. The seventh is the watchdog, which reads the others'
+  job scripts on one machine, registered as eleven tasks: the nightly runs twice (22:15, and again at
+  07:00 as nightly-catchup) and the watchdog runs three times (07:25, repeating every 30 minutes for
+  two hours; 12:25, repeating every 30 minutes for one hour; and once at 22:45). Six of the scripts
+  wake on their clock time, read the files the earlier jobs left behind, and leave files for the
+  next: discover, the collector, the morning chain, the 12:00 midday pass, the nightly and the Sunday
+  universe rebuild. The seventh is the watchdog, which reads the others'
   dated logs and Task Scheduler's own record, then relaunches the .bat of whatever is safe to rerun.
-  The seventh is the quota meter sampler, which is not a step at all: it takes one reading of the
+  The eighth is the quota meter sampler, which is not a step at all: it takes one reading of the
   shared vendor counter every thirty minutes of every day, weekends included, because the job trail
   can say which step spent what and cannot say when, and the overnight silence between 22:45 and
   07:00 is exactly where a sibling project draining the shared key would hide.
+  Both counts moved on 2026-08-31, when job_midday.bat and the watchdog window over it were
+  registered: seven scripts and nine tasks the day before, which is what the line below said and
+  what this paragraph did not. It read eight and ten, and it numbered the meter sampler seventh
+  alongside the watchdog, so the enumeration closed on nothing. Those two were wrong when written
+  rather than overtaken, and are corrected here.
   The schedule is the architecture.</p>
   <div class="meta">
-    <span>66 components</span><span>7 job scripts, 9 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
+    <span>69 components</span><span>8 job scripts, 11 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
   </div>
 </header>
 
@@ -284,14 +297,21 @@ tbody tr:hover{background:var(--ground)}
   another. What passes between them is files on disk, which is why a dead job shows up downstream as
   a missing file with a stated reason rather than as a crash.</p>
   <p>The one exception is the watchdog (<code>tasks/job_monitor.bat</code>, registered as monitor,
-  which runs every 30 minutes for two hours from 07:25, and as monitor-night at 22:45). It reads Task
+  which runs every 30 minutes for two hours from 07:25, as monitor-midday every 30 minutes for one
+  hour from 12:25, and as monitor-night at 22:45). It reads Task
   Scheduler's own record for each job alongside that job's dated log, and relaunches the job's .bat
   when the job fired and died, when it never fired at all because the machine was asleep, when no
   collector is alive inside the collector window, or when <code>universe.json</code> has gone past
   <code>universe_rerun_after_days</code> = 8. Only idempotent work is rerun, at most
   <code>max_reruns_per_job_per_day</code> = 1 per job per day so a hard failure cannot loop, and
   never a second collector while one is still writing bars, because two collectors folding the same
-  tape write duplicate minutes and double the premarket volume downstream.</p>
+  tape write duplicate minutes and double the premarket volume downstream. The 12:00 pass is the one
+  job it watches and never relaunches. That sweep spends about 2,902 credits on the shared key, and
+  <code>job_midday.bat</code> stamps <code>PMD_JOB</code>, so a relaunch would resolve as the owner
+  of today and replace the packet the failed run may already have written. The midday window is
+  three passes rather than one because one could not decide anything:
+  <code>job_log_stale_after_s</code> = 2200 leaves a midday that hung at 12:00 still reading as warm
+  at 12:25, and only by 12:55 is the log cold enough to tell a hung job from a working one.</p>
 
   <figure>
     <div class="rail">
@@ -299,8 +319,9 @@ tbody tr:hover{background:var(--ground)}
       <div class="c conf">
         <h5>Rebuild the discovery population</h5>
         <p>Pulls the NYSE and NASDAQ symbol lists, keeps common stock only, and admits roughly 2,750
-        names on price, dollar volume, market cap, and history, 2,754 on the current file, stamped
-        2026-08-17T00:50 ET by the hand run that first carried the funnel and the gates. The whole week screens against it.
+        names on price, dollar volume, market cap, and history, 2,751 on the current file, stamped
+        2026-08-30T21:01 ET by the Sunday pass. It read 2,754 stamped 2026-08-17T00:50 ET, the hand
+        run that first carried the funnel and the gates, until that rebuild. The whole week screens against it.
         A second step then measures gap propensity over 250 sessions and 20 day ATR for every
         admitted name, one end of day call each, so about 2,750 calls and seven minutes. It rides
         this schedule because every 07:15 pass of the coming week orders its pool within tier by
@@ -378,8 +399,34 @@ tbody tr:hover{background:var(--ground)}
       <div class="t"><b>09:30</b>ET</div>
       <div class="c open">
         <h5>Market opens</h5>
-        <p>The system has already finished. Nothing it does after this point affects today's report.</p>
+        <p>The morning is finished and nothing after this point changes the report that went out at
+        08:49. Until 2026-08-31 that was the whole trading day and this row read "the system has
+        already finished". The 12:00 pass below now reads the session this bell opens, into a packet
+        of its own that never touches the morning's.</p>
         <div class="ids">none</div>
+      </div>
+
+      <div class="t"><b>12:00</b>ET</div>
+      <div class="c mid">
+        <h5>Grade the picks, rank the session</h5>
+        <p>Two questions the morning could not ask, because at 08:45 the session they are about had
+        not opened. Every live picks row for today is graded against the levels the morning
+        published, <code>entry_ref</code> and <code>stop_ref</code>, because the night's corrected
+        levels do not exist yet: never triggered, gapped through, triggered, or unknown with a
+        reason. A triggered row whose session low reached the stop is reported as the stop level
+        reached with the sequence unknown, and never as a stop out, because a daily quote carries no
+        order of events and this pass will not invent one. Then the whole universe is quoted at one
+        credit a name, about 2,751 of them, and ranked on today's move and its volume against the
+        name's own average, with news fetched afterwards for the top of the list to explain what
+        price already found rather than to decide who is on it. Today's prices come from
+        us-quote-delayed, because the vendor does not publish today's intraday bars until overnight.
+        The denominator does not: every move divides by a prior session close bought from one bulk
+        day asked for BY DATE, because the quote's own previousClosePrice was measured on 2026-08-31
+        and is not one quantity, matching the prior session on about a third of names and today's
+        close on about a third more, with nothing in the payload saying which a given row holds.
+        Nothing here writes to picks or to the paper ledger, and no model runs: a pick triggered or
+        it did not, so this report is rendered rather than written.</p>
+        <div class="ids">C67 fires C68 then C69 &rarr; reads C26, C27, C29, C31, writes C32</div>
       </div>
 
       <div class="t"><b>20:00</b>ET</div>
@@ -414,7 +461,9 @@ tbody tr:hover{background:var(--ground)}
         C64, C65</div>
       </div>
     </div>
-    <figcaption><b>One weekday.</b> The morning jobs gather live evidence while it exists. The night
+    <figcaption><b>One weekday.</b> The morning jobs gather live evidence while it exists. The
+    midday job sits between them and the night, on the only endpoint that carries today from inside
+    the session. The night
     job returns hours after the report has already gone out, once the vendor has published data that
     did not exist at 08:45. Times are Eastern throughout, resolved by a single clock module rather
     than by the machine's local time.</figcaption>
@@ -426,12 +475,14 @@ tbody tr:hover{background:var(--ground)}
   <h2><span class="n">03</span> &nbsp;Catalogue</h2>
   <h3>Layers and component catalogue</h3>
   <p>Every component carries an identifier used consistently in every figure and table on this page.
-  Seven layers, colour-coded by the left or top accent wherever a component appears.</p>
+  Eight layers, colour-coded by the left or top accent wherever a component appears. The midday layer
+  was added on 2026-08-31 with the components in it, and there were seven before that.</p>
 
   <div class="legend">
     <span class="lg sched">Scheduler</span>
     <span class="lg found">Foundation</span>
     <span class="lg morn">Morning pipeline</span>
+    <span class="lg mid">Midday pipeline</span>
     <span class="lg night">Night pipeline</span>
     <span class="lg conf">Authored input</span>
     <span class="lg store">Data store</span>
@@ -442,14 +493,15 @@ tbody tr:hover{background:var(--ground)}
   <table>
     <thead><tr><th>ID</th><th>Component</th><th>Layer</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
     <tbody>
-      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46</td></tr>
+      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46, C48, C67</td></tr>
       <tr><td class="id">C02</td><td class="nm">job_universe.bat</td><td><span class="lay sched">Scheduler</span></td><td>Sun 21:00</td><td>none</td><td>C12, C40, C34</td></tr>
       <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
       <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:20</td><td>none</td><td>C15, C34</td></tr>
       <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
+      <tr><td class="id">C67</td><td class="nm">job_midday.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 12:00</td><td>none</td><td>C50, C68, C69, C34</td></tr>
       <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15 and 07:00. The 07:00 firing is the catch-up and runs C62, C20 and C21 only</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C63, C61, C53, C34</td></tr>
-      <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
-      <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, C34</td></tr>
+      <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, 12:25 every 30m for 1h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
+      <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, and C34. Never C67, which it watches and reports on only</td></tr>
       <tr><td class="id">C48</td><td class="nm">job_meter_sampler.bat</td><td><span class="lay sched">Scheduler</span></td><td>Every day 00:00, every 30m for 24h</td><td>none</td><td>C49, C34</td></tr>
       <tr><td class="id">C49</td><td class="nm">meter_sampler.py</td><td><span class="lay sched">Scheduler</span></td><td>With C48. An instrument, not a step: it writes no C56 record</td><td>C35 /api/user</td><td>C34 meter-&lt;date&gt;.log</td></tr>
       <tr><td class="id">C50</td><td class="nm">market_today.py</td><td><span class="lay sched">Scheduler</span></td><td>First step of every weekday job. Exit 3 stops that job cleanly</td><td>C58, C35</td><td>C58, C56, C34</td></tr>
@@ -475,6 +527,9 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, when C17 returns</td><td>C32</td><td>C32</td></tr>
       <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, and by hand</td><td>C29, C31, C32, C33</td><td>Console, C33 under --arm</td></tr>
       <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49</td><td>C32, C33, C38</td><td>C34</td></tr>
+
+      <tr><td class="id">C68</td><td class="nm">scan_midday.py</td><td><span class="lay mid">Midday</span></td><td>12:00</td><td>C23, C26, C27, C28's subscriptions sidecar, C29, C31, C35</td><td>C32 midday_packet.json. Never C31, never C64</td></tr>
+      <tr><td class="id">C69</td><td class="nm">render_midday.py</td><td><span class="lay mid">Midday</span></td><td>12:00, after C68</td><td>C23, C32 midday_packet.json</td><td>C32 report_midday.md and report_midday.html</td></tr>
 
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
@@ -955,8 +1010,10 @@ tbody tr:hover{background:var(--ground)}
   <h2><span class="n">09</span> &nbsp;Stores</h2>
   <h3>Data store read and write matrix</h3>
   <p>Every store has exactly one writer in the morning path, which is what makes a missing file
-  unambiguous. The picks table is the single exception and is written by three components at three
-  different times, always to different columns of the same row. The gate marker has two writers,
+  unambiguous. The picks table is the single exception and is written by four components at three
+  different times, always to different columns of the same row: C16 at 08:45, C20 and C59 the same
+  night, and C21 one and five sessions later. This said three until 2026-08-31, which had been wrong
+  since C59 started writing the table on 2026-08-29. The gate marker has two writers,
   <code>verify_morning.py</code> by hand and <code>vintage.py</code> from inside the scan, and one
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two columns were added on
   2026-08-20 for stores the page had never carried: the published archive (C54), whose single writer
@@ -968,7 +1025,12 @@ tbody tr:hover{background:var(--ground)}
   of every weekday job and rewritten only by the nightly's refresh pass. Two more joined them on
   2026-08-29: the paper ledger table (C64), whose single writer is C60 at 22:15 and whose readers are
   C61 and, for the record block only, C16; and the weekly page (C65), written by C61 and read by
-  nobody, which is what a reporting layer should be.</p>
+  nobody, which is what a reporting layer should be. The two midday rows joined this matrix on
+  2026-08-31, and the shape of C68's row is the design of the whole 12:00 pass: it reads the picks
+  table and never writes it, because a second writer booking against levels the night has not yet
+  corrected would destroy the comparison that table exists for. Its read of C28 is the subscriptions
+  sidecar written beside the bars at subscribe time, not the bars themselves, because what the
+  collector asked the socket for is the only evidence a name was listened to.</p>
 
   <div class="tw">
   <table class="mx">
@@ -987,6 +1049,8 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C18</td><td class="nm">render_report.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C19</td><td class="nm">deliver.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C68</td><td class="nm">scan_midday.py</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="r">R</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
+      <tr><td class="id">C69</td><td class="nm">render_midday.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="rw">RW</td><td class="r">R</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
@@ -1018,7 +1082,8 @@ tbody tr:hover{background:var(--ground)}
   <h2><span class="n">10</span> &nbsp;Failure</h2>
   <h3>Failure behaviour</h3>
   <p>No job in the data path retries another and no job waits on one. The watchdog
-  (<code>src/ops/monitor_jobs.py</code>, fired every 30 minutes for two hours from 07:25 and again at
+  (<code>src/ops/monitor_jobs.py</code>, fired every 30 minutes for two hours from 07:25, again every
+  30 minutes for one hour from 12:25, and once at
   22:45) is the deliberate exception: it checks Task Scheduler's record against each job's dated log
   and relaunches only what is idempotent, at most <code>max_reruns_per_job_per_day</code> = 1 rerun
   per job per day, so a hard failure cannot loop. The nightly is always safe to rerun, the morning
@@ -1042,6 +1107,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 1007 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
       <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46-08:49</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
       <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
+      <tr><td class="nm">C68 scan_midday<br><span style="font-family:var(--sans);color:var(--ink-3)">12:00</span></td><td>The midday packet, and the report C69 renders from it.</td><td>Nothing else is affected. Nothing downstream reads either file and this pass writes to no table, so a lost midday costs one edition and nothing else. The watchdog watches it from 12:25 and REPORTS ONLY, never relaunching, which is the one place its rule is not "rerun what is idempotent": the sweep spends about 2,902 credits on the shared key, and <code>job_midday.bat</code> stamps <code>PMD_JOB</code>, so a rerun would resolve as the owner of today and REPLACE a packet the failed run may already have written. That is worst in the case most likely to bring the watchdog here, a scan that wrote its packet and a render that failed, where the whole sweep is bought again to redo a step that makes no vendor call. The preflight is sized to the whole sweep and refuses rather than truncating, because half a universe is not a market wide scan and must not be published as one.</td><td>Already sent</td></tr>
       <tr><td class="nm">C20 backfill<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>True premarket columns for that date, and the volume verification for it.</td><td>Nothing today is affected. The next run picks up any row where <code>backfilled_at</code> is null, so a missed night self-heals. The volume check self-heals on a different query, because it has to: it asks which COLLECTED sessions were never measured rather than which picks rows lack a column, so it still runs when the table is empty. Until 2026-08-20 it sat behind the picks early return and did not.</td><td>Already sent</td></tr>
       <tr><td class="nm">C21 fill_outcomes<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Outcome columns.</td><td>Same. It scans for unfilled rows past the one and five session marks, so it catches up on its own.</td><td>Already sent</td></tr>
       <tr><td class="nm">C59 true_volume<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>The measured volume, the measured reference levels and the fill verdict for that date.</td><td>Nothing today is affected and nothing in the morning path reads any of it. It fills by query rather than by date, so a missed night is picked up by the next run. A row it cannot measure is left null WITH <code>truth_reason</code> written, and <code>fill_plausible</code> is separately marked <code>unknown</code> rather than left null, because a null verdict would be a fourth state the column does not have and would read downstream as a row nobody asked about rather than a row nobody could answer.</td><td>Already sent</td></tr>
@@ -1143,17 +1209,20 @@ tbody tr:hover{background:var(--ground)}
     <b>selection</b> (universe, discover, gap_stats),
     <b>collect</b> (collect_premarket, baseline),
     <b>morning</b> (scan, vintage, analyst, render_report, verify_morning, deliver),
+    <b>midday</b> (scan_midday, render_midday, shipped 2026-08-31),
     <b>night</b> (backup_evidence, backfill_premarket, fill_outcomes, true_volume, paper_ledger,
     pool_recall, prune_data, weekly_page, build_archive, in the order the nightly runs them),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
-    vwap_gappers, three probe_ scripts and two measure_ scripts, instruments, not pipeline),
+    vwap_gappers, sweep_baseline_floor, cutoff_0830, four probe_ scripts and three measure_ scripts,
+    instruments, not pipeline; this read three probe_ and two measure_ scripts until 2026-08-31 and
+    had never named the other two modules at all),
     <b>tests</b> (conftest, run_tests and fourteen test_ modules). One file sits at the root beside the
     packages, probe_alpaca.py, the shared Alpaca client. It was research only until 2026-08-29 and is
     now imported by two night steps as well, both of them after the close and neither of them able to
     reach a report; night/paper_ledger.py imports it inside <code>book()</code> rather than at module
     scope, so the 08:45 scan can read the ledger's counts without pulling an HTTP client into that
     window.
-    <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55, C59-C63)</span></dd>
+    <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55, C59-C63, C68, C69)</span></dd>
 
     <dt>doc\</dt>
     <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md (eleven fixed sections: nine until
@@ -1167,18 +1236,24 @@ tbody tr:hover{background:var(--ground)}
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
     <dt>tasks\</dt>
-    <dd>the seven scheduled job batch files, register_tasks.ps1, and scheduling notes. Two more .bat
-    files sit here and are deliberately absent from register_tasks.ps1's schedule, both one off probes
-    armed a morning at a time: job_probe_socket_cap, the instrument for the collector volume question,
-    armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, the
+    <dd>eleven .bat files in all. Eight are the scheduled jobs, and register_tasks.ps1 registers
+    those eight as eleven tasks; beside them sit that script and the scheduling notes. The other
+    three .bat files are deliberately absent from the schedule, all one off probes
+    armed a day at a time: job_probe_socket_cap, the instrument for the collector volume question,
+    armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30; job_probe_capture, the
     Alpaca live capture test, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan]
-    run_time rather than a chosen number. Both have run, both questions are answered in DECISIONS.md,
-    and neither is armed today. A plain run of the script never registers either, so refreshing the
+    run_time rather than a chosen number; and job_probe_socket_cost, armed with
+    <code>-SocketCost YYYY-MM-DD</code> at 10:00, past the collector's 09:25 stop and clear of the
+    12:00 job because that one spends REST credits inside the delta this reads. The first two have
+    run and their answers are in DECISIONS.md; the third takes the one reading the websocket still
+    owes, what a heavy live tape costs per message, which is what decides whether [Collector]
+    stop_time may move past the open.
+    A plain run of the script never registers any of them, so refreshing the
     schedule cannot resurrect a probe that has been answered, and <code>-Unregister</code> removes one
     if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on
     2026-08-20 once the same was true of them; the modules they
     wrapped stay in the research package
-    <span style="color:var(--ink-3)">(C02-C06, C46, C48)</span></dd>
+    <span style="color:var(--ink-3)">(C02-C06, C46, C48, C67)</span></dd>
 
     <dt>data\</dt>
     <dd>universe.json, watchlist.json, universe-closes-&lt;date&gt;.json,
@@ -1190,7 +1265,9 @@ tbody tr:hover{background:var(--ground)}
 
     <dt>runs\&lt;date&gt;\</dt>
     <dd>packet.json, report.md, report.html, analyst_usage.json, verify_intraday.json,
-    premarket_snapshot.jsonl, pool_recall.json (written by the nightly recall pass, which measures
+    premarket_snapshot.jsonl, midday_packet.json beside report_midday.md and report_midday.html
+    (written by the 12:00 pass, which grades the morning's picks against the session that opened
+    after them and ranks what else moved), pool_recall.json (written by the nightly recall pass, which measures
     what the morning pool missed), and packet_degraded.json (written only when a quota thinned rerun
     would otherwise overwrite a full width packet, so the thin evidence is kept beside the fuller day
     rather than replacing it) <span style="color:var(--ink-3)">(C29, C32)</span></dd>

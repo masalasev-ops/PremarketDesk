@@ -14,7 +14,9 @@ not already on disk it does not appear here. That constraint is the reason this
 is worth having at all, because a reporting layer that fetches is a second
 pipeline to keep right.
 
-Four sections and no more, in the order a person actually asks them:
+Five sections and no more, in the order a person actually asks them. It was
+four until the score watch shipped, and this line said four for as long as
+the module rendered five:
 
   Did it run           jobs fired, non zero exits, mornings that produced a
                        report at all

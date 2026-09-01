@@ -15,6 +15,94 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-08-31, seventh: the watchdog watches the midday job, and the suite counts itself
+
+**The 12:00 job had been running watched by nothing.** `ops/monitor_jobs.JOBS`
+held four entries and midday was not one of them. The weekday monitor stops at
+`[Monitor] last_pass`, 09:25, and monitor-night is at 22:45, so a midday failure
+was first named by `job_status.overdue` in the NEXT morning's packet, about
+eighteen hours later, and was never rerun. CRITERIA [Job status steps] already
+carried `midday` and `midday_render`, so the overdue path worked and only the
+watchdog was blind.
+
+**Three new clocks, and each is derived rather than chosen.** `midday_due` is
+12:20, `[Midday] run_time` plus twenty: the only recorded run of the scan step
+took 20.5 seconds and the render makes no vendor and no model call, so a healthy
+pass is over by about 12:01. The upper bound is the SCHEDULE and not the job, a
+due time later than the first pass that can judge it slips the verdict by a
+whole `pass_interval_min`, so due had to land at or before 12:25. Thirty,
+matching `nightly_due`, would have put it at 12:30 and cost the reader half an
+hour for nothing.
+
+`midday_first_pass` is 12:25, the first slot on the existing :25 and :55 grid at
+or after due, so there is one fact about when the watchdog fires rather than
+two. `midday_last_pass` is 13:25, giving three firings.
+
+**More than one pass is arithmetic, not caution.** `job_log_stale_after_s` is
+2,200, so a midday that hung after writing its log at 12:00 is still warm at
+12:25 and cannot be told from a live job. One pass could only ever report
+UNRESOLVED on that state. By 12:55 the log is 3,300 seconds cold and the verdict
+is decidable. The third is margin for Task Scheduler's repetition endpoint,
+which the morning trigger's five firings imply is inclusive and which nothing
+here has verified.
+
+**Midday is the one job the watchdog reports and never reruns.** Two reasons,
+pointing the same way. The 12:00 sweep spends a measured 2,902 credits on a key
+shared with another project. And `job_midday.bat` sets `PMD_JOB`, so a relaunch
+resolves through `core/artifacts.py` as the owner of today and REPLACES the
+12:00 packet with a later measurement. That is worst in the case most likely to
+bring the watchdog here: a scan that wrote its packet and a render that failed,
+where a rerun spends the whole sweep again to redo a step that makes no vendor
+call and overwrites the good half on the way. CRITERIA [Midday] asks closed
+questions about a session already open, so a named failure a human can act on
+beats an automatic second attempt.
+
+**What the new passes cost, said rather than left to be found.** They inherit
+every other branch, including the discover rerun, which fires whenever discover
+did not finish and no subscription list exists, at any hour by design. That is
+not new: monitor-night at 22:45 already has it and the comment in
+`monitor_jobs.py` says so. It is bounded by `max_reruns_per_job_per_day`, and in
+practice the 07:25 pass has already spent that budget on any morning where
+discover failed.
+
+**The pass grid moved and one claim had to move with it.**
+`_next_pass_minute(09:25)` is 12:25 now rather than 22:45, and
+`claim_a_hold_needs_a_pass_that_can_act` walked the old grid. The BEHAVIOUR is
+unchanged and that is the point: `hold_is_answerable` tests
+`next_pass < collector_stop` and not merely that a next pass exists, so a pass
+three hours after the collector window closed still cannot answer a hold. That
+property is now asserted directly beside the walk, because a grid a claim only
+reads is a grid it stops defending the moment the schedule changes again.
+
+**Nothing compared the watchdog's list against the schedule, so now something
+does.** `claim_the_watchdog_reads_every_job_that_writes_a_log` reads the .bat
+files: a job that stamps `PMD_JOB` and writes a dated log is a job the watchdog
+can read, and it must be in `JOBS` or in a named exemption. Two are exempt and
+each carries its reason: the watchdog cannot watch itself, and the Sunday
+universe rebuild is judged by AGE against `universe_rerun_after_days` rather
+than by a dated log, which is what lets it survive a week of logs rolling over.
+The next scheduled job is covered the day it is written.
+
+**And the suite miscounted itself, in the sentence about not doing that.**
+`test_regressions`'s docstring said it carried ninety six claims against one
+hundred and twenty six defined and one hundred and twenty six called. The
+sentence around the number argues that it "must be read off the file rather than
+remembered, because it said forty four for a while after it held fifty seven and
+a suite that miscounts itself is the first thing a reader stops trusting".
+
+A sentence that argues for a discipline is not the discipline.
+`claim_the_suite_can_count_itself` parses the file and compares the docstring
+against the definitions and the call sites in `main()`. It caught itself on its
+first run, since adding it moved the count. It also catches the two failures a
+bare count cannot: a claim defined and never wired in, which passes silently
+forever, and a claim called twice, which inflates the count without adding
+coverage.
+
+**One number nothing checks, stated because leaving it silent is how the last
+one got here.** The monitor's trigger times live in `register_tasks.ps1` and in
+CRITERIA [Monitor] and no test compares them. The job list is machine checked
+now; the clocks are still held by hand.
+
 ## 2026-08-31, sixth: five falsy values that were reading as answers
 
 One shape, five places, and the newest module carries four of them. A missing

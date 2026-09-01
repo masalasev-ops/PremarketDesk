@@ -166,7 +166,7 @@
     font-size: 0.8rem;
   }
   table.files td:last-child { color: var(--muted); }
-  .arcnav { margin: 26px 0 0; border-top: 1px solid var(--rule); padding-top: 18px; }
+  .arcnav { margin: 26px 0 0; border-top: 1px solid var(--line); padding-top: 18px; }
   .arcnav ol {
     list-style: none; margin: 0; padding: 0;
     display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
@@ -178,7 +178,7 @@
     font-family: "Cascadia Code", Consolas, monospace;
     font-size: 0.72rem; color: var(--muted); margin-right: 9px;
   }
-  .arcnav a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .arcnav a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line); }
   .arcnav a:hover { border-bottom-color: currentColor; }
   .table-wrap { overflow-x: auto; }
 </style>
@@ -189,15 +189,18 @@
   <p class="eyebrow">PremarketDesk architecture</p>
   <h1>A Day in PremarketDesk</h1>
   <p class="lede">There is no server and no queue. The whole system is eight .bat
-  files on one machine, registered as ten Windows Task Scheduler tasks: two of
-  them are registered twice, the nightly at 22:15 and again at 07:00, and the
-  watchdog every 30 minutes from 07:25 to 09:25 and once more at 22:45. The ninth
+  files on one machine, registered as eleven Windows Task Scheduler tasks: two of
+  them are registered more than once, the nightly at 22:15 and again at 07:00, and
+  the watchdog three times over, every 30 minutes from 07:25 to 09:25, again every
+  30 minutes from 12:25 to 13:25, and once more at 22:45. The eleventh entry
   is not a step at all but an instrument, the quota meter sampler, which takes one
   reading every thirty minutes of every day including weekends. Each task wakes at
   its clock time, reads the files earlier jobs left behind, and leaves files for
   the next. The architecture is the clock.</p>
   <p class="lede">The day has a shape. The morning gathers evidence while it
-  exists and publishes a judgement on it before the open. The night comes back
+  exists and publishes a judgement on it before the open. At noon a third pass,
+  live since 2026-08-31, asks what the session did with the morning's own picks
+  and what else moved that the morning never named. The night comes back
   once the session is over, measures what was actually true, and books what one
   written rule would have done about it. The next morning reads that record
   back. This page follows that loop once, in order, and says what each stage of
@@ -208,6 +211,7 @@
     <ol>
       <li><a href="#timeline">The weekday, end to end</a></li>
       <li><a href="#morning">The morning pipeline</a></li>
+      <li><a href="#midday">The noon pass</a></li>
       <li><a href="#night">After dark, what was really true</a></li>
       <li><a href="#chain">From a level, to a fill, to a booked trade</a></li>
       <li><a href="#sizing">Why there is one rule</a></li>
@@ -234,8 +238,9 @@
     tier. The rest of the pool is written to watchlist.json marked
     not_subscribed, so the cut is auditable rather than invisible. The collector
     listens to live trades, the 08:45 chain turns evidence into an emailed
-    report, and the night jobs, shown in amber here and throughout this page,
-    come back at 22:15 to write down what was really true. Sunday at 21:00 a sixth
+    report, the noon pass at 12:00 returns to those same picks once the session
+    has opened, and the night jobs, shown in amber here and throughout this page,
+    come back at 22:15 to write down what was really true. Sunday at 21:00 one more
     pass rebuilds the discovery universe for the coming week and measures the gap
     propensity the weekday pool is ordered by. It ran at 20:00 until 2026-08-16,
     which was the exact instant of the quota reset, and at 20:30 until 2026-08-17,
@@ -244,7 +249,7 @@
   </div>
 
   <figure>
-    <svg viewBox="0 0 940 230" role="img" aria-label="Timeline of one weekday: discover at 07:15, collector from 07:20 to 09:25, the morning chain at 08:45, the shared API quota day turning over at 20:00, and the nightly backfill and outcomes jobs at 22:15.">
+    <svg viewBox="0 0 940 250" role="img" aria-label="Timeline of one weekday: discover at 07:15, collector from 07:20 to 09:25, the morning chain at 08:45, the midday pass at 12:00 inside the break in the axis, the shared API quota day turning over at 20:00, and the nightly backfill and outcomes jobs at 22:15.">
       <defs>
         <marker id="tl-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
           <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
@@ -304,10 +309,13 @@
       <text x="760" y="128" text-anchor="middle" font-size="10" class="svg-muted">writes the truth into picks</text>
       <line x1="760" y1="138" x2="760" y2="154" stroke="currentColor" stroke-width="1"/>
 
-      <text x="60" y="210" font-size="10.5" class="svg-muted">Sunday 21:00, off this timeline: universe.py rebuilds the 2,754 name discovery population, then gap_stats.py measures the gap propensity the 07:15 pool ranks on.</text>
-      <text x="60" y="224" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST), observed 30 to 32 minutes late: the nightly and next morning spend from the same day; every job logs its quota day.</text>
+      <text x="60" y="210" font-size="10.5" class="svg-muted">12:00, inside the break above: the midday pass grades the morning's picks against the open session and ranks the day's movers; the watchdog returns 12:25, 12:55, 13:25.</text>
+      <text x="60" y="224" font-size="10.5" class="svg-muted">Sunday 21:00, off this timeline: universe.py rebuilds the 2,754 name discovery population, then gap_stats.py measures the gap propensity the 07:15 pool ranks on.</text>
+      <text x="60" y="238" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST), observed 30 to 32 minutes late: the nightly and next morning spend from the same day; every job logs its quota day.</text>
     </svg>
     <figcaption>One weekday. Morning jobs gather live evidence while it exists;
+    the noon pass, inside the break in the axis, is the only job here that reads
+    the regular session while it is still running;
     the amber night job returns after the data vendor has published the full
     day, records what the morning could not see, and rebuilds the single file
     report archive at site/PremarketDesk.html, which the morning chain also
@@ -440,8 +448,8 @@
     completion, medium effort) 86.5 to 97.7 seconds over five measured runs,
     and render, deliver, and the archive rebuild 0.7 seconds together, so the
     chain finished at 08:46:53 with roughly 43 minutes of slack before the
-    09:30 open. A morning that rides both analyst timeouts, 537 seconds each,
-    into the fallback report still finishes by about 09:03, leaving 27. The dashed amber arrow is the night returning to the same
+    09:30 open. A morning that rides both analyst timeouts, 1007 seconds each,
+    into the fallback report still finishes by 09:18:53, leaving 11. The dashed amber arrow is the night returning to the same
     database rows the 08:45 scan created, hours after the report already
     went out.
     <br><br>
@@ -455,14 +463,143 @@
     the chain together. The timeout of 293 seconds had been set at three times the
     slowest of five dry runs, and the schedule overtook that sample: against
     the slowest real morning it was 1.6 times. It was re-derived to 537 on
-    2026-08-20 on the same rule, so two exhausted attempts now end at 09:03
+    2026-08-20 on the same rule, so two exhausted attempts ended at 09:03
     instead of 08:55, still 27 minutes clear of the open. The raise buys room
     for the trend and explains none of it: the step went 54.4, 107.5, 185.3,
     231.7 and it tracks output length, which went to 20,188 tokens on
     2026-08-20 against a template whose nine sections did not change. The
-    growth slowed on that fourth point rather than doubling again, and 537 is
-    already only 2.4 times the slowest morning on record.</figcaption>
+    growth slowed on that fourth point rather than doubling again, and 537 was
+    already only 2.4 times the slowest morning then on record.
+    <br><br>
+    The same rule was applied again on 2026-08-29, which is what the paragraph
+    above is now history to. Four more scheduled mornings had overtaken the
+    2026-08-20 sample and the multiple had decayed to 1.6 a second time, so
+    timeout_s was re-derived to 1007, three times the 335.7 seconds of
+    2026-08-27, which is the slowest morning on record. The number does not
+    travel alone: [Monitor] job_log_stale_after_s is derived from it and moved
+    1200 to 2200 with it, because a healthy analyst step is the longest silence
+    in the tree and a job the watchdog reads as dead gets relaunched mid run.
+    Two exhausted attempts now end at 09:18:53, eleven minutes before the open
+    and six minutes before the 09:25 watchdog pass, and it is that six minutes,
+    not the eleven, that is the margin to watch if this rises again.</figcaption>
   </figure>
+</section>
+
+<section id="midday">
+  <p class="eyebrow">12:00, once the session has opened</p>
+  <h2>The noon pass: what the picks did, and what else moved</h2>
+  <div class="prose">
+    <p>The morning publishes a judgement ninety minutes before the open and then
+    has nothing further to say about the day it was about. Two of the questions
+    it cannot answer are answerable by lunchtime, and since 2026-08-31 a third
+    weekday job asks them: what the morning's own picks did once the session
+    opened, and what else moved that the morning never named. job_midday.bat
+    runs <code>midday.scan_midday</code> and then
+    <code>midday.render_midday</code>, and writes one packet and two renders
+    into the same dated directory the morning used,
+    <code>runs/&lt;date&gt;/midday_packet.json</code>,
+    <code>report_midday.md</code> and <code>report_midday.html</code>. Nothing
+    else in the system reads any of the three: there is no email, and the
+    archive at site/PremarketDesk.html is the morning's.</p>
+
+    <p><strong>It grades against the levels the morning published, and the cost
+    of that has to be said out loud.</strong> The carry through pass reads every
+    live picks row for today and measures it against entry_ref and stop_ref,
+    never against entry_ref_true and stop_ref_true, because those do not exist
+    until the night's truth pass writes them at 22:15. The choice is between the
+    morning's levels and no answer at all. The consequence is that the night
+    ledger, booking the same trade against the corrected levels, will sometimes
+    reach a different verdict. That is not a defect in either pass: it is two
+    measurements of one question against two reference prices, and the noon one
+    is built on the numbers a reader actually saw at 08:45. Nothing here is
+    written to picks or to paper_trades. paper_trades is the night's, it is
+    keyed on a rule version, and a second writer booking against uncorrected
+    levels would destroy the comparison that table exists for.</p>
+  </div>
+
+  <div class="table-wrap">
+  <table class="files">
+    <tr><td>never triggered</td><td>high below entry_ref. No position, and the session low is deliberately NOT read: a low with no trade under it stops nothing. CRITERIA writes this case down first because it is the one the first prototype got wrong on 2026-08-31</td></tr>
+    <tr><td>gapped through</td><td>open at or above entry_ref. The fill is the open, exactly as the night's rule fills a gap through, and because that fill is the session's FIRST print a low reaching stop_ref after it is unambiguously a stop out. Order is knowable here and only here</td></tr>
+    <tr><td>triggered</td><td>open below entry_ref, high at or above it. The fill is entry_ref, and whether the session low came before or after that fill is UNKNOWABLE from a daily high and low, so a low at or under stop_ref is reported as the stop level reached with the sequence unknown, and never as a stop out</td></tr>
+    <tr><td>unknown</td><td>any level the quote did not carry. Null with a reason, which is not a verdict and is never printed as one</td></tr>
+  </table>
+  </div>
+
+  <div class="prose">
+    <p><strong>The third row is the whole argument for moving [Collector]
+    stop_time past the open,</strong> and the count of rows landing in it is
+    printed on every edition rather than left to be noticed: a pass that is
+    silent about how often it cannot answer reads exactly like a pass that
+    always can. Minute bars carrying timestamps would turn that case into the
+    second one's certainty, and job_probe_socket_cost is the instrument that
+    decides whether the socket can afford to stay listening that long. The other
+    thing this pass cannot do is ask whether a level was transactable at all:
+    fill_plausible is computed by the night out of Alpaca band volume and does
+    not exist at noon, so a midday verdict on an illiquid level is arithmetic
+    rather than a trade, and the report says so in its own words.</p>
+
+    <p><strong>The second half ranks today's move across the whole universe, and
+    it is a different question from the notable movers section at 08:45.</strong>
+    That one ranks the previous COMPLETED session out of a file already on disk
+    and costs nothing. This one asks what is moving mid session, and it costs one
+    credit per universe name, which is most of the pass's measured 2,902 credits
+    against a key that allows 100,000 a day and is shared with another project.
+    The affordable design, pulling the news feed and quoting only the names
+    carrying a headline, answers which names had news AND moved, which is not the
+    question: a name that moved on no tagged headline would be invisible and the
+    report would have no way of saying it was blind. So selection is on PRICE,
+    news is fetched afterwards for the top of the list to explain what price has
+    already found, and the quota preflight refuses rather than truncating,
+    because half a universe is not a market wide scan and must not be published
+    as one.</p>
+  </div>
+
+  <div class="callout">
+    <h3>The denominator, which is the load bearing line of the whole pass</h3>
+    <p>Every move reported here divides by the prior session's close, and that
+    close comes from eod-bulk-last-day asked for by an EXPLICITLY NAMED date,
+    one call for the whole exchange. It is emphatically not the quote's own
+    previousClosePrice, and the first draft of the rule said that it was.</p>
+    <p>Measured on 2026-08-31 across the 2,391 universe names carrying both,
+    previousClosePrice is not one quantity. It equalled the PRIOR session's
+    close for about 34 percent of them and TODAY'S close for about 29 percent,
+    with nothing in the payload saying which a given row holds, and SAIC.US
+    matched neither. A further 359 names carried no previousClosePrice at all
+    while carrying a previousCloseDate, and every one of those dates was
+    correct. The field was RIGHT on rows whose price was wrong, so it is
+    evidence about the vendor rather than a check on anything, and nothing
+    branches on it.</p>
+    <p><strong>This is the 2026-08-14 defect wearing new clothes.</strong> That
+    morning published a report priced off the last completed session, from an
+    endpoint whose name said live. The lesson then was that a field's name is
+    not its contract, and it holds for a field called previous which is
+    sometimes current.</p>
+  </div>
+
+  <div class="prose">
+    <p><strong>No model runs at noon, and that is a decision rather than a
+    saving.</strong> The morning calls the analyst because "what should I make of
+    this" is an open question. Midday asks closed ones: a pick triggered or it
+    did not, a name moved or it did not, and both are arithmetic that is already
+    in the packet. So there is no narrative step, no containment check and no
+    quantifier guard, because nothing here writes prose for them to police. The
+    renderer builds its own markdown and escapes on the way out, since every
+    headline in the movers section is third party text from a feed nobody here
+    controls.</p>
+    <p><strong>The hour is not arbitrary either.</strong> EODHD does not publish
+    today's intraday bars until overnight, measured on 2026-08-31, so the
+    endpoint the night measures the morning with is unavailable to this pass at
+    any hour of the trading day. What is left is us-quote-delayed, whose REGULAR
+    hours behaviour is the part that has been measured, on 2026-08-17 at a
+    lastTradeTime of 09:56:12 against a 09:57 fetch, and whose premarket
+    behaviour is untested. 12:00 sits well inside the window that was measured.
+    The job also spent its first day watched by nothing, because the weekday
+    watchdog's last pass is 09:25 and the night one is at 22:45, so a midday
+    failure would first have been named by the next morning's packet about
+    eighteen hours later. A second watchdog trigger was registered the same day
+    and fires at 12:25, 12:55 and 13:25.</p>
+  </div>
 </section>
 
 <section id="night">
@@ -1106,11 +1243,16 @@ losers never up more than 0.5%           2 of 11</p>
     </tr>
     <tr>
       <td>analyst.py fails or times out</td>
-      <td>Two attempts at 537 seconds each, set at three times the slowest
-      measured MORNING, 178.9 seconds on 2026-08-19, re-derived on 2026-08-20
-      off the five dry runs the schedule had overtaken. The morning that
-      followed took 226.1 seconds, so the standing headroom is 2.4 times and
-      the same rule is due to be applied again. Then the
+      <td>Two attempts at 1007 seconds each, set at three times the slowest
+      measured MORNING, 335.7 seconds on 2026-08-27, so two exhausted attempts
+      end at 09:18:53, eleven minutes before the open. It was 537 against the
+      178.9 seconds of 2026-08-19 until 2026-08-29, by which point four more
+      scheduled mornings had taken the multiple down to 1.6 and the same rule
+      was applied to the newer evidence. The rule did not change and what it
+      was measured against did, and [Monitor] job_log_stale_after_s moved 1200
+      to 2200 with it, because that number is derived from this one and a
+      healthy analyst step the watchdog reads as a dead job gets relaunched
+      mid run. Then the
       deterministic fallback:
       report.md is rebuilt as plain tables straight from packet.json, the
       disclaimer carries the failure reason, analyst_usage.json records
@@ -1130,6 +1272,23 @@ losers never up more than 0.5%           2 of 11</p>
       artifact of the day is already on disk, and the next rebuild, evening
       or morning, replaces the file whole because every build is a full
       rebuild.</td>
+    </tr>
+    <tr>
+      <td>the midday pass fails at 12:00</td>
+      <td>Nothing downstream notices, because nothing downstream reads it: the
+      midday packet and its two renders are read by no other job, and no email
+      is waiting on them. The watchdog returns at 12:25, 12:55 and 13:25, and
+      it REPORTS the failure without ever rerunning the job, which makes midday
+      the one exception among the five jobs ops/monitor_jobs.py watches. Two
+      reasons point the same way. The 12:00 sweep spends about 2,902 credits on
+      a key shared with another project, and job_midday.bat sets PMD_JOB, so a
+      relaunch resolves through core/artifacts.py as the owner of today and
+      REPLACES the 12:00 packet with a later measurement. The worst case is
+      exactly the one most likely to bring the watchdog here: a scan that wrote
+      its packet and a render that failed, where a rerun spends the whole sweep
+      again to redo a step that makes no vendor call, and overwrites the good
+      half on the way. A human runs tasks/job_midday.bat if the report is still
+      wanted.</td>
     </tr>
     <tr>
       <td>nightly jobs fail</td>
@@ -1152,7 +1311,7 @@ losers never up more than 0.5%           2 of 11</p>
   <dl class="principles">
     <div>
       <dt>EODHD is the only vendor a published number comes from.</dt>
-      <dd>REST for quotes, history, news, calendars; the websocket for live trades. Nothing in selection, collect or morning calls a second vendor, so there is never a question of which feed a number in the report came from. The night is the deliberate exception and it is named rather than hidden: true_volume and paper_ledger both read Alpaca, because measuring the record against a second, complete tape is the entire point of those passes. What keeps the boundary is structural rather than a promise. Alpaca's free plan serves the sip feed for a session that is OVER and refuses a running one with 403, so no version of this reaches 08:45, and every column it writes carries truth_source, because a _true suffix is not a provenance.</dd>
+      <dd>REST for quotes, history, news, calendars; the websocket for live trades. Nothing in selection, collect, morning or midday calls a second vendor, so there is never a question of which feed a number in the report came from. The night is the deliberate exception and it is named rather than hidden: true_volume and paper_ledger both read Alpaca, because measuring the record against a second, complete tape is the entire point of those passes. What keeps the boundary is structural rather than a promise. Alpaca's free plan serves the sip feed for a session that is OVER and refuses a running one with 403, so no version of this reaches 08:45, and every column it writes carries truth_source, because a _true suffix is not a provenance.</dd>
     </div>
     <div>
       <dt>Every threshold lives in doc/CRITERIA.md.</dt>
@@ -1182,11 +1341,11 @@ losers never up more than 0.5%           2 of 11</p>
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the probe_ scripts and the measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the fourteen test_ modules, the newest being test_notable, one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the Alpaca client the probes share; it is research only and no pipeline module imports it. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
+    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, render_report, verify_morning, deliver), <strong>midday</strong> (scan_midday, render_midday, the 12:00 pass that shipped 2026-08-31), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, the probe_ scripts and the measure_ scripts, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the fourteen test_ modules, the newest being test_midday, which shipped with the 12:00 pass on 2026-08-31, with test_regressions holding one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the shared Alpaca client. Until 2026-08-31 this row said it is research only and that no pipeline module imports it, which is false and is the more dangerous of the two things to believe: night/true_volume.py imports it at MODULE scope, so it is the Alpaca transport for a SCHEDULED step and deleting it stops the nightly truth pass. night/paper_ledger.py imports it as well, inside <code>book()</code> rather than at module scope, so the 08:45 scan can read the ledger's counts without pulling an HTTP client into that window. BUILD_PLAN.md withdrew the same sentence on 2026-08-22. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
     <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the eleven fixed report sections, nine until Layer 4 added notable movers on 2026-08-20 and ten until the record block landed on 2026-08-29), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md and SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written 2026-08-29 at 66 picks with every judging point in it far beyond that count</td></tr>
-    <tr><td>tasks\</td><td>eleven job .bat files, eight of which register_tasks.ps1 registers as ten scheduled tasks: job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat twice, once repeating every 30 minutes through the morning window and once at 22:45, job_midday.bat at 12:00 on weekdays, and job_meter_sampler.bat every thirty minutes of every day, weekends included. Beside them register_tasks.ps1 and a README of scheduling notes. The other three of the eleven .bat files are one off probes that a plain run of the script never registers, so a schedule refresh cannot resurrect a question that has been answered: job_probe_socket_cap, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number. Both of those have run, both questions are answered in DECISIONS.md, and neither is armed. The third is job_probe_socket_cost, added 2026-08-31 and NOT yet run: it measures the one number the websocket still owes, the per message cost on a heavy live tape, which is what decides whether [Collector] stop_time may move past the open so the midday pass can grade a fill from timestamped bars. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted once the same was true of them</td></tr>
+    <tr><td>tasks\</td><td>eleven job .bat files, eight of which register_tasks.ps1 registers as eleven scheduled tasks: job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat three times, once repeating every 30 minutes through the morning window, once repeating every 30 minutes over the midday job at 12:25, 12:55 and 13:25, and once at 22:45, job_midday.bat at 12:00 on weekdays, and job_meter_sampler.bat every thirty minutes of every day, weekends included. The midday watchdog firings were added on 2026-08-31 and took the schedule from ten registered tasks to eleven. Beside them register_tasks.ps1 and a README of scheduling notes. The other three of the eleven .bat files are one off probes that a plain run of the script never registers, so a schedule refresh cannot resurrect a question that has been answered: job_probe_socket_cap, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number. Both of those have run, both questions are answered in DECISIONS.md, and neither is armed. The third is job_probe_socket_cost, added 2026-08-31 and NOT yet run: it measures the one number the websocket still owes, the per message cost on a heavy live tape, which is what decides whether [Collector] stop_time may move past the open so the midday pass can grade a fill from timestamped bars. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted once the same was true of them</td></tr>
     <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks, gap_stats, gap_sweeps and paper_trades tables, the last holding one row per live pick PER RULE VERSION, two of them today: the trade the CRITERIA [Paper] rule took, or the reason it declined), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
-    <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
+    <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, midday_packet.json, report_midday.md, report_midday.html, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>
     <tr><td>logs\</td><td>one dated log per job per day</td></tr>
   </table>
