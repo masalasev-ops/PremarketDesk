@@ -187,10 +187,18 @@ def collector_finished(day: str, rows: list[dict[str, Any]] | None = None
     A missing answer is NOT a yes. No row, a row that failed, and a row still
     open all return False with the reason, because a backup taken on a guess is
     the failure this whole module exists to prevent.
+
+    A row still open is read IN ORDER against the completed runs beside it, and
+    is not on its own an answer about the session. A watchdog restart leaves
+    the killed run open forever and finishes the session in a second row; only
+    an open run that started AFTER the last completed one can still be
+    appending to the capture, and only that one refuses.
     """
     if rows is None:
         rows = job_status.records()
     seen_any = False
+    completed: dict[str, Any] | None = None
+    opened: list[str] = []
     for row in rows:
         if row.get("step") != "collector":
             continue
@@ -201,16 +209,43 @@ def collector_finished(day: str, rows: list[dict[str, Any]] | None = None
             seen_any = True
             continue
         seen_any = True
+        # NOT a return, which is what it used to be. A morning the watchdog
+        # restarted leaves the dead run's row open forever WITH a completed
+        # run recorded after it, and answering on the first row seen refused
+        # that session on every nightly until it fell out of the ten session
+        # catch up window, after which the one artifact class this module
+        # calls irreplaceable had never been copied at all. 2026-08-18 and
+        # 2026-08-19 are both restarted mornings and survive only because
+        # their failed first runs recorded an end. A process killed by the
+        # power cut this module keeps citing records none.
         if not row.get("ended_at"):
-            return False, (f"the {day} collector has a row that never ended, so "
-                           "the session is still running or the process died "
-                           "without recording an end")
+            opened.append(started)
+            continue
         if row.get("status") == "ok" and row.get("exit_code") == 0:
-            produced = row.get("produced_count")
-            return True, (f"the {day} collector finished at "
-                          f"{str(row['ended_at'])[11:19]}"
-                          + (f" with {produced:,} minutes written"
-                             if isinstance(produced, int) else ""))
+            if completed is None or started > str(completed.get("started_at") or ""):
+                completed = row
+    if completed is not None:
+        # ORDER DECIDES IT, and this is the one thing an open row can still
+        # mean. A run that started AFTER the completed one may be appending to
+        # the capture at this moment, and write once would freeze it at
+        # whatever length it has reached, which is the 2026-08-24 defect. A
+        # run that started before it is a corpse and says nothing about a
+        # session that went on to finish.
+        latest = str(completed.get("started_at") or "")
+        newer = sorted(s for s in opened if s > latest)
+        if newer:
+            return False, (f"the {day} collector completed a run, and another "
+                           f"started after it at {newer[-1][11:19]} and never "
+                           "ended, so the capture may still be growing")
+        produced = completed.get("produced_count")
+        return True, (f"the {day} collector finished at "
+                      f"{str(completed['ended_at'])[11:19]}"
+                      + (f" with {produced:,} minutes written"
+                         if isinstance(produced, int) else ""))
+    if opened:
+        return False, (f"the {day} collector has a row that never ended, so "
+                       "the session is still running or the process died "
+                       "without recording an end")
     if seen_any:
         return False, (f"the {day} collector left rows but none is a completed "
                        f"{SESSION_COLLECTOR_JOB} run, so what is on disk is a "

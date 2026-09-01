@@ -10571,6 +10571,24 @@ def claim_an_unfinished_session_is_not_backed_up(failures: list[str]) -> None:
         {"step": "collector", "job": "collector", "status": "failed",
          "exit_code": 1, "started_at": "2026-04-09T07:20:01-04:00",
          "ended_at": "2026-04-09T07:21:00-04:00", "produced_count": None},
+        # A MORNING THE WATCHDOG RESTARTED. The first run was killed without
+        # recording an end, the second finished the session. Answering on the
+        # open row refused this backup on every nightly for ten sessions and
+        # then forever, over a capture that is on disk and complete.
+        {"step": "collector", "job": "collector", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-11T07:20:01-04:00",
+         "ended_at": None, "produced_count": None},
+        {"step": "collector", "job": "collector", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-11T07:40:00-04:00",
+         "ended_at": "2026-04-11T09:25:00-04:00", "produced_count": 3011},
+        # THE OTHER ORDER, which must still refuse: a completed run and then
+        # one still open after it, which may be appending right now.
+        {"step": "collector", "job": "collector", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-12T07:20:01-04:00",
+         "ended_at": "2026-04-12T09:25:00-04:00", "produced_count": 2900},
+        {"step": "collector", "job": "collector", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-12T10:00:00-04:00",
+         "ended_at": None, "produced_count": None},
     ]
 
     cases = [
@@ -10579,6 +10597,10 @@ def claim_an_unfinished_session_is_not_backed_up(failures: list[str]) -> None:
         ("2026-04-08", False, "an instrument, not the session", "instrument"),
         ("2026-04-09", False, "a run that failed", "none is a completed"),
         ("2026-04-10", False, "no row at all", "no collector run is recorded"),
+        ("2026-04-11", True, "a restarted morning whose second run finished",
+         "finished at"),
+        ("2026-04-12", False, "a run still open after a completed one",
+         "may still be growing"),
     ]
     for day, wanted, what, phrase in cases:
         got, why = _backup.collector_finished(day, rows)
