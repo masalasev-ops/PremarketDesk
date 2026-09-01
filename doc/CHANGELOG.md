@@ -15,6 +15,44 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, fourth: the 2026-08-20 packet is back, and 08-21 never had one
+
+**Answers the entry below, which said the restore was worth considering and
+was not taken.** It was taken about an hour later, on the operator's word, and
+that entry keeps its original text because it was true when written.
+
+`night.backup_evidence --restore 2026-08-20` returned exactly one artifact.
+The three premarket files were skipped as already matching, which is restore
+refusing to overwrite a working copy that agrees with the backup, and no
+rendered report came back because the backup never held one. So
+runs/2026-08-20/ now holds packet.json and nothing else: twelve candidates,
+all twelve carrying score_components, byte identical to the backup, and still
+stamped 10:27 on 2026-08-20 because copy2 preserves the mtime. The restore
+spent no quota. The meter read 1,148 before and after.
+
+Both readers behave as their own docstrings promised. build_archive logs
+"skipped 2026-08-20, no report.md" and moves on, so the published archive
+still shows seven mornings and the deleted report stays deleted.
+weekly_page._score_components_by_row now recovers all twelve rows, taking the
+component table from 44 rows to 56.
+
+**What the verification turned up, which is older than any of this.**
+runs/2026-08-21/packet.json is a 762 byte stub. It carries one candidate, no
+score components, and `stub` in its build commit field, while picks holds
+twelve rows for that session. The backup holds the identical stub, so the
+stub was already in place when the 22:15 backup ran that night and the real
+packet of 2026-08-21 was never captured by anything.
+
+No number is published wrong by it and nothing is being changed. build_archive
+already refuses to present it as a morning: _fixture_reason returns "its packet
+was built by 'stub', which is not a commit" and the archive labels the day
+rather than publishing its count of one. The weekly page contributes nothing
+for those twelve rows, which is the same rule that governed 2026-08-20 while
+its packet was gone, and a component nobody scored is still not a component
+that scored zero. It is recorded here because a reader who finds one candidate
+where picks says twelve deserves to know the answer is a stub and not a
+morning.
+
 ## 2026-09-01, third: six run directories deleted by hand, and what that costs
 
 **Not a code change. An operator action, recorded here because the tree no
