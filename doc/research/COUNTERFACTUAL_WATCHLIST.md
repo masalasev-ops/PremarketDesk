@@ -5,7 +5,7 @@ floor had been applied to the MEASURED premarket RVOL instead of to the
 published estimate.
 
 Instrument: `src/research/counterfactual_watchlist.py`. Payload:
-`doc/research/counterfactual_watchlist-2026-09-01.json`, which carries the raw
+`data/research/counterfactual_watchlist-2026-09-01.json`, which carries the raw
 rows and not only the tables below, so every number here is arithmetic on a
 file. Zero vendor calls. It writes to no table and reads picks only.
 

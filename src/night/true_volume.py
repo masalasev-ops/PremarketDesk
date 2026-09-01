@@ -16,7 +16,7 @@ premarket float rotation exists to rescue. The correction therefore reinstates
 at a lower layer the bias the float rotation fallback was built to remove."
 
 The record this module writes says the opposite. Over the 46 guarded rows in
-doc/research/capture_rate_study-2026-09-01.json, terciles of avg_volume_20d
+data/research/capture_rate_study-2026-09-01.json, terciles of avg_volume_20d
 give median capture shares of 0.178 thin, 0.087 mid and 0.084 thick, Spearman
 rho -0.405 over 46 rows and 6 sessions. Thin names capture MORE. The spread is
 still real and a single divisor still cannot correct it; what was wrong is the

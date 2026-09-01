@@ -909,7 +909,7 @@ def report(payload: dict[str, Any]) -> None:
 
 
 def payload_path(stamp: str) -> Path:
-    return config.DOC_DIR / "research" / f"counterfactual_watchlist-{stamp}.json"
+    return config.STUDY_DIR / f"counterfactual_watchlist-{stamp}.json"
 
 
 def write_payload(payload: dict[str, Any], stamp: str) -> Path:

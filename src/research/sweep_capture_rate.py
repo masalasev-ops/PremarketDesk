@@ -116,7 +116,7 @@ def newest_payload() -> Any:
     the file and whenever, which is the same argument CRITERIA's closes
     retention note makes for reading an age off a name and not off a stat.
     """
-    directory = config.DOC_DIR / "research"
+    directory = config.STUDY_DIR
     found = sorted(directory.glob(f"{PATH_STEM}-*.json"))
     if not found:
         raise SystemExit(
@@ -851,7 +851,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Score four candidate capture rates against the archive.")
     parser.add_argument("--payload", default=None,
                         help="the archived study to sweep; defaults to the "
-                             f"newest doc/research/{PATH_STEM}-*.json")
+                             f"newest data/research/{PATH_STEM}-*.json")
     parser.add_argument("--bands", type=int, default=DEFAULT_BANDS,
                         help="liquidity bands for candidate C. A display "
                              "boundary, not a threshold")

@@ -1722,7 +1722,7 @@ measurement makes it mine.
 screen that reads it, phrased as the volume slot scoring at least one point
 rather than as a second number, so the identity above cannot drift apart.
 
-**Evidence.** doc/research/float_rotation_study-2026-08-21-eligibility.json,
+**Evidence.** data/research/float_rotation_study-2026-08-21-eligibility.json,
 key mapping_transfer.top_12_by_gap.day_setup_eligibility. The study computes it
 from CRITERIA rather than from a constant, so it re-derives if either floor
 moves. 50 sessions tallied of 60 walked, 462 Alpaca requests, 0 EODHD calls.
@@ -1826,7 +1826,7 @@ shipped pair from those rows with its own arithmetic, refuses any drift between
 CRITERIA and the archived fit, and checks that one significant figure is the
 worse of the two. Six mutations against it, six caught.
 
-**Evidence.** doc/research/float_rotation_study-2026-08-20-warmup-fixed.json,
+**Evidence.** data/research/float_rotation_study-2026-08-20-warmup-fixed.json,
 51 sessions tallied of 61 walked, 463 Alpaca requests, 0 EODHD calls. The two
 earlier payloads stay on disk and are still what the entries above quote.
 

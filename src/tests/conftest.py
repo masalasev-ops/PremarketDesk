@@ -55,6 +55,7 @@ from core import config
 # added here; the mtime check below is what catches it if nobody remembers.
 _CONFIG_PATHS = (
     "DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR", "SITE_DIR",
+    "STUDY_DIR",
     "DB_PATH", "UNIVERSE_PATH", "WATCHLIST_PATH", "CA_BUNDLE_PATH",
 )
 
@@ -89,6 +90,7 @@ def _redirect_config(root: Path) -> None:
     """Point every writable config path inside `root`."""
     config.DATA_DIR = root / "data"
     config.PREMARKET_DIR = config.DATA_DIR / "premarket"
+    config.STUDY_DIR = config.DATA_DIR / "research"
     config.RUNS_DIR = root / "runs"
     config.LOGS_DIR = root / "logs"
     config.SITE_DIR = root / "site"
@@ -97,7 +99,7 @@ def _redirect_config(root: Path) -> None:
     config.WATCHLIST_PATH = config.DATA_DIR / "watchlist.json"
     config.CA_BUNDLE_PATH = config.DATA_DIR / "ca-bundle.pem"
     for directory in (config.DATA_DIR, config.PREMARKET_DIR, config.RUNS_DIR,
-                      config.LOGS_DIR, config.SITE_DIR):
+                      config.LOGS_DIR, config.SITE_DIR, config.STUDY_DIR):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -226,12 +228,13 @@ def isolated_store() -> Iterator[Path]:
     """
     box = Path(tempfile.mkdtemp(prefix="pmd-claim-"))
     saved = (config.DATA_DIR, config.RUNS_DIR, config.DB_PATH,
-             config.PREMARKET_DIR, config.LOGS_DIR)
+             config.PREMARKET_DIR, config.LOGS_DIR, config.STUDY_DIR)
     try:
         config.DATA_DIR = box / "data"
         config.RUNS_DIR = box / "runs"
         config.LOGS_DIR = box / "logs"
         config.PREMARKET_DIR = config.DATA_DIR / "premarket"
+        config.STUDY_DIR = config.DATA_DIR / "research"
         config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
         config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
         config.RUNS_DIR.mkdir(parents=True, exist_ok=True)
@@ -239,7 +242,7 @@ def isolated_store() -> Iterator[Path]:
         yield box
     finally:
         (config.DATA_DIR, config.RUNS_DIR, config.DB_PATH,
-         config.PREMARKET_DIR, config.LOGS_DIR) = saved
+         config.PREMARKET_DIR, config.LOGS_DIR, config.STUDY_DIR) = saved
         shutil.rmtree(box, ignore_errors=True)
 
 
@@ -685,6 +688,7 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
 
         config.DATA_DIR = data_copy
         config.PREMARKET_DIR = data_copy / "premarket"
+        config.STUDY_DIR = data_copy / "research"
         config.RUNS_DIR = runs_copy
         config.LOGS_DIR = sandbox / "logs"
         config.SITE_DIR = sandbox / "site"

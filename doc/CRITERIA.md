@@ -1189,7 +1189,7 @@ are exactly the population premarket float rotation exists to rescue, so the
 correction reinstates at a lower layer the bias the float rotation fallback
 was built to remove". THE RECORD SAYS THE OPPOSITE, and it is the record this
 section exists to accumulate. Over the 46 guarded rows in
-doc/research/capture_rate_study-2026-09-01.json, terciles of the morning's own
+data/research/capture_rate_study-2026-09-01.json, terciles of the morning's own
 avg_volume_20d give a median capture share of 0.178 for the thinnest band,
 0.087 for the middle and 0.084 for the thickest, with Spearman rho of share
 against average volume at -0.405 over 46 rows and 6 sessions. Thin names

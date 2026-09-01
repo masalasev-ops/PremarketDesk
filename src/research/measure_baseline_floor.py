@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="stop after this many names, for a cheap dry run")
     parser.add_argument("--out", default=None,
                         help="where to write the payload; defaults to "
-                             "doc/research/baseline_floor_study-<today>.json")
+                             "data/research/baseline_floor_study-<today>.json")
     args = parser.parse_args(argv)
 
     today = ettime.today_et()
@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         "table": table,
         "rows": rows,
     }
-    out = (config.PROJECT_ROOT / "doc" / "research" /
+    out = (config.STUDY_DIR /
            f"baseline_floor_study-{today.isoformat()}.json"
            if args.out is None else config.PROJECT_ROOT / args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and twenty nine claims, a count read off
+and the two pages. It now carries one hundred and thirty claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -4536,7 +4536,8 @@ def claim_ensure_dirs_follows_a_redirected_config(failures: list[str]) -> None:
     """
     from tests import conftest
 
-    watched = ("DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR")
+    watched = ("DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR",
+               "STUDY_DIR")
     # PROJECT_ROOT is never redirected, so these are the real four whatever
     # sandbox this claim happens to be running inside.
     real = {config.PROJECT_ROOT / "data",
@@ -10497,6 +10498,119 @@ def claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(
           f"minute window outlasts the {stale_after:,.0f}s staleness gate")
 
 
+# doc/ is read as diffs and nothing else. On 2026-09-01 it held 91,132
+# committed lines, of which 67,470 were nine machine written JSON payloads, and
+# a one line edit to CRITERIA arrived in the same review as 41,482 lines of
+# per row study output. The payloads moved under the gitignored data root and
+# what stays is the finding. These two numbers keep it that way.
+#
+# The cap is 1,500 lines. Chosen against the tree rather than picked: the
+# largest prose document that is NOT append only is CRITERIA at 3,124, the
+# largest hand written note is COLLECTOR_VOLUME at 1,148, and the arc pages sit
+# near 1,350. So 1,500 clears every hand written file with room to grow and
+# catches the next generated one.
+_DOC_LINE_CAP = 1500
+
+# Every committed file under doc/ allowed past the cap, and why. A file added
+# here without a reason is the whole failure this claim exists to prevent.
+_DOC_CAP_EXEMPT = {
+    "CHANGELOG.md": "append only by design. It is the record and it grows.",
+    "DECISIONS.md": "append only by design, same argument.",
+    "CRITERIA.md": "the authority every threshold is read from, and each one "
+                   "carries its derivation beside it.",
+    "collector-capture.json": "machine written and NOT regenerable: no script "
+                              "produces it, it cost 297 intraday calls against "
+                              "a shared quota, and it is the provenance a claim "
+                              "traces the shipped capture rate to.",
+}
+
+# The only machine written payloads that may stay committed. Both carry a
+# _provenance header saying, in their own words, why they cannot be produced
+# again: one lost its script, the other its input.
+_DOC_PAYLOAD_EXEMPT = {
+    "collector-capture.json",
+    "float_rotation_study-2026-08-16-prefix.json",
+    "float_rotation_study-2026-08-17-postfix.json",
+}
+
+
+def claim_doc_carries_findings_and_not_payloads(failures: list[str]) -> None:
+    """No committed file under doc/ is machine written bulk.
+
+    Reading diffs is the only review this project has, and until 2026-09-01
+    three quarters of doc/ was study output nobody reads as a diff. The
+    finding stays committed, the payload lives under the gitignored data root,
+    and a note carries the question, the headline numbers, the date, the commit
+    and the path.
+
+    Two rules, because either alone has a hole. A cap alone admits a 1,400 line
+    payload. A no-JSON rule alone lets a prose file balloon to ten thousand.
+
+    The lists are the argument, not the mechanism. Adding a name is a
+    deliberate edit that has to bring a reason, which is what
+    prune_data.PRUNABLE and backup_evidence._ARTIFACTS both do and for the same
+    reason: a rule that quietly grows to fit whatever arrives is not a rule.
+    """
+    import subprocess
+
+    root = config.PROJECT_ROOT
+    listing = subprocess.run(
+        # --no-optional-locks, or an ordinary read refreshes and rewrites
+        # .git/index and the whole tree photograph fails on a file the
+        # suite itself changed. That cost a day on 2026-08-14 and there is
+        # a claim watching for it.
+        ["git", "--no-optional-locks", "ls-files", "doc"],
+        cwd=root, capture_output=True, text=True)
+    if listing.returncode != 0:
+        failures.append("git ls-files doc failed, so this claim cannot see "
+                        "what is committed and is not asserting anything")
+        return
+    tracked = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+    if not tracked:
+        failures.append("git ls-files doc returned nothing, which cannot be "
+                        "right and would make this claim pass on an empty set")
+        return
+
+    total = 0
+    for relative in tracked:
+        path = root / relative
+        if not path.is_file():
+            continue
+        lines = len(path.read_bytes().splitlines())
+        total += lines
+        name = path.name
+
+        if lines > _DOC_LINE_CAP and name not in _DOC_CAP_EXEMPT:
+            failures.append(
+                f"{relative} is {lines:,} lines, over the {_DOC_LINE_CAP:,} "
+                "line cap, and is not named in _DOC_CAP_EXEMPT. If it is a "
+                "study payload it belongs under data/research with a note in "
+                "doc/ carrying its finding. If it is prose that genuinely has "
+                "to be this long, add it to that list with the reason")
+
+        if path.suffix == ".json" and name not in _DOC_PAYLOAD_EXEMPT:
+            failures.append(
+                f"{relative} is a committed JSON payload under doc/ and is not "
+                "one of the two runs that cannot be produced again. Machine "
+                "written bulk goes under data/research and its finding goes in "
+                "a note beside the other notes")
+
+    # And the exemptions have to still exist, or the list becomes a place old
+    # names accumulate and the next reader trusts it as current.
+    # git ls-files always emits forward slashes, so this needs no Path.
+    committed = {relative.rsplit("/", 1)[-1] for relative in tracked}
+    for name in sorted(set(_DOC_CAP_EXEMPT) | _DOC_PAYLOAD_EXEMPT):
+        if name not in committed:
+            failures.append(
+                f"{name} is exempted from the doc/ rules and is not committed "
+                "under doc/ any more, so the exemption is describing a file "
+                "that is not there")
+
+    print(f"  doc bulk     {len(tracked)} committed file(s), {total:,} lines, "
+          f"cap {_DOC_LINE_CAP:,} with {len(_DOC_CAP_EXEMPT)} named exemption(s) "
+          f"and {len(_DOC_PAYLOAD_EXEMPT)} payload(s) that cannot be regenerated")
+
+
 def claim_the_midday_pass_never_touches_the_morning(failures: list[str]) -> None:
     """The 12:00 pass writes three files and none of them is the morning's.
 
@@ -10936,8 +11050,13 @@ def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None
     counts = {
         "test_ modules": suite.count('"tests.test_'),
         "job .bat files": len(list((root / "tasks").glob("job_*.bat"))),
-        "float rotation study": len(list(
-            (root / "doc" / "research").glob("float_rotation_study-*.json"))),
+        # BOTH ROOTS. The regenerable payloads moved under data/ on
+        # 2026-09-01 and the two unrepeatable ones stayed in doc/, so a
+        # count taken from either alone reads lower than the number of
+        # fits that exist and the documents quoting it would be wrong.
+        "float rotation study": len(
+            list((root / "doc" / "research").glob("float_rotation_study-*.json"))
+            + list(config.STUDY_DIR.glob("float_rotation_study-*.json"))),
     }
     for what, number in counts.items():
         if number not in words:
@@ -11031,7 +11150,7 @@ def claim_the_day_screen_and_the_volume_score_agree_on_one_number(
 
     # And the study reports the matched floor from CRITERIA rather than from a
     # constant, which is what makes it re-derive when either of the two moves.
-    payload = (config.PROJECT_ROOT / "doc" / "research"
+    payload = (config.STUDY_DIR
                / "float_rotation_study-2026-08-21-eligibility.json")
     if not payload.is_file():
         failures.append(f"{payload.name} is gone, so the eligibility floor "
@@ -11173,8 +11292,16 @@ def claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(
     # is shipped is exactly the drift this claim exists to catch, and against a
     # hardcoded elder payload it would pass forever. Sorting is by filename and
     # the names carry ISO dates, so newest is last.
-    archived = sorted((config.PROJECT_ROOT / "doc" / "research").glob(
-        "float_rotation_study-*.json"))
+    # Under data/ since 2026-09-01, with the two unrepeatable runs left in
+    # doc/. Both roots are read: the newest fit is the one CRITERIA's edges
+    # answer to, and which directory it sits in is not the question. Sorted
+    # by NAME and not by path, or the two roots would interleave by
+    # directory and newest would mean whichever root sorted last.
+    archived = sorted(
+        list((config.PROJECT_ROOT / "doc" / "research").glob(
+            "float_rotation_study-*.json"))
+        + list(config.STUDY_DIR.glob("float_rotation_study-*.json")),
+        key=lambda path: path.name)
     if not archived:
         failures.append("no float_rotation_study payload is archived, so the "
                         "edges in CRITERIA [Score premarket float rotation] "
@@ -11821,6 +11948,7 @@ def main() -> int:
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
     claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(failures)
+    claim_doc_carries_findings_and_not_payloads(failures)
     claim_the_midday_pass_never_touches_the_morning(failures)
     claim_the_unsigned_score_says_so_wherever_it_is_named(failures)
     claim_the_watchdog_reads_every_job_that_writes_a_log(failures)

@@ -97,6 +97,55 @@ _ARTIFACTS = (
 )
 
 
+def study_root() -> Path:
+    """Where study payloads are kept. A SIBLING of the dated sessions, not one.
+
+    They are not sessions and they are not evidence in the sense _ARTIFACTS
+    means. Filing them under a date would put them in the same shape as the
+    four things that have no route back and quietly widen that promise.
+    """
+    return backup_root() / "studies"
+
+
+def back_up_studies(dry_run: bool = False) -> dict[str, Any]:
+    """Copy data/research payloads to the backup root, once each.
+
+    A DIFFERENT AND WEAKER PROMISE THAN _ARTIFACTS, and the difference is the
+    point. Those four cannot be produced again at any price. These can: an
+    instrument exists for every one of them. They are kept because running it
+    again costs quota, or reads a universe and a set of packets that have since
+    moved, so a payload is cheaper to hold than to re-earn. That is prudence,
+    not irreplaceability, and calling it the same thing would make the sentence
+    above _ARTIFACTS mean nothing.
+
+    Write once, on the same argument as the dated copies: a payload that
+    disagrees with its backup is reported, never resolved, because a stale
+    backup and an overwritten working copy look identical from here.
+    """
+    source_dir = config.STUDY_DIR
+    copied: list[str] = []
+    held: list[str] = []
+    disagree: list[str] = []
+    if not source_dir.is_dir():
+        return {"copied": copied, "held": held, "disagree": disagree,
+                "dry_run": dry_run, "root": study_root()}
+    for source in sorted(source_dir.glob("*.json")):
+        target = study_root() / source.name
+        if target.is_file():
+            if _digest(target) == _digest(source):
+                held.append(source.name)
+            else:
+                disagree.append(source.name)
+            continue
+        copied.append(source.name)
+        if dry_run:
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    return {"copied": copied, "held": held, "disagree": disagree,
+            "dry_run": dry_run, "root": study_root()}
+
+
 def backup_root() -> Path:
     """Outside the working tree, and outside the repository's parent.
 
@@ -270,6 +319,18 @@ def main(argv: list[str] | None = None) -> int:
         reverse=True)[:catchup]
     result = run(sorted(days), dry_run=args.dry_run)
     report(result)
+
+    # After the four, and reported apart from them, because they are held
+    # on a different promise. See back_up_studies.
+    studies = back_up_studies(dry_run=args.dry_run)
+    verb = "would copy" if studies["dry_run"] else "copied"
+    print(f"backup: studies {verb} {len(studies['copied'])}, "
+          f"already held {len(studies['held'])}, at {studies['root']}")
+    for name in studies["disagree"]:
+        print(f"  DISAGREES  studies/{name}: the working copy differs from "
+              "the backup and NEITHER was changed. A study payload is "
+              "rewritten by re-running its instrument, so this is either a "
+              "re-run nobody recorded or a corrupted file")
     job_status.produced("evidence files copied", result["written"])
     return 0
 

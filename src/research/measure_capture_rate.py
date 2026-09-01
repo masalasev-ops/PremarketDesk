@@ -657,7 +657,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Re-derive the capture rate from the live record, offline.")
     parser.add_argument("--out", default=None,
                         help="where to write the payload; defaults to "
-                             f"doc/research/{PATH_STEM}-<today>.json")
+                             f"data/research/{PATH_STEM}-<today>.json")
     parser.add_argument("--no-write", action="store_true",
                         help="report and archive nothing")
     args = parser.parse_args(argv)
@@ -693,7 +693,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.no_write:
         print("\nmeasure_capture_rate: --no-write, nothing archived")
         return 0
-    out = (config.DOC_DIR / "research" /
+    out = (config.STUDY_DIR /
            f"{PATH_STEM}-{ettime.today_et().isoformat()}.json"
            if args.out is None else config.PROJECT_ROOT / args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -15,6 +15,75 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, sixth: study payloads leave doc/, and the finding stays
+
+**doc/ held 91,132 committed lines and 67,470 of them were nine machine written
+JSON payloads.** A one line edit to CRITERIA arrived in the same review as
+41,482 lines of per row study output. Reading diffs is the only review
+mechanism this project has, and three quarters of the surface being generated
+bulk is that mechanism not working.
+
+**After: 26,953 lines across 21 files.** 64,179 lines left the repository.
+
+**What moved and what did not.** Six regenerable payloads moved under
+data/research, which config.STUDY_DIR names and .gitignore already covered.
+Three stayed, each for a reason it states itself.
+
+  float_rotation_study-2026-08-16-prefix.json    the script that produced it is
+                                                 gone, replaced in 405c9ac
+  float_rotation_study-2026-08-17-postfix.json   the input is gone: it read a
+                                                 universe.json the Sunday job
+                                                 overwrites weekly
+  collector-capture.json                         no script produces it at all.
+                                                 297 intraday calls against a
+                                                 shared quota, and the
+                                                 provenance a claim traces the
+                                                 shipped capture rate to
+
+The first two carry that argument in their own _provenance headers, written
+when they were preserved on 2026-08-18. That commit ended "this is one
+comparison kept for one entry, not a change of policy about study outputs",
+which is the policy this entry finally applies to the other seven.
+
+**Three findings written, so the payload is not the record.** CAPTURE_RATE.md,
+BASELINE_FLOOR.md and FLOAT_ROTATION_FITS.md each carry the question, the
+headline numbers, the date, the commit and the path. The counterfactual note
+already existed and had its payload path repointed. Each is between 44 and 53
+lines against payloads of 3,180 to 41,482.
+
+**Two rules keep it this way**, in
+claim_doc_carries_findings_and_not_payloads. A 1,500 line cap on any committed
+file under doc/ not named in a list with its reason, and no committed JSON
+under doc/ beyond the three above. Either rule alone has a hole: a cap admits a
+1,400 line payload, and a no-JSON rule lets a prose file balloon. The cap was
+chosen against the tree rather than picked, clearing the largest hand written
+note at 1,148 and the arc pages near 1,350. Verified by planting a 2,000 line
+JSON under doc/research, which raised both failures, rather than by trusting
+that it would.
+
+**The payloads are in the backup root**, under evidence/studies/ and
+deliberately NOT in backup_evidence._ARTIFACTS. That tuple's argument is that
+exactly four things have no route back, and a study payload has one: its
+instrument can be re-run. They are held because re-running costs quota or reads
+a universe and a set of packets that have since moved, which is prudence rather
+than irreplaceability, and folding them into the four would make that sentence
+mean nothing. Same write once discipline, its own weaker promise, stated.
+
+**Two claims caught this work as it was written.** The new claim shelled out to
+git without --no-optional-locks, which refreshes and rewrites .git/index and
+then fails the whole tree photograph on a file the suite itself changed; there
+is a claim watching for exactly that, and its message says it cost a day on
+2026-08-14. And the self counting claim caught the module docstring still
+saying one hundred and twenty nine.
+
+**Raised while running the backup, and not from this work.** The 2026-08-24
+premarket capture and its subscriptions sidecar DISAGREE with their backups:
+520,756 bytes against 1,233, and 932 against 318. Neither file was changed,
+which is the write once rule behaving correctly. A person has to say which side
+is right. It is recorded here rather than fixed because only one of the two
+readings is recoverable and choosing wrong destroys the evidence for telling
+them apart.
+
 ## 2026-09-01, fifth: conviction is defined, and today's report was rebuilt
 
 **Two defects in the same document, both raised by a reader looking at it.**

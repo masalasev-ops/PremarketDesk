@@ -37,6 +37,14 @@ CRITERIA_PATH = DOC_DIR / "CRITERIA.md"
 
 DATA_DIR = PROJECT_ROOT / "data"
 PREMARKET_DIR = DATA_DIR / "premarket"
+# Study payloads. Regenerable bulk, so it lives under the gitignored data
+# root rather than in doc/, where every one of them inflated every diff and
+# reading diffs is the only review this project has. What stays committed is
+# the finding: a note carrying the question, the headline numbers, the date,
+# the commit and this path. The two 2026-08-16 and 2026-08-17 float rotation
+# runs stay in doc/ because their own _provenance headers say they cannot be
+# produced again, one having lost its script and the other its input.
+STUDY_DIR = DATA_DIR / "research"
 RUNS_DIR = PROJECT_ROOT / "runs"
 LOGS_DIR = PROJECT_ROOT / "logs"
 # The published archive. It lives here rather than being built from
@@ -69,7 +77,8 @@ ANALYST_PROMPT_PATH = DOC_DIR / "prompt_analyst.md"
 # the sandbox. And test_entrypoints' call, placed to materialise the SANDBOX
 # directories, quietly materialised the repository's and did nothing for its
 # stated purpose.
-_ALL_DIR_NAMES = ("DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR")
+_ALL_DIR_NAMES = ("DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR",
+                  "STUDY_DIR")
 
 # EODHD addresses. These are locations, not criteria, so they live here rather
 # than in CRITERIA.md. Every number that shapes a decision lives in that file.
