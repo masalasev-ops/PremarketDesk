@@ -167,6 +167,59 @@ def _target(day: str, label: str, source: Path) -> Path:
     return backup_root() / day / f"{label}{source.suffix}"
 
 
+# The job that owns a session's collector run. A hand run or an instrument
+# records step "collector" too, under job "manual", and today's socket cost
+# probe is exactly that: it wrote 932 minutes at 10:00 against the morning's
+# 3,289 at 07:20. An instrument finishing is not a session finishing.
+SESSION_COLLECTOR_JOB = "collector"
+
+
+def collector_finished(day: str, rows: list[dict[str, Any]] | None = None
+                       ) -> tuple[bool, str]:
+    """Did the scheduled collector record a COMPLETED run for this date.
+
+    ASKED OF job_status AND NOT OF THE FILE, which is the whole point. A
+    capture file exists from the socket's first written minute, so its presence
+    says a run started and nothing at all about whether it ended. On 2026-08-24
+    the 07:55 catch up read a file holding five bars and backed it up, and
+    write once made that stub the permanent copy of a 2,089 bar session.
+
+    A missing answer is NOT a yes. No row, a row that failed, and a row still
+    open all return False with the reason, because a backup taken on a guess is
+    the failure this whole module exists to prevent.
+    """
+    if rows is None:
+        rows = job_status.records()
+    seen_any = False
+    for row in rows:
+        if row.get("step") != "collector":
+            continue
+        started = str(row.get("started_at") or "")
+        if not started.startswith(day):
+            continue
+        if row.get("job") != SESSION_COLLECTOR_JOB:
+            seen_any = True
+            continue
+        seen_any = True
+        if not row.get("ended_at"):
+            return False, (f"the {day} collector has a row that never ended, so "
+                           "the session is still running or the process died "
+                           "without recording an end")
+        if row.get("status") == "ok" and row.get("exit_code") == 0:
+            produced = row.get("produced_count")
+            return True, (f"the {day} collector finished at "
+                          f"{str(row['ended_at'])[11:19]}"
+                          + (f" with {produced:,} minutes written"
+                             if isinstance(produced, int) else ""))
+    if seen_any:
+        return False, (f"the {day} collector left rows but none is a completed "
+                       f"{SESSION_COLLECTOR_JOB} run, so what is on disk is a "
+                       "partial or an instrument's")
+    return False, (f"no {SESSION_COLLECTOR_JOB} run is recorded for {day} at "
+                   "all. Either the session has not run yet, or it ran before "
+                   "job_status tracked it")
+
+
 def survey(days: list[str]) -> dict[str, Any]:
     """What would be copied, what is already held, and what disagrees."""
     copied: list[dict[str, Any]] = []
@@ -472,7 +525,34 @@ def main(argv: list[str] | None = None) -> int:
         {p.stem for p in config.PREMARKET_DIR.glob("*.jsonl")
          if len(p.stem) == 10},
         reverse=True)[:catchup]
-    result = run(sorted(days), dry_run=args.dry_run)
+
+    # A SESSION THAT IS STILL BEING WRITTEN IS NOT BACKED UP. See
+    # collector_finished. --date is the explicit override and says so,
+    # because after an arbitration somebody has to be able to re-take a
+    # copy on purpose, and that is a different act from the nightly
+    # sweeping up whatever it finds.
+    if args.date:
+        print(f"backup: --date {args.date} given, so the completed session "
+              "check is SKIPPED for it. This is the override.")
+        ready = days
+    else:
+        rows = job_status.records()
+        ready = []
+        for day in days:
+            finished, why = collector_finished(day, rows)
+            if finished:
+                ready.append(day)
+                continue
+            held = all(_target(day, label, locate(day)).is_file()
+                       for label, locate in _ARTIFACTS)
+            print(f"backup: SKIPPED {day}, {why}."
+                  + (" Every artifact for it is already held, so nothing "
+                     "is at risk." if held else
+                     " Nothing was copied: a partial copy held is worse "
+                     "than none, because write once makes it permanent. "
+                     f"Force it with --date {day} once the session is "
+                     "over."))
+    result = run(sorted(ready), dry_run=args.dry_run)
     report(result)
 
     # After the four, and reported apart from them, because they are held

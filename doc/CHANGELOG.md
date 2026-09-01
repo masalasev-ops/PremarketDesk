@@ -15,6 +15,80 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twelfth: the child is tested too, and an unfinished session is not backed up
+
+Both of these were raised as things to VERIFY before acting. Both hold, and the
+verification moved two details.
+
+### 1. The claim tested the parent and trusted the child
+
+Confirmed by reading it. `claim_the_socket_probe_cannot_write_the_session_capture`
+inspects the launched command for `--premarket-dir` and stops there. It never
+calls `bar_path`, `stats_path` or `subscriptions_path`, so nothing asserted that
+`collect_premarket` honours the flag it is handed.
+
+Confirmed load bearing: the comment above the rebind states, as the reason it is
+safe, that all three helpers read `config.PREMARKET_DIR` at CALL time. A
+property named as the reason something is safe, with nothing enforcing it.
+
+**The precedent is bigger than cited.** `conftest._DERIVED` carries SEVEN module
+constants that captured a root at import and cannot be redirected without being
+named one at a time: two backtest directories and a third for sessions, the job
+status trail, the market calendar cache, the monitor's rerun state and the
+UNVERIFIED marker. Not six.
+
+`claim_the_collector_writes_where_premarket_dir_points` calls `main` with the
+flag against a temporary directory. It returns 1 on the missing watchlist, which
+is the first gate past the rebind and long before any socket, so the real parser
+and the real rebind are exercised rather than a stand in. Then each of the three
+helpers is checked SEPARATELY, because a set that fails as one says a redirect
+broke and naming the helper says which line to open.
+
+Verified by breaking it rather than by reasoning: `stats_path` rewritten to
+capture `PREMARKET_DIR` at import turns the suite red with
+"stats_path, the run stats sidecar returned ... which is not under the
+--premarket-dir it was given".
+
+### 2. The nightly backed up a session still being written
+
+Confirmed in the .bat, not from the story. `tasks/job_nightly.bat` runs
+`backup_evidence` at **line 56**, and the catchup gate is at **line 71** and only
+skips pool recall and the archive. So the 07:00 firing backs up, and on
+2026-08-24 the machine was late and that firing landed at 07:55 with five bars
+on disk.
+
+Confirmed in the code: the day list came from
+`PREMARKET_DIR.glob("*.jsonl")`, which is file PRESENCE. A capture file exists
+from the socket's first written minute, so it says a run started and nothing
+about whether it ended.
+
+`collector_finished(day)` now asks `job_status` instead, and three answers are
+all False with distinct reasons: no row, a row that is not a scheduled collector
+run, and a row that never ended. An instrument does not count. Today's socket
+cost probe recorded step `collector` under job `manual` and wrote 932 minutes at
+10:00 beside the morning's 3,289 at 07:20; a probe finishing is not a session
+finishing.
+
+**A detail the verification turned up.** 2026-08-13 and 2026-08-14 have NO
+collector rows at all, because they predate job_status. Both are outside the ten
+session window and both are already held, so the gate costs nothing there, and
+the SKIPPED line says which case it is: a day whose artifacts are all held reads
+"nothing is at risk" rather than being reported as a loss.
+
+Verified against a FRESH backup root, simulating 07:55 with today's completion
+removed: 35 files copied for the nine finished sessions, today skipped with
+"Nothing was copied: a partial copy held is worse than none, because write once
+makes it permanent. Force it with --date 2026-09-01 once the session is over."
+
+`--date` stays the explicit override and announces itself, because after an
+arbitration somebody has to be able to re-take a copy on purpose, and that is a
+different act from the nightly sweeping up whatever it finds.
+
+The word list in the self counting claim was extended to 134, which its own
+failure message asks for rather than deleting the check.
+
+Suite green, 134 claims, 1,699 paths, no drift.
+
 ## 2026-09-01, eleventh: monitor-midday registered by hand, and the blind spot it came from closed
 
 ### 1. The task, created singly

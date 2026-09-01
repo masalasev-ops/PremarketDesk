@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty two claims, a count read off
+and the two pages. It now carries one hundred and thirty four claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -10534,6 +10534,151 @@ _DOC_PAYLOAD_EXEMPT = {
 }
 
 
+def claim_an_unfinished_session_is_not_backed_up(failures: list[str]) -> None:
+    """The 2026-08-24 shape, asked of job_status rather than of the file.
+
+    job_nightly.bat runs backup_evidence at line 56, BEFORE the catchup gate at
+    line 71 that only skips pool recall and the archive. So the 07:00 firing
+    backs up, and on 2026-08-24 the machine was late and that firing landed at
+    07:55, when the day's capture was a proxies only stub of five bars. Write
+    once then held those five bars against every nightly for eight days while
+    the alarm fired unread, over a session that ended with 2,089.
+
+    The arbitration door resolves that afterwards. This stops it happening.
+
+    A capture file exists from the socket's FIRST written minute, so its
+    presence says a run started and nothing about whether it ended. The
+    question therefore goes to job_status, and three answers are all False:
+    no row, a row that is not a scheduled collector run, and a row that never
+    ended. A missing answer is not a yes.
+
+    An instrument does not count. Today's socket cost probe recorded step
+    collector under job manual and wrote 932 minutes at 10:00, beside the
+    morning's 3,289 at 07:20. A probe finishing is not a session finishing.
+    """
+    from night import backup_evidence as _backup
+
+    rows = [
+        {"step": "collector", "job": "collector", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-06T07:20:01-04:00",
+         "ended_at": "2026-04-06T09:25:00-04:00", "produced_count": 2463},
+        {"step": "collector", "job": "collector", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-07T07:20:01-04:00",
+         "ended_at": None, "produced_count": None},
+        {"step": "collector", "job": "manual", "status": "ok",
+         "exit_code": 0, "started_at": "2026-04-08T10:00:02-04:00",
+         "ended_at": "2026-04-08T10:20:05-04:00", "produced_count": 932},
+        {"step": "collector", "job": "collector", "status": "failed",
+         "exit_code": 1, "started_at": "2026-04-09T07:20:01-04:00",
+         "ended_at": "2026-04-09T07:21:00-04:00", "produced_count": None},
+    ]
+
+    cases = [
+        ("2026-04-06", True, "a finished scheduled run", None),
+        ("2026-04-07", False, "a run that never ended", "never ended"),
+        ("2026-04-08", False, "an instrument, not the session", "instrument"),
+        ("2026-04-09", False, "a run that failed", "none is a completed"),
+        ("2026-04-10", False, "no row at all", "no collector run is recorded"),
+    ]
+    for day, wanted, what, phrase in cases:
+        got, why = _backup.collector_finished(day, rows)
+        if got != wanted:
+            failures.append(
+                f"collector_finished({day}) returned {got} for {what}, wanted "
+                f"{wanted}. Reason given: {why!r}. A False that reads True here "
+                "backs up a session that is still being written, which is the "
+                "2026-08-24 defect")
+        if phrase and phrase not in why:
+            failures.append(
+                f"the reason for {day} does not say {phrase!r}: {why!r}. The "
+                "three ways a session can be unfinished need different "
+                "messages or the operator cannot tell which one to act on")
+
+    # The reason is never empty, whichever way it went.
+    for day, _, _, _ in cases:
+        _, why = _backup.collector_finished(day, rows)
+        if not (why or "").strip():
+            failures.append(f"collector_finished({day}) gave no reason at all, "
+                            "so a SKIPPED line would name no cause")
+
+    print(f"  session gate {sum(1 for c in cases if not c[1])} unfinished shapes "
+          "refused with distinct reasons, and a finished scheduled run accepted")
+
+
+def claim_the_collector_writes_where_premarket_dir_points(
+        failures: list[str]) -> None:
+    """--premarket-dir has to move all three files, checked one at a time.
+
+    claim_the_socket_probe_cannot_write_the_session_capture tests the PARENT:
+    that measure_socket_cost refuses without an --out-dir and then launches the
+    collector with --premarket-dir set to it. It stops there and trusts the
+    child. Today that trust is warranted, because bar_path, stats_path and
+    subscriptions_path all read config.PREMARKET_DIR at CALL time and the
+    rebind in main lands before any of them. The comment above that rebind
+    states exactly this as the reason it is safe, which makes the property
+    load bearing, and it was unenforced.
+
+    IT IS NOT A HYPOTHETICAL. conftest._DERIVED exists because SEVEN module
+    constants captured a root at import and could not be redirected: two
+    backtest directories and a third for sessions, the job status trail, the
+    market calendar cache, the monitor's rerun state and the UNVERIFIED marker.
+    A helper here rewritten as PREMARKET_DIR / "x" at module scope would keep
+    this suite green and send every capture back to the session directory.
+
+    So the three are asserted SEPARATELY. A set that fails as one tells a
+    reader a redirect broke; naming the helper tells them which line to open.
+
+    The real parser and the real rebind are exercised, not a stand in: main is
+    called with the flag and returns 1 on the missing watchlist, which is the
+    first gate past the rebind and long before any socket.
+    """
+    import pathlib as _pathlib
+    import shutil as _shutil
+    import tempfile
+
+    from collect import collect_premarket
+
+    box = _pathlib.Path(tempfile.mkdtemp(prefix="pmd-outdir-"))
+    saved = config.PREMARKET_DIR
+    try:
+        with conftest_activate() as _sandbox:
+            # No watchlist, so main returns at the first gate past the rebind.
+            if config.WATCHLIST_PATH.exists():
+                config.WATCHLIST_PATH.unlink()
+            target = box / "capture"
+            code = collect_premarket.main(["--premarket-dir", str(target)])
+            if code != 1:
+                failures.append(
+                    f"collect_premarket.main returned {code} with no watchlist, "
+                    "not 1, so this claim did not stop where it meant to and "
+                    "the paths below were read after an unknown amount of work")
+
+            resolved = target.resolve()
+            for label, helper in (
+                    ("bar_path, the capture itself", collect_premarket.bar_path),
+                    ("stats_path, the run stats sidecar", collect_premarket.stats_path),
+                    ("subscriptions_path, the subscription list",
+                     collect_premarket.subscriptions_path)):
+                try:
+                    got = _pathlib.Path(helper("2026-01-02")).resolve()
+                except Exception as exc:  # noqa: BLE001
+                    failures.append(f"{label} raised {type(exc).__name__}: {exc}")
+                    continue
+                if got.parent != resolved:
+                    failures.append(
+                        f"{label} returned {got}, which is not under the "
+                        f"--premarket-dir it was given, {resolved}. That helper "
+                        "is reading a path captured before the rebind, so a "
+                        "research run writes it into the session capture while "
+                        "the other two go elsewhere")
+
+            print(f"  outdir       --premarket-dir moves all three named "
+                  f"helpers, each checked on its own")
+    finally:
+        config.PREMARKET_DIR = saved
+        _shutil.rmtree(box, ignore_errors=True)
+
+
 def claim_the_socket_probe_cannot_write_the_session_capture(
         failures: list[str]) -> None:
     """A live socket instrument must not be able to reach the morning's file.
@@ -11210,6 +11355,8 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
     words = {
         44: "forty four", 57: "fifty seven", 96: "ninety six",
         131: "one hundred and thirty one", 132: "one hundred and thirty two",
+        133: "one hundred and thirty three",
+        134: "one hundred and thirty four",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -12167,6 +12314,8 @@ def main() -> int:
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
     claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(failures)
+    claim_an_unfinished_session_is_not_backed_up(failures)
+    claim_the_collector_writes_where_premarket_dir_points(failures)
     claim_the_socket_probe_cannot_write_the_session_capture(failures)
     claim_a_held_backup_yields_only_to_a_recorded_verdict(failures)
     claim_doc_carries_findings_and_not_payloads(failures)
