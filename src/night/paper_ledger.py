@@ -644,7 +644,13 @@ def ledger_report() -> None:
         store.init(connection)
         rows = [dict(row) for row in connection.execute(
             "SELECT p.*, k.mfe_pct_true, k.mae_pct_true FROM paper_trades p "
-            "LEFT JOIN picks k ON k.date=p.date AND k.ticker=p.ticker")]
+            "LEFT JOIN picks k ON k.date=p.date AND k.ticker=p.ticker "
+            # The ledger is the judging count, so the join has to say which
+            # picks row it is borrowing an excursion from. paper_trades has no
+            # source column of its own and nothing but the live path writes
+            # it, but the JOIN reaches into a table that now holds
+            # reconstructed rows too.
+            "AND k.source='live'")]
     if not rows:
         print("paper: the ledger is empty")
         return

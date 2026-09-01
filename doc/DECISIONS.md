@@ -5935,3 +5935,112 @@ PURR STAYS OPEN. Two signals have now been measured and refused for it, sector
 breadth on 2026-09-01 and titles here, and both refusals are the same rule
 applied the same way in both directions.
 
+## 2026-09-01, twelfth: the Alpaca replay, and what a reconstructed row may and may not conclude
+
+THE UNCLAIMED CONCLUSION. The 2026-08-31 review recorded that Alpaca's free
+plan serves SIP for a COMPLETED session and that a full 2,745 name sweep cost
+four requests and 1.04 seconds, and noted that nothing in the repo had drawn
+the conclusion. This draws it.
+
+backtest_pool.SCREEN_SKIPPED said of the premarket RVOL condition: "There is no
+premarket tape for a historical session, so this condition cannot be replayed
+and is not applied." That sentence was true of every source this project had
+when it was written and is false now. Measured before it was believed:
+2026-08-13, 04:00 to 08:30 ET, Alpaca returns 243 one minute bars for AAPL,
+243 for NVDA, 8 for DQ and 5 for PLAB. The thin names are thin rather than
+absent, which is what a premarket tape looks like.
+
+So all five [Day setup] conditions are replayable. gap_pct, price and
+market_cap from the caches backtest_pool already built,
+require_above_prior_high from the end of day cache, and premarket_rvol from the
+tape. screen_passed's count stops being an upper bound with one condition
+quietly dropped.
+
+WHAT WAS BUILT. research/replay_session.py, split into the same two stages as
+backtest_pool and for the same reason: fetching is network bound and dated,
+evaluating must be reproducible from the same bytes or two runs of one question
+measure two different things. Ten sessions are cached and written, 2026-07-31
+through 2026-08-13, 42 subscribed names each, 420 rows. 74 of them clear the
+day screen. No EODHD quota was spent at any point.
+
+WHAT IT DOES NOT REPLAY, left null with a reason rather than computed from a
+stand in:
+
+  swing_eligible  needs twoHundredDayAveragePrice. No cache here holds it and
+                  the EODHD quote endpoint serves it only for today. A 200 bar
+                  mean of the end of day cache is a different quantity and
+                  would be wearing this column's name.
+  score           needs the catalyst CLASS, which comes from EODHD news tags
+                  per article. The session cache stores the sweep as a newest
+                  title and timestamp per name, not the tag lists.
+  conviction      follows the score.
+
+One correction was found while building it and is worth recording because it
+would have biased the result in a consistent direction. The first version
+priced on the window VWAP. CRITERIA prices on "the latest premarket print" and
+compares that same print against the prior high, and VWAP sits systematically
+BELOW the last print on a name that rose all morning, which is precisely the
+population this screen looks for. It moved one verdict on the first session
+tested. fetch now folds the bars itself so the last close survives.
+
+THE FENCE, three separate reasons rather than one.
+
+  1. A reconstruction may never DISPLACE the record, which is sharper than
+     pooling. picks is keyed on (date, ticker) and NOT on source, so two rows
+     for one name on one day cannot coexist: a reconstruction written for a
+     date the morning already published would REPLACE the live row, and the
+     live row is the only record of what was published. The backup holds
+     packets and reports, not picks. write_day refuses a day WHOLE if it holds
+     any row that is not itself reconstructed, and names what it found.
+     Re-running over its own earlier output is allowed, because a replay that
+     could not be re-run after a bug fix is a worse instrument than none.
+  2. Every production SELECT against picks filters source='live'. Most already
+     did. FOUR DID NOT, and they were all correct on the day they were written:
+     scan_midday.live_picks, which builds the midday page from "today's picks";
+     the paper ledger's summary join, which reaches from paper_trades into
+     picks for an excursion; true_volume's guard against overwriting a measured
+     volume with a null; and cutoff_0830's socket study. That is the shape the
+     claim now catches, code that stops being right when something new is added
+     elsewhere.
+  3. Nothing in the replay writes paper_trades. The ledger is the judging count
+     and no reconstruction enters it. The claim greps the module for a write to
+     that table rather than trusting the sentence.
+
+WHAT THE REPLAY MAY CONCLUDE. Things about the SCREEN and the PIPELINE, which
+is what it actually observes:
+
+  how many subscribed names clear the day screen on a real tape, per session
+  which condition is doing the excluding, through screen_tally
+  how often premarket_rvol is the binding condition, which no cache could
+    answer before and which bears directly on [[rvol-window-mismatch]]
+  whether the pool the discovery ordering built contains names that would have
+    screened, which is discovery recall measured against the screen rather
+    than against the raw gapper list
+
+WHAT IT MAY NOT CONCLUDE. Anything about an EDGE:
+
+  It is not evidence a trade would have made money. No reconstructed row is
+  ever booked, no P&L is computed from one, and the ledger cannot see them.
+  It may not move a CRITERIA threshold. Every number in that file is calibrated
+    on the population it will be applied to, and a reconstruction is a
+    different population: no socket ran, no capture share applies, and the
+    catalyst class that pays 3 of the score's 10 points is absent entirely.
+  It may not move a go live flag. Those wait for a real morning's gate table
+    and nothing here is a morning.
+  It may not be compared row for row against a live session, because the
+    primary key forbids the two coexisting. That comparison, a reconstruction
+    of a date that also ran live, is the most interesting thing this instrument
+    could do and it is the one thing it cannot do. Closing it means migrating
+    picks to a primary key of (date, ticker, source), which is a rebuild of the
+    table holding the project's only outcome history. NOT DONE, deliberately,
+    and named here so the next reader knows the limit is structural rather than
+    an oversight.
+  Its RVOL is not the morning's RVOL. The morning divides an ESTIMATE of
+    consolidated premarket volume by a cached baseline; the replay divides a
+    measured Alpaca window by an Alpaca baseline over the same window. Those
+    agree in definition and not in provenance, and the second is the better
+    number, which is exactly why it may not be read as what the morning saw.
+
+THE RESULT IS EXPLORATORY AND IS NAMED AS SUCH. It lives under research/, it
+writes a source nothing reads, and it carries no licence to act.
+

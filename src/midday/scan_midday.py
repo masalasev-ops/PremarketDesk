@@ -742,12 +742,20 @@ def morning_context(day: str) -> dict[str, Any]:
 
 
 def live_picks(day: str) -> list[dict[str, Any]]:
-    """Today's picks rows. Read only, and this module never writes that table."""
+    """Today's LIVE picks rows. Read only, and this module never writes that table.
+
+    source='live' is not decoration. picks is keyed on (date, ticker) and
+    carries test rows from off clock runs and, since 2026-09-01,
+    reconstructed rows from research/replay_session.py. The midday page is a
+    document about what this morning published, so a row from any other
+    source in it would be a claim about the session that the session did not
+    make.
+    """
     with store.session() as conn:
         cursor = conn.execute(
             "SELECT ticker, score, conviction, day_eligible, swing_eligible, "
             "gap_pct, pm_high, pm_low, pm_vwap, entry_ref, stop_ref "
-            "FROM picks WHERE date = ? ORDER BY ticker", (day,))
+            "FROM picks WHERE date = ? AND source='live' ORDER BY ticker", (day,))
         columns = [c[0] for c in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 

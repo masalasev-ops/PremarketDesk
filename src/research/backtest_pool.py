@@ -458,9 +458,17 @@ def _eod_cache(day: str) -> dict[str, Any]:
 SCREEN_APPLIED = ("gap_pct", "price", "market_cap", "require_above_prior_high")
 SCREEN_SKIPPED = {
     "premarket_rvol": (
-        "needs the collector's premarket volume, which exists only for names "
-        "subscribed on the day. There is no premarket tape for a historical "
-        "session, so this condition cannot be replayed and is not applied."
+        "needs premarket volume, which THIS module has no source for: it reads "
+        "the end of day cache, and a daily bar carries no premarket at all. So "
+        "the condition is not applied here and this count stays an upper bound "
+        "on the real screen. [corrected 2026-09-01: this used to say 'there is "
+        "no premarket tape for a historical session', which was true of every "
+        "source this project had when it was written and is not true now. "
+        "Alpaca's free plan serves SIP minute bars for a session that is over, "
+        "premarket included, and research/replay_session.py applies all five "
+        "day_setup conditions off that tape. The limitation is this cache's, "
+        "not the world's, and a reader deciding whether the question is "
+        "answerable needed to be told which.]"
     ),
 }
 

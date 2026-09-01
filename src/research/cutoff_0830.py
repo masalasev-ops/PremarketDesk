@@ -298,8 +298,13 @@ def tape_scale() -> dict[str, Any]:
     with store.session() as connection:
         store.init(connection)
         rows = connection.execute(
+            # A study of what the SOCKET saw against what was true, so it
+            # is about sessions the socket ran on. A reconstructed row carries
+            # pm_volume_true and no socket window at all, so it would be
+            # filtered out here by luck rather than by intent; said out loud
+            # instead.
             "SELECT date, ticker, pm_volume_true, true_volume_socket_window "
-            "FROM picks WHERE pm_volume_true IS NOT NULL "
+            "FROM picks WHERE source='live' AND pm_volume_true IS NOT NULL "
             "AND true_volume_socket_window IS NOT NULL"
         ).fetchall()
     by_day: dict[str, dict[str, Any]] = {}

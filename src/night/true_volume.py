@@ -942,7 +942,12 @@ def write(result: dict[str, Any]) -> int:
         existing = {
             row["ticker"]: row["pm_volume_true"]
             for row in connection.execute(
-                "SELECT ticker, pm_volume_true FROM picks WHERE date = ?",
+                # source='live' because this read decides whether a
+                # measured volume already on the row is about to be replaced
+                # by a null, and it must compare against the row the truth
+                # pass is actually writing.
+                "SELECT ticker, pm_volume_true FROM picks "
+                "WHERE date = ? AND source='live'",
                 (result["day"],))
         }
         for record in result["rows"]:

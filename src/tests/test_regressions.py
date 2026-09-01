@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty seven claims, a count read off
+and the two pages. It now carries one hundred and thirty nine claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -45,6 +45,7 @@ import json
 import contextlib
 import os
 import pathlib
+import re
 import sys
 import tempfile
 from typing import Any
@@ -11544,6 +11545,8 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         135: "one hundred and thirty five",
         136: "one hundred and thirty six",
         137: "one hundred and thirty seven",
+        138: "one hundred and thirty eight",
+        139: "one hundred and thirty nine",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -12186,6 +12189,202 @@ def claim_a_lost_session_is_history_and_a_new_one_is_a_finding(
           "named, and one already held is neither")
 
 
+def claim_every_production_read_of_picks_is_fenced(failures: list[str]) -> None:
+    """No production SELECT reads picks without saying which source it wants.
+
+    picks holds three kinds of row and they are not interchangeable. 'live' is
+    the record of what a morning actually published. 'test' comes from off
+    clock runs. 'reconstructed' arrives from research/replay_session.py, which
+    replays the shipped day screen on an Alpaca tape for a session that was
+    never run live. An aggregate that reads all three answers a question
+    nobody asked.
+
+    Most reads were already fenced when the reconstruction landed. FOUR WERE
+    NOT, and they are the reason this claim exists rather than a comment:
+    scan_midday.live_picks, which builds the midday page out of "today's picks"
+    and would have put a reconstructed row in a document about this morning;
+    the paper ledger's summary join, which reaches from paper_trades into picks
+    for an excursion; true_volume's guard against overwriting a measured volume
+    with a null; and cutoff_0830's socket study. Every one of them was written
+    before a third source existed, and every one of them was correct on the day
+    it was written. That is the shape this catches: not a mistake, but code
+    that stops being right when something new is added elsewhere.
+
+    SELECTS ONLY. An UPDATE keyed on the full primary key is safe without a
+    source filter, because picks is keyed on (date, ticker) so there is exactly
+    one row to hit and the ticker list came from a fenced SELECT one line
+    above. Widening this claim to UPDATEs would fail those and teach the next
+    reader to add a filter that changes nothing.
+    """
+    import ast as _ast
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    # The replay's own refusal query, which has to see EVERY source: it exists
+    # to find out whether a live or test row is already sitting on the date it
+    # is about to write, and a source filter would blind it to the thing it is
+    # checking for.
+    allowed = {("research/replay_session.py", "SELECT source, COUNT(*)")}
+
+    unfenced: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith("tests/") or "__pycache__" in rel:
+            continue
+        try:
+            tree = _ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if not (isinstance(node, _ast.Constant)
+                    and isinstance(node.value, str)):
+                continue
+            flat = " ".join(node.value.split())
+            if not flat.upper().startswith("SELECT"):
+                continue
+            if not re.search(r"\bpicks\b", flat):
+                continue
+            if any(rel == where and flat.startswith(head)
+                   for where, head in allowed):
+                continue
+            if re.search(r"source\s*=\s*'live'", flat):
+                continue
+            unfenced.append(f"{rel}:{node.lineno}  {flat[:110]}")
+
+    if unfenced:
+        failures.append(
+            "these production SELECT(s) read picks with no source='live' "
+            "filter, so a reconstructed or test row can reach them: "
+            + "; ".join(unfenced))
+
+    # The claim is worthless if the scan finds nothing to scan. Two independent
+    # counts, because a broken walker and a broken matcher look identical from
+    # the outside.
+    seen = 0
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith("tests/") or "__pycache__" in rel:
+            continue
+        try:
+            tree = _ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in _ast.walk(tree):
+            if (isinstance(node, _ast.Constant) and isinstance(node.value, str)
+                    and " ".join(node.value.split()).upper().startswith("SELECT")
+                    and re.search(r"\bpicks\b", " ".join(node.value.split()))):
+                seen += 1
+    if seen < 15:
+        failures.append(
+            f"the fence scan found only {seen} SELECT(s) against picks in "
+            "production, which is too few to be reading the tree it thinks it "
+            "is reading")
+
+    print(f"  source fence all {seen} production SELECT(s) against picks name "
+          "the source they want, so a reconstructed row cannot reach an "
+          "aggregate that was written before reconstructions existed")
+
+
+def claim_a_reconstruction_never_displaces_the_record(failures: list[str]) -> None:
+    """A reconstructed row may never be written over a live one.
+
+    THIS IS SHARPER THAN POOLING and it is why the refusal is in the writer
+    rather than left to a convention. picks is keyed on (date, ticker) and NOT
+    on source, so two rows for one name on one day cannot coexist. A
+    reconstruction written for a date the morning already published would not
+    sit beside the live row for an analyst to compare: it would REPLACE it, and
+    the live row is the only record this project holds of what was actually
+    published that day. The backup holds packets and reports, not picks.
+
+    So replay_session.write_day refuses a day WHOLE if it holds any row that is
+    not itself reconstructed, and names what it found. Re-running a
+    reconstruction over its own earlier output is allowed, because a replay
+    that could not be re-run after a bug fix would be a worse instrument than
+    no replay at all.
+
+    The three cases below are the three that matter: a day holding a live row
+    is refused, a day holding a test row is refused for the same reason, and a
+    day holding only reconstructions is written.
+    """
+    from core import store
+    from research import replay_session
+
+    result = {
+        "session_date": "2026-04-06",
+        "notes": ["not replayed: nothing, this is a fixture"],
+        "candidates": [{"symbol": "AAA.US", "day_eligible": True,
+                        "gap_pct": 5.0, "pm_rvol": 2.0, "pm_high": 10.0,
+                        "pm_low": 9.0, "pm_vwap": 9.5, "pm_volume": 1000.0,
+                        "prior_high": 9.9, "pm_bars": 30,
+                        "baseline_median": 500.0, "baseline_sessions": 20}],
+    }
+
+    for holder in ("live", "test"):
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks WHERE date=?",
+                               (result["session_date"],))
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, score) VALUES (?,?,?,?)",
+                (result["session_date"], "AAA.US", holder, 7.0))
+            connection.commit()
+
+        outcome = replay_session.write_day(result)
+        if not outcome.get("refused"):
+            failures.append(
+                f"a day holding a {holder!r} row accepted {outcome.get('written')} "
+                "reconstructed row(s). picks is keyed on (date, ticker), so "
+                f"that write REPLACED the {holder} row rather than sitting "
+                "beside it")
+        elif holder not in str(outcome.get("refused")):
+            failures.append(
+                f"the refusal does not say it found a {holder!r} row, so a "
+                f"reader cannot tell what stopped it: {outcome.get('refused')}")
+
+        with store.session() as connection:
+            kept = connection.execute(
+                "SELECT source, score FROM picks WHERE date=? AND ticker=?",
+                (result["session_date"], "AAA.US")).fetchone()
+        if kept is None or kept["source"] != holder:
+            failures.append(
+                f"the {holder!r} row is gone after a refused write, so the "
+                "refusal did not protect the row it exists to protect")
+
+    # And the case that must be allowed: a re-run over its own output.
+    with store.session() as connection:
+        connection.execute("DELETE FROM picks WHERE date=?",
+                           (result["session_date"],))
+        connection.execute(
+            "INSERT INTO picks (date, ticker, source) VALUES (?,?,?)",
+            (result["session_date"], "AAA.US", replay_session.SOURCE))
+        connection.commit()
+    outcome = replay_session.write_day(result)
+    if outcome.get("refused") or outcome.get("written") != 1:
+        failures.append(
+            "a reconstruction could not be re-run over its own earlier output, "
+            f"so a bug fix cannot be replayed: {outcome}")
+
+    with store.session() as connection:
+        connection.execute("DELETE FROM picks WHERE date=?",
+                           (result["session_date"],))
+        connection.commit()
+
+    # Nothing here may reach the ledger, which is the judging count.
+    ledger_writes = [
+        line for line in (pathlib.Path(__file__).resolve().parent.parent
+                          / "research" / "replay_session.py")
+        .read_text(encoding="utf-8").splitlines()
+        if "paper_trades" in line]
+    if any("INSERT" in line.upper() or "UPDATE" in line.upper()
+           for line in ledger_writes):
+        failures.append(
+            "the replay writes paper_trades. The ledger is the judging count "
+            "and no reconstruction may enter it")
+
+    print("  no displacing a reconstruction is refused over a live row and "
+          "over a test row, is allowed over its own earlier output, and never "
+          "reaches the paper ledger")
+
+
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     """Hard rule 4 is guarded by something other than good intentions.
 
@@ -12722,6 +12921,8 @@ def main() -> int:
     claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not(failures)
     claim_every_printed_column_has_plain_english(failures)
     claim_a_lost_session_is_history_and_a_new_one_is_a_finding(failures)
+    claim_every_production_read_of_picks_is_fenced(failures)
+    claim_a_reconstruction_never_displaces_the_record(failures)
 
     if failures:
         for failure in failures:

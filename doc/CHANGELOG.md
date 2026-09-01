@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty third: the Alpaca replay, fenced three ways
+
+The 2026-08-31 review recorded that Alpaca's free plan serves SIP for a
+completed session and that nothing in the repo had drawn the conclusion. This
+draws it.
+
+backtest_pool.SCREEN_SKIPPED said "there is no premarket tape for a historical
+session, so this condition cannot be replayed". True of every source this
+project had when it was written, false now, and corrected in place. Measured
+first: 2026-08-13 04:00 to 08:30 returns 243 bars for AAPL and 8 for DQ, so the
+thin names are thin rather than absent.
+
+research/replay_session.py runs the SHIPPED day screen on that tape, split into
+fetch and evaluate the same way backtest_pool is and for the same reason. All
+five [Day setup] conditions apply, premarket_rvol included, so screen_passed
+stops being an upper bound with one condition quietly dropped. Ten sessions
+cached and written, 2026-07-31 to 2026-08-13, 420 rows, 74 clearing the screen,
+zero EODHD quota.
+
+swing_eligible, score and conviction are left NULL with the reason on the row:
+the 200 day average is in no cache and the catalyst class needs news tags the
+session cache never stored. A stand in for either would be a different quantity
+wearing the column's name.
+
+One correction found while building it, recorded because it biased in a
+consistent direction. The first version priced on the window vwap where
+CRITERIA prices on the latest premarket print, and vwap sits systematically
+below the last print on a name that rose all morning, which is the population
+this screen looks for. It moved one verdict on the first session tested.
+
+### The fence, and the four reads that were not fenced
+
+A reconstruction may never DISPLACE the record, which is sharper than pooling:
+picks is keyed on (date, ticker) and not on source, so a reconstruction written
+over a live date REPLACES the only record of what was published. write_day
+refuses such a day whole and names what it found.
+
+Every production SELECT against picks now filters source='live'. Most already
+did. FOUR DID NOT, and each was correct on the day it was written:
+scan_midday.live_picks, the paper ledger's summary join into picks, true_volume's
+guard against overwriting a measured volume with a null, and cutoff_0830's
+socket study. That is what the new claim catches, code that stops being right
+when something new is added elsewhere.
+
+Nothing writes paper_trades. The ledger is the judging count.
+
+DECISIONS records what the replay may conclude, which is things about the
+screen, and what it may not, which is anything about an edge. It also records
+the one thing this instrument cannot do: compare a reconstruction against a
+live session on the same date, because the primary key forbids the two
+coexisting. Closing that needs a key of (date, ticker, source) and a rebuild of
+the table holding the only outcome history there is. Not done, deliberately.
+
+Suite green, 139 claims, 1,887 paths, no drift.
+
 ## 2026-09-01, twenty second: the title does not separate a wrap from a release either
 
 The second candidate signal for the case the macro tag list left open, measured
