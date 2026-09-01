@@ -1965,8 +1965,15 @@ even when empty.
 
 ### The warn mode note, and what has to be true before it flips
 
-quantifier_guard is `warn` and was set that way on 2026-08-18, the day the
-regeneration and fallback were built. The reason is measured rather than
+quantifier_guard was `warn` from 2026-08-18, the day the regeneration and
+fallback were built, until it was armed on 2026-08-28. It reads `enforcing`
+now. [corrected 2026-09-01: this said "quantifier_guard is `warn`" in the
+present tense, and went on saying it for four days after the flip that the
+numbered list below already records. The rest of this section is history and is
+left exactly as written, because it was true when it was written; a sentence
+stating the CURRENT setting is not history, it is a reading a reader takes at
+face value, and this one sent them to the opposite of the value in the block at
+the top of this file.] The reason is measured rather than
 feared. Running the guard over the three archived reports flags every one of
 them: 2026-08-14 twelve times, 2026-08-17 eight times, 2026-08-18 ten times,
 with `no` accounting for eighteen of the thirty. Enforcing today would mean the
@@ -2001,8 +2008,20 @@ all three do. What each one was, and what closed it:
      asking the model to filter. See TEMPLATE_DERIVATIONS.md fourth pass.
   2. A morning runs clean, meaning a real report with zero flags rather than a
      fixture with zero flags.
-     CLOSED on 2026-08-19, and seven more since: the last flag of any kind
-     was raised on 2026-08-21.
+     CLOSED on 2026-08-19, and five more before the flip: 2026-08-24, 08-25,
+     08-26, 08-27 and 08-28. The last flag of any kind was raised on
+     2026-08-21.
+     [corrected 2026-09-01: this said "seven more since". Five trading
+     mornings ran between the last flag and the flip, not seven, and the two
+     days between them were a weekend. A count that overstates the evidence
+     for the very condition it is the evidence for is the wrong kind of number
+     to leave standing.
+     Separately, and NOT a correction to the verdict: runs/2026-08-19 was
+     deleted on 2026-09-01 along with five other sessions, and the backup
+     copies no rendered report, so that morning can no longer be inspected.
+     The condition was met on evidence that existed when it was judged. The
+     claim is simply no longer checkable, which is a different thing from a
+     claim that was never supported, and it should be read as one.]
   3. The flags already logged have dispositions, since the word list was going
      to be tuned on them and flipping the switch first would mean tuning it on
      a sample that stopped growing.

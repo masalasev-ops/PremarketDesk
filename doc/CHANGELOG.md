@@ -15,6 +15,53 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, eighteenth: CRITERIA said the guard was in warn mode for four days after it was armed
+
+Found while dating the flip, which was asked for because plain tables had
+started appearing and nobody knew whether the cause was the word list or a
+switch thrown ahead of its conditions.
+
+THE FLIP IS SOUND. Commit e75f2d8, 2026-08-28 18:32:58, after that morning's
+run. All three conditions were met as CRITERIA defines them: the six gating
+derivations T2, T3, T15, T16, P1 and P2 closed on 08-20 and 08-28, no flag had
+been raised since 08-21, and both logged flags were dispositioned on 08-25.
+Nothing was thrown early. T6 and T12 are sometimes named alongside those six
+and were not gating: T6 was applied 2026-08-20 anyway, and T12 is still
+PROPOSED today, as are T4 and T5.
+
+TWO DEFECTS IN THE FILE, both corrected in place with markers.
+
+The section that argues for warn mode opened "quantifier_guard is `warn` and
+was set that way on 2026-08-18" and went on saying it for four days after the
+flip, while the settings block at line 1832 read `enforcing`. The file
+contradicted itself about the current value of a switch that decides whether a
+morning ships a narrative or a plain table. The history is left exactly as
+written because it was true when written; the present tense claim about the
+current setting is not history, it is a reading a reader takes at face value,
+and it pointed at the opposite of the truth.
+
+And condition 2's evidence said "seven more since" where five trading mornings
+ran between the last flag and the flip: 08-24, 08-25, 08-26, 08-27 and 08-28,
+with a weekend between. A count that overstates the evidence for the very
+condition it is the evidence for is the wrong kind of number to leave standing.
+
+Recorded beside it, and NOT a correction to the verdict: runs/2026-08-19 was
+deleted on 2026-09-01 and the backup copies no rendered report, so the morning
+that condition names can no longer be inspected. The condition was met on
+evidence that existed when it was judged, and the claim is now simply
+uncheckable. That is a different thing from a claim that was never supported
+and the entry now reads as one.
+
+### What the plain tables actually are
+
+One. 2026-09-01 is the only plain table ever shipped, and there have been two
+mornings under enforcing: 08-31 ran clean and 09-01 fell back on ids 3 and 4,
+both `no`. On the same packet two later hand runs both got a narrative through
+with the regeneration passing, so the fallback is marginal rather than
+systematic and n=1 establishes no pattern.
+
+Suite green, 135 claims, 1,814 paths, no drift.
+
 ## 2026-09-01, seventeenth: why each name moved, from its own headlines
 
 Owner feedback on the Top headline column: it is making no improvement. What is
