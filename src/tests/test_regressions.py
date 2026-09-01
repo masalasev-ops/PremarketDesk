@@ -11614,6 +11614,17 @@ def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None
         "float rotation study": len(
             list((root / "doc" / "research").glob("float_rotation_study-*.json"))
             + list(config.STUDY_DIR.glob("float_rotation_study-*.json"))),
+        # THREE MORE THE ARCHITECTURE PAGES ASSERT, added 2026-09-01 after all
+        # three were found stale on the same afternoon. The research package
+        # gained replay_session, a probe .bat was deleted, and three write ups
+        # had landed under doc/research without either page noticing. Every one
+        # of them is a number a reader checks first to decide whether the rest
+        # of the document describes this tree, and every one was wrong in the
+        # cheapest possible way to check.
+        "modules in all": len([p for p in (root / "src" / "research").glob("*.py")
+                               if p.stem != "__init__"]),
+        ".bat files in all": len(list((root / "tasks").glob("*.bat"))),
+        "write ups in all": len(list((root / "doc" / "research").glob("*.md"))),
     }
     for what, number in counts.items():
         if number not in words:
@@ -11628,6 +11639,10 @@ def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None
         ("doc/Premarketdesk_ADayRunArc.html", "job .bat files"),
         ("doc/BUILD_PLAN.md", "job .bat files"),
         ("doc/BUILD_PLAN.md", "float rotation study"),
+        ("doc/ArchitecturePremarketdesk.html", "modules in all"),
+        ("doc/Premarketdesk_ADayRunArc.html", "modules in all"),
+        ("doc/ArchitecturePremarketdesk.html", ".bat files in all"),
+        ("doc/ArchitecturePremarketdesk.html", "write ups in all"),
     ]
     for rel, what in checks:
         path = root / rel

@@ -244,12 +244,13 @@ tbody tr:hover{background:var(--ground)}
   backwards, calling the meta line the value that was right and eight and ten the mistake.
   The schedule is the architecture.</p>
   <div class="meta">
-    <span>69 components</span><span>8 job scripts, 11 tasks</span><span>1 data vendor</span><span>1 model call per day</span>
+    <span>69 components</span><span>8 job scripts, 11 tasks</span><span>1 data vendor</span><span>2 model calls per day</span>
   </div>
 </header>
 
 <nav class="toc">
   <ol>
+    <li><span class="n">00</span><a href="#s0">What changed on 2026-09-01</a></li>
     <li><span class="n">01</span><a href="#s1">What this is for</a></li>
     <li><span class="n">02</span><a href="#s2">The weekday, end to end</a></li>
     <li><span class="n">03</span><a href="#s3">Layers and component catalogue</a></li>
@@ -264,6 +265,70 @@ tbody tr:hover{background:var(--ground)}
     <li><span class="n">12</span><a href="#s12">File map</a></li>
   </ol>
 </nav>
+
+<!-- what changed -->
+<section id="s0">
+  <h2><span class="n">00</span> &nbsp;Recent</h2>
+  <h3>What changed on 2026-09-01</h3>
+  <p class="lede">A long day of edits, written out in plain words. Each line says what a
+  reader would notice, not what the code does. The full account of any one of them is in
+  CHANGELOG.md; the reasoning is in DECISIONS.md.</p>
+
+  <p><b>1. The reports explain themselves now.</b> Every table has a line under it saying what its
+  columns mean, and there is a short list at the foot of the page explaining the words. Nothing was
+  taken away. The wording lives in one file, <code>core/glossary.py</code>, so the same word cannot
+  mean two things in two places.</p>
+
+  <p><b>2. A new section says why each stock moved.</b> It is called "Why these gapped" and it sits
+  under the gappers table. It replaces the old Top headline column, which showed the NEWEST story
+  attached to a stock rather than the one that explains it. That column is how a story about
+  Palantir came to sit against MSTR. The new section is written by a second call to the local
+  model, and it is only allowed to use headlines about that stock; if it names a headline nobody
+  gave it, the answer is thrown away.</p>
+
+  <p><b>3. The midday report was retypeset.</b> Larger text, tables that scroll instead of
+  squeezing, and no more words in capitals except on the two lines that mean "do not trust this
+  page", which are meant to shout.</p>
+
+  <p><b>4. A market wrap no longer gives a stock a catalyst.</b> An article about the SESSION rather
+  than about a company, the kind tagged INFLATION or RATES or TREASURIES, used to hand its
+  earnings label to whichever stock the news feed had attached it to. Two tests already caught the
+  wide roundups that list forty companies. This is a third test, and it catches the narrow one: five
+  tags, one stock, and not about a company at all. It was measured on all 195 articles the system
+  has ever held before it was switched on.</p>
+
+  <p><b>5. Everything the model writes is now checked before the file is saved.</b> The guard that
+  refuses sweeping claims like "every one of these gapped on earnings" used to read only the main
+  narrative. The new "Why these gapped" section is also written by a model, and it was being added
+  AFTER the check. It is inside the check now, and the suite fails if anyone adds another section
+  after it.</p>
+
+  <p><b>6. The nightly backup holds more.</b> It used to copy four things a night. It now copies
+  six, adding the rendered report and its web page, plus the log of guard decisions. The reason is
+  narrow: a report cannot be rebuilt, because the same input does not produce the same words twice,
+  and six mornings of reports were lost before this changed.</p>
+
+  <p><b>7. There is a new tool for replaying past mornings on real data.</b>
+  <code>research/replay_session.py</code> takes a trading day that is over, fetches the real
+  premarket tape for it from Alpaca, and runs the same screen the morning runs. Ten past sessions
+  are stored. Its rows are kept strictly apart from the real record: they carry a different label,
+  every query that reads the record now says which label it wants, and the tool refuses to write to
+  a day the real morning already used.</p>
+
+  <p><b>8. Two numbers now say how many days they are averages of.</b> One is the twenty day average
+  volume, which could quietly be an average of three days. The other is a figure on the weekly page
+  that sat between two figures that did say, so a reader would have carried the wrong count across.</p>
+
+  <p><b>9. The paper ledger refuses an impossible trade in every mode.</b> A stop at or above the
+  entry price is refused outright rather than booked, in all sizing modes rather than one.</p>
+
+  <p><b>10. One probe was deleted.</b> job_probe_socket_cost ran, answered its question, and was
+  removed on the instruction written in its own header. Its answer is in DECISIONS.md.</p>
+
+  <div class="note"><p><b>What did not change.</b> The screen thresholds, the score, the schedule
+  and the go-live flags are all where they were. The premarket capture rate stays 0.1172 and the
+  collector still starts at 07:20. Nothing in this list moves a number the system trades on.</p></div>
+</section>
 
 <!-- 1 -->
 <section id="s1">
@@ -745,6 +810,17 @@ tbody tr:hover{background:var(--ground)}
     would invalidate the setup, connect the macro calendar to the day's tone, and name the traps.
     Nothing in that list changes a number.</p>
 
+    <h4>The second model call, added 2026-09-01</h4>
+    <p style="font-size:13.5px">There are TWO model calls a weekday now, not one. The first writes
+    the narrative. The second writes the "Why these gapped" section, one short paragraph a stock,
+    and it is deliberately kept apart from the first: it runs whether or not the narrative survived,
+    because a morning that fell back to plain tables needs the explanation more than a narrated one
+    does, and when it fails it costs that section and nothing else. It is shown only that stock's
+    own headlines, it has to quote the exact headline it used, and an answer naming a headline
+    nobody supplied is thrown away with the reason recorded on the row. It replaced the Top headline
+    column, which showed the NEWEST story attached to a stock rather than the one that explains it,
+    and which is how a story about Palantir came to sit against MSTR.</p>
+
     <h4>What stops it going wrong</h4>
     <p style="font-size:13.5px">A containment check compares every ticker in the report against the
     packet and fails the run on any name that is not there. The prompt requires the disclaimer line to
@@ -762,6 +838,26 @@ tbody tr:hover{background:var(--ground)}
     2026-08-20, and the report from 5,173 to 20,188 output tokens,
     against the existing Claude subscription rather than a metered API key. Token counts are written to
     <code>runs/&lt;date&gt;/analyst_usage.json</code> so the real cost is measured rather than assumed.
+    <br><br>
+    <b>The guard reads the finished file, from 2026-09-01.</b> A second guard refuses sweeping
+    claims about the set of candidates, the kind that say "every one of these gapped on earnings"
+    when nobody counted. It used to read only the narrative, which is the right place for it: the
+    answer to a bad narrative is to ask for another one, and only a narrative can be asked again. It
+    was not the whole job. The "Why these gapped" section is ALSO written by a model, and it was
+    being added after the guard had finished, so nothing read it.
+    <br><br>
+    The guard now reads the finished report, the version that goes into the file, rather than an
+    intermediate one. Telling the model's words apart from the project's own is done by building the
+    report twice, once with that section and once without, and looking at the difference: anything
+    in both was written by this project, and the test suite checks that text once and for good. If
+    the model's section carries a claim the guard refuses, the version without it is what ships, and
+    the section says why it is missing rather than disappearing. The suite fails if anyone adds
+    another model written section after the guard, because a rule that depends on the order
+    functions happen to be called in gets broken by the next change.
+    <br><br>
+    Nothing went out unchecked in the meantime. The section landed after that morning's 08:45 run,
+    so no scheduled report ever carried it, and the one hand run that does carries nothing the guard
+    would have refused.
     <br><br>
     <b>What five scheduled mornings then measured.</b> 89.1s and 7,697 output tokens on 2026-08-14,
     48.4s and 4,000 on 08-17, 98.5s and 8,954 on 08-18, 178.9s and 16,005 on 08-19, 226.1s and
@@ -1028,7 +1124,21 @@ tbody tr:hover{background:var(--ground)}
   unambiguous. The picks table is the single exception and is written by four components at three
   different times, always to different columns of the same row: C16 at 08:45, C20 and C59 the same
   night, and C21 one and five sessions later. This said three until 2026-08-31, which had been wrong
-  since C59 started writing the table on 2026-08-29. The gate marker has two writers,
+  since C59 started writing the table on 2026-08-29.</p>
+
+  <p><b>Three kinds of row live in that table and they must never be mixed.</b> Every row carries a
+  label saying where it came from. <code>live</code> is the record of what a morning actually
+  published and is the only one that counts. <code>test</code> comes from a run outside the live
+  window. <code>reconstructed</code> arrived on 2026-09-01 from the Alpaca replay, which runs the
+  same screen over a trading day that is long finished.
+  Every query in the pipeline now says which label it wants; four of them did not, and each was
+  correct on the day it was written and stopped being correct when a third kind of row appeared. The
+  replay also refuses to write to a date the real morning already used, because the table is keyed
+  on date and ticker and not on the label, so a reconstruction there would REPLACE the record rather
+  than sit beside it. A test in the suite fails if a new query forgets to say which label it
+  wants.</p>
+
+  <p> The gate marker has two writers,
   <code>verify_morning.py</code> by hand and <code>vintage.py</code> from inside the scan, and one
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two columns were added on
   2026-08-20 for stores the page had never carried: the published archive (C54), whose single writer
@@ -1219,17 +1329,19 @@ tbody tr:hover{background:var(--ground)}
     <dd>Split into packages by role on 2026-08-16, with <code>src\</code> itself as the import root, so
     every job runs a module rather than a file: <code>python -m morning.scan</code>, never
     <code>python src\scan.py</code>. Module names did not change in the move.
-    <b>core</b> (config, ettime, criteria, eodhd, store, artifacts),
+    <b>core</b> (config, ettime, criteria, eodhd, store, artifacts, glossary),
     <b>ops</b> (job_status, market_today, monitor_jobs, meter_sampler, quantifier_flags),
     <b>selection</b> (universe, discover, gap_stats),
     <b>collect</b> (collect_premarket, baseline),
-    <b>morning</b> (scan, vintage, analyst, render_report, verify_morning, deliver),
+    <b>morning</b> (scan, vintage, analyst, gap_reasons, render_report, verify_morning,
+    deliver),
     <b>midday</b> (scan_midday, render_midday, shipped 2026-08-31),
     <b>night</b> (backup_evidence, backfill_premarket, fill_outcomes, true_volume, paper_ledger,
     pool_recall, prune_data, weekly_page, build_archive, in the order the nightly runs them),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
-    vwap_gappers, cutoff_0830, counterfactual_watchlist, four probe_ scripts, four measure_ scripts
-    and two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate: seventeen modules in all,
+    vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session, four probe_ scripts, four
+    measure_ scripts
+    and two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate: eighteen modules in all,
     counted off the directory, instruments, not pipeline. This read three probe_ and two measure_
     scripts until 2026-08-31, and named neither counterfactual_watchlist nor sweep_capture_rate
     until 2026-09-01, when both landed beside measure_capture_rate and took the measure_ count
@@ -1250,24 +1362,28 @@ tbody tr:hover{background:var(--ground)}
     VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, which pre-registers what would
     have to be true for the conviction score to be ordering outcomes and what counts as no
     relationship, written while the record was too small to judge on purpose, and
-    COUNTERFACTUAL_WATCHLIST.md, the fifth, which landed 2026-09-01 and which this list read four
-    studies without until then, beside the tracked
+    COUNTERFACTUAL_WATCHLIST.md, beside BASELINE_FLOOR.md, CAPTURE_RATE.md and
+    FLOAT_ROTATION_FITS.md: eight write ups in all, counted off the directory. This list said five
+    on 2026-09-01 and three of the eight were already on disk when it said it, which is the way a
+    count goes wrong that nobody notices, so it is counted rather than remembered now. Beside them
+    the tracked
     float rotation study payloads DECISIONS.md cites
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
     <dt>tasks\</dt>
-    <dd>eleven .bat files in all. Eight are the scheduled jobs, and register_tasks.ps1 registers
+    <dd>ten .bat files in all. Eight are the scheduled jobs, and register_tasks.ps1 registers
     those eight as eleven tasks; beside them sit that script and the scheduling notes. The other
-    three .bat files are deliberately absent from the schedule, all one off probes
+    two .bat files are deliberately absent from the schedule, both one off probes
     armed a day at a time: job_probe_socket_cap, the instrument for the collector volume question,
-    armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30; job_probe_capture, the
-    Alpaca live capture test, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan]
-    run_time rather than a chosen number; and job_probe_socket_cost, armed with
-    <code>-SocketCost YYYY-MM-DD</code> at 10:00, past the collector's 09:25 stop and clear of the
-    12:00 job because that one spends REST credits inside the delta this reads. The first two have
-    run and their answers are in DECISIONS.md; the third takes the one reading the websocket still
-    owes, what a heavy live tape costs per message, which is what decides whether [Collector]
-    stop_time may move past the open.
+    armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30; and job_probe_capture,
+    the Alpaca live capture test, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is
+    [Scan] run_time rather than a chosen number. Both have run and both answers are in
+    DECISIONS.md.
+    A third, job_probe_socket_cost, sat here until 2026-09-01. It ran that morning at 10:00,
+    measured what a heavy live tape costs per message at ZERO across 21,306 messages, and its task
+    and its .bat were deleted the same day on the instruction in its own header. Its module stays
+    under src/research/ carrying a warning, because it writes into the premarket session capture
+    and that run had to be arbitrated back out by hand.
     A plain run of the script never registers any of them, so refreshing the
     schedule cannot resurrect a probe that has been answered, and <code>-Unregister</code> removes one
     if it is there. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted on

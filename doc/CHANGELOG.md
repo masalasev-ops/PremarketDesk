@@ -15,6 +15,50 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty sixth: the two architecture pages, back in sync and in plainer words
+
+Both pages had drifted. ArchitecturePremarketdesk.html was last written at
+08:59 and Premarketdesk_ADayRunArc.html at 10:39, and fifteen commits landed
+after that. Neither page named glossary, gap_reasons or replay_session, and
+the architecture page still counted a probe .bat that was deleted at 10:42 and
+five research write ups where eight sit on disk, three of which were already
+there when it said five.
+
+### What was corrected
+
+core gains glossary and morning gains gap_reasons on both pages. research goes
+from seventeen modules to eighteen with replay_session. tasks goes from eleven
+.bat files to ten, three deliberately unscheduled probes to two, and
+job_probe_socket_cost moves from a live instrument to a deleted one with the
+reading it took. doc/research goes from five write ups to eight, counted off
+the directory rather than remembered. The masthead said one model call a day
+and there are two.
+
+### What was added, in plain words
+
+A section 00 at the top of the architecture page, "What changed on 2026-09-01",
+ten numbered lines saying what a READER would notice rather than what the code
+does, plus a closing note on what did not change: no threshold, no score, no
+schedule, no go live flag, premarket_capture_rate still 0.1172 and the
+collector still starting at 07:20.
+
+The analyst section gains the second model call and the guard that now reads
+the finished file. The store matrix gains the three kinds of picks row and the
+rule that they never mix. The day run page gains the three things a reader sees
+in the report itself: the plain English legends, the "Why these gapped"
+section, and the guard reading the finished body.
+
+### The counts are enforced now
+
+claim_the_documents_that_count_things_still_count_right already pinned the test
+module count, the job .bat count and the float rotation study count in WORDS,
+because the prose is written in words. It now pins three more: the research
+module count on both pages, and the .bat count and the write up count on the
+architecture page. All three were stale on the same afternoon, which is the
+argument for counting them rather than trusting them.
+
+Suite green, 140 claims, no drift.
+
 ## 2026-09-01, twenty fifth: the guard reads what ships, C survives the corrected key, two denominators published
 
 Three findings from the review, acted on.
