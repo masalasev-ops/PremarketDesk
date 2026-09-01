@@ -318,6 +318,28 @@ _FALLBACK_TITLES = {
 }
 
 
+def _direction_caveat(packet: dict[str, Any]) -> str:
+    """The unsigned score caveat, quoted from the packet where it exists.
+
+    THE PROPERTY AND THE COUNTS ARE DIFFERENT THINGS and are treated
+    differently. That the score weighs the absolute gap is a fact about the
+    instrument and is true of every packet ever written, so it is always
+    stated. The up and down counts are evidence, so a packet carrying no
+    score_roll gets the property with the counts withheld and a reason,
+    rather than the property with zeros under it.
+
+    .get chains throughout: test_containment feeds this function a fixture
+    packet with no score_roll at all, and a subscript would raise there.
+    """
+    quoted = ((packet.get("score_roll") or {}).get("text") or {}).get("direction")
+    if quoted:
+        return str(quoted)
+    return ("The score weighs the absolute gap, so it ranks confluence and "
+            "not direction: a faller and a riser can tie at the same number. "
+            "How many rows gapped each way is not stated because this packet "
+            "carries no score roll.")
+
+
 def fallback_report(
     packet: dict[str, Any], reason: str, cause: str = CAUSE_UNAVAILABLE
 ) -> str:
@@ -425,6 +447,13 @@ def fallback_report(
         f"{len(candidates)}{_named(day)}. Swing eligible {len(swing)} of "
         f"{len(candidates)}{_named(swing)}. "
         f"{len(packet.get('gaps_to_fill', []))} gaps recorded in the packet.")
+    add("")
+    # The score is unsigned and this report prints scores. The narrative pass
+    # is ordered to say so and this path is the one where the narrative pass
+    # did not happen, so the caveat has to be here too: fallback_report writes
+    # its own headings and has dropped a new section on every morning the
+    # model call failed.
+    add(_direction_caveat(packet))
     add("")
     add("## Premarket gappers")
     add("")
@@ -628,6 +657,10 @@ def fallback_report(
             f"| {_f(c.get('pm_low'), 4)} | {_f(c.get('pm_vwap'), 4)} | {_f(c.get('prior_high'))} "
             f"| {_f(quote.get('twoHundredDayAveragePrice'))} | {_f(c.get('score'), 1)} "
             f"| {_conviction(c)} |")
+    add("")
+    # This table carries Score and Conviction for every candidate and no gap
+    # column at all, so a scored faller and a scored riser are identical here.
+    add(_direction_caveat(packet))
     add("")
     add("## Economic data and rates")
     add("")

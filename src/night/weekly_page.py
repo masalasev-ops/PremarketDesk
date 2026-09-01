@@ -602,6 +602,17 @@ def _render_score_watch(add, score: dict[str, Any]) -> None:
         f"not conclude: the judging point and what would count as the score "
         f"having no relationship to outcomes are pre-registered in "
         f"doc/research/SCORE_INVERSION.md.</p>")
+    # The property, never the measurement. A number hardcoded here goes
+    # stale and this page renders nightly; the split itself belongs in the
+    # pre-registration, which commits to reporting it when either point is
+    # judged, and not in a standing table that invites eyeballing it at n=11.
+    add("<p class=sub>THE SCORE IS UNSIGNED and every quantity below is "
+        "measured from a long. Its gap component weighs the ABSOLUTE gap, "
+        "so each bucket holds rows that gapped up and rows that gapped "
+        "down, and a median over one of them is a median over both. A "
+        "bucket holding more falling names is losing a race it was never "
+        "entered in. See the gap direction confound in "
+        "doc/research/SCORE_INVERSION.md.</p>")
     add("<p class=sub>Booked P&amp;L is the CRITERIA [Paper] rule on the "
         "pick's own session. The two excursions come from [Outcomes], which "
         "measures the session AFTER it. They are different days and are shown "

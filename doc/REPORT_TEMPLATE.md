@@ -127,8 +127,18 @@ which is not false and reads as complete.
 
 GIVE THE DIRECTION WHENEVER NAMES ARE GROUPED OR RANKED BY SCORE. The gap
 component scores the ABSOLUTE gap, so the score is unsigned and a falling
-ticker ties a rising one. score_roll.score_is_direction_blind is true and
-score_roll.direction_note says it in words. On 2026-08-20 this report called
+ticker ties a rising one. Write `score_roll.text.direction` WORD FOR WORD in
+the Summary, on the same terms as the evidence_roll.text lines above: it is
+written to be quoted and it carries its own counts.
+
+This used to say that score_roll.direction_note "says it in words", which
+left the sentence to you, and six mornings produced six different sentences.
+direction_note cannot be quoted verbatim, because it writes ABSOLUTE in
+capitals and rule 8 forbids reproducing that. score_roll.text.direction is
+the same fact written so it can be. Wherever you name a score, give the
+direction from that row's own gap_direction field.
+
+On 2026-08-20 this report called
 AAP and FUTU jointly "the strongest scored names, both green at 8" while AAP
 was down 21.75 percent on an earnings miss, below its VWAP, its prior high and
 its 200 day average.

@@ -260,7 +260,14 @@ max_price_age_seconds         = 900        # SEED, not measured. Fifteen minutes
 Applies to the intraday gap and go screen. A candidate is day_eligible only
 when every line here passes.
 
-gap_pct                       = > 3        # absolute gap versus prior close, percent
+gap_pct                       = > 3        # absolute gap versus prior close, percent. ABSOLUTE: evaluate_eligibility takes abs(), so
+                                           # this screen is direction blind too and require_above_prior_high is what makes it long in
+                                           # practice. Measured over the live picks table on 2026-09-01: 0 of the 12 rows that reached
+                                           # either watchlist gapped down, because
+                                           # clearing the prior session high requires the premarket price above a level at or above
+                                           # that session's close. That is arithmetic plus one assumption, that the vendor's daily high
+                                           # and close come from one consistently adjusted row, which is the class of assumption the
+                                           # 2026-08-20 review caught disagreeing by 1.67 percent. See [Score gap].
 price                         = > 3        # dollars, latest premarket print
 market_cap                    = > 1B
 premarket_rvol                = > 1.5      # the CONSOLIDATED premarket volume estimate divided by the cached baseline median. Was the collector's socket volume until 2026-08-21; see the capture rate note
@@ -2985,6 +2992,22 @@ band = else : 0
 ## Score gap
 
 Tested against the absolute gap percent.
+
+**THE SCORE IS THEREFORE UNSIGNED, and what that costs is stated here rather
+than left to be rediscovered.** A name down 20 percent and a name up 20
+percent earn the same points, while every outcome column in picks is
+measured from entry_ref, which is pm_high, a LONG reference. So a bucket
+holding more falling names is compared on a quantity it cannot win. That is
+a confound in the score's own evaluation and it is written down as one, in
+doc/research/SCORE_INVERSION.md, dated before either judging point.
+
+The direction is carried rather than the sign being restored: per candidate
+as gap_direction, per packet as score_roll.text.direction, which is written
+to be quoted word for word, and the report is required to give it wherever a
+score is named. Signing the component instead would change what the score IS
+while the score is under a pre-registered evaluation, and changing the
+instrument mid measurement destroys the measurement. That is an owner
+decision and not a code change.
 
 band = > 8 : 2
 band = >= 4 : 1

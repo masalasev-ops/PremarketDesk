@@ -9,12 +9,12 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and twenty six claims, a count read off
+and the two pages. It now carries one hundred and twenty seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
-[corrected 2026-08-31: was ninety six, against one hundred and twenty six
-defined and one hundred and twenty six called. The sentence above argues
+[corrected 2026-08-31: was ninety six, against one hundred and twenty seven
+defined and one hundred and twenty seven called. The sentence above argues
 that this number must be read off the file, and it had been remembered for
 long enough to be wrong by twenty eight. It is machine checked now, by
 claim_the_suite_can_count_itself, so the next reader does not have to.]
@@ -10323,6 +10323,125 @@ def claim_unregister_removes_every_probe_register_can_create(
           f"script registers is also removed by -Unregister")
 
 
+def claim_the_unsigned_score_says_so_wherever_it_is_named(
+        failures: list[str]) -> None:
+    """The score is direction blind and every path that prints one says it.
+
+    [Score gap] scores the ABSOLUTE gap, so a name down 20 percent and a name up
+    20 percent earn the same points, while every outcome column is measured from
+    entry_ref, which is pm_high, a LONG reference. On 2026-08-20 the report
+    called AAP and FUTU jointly the strongest scored names, both green at 8,
+    while AAP was down 21.75 percent on an earnings miss.
+
+    That finding was recorded as closed and half of it was. score_roll has
+    carried a per row direction since, and REPORT_TEMPLATE has ordered the model
+    to give it. What was left:
+
+    THE CAVEAT WAS A PARAPHRASE. The template said direction_note "says it in
+    words", which leaves the model to compose, and six mornings produced six
+    different sentences. direction_note cannot be quoted verbatim: it writes
+    ABSOLUTE in capitals and prompt rule 8 forbids reproducing that.
+    score_roll.text.direction is the same fact written so it can be quoted, on
+    the evidence_roll.text precedent.
+
+    NO CANDIDATE CARRIED A DIRECTION. The sign is discarded in score_candidate
+    and nothing near the score recorded it, so a reader of one row had the score
+    and no way to know which way the name was moving.
+
+    THE FALLBACK SAID NOTHING AT ALL. fallback_report writes its own headings and
+    its Technical signals table publishes Score and Conviction for every
+    candidate with no gap column, so on the morning the model call fails a scored
+    faller and a scored riser are identical.
+
+    The quotable sentence has three constraints and all three are asserted, not
+    assumed: it must survive the quantifier guard at any counts, it must carry no
+    capitals so it can be reproduced, and it must count a never computed gap
+    apart from up.
+    """
+    from morning import analyst
+    from morning import scan
+
+    rows = [{"symbol": "UP.US", "gap_pct": 8.0, "score": 7.0, "conviction": "green"},
+            {"symbol": "DOWN.US", "gap_pct": -12.0, "score": 7.0, "conviction": "green"},
+            {"symbol": "FLAT.US", "gap_pct": 0.0, "score": 5.0, "conviction": "yellow"},
+            {"symbol": "NOGAP.US", "gap_pct": None, "score": 4.0, "conviction": "yellow"}]
+    roll = scan.score_roll([dict(row) for row in rows])
+    sentence = ((roll.get("text") or {}).get("direction") or "")
+
+    if not sentence:
+        failures.append("score_roll carries no text.direction, so the template "
+                        "has nothing to quote and the caveat goes back to being "
+                        "composed by the model")
+        return
+
+    # 1. The guard that rejects reports must not be able to fire on it.
+    fired = analyst.quantifier_violations(sentence)
+    if fired:
+        failures.append(
+            f"the direction sentence trips the quantifier guard: {fired}. It is "
+            "quoted verbatim into a report the guard then scans, so it has to be "
+            "unfireable at any counts, which is why it says rows and never name, "
+            "candidate or watchlist")
+
+    # 2. No capitals, or the model cannot reproduce it under prompt rule 8.
+    shouty = [word for word in sentence.split()
+              if len(word) > 2 and word.strip(".,:").isupper()]
+    if shouty:
+        failures.append(
+            f"the direction sentence carries capitals {shouty}, so quoting it "
+            "word for word breaks prompt_analyst rule 8, which is exactly why "
+            "direction_note was paraphrased six different ways")
+
+    # 3. Its counts, with the never computed gap apart from up.
+    if "2 scored rows" in sentence or "4 scored rows" not in sentence:
+        failures.append(f"the sentence does not carry its own denominator over "
+                        f"the four scored rows: {sentence!r}")
+    if "2 gapped up" not in sentence:
+        failures.append(f"a zero gap must count as up, matching gap_direction: "
+                        f"{sentence!r}")
+    if "1 carry a gap that was never computed" not in sentence:
+        failures.append(
+            f"a gap that was never computed is folded into a direction it was "
+            f"never measured to have: {sentence!r}")
+
+    # 4. The candidate stamp, and it agrees with the roll.
+    for row in rows:
+        candidate = dict(row)
+        scan.score_candidate(candidate)
+        expected = scan.gap_direction(row["gap_pct"])
+        if candidate.get("gap_direction") != expected:
+            failures.append(
+                f"{row['symbol']} was stamped gap_direction "
+                f"{candidate.get('gap_direction')!r}, expected {expected!r}. The "
+                "roll and the candidate must read one rule")
+
+    # 5. The fallback, on both paths.
+    packet = {"session_date": "2026-03-16", "candidates": [dict(r) for r in rows],
+              "score_roll": roll, "gaps_to_fill": []}
+    with_roll = analyst.fallback_report(packet, "test")
+    if sentence not in with_roll:
+        failures.append("fallback_report does not carry the direction sentence, "
+                        "so on the morning the model call fails the report prints "
+                        "scores and says nothing about the sign")
+
+    without = analyst.fallback_report(
+        {k: v for k, v in packet.items() if k != "score_roll"}, "test")
+    if "ranks confluence and not direction" not in without:
+        failures.append(
+            "a packet carrying no score_roll drops the caveat entirely. The "
+            "PROPERTY is true of every packet ever written and must always be "
+            "stated; only the counts are evidence and may be withheld")
+    if "0 gapped up" in without:
+        failures.append(
+            "a packet carrying no score_roll published a count of zero rather "
+            "than withholding it, which is a measured answer invented from a "
+            "missing one")
+
+    print("  unsigned     the direction sentence is quotable and guard proof, "
+          "the candidate carries its own sign, and the fallback says so with "
+          "and without a roll")
+
+
 def claim_the_watchdog_reads_every_job_that_writes_a_log(failures: list[str]) -> None:
     """Every scheduled job with a dated log of its own is in the watchdog's list.
 
@@ -11402,6 +11521,7 @@ def main() -> int:
     claim_the_universe_keeps_the_name_the_vendor_sent(failures)
     claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
     claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
+    claim_the_unsigned_score_says_so_wherever_it_is_named(failures)
     claim_the_watchdog_reads_every_job_that_writes_a_log(failures)
     claim_the_suite_can_count_itself(failures)
     claim_the_documents_count_what_is_actually_here(failures)

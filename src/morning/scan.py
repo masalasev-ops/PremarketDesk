@@ -65,6 +65,34 @@ def _as_float(value: Any) -> float | None:
     return out if out == out else None
 
 
+def gap_direction(gap_pct: Any) -> str | None:
+    """"up", "down", or None when the gap was never computed.
+
+    One rule in one place, because two copies of it is how the score roll and
+    the candidate stamp come to disagree about a name. The roll has carried
+    this since 2026-08-20 and it lived inline there; the candidate dict
+    carried nothing at all, which is why the report could name a score with
+    no way to say which way the name was moving.
+
+    Exactly 0.0 reads as up, and the boundary is stated rather than left to
+    be discovered. It is not a third state because no candidate can sit on it
+    in practice: rank_by_measured_gap applies the [Discovery] gap floor to the
+    ABSOLUTE gap, so a name reaching the pool has moved. attach_gap then
+    recomputes the published gap against a different prior close, which makes
+    an exact zero arithmetically reachable, and it has never occurred. A
+    "flat" state would buy a distinction for a case that does not arise and
+    would have to be quoted into the report by name.
+
+    NULL, never a default. A gap that was never computed has no direction, and
+    the reason it was never computed is already recorded once, in gap_reason.
+    Two copies of one reason is how they drift.
+    """
+    value = _as_float(gap_pct)
+    if value is None:
+        return None
+    return "up" if value >= 0 else "down"
+
+
 class Packet:
     """The morning's evidence, plus an honest list of what is missing from it."""
 
@@ -2975,7 +3003,7 @@ def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             "symbol": candidate["symbol"],
             "score": score,
             "gap_pct": gap,
-            "direction": None if gap is None else ("up" if gap >= 0 else "down"),
+            "direction": gap_direction(gap),
         })
     for rows in buckets.values():
         rows.sort(key=lambda r: (-r["score"], r["symbol"]))
@@ -2988,6 +3016,29 @@ def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         if band.result in buckets and band.result not in order:
             order.append(band.result)
     order += sorted(name for name in buckets if name not in order)
+
+    # THE QUOTABLE FORM, on the evidence_roll.text precedent. direction_note
+    # below is written for a code reader and nothing quotes it: it carries
+    # ABSOLUTE in capitals, which prompt_analyst rule 8 forbids the model from
+    # reproducing, so REPORT_TEMPLATE asked for the sense of it instead and got
+    # six different sentences on six mornings.
+    #
+    # Every constraint on this wording is load bearing. It says "rows" and
+    # never name, candidate or watchlist, so analyst.quantifier_violations
+    # cannot fire on it at any counts. It carries no capitals, so it can be
+    # reproduced verbatim. It carries its own denominator. And it counts a gap
+    # that was never computed APART rather than folding it into up.
+    scored_rows = [row for rows in buckets.values() for row in rows]
+    up_rows = sum(1 for row in scored_rows if row["direction"] == "up")
+    down_rows = sum(1 for row in scored_rows if row["direction"] == "down")
+    no_gap_rows = sum(1 for row in scored_rows if row["direction"] is None)
+    direction_text = (
+        "The score weighs the absolute gap, so it ranks confluence and not "
+        "direction: a faller and a riser can tie at the same number. Of "
+        "{scored} scored rows, {up} gapped up, {down} gapped down and "
+        "{no_gap} carry a gap that was never computed."
+    ).format(scored=len(scored_rows), up=up_rows, down=down_rows,
+             no_gap=no_gap_rows)
 
     def phrase(row: dict[str, Any]) -> str:
         if row["gap_pct"] is None:
@@ -3006,6 +3057,7 @@ def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             "on every row here for that reason and must be given wherever names "
             "are grouped or ranked by score."
         ),
+        "text": {"direction": direction_text},
         "summary": "; ".join(
             f"{name}: " + ", ".join(phrase(row) for row in buckets[name])
             for name in order
@@ -3271,6 +3323,11 @@ def score_candidate(candidate: dict[str, Any]) -> None:
                 f"({candidate.get('pm_float_rotation_reason')})")
 
     gap_raw = candidate.get("gap_pct")
+    # Stamped on BOTH branches and before either, because this is the line
+    # where the sign is thrown away and it is therefore the line that owes a
+    # reader the record of it. A candidate the gap could not be scored for
+    # still has a direction if it has a gap at all.
+    candidate["gap_direction"] = gap_direction(gap_raw)
     if gap_raw is None:
         unknown("gap", "the gap itself was never computed")
     else:

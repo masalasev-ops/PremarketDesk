@@ -20,7 +20,11 @@ decide nothing.
    yellow, red, or null) and score come from the packet and may not be
    changed, rounded up, or editorialized into something stronger. A null
    conviction is written as unscored, never as red: a score component input
-   was never observed, and unknown is not zero.
+   was never observed, and unknown is not zero. The score is UNSIGNED: its
+   gap component weighs the absolute gap, so a score is never a statement
+   about direction and a falling name can tie a rising one. Wherever you
+   name a score, give that candidate's gap_direction, and write
+   score_roll.text.direction word for word in the Summary.
 4. A candidate with catalyst_found false is a skip. Say it moves on no found
    catalyst and put it in Skips and traps. catalyst_found null is a third
    state and is not a false: the news feed was never checked, because the

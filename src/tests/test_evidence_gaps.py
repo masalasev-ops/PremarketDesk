@@ -481,6 +481,22 @@ def claim_the_template_reads_the_roll_rather_than_deriving_it(
     if "score_roll.unscored" not in text:
         failures.append("REPORT_TEMPLATE.md must read score_roll.unscored for "
                         "the unscored names rather than scanning for a null score")
+    # The unsigned score caveat has to be QUOTED, not described. The template
+    # asked for the sense of score_roll.direction_note for six mornings and
+    # got six different sentences, because direction_note writes ABSOLUTE in
+    # capitals and rule 8 forbids reproducing that.
+    if "score_roll.text.direction" not in text:
+        failures.append("REPORT_TEMPLATE.md does not quote "
+                        "score_roll.text.direction, so the unsigned score "
+                        "caveat is composed by the model again")
+    if "score_roll.text.direction" not in prompt:
+        failures.append("prompt_analyst.md does not name "
+                        "score_roll.text.direction, so the prompt and the "
+                        "template disagree about who writes that sentence")
+    if 'direction_note says it in words' in text:
+        failures.append("REPORT_TEMPLATE.md still tells the model that "
+                        "direction_note \"says it in words\", which is the "
+                        "instruction that produced six different sentences")
 
     # And the instruction that asked for the filter has to be GONE, not merely
     # supplemented. These are the exact phrases T2 and T15 were written against.
