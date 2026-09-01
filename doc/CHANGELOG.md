@@ -186,6 +186,14 @@ and the working copy is the contaminated one. On 2026-08-24 the working copy
 was right; here it is the backup. That is the whole reason the door built above
 takes a verdict and sources rather than a preference for one side.
 
+**The two are perfectly separable, which the remedy depends on.** The backup
+taken at 09:44 holds 3,338 bars and every one is extended-hours. The working
+copy is that file byte for byte plus 932 more, and every one of those is
+market_status open, earliest 09:53. Restoring the backup would discard the
+probe run and not one premarket bar. That is checked rather than assumed,
+because a remedy that loses real evidence to tidy up an instrument is worse
+than the contamination.
+
 **Not arbitrated and nothing changed.** The probe is still running, a verdict
 taken against a moving file is worth nothing, and the remedy discards data,
 which is a decision for an owner rather than a defect to be quietly repaired.

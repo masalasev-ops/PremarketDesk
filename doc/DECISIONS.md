@@ -1182,6 +1182,90 @@ capture ran 0.0288 to 0.4231 on the socket's own window; window share ran
 is now published rather than left for a reader to compute. Table in
 doc/research/COLLECTOR_VOLUME.md.
 
+## 2026-09-01, eighth: the socket costs nothing on a busy tape, and the gap is two parts with no remainder
+
+**THE PROBE.** `research/measure_socket_cost.py` ran 10:00:01 to 10:20:05 ET,
+one connection, one resubscription, zero reconnects, **21,306 messages** folded
+into 932 minutes on a live regular hours tape.
+
+| | |
+| --- | ---: |
+| vendor counter before | 1,286 |
+| vendor counter after | 1,286 |
+| raw delta | **0** |
+| adjusted delta | -2, being the raw delta minus this script's own two `/user` reads |
+
+The adjusted figure is negative because the two reads the script makes to take
+the measurement did not move the counter either. The honest statement is the
+raw one: **a twenty minute socket run carrying 21,306 messages on an open
+market tape moved the daily counter by zero.**
+
+That closes the question the probe's own .bat was written to ask. Two runs on
+2026-08-13 measured zero, but both rode the quiet evening tape, and the one
+window that ever streamed a heavy live tape straddled the counter's 00:00 UTC
+reset and was unreadable. The per message cost on a busy tape was the one
+number the socket still owed. It is zero.
+
+**Caveat kept from the instrument.** The counter is account wide. Nothing else
+used the key during the run, which the meter lines either side confirm at 1,286
+both times.
+
+### The gap is two parts, and they are a complete decomposition
+
+Both come off the same Alpaca tape and chain exactly:
+
+    socket / full premarket  =  (socket / tape in the socket's window)
+                             x  (tape in that window / full premarket)
+                             =  capture_observed  x  collector_window_share
+
+Medians over the guarded fit set, **46 rows across 6 sessions**, which is the
+set any re-derivation would be fitted on:
+
+| part | what it is | median share | as a multiple |
+| --- | --- | ---: | ---: |
+| FEED | what the socket misses **while listening**. `capture_observed` | 0.099899 | 1 in 10.01 |
+| WINDOW | what the 07:20 start misses because it **was not listening**. `collector_window_share` | 0.407357 | 1 in 2.45 |
+| TOTAL | socket against the whole premarket | 0.033739 | 1 in 29.64 |
+
+**THE RESIDUAL IS ZERO, AND IT IS STATED RATHER THAN OMITTED.** Per row,
+`total / (feed x window)` has median **1.000000293**, minimum 0.999980728,
+maximum 1.000022275, and **not one of the 56 rows carrying all four volumes is
+off the identity by more than 0.1 percent**. Nothing unexplained sits between
+the socket and Alpaca's premarket tape.
+
+That zero is narrower than it sounds and the narrowness is the point. The two
+parts are a complete decomposition **of the socket against Alpaca**. They say
+nothing about Alpaca's SIP tape against the true consolidated tape, which this
+instrument does not measure and cannot. A residual reported as zero when the
+question was never asked is the failure this project keeps finding, so: the
+remainder measured here is zero, and the remainder between Alpaca and the
+consolidated tape is UNMEASURED, not zero.
+
+### Which half each proposed remedy actually reaches
+
+`[Collector] premarket_capture_rate` is one number, 0.1172, and it is a FEED
+correction. It cannot reach the window half at all, and the current single
+threshold has been treated as if it addressed the whole gap.
+
+| remedy | reaches | what it is worth |
+| --- | --- | --- |
+| re-fit `premarket_capture_rate` from 0.1172 | FEED only | the measured feed median is 0.099899, so the shipped divisor scales the socket up by 8.53x where the measurement says 10.01x. It **under corrects the feed by about 17 percent** and leaves the window untouched |
+| a per symbol capture table | FEED only | addresses the dispersion within the feed half, which `sweep_capture_rate` measured as real. Still cannot reach the window |
+| move `[Collector] start_time` earlier than 07:20 | WINDOW only | the larger half of nothing else: 1 in 2.45 against the baseline's 04:00 `session_start`. **This is a scheduling decision, not an arithmetic one**, and the probe above just priced it at zero vendor credits |
+| widen the socket past the 50 symbol cap | NEITHER | it changes which names are covered, not what share of a covered name's tape is seen. It is an account purchase and has been declined twice |
+| anything aimed at the residual | nothing to reach | there is no remainder between the socket and Alpaca to correct |
+
+**Nothing in the morning path is changed by this entry**, per the instruction it
+was measured under. `premarket_capture_rate` still ships at 0.1172 and
+`start_time` still ships at 07:20. What has changed is that the two halves are
+now separately measured, and the one remedy that reaches the larger half is
+known to be free.
+
+**The probe left a defect behind.** It launches `collect_premarket`, which
+writes to `PREMARKET_DIR/<today>.jsonl`, so today's premarket capture now holds
+322 regular hours bars and the vintage guard refuses a packet built from it.
+Recorded in the changelog for 2026-09-01 and not repaired here.
+
 ## 2026-08-21, seventh: the code is frozen except for defects that make published numbers wrong [amended 2026-09-01, four clauses now, see the amendment inside]
 
 **THE RULE.** From this entry forward a change is in scope if, and only if, it
