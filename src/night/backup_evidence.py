@@ -75,6 +75,25 @@ have said so the same night.
     PYTHONPATH=src .venv/Scripts/python.exe -m night.backup_evidence
     PYTHONPATH=src .venv/Scripts/python.exe -m night.backup_evidence --list
     PYTHONPATH=src .venv/Scripts/python.exe -m night.backup_evidence --restore 2026-08-20
+
+WHERE THE HELD SET ALREADY HAS HOLES, recorded once here rather than reported
+every night for the rest of the project's life.
+
+On 2026-09-01 the run directories for 2026-08-13, 08-14, 08-17, 08-18, 08-19
+and 08-20 were deleted by hand, on the argument that an archive of reports now
+known to be wrong is its own kind of dishonesty. The packets and captures for
+those sessions were already held and survived. The RENDERED REPORTS were not
+held, because report.md and report-html only joined _ARTIFACTS later the same
+day, and no backup carries them. Those six sessions' reports are gone for good,
+as are the 08-15 and 08-16 weekend sweeps recorded in the entry of 2026-08-21.
+
+That is why HELD_SINCE exists below. A session older than the date an artifact
+joined the held set was never a candidate for backup, so a source missing from
+it is HISTORY. Reporting it as a finding on every run forever is the cry-wolf
+shape _LEDGERS is written to avoid and the completion gate already avoids by
+saying "already held, nothing at risk" rather than withholding loudly. A
+session NEWER than that date with no held copy is a real finding and still
+prints.
 """
 
 from __future__ import annotations
@@ -129,6 +148,24 @@ _ARTIFACTS = (
     ("report", lambda day: config.run_path(day) / "report.md"),
     ("report-html", lambda day: config.run_path(day) / "report.html"),
 )
+
+
+# WHEN EACH ARTIFACT JOINED THE HELD SET, so a hole can be told from a loss.
+# A source missing from a session OLDER than its label's date was never going
+# to be held and is history; the module docstring records the deletion that
+# made the two report holes. A source missing from a session NEWER than it,
+# with nothing held, is a finding and prints.
+#
+# Dates read off the git history rather than remembered: the original four
+# went in together on 2026-08-21, and the two reports on 2026-09-01.
+HELD_SINCE = {
+    "premarket": "2026-08-21",
+    "premarket-stats": "2026-08-21",
+    "subscriptions": "2026-08-21",
+    "packet": "2026-08-21",
+    "report": "2026-09-01",
+    "report-html": "2026-09-01",
+}
 
 
 # A RUNNING PROJECT FILE rather than a session artifact, held on the SAME
@@ -347,14 +384,24 @@ def survey(days: list[str]) -> dict[str, Any]:
     copied: list[dict[str, Any]] = []
     held: list[str] = []
     missing: list[str] = []
+    gone_but_held: list[str] = []
+    gone_before_held: list[str] = []
     disagree: list[dict[str, Any]] = []
     for day in days:
         for label, locate in _ARTIFACTS:
             source = locate(day)
-            if not source.is_file():
-                missing.append(f"{day}/{label}")
-                continue
             target = _target(day, label, source)
+            if not source.is_file():
+                # THREE ANSWERS, not one. The working copy is gone; what that
+                # MEANS depends on whether anything holds it and on whether
+                # this session was ever a candidate for holding it.
+                if target.is_file():
+                    gone_but_held.append(f"{day}/{label}")
+                elif day < HELD_SINCE.get(label, "0000-00-00"):
+                    gone_before_held.append(f"{day}/{label}")
+                else:
+                    missing.append(f"{day}/{label}")
+                continue
             row = {"day": day, "label": label, "source": source,
                    "target": target, "bytes": source.stat().st_size}
             if not target.is_file():
@@ -367,6 +414,8 @@ def survey(days: list[str]) -> dict[str, Any]:
             # corrupted working copy are the same observation from this side.
             disagree.append({**row, "backup_bytes": target.stat().st_size})
     return {"copy": copied, "held": held, "missing": missing,
+            "gone_but_held": gone_but_held,
+            "gone_before_held": gone_before_held,
             "disagree": disagree}
 
 
@@ -441,6 +490,14 @@ def report(result: dict[str, Any]) -> None:
         print(f"backup: {len(result['held'])} file(s) already held and "
               "unchanged, left alone. A dated backup is never overwritten")
     if result["missing"]:
+        # ONLY THE FINDING. A source gone from a session that already holds it,
+        # and a source gone from a session older than the artifact itself, are
+        # both carried in the result for anything that wants to read them and
+        # neither is printed. See HELD_SINCE and the docstring's note on where
+        # the held set already has holes: a line that fires every night about
+        # two sessions that will never come back is a line nobody reads by the
+        # end of the week, and the DISAGREES line underneath it is the one
+        # thing in this module that must never be skimmed past.
         print(f"backup: {len(result['missing'])} artifact(s) not on disk to "
               f"copy: {', '.join(result['missing'][:8])}"
               + (" ..." if len(result["missing"]) > 8 else ""))

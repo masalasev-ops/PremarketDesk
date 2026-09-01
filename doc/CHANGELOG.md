@@ -15,6 +15,53 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twentieth: a hole in the held set is history, not a nightly finding
+
+The change that added the reports left the nightly naming 2026-08-19/report and
+2026-08-20/report as artifacts not on disk to copy, on every run, permanently,
+for two sessions that cannot come back. That is the cry-wolf shape _LEDGERS was
+written to avoid and the completion gate already avoids by saying "already
+held, nothing at risk" rather than withholding loudly. A line that fires every
+night about something nobody can act on is a line nobody reads by the end of
+the week, and the DISAGREES line underneath it is the one thing in that module
+that must never be skimmed past.
+
+### A rule rather than a list of two dates
+
+HELD_SINCE records when each artifact joined the held set, read off the git
+history rather than remembered: the original four together on 2026-08-21, the
+two reports on 2026-09-01. A source missing from a session OLDER than its
+label's date was never a candidate for backup and is a HOLE. A source missing
+from a NEWER session with nothing held is a LOSS.
+
+A hardcoded pair of dates would have covered today and nothing else. This
+covers every artifact added from here on, including the next one, without the
+author of that change having to remember this one.
+
+survey now answers three ways instead of one, and only the third prints:
+
+  gone_but_held       the working copy is gone and the backup holds it, so
+                      nothing is at risk
+  gone_before_held    the session predates the artifact, so there was never
+                      going to be a copy
+  missing             a real loss, named as before
+
+The first two are carried in the result for anything that wants to read them.
+The permanently gone range is recorded once in the module docstring, with the
+deletion that caused it, rather than reported nightly.
+
+### The suppression is the risk
+
+Which is why claim_a_lost_session_is_history_and_a_new_one_is_a_finding exists.
+A rule that hides a missing artifact can hide a real one, so both directions
+are pinned: a report missing from a session older than 2026-09-01 must be
+silent AND carried as history, one missing from a newer session with nothing
+held must be named, and one whose backup already holds it must be neither.
+
+A clean night now prints nothing about the two lost reports.
+
+Suite green, 136 claims, 1,820 paths, no drift.
+
 ## 2026-09-01, nineteenth: the held set gains the reports and the flag log
 
 Two things failed the test the held set is supposed to apply, which is not that

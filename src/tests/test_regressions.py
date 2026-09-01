@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and thirty five claims, a count read off
+and the two pages. It now carries one hundred and thirty six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11395,6 +11395,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         133: "one hundred and thirty three",
         134: "one hundred and thirty four",
         135: "one hundred and thirty five",
+        136: "one hundred and thirty six",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -11964,6 +11965,79 @@ def claim_every_printed_column_has_plain_english(failures: list[str]) -> None:
           "it, and applying it twice changes nothing")
 
 
+def claim_a_lost_session_is_history_and_a_new_one_is_a_finding(
+        failures: list[str]) -> None:
+    """The nightly must not report the same permanent loss every night forever.
+
+    Six run directories were deleted on 2026-09-01 and their rendered reports
+    were never held, because report and report-html joined _ARTIFACTS later the
+    same day. Left alone, the nightly named 2026-08-19/report and
+    2026-08-20/report as artifacts not on disk on EVERY run, permanently, for
+    two sessions that cannot come back. A line that fires every night about
+    something nobody can act on is a line nobody reads by the end of the week,
+    and the DISAGREES line under it is the one thing in that module that must
+    never be skimmed past.
+
+    THE SUPPRESSION IS THE RISK, which is why this claim exists. A rule that
+    hides a missing artifact can hide a real one, so both directions are
+    pinned: a session OLDER than the date its artifact joined the held set is
+    history and silent, and a session NEWER than that date with nothing held is
+    a finding and is named. The third case, a source gone from a session whose
+    backup already holds it, is also silent because nothing is at risk, which
+    is the reading the completion gate already takes.
+    """
+    import tempfile
+
+    from night import backup_evidence as backup
+
+    root = pathlib.Path(tempfile.mkdtemp())
+    real_runs, real_pm, real_root = (
+        config.RUNS_DIR, config.PREMARKET_DIR, backup.backup_root)
+    try:
+        config.RUNS_DIR = root / "runs"
+        config.PREMARKET_DIR = root / "premarket"
+        config.RUNS_DIR.mkdir(parents=True)
+        config.PREMARKET_DIR.mkdir(parents=True)
+        store = root / "backup"
+        store.mkdir()
+        backup.backup_root = lambda: store
+
+        joined = backup.HELD_SINCE["report"]
+        older, newer, held_day = "2026-08-19", "2026-09-02", "2026-09-03"
+        for day in (older, newer, held_day):
+            (config.RUNS_DIR / day).mkdir()
+        (store / held_day).mkdir(parents=True)
+        (store / held_day / "report.md").write_text("held", encoding="utf-8")
+
+        found = backup.survey([older, newer, held_day])
+
+        if f"{newer}/report" not in found["missing"]:
+            failures.append(
+                f"a report missing from {newer}, after report joined the held "
+                f"set on {joined} and with nothing held for it, was not "
+                f"reported as a finding: {found['missing']}")
+        if f"{older}/report" in found["missing"]:
+            failures.append(
+                f"a report missing from {older}, before report joined the held "
+                f"set on {joined}, was reported as a finding. That line fires "
+                "every night forever over a session that cannot come back")
+        if f"{older}/report" not in found["gone_before_held"]:
+            failures.append(
+                f"{older}/report was not carried as history, so nothing can "
+                "read the hole even though the nightly stopped printing it")
+        if f"{held_day}/report" in found["missing"]:
+            failures.append(
+                f"a report gone from {held_day} whose backup already holds it "
+                "was reported as a finding, but nothing is at risk")
+    finally:
+        config.RUNS_DIR, config.PREMARKET_DIR = real_runs, real_pm
+        backup.backup_root = real_root
+
+    print("  lost sessions a report missing from a session older than the held "
+          "set is history and silent, one missing from a newer session is "
+          "named, and one already held is neither")
+
+
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     """Hard rule 4 is guarded by something other than good intentions.
 
@@ -12498,6 +12572,7 @@ def main() -> int:
     claim_the_score_watch_counts_a_pick_once_per_pick(failures)
     claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not(failures)
     claim_every_printed_column_has_plain_english(failures)
+    claim_a_lost_session_is_history_and_a_new_one_is_a_finding(failures)
 
     if failures:
         for failure in failures:
