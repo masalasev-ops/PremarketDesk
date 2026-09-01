@@ -10361,10 +10361,17 @@ def claim_the_unsigned_score_says_so_wherever_it_is_named(
     from morning import analyst
     from morning import scan
 
+    # NOGAP.US carries score None, and that is not a convenience: a null
+    # gap_pct makes score_candidate mark the gap component unavailable, and an
+    # unavailable component nulls the score. The pair (gap None, score 4.0)
+    # cannot be produced by the pipeline, and this fixture used to carry it,
+    # which is how the never-computed clause was proved against a state that
+    # does not occur while the shipped sentence could only ever print zero.
+    # The invariant itself is asserted below rather than assumed.
     rows = [{"symbol": "UP.US", "gap_pct": 8.0, "score": 7.0, "conviction": "green"},
             {"symbol": "DOWN.US", "gap_pct": -12.0, "score": 7.0, "conviction": "green"},
             {"symbol": "FLAT.US", "gap_pct": 0.0, "score": 5.0, "conviction": "yellow"},
-            {"symbol": "NOGAP.US", "gap_pct": None, "score": 4.0, "conviction": "yellow"}]
+            {"symbol": "NOGAP.US", "gap_pct": None, "score": None, "conviction": None}]
     roll = scan.score_roll([dict(row) for row in rows])
     sentence = ((roll.get("text") or {}).get("direction") or "")
 
@@ -10392,17 +10399,47 @@ def claim_the_unsigned_score_says_so_wherever_it_is_named(
             "word for word breaks prompt_analyst rule 8, which is exactly why "
             "direction_note was paraphrased six different ways")
 
-    # 3. Its counts, with the never computed gap apart from up.
-    if "2 scored rows" in sentence or "4 scored rows" not in sentence:
+    # 3. Its counts, with the never computed gap apart from the scored rows.
+    if "3 scored rows" not in sentence:
         failures.append(f"the sentence does not carry its own denominator over "
-                        f"the four scored rows: {sentence!r}")
+                        f"the three scored rows: {sentence!r}")
     if "2 gapped up" not in sentence:
         failures.append(f"a zero gap must count as up, matching gap_direction: "
                         f"{sentence!r}")
-    if "1 carry a gap that was never computed" not in sentence:
+    if "1 gapped down" not in sentence:
+        failures.append(f"the down count is wrong: {sentence!r}")
+    if "neither count: 1 today" not in sentence:
         failures.append(
-            f"a gap that was never computed is folded into a direction it was "
-            f"never measured to have: {sentence!r}")
+            f"the row whose gap was never computed is not counted, so the "
+            f"clause reports nothing on the mornings it exists for: {sentence!r}")
+
+    # 3b. THE INVARIANT THAT MADE THE OLD FIXTURE UNREACHABLE, asserted rather
+    # than assumed, because the whole defect was a count taken over the one
+    # population it can never appear in. A null gap must null the score, so a
+    # never-computed gap is always unscored and never in a bucket.
+    null_gap = {"symbol": "NOGAP.US", "gap_pct": None}
+    scan.score_candidate(null_gap)
+    if null_gap.get("score") is not None:
+        failures.append(
+            f"a candidate with no gap scored {null_gap.get('score')}, so the "
+            "never-computed count could now legitimately be taken over the "
+            "scored rows and this claim is measuring the wrong population")
+    if "gap" not in (null_gap.get("score_unavailable") or []):
+        failures.append(
+            "a candidate with no gap does not record gap as an unavailable "
+            f"score component: {null_gap.get('score_unavailable')}")
+
+    # 3c. The quota degraded morning, which is the sharp case: prior_close is
+    # nulled for EVERY candidate, so every gap is null and no row is scored.
+    degraded = scan.score_roll(
+        [{"symbol": f"A{n}.US", "gap_pct": None, "score": None, "conviction": None}
+         for n in range(12)])
+    degraded_text = ((degraded.get("text") or {}).get("direction") or "")
+    if "neither count: 12 today" not in degraded_text:
+        failures.append(
+            "on a morning where no gap was computed for anything, the sentence "
+            "does not say so. That is a never-checked population published as a "
+            f"checked and empty count: {degraded_text!r}")
 
     # 4. The candidate stamp, and it agrees with the roll.
     for row in rows:

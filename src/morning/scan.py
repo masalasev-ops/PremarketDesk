@@ -3026,17 +3026,35 @@ def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     # Every constraint on this wording is load bearing. It says "rows" and
     # never name, candidate or watchlist, so analyst.quantifier_violations
     # cannot fire on it at any counts. It carries no capitals, so it can be
-    # reproduced verbatim. It carries its own denominator. And it counts a gap
-    # that was never computed APART rather than folding it into up.
+    # reproduced verbatim. Each count carries its own denominator. And a gap
+    # that was never computed is counted APART rather than folded into up.
+    #
+    # THE NEVER-COMPUTED COUNT IS TAKEN OVER THE CANDIDATES AND NOT OVER THE
+    # SCORED ROWS, which is where it lives. A row reaches `buckets` only when
+    # its score is not None, and score_candidate marks the gap component
+    # unavailable when gap_pct is None, which sets the score to None. So such
+    # a row is always in `unscored` and never in `buckets`, and counting it
+    # over the scored rows returned zero on every morning that has ever run,
+    # including the mornings where a gap really was never computed.
+    #
+    # The quota-degraded branch is the sharp case rather than a corner: it
+    # sets prior_close to None for EVERY candidate, so every gap_pct is None,
+    # buckets is empty, and the sentence read "Of 0 scored rows, 0 gapped up,
+    # 0 gapped down and 0 carry a gap that was never computed" on precisely
+    # the morning when nothing had a gap. A never-checked population published
+    # as a checked-and-empty count of zero, in the sentence written to stop
+    # exactly that.
     scored_rows = [row for rows in buckets.values() for row in rows]
     up_rows = sum(1 for row in scored_rows if row["direction"] == "up")
     down_rows = sum(1 for row in scored_rows if row["direction"] == "down")
-    no_gap_rows = sum(1 for row in scored_rows if row["direction"] is None)
+    no_gap_rows = sum(1 for candidate in candidates
+                      if _as_float(candidate.get("gap_pct")) is None)
     direction_text = (
         "The score weighs the absolute gap, so it ranks confluence and not "
         "direction: a faller and a riser can tie at the same number. Of "
-        "{scored} scored rows, {up} gapped up, {down} gapped down and "
-        "{no_gap} carry a gap that was never computed."
+        "{scored} scored rows, {up} gapped up and {down} gapped down. Rows "
+        "whose gap was never computed are unscored and sit in neither "
+        "count: {no_gap} today."
     ).format(scored=len(scored_rows), up=up_rows, down=down_rows,
              no_gap=no_gap_rows)
 
