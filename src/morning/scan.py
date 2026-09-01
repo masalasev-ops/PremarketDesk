@@ -5234,9 +5234,17 @@ def thinner_than(fresh: dict[str, int], prior: dict[str, int]) -> list[str]:
 def _promote_snapshot(pending: str | None, overwrite: bool = False) -> Path | None:
     """Move this run's collector copy into the name the packet names.
 
-    THROUGH THE GUARD, because the name this promotes INTO is one of the two
-    artifacts the nightly backup holds as having no route back, and until
-    2026-08-31 this was a bare os.replace onto it.
+    THROUGH THE GUARD, because the name this promotes INTO is the morning's
+    frozen capture and until 2026-08-31 this was a bare os.replace onto it.
+
+    [corrected 2026-09-01: this said the name is "one of the two artifacts the
+    nightly backup holds as having no route back". It is not. That backup
+    holds data/premarket/<date>.jsonl and runs/<date>/packet.json, and this
+    file is a byte prefix of the first, truncated at the last complete bar the
+    packet records, so it is reconstructible from a file the backup does hold.
+    Guarding it is still right, because reconstructing it needs the raw
+    capture AND the packet that says where to cut, and the wrong reason for a
+    correct guard is what a maintainer reasons from next.]
 
     snapshot_bars already resolves through artifacts, and reading that as
     cover was the mistake: what it guards is
@@ -5246,12 +5254,18 @@ def _promote_snapshot(pending: str | None, overwrite: bool = False) -> Path | No
     this line reached it with no guard at all, so the protection added on
     2026-08-15 stopped at the caller it was written for.
 
-    The failure it was written for is on record twice. A hand run of
-    snapshot_bars replaced the frozen 08:45 snapshot for 2026-08-14 with the
-    whole trading day, and it was noticed only because test_repricing reads
-    that file. A hand run of THIS module at 15:46 on 2026-08-21 replaced that
-    morning's capture and its packet, and both are gone permanently; the
-    backup exists because of it and can only report the loss afterwards.
+    The failure it was written for is on record. A hand run of snapshot_bars
+    replaced the frozen 08:45 snapshot for 2026-08-14 with the whole trading
+    day, and it was noticed only because test_repricing reads that file.
+
+    [corrected 2026-09-01: this went on to say "a hand run of THIS module at
+    15:46 on 2026-08-21 replaced that morning's capture and its packet". The
+    loss is real and the cause is not this module. That packet carries
+    build.commit "stub" and collector_snapshot null, and build_packet can emit
+    neither, so the run never went through main at all: it was the claim sweep
+    writing fixture data directly, which is what the nightly backup module and
+    conftest.py both already record. The guard here is still right and its
+    justification is the 2026-08-14 morning above, which WAS a hand run.]
 
     thin_rerun_stands_down is not the answer either, and the same morning is
     why. It refuses a rerun carrying LESS evidence, and a hand run on a live
@@ -5368,15 +5382,21 @@ def write_packet(payload: dict[str, Any], overwrite: bool = False) -> Any:
     module for it and is right to stay blunt. packet.json was not among
     them, and it is the one artifact whose own docstring, three lines down,
     says everything after this step reads it and a re-read of a past session
-    reads it rather than picks. The nightly backup names it as one of the
-    two files in the tree with no route back.
+    reads it rather than picks. The nightly backup does hold it, as one of
+    the two files it names.
 
     The atomic write below is kept and is a different guarantee: it stops a
     run interrupted mid write from leaving a packet that parses as nothing.
-    It has never stopped a complete run from replacing a frozen one, and on
-    2026-08-21 a hand run at 15:46 did exactly that. runs/2026-08-21 still
-    carries the result: a packet stamped 15:46:38 holding one candidate,
-    AAPL.US, beside twelve picks rows from that morning naming none of it.
+    It has never stopped a complete run from replacing a frozen one.
+
+    runs/2026-08-21 carries what that costs: a packet stamped 15:46:38 holding
+    one candidate, AAPL.US, beside twelve picks rows from that morning naming
+    none of it. [corrected 2026-09-01: this attributed that packet to "a hand
+    run at 15:46" of this module. It carries build.commit "stub" and
+    collector_snapshot null, neither of which build_packet emits, so it was
+    the claim sweep writing directly and it never reached main or the stand
+    down. It is what a lost morning LOOKS like, which is why it is still
+    quoted here, and it is not evidence about this code path.]
 
     A scheduled run owns today and overwrites freely, because a watchdog
     rerun of the morning chain is supposed to produce a fresh packet. A hand

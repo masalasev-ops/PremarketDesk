@@ -753,6 +753,7 @@ def claim_operator_tools_spare_artifacts(failures: list[str]) -> None:
     # Every module a human can point at a past run directory routes through
     # the guard. A new one that forgets is the whole failure mode returning.
     unguarded = []
+    guarded = []
     for module_name, artifact in (
         ("night.pool_recall", "pool_recall.json"),
         ("night.backfill_premarket", "verify_intraday.json"),
@@ -765,14 +766,15 @@ def claim_operator_tools_spare_artifacts(failures: list[str]) -> None:
         ("morning.scan", "packet.json and premarket_snapshot.jsonl"),
     ):
         source = Path(importlib.import_module(module_name).__file__).read_text(encoding="utf-8")
+        guarded.append(module_name)
         if "artifacts.resolve" not in source:
             unguarded.append(f"{module_name} writes {artifact} under runs/ but never "
                              "calls artifacts.resolve, so a hand run against a past "
                              "session would replace it")
     failures.extend(unguarded)
     if not unguarded:
-        print("  operator     pool_recall, backfill and the collector all route "
-              "their runs/ writes through the guard")
+        print(f"  operator     all {len(guarded)} modules that write under "
+              "runs/ route those writes through the guard")
 
 
 def claim_midday_runs_and_renders(failures: list[str]) -> None:
