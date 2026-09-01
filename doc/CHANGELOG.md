@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, fourteenth: the midday report is typeset, and stops shouting
+
+Raised by the owner on reading the 12:00 edition: "so badly formatted. Small
+and caps all wrongly done". Both halves were real, and neither was cosmetic in
+the sense of being arbitrary.
+
+### The type size was never decided
+
+The HTML shell set no font-size on body at all. Every size under it was an em
+multiple, so the whole report rendered against whatever default the reader's
+browser happened to apply, and the eight column carry through table, at 0.92em
+of that unknown, was the first thing to suffer. It sat in a 760px column, which
+eight columns of grades and their prose do not fit.
+
+Now an explicit 17px base, a 940px measure, tables at 0.97em with real padding,
+a zebra on the body rows and the ticker column held on one line. Each table is
+wrapped in a scrolling box, so a narrow screen scrolls the table rather than
+the whole page sideways.
+
+### Capitals doing two different jobs, and one of them badly
+
+Two separate defects sat under "caps wrong".
+
+Packet notes are written to sit wherever a reader needs them, so many begin
+with a small letter, and the renderer was dropping them straight into sentence
+position. "selection is on price across every universe name" opened its own
+paragraph that way, and so did "every move divides by". _sentence now
+capitalises a note that OPENS a sentence, and only where the first word is a
+plain lowercase word. us-quote-delayed's and ethPrice keep the spelling the
+vendor and the code give them, because "Us-quote-delayed" misnames a field a
+reader has to go and look up, which is a worse error than a small letter.
+
+Separately, this project argues in capitals. That is right in a comment and it
+is shouting in a report, and NOT, PRICE and HERE reached the reader that way.
+_prose lowercases a CLOSED LIST of emphasis words, matching maximal runs of
+capitals and looking each run up, so CRITERIA, EODHD, DECISIONS, SKIP, RVOL and
+every ticker are untouched and NOTE stays NOTE. Fixed at the source in
+scan_midday too, but the list stays: every packet already on disk carries the
+old wording, and a re-render of an archived session has to read right as well.
+
+THE LINE IS BETWEEN PROSE AND AN ALARM, and the suite drew it. A close call and
+an unjudged bucket appear in a perfectly healthy report, so capitals there
+shout at a reader for whom nothing is wrong; both are sentence case now. THE
+COUNTS ABOVE DO NOT ADD UP and PARTIAL fire only when the report cannot be
+trusted as it stands. test_midday pins the first in both directions and was
+right to, the de-shouting of it turned the suite red, and both keep their
+capitals. The rule is now written beside the list that implements the other
+half of it.
+
+Today's 12:00 edition was re-rendered from its own packet. The packet was not
+touched and no vendor call was made: it is the evidence, and the report is
+derived from it.
+
+Suite green, 1,741 paths, no drift.
+
 ## 2026-09-01, thirteenth: two readers that could not fail safely
 
 A review pass over the tree, taken against the 12:00 job's dependency closure

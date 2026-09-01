@@ -842,7 +842,7 @@ def build_packet(day: str | None = None,
             "denominator_note": (
                 f"every move divides by the {expect_prior} close from "
                 "eod-bulk-last-day, asked for by date. The quote's own "
-                "previousClosePrice is NOT read: measured 2026-08-31 it "
+                "previousClosePrice is not read: measured 2026-08-31 it "
                 "matched the prior session for 34 percent of names and today's "
                 "close for 29 percent, with nothing in the payload saying "
                 "which, and it disagreed with the single symbol eod endpoint "
@@ -898,9 +898,9 @@ def build_packet(day: str | None = None,
             "tally": tally,
             "news_calls": news_calls,
             "selection_note": (
-                "selection is on PRICE across every universe name, and news is "
+                "selection is on price across every universe name, and news is "
                 "fetched afterwards for the top of the ranked list. A name that "
-                "moved on no tagged headline is still HERE, carrying a reason "
+                "moved on no tagged headline is still here, carrying a reason "
                 "that says the feed was silent. A news led scan could not have "
                 "said that"),
             "floors": {

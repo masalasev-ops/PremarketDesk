@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -46,21 +47,35 @@ _SHELL = """<!doctype html>
     font-family: Georgia, "Times New Roman", serif;
     color: #1a1a1a;
     background: #ffffff;
-    max-width: 760px;
+    /* AN EXPLICIT BASE. There was none, so every size below was a multiple of
+       whatever default the reader's browser happened to apply, and the eight
+       column table scaled off that same unknown. A report whose type size is
+       not decided here is not a report whose type size was decided. */
+    font-size: 17px;
+    /* 760px held eight columns of carry through plus their prose. It does
+       not. */
+    max-width: 940px;
     margin: 0 auto;
-    padding: 24px 16px;
-    line-height: 1.55;
+    padding: 28px 20px 56px;
+    line-height: 1.6;
   }}
-  h1 {{ font-size: 1.6em; border-bottom: 2px solid #1a1a1a; padding-bottom: 6px; }}
-  h2 {{ font-size: 1.2em; margin-top: 1.6em; border-bottom: 1px solid #cccccc;
-       padding-bottom: 4px; }}
-  h3 {{ font-size: 1.02em; margin-top: 1.3em; }}
-  table {{ border-collapse: collapse; width: 100%; font-size: 0.92em;
+  h1 {{ font-size: 1.7em; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px;
+       margin-bottom: 0.6em; }}
+  h2 {{ font-size: 1.3em; margin-top: 1.9em; border-bottom: 1px solid #cccccc;
+       padding-bottom: 5px; }}
+  h3 {{ font-size: 1.08em; margin-top: 1.5em; }}
+  p {{ margin: 0.7em 0; }}
+  /* The carry through table is eight columns. It scrolls inside its own box
+     rather than pushing the whole page sideways on a narrow screen. */
+  .tablewrap {{ overflow-x: auto; margin: 1.1em 0; }}
+  table {{ border-collapse: collapse; width: 100%; font-size: 0.97em;
           font-family: Arial, Helvetica, sans-serif; }}
-  th, td {{ border: 1px solid #bbbbbb; padding: 6px 8px; text-align: left;
+  th, td {{ border: 1px solid #bbbbbb; padding: 8px 10px; text-align: left;
            vertical-align: top; }}
-  th {{ background: #f0f0f0; }}
-  .note {{ color: #444444; font-size: 0.94em; }}
+  th {{ background: #eef0f2; font-weight: 600; }}
+  tbody tr:nth-child(even) td {{ background: #fafafa; }}
+  td:first-child {{ font-weight: 600; white-space: nowrap; }}
+  .note {{ color: #444444; font-size: 0.95em; }}
   .flag {{ background: #fff6d5; }}
 </style>
 </head>
@@ -133,6 +148,55 @@ def _cell(text: Any) -> str:
     return out.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
 
 
+# Words the packet writes in capitals for EMPHASIS, which the report un-shouts.
+# THE LINE IS BETWEEN PROSE AND AN ALARM. A close call and an unjudged bucket
+# appear in a perfectly healthy report, so capitals there are shouting at a
+# reader for whom nothing is wrong. THE COUNTS ABOVE DO NOT ADD UP and PARTIAL
+# fire only when the report cannot be trusted as it stands, and both keep their
+# capitals for that reason: they are the two lines a reader must not skim past.
+# This project argues in capitals and that is right in a comment; a reader's
+# report should not shout at them. It is a CLOSED LIST rather than a rule about
+# capitals: a maximal run of capitals is looked up in the list, so NOTE stays
+# NOTE. Built by scanning every note field the report actually renders:
+# CRITERIA, EODHD, DECISIONS and SKIP are all-caps in the very same sentences
+# and are NAMES, so a rule would have wrecked them. Fixed at the source in
+# scan_midday too, but the packets already on disk carry the old wording and a
+# re-render of an archived session has to read right as well.
+_EMPHASIS_CAPS = ("NOT", "PRICE", "HERE", "READ")
+_EMPHASIS_RE = re.compile("[A-Z]{2,}")
+
+
+def _prose(text: Any) -> str:
+    """Packet prose for a reader: safe in a table, and not shouting."""
+    return _EMPHASIS_RE.sub(
+        lambda m: m.group(0).lower() if m.group(0) in _EMPHASIS_CAPS
+        else m.group(0),
+        _cell(text))
+
+
+def _sentence(text: Any) -> str:
+    """A note used to OPEN a sentence, capitalised only where that is safe.
+
+    The packet's notes are written to sit anywhere a reader needs them, so many
+    begin with a small letter, and several were being dropped straight into
+    sentence position: "selection is on price across every universe name"
+    opened its own paragraph that way, and so did "every move divides by".
+
+    Only a first word that is a PLAIN lowercase word is touched. An identifier
+    keeps the spelling the vendor and the code give it, because "EthPrice" and
+    "Us-quote-delayed" would be wrong in a louder way than a small letter is:
+    one is a typographic slip, the other misnames the field a reader has to go
+    and look up.
+    """
+    out = _prose(text)
+    if not out:
+        return out
+    first = out.split(" ", 1)[0]
+    if first.isalpha() and first.islower():
+        return out[0].upper() + out[1:]
+    return out
+
+
 def carry_section(packet: dict[str, Any]) -> list[str]:
     carry = packet["carry_through"]
     rows = carry["rows"]
@@ -159,23 +223,23 @@ def carry_section(packet: dict[str, Any]) -> list[str]:
 
     out += ["Row by row, with the reason each verdict was reached.", ""]
     for row in rows:
-        out.append(f"**{_cell(row['ticker'])}**: {_cell(row.get('state_reason'))}.")
+        out.append(f"**{_cell(row['ticker'])}**: {_prose(row.get('state_reason'))}.")
         if row.get("stop_state_reason"):
-            out.append(f"Stop: {_cell(row['stop_state_reason'])}.")
+            out.append(f"Stop: {_prose(row['stop_state_reason'])}.")
         if row.get("decided_inside_the_open_tolerance"):
-            out.append(f"CLOSE CALL: {_cell(row.get('open_tolerance_reason'))}.")
+            out.append(f"Close call: {_prose(row.get('open_tolerance_reason'))}.")
         if row.get("worst_vs_fill_reason"):
             out.append(f"Worst against fill is not reported: "
-                       f"{_cell(row['worst_vs_fill_reason'])}.")
+                       f"{_prose(row['worst_vs_fill_reason'])}.")
         out.append("")
 
     # The three standing disclosures. None of them is conditional, because a
     # report that states a limit only when it bites reads like a report with
     # no limits on the mornings it stays quiet.
     out += ["### What these grades are and are not", "",
-            f"Levels are {_cell(rows[0].get('levels_are'))}", "",
-            _cell(carry["not_checked"]) + ".", "",
-            _cell(carry["sequence_unknown_note"]) + ".", ""]
+            f"Levels are {_prose(rows[0].get('levels_are'))}", "",
+            _sentence(carry["not_checked"]) + ".", "",
+            _sentence(carry["sequence_unknown_note"]) + ".", ""]
     flagged = carry.get("decided_inside_the_open_tolerance_rows") or 0
     out += [f"{flagged} of {len(rows)} rows were decided by a margin inside the "
             "open tolerance, where the verdict could flip against the official "
@@ -213,11 +277,11 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
         out += ["### Why each of them moved", ""]
         for row in rows:
             out.append(f"**{_cell(row['symbol'])}**, {_pct(row.get('move_pct'))}. "
-                       f"{_cell(row['morning_reach_note'])}.")
+                       f"{_sentence(row['morning_reach_note'])}.")
             for item in (row.get("news") or [])[:HEADLINES_SHOWN]:
                 out.append(f"- {_cell(item['title'])}")
             if row.get("news_reason"):
-                out.append(f"- {_cell(row['news_reason'])}.")
+                out.append(f"- {_sentence(row['news_reason'])}.")
             out.append("")
 
     # EVERY BUCKET, so the line adds up to the quoted count. It used to name
@@ -232,7 +296,7 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
                    "zero_average_volume", "zero_previous_close",
                    "below_price", "below_move", "below_rvol", "admitted"))
     out += ["### How this list was chosen", "",
-            _cell(movers["selection_note"]) + ".", "",
+            _sentence(movers["selection_note"]) + ".", "",
             f"Of {tally['quoted']:,} universe names quoted: "
             f"{tally.get('refused', 0):,} carried a quote this pass refused, "
             f"{tally['named_this_morning']:,} were already named this morning, "
@@ -268,7 +332,7 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
             f"{UNJUDGED_LABELS[name]}: "
             f"{', '.join(tally['examples'].get(name) or ['none recorded'])}"
             for name in unpriced)
-        out += [f"NOT JUDGED, because the pass could not price them: {parts}. "
+        out += [f"Not judged, because the pass could not price them: {parts}. "
                 f"These names did not fail a floor, they were never measured. "
                 f"Examples, {examples}.", ""]
     else:
@@ -295,10 +359,10 @@ def to_markdown(packet: dict[str, Any]) -> str:
     lines += movers_section(packet)
     lines += [
         "## Where these numbers come from", "",
-        _cell(source["why_not_intraday"]) + ".", "",
-        _cell(source["denominator_note"]) + ".", "",
-        _cell(source["open_is_not_the_auction"]) + ".", "",
-        _cell(source["extended_hours_reason"]) + ", so they are not read.", "",
+        _sentence(source["why_not_intraday"]) + ".", "",
+        _sentence(source["denominator_note"]) + ".", "",
+        _sentence(source["open_is_not_the_auction"]) + ".", "",
+        _sentence(source["extended_hours_reason"]) + ", so they are not read.", "",
         f"Generated {packet['generated_at']}. "
         f"{packet.get('api_calls', 0)} vendor calls.", "",
     ]
@@ -320,6 +384,7 @@ def to_html(markdown_text: str, title: str) -> str:
         if not line:
             if in_table:
                 body.append("</table>")
+                body.append("</div>")
                 in_table = False
             continue
         if line.startswith("|"):
@@ -327,6 +392,7 @@ def to_html(markdown_text: str, title: str) -> str:
             if all(set(c) <= set("-: ") for c in cells):
                 continue
             if not in_table:
+                body.append('<div class="tablewrap">')
                 body.append("<table>")
                 in_table = True
                 tag = "th"
@@ -337,6 +403,7 @@ def to_html(markdown_text: str, title: str) -> str:
             continue
         if in_table:
             body.append("</table>")
+            body.append("</div>")
             in_table = False
         if line.startswith("### "):
             body.append(f"<h3>{_inline(line[4:])}</h3>")
@@ -350,6 +417,7 @@ def to_html(markdown_text: str, title: str) -> str:
             body.append(f"<p>{_inline(line)}</p>")
     if in_table:
         body.append("</table>")
+        body.append("</div>")
     return _SHELL.format(title=html.escape(title, quote=False),
                          body="\n".join(body))
 
