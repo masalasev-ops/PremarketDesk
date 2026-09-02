@@ -127,9 +127,29 @@ swing eligible {screen_tally.swing.eligible} of
 WHAT THE LIST LOOKS LIKE TOGETHER, quoted from `list_shape.text` and never
 counted by you. Three sentences, in this order, word for word:
 
-- `list_shape.text.sectors`
+- `list_shape.text.sectors`, which carries its own historical comparison or
+  says in words why there is none. Quote whichever it gives you. A share with
+  no scale beside it is a number a reader cannot read: nine of twelve in one
+  sector may be the most concentrated morning of the month or the fourth this
+  week, and until the record carries [Composition]
+  min_sessions_for_sector_history sessions with a sector on them, the honest
+  answer is that the comparison does not exist yet.
+- `list_shape.text.gap_direction`, the up against down count. Quote it beside
+  the sector line. The score is UNSIGNED, so a falling name can tie a rising
+  one, and this is the mix that makes a score readable. It is also the
+  explanation for an empty watchlist on a heavy down morning, because both
+  screens are long only: on 2026-08-18 eleven of twelve gapped down and nothing
+  could pass, and the report had no way to say so.
 - `list_shape.text.catalyst_classes`
-- `list_shape.text.repeat_appearances`
+- `list_shape.text.repeat_appearances`, which names what the paper rule booked
+  for each repeat on its own prior sessions. THIS IS THE ONLY PLACE THE RECORD
+  SPEAKS ABOUT A NAME IN FRONT OF THE READER, and it is bounded hard. Quote it
+  and add nothing. You may not call two prior sessions a pattern, a tendency, a
+  signal or an edge, may not say a name is "due", and may not let a prior
+  outcome move a conviction: the conviction is in the packet and this sentence
+  is history, not evidence about this morning. Every figure in it travels with
+  its count for that reason. Where the ledger has no answer for a session the
+  sentence says so, and a session with no booked trade is not a loss.
 
 The report has always said a great deal about one candidate at a time and
 nothing about the twelve as a group. Nine of twelve in one sector is a fact

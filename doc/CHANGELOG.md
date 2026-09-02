@@ -15,6 +15,64 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty first: the record speaks about a name, and composition gains a direction and a scale
+
+WHAT A REPEAT DID, and it is read off the RIGHT SESSION. list_shape already
+said MRVL was picked on two of the last five sessions. It now says what the
+paper rule booked on those sessions: 2026-08-28 stopped out at -2.75 percent,
+2026-08-25 held to the close at +0.47. This is the first time the accumulated
+record appears in the morning report as a statement about a name in front of
+the reader rather than about the screen in aggregate.
+
+IT DOES NOT READ picks.mfe_pct, AND THAT IS THE WHOLE CORRECTNESS OF IT. Those
+columns are the obvious ones to reach for and every one of them describes the
+session AFTER the pick. AXTI picked 2026-08-27 opened 70.30 against an entry
+reference of 70.94 and reached 70.85, a miss by 0.13 percent, while its
+mfe_pct reads -7.79 off 2026-08-28's high. A sentence built from those columns
+would publish a figure about the wrong day, in the one place whose entire value
+is that it is about the right one. paper_ledger fetches its own bars for its
+own session, which is why it exists, so paper_trades is the source and a claim
+fails if anyone swaps it back.
+
+THREE STATES AND ONE RULE VERSION. A booked trade has a return, a trigger that
+never fired is not a loss, a row the rule declined on evidence was never asked,
+and where the ledger has no answer the sentence says so rather than printing a
+zero. One version is read, the earliest, because every version books the same
+trades and differs only in position size, so reading two would double every
+count. Fenced to live rows on dates before today, like every other read of that
+table from the morning path.
+
+BOUNDED HARD in both documents. Two prior sessions are not a pattern, a
+tendency, a signal or an edge, a name is never "due", and a prior outcome may
+not move a conviction. Every figure travels with its count for that reason.
+
+THE GAP DIRECTION SPLIT, quoted beside the sector line. The score is unsigned
+and rule 3c already says so, which makes the up against down mix the fact that
+renders a score readable. It is also the explanation for an empty watchlist on
+a heavy down morning, since both screens are long only: 2026-08-18 had eleven
+of twelve gapping down and nothing could pass, and the report had no way to say
+why. On 2026-09-01 it reads twelve of twelve down.
+
+A SCALE FOR THE CONCENTRATION, or the reason there is none. Nine of twelve in
+Information Technology may be the most concentrated morning of the month or the
+fourth this week. The scale needs the sector of every past pick and picks never
+stored one, so the column is added now and the line states in words that the
+comparison does not exist yet, with its session count against [Composition]
+min_sessions_for_sector_history. Twenty, matching [Notable]
+min_sessions_for_move_sigma, which is the other place this project refuses to
+divide by too little history. A median over five sessions is a statistic
+computed correctly over a sample too small to mean anything, which is worse
+than none because it looks like one. A session is one observation: the share is
+taken per session and the median across sessions.
+
+Two ordering defects were caught by reading the output rather than the code.
+The repeat sentence was built before the outcomes were attached, so every line
+read "no booked outcome yet" while the ledger held two trades for MRVL, and
+sector_history was being read from the database twice in one call.
+
+Suite green, no drift. Two claims added. No threshold moved, no score changed,
+and nothing added here reaches eligibility.
+
 ## 2026-09-02, thirtieth: what the headline is about, what the list looks like, and what is missing
 
 Four additions to what the report says. Two are asked of the model and two are

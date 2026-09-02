@@ -254,6 +254,20 @@ setup for the company its peers keep. There is no threshold here and no
 parameter that could become one: the counts are published and the reader
 decides what they mean.
 
+min_sessions_for_sector_history = 20       # SESSIONS, not rows, that must carry a sector
+                                           # before the sector line prints its historical
+                                           # median. picks gained its sector column on
+                                           # 2026-09-02, so every earlier session carries
+                                           # NULL and cannot contribute, and until this
+                                           # many have accumulated the line states in words
+                                           # that the comparison is unavailable. A median
+                                           # over five sessions is a number computed
+                                           # correctly over a sample too small to mean
+                                           # anything, which is worse than no number
+                                           # because it looks like one. Twenty matches
+                                           # [Notable] min_sessions_for_move_sigma, the
+                                           # other place this project refuses to divide by
+                                           # too little history
 repeat_lookback_sessions      = 5          # how many RECORDED SESSIONS back the repeat
                                            # appearance count reaches, counted as distinct
                                            # dates already in picks rather than as calendar

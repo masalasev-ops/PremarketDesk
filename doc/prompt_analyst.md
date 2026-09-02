@@ -231,13 +231,24 @@ each part below is one thing you either did or did not do.
     raised guidance, and beat and cut guidance, are opposite events inside the
     single class `earnings`. Where the headline names no specific event, say
     that it does not rather than supplying one.
-18. Quote `list_shape.text.sectors`, `list_shape.text.catalyst_classes` and
+18a. Quote `list_shape.text.sectors`, `list_shape.text.gap_direction`,
+    `list_shape.text.catalyst_classes` and
     `list_shape.text.repeat_appearances` word for word in the Summary. They say
     what the list looks like together, which is not a property of a candidate
-    and is not visible from a per candidate block. They describe and never
-    screen: you may not write that a concentration makes a name weaker or
-    stronger, because nothing in this system screens a company on the
-    neighbours it keeps. Counted in Python for the reason screen_tally is.
+    and is not visible from a per candidate block. Counted in Python for the
+    reason screen_tally is.
+18b. They describe and never screen. You may not write that a concentration
+    makes a name weaker or stronger, because nothing in this system screens a
+    company on the neighbours it keeps.
+18c. The sector sentence carries its own historical comparison or says why
+    there is none. Quote whichever it gives you and do not supply a comparison
+    of your own.
+18d. The repeat sentence names what the paper rule booked for a repeat on its
+    own prior sessions, and it is the only place the record speaks about a name
+    in front of the reader. Quote it and add nothing. Two prior sessions are
+    not a pattern, a tendency, a signal or an edge, a name is never "due", and
+    a prior outcome may not move a conviction. A session the rule did not trade
+    is not a loss.
 19. Where a candidate's `evidence_missing.text` is not empty, quote it word for
     word as the last line of that candidate's Premarket gappers block. Where it
     is empty, write nothing at all rather than a line saying nothing is

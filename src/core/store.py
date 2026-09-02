@@ -140,6 +140,19 @@ CREATE TABLE IF NOT EXISTS paper_trades (
 # Columns added after the first schema shipped. init() widens existing
 # databases with these so no script depends on another having migrated first.
 _PICKS_LATER_COLUMNS = (
+    # THE VENDOR'S SECTOR FOR THE NAME, recorded so the morning's composition
+    # can one day be compared against its own history rather than left as a
+    # number with no scale. "Nine of twelve in one sector" is a concentrated
+    # morning or an ordinary one and a reader has no way to tell without the
+    # median across past sessions.
+    #
+    # It is a RECORD ONLY. Nothing screens on it, nothing scores on it, and
+    # scan.list_shape reads today's from the packet rather than from here.
+    # This column exists so the comparison becomes possible, and it cannot
+    # answer for a session that closed before it existed: rows written before
+    # this carry NULL, which reads as a session whose sectors were never
+    # recorded and never as a session with no sector.
+    ("sector", "TEXT"),
     # 'live', 'test' or 'reconstructed'. The writer sets it explicitly on
     # every row; NULL can only mean the row predates the column, and every
     # row in the table on migration day (2026-08-14) was test data from

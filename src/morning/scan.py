@@ -3132,6 +3132,153 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
     candidate["swing_failed_unmeasured"] = [key for key, _why, m in swing if not m]
 
 
+NO_SECTOR_HISTORY = (
+    "the record does not carry enough sessions with a sector on them to say "
+    "whether this is a concentrated morning or an ordinary one")
+
+
+def sector_history(session_date: str) -> dict[str, Any]:
+    """The median top sector share across past sessions, or why there is none.
+
+    "Nine of twelve in Information Technology" is a number with no scale. It
+    may be the most concentrated morning of the month or the fourth one this
+    week, and a reader given the figure alone cannot tell which. This is the
+    denominator rule the rest of the project already applies to a rate, applied
+    to a composition instead.
+
+    IT WILL READ UNAVAILABLE FOR A WHILE AND THAT IS THE HONEST ANSWER. picks
+    gained its sector column on 2026-09-02, so every session recorded before
+    that carries NULL and cannot contribute. A median over the handful of
+    sessions that do would be a number computed correctly over a sample too
+    small to mean anything, which is the shape of error this project spends
+    most of its effort avoiding. [Composition] min_sessions_for_sector_history
+    is the floor and the reason is stated in words when it is not met, because
+    a missing comparison a reader is told about is worth more than a present
+    one they cannot trust.
+
+    A SESSION IS ONE OBSERVATION. Twelve candidates from one morning share a
+    market and a macro print, so the statistic is computed per session and then
+    taken across sessions, never over rows pooled together.
+
+    Fenced to live rows before today, like everything else that reads this
+    table from the morning path.
+    """
+    floor = _CRIT.integer("composition", "min_sessions_for_sector_history")
+    with store.session() as connection:
+        store.init(connection)
+        rows = connection.execute(
+            "SELECT date, sector FROM picks WHERE source='live' AND date < ? "
+            "AND sector IS NOT NULL", (session_date,)).fetchall()
+
+    by_session: dict[str, list[str]] = {}
+    for date, sector in rows:
+        by_session.setdefault(date, []).append(sector)
+    shares: list[float] = []
+    for sectors in by_session.values():
+        if not sectors:
+            continue
+        counts: dict[str, int] = {}
+        for sector in sectors:
+            counts[sector] = counts.get(sector, 0) + 1
+        shares.append(max(counts.values()) / len(sectors))
+    shares.sort()
+
+    if len(shares) < floor:
+        return {
+            "sessions": len(shares),
+            "min_sessions": floor,
+            "median_top_sector_share": None,
+            "reason": NO_SECTOR_HISTORY,
+        }
+    middle = len(shares) // 2
+    median = (shares[middle] if len(shares) % 2
+              else (shares[middle - 1] + shares[middle]) / 2)
+    return {
+        "sessions": len(shares),
+        "min_sessions": floor,
+        "median_top_sector_share": round(median, 4),
+        "reason": None,
+    }
+
+
+def prior_outcomes(
+    symbols: list[str], session_date: str, sessions: int
+) -> dict[str, dict[str, Any]]:
+    """What the ledger booked for these names on their own prior sessions.
+
+    THE FIRST TIME THE ACCUMULATED RECORD IS ABOUT A NAME IN FRONT OF THE
+    READER. record_so_far already puts the shape of the whole ledger in the
+    packet, and that is a statement about the screen. This is a statement about
+    MRVL.
+
+    IT READS paper_trades AND NOT THE OUTCOME COLUMNS ON picks, and that choice
+    is the whole correctness of this function. picks.mfe_pct, picks.mae_pct and
+    picks.pm_high_broke_next_day all describe the session AFTER the one the
+    pick was about. AXTI picked 2026-08-27 opened 70.30 against an entry
+    reference of 70.94 and reached 70.85, a miss by 0.13 percent, while its
+    mfe_pct reads -7.79 off 2026-08-28's high of 65.4155. Quoting those columns
+    as "what happened when this name was last picked" would publish a figure
+    about the wrong day, in a sentence whose entire value is that it is about
+    the right one. CRITERIA [Outcomes] records why they are not repointed:
+    doing so rewrites the meaning of every row already in the table.
+
+    paper_ledger fetches its own bars for its own session, which is exactly why
+    it exists, so `session` here is the pick's own date and the outcome is that
+    day's.
+
+    FENCED THE SAME WAY prior_appearances is: live rows only, dates before
+    today. And it reads ONE rule version, the earliest, because every version
+    books the same trades and differs only in position size, so per trade
+    percent returns are identical under all of them and reading two would
+    double every count.
+
+    THREE STATES, NEVER TWO. A row the ledger booked has a return. A row whose
+    trigger never fired has no trade and is not a loss. A row skipped on
+    evidence was never asked. A null is none of the three collapsed together,
+    and the caller states the count of each rather than treating absence as a
+    miss.
+    """
+    if not symbols or sessions <= 0:
+        return {}
+    from night import paper_ledger
+
+    rule = sorted(paper_ledger.rule_versions())[0]
+    with store.session() as connection:
+        store.init(connection)
+        dates = [row[0] for row in connection.execute(
+            "SELECT DISTINCT date FROM picks WHERE source='live' AND date < ? "
+            "ORDER BY date DESC LIMIT ?", (session_date, sessions))]
+        if not dates:
+            return {}
+        marks = ",".join("?" * len(dates))
+        rows = [dict(r) for r in connection.execute(
+            f"SELECT t.* FROM paper_trades t JOIN picks k "
+            f"ON k.date = t.date AND k.ticker = t.ticker "
+            f"WHERE k.source='live' AND t.rule_version = ? "
+            f"AND t.date IN ({marks}) ORDER BY t.date DESC",
+            (rule, *dates))]
+
+    wanted = set(symbols)
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if row["ticker"] not in wanted:
+            continue
+        entry = out.setdefault(row["ticker"], {
+            "rule_version": rule, "booked": [], "never_triggered": [],
+            "skipped": [],
+        })
+        if row.get("skip_reason"):
+            entry["skipped"].append({"date": row["date"],
+                                     "why": row["skip_reason"]})
+        elif row.get("booked") and row.get("pnl_pct") is not None:
+            entry["booked"].append({"date": row["date"],
+                                    "pnl_pct": row["pnl_pct"],
+                                    "exit_reason": row.get("exit_reason")})
+        else:
+            entry["never_triggered"].append({"date": row["date"]})
+    return out
+
+
 def prior_appearances(
     symbols: list[str], session_date: str, sessions: int
 ) -> dict[str, list[str]]:
@@ -3219,6 +3366,18 @@ def list_shape(
         sectors.setdefault(str(name), []).append(bare(candidate["symbol"]))
     ranked_sectors = sorted(sectors.items(), key=lambda kv: (-len(kv[1]), kv[0]))
 
+    # GAP DIRECTION. Up against down, which the score cannot say: rule 3c
+    # already tells the model the score is UNSIGNED, so a falling name can tie
+    # a rising one and the mix is what makes a score readable at all. It is
+    # also the explanation for an empty watchlist on a heavy down morning,
+    # because both screens are long only. On 2026-08-18 eleven of twelve gapped
+    # down and nothing could pass, and the report had no way to say so.
+    directions: dict[str, list[str]] = {}
+    for candidate in candidates:
+        way = candidate.get("gap_direction") or "unknown"
+        directions.setdefault(str(way), []).append(bare(candidate["symbol"]))
+    ranked_directions = sorted(directions.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
     # CATALYST CLASS. The coarse bucket, counted. The report says what each
     # name's class is; this says how much of the morning rests on one kind of
     # news, which is the thing a reader cannot see from twelve separate rows.
@@ -3240,6 +3399,22 @@ def list_shape(
     ]
     repeats.sort(key=lambda r: (-r["sessions"], r["symbol"]))
 
+    # WHAT THE LEDGER BOOKED FOR THOSE PRIOR SESSIONS, attached here and not
+    # below, because the sentence built a few lines down reads it. It was
+    # written below once and every repeat line said "no booked outcome yet"
+    # while the ledger held two trades for MRVL: a sentence that reports
+    # absence when the answer exists is worse than one that omits it.
+    #
+    # repeats carries DISPLAY symbols and the ledger carries vendor ones, so
+    # the lookup tries the qualified form first and the bare one after, rather
+    # than assuming a suffix that other exchanges do not use.
+    outcomes = prior_outcomes(
+        [c["symbol"] for c in candidates], session_date, lookback)
+    by_display = {glossary.bare_ticker(key): value
+                  for key, value in outcomes.items()}
+    for row in repeats:
+        row["outcomes"] = by_display.get(row["symbol"]) or {}
+
     def group_line(ranked: list[tuple[str, list[str]]], what: str) -> str:
         if not ranked:
             return f"0 of {examined} candidates carry a {what}."
@@ -3248,26 +3423,81 @@ def list_shape(
         return (f"{examined} candidates across {len(ranked)} {what} groups: "
                 f"{parts}.")
 
+    # WHAT THOSE PRIOR APPEARANCES DID, per name, in three states. A count
+    # travels with every one of them: two prior sessions is two prior sessions
+    # and REPORT_TEMPLATE forbids the model calling it anything more. Silence
+    # where the ledger has no answer, never a zero standing in for a miss.
+    def what_happened(row: dict[str, Any]) -> str:
+        record = row.get("outcomes") or {}
+        booked = record.get("booked") or []
+        never = record.get("never_triggered") or []
+        skipped = record.get("skipped") or []
+        if not (booked or never or skipped):
+            return (f"{row['symbol']} on {row['sessions']} of them, "
+                    f"{', '.join(row['dates'])}, with no booked outcome yet "
+                    "for any of those sessions")
+        parts: list[str] = []
+        if booked:
+            moves = ", ".join(
+                f"{b['date']} {b['pnl_pct']:+.2f} percent to {b['exit_reason']}"
+                for b in booked)
+            parts.append(f"{len(booked)} the rule traded ({moves})")
+        if never:
+            parts.append(f"{len(never)} where the entry reference was never "
+                         f"reached ({', '.join(n['date'] for n in never)})")
+        if skipped:
+            parts.append(f"{len(skipped)} the rule declined on evidence "
+                         f"({', '.join(s['date'] for s in skipped)})")
+        return (f"{row['symbol']} on {row['sessions']} of them, "
+                f"{', '.join(row['dates'])}: of those, " + "; ".join(parts))
+
     if repeats:
-        detail = "; ".join(
-            f"{r['symbol']} on {r['sessions']} of them, {', '.join(r['dates'])}"
-            for r in repeats)
+        detail = ". ".join(what_happened(r) for r in repeats)
+        rule = next((r["outcomes"].get("rule_version") for r in repeats
+                     if r.get("outcomes")), None)
+        booked_note = (f" Outcomes are the paper rule {rule} booked against "
+                       "that session itself.") if rule else ""
         repeat_line = (
             f"{len(repeats)} of {examined} candidates were also picked inside "
-            f"the last {lookback} recorded sessions: {detail}.")
+            f"the last {lookback} recorded sessions. {detail}.{booked_note}")
     else:
         repeat_line = (
             f"0 of {examined} candidates were picked inside the last "
             f"{lookback} recorded sessions.")
 
+    # THE SCALE FOR THE SECTOR LINE, or the reason there is none. Appended to
+    # that sentence rather than published as a second one, because a figure and
+    # the thing that makes it readable belong in the same breath.
+    history = sector_history(session_date)
+    top_share = (len(ranked_sectors[0][1]) / examined) if ranked_sectors and examined else None
+    if history["median_top_sector_share"] is None:
+        scale = (f" There is no historical comparison for that: "
+                 f"{history['reason']}, {history['sessions']} of the "
+                 f"{history['min_sessions']} needed.")
+    elif top_share is None:
+        scale = ""
+    else:
+        scale = (f" The largest group is {top_share:.0%} of the list, against a "
+                 f"median largest group of "
+                 f"{history['median_top_sector_share']:.0%} across the "
+                 f"{history['sessions']} past sessions the record carries a "
+                 "sector for.")
+
     return {
         "candidates_examined": examined,
         "lookback_sessions": lookback,
+        "sector_history": history,
+        "gap_direction": {label: names for label, names in ranked_directions},
         "sectors": {label: names for label, names in ranked_sectors},
         "catalyst_classes": {label: names for label, names in ranked_classes},
         "repeat_appearances": repeats,
         "text": {
-            "sectors": group_line(ranked_sectors, "sector"),
+            "sectors": group_line(ranked_sectors, "sector") + scale,
+            "gap_direction": (
+                f"{examined} candidates by gap direction: " + ", ".join(
+                    f"{label} {len(names)}" for label, names in ranked_directions)
+                + ". The score is unsigned, so a falling name can tie a rising "
+                "one, and both screens are long only."),
             "catalyst_classes": group_line(ranked_classes, "catalyst class"),
             "repeat_appearances": repeat_line,
         },
@@ -6004,6 +6234,9 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 "score": candidate.get("score"),
                 "conviction": candidate.get("conviction"),
                 "gap_pct": candidate.get("gap_pct"),
+                # RECORD ONLY, off the quote already in the packet, so this
+                # costs no call. See store._PICKS_LATER_COLUMNS.
+                "sector": (candidate.get("quote") or {}).get("sector"),
                 "pm_rvol": candidate.get("pm_rvol"),
                 "pm_float_rotation": candidate.get("pm_float_rotation"),
                 # Which of the two volume measures actually scored this row.

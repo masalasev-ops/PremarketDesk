@@ -28,6 +28,7 @@ than dropped, and is never totalled into the morning's own minutes.
 from __future__ import annotations
 
 import json
+import pathlib
 import re
 import sys
 import tempfile
@@ -334,21 +335,233 @@ _ROLL_CASES = {
 
 _SHAPE_CANDIDATES = [
     {"symbol": "AAA.US", "quote": {"sector": "Information Technology"},
+     "gap_direction": "up",
      "catalyst_class": "earnings", "pm_rvol": 2.0, "pm_window_start": "07:20",
      "pm_window_thin": False, "score": 7.0, "pm_band_state": "thin",
      "catalyst_found": True, "pm_rvol_basis": {"is_lower_bound": True}},
     {"symbol": "BBB.US", "quote": {"sector": "Information Technology"},
+     "gap_direction": "down",
      "catalyst_class": "earnings", "pm_rvol": 3.0, "pm_window_start": "07:20",
      "pm_window_thin": False, "score": 5.0, "pm_band_state": "not flagged",
      "catalyst_found": True, "pm_rvol_basis": {"is_lower_bound": True}},
     # No RVOL at all, so the lower bound question cannot be ASKED of it. This
     # row is what makes the shared/askable split observable.
     {"symbol": "CCC.US", "quote": {"sector": "Health Care"},
+     "gap_direction": "down",
      "catalyst_class": None, "pm_rvol": None, "pm_window_start": "07:41",
      "pm_window_starts_late": True,
      "pm_window_thin": False, "score": 2.0, "pm_band_state": "unknown",
      "catalyst_found": None, "pm_rvol_basis": {}},
 ]
+
+
+def claim_a_prior_outcome_is_read_off_the_right_session(
+        failures: list[str]) -> None:
+    """The record speaks about a name, and it speaks about the correct day.
+
+    THIS IS THE ONE THAT COULD HAVE SHIPPED A WRONG NUMBER QUIETLY. picks holds
+    mfe_pct, mae_pct and pm_high_broke_next_day, they are the obvious columns
+    to reach for, and every one of them describes the session AFTER the one the
+    pick was about. AXTI picked 2026-08-27 opened 70.30 against an entry
+    reference of 70.94 and reached 70.85, a miss by 0.13 percent, while its
+    mfe_pct reads -7.79 off the following day's high of 65.4155. A sentence
+    reading "when this name was last picked its premarket high did not break"
+    built from those columns is a statement about the wrong day, in the one
+    place whose whole value is that it is about the right one.
+
+    paper_ledger fetches its own bars for its own session, which is precisely
+    why it exists, so paper_trades is the source and this claim holds that.
+    CRITERIA [Outcomes] records why the picks columns are not repointed:
+    repointing rewrites the meaning of every row already in the table.
+
+    THREE STATES AGAIN. A booked trade has a return. A trigger that never fired
+    is not a loss. A row skipped on evidence was never asked. Collapsing any
+    two of them turns a morning the rule sat out into a morning it lost.
+
+    And ONE RULE VERSION, the earliest. Every version books the same trades and
+    differs only in position size, so per trade percent returns are identical
+    under all of them and reading two would double every count in the sentence.
+    """
+    from core import store
+    from morning import scan
+
+    with store.session() as connection:
+        store.init(connection)
+        connection.execute("DELETE FROM picks")
+        connection.execute("DELETE FROM paper_trades")
+        for date, ticker, source in (
+                ("2026-01-01", "AAA.US", "live"),
+                ("2025-12-31", "AAA.US", "live"),
+                ("2025-12-30", "AAA.US", "live"),
+                ("2025-12-30", "BBB.US", "reconstructed"),
+                ("2026-01-02", "AAA.US", "live")):
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source) VALUES (?, ?, ?)",
+                (date, ticker, source))
+        for date, ticker, version, booked, pnl, exit_reason, skip in (
+                # One traded, one that never triggered, one refused on
+                # evidence. Three sessions, three states.
+                ("2026-01-01", "AAA.US", "v1", 1, -2.5, "stop", None),
+                ("2025-12-31", "AAA.US", "v1", 0, None, "trigger never fired", None),
+                ("2025-12-30", "AAA.US", "v1", 0, None, None, "fill implausible"),
+                # A second rule version over the same trade. Reading both
+                # would report two trades where one happened.
+                ("2026-01-01", "AAA.US", "v2", 1, -2.5, "stop", None),
+                # A reconstruction, which nobody ever read.
+                ("2025-12-30", "BBB.US", "v1", 1, 9.9, "session close", None)):
+            connection.execute(
+                "INSERT INTO paper_trades (date, ticker, rule_version, booked, "
+                "pnl_pct, exit_reason, skip_reason) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (date, ticker, version, booked, pnl, exit_reason, skip))
+        connection.commit()
+
+    got = scan.prior_outcomes(["AAA.US", "BBB.US"], "2026-01-02", 5)
+    record = got.get("AAA.US") or {}
+    if [b["date"] for b in record.get("booked") or []] != ["2026-01-01"]:
+        failures.append(
+            f"the booked sessions read {record.get('booked')}. One trade was "
+            "booked, under two rule versions, and reading both would report it "
+            "twice")
+    if [n["date"] for n in record.get("never_triggered") or []] != ["2025-12-31"]:
+        failures.append(
+            f"the untriggered sessions read {record.get('never_triggered')}. A "
+            "trigger that never fired is its own state and is not a loss")
+    if [s["date"] for s in record.get("skipped") or []] != ["2025-12-30"]:
+        failures.append(
+            f"the skipped sessions read {record.get('skipped')}. A row the rule "
+            "declined on evidence was never asked and is not an outcome")
+    if "BBB.US" in got:
+        failures.append(
+            "a reconstruction reached the prior outcomes, and no reader ever "
+            f"saw that session published: {got.get('BBB.US')}")
+
+    # The sentence says nothing rather than reporting a zero, where the ledger
+    # has no answer at all.
+    with store.session() as connection:
+        connection.execute("DELETE FROM paper_trades")
+        connection.commit()
+    silent = scan.list_shape(
+        [{"symbol": "AAA.US", "quote": {"sector": "X"},
+          "catalyst_class": "earnings", "gap_direction": "up"}],
+        "2026-01-02")["text"]["repeat_appearances"]
+    if "no booked outcome yet" not in silent:
+        failures.append(
+            "a repeat with no ledger row does not say so, so an absent outcome "
+            f"reads as an outcome: {silent!r}")
+
+    # THE SOURCE ITSELF. If someone later swaps paper_trades for the picks
+    # outcome columns, this is what fails.
+    source = pathlib.Path(scan.__file__).read_text(encoding="utf-8")
+    body = source.split("def prior_outcomes(", 1)[1].split("\ndef ", 1)[0]
+    for wrong in ("mfe_pct", "mae_pct", "pm_high_broke_next_day"):
+        if f'"{wrong}"' in body or f"t.{wrong}" in body:
+            failures.append(
+                f"prior_outcomes reads picks.{wrong}, which describes the "
+                "session AFTER the pick. The whole value of this sentence is "
+                "that it is about the pick's own session")
+    if "paper_trades" not in body:
+        failures.append("prior_outcomes does not read paper_trades, which is "
+                        "the only table holding the pick's own session")
+
+    with store.session() as connection:
+        connection.execute("DELETE FROM picks")
+        connection.commit()
+
+    print("  prior what a repeat did is read off the paper ledger's own "
+          "session, in three states, under one rule version, and never off the "
+          "outcome columns that describe the next day")
+
+
+def claim_the_composition_carries_direction_and_a_scale(
+        failures: list[str]) -> None:
+    """Up against down, and a share with something to read it against.
+
+    THE DIRECTION SPLIT IS NOT DECORATION. Rule 3c tells the model the score is
+    unsigned, so a falling name can tie a rising one, and the mix is what makes
+    that readable. It is also the whole explanation for an empty watchlist on a
+    heavy down morning, because both screens are long only: on 2026-08-18
+    eleven of twelve gapped down and nothing could pass, and the report had no
+    way to say why.
+
+    THE SCALE IS THE DENOMINATOR RULE APPLIED TO A COMPOSITION. Nine of twelve
+    in one sector may be the most concentrated morning of the month or the
+    fourth this week. picks gained its sector column on 2026-09-02, so for now
+    the honest answer is that the comparison does not exist yet, and this holds
+    that the sentence SAYS SO rather than printing a median over five sessions
+    or omitting the question. A statistic computed correctly over a sample too
+    small to mean anything is worse than none, because it looks like one.
+
+    A session is one observation: the share is taken per session and the median
+    across sessions, never over rows pooled together.
+    """
+    from core import store
+    from morning import analyst, scan
+
+    with store.session() as connection:
+        store.init(connection)
+        connection.execute("DELETE FROM picks")
+        connection.commit()
+
+    candidates = [
+        {"symbol": "AAA.US", "quote": {"sector": "Tech"},
+         "catalyst_class": "earnings", "gap_direction": "up"},
+        {"symbol": "BBB.US", "quote": {"sector": "Tech"},
+         "catalyst_class": "earnings", "gap_direction": "down"},
+        {"symbol": "CCC.US", "quote": {"sector": "Health"},
+         "catalyst_class": "none", "gap_direction": "down"},
+    ]
+    shape = scan.list_shape(candidates, "2026-01-02")
+
+    if shape["gap_direction"] != {"down": ["BBB", "CCC"], "up": ["AAA"]}:
+        failures.append(f"the direction split reads {shape['gap_direction']}")
+    line = shape["text"]["gap_direction"]
+    if "3 candidates" not in line or "down 2" not in line or "up 1" not in line:
+        failures.append(f"the direction sentence carries no counts against its "
+                        f"denominator: {line!r}")
+    if "unsigned" not in line:
+        failures.append(
+            "the direction sentence does not say the score is unsigned, which "
+            f"is the reason the split is worth printing: {line!r}")
+
+    # No history at all, so the sector line says why rather than going quiet.
+    sectors = shape["text"]["sectors"]
+    if "no historical comparison" not in sectors:
+        failures.append(
+            "the sector sentence carries neither a comparison nor a reason "
+            f"there is none: {sectors!r}")
+    if shape["sector_history"]["median_top_sector_share"] is not None:
+        failures.append(
+            "a median was computed over an empty record: "
+            f"{shape['sector_history']}")
+
+    # Under the floor, it still refuses. One session is not twenty.
+    with store.session() as connection:
+        for ticker in ("AAA.US", "BBB.US"):
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source, sector) "
+                "VALUES (?, ?, 'live', 'Tech')", ("2026-01-01", ticker))
+        connection.commit()
+    thin = scan.sector_history("2026-01-02")
+    if thin["median_top_sector_share"] is not None:
+        failures.append(
+            f"a median printed over {thin['sessions']} session(s) against a "
+            f"floor of {thin['min_sessions']}: {thin}")
+    if thin["sessions"] != 1:
+        failures.append(f"the session count is {thin['sessions']} and one "
+                        "session carries a sector")
+
+    for key, sentence in shape["text"].items():
+        for hit in analyst.quantifier_violations(sentence):
+            failures.append(
+                f"list_shape's {key} sentence asserts {hit['quantifier']!r} "
+                f"near {hit['set_word']!r}: {sentence!r}")
+
+    with store.session() as connection:
+        connection.execute("DELETE FROM picks")
+        connection.commit()
+
+    print("  composition the up and down counts carry their denominator, and "
+          "the sector share states why it has nothing to be read against yet")
 
 
 def claim_the_list_shape_is_counted_and_never_derived(
@@ -396,7 +609,10 @@ def claim_the_list_shape_is_counted_and_never_derived(
                 f"list_shape's {key} sentence asserts {hit['quantifier']!r} "
                 f"near {hit['set_word']!r} and the report quotes it word for "
                 f"word: {line!r}")
-        if f"of {len(_SHAPE_CANDIDATES)}" not in line and "across" not in line:
+        # Three shapes carry the denominator: "N of M", "M candidates
+        # across K groups", and "M candidates by ...". What matters is that
+        # the population is stated, never that a particular wording is.
+        if str(len(_SHAPE_CANDIDATES)) not in line:
             failures.append(f"list_shape's {key} sentence carries no "
                             f"denominator: {line!r}")
 
@@ -1016,6 +1232,8 @@ def main() -> int:
     claim_the_template_does_not_ask_for_the_false_sentences(failures)
     claim_the_roll_selects_by_the_predicate_it_names(failures)
     claim_the_list_shape_is_counted_and_never_derived(failures)
+    claim_a_prior_outcome_is_read_off_the_right_session(failures)
+    claim_the_composition_carries_direction_and_a_scale(failures)
     claim_a_repeat_appearance_reads_only_live_rows_before_today(failures)
     claim_a_gap_the_whole_list_shares_is_said_once(failures)
     claim_the_instructions_ask_for_the_shape_and_the_absence(failures)
