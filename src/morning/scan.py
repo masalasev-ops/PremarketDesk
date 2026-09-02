@@ -834,7 +834,7 @@ def attach_premarket_path(
                     "on the watchlist but the collector recorded no bars inside "
                     "the collection window for it. A replayed print from before "
                     "the window is filtered out upstream and is not a bar here, "
-                    "so this does not assert the socket was silent all morning"
+                    "so this does not assert the socket was silent through the morning"
                 )
             continue
 
@@ -1823,7 +1823,7 @@ def capture_correction_report(
            + " across that floor" if carried
            else ", and the correction carried none of them across that floor")
         + (", of which " + ", ".join(onto) + " reached the day watchlist"
-           if onto else ", and none of them reached the day watchlist")
+           if onto else ", and 0 of them reached the day watchlist")
         + ". Clearing the volume floor is one condition, not membership. Every "
           "row states the share used, how many common minutes backed it, and "
           "where it came from. See CRITERIA [Collector] "

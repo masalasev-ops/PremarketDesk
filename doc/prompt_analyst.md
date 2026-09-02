@@ -129,9 +129,14 @@ each part below is one thing you either did or did not do.
 
     Banned words: all, each, every, majority, most, no, none
 
-    Set words: candidate, candidates, name, names, watchlist, watchlists
+    Set words: candidate, candidates, watchlist, watchlists
 
-    A banned word within six words of a set word, either side, is refused.
+    A banned word within six words of a set word, either side, is refused,
+    and `no` within two words ahead of one, because it is a determiner and
+    governs the noun right after it. Until 2026-09-02 the set words included
+    name and names and `no` reached six words forward; two of the seven flags
+    judged by then matched `no bars` and `no trade` on that reach, about one
+    ticker each, and "that name" is how ordinary prose refers to one ticker.
     This is checked mechanically and a report that breaks it is rejected
     before delivery, in the same way the watchlist header rows are both
     instructed here and verified in code.

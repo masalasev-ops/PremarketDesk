@@ -138,12 +138,24 @@ evidence behind them.
 | Covers | This morning only, except one section | Today's session so far | A rolling trailing 7 days |
 | Answers | Which names gapped, on what, and what the evidence behind each is worth | What this morning's picks actually did, and what else moved that the morning never named | Did the machine run, is its data trustworthy, what did it publish, what did it cost, and is the score ordering anything |
 | Read it | Before 09:30, ideally around 08:50 | Any time after 12:00 | Whenever. Nothing in it is time critical |
-| Written by | The claude CLI, from a packet | Nothing. It is rendered | Nothing. It is rendered |
+| Written by | Python, from the packet, with a handful of prose slots filled by the claude CLI | Nothing. It is rendered | Nothing. It is rendered |
 
-The morning report is the only one a model writes. The midday report asks
-closed questions, a pick triggered or it did not, a name moved or it did not,
-so it is laid out directly from arithmetic with no narrative pass, no
-containment check and nothing that could hallucinate.
+The morning report is the only one a model touches, and since 2026-09-02 it
+does not write it. Python writes the whole report from the packet, every
+table, count and quoted sentence, and leaves marked slots for the prose only a
+model can write: the mood phrase in the title, the market tone, one sentence
+under each quoted headline saying who it is about, one write up per name on a
+watchlist closing with the line that says what would prove it wrong, and one
+sentence on the rate picture. The model returns the report with the slots
+filled; the fixed text that ships is the copy Python wrote, the model's answer
+is used only to find what it wrote in the slots, and the containment and
+quantifier guards read that prose. Before 2026-09-02 the model wrote the whole
+page from a 68 KB instruction set, and at least 60 percent of what survived
+the guard was packet text copied under instruction. CRITERIA [Analyst] mode
+switches between the two. The midday report asks closed questions, a pick
+triggered or it did not, a name moved or it did not, so it is laid out
+directly from arithmetic with no narrative pass, no containment check and
+nothing that could hallucinate.
 
 The weekly page is not weekly in cadence, only in span. It is rebuilt from
 scratch every night, so it always covers the last seven days ending yesterday.

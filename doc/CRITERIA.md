@@ -1861,7 +1861,7 @@ narrates numbers already decided in Python, so these are operational knobs
 like the Api section above, not screen criteria.
 
 model                         = opus       # owner's standing choice, re-asserted 2026-08-13 evening
-effort                        = medium     # compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
+effort                        = low        # re-measured 2026-09-02 in slots mode against medium on the 2026-09-01 packet: low 134s and 12,955 output tokens, medium 156s and 15,316, both clean on the first attempt with the same slot prose quality, so the 2026-08-14 finding below no longer applies to a job with five kinds of slot to fill. See the slots note. [was medium: compared against low on the 2026-08-13 packet (2026-08-14): medium covered all 12 candidates individually in Technical signals where low compressed six into one vague sentence, and its traps section gave actionable per-name instructions; ~25s slower, worth it. Default (high) effort remains measured at ~340s, not affordable.
 timeout_s                     = 1007       # 3x the slowest morning on record, 335.7s on 2026-08-27. See the timeout note below.
                                            # [corrected 2026-08-29: was 537, itself 3x the 178.9s of 2026-08-19 when it was
                                            # set on 2026-08-20. Four scheduled mornings overtook that and the multiple had
@@ -1878,7 +1878,66 @@ quantifier_guard              = enforcing  # warn: log and print flags, deliver 
                                            # [corrected 2026-08-28: was warn, from 2026-08-18. The three conditions below
                                            # are met. Flipping does not widen the clock budget: the worst case was already
                                            # computed at two CLI runs, 09:03:13, in the timeout note above.]
+mode                          = slots      # freeform: the model writes the whole report from REPORT_TEMPLATE.md. slots: Python writes the report (analyst.fallback_report with slots=True) and the model fills the marked prose slots only, from doc/prompt_slots.md. Added 2026-09-02 as freeform and flipped to slots the same day on the hand runs recorded in the slots note below. An unrecognised value is treated as freeform and says so.
 prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2, Q3, Q4, YOY, QOQ, EPS, ARR, GAAP, IPO, CEO, CFO, COO, CTO, FDA, SEC, FOMC, GDP, CPI, PPI, PCE, ISM, ADP, ETF, NYSE, USD, EUR, RVOL, VWAP, OHLCV, NOT, AND, THE, ALL, ON, SO, IT, AI, A, I
+
+### The slots note
+
+mode = slots since 2026-09-02. Under it the narrative pass does not write the
+report. analyst.fallback_report, the same function that has always written
+the plain table on a morning the model failed, writes the whole report with
+slots=True, leaving marked slots for five kinds of prose: the mood phrase in
+the title, the market tone at the top of Summary, one sentence under each
+quoted headline in Premarket gappers saying who it is about, one write up per
+day or swing eligible candidate in Technical signals closing with the
+invalidation line, and one sentence on the rate picture. The model is handed
+doc/prompt_slots.md, the skeleton and a projected packet (analyst.project_packet,
+an allowlist of the fields the slots read), and returns the report with the
+slots filled. analyst.check_slots fits the answer back onto the skeleton: the
+fixed text that ships is Python's, the model's copy is used only to locate the
+slot texts, a rewrapped line is forgiven, a deleted or reworded fixed segment
+is a violation answered by one regeneration and then the plain report, and a
+slot left empty, carrying a heading, a table row or a leftover marker, or a
+write up without the invalidation lead in, is a violation by name. The
+quantifier guard reads the slot texts in the narration loop and the finished
+page in the final pass, where a hit in Python's own sentences is logged as
+annotated and said on the disclaimer rather than costing a narrative the
+model did not write.
+
+Measured on hand runs of archived packets, model opus, first attempt clean
+in every case:
+
+| packet | mode | effort | CLI seconds | output tokens | cache write tokens | cost equivalent |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| 2026-09-01 | freeform | medium | 227 to 359 | 20,013 to 30,951 | 86,148 | 1.43 to 1.74 |
+| 2026-09-01 | slots | medium | 156 | 15,316 | 32,257 | 0.73 |
+| 2026-09-01 | slots | low | 134 | 12,955 | 32,257 | 0.67 |
+| 2026-08-31 | freeform | medium | 207 | 18,083 | 43,583 | 0.92 |
+| 2026-08-31 | slots | low | 97 | 8,754 | 15,998 | 0.39 |
+
+The input falls by nearly two thirds, the output by a third to a half, and
+the clock by half. Output stays above the visible slot prose because the
+model still thinks before it writes; effort low costs nothing visible in
+slots mode and is the setting above. The report itself is not shorter: the
+skeleton carries every table, count and quoted sentence the template asked
+the model to copy, and those are now written once, by the code that computed
+them.
+
+The first slots hand run did not ship, and why is worth keeping. Its first
+attempt tripped the quantifier guard on a sentence the SCAN had written into
+gaps_to_fill and the skeleton had quoted, because the guard read the whole
+assembled page; its second attempt altered fixed text after the last slot,
+very likely repairing two rendering defects in the skeleton itself, a dict
+printed where a symbol belonged and a stray regex escape. All three were
+fixed before the second run: the guard reads the slot texts in the loop, the
+two defects are gone, and the rejected answer is now kept beside the report as
+report.slots-rejected-N.md so the next such failure can be read rather than
+inferred.
+
+What freeform keeps: the whole of REPORT_TEMPLATE.md and prompt_analyst.md,
+which remain the specification of the report the skeleton renders and the
+place the reasoning behind every sentence lives. Setting mode back to
+freeform restores the old path unchanged.
 
 ### The timeout note, and why the number moved
 
@@ -2115,7 +2174,20 @@ So the population that produced both flags is the one this pass removed.
 
 What is NOT settled: the word list itself. The review scheduled for a month
 after 2026-08-18 still stands, `no` and `each` are still the words most
-likely to move, and a sample of two is not a rate. Enforcing changes what a
+likely to move, and a sample of two is not a rate.
+[2026-09-02: the word list moved, on the seven judged flags rather than the
+twenty this note wanted, because the 2026-09-01 scheduled morning fell to
+the plain table on two of them. Set words are candidate, candidates,
+watchlist and watchlists: name and names are out, since "that name" is how
+prose refers to one ticker and no judged flag on those words was about the
+set. `no` reaches two words forward rather than six, because it governs the
+noun after it. Measured against the seven judged flags: ids 1 and 3, the two
+DECISIONS 2026-09-01 ninth calls shape A, no longer fire; ids 2, 4, 5, 6 and
+7, the true universals over `candidate`, still do. The guard stays enforcing.
+The mode knob above is the larger change: under slots the guard scans the
+model's slot prose and this file's own sentences, a few hundred words, so the
+population that produced the false positives, twelve paragraphs of freehand
+about the set, is gone with the essay.] Enforcing changes what a
 flag costs, not how often the guard is right, and if the plain table starts
 appearing on mornings a reader disagrees with, the word list is the thing to
 tune and this knob is the thing to put back to `warn` while that happens.

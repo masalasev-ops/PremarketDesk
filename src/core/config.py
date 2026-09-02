@@ -61,6 +61,7 @@ WATCHLIST_PATH = DATA_DIR / "watchlist.json"
 
 REPORT_TEMPLATE_PATH = DOC_DIR / "REPORT_TEMPLATE.md"
 ANALYST_PROMPT_PATH = DOC_DIR / "prompt_analyst.md"
+SLOTS_PROMPT_PATH = DOC_DIR / "prompt_slots.md"
 
 # The four working directories, named rather than captured. ensure_dirs()
 # resolves each name against this module at CALL time, and that is the whole

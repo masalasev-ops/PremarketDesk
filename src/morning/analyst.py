@@ -102,8 +102,266 @@ def _scrubbed_env() -> dict[str, str]:
 
 _RULE = "----------------------------------------------------------------"
 
+# ------------------------------------------------- the two modes
+#
+# freeform: the model is handed prompt_analyst.md, REPORT_TEMPLATE.md and the
+# packet, and writes the whole report. The shape of this project from
+# 2026-08-13 to 2026-09-02.
+#
+# slots: Python writes the report (fallback_report with slots=True) and the
+# model is handed prompt_slots.md, that skeleton and a projected packet, and
+# fills the marked slots. The narrative that survived the guard on 2026-08-31
+# was at least 60 percent packet text copied under instruction, the
+# instruction set was 68 KB, and three quarters of the paid output was the
+# model reasoning about 28 rules. In slots mode the model writes the few
+# hundred words only a model can write and the guards read those.
+
+MODE_FREEFORM = "freeform"
+MODE_SLOTS = "slots"
+
+SLOT_MOOD = "MOOD"
+SLOT_TONE = "TONE"
+SLOT_HEADLINE = "HEADLINE"
+SLOT_SETUP = "SETUP"
+SLOT_RATES = "RATES"
+
+_MARKER_RE = re.compile(r"\{\{([A-Z]+)((?::[A-Z0-9.]+)*)\}\}")
+
+
+def slot(name: str, *args: str) -> str:
+    """The marker for one slot, `{{NAME}}` or `{{NAME:ARG:ARG}}`."""
+    return "{{" + ":".join((name, *args)) + "}}"
+
+
+def report_mode() -> str:
+    """CRITERIA [Analyst] mode, with an unknown value read as freeform, aloud."""
+    value = _CRIT.text("analyst", "mode").strip().lower()
+    if value in (MODE_FREEFORM, MODE_SLOTS):
+        return value
+    print(f"analyst: CRITERIA analyst.mode is {value!r}, which is neither "
+          f"{MODE_FREEFORM!r} nor {MODE_SLOTS!r}; treating it as {MODE_FREEFORM}")
+    return MODE_FREEFORM
+
+
+# The skeleton the model is filling this morning, set by write_report in
+# slots mode and read by _compose_stdin. Module state for the same reason
+# RunBudget is: invoke_claude(packet_text, correction) is stubbed by two
+# argument lambdas in three test modules.
+_skeleton: str | None = None
+
+
+def render_skeleton(packet: dict[str, Any]) -> str:
+    """The report with its slots open, for the model to fill."""
+    return fallback_report(packet, "", slots=True)
+
+
+def markers_in(text: str) -> list[str]:
+    """Every slot marker in a document, in order, with duplicates kept."""
+    return [match.group(0) for match in _MARKER_RE.finditer(text)]
+
+
+def check_slots(skeleton: str, received: str) -> tuple[str | None, dict[str, str], list[str]]:
+    """Fit the model's answer back onto the skeleton it was sent.
+
+    Returns (assembled_report, slot_texts, violations). The fixed text of the
+    shipped report comes from the SKELETON, never from the model's copy of
+    it: the model's answer is used only to locate what it wrote between the
+    fixed segments, so a stray reworded sentence outside a slot cannot reach
+    the page. Each fixed segment is searched for as its own words with any
+    whitespace between them, which forgives a rewrapped line and nothing
+    else. A segment that cannot be found is a violation, and so is a slot
+    filled with nothing, with a heading, with a table row, with a leftover
+    marker, or a SETUP slot missing the invalidation lead in.
+
+    On violations the assembled report is None and the caller regenerates
+    with the list, or falls back when the budget is spent.
+    """
+    violations: list[str] = []
+    pieces = _MARKER_RE.split(skeleton)
+    # re.split with two groups yields: fixed, name, args, fixed, name, args, ...
+    fixed = pieces[0::3]
+    names = pieces[1::3]
+    args = pieces[2::3]
+    markers = [f"{{{{{n}{a}}}}}" for n, a in zip(names, args)]
+    if not markers:
+        return skeleton, {}, ["the skeleton carries no slots"]
+
+    cursor = 0
+    starts: list[int] = []
+    ends: list[int] = []
+    for index, segment in enumerate(fixed):
+        tokens = segment.split()
+        if not tokens:
+            # Two markers back to back, or a marker at the very edge. Treat
+            # the boundary as the current cursor.
+            starts.append(cursor)
+            ends.append(cursor)
+            continue
+        pattern = re.compile(r"\s+".join(re.escape(t) for t in tokens))
+        match = pattern.search(received, cursor)
+        if match is None:
+            near = markers[index] if index < len(markers) else markers[-1]
+            # Slots are named without their braces in every message, because
+            # a message can reach the fallback's disclaimer and a brace pair
+            # there reads as a marker the fallback failed to fill.
+            violations.append(
+                f"the fixed text just {'before' if index < len(markers) else 'after'} "
+                f"slot {near.strip('{}')} was altered or dropped; the report must be "
+                "returned with every character outside a slot exactly as it arrived")
+            return None, {}, violations
+        starts.append(match.start())
+        ends.append(match.end())
+        cursor = match.end()
+
+    slot_texts: dict[str, str] = {}
+    for index, marker in enumerate(markers):
+        label = f"slot {marker.strip('{}')}"
+        text = received[ends[index]:starts[index + 1]].strip()
+        text = "\n".join(line.rstrip() for line in text.splitlines()).strip()
+        if not text:
+            violations.append(f"{label} was left empty")
+            continue
+        if _MARKER_RE.search(text):
+            violations.append(f"{label} still carries a marker: "
+                              f"{_MARKER_RE.sub(lambda m: m.group(0).strip('{}'), text[:80])!r}")
+            continue
+        if any(line.lstrip().startswith(("#", "|", "```")) for line in text.splitlines()):
+            violations.append(f"{label} carries a heading, a table row or a fence, "
+                              "which slot prose may not")
+            continue
+        if marker.startswith("{{" + SLOT_SETUP) and INVALIDATION_MARKER not in text:
+            violations.append(f"{label} does not close with the line beginning "
+                              f"{INVALIDATION_MARKER!r}")
+            continue
+        slot_texts[marker] = text
+
+    if violations:
+        return None, slot_texts, violations
+    assembled = skeleton
+    for marker, text in slot_texts.items():
+        assembled = assembled.replace(marker, text, 1)
+    return assembled, slot_texts, []
+
+
+def slot_correction(violations: list[str]) -> str:
+    """The note appended when a slots answer is asked for again."""
+    lines = [
+        "STOP. Your previous answer to this exact request was REJECTED before "
+        "anybody read it, and you are asked for it again from the beginning.",
+        "",
+        "The report was returned with its fixed text altered, or with a slot "
+        "filled wrongly. Rule 2 and rule 3 of the slots prompt are the whole "
+        "of what went wrong:",
+        "",
+    ]
+    lines += [f"  {v}" for v in violations]
+    lines += [
+        "",
+        "Return the report exactly as it arrived, with each slot replaced by "
+        "prose and nothing else changed. This is the last attempt: if the next "
+        "answer is rejected too, the morning ships with the slots filled by fixed "
+        "sentences and no narrative at all.",
+    ]
+    return "\n".join(lines)
+
+
+# ------------------------------------------------- the packet projection
+#
+# What is piped is not the packet on disk. packet.json stays whole; the model
+# is handed a projection with the fields the report never quotes removed,
+# because the packet is 28k to 71k tokens and the instructions are 15k, and
+# a third of the packet is basis blocks, URLs and pool evidence no section
+# names. The containment allowed set (_packet_uppercase_tokens) still reads
+# the full packet, which is why it takes packet_text separately.
+
+# Freeform: a denylist, because REPORT_TEMPLATE.md names most of the packet.
+# Each path is one the template does not name; the comment says which section
+# would have needed it.
+_FREEFORM_DROP_CANDIDATE_KEYS = (
+    "pool_evidence",          # the pool's reasons; the report quotes pool_tier only
+    "pool_tier_reason",
+    "prior_close_quoted",     # the quote endpoint's prior close, superseded by prior_close
+    "provisional_gap_pct",    # the ranking's provisional gap, superseded by gap_pct
+    "gap_2session",           # the notable movers section carries its own two session leg
+    "gap_3session",
+    "avg_dollar_volume_20d",  # a discovery ranking key, no section prints it
+    "headline_polarity",      # trap_basis carries the counts the template quotes
+)
+_FREEFORM_DROP_HEADLINE_KEYS = ("url", "sentiment")
+_FREEFORM_DROP_TOP_KEYS: tuple[str, ...] = ()
+
+# Slots: an allowlist, because the skeleton already carries the rest.
+_SLOTS_KEEP_TOP_KEYS = (
+    "session_date", "generated_at", "market_snapshot", "economic",
+    "screen_tally", "score_roll", "list_shape", "candidates",
+)
+_SLOTS_KEEP_CANDIDATE_KEYS = (
+    "symbol", "gap_pct", "gap_direction", "price", "prior_close", "prior_high",
+    "pm_high", "pm_low", "pm_vwap", "pm_rvol", "pm_rvol_reason",
+    "pm_float_rotation", "volume_measure_used", "pm_window_starts_late",
+    "pm_window_thin", "pm_window_thin_reason", "score", "conviction",
+    "score_components", "day_eligible", "swing_eligible", "entry_ref",
+    "stop_ref", "catalyst_class", "catalyst_found", "catalyst_why",
+    "headlines", "evidence_missing", "prior_close_disagreement_pct",
+)
+_SLOTS_KEEP_HEADLINE_KEYS = ("title", "publisher", "published_at", "tags", "article_scope")
+_SLOTS_KEEP_QUOTE_KEYS = ("name", "twoHundredDayAveragePrice", "marketCap", "sector")
+
+
+def project_packet(packet: dict[str, Any], mode: str) -> dict[str, Any]:
+    """The packet as piped to the model, for one mode. packet.json is untouched."""
+    projected = json.loads(json.dumps(packet))
+    if mode == MODE_SLOTS:
+        projected = {k: v for k, v in projected.items() if k in _SLOTS_KEEP_TOP_KEYS}
+        kept: list[dict[str, Any]] = []
+        for candidate in projected.get("candidates") or []:
+            slim = {k: v for k, v in candidate.items() if k in _SLOTS_KEEP_CANDIDATE_KEYS}
+            quote = candidate.get("quote") or {}
+            slim["quote"] = {k: v for k, v in quote.items() if k in _SLOTS_KEEP_QUOTE_KEYS}
+            slim["headlines"] = [
+                {k: v for k, v in (head or {}).items() if k in _SLOTS_KEEP_HEADLINE_KEYS}
+                for head in (candidate.get("headlines") or [])]
+            basis = candidate.get("pm_rvol_basis") or {}
+            if basis.get("is_lower_bound") is not None:
+                slim["pm_rvol_is_lower_bound"] = basis.get("is_lower_bound")
+            kept.append(slim)
+        projected["candidates"] = kept
+        return projected
+    for key in _FREEFORM_DROP_TOP_KEYS:
+        projected.pop(key, None)
+    for candidate in projected.get("candidates") or []:
+        for key in _FREEFORM_DROP_CANDIDATE_KEYS:
+            candidate.pop(key, None)
+        for head in candidate.get("headlines") or []:
+            for key in _FREEFORM_DROP_HEADLINE_KEYS:
+                head.pop(key, None)
+    correction = projected.get("capture_correction")
+    if isinstance(correction, dict):
+        correction.pop("rows", None)
+    return projected
+
 
 def _compose_stdin(packet_text: str, correction: str | None = None) -> str:
+    try:
+        packet_text = json.dumps(project_packet(json.loads(packet_text), report_mode()),
+                                 indent=1)
+    except (ValueError, TypeError):
+        # Not JSON, so nothing to project. The suite pipes plain strings here.
+        pass
+    if _skeleton is not None:
+        prompt = config.SLOTS_PROMPT_PATH.read_text(encoding="utf-8")
+        document = (
+            f"{prompt}\n\n"
+            f"{_RULE}\n\n"
+            "Here is the report, with its slots open:\n\n"
+            f"{_skeleton}\n\n"
+            f"{_RULE}\n\n"
+            "Here is this morning's packet, your only source:\n\n"
+            f"{packet_text}\n"
+        )
+        if correction:
+            document += f"\n{_RULE}\n\n{correction}\n"
+        return document
     prompt = config.ANALYST_PROMPT_PATH.read_text(encoding="utf-8")
     template = config.REPORT_TEMPLATE_PATH.read_text(encoding="utf-8")
     document = (
@@ -391,7 +649,8 @@ def _direction_caveat(packet: dict[str, Any]) -> str:
 
 
 def fallback_report(
-    packet: dict[str, Any], reason: str, cause: str = CAUSE_UNAVAILABLE
+    packet: dict[str, Any], reason: str, cause: str = CAUSE_UNAVAILABLE,
+    slots: bool = False,
 ) -> str:
     """The report the morning gets when the model's answer cannot be used.
 
@@ -399,6 +658,15 @@ def fallback_report(
     skeleton as the template so downstream rendering and reading habits hold.
     The disclaimer line carries the failure reason, because a report that
     silently degraded would be a report that lied about its own provenance.
+
+    WITH slots=True THIS IS ALSO THE SKELETON THE MODEL FILLS. Since
+    2026-09-02, under CRITERIA [Analyst] mode = slots, the narrative pass no
+    longer writes the report: Python writes it, here, and leaves marked slots
+    for the prose only a model can write, which the model replaces and nothing
+    else. The two documents are one function on purpose. The fallback used to
+    be the shape the report fell to when the model failed; now it is the shape
+    the report always has, with the slots filled by fixed sentences on the
+    morning the model cannot fill them. See render_skeleton and check_slots.
 
     Its prose is written in counts rather than quantifiers, for the same
     reason the template is: "0 of 12" carries the denominator that "none are
@@ -427,16 +695,24 @@ def fallback_report(
 
     lines: list[str] = []
     add = lines.append
-    add(_FALLBACK_TITLES.get(cause, _FALLBACK_TITLES[CAUSE_UNAVAILABLE]))
+    if slots:
+        add(f"# PremarketDesk: {slot(SLOT_MOOD)}")
+    else:
+        add(_FALLBACK_TITLES.get(cause, _FALLBACK_TITLES[CAUSE_UNAVAILABLE]))
     add("")
     add(f"{packet.get('session_date')}, packet generated {packet.get('generated_at')}, "
         "generated by PremarketDesk.")
     add("")
-    disclaimer = (
-        "Nothing here is advice, the screen thresholds are unvalidated seed values, "
-        f"{cause} ({reason}), so this is the deterministic "
-        "fallback built straight from packet.json"
-    )
+    if slots:
+        disclaimer = ("Nothing here is advice, the screen thresholds are unvalidated "
+                      "seed values, and every figure below was written by Python "
+                      "from packet.json")
+    else:
+        disclaimer = (
+            "Nothing here is advice, the screen thresholds are unvalidated seed values, "
+            f"{cause} ({reason}), so this is the deterministic "
+            "fallback built straight from packet.json"
+        )
     if no_rvol:
         disclaimer += f"; premarket RVOL is null for {', '.join(no_rvol)}"
     if partial:
@@ -489,15 +765,60 @@ def fallback_report(
     add("")
     add("## Summary")
     add("")
+    if slots:
+        # The market tone, the one thing in this section a model writes.
+        add(slot(SLOT_TONE))
+        add("")
 
     def _named(rows: list[dict[str, Any]]) -> str:
         return (": " + ", ".join(_bare(c["symbol"]) for c in rows)) if rows else ""
 
+    # The funnel, quoted from candidate_provenance.ranking where the packet
+    # carries it: what reached the ranking, what cleared the floors, what was
+    # kept, and what the rank cap cut, by name. A reader could not tell a
+    # screened out ticker from a truncated one until the template asked for
+    # this on 2026-08-20, and the fallback never had it at all.
+    ranking = (packet.get("candidate_provenance") or {}).get("ranking") or {}
+    if ranking.get("subscribed_considered") is not None:
+        funnel = (f"Of {ranking.get('subscribed_considered')} names ranked, "
+                  f"{_f(ranking.get('cleared_floors'), 0)} cleared the price and gap "
+                  f"floors and {_f(ranking.get('kept'), 0)} were kept as candidates.")
+        capped = ranking.get("capped_out_symbols") or []
+        if capped:
+            # Rows or bare symbols; the packet has carried rows with a symbol
+            # and a gap since 2026-08-20, and the first slots hand run printed
+            # the dict repr of each before this branch existed.
+            named = []
+            for row in capped:
+                if isinstance(row, dict):
+                    gap = row.get("gap_pct")
+                    named.append(_bare(str(row.get("symbol") or ""))
+                                 + (f" at {_f(gap)} percent" if gap is not None else ""))
+                else:
+                    named.append(_bare(str(row)))
+            funnel += (f" The difference of {len(capped)} was cut by the rank cap of "
+                       f"{_f(ranking.get('cap'), 0)} rather than rejected by a screen: "
+                       + ", ".join(named) + ".")
+        if ranking.get("unrankable"):
+            funnel += (f" {ranking['unrankable']} carried no premarket price or no "
+                       "pool prior close and were never ranked at all.")
+        add(funnel)
     add(f"{len(candidates)} candidates examined. Day eligible {len(day)} of "
         f"{len(candidates)}{_named(day)}. Swing eligible {len(swing)} of "
         f"{len(candidates)}{_named(swing)}. "
-        f"{len(packet.get('gaps_to_fill', []))} gaps recorded in the packet.")
+        f"{len(packet.get('gaps_to_fill', []))} evidence gaps recorded in the "
+        "packet, listed under Skips and traps.")
     add("")
+    # What the list looks like together, quoted from list_shape.text where the
+    # packet carries it. These are counts across the set and are the packet's
+    # job, for the reason screen_tally is.
+    shape_text = (packet.get("list_shape") or {}).get("text") or {}
+    shape_lines = [str(shape_text[key]) for key in
+                   ("sectors", "gap_direction", "catalyst_classes", "repeat_appearances")
+                   if shape_text.get(key)]
+    if shape_lines:
+        add(" ".join(shape_lines))
+        add("")
     # The score is unsigned and this report prints scores. The narrative pass
     # is ordered to say so and this path is the one where the narrative pass
     # did not happen, so the caveat has to be here too: fallback_report writes
@@ -507,19 +828,51 @@ def fallback_report(
     add("")
     add("## Premarket gappers")
     add("")
-    add("| Ticker | Name | Gap % | Price | Prior close | Mkt cap | Catalyst | Top headline |")
-    add("|---|---|---|---|---|---|---|---|")
-    for c in candidates:
-        quote = c.get("quote") or {}
-        heads = c.get("headlines") or []
-        title = (heads[0].get("title") or "")[:80] if heads else ""
-        found = c.get("catalyst_found")
-        catalyst = c.get("catalyst_class") if found else (
-            "none found" if found is False else "unknown")
-        add(f"| {_bare(c['symbol'])} | {_cell(quote.get('name'))} | {_f(c.get('gap_pct'))} "
-            f"| {_f(c.get('price'))} | {_f(c.get('prior_close'))} | {_cap(quote.get('marketCap'))} "
-            f"| {_cell(catalyst)} | {_cell(title)} |")
-    add("")
+    if slots:
+        # One block per candidate, the template's shape: the figures, the
+        # catalyst state in the packet's own words, every headline with its
+        # publisher and time, and under each headline the one sentence prompt
+        # rule 17 asks a model for, which is the slot. The evidence_missing
+        # line closes the block where the packet carries one.
+        for c in candidates:
+            quote = c.get("quote") or {}
+            found = c.get("catalyst_found")
+            state = ("catalyst_found true" if found else
+                     "catalyst_found false, a skip" if found is False else
+                     "catalyst status unknown, the news feed was never checked")
+            add(f"**{_bare(c['symbol'])}, {_cell(quote.get('name')) or 'name not carried'}.** "
+                f"Gap {_f(c.get('gap_pct'))} percent, last {_f(c.get('price'))}, prior "
+                f"close {_f(c.get('prior_close'))}, market cap {_cap(quote.get('marketCap'))}. "
+                f"Catalyst class {c.get('catalyst_class') or 'null'}, {state}. "
+                f"catalyst_why: {_cell(c.get('catalyst_why')) or 'not recorded'}.")
+            heads = c.get("headlines") or []
+            in_window = c.get("headlines_in_window")
+            if heads:
+                if isinstance(in_window, int) and in_window > len(heads):
+                    add(f"{in_window} headlines in the window, the {len(heads)} newest shown.")
+                for number, head in enumerate(heads, start=1):
+                    when = _cell(head.get("published_at")) or "time not carried"
+                    add(f'Headline: "{_cell(head.get("title"))}" '
+                        f"({_cell(head.get('publisher')) or 'publisher unknown'}, {when})")
+                    add(slot(SLOT_HEADLINE, _bare(c["symbol"]), str(number)))
+            missing_text = (c.get("evidence_missing") or {}).get("text")
+            if missing_text:
+                add(str(missing_text))
+            add("")
+    else:
+        add("| Ticker | Name | Gap % | Price | Prior close | Mkt cap | Catalyst | Top headline |")
+        add("|---|---|---|---|---|---|---|---|")
+        for c in candidates:
+            quote = c.get("quote") or {}
+            heads = c.get("headlines") or []
+            title = (heads[0].get("title") or "")[:80] if heads else ""
+            found = c.get("catalyst_found")
+            catalyst = c.get("catalyst_class") if found else (
+                "none found" if found is False else "unknown")
+            add(f"| {_bare(c['symbol'])} | {_cell(quote.get('name'))} | {_f(c.get('gap_pct'))} "
+                f"| {_f(c.get('price'))} | {_f(c.get('prior_close'))} | {_cap(quote.get('marketCap'))} "
+                f"| {_cell(catalyst)} | {_cell(title)} |")
+        add("")
     add("## Day watchlist")
     add("")
     # The header row goes down whether or not there is anything under it. An
@@ -727,6 +1080,104 @@ def fallback_report(
     # column at all, so a scored faller and a scored riser are identical here.
     add(_direction_caveat(packet))
     add("")
+    # The write ups, for the names on a watchlist and for nobody else. In
+    # slots mode each is a slot the model fills and closes with the
+    # invalidation line; otherwise the levels are in the table above and the
+    # sentence says how many write ups there would have been.
+    eligible = [c for c in candidates if c.get("day_eligible") or c.get("swing_eligible")]
+    if slots and eligible:
+        for c in eligible:
+            add(f"**{_bare(c['symbol'])}.** {slot(SLOT_SETUP, _bare(c['symbol']))}")
+            add("")
+    else:
+        add(f"Write ups: {len(eligible)} of {len(candidates)} candidates are on a "
+            "watchlist this morning" + ("." if slots or not eligible else
+                                       ", and the narrative that would describe "
+                                       "them was not written; their levels are in "
+                                       "the table above."))
+        add("")
+    # The measured worth of every RVOL above, from the nightly check. Its one
+    # home since 2026-09-02, on the template's word: the Summary and Skips
+    # sections used to carry it too, and the 2026-09-01 hand run printed the
+    # same figures twice.
+    check = packet.get("collector_volume_check")
+    if check:
+        # The last sentence used to read "so they understate by about that much
+        # again", asserting a direction from a magnitude. The check returned an
+        # UNSIGNED median, and COLLECTOR_VOLUME.md records the collector wrong
+        # in both directions: 2026-08-17 at -88.49 percent against 2026-08-14 at
+        # 3.83 times the vendor in aggregate. On a morning shaped like the
+        # second one this told the reader every RVOL was understated when the
+        # numerator was inflated, which is the direction that flatters volume.
+        # direction_phrase is now computed in scan from the signed median and
+        # the aggregate ratio, and is quoted rather than composed here.
+        signed = check.get("median_signed_pct")
+        ratio = check.get("aggregate_ratio")
+        extra = ""
+        if signed is not None:
+            extra += f", signed median {signed:+.1f}%"
+        if ratio is not None:
+            extra += f", aggregate {ratio:.2f} times the vendor"
+        silent_count = check.get("collector_silent")
+        add(f"Collector volume check, {check.get('day')}: median absolute "
+            f"difference {check.get('median_abs_pct'):.1f}% against the vendor's "
+            f"one minute bars on identical minutes, across "
+            f"{check.get('compared')} symbol(s), "
+            f"{check.get('within_one_percent')} within one percent{extra}"
+            f"{'. STALE, ' + str(check.get('age_days')) + ' days old' if check.get('stale') else ''}"
+            ". That gap is the INPUT to the premarket RVOL figures above, not "
+            "an error inside them: it is divided out per symbol as "
+            "pm_capture_share, so the numerator above is an estimate of "
+            "consolidated volume. What survives is the share's session to "
+            "session dispersion, about 1.5 times against a level of about "
+            "nine. The vendor side of the check reads: "
+            + (check.get("direction_phrase")
+               or "the direction of that disagreement is unknown") + "."
+            + (f" The check never reached {silent_count} subscribed symbol(s)."
+               if isinstance(silent_count, int) and silent_count > 0 else ""))
+    else:
+        add("Collector volume check: not written. The disagreement between the "
+            "collector feed and the vendor feed is unmeasured, which is not the "
+            "same as small.")
+    add("")
+    # The denominator vintages, once for the set. Reusing a cached baseline is
+    # the design, so this is a fact and not a warning; a reader comparing two
+    # RVOLs should know when they are two vintages.
+    aged = []
+    warmed = 0
+    for c in candidates:
+        base = c.get("baseline") or {}
+        age = base.get("age_days")
+        if base.get("computed_today"):
+            warmed += 1
+        elif isinstance(age, (int, float)):
+            aged.append((int(age), _bare(c["symbol"])))
+    if aged or warmed:
+        aged.sort(reverse=True)
+        parts = [f"{symbol} at {age} day{'s' if age != 1 else ''}" for age, symbol in aged]
+        add(f"RVOL denominators: {warmed} baseline(s) warmed this morning and "
+            f"{len(aged)} reused from the cache"
+            + (", " + ", ".join(parts) if parts else "")
+            + ". Reuse is the design under CRITERIA [Baseline] refresh_after_days, "
+            "stated so two ratios of different vintage are read as such.")
+        add("")
+    coverage = packet.get("collector_coverage") or {}
+    silent_nothing = coverage.get("silent_with_nothing") or []
+    silent_replay = coverage.get("silent_with_replay_only") or []
+    if silent_nothing:
+        add("Subscribed and silent, nothing whatever delivered: "
+            + ", ".join(_bare(s) for s in silent_nothing) + ".")
+    if silent_replay:
+        add("Subscribed with no trade inside the collection window, the only print "
+            "a replay stamped outside it: "
+            + ", ".join(_bare(s) for s in silent_replay) + ".")
+    if silent_nothing or silent_replay:
+        add("")
+    blocked = packet.get("day_blocked_on_rvol_alone") or []
+    if blocked:
+        add(f"Failed the day screen on premarket RVOL alone, having cleared "
+            f"the other day conditions: {', '.join(_bare(s) for s in blocked)}.")
+        add("")
     add("## Economic data and rates")
     add("")
     economic = packet.get("economic") or {}
@@ -754,6 +1205,20 @@ def fallback_report(
     else:
         add("No high importance events in the packet window.")
     add("")
+    # The rates rows from the snapshot, which the template puts here as well
+    # as in Market trends, and the one sentence a model writes about them.
+    rates = [row for row in packet.get("market_snapshot", [])
+             if str(row.get("label", "")).lower() in ("10y", "3m", "dxy")]
+    if rates:
+        add("Rates and the dollar: " + "; ".join(
+            f"{str(r.get('label')).upper()} {_f(r.get('last'), 3)} "
+            f"({_f(r.get('change_pct'))} percent"
+            + (", prior session close" if r.get("prior_session_only") else "") + ")"
+            for r in rates) + ".")
+        add("")
+    if slots:
+        add(slot(SLOT_RATES))
+        add("")
     add("## Coming up")
     add("")
     earnings_block = packet.get("earnings") or {}
@@ -893,52 +1358,45 @@ def fallback_report(
         add(f"Trap undecided for {', '.join(unweighable)}: trap_why on those "
             "rows carries the reason, and undecided is not a verdict of safe.")
 
-    # The measured worth of every RVOL above, from the nightly check. Stated
-    # here for the same reason the template requires it: a lower bound whose
-    # size nobody names reads as a rounding note.
-    check = packet.get("collector_volume_check")
-    if check:
-        # The last sentence used to read "so they understate by about that much
-        # again", asserting a direction from a magnitude. The check returned an
-        # UNSIGNED median, and COLLECTOR_VOLUME.md records the collector wrong
-        # in both directions: 2026-08-17 at -88.49 percent against 2026-08-14 at
-        # 3.83 times the vendor in aggregate. On a morning shaped like the
-        # second one this told the reader every RVOL was understated when the
-        # numerator was inflated, which is the direction that flatters volume.
-        # direction_phrase is now computed in scan from the signed median and
-        # the aggregate ratio, and is quoted rather than composed here.
+    # The evidence roll's per symbol reasons, where the packet carries them:
+    # the thin baselines and the thin bands, one line per symbol, because the
+    # median and the share counts differ per row and a sentence cannot carry
+    # them. The membership sentences themselves are quoted where the packet
+    # wrote them.
+    roll = packet.get("evidence_roll") or {}
+    roll_text = roll.get("text") or {}
+    for key in ("thin_baseline", "band_thin"):
+        sentence = roll_text.get(key)
+        rows = roll.get(key) or []
+        if sentence:
+            add("")
+            add(str(sentence))
+            for row in rows:
+                if isinstance(row, dict) and row.get("why"):
+                    add(f"- {_bare(str(row.get('symbol') or ''))}: {row['why']}")
+    dropped = roll.get("dropped_no_coverage") or []
+    if dropped:
         add("")
-        signed = check.get("median_signed_pct")
-        ratio = check.get("aggregate_ratio")
-        extra = ""
-        if signed is not None:
-            extra += f", signed median {signed:+.1f}%"
-        if ratio is not None:
-            extra += f", aggregate {ratio:.2f} times the vendor"
-        add(f"Collector volume check, {check.get('day')}: median absolute "
-            f"difference {check.get('median_abs_pct'):.1f}% against the vendor's "
-            f"one minute bars on identical minutes, across "
-            f"{check.get('compared')} symbol(s), "
-            f"{check.get('within_one_percent')} within one percent{extra}"
-            f"{'. STALE, ' + str(check.get('age_days')) + ' days old' if check.get('stale') else ''}"
-            ". That gap is the INPUT to the premarket RVOL figures above, not "
-            "an error inside them: it is divided out per symbol as "
-            "pm_capture_share, so the numerator above is an estimate of "
-            "consolidated volume. What survives is the share's session to "
-            "session dispersion, about 1.5 times against a level of about "
-            "nine. The vendor side of the check reads: "
-            + (check.get("direction_phrase")
-               or "the direction of that disagreement is unknown") + ".")
-    else:
-        add("")
-        add("Collector volume check: not written. The disagreement between the "
-            "collector feed and the vendor feed is unmeasured, which is not the "
-            "same as small.")
+        add("Cleared selection and dropped before pricing, the collector having no "
+            "bars for them: " + "; ".join(
+                f"{_bare(str(r.get('symbol') or ''))} ({r.get('reason') or 'no reason recorded'})"
+                if isinstance(r, dict) else _bare(str(r)) for r in dropped) + ".")
 
-    blocked = packet.get("day_blocked_on_rvol_alone") or []
-    if blocked:
-        add(f"Failed the day screen on premarket RVOL alone, having cleared "
-            f"the other day conditions: {', '.join(_bare(s) for s in blocked)}.")
+    # Every evidence gap the scan recorded, as the scan wrote it. The Summary
+    # gives the count and this is the list, so a reader who wants to know what
+    # weakens the morning reads it here rather than in a sentence the model
+    # chose to write or not.
+    gaps = packet.get("gaps_to_fill") or []
+    add("")
+    if gaps:
+        add(f"Evidence gaps recorded by the scan, {len(gaps)} in total:")
+        add("")
+        for gap in gaps:
+            # The scan writes exchange qualified symbols into its gap prose;
+            # the report body uses bare tickers, rule 8.
+            add("- " + _EXCHANGE_SUFFIX_RE.sub(lambda m: m.group(1), _cell(gap)))
+    else:
+        add("Evidence gaps recorded by the scan: 0.")
     return "\n".join(lines) + "\n"
 
 
@@ -1014,10 +1472,21 @@ _QUANTIFIERS = ("every", "all", "none", "each", "most", "majority")
 # both directions because "the candidates all cleared" and "all the candidates
 # cleared" are the same sentence.
 _FORWARD_ONLY_QUANTIFIERS = ("no",)
-_SET_WORDS = ("candidate", "candidates", "name", "names", "watchlist", "watchlists")
+# `name` and `names` left this list on 2026-09-02. Of the seven flags judged
+# by then, the two that were about nothing whatever to do with the set (ids 1
+# and 3, DECISIONS 2026-09-01 ninth, shape A) matched `no bars` six words ahead
+# of `watchlist` and `no trade` four words ahead of `name`, and "that name" is
+# how ordinary prose refers to one ticker. A universal about the set says
+# candidates or watchlist; it does not say names.
+_SET_WORDS = ("candidate", "candidates", "watchlist", "watchlists")
 # Words either side, not characters. Six is wide enough to catch "every one of
 # the candidates" and narrow enough that two unrelated sentences do not collide.
 _QUANTIFIER_WINDOW_WORDS = 6
+# `no` is a determiner and governs the noun right after it, so its window is
+# two words forward: "no candidate" and "no such candidate" are caught, and
+# "no bars for six of the names on the watchlist" is not, because that `no`
+# governs bars. Six words forward was the mechanism behind flag id 1.
+_FORWARD_WINDOW_WORDS = 2
 
 
 def flag_log_path() -> Path:
@@ -1242,7 +1711,8 @@ def _scan_prose(number: int, stripped: str) -> list[dict[str, Any]]:
         if word not in _QUANTIFIERS and not forward_only:
             continue
         low = index if forward_only else max(0, index - _QUANTIFIER_WINDOW_WORDS)
-        high = min(len(lowered), index + _QUANTIFIER_WINDOW_WORDS + 1)
+        reach = _FORWARD_WINDOW_WORDS if forward_only else _QUANTIFIER_WINDOW_WORDS
+        high = min(len(lowered), index + reach + 1)
         near = [w for w in lowered[low:index] + lowered[index + 1:high]
                 if w in _SET_WORDS]
         if near:
@@ -1399,6 +1869,18 @@ def quantifier_correction(hits: list[dict[str, Any]]) -> str:
     for hit in hits:
         lines.append(f"  matched {hit['quantifier']!r} near {hit['set_word']!r}: "
                      f"{hit['text']}")
+    if _skeleton is not None:
+        lines += [
+            "",
+            "Return the report again with the slots filled, the fixed text exactly "
+            "as it arrived, and the sentence above reworded so that no word from "
+            "the banned list stands near a set word. The report already carries "
+            'the counts, as "0 of 12"; quote them rather than describing the set. '
+            "This is the last attempt: if the next answer is rejected too, the "
+            "morning ships with the slots filled by fixed sentences and no "
+            "narrative at all.",
+        ]
+        return "\n".join(lines)
     lines += [
         "",
         "Write the whole report again. Everything else about it is unchanged. "
@@ -2259,8 +2741,19 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # regeneration. max_attempts is the total number of CLI runs the narrative
     # may cost, and the clock arithmetic in CRITERIA rests on that reading.
     # See RunBudget.
-    global _budget
+    global _budget, _skeleton
     _budget = RunBudget(_CRIT.integer("analyst", "max_attempts"))
+    mode = report_mode()
+    # In slots mode a slot violation costs a regeneration too, so the loop
+    # runs whether or not the guard is enforcing: the regeneration count is
+    # the same knob, because the two failures are answered the same way.
+    if mode == MODE_SLOTS:
+        _skeleton = render_skeleton(packet)
+        attempts = _CRIT.integer("analyst", "quantifier_regenerations") + 1
+        print(f"analyst: slots mode, {len(markers_in(_skeleton))} slot(s) to fill, "
+              f"skeleton {len(_skeleton):,} chars")
+    else:
+        _skeleton = None
     report_text: str | None = None
     usage: dict[str, Any] = {}
     reason: str | None = None
@@ -2270,6 +2763,8 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     flags_raised: list[dict[str, Any]] = []
     warned: list[dict[str, Any]] = []
     warned_ids: list[int] = []
+    slot_violations: list[str] = []
+    final_slot_texts: dict[str, str] = {}
 
     for attempt in range(1, attempts + 1):
         text, usage, error, kind = invoke_claude(packet_text, correction)
@@ -2278,6 +2773,36 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             if not error:
                 kind = "failed"
             break
+
+        if _skeleton is not None:
+            assembled, slot_texts, violations = check_slots(_skeleton, text)
+            usage["slots_filled"] = len(slot_texts)
+            if violations:
+                slot_violations = violations
+                print(f"analyst: the slots answer was rejected on attempt {attempt}:")
+                for violation in violations:
+                    print(f"analyst:   {violation}")
+                # The rejected answer is kept beside the report, because the
+                # violation message says where the fit broke and not what the
+                # model wrote there, and the first slots hand run could not be
+                # diagnosed without it.
+                rejected_path, _ = artifacts.resolve(
+                    run_directory / f"report.slots-rejected-{attempt}.md",
+                    allow_overwrite, what="analyst")
+                rejected_path.write_text(text, encoding="utf-8")
+                print(f"analyst: the rejected answer is at {rejected_path.name}")
+                if attempt < attempts and _budget.remaining > 0:
+                    correction = slot_correction(violations)
+                    print("analyst: asking again with the violations quoted back")
+                    continue
+                kind = "slots"
+                cause = CAUSE_WITHHELD
+                reason = ("the model altered the report outside its slots or filled "
+                          f"a slot wrongly on {attempt} attempt(s): "
+                          + "; ".join(violations)[:400])
+                break
+            text = assembled
+            final_slot_texts = slot_texts
 
         # Containment first, and the order is deliberate. An invented ticker
         # is fabricated evidence, the one failure this system exists to
@@ -2291,7 +2816,14 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             report_text = text
             break
 
-        hits = quantifier_violations(text)
+        # In slots mode the guard reads what the MODEL wrote, the slot texts,
+        # because a regeneration can only change those. The skeleton's own
+        # sentences are Python's and are read by the final pass below, where a
+        # violation is recorded as annotated and said on the disclaimer rather
+        # than costing a narrative the model did not write. The first slots
+        # hand run lost its narrative to a scan written gap sentence.
+        hits = quantifier_violations(
+            "\n".join(final_slot_texts.values()) if _skeleton is not None else text)
         if not hits:
             report_text = text
             break
@@ -2351,7 +2883,9 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # The budget is this morning's and nothing after the loop spends it. Left
     # set, a hand call to invoke_claude in the same process, which the suite
     # makes, would be refused with a message about a morning that is over.
+    # The skeleton likewise: a later hand call composes the freeform document.
     _budget = None
+    _skeleton = None
 
     if report_text is None:
         print(f"analyst: {cause} ({kind}): {reason}")
@@ -2385,6 +2919,9 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             usage["quantifier_flags"] = flags_raised
             usage["quantifier_regenerated"] = True
     usage["quantifier_guard"] = GUARD_ENFORCING if enforcing else GUARD_WARN
+    usage["mode"] = mode
+    if slot_violations:
+        usage["slot_violations"] = slot_violations
 
     # WHY EACH NAME MOVED, in plain language and grounded in that name's own
     # headlines. A second CLI call, deliberately separate from the narrative:
@@ -2441,7 +2978,15 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             "naming the level, and a figure written there is not checked "
             "against the packet")
 
-    late = _late_hits(report_text, quantifier_violations(without_model))
+    # The baseline is what the narrative pass already judged: in freeform the
+    # whole body without the explanation, in slots mode only the slot texts,
+    # so that a quantifier in the skeleton's own Python written sentences is
+    # a late hit here and not silently subtracted.
+    if mode == MODE_SLOTS:
+        baseline_hits = quantifier_violations("\n".join(final_slot_texts.values()))
+    else:
+        baseline_hits = quantifier_violations(without_model)
+    late = _late_hits(report_text, baseline_hits)
     if late:
         late_ids = record_quantifier_flags(
             late, session_date, report_path.name, attempt=1,
@@ -2454,7 +2999,19 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
               "not raise, so an annotation wrote them")
         for hit in late:
             print(f"analyst:   line {hit.get('line')}: {hit.get('text')}")
-        if enforcing:
+        if enforcing and mode == MODE_SLOTS:
+            # In slots mode the slot texts were already judged clean, so a late
+            # hit is in text Python or the scan wrote: the skeleton's quoted
+            # gap sentences, most often. Withdrawing the model's explanation
+            # would repair nothing and cost the reader a section. The claim is
+            # said on the disclaimer, the flag is logged as annotated for the
+            # word list review, and the sentence to fix is in scan.py.
+            report_text = _append_to_disclaimer(
+                report_text,
+                f"a final check found {len(late)} quantified claim(s) about the "
+                "candidate set in text Python wrote, not in the model's prose; "
+                "they are logged for the word list review and published as written")
+        elif enforcing:
             # The comparison body IS the repair. It is this report without the
             # model written section, and the section states why it is missing
             # rather than vanishing, on the same argument annotate_gap_reasons

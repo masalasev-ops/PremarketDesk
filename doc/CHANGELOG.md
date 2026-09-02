@@ -15,6 +15,81 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty fourth: Python writes the report and the model fills the slots
+
+Tier 2 of doc/IMPROVEMENT_PLAN.md. The largest change to the narrative pass
+since it was built, and the argument for it was in the record already: the
+2026-08-31 report that survived the guard was at least 60 percent packet text
+copied word for word under instruction, the instruction set was 68 KB, and
+three quarters of the paid output was the model reasoning about 28 rules
+before writing a page whose every count and table Python had already
+computed.
+
+THE SKELETON. analyst.fallback_report gained slots=True. With it the function
+that has always written the plain table writes the whole report with five
+kinds of marked slot: `{{MOOD}}` in the title, `{{TONE}}` at the top of
+Summary, `{{HEADLINE:TICKER:N}}` under each quoted headline, `{{SETUP:TICKER}}`
+for each day or swing eligible candidate, `{{RATES}}` under the economic
+block. Everything else, the funnel sentence with the rank cap's casualties by
+name, the list shape sentences, the gappers blocks with every headline and its
+publisher and time, both watchlists, notable movers, the market table, the
+Technical signals table, the record, the evidence roll's per symbol reasons,
+the trap lines and every gap the scan recorded as a list, is Python's. The
+fallback with slots off is the same function and gained the same sections, so
+a morning the model cannot serve now reads as the same report with the slots
+filled by fixed sentences.
+
+THE FIT. analyst.check_slots locates the model's slot texts by finding each
+fixed segment of the skeleton in the answer, as words with any whitespace
+between them, and assembles the shipped report from the SKELETON's fixed text
+and the model's slot texts. The model's copy of the fixed text never ships:
+an insertion outside a slot is dropped, a deletion or rewording is a violation,
+and a slot left empty, carrying a heading or table row or a leftover marker,
+or a SETUP slot without the invalidation lead in, is a violation by name. A
+violation costs one regeneration with the list quoted back, then the plain
+report with the reason on the disclaimer. The rejected answer is written
+beside the report as report.slots-rejected-N.md.
+
+THE GUARD READS THE MODEL'S WORDS. In the narration loop the quantifier guard
+scans the slot texts, because a regeneration can only change those; the
+finished page is scanned by the final pass, where a hit in Python's own
+sentences is logged as annotated and said on the disclaimer instead of
+withdrawing an explanation that had nothing to do with it. The first slots
+hand run lost its narrative to a scan written gap sentence before this was
+so, and that sentence, "none of them reached the day watchlist", now reads
+"0 of them" in scan.py.
+
+THE PROMPT AND THE PACKET. doc/prompt_slots.md is 7 KB against the 64 KB of
+prompt_analyst.md and REPORT_TEMPLATE.md together, which remain the freeform
+specification and the reasoning behind every sentence the skeleton renders.
+analyst.project_packet pipes an allowlist of the fields the slots read; in
+freeform it drops the basis blocks, pool evidence, URLs and correction rows
+nothing quotes. packet.json on disk is unchanged and containment still reads
+it whole. CRITERIA [Analyst] mode selects the path; slots since today.
+
+MEASURED, first attempt clean every time: the 2026-09-01 packet went from 227
+to 359 seconds and 20,013 to 30,951 output tokens under freeform to 156
+seconds and 15,316 tokens in slots at medium effort, and 134 seconds and
+12,955 at low; cache write tokens 32,257 against 86,148. The 2026-08-31
+packet, which has a day eligible name and so a SETUP slot, went from 207
+seconds and 18,083 tokens to 97 and 8,754, cache write 15,998 against 43,583.
+CRITERIA [Analyst] effort moved to low on that comparison; the table is in
+the slots note there.
+
+THE GUARD'S WORD LIST, tuned on the seven judged flags: name and names leave
+the set words, and `no` reaches two words forward rather than six. Ids 1 and
+3, the two flags DECISIONS 2026-09-01 ninth calls shape A, no longer fire; the
+five true universals over `candidate` still do. The guard stays enforcing.
+
+ALSO. gap_reasons._parse salvages per ticker objects when the whole answer
+does not parse, so one unbalanced brace costs one explanation and not the
+section. Seven claims: the skeleton opens exactly one slot per prose field
+and the fallback carries none; the fit forgives a rewrap and refuses each
+violation by name; the projection keeps every path the template quotes and
+the slots allowlist is under two fifths of the packet; slots mode ships, asks
+again, and falls back through write_report with the CLI stubbed; the slots
+prompt is guard clean and names every guard word.
+
 ## 2026-09-02, thirty third: the page opens at a glance, the essay becomes a table, and the midday report reaches the reader
 
 Tier 1 of doc/IMPROVEMENT_PLAN.md: the report gets better for its reader

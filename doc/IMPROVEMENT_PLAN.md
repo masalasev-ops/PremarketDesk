@@ -381,6 +381,18 @@ to files that exist in the fixture tree. Effort M. Risk low. Delegable: yes.
 
 ## Tier 2: the analyst call does less
 
+Done 2026-09-02: 2.1 as slots (2.2 not taken, DECISIONS 2026-09-02 third
+says why), 2.3, 2.4 steps 1 and 2 with the guard left enforcing rather than
+step 4, 2.5 with effort moved to low, and 2.6. CRITERIA [Analyst] mode is
+slots. Acceptance was three hand runs on two archived packets, first attempt
+clean each time, the table in CRITERIA's slots note: the 2026-09-01 packet
+fell from 227 to 359 seconds to 134, output tokens from 20k to 31k to 13k, the
+2026-08-31 packet with a SETUP slot from 207 seconds to 97. Two of the plan's
+acceptance figures were not met and are recorded as such: output tokens are
+13k to 15k rather than under 6k, because the model thinks before it writes,
+and the CLI took 97 to 156 seconds rather than under 90. CHANGELOG 2026-09-02
+thirty fourth.
+
 This is the structural change. Everything the report quotes word for word is
 already rendered by `fallback_report`. The model is paid to copy it and a
 guard then checks it did not paraphrase. The 2026-08-31 report that survived

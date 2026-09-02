@@ -31,6 +31,7 @@ never read as though a question was answered when it was not.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from typing import Any
 
@@ -128,8 +129,21 @@ def build_document(candidates: list[dict[str, Any]]) -> tuple[str, dict[str, lis
     return "\n".join(lines), allowed
 
 
+_TICKER_OBJECT_RE = re.compile(
+    r'"([A-Z][A-Z0-9.\-]{0,9})"\s*:\s*(\{(?:[^{}]|\{[^{}]*\})*\})')
+
+
 def _parse(text: str) -> dict[str, Any] | None:
-    """The JSON object out of the model's answer, or None."""
+    """The JSON object out of the model's answer, or None.
+
+    Whole document first. When that fails, the per ticker objects are salvaged
+    one at a time, because until 2026-09-02 a single unbalanced brace in one
+    ticker's `why` lost the section for every ticker: the whole answer was
+    sliced from the first `{` to the last `}` and either parsed or did not.
+    A ticker whose own object cannot be parsed is simply absent from the
+    payload, and validate() then records it as unanswered with the reason, so
+    the reader sees eleven explanations and one refusal rather than none.
+    """
     body = text.strip()
     if body.startswith("```"):
         body = body.split("\n", 1)[-1]
@@ -140,9 +154,19 @@ def _parse(text: str) -> dict[str, Any] | None:
         return None
     try:
         payload = json.loads(body[start:end + 1])
+        if isinstance(payload, dict):
+            return payload
     except ValueError:
-        return None
-    return payload if isinstance(payload, dict) else None
+        pass
+    salvaged: dict[str, Any] = {}
+    for match in _TICKER_OBJECT_RE.finditer(body):
+        try:
+            value = json.loads(match.group(2))
+        except ValueError:
+            continue
+        if isinstance(value, dict):
+            salvaged[match.group(1)] = value
+    return salvaged or None
 
 
 def validate(payload: dict[str, Any],

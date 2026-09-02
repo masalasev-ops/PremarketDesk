@@ -18,6 +18,55 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, third: slots rather than structured output, the skeleton's text is canonical, and the guard flips nothing
+
+Three choices in tier 2 of doc/IMPROVEMENT_PLAN.md.
+
+SLOTS RATHER THAN JSON. The plan offered two shapes: the model returns the
+skeleton with marked slots filled, or the model returns JSON keyed by slot
+and Python places the values. JSON validates keys before any prose is placed
+and fails per field rather than per document, and gap_reasons already works
+that way. Slots were chosen because the skeleton IS the fallback report, one
+function with one flag, so the shipped page and the degraded page cannot
+drift apart, and because the fit gives the same per field failure for free:
+check_slots names the slot that was left empty or the segment that was
+altered, and the assembled report is built from the skeleton's fixed text
+either way. The price is a second parser of a different kind, a token
+tolerant search for fixed segments, and its one leniency is written down: an
+insertion outside a slot is dropped rather than refused, because the shipped
+text is the skeleton's and a model that adds a sentence between two fixed
+paragraphs has changed nothing a reader will see.
+
+THE MODEL'S COPY NEVER SHIPS. It would have been simpler to ship the model's
+answer once it passed the fit. It is not shipped, because the whole point of
+the mode is that the fixed text is Python's, and a check that compares and
+then ships the other copy has two sources of truth for one page. The one
+thing the model's copy is used for is to find where its prose begins and
+ends.
+
+THE GUARD STAYS ENFORCING. CRITERIA's warn mode note said that if the plain
+table started appearing on mornings a reader disagreed with, the word list
+should be tuned and the knob put back to warn while that happened. The plain
+table appeared on 2026-09-01 on two false positives, the word list was tuned,
+and the knob was NOT put back to warn. The reason is the mode change: under
+slots the guard's population is the slot prose, a few hundred words of tone,
+headline description and write ups, and the sentences that produced the
+false positives, freehand paragraphs about the set, are not written any more.
+Flipping to warn would have let a real universal in a SETUP write up ship
+while measuring a population that no longer exists. If flags reappear under
+slots, the note's instruction stands and warn is the knob to reach for.
+
+THE SKELETON'S OWN QUANTIFIERS ARE NOT THE MODEL'S FAULT. The first slots
+hand run fell to the plain table because the guard read the assembled page
+and found a scan written gap sentence. The choice was between making the
+guard skip Python text entirely, scanning only slot prose in both passes, and
+keeping the final pass over the whole page with a different consequence. The
+second was chosen: the final pass still finds a quantifier in Python's own
+sentences, logs it as annotated so the word list review sees it, and says so
+on the disclaimer, but does not withdraw anything, because the model's
+explanation was not the sentence at fault and the sentence to fix is in
+scan.py. One such sentence was fixed the same hour.
+
 ## 2026-09-02, second: rule 17 stays, the strip is Python's, and the footer is stripped before it is mailed
 
 Three choices in tier 1 of doc/IMPROVEMENT_PLAN.md.

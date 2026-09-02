@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and forty seven claims, a count read off
+and the two pages. It now carries one hundred and fifty two claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11574,6 +11574,16 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         148: "one hundred and forty eight",
         149: "one hundred and forty nine",
         150: "one hundred and fifty",
+        151: "one hundred and fifty one",
+        152: "one hundred and fifty two",
+        153: "one hundred and fifty three",
+        154: "one hundred and fifty four",
+        155: "one hundred and fifty five",
+        156: "one hundred and fifty six",
+        157: "one hundred and fifty seven",
+        158: "one hundred and fifty eight",
+        159: "one hundred and fifty nine",
+        160: "one hundred and sixty",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -13463,6 +13473,310 @@ def claim_the_archive_carries_the_midday_report(failures: list[str]) -> None:
           "day without one says the pass has not run")
 
 
+def _slots_packet() -> dict[str, Any]:
+    """A packet with two candidates, one on the day watchlist, three headlines."""
+    return {
+        "session_date": "2026-01-02", "generated_at": "2026-01-02T08:45:00-05:00",
+        "candidates": [
+            {"symbol": "ARX.US", "conviction": "green", "day_eligible": True,
+             "swing_eligible": False, "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02,
+             "price": 19.0, "prior_close": 13.3, "pm_high": 19.51, "pm_low": 18.9,
+             "pm_vwap": 19.1, "prior_high": 14.0, "entry_ref": 19.51, "stop_ref": 18.9,
+             "catalyst_found": True, "catalyst_class": "earnings",
+             "catalyst_why": "tagged EARNINGS", "collector_covered": True,
+             "quote": {"name": "Aeries", "marketCap": 2.0e9},
+             "headlines": [{"title": "Aeries beats", "publisher": "x.com",
+                            "published_at": "2026-01-02T07:00:00-05:00"},
+                           {"title": "Sector rallies", "publisher": "y.com",
+                            "published_at": "2026-01-02T06:00:00-05:00"}]},
+            {"symbol": "BBB.US", "conviction": "red", "day_eligible": False,
+             "swing_eligible": False, "score": 1.0, "pm_rvol": 0.5, "gap_pct": -3.5,
+             "price": 10.0, "prior_close": 10.4, "pm_high": 10.4, "pm_low": 9.9,
+             "pm_vwap": 10.1, "prior_high": 10.6, "catalyst_found": False,
+             "catalyst_class": "none", "catalyst_why": "no tag", "collector_covered": True,
+             "quote": {"name": "Bee Holdings", "marketCap": 3.0e9},
+             "headlines": [{"title": "Bee slips", "publisher": "z.com",
+                            "published_at": "2026-01-02T05:00:00-05:00"}]},
+        ],
+        "screen_tally": {"candidates_examined": 2, "day": {"eligible": 1},
+                         "swing": {"eligible": 0, "failed_summary": "gap_pct 2 of 2"}},
+        "market_snapshot": [{"label": "spy", "last": 500.0, "change_pct": -0.5,
+                             "source": "collector"},
+                            {"label": "10y", "last": 4.5, "change_pct": 0.2,
+                             "source": "eod", "prior_session_only": True}],
+        "economic": {"events": [{"time_et": "2026-01-02T10:00:00-05:00",
+                                 "title": "ISM", "forecast": 50, "previous": 49,
+                                 "actual": None}]},
+        "job_health": {"overdue": [], "line": None},
+    }
+
+
+def _fill_skeleton(skeleton: str) -> str:
+    """The answer a well behaved model gives: every slot filled, nothing else touched."""
+    from morning import analyst
+
+    filled = skeleton
+    for marker in analyst.markers_in(skeleton):
+        text = f"Prose for {marker.strip('{}').replace(':', ' ')}."
+        if marker.startswith("{{" + analyst.SLOT_SETUP):
+            text += f"\n{analyst.INVALIDATION_MARKER} a break back under the premarket low."
+        filled = filled.replace(marker, text, 1)
+    return filled
+
+
+def claim_the_skeleton_opens_a_slot_for_each_prose_field(failures: list[str]) -> None:
+    """Python writes the report; the slots are exactly the prose only a model can write.
+
+    One MOOD in the title, one TONE at the top of Summary, one HEADLINE under
+    each quoted headline of each candidate, one SETUP per candidate on a
+    watchlist and none for the rest, one RATES under the economic block. The
+    fallback with slots off carries no marker at all, because it is the same
+    function and a marker left in a fallback would reach a reader as text.
+    """
+    from morning import analyst
+
+    packet = _slots_packet()
+    with conftest_activate():
+        skeleton = analyst.render_skeleton(packet)
+        fallback = analyst.fallback_report(packet, "the model timed out")
+    markers = analyst.markers_in(skeleton)
+    expected = ["{{MOOD}}", "{{TONE}}", "{{HEADLINE:ARX:1}}", "{{HEADLINE:ARX:2}}",
+                "{{HEADLINE:BBB:1}}", "{{SETUP:ARX}}", "{{RATES}}"]
+    if sorted(markers) != sorted(expected):
+        failures.append(f"the skeleton's slots are {markers}, expected {expected}")
+    if markers and markers[0] != "{{MOOD}}":
+        failures.append("the title slot is not the first marker")
+    if analyst.markers_in(fallback):
+        failures.append("the fallback report carries slot markers")
+    for needle in ("| Ticker | Gap % | Price | Premarket RVOL", "## What the record says so far",
+                   "**ARX.** {{SETUP:ARX}}", 'Headline: "Aeries beats" (x.com,'):
+        if needle not in skeleton:
+            failures.append(f"the skeleton lacks {needle!r}")
+    print("  skeleton     one slot per prose field, none for an ineligible name, and "
+          "the fallback carries no marker")
+
+
+def claim_a_slots_answer_is_fitted_back_onto_the_skeleton(failures: list[str]) -> None:
+    """The shipped fixed text is the skeleton's; the model's copy only locates the slots.
+
+    A rewrapped line is forgiven. Fixed text the model deleted or reworded is
+    a violation. Text the model inserted outside a slot never ships, because
+    the assembled report is the skeleton with the slot texts dropped in. An
+    empty slot, a leftover marker, a heading or table row inside a slot, and a
+    SETUP slot without the invalidation lead in are each violations named
+    against their marker.
+    """
+    from morning import analyst
+
+    with conftest_activate():
+        skeleton = analyst.render_skeleton(_slots_packet())
+    good = _fill_skeleton(skeleton).replace("generated by PremarketDesk.",
+                                            "generated by\nPremarketDesk.")
+    assembled, texts, violations = analyst.check_slots(skeleton, good)
+    if violations or assembled is None:
+        failures.append(f"a well behaved answer was rejected: {violations}")
+    elif "{{" in assembled or "Prose for SETUP ARX." not in assembled:
+        failures.append("the assembled report lost a slot or kept a marker")
+    if len(texts) != 7:
+        failures.append(f"{len(texts)} slot texts were read, expected 7")
+
+    inserted = good.replace("## Summary", "## Summary of the morning")
+    assembled, _texts, violations = analyst.check_slots(skeleton, inserted)
+    if violations or assembled is None or "Summary of the morning" in assembled:
+        failures.append("text inserted outside a slot reached the assembled report, or "
+                        f"was refused instead of being dropped: {violations}")
+
+    deleted = good.replace("## Swing watchlist", "")
+    assembled, _texts, violations = analyst.check_slots(skeleton, deleted)
+    if assembled is not None or not violations:
+        failures.append("fixed text the model deleted was not a violation")
+
+    unfilled = skeleton
+    assembled, _texts, violations = analyst.check_slots(skeleton, unfilled)
+    if assembled is not None or not any("marker" in v for v in violations):
+        failures.append(f"an unfilled skeleton was not refused for its markers: {violations}")
+
+    no_lead_in = good.replace(f"{analyst.INVALIDATION_MARKER} a break back under the premarket low.", "")
+    assembled, _texts, violations = analyst.check_slots(skeleton, no_lead_in)
+    if assembled is not None or not any("SETUP" in v for v in violations):
+        failures.append(f"a SETUP slot without the invalidation line was accepted: {violations}")
+
+    headed = good.replace("Prose for TONE.", "## A new section\n\nProse for TONE.")
+    assembled, _texts, violations = analyst.check_slots(skeleton, headed)
+    if assembled is not None or not any("heading" in v for v in violations):
+        failures.append(f"a heading inside a slot was accepted: {violations}")
+    print("  slot fit     a rewrapped line is forgiven, an insertion never ships, a "
+          "deletion, an empty slot, a leftover marker, a heading and a missing "
+          "invalidation line are each refused by name")
+
+
+def claim_the_projection_keeps_what_the_template_names(failures: list[str]) -> None:
+    """The piped packet is smaller than the packet on disk and loses nothing quoted.
+
+    Measured on the 2026-09-01 packet: 167 KB, 71,000 tokens, a third of it
+    basis blocks, URLs and pool evidence no section names. The freeform
+    projection drops those and keeps every path REPORT_TEMPLATE.md quotes; the
+    slots projection is an allowlist and is under two fifths of the whole.
+    packet.json itself is never changed, and the containment allowed set reads
+    the full text.
+    """
+    from morning import analyst
+
+    packet = {
+        "session_date": "2026-01-02", "generated_at": "x",
+        "candidates": [{
+            "symbol": "ARX.US", "gap_pct": 1.0, "price": 1.0, "score": 1.0,
+            "day_eligible": False, "swing_eligible": False, "catalyst_class": "none",
+            "catalyst_found": False, "trap": None, "trap_why": "w",
+            "trap_basis": {"headlines_scored": 0}, "pm_rvol_basis": {"is_lower_bound": True},
+            "pm_float_rotation_basis": {"is_lower_bound": False},
+            "pool_evidence": {"big": "x" * 500}, "headline_polarity": {"x": 1},
+            "prior_close_quoted": 1.0, "provisional_gap_pct": 1.0, "gap_2session": 1.0,
+            "gap_3session": 1.0, "avg_dollar_volume_20d": 1.0,
+            "headlines": [{"title": "t", "publisher": "p", "published_at": "2026",
+                           "url": "https://x/" + "y" * 400, "sentiment": {"polarity": 0.1},
+                           "article_scope": {"why": "about this name"}}],
+            "quote": {"name": "Aeries", "marketCap": 1.0, "twoHundredDayAveragePrice": 1.0,
+                      "sharesFloat": 1.0}, "evidence_missing": {"text": "m"},
+            "score_components": {"gap": 1}}],
+        "evidence_roll": {"text": {"rvol_null": "0 of 1"}},
+        "score_roll": {"text": {"direction": "d"}, "summary": "s", "by_bucket": {}},
+        "screen_tally": {"day": {"failed_summary": "f"}},
+        "capture_correction": {"candidates": 1, "rows": [{"x": 1}] * 50},
+        "notable_movers": {"rows": [], "list_reports": {}},
+        "record_so_far": {"picks": {"rows": 0, "sessions": 0}},
+        "list_shape": {"text": {"sectors": "s"}},
+        "evidence_missing_shared": {"text": "shared"},
+        "market_snapshot": [], "economic": {"events": []},
+    }
+    full = json.dumps(packet)
+    freeform = analyst.project_packet(packet, analyst.MODE_FREEFORM)
+    slots = analyst.project_packet(packet, analyst.MODE_SLOTS)
+    if packet["candidates"][0].get("pool_evidence") is None or "rows" not in packet["capture_correction"]:
+        failures.append("project_packet mutated the packet it was handed")
+    for path in ("evidence_roll", "score_roll", "screen_tally", "capture_correction",
+                 "notable_movers", "record_so_far", "list_shape", "evidence_missing_shared"):
+        if path not in freeform:
+            failures.append(f"the freeform projection dropped {path}, which the template quotes")
+    candidate = freeform["candidates"][0]
+    for key in ("trap_basis", "pm_rvol_basis", "pm_float_rotation_basis", "evidence_missing",
+                "score_components"):
+        if key not in candidate:
+            failures.append(f"the freeform projection dropped candidate.{key}, which the template quotes")
+    for key in ("pool_evidence", "headline_polarity", "prior_close_quoted", "provisional_gap_pct",
+                "gap_2session", "gap_3session", "avg_dollar_volume_20d"):
+        if key in candidate:
+            failures.append(f"the freeform projection kept candidate.{key}, which nothing quotes")
+    if "url" in candidate["headlines"][0] or "rows" in freeform["capture_correction"]:
+        failures.append("the freeform projection kept headline urls or the correction rows")
+    if len(json.dumps(freeform)) >= len(full):
+        failures.append("the freeform projection is not smaller than the packet")
+    if len(json.dumps(slots)) > 0.4 * len(full):
+        failures.append(f"the slots projection is {len(json.dumps(slots))} of {len(full)} chars, "
+                        "over two fifths of the packet")
+    slim = slots["candidates"][0]
+    for key in ("symbol", "gap_pct", "score_components", "headlines", "evidence_missing",
+                "pm_rvol_is_lower_bound"):
+        if key not in slim:
+            failures.append(f"the slots projection dropped candidate.{key}, which a slot reads")
+    if slim["headlines"][0].get("article_scope", {}).get("why") != "about this name":
+        failures.append("the slots projection dropped article_scope.why")
+    if "sharesFloat" in slim.get("quote", {}) or "trap_basis" in slim:
+        failures.append("the slots projection kept a field no slot reads")
+    print("  projection   the piped packet is smaller, keeps every quoted path, and "
+          "the slots allowlist is under two fifths of the whole")
+
+
+def claim_slots_mode_ships_the_skeleton_and_the_prose(failures: list[str]) -> None:
+    """Under mode = slots the report on disk is the skeleton with the slots filled,
+    a bad answer is asked for again, and a second bad answer costs the
+    narrative and not the report.
+
+    Driven through write_report with invoke_claude stubbed, which is how the
+    other analyst claims work; the stub reads the skeleton the module set and
+    fills it, so what is exercised is the real render and the real fit.
+    """
+    from morning import analyst
+    from morning import gap_reasons
+
+    def run(session: str, answers: list) -> dict[str, Any]:
+        run_directory = config.run_dir(session)
+        run_directory.mkdir(parents=True, exist_ok=True)
+        packet_path = run_directory / "packet.json"
+        # write_report writes under the packet's own session date.
+        packet = dict(_slots_packet(), session_date=session,
+                      generated_at=f"{session}T08:45:00-05:00")
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
+        calls: list = []
+
+        def stub(packet_text, correction=None):
+            calls.append(correction)
+            behave = answers[min(len(calls) - 1, len(answers) - 1)]
+            text = behave(analyst._skeleton)
+            return text, {"output_tokens": 1, "total_cost_usd": 0.01, "num_turns": 1}, None, "ok"
+
+        real = (analyst.invoke_claude, analyst.guard_mode, analyst.report_mode, gap_reasons.explain)
+        analyst.invoke_claude = stub
+        analyst.guard_mode = lambda: analyst.GUARD_ENFORCING
+        analyst.report_mode = lambda: analyst.MODE_SLOTS
+        gap_reasons.explain = lambda candidates: ({}, None, "stubbed by the suite")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = analyst.write_report(packet_path)
+        finally:
+            (analyst.invoke_claude, analyst.guard_mode, analyst.report_mode,
+             gap_reasons.explain) = real
+        return {"code": code, "calls": calls,
+                "text": (run_directory / "report.md").read_text(encoding="utf-8"),
+                "usage": json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))}
+
+    broken = lambda skeleton: _fill_skeleton(skeleton).replace("## Swing watchlist", "")  # noqa: E731
+    with conftest_activate():
+        good = run("2026-01-09", [_fill_skeleton])
+        rescued = run("2026-01-12", [broken, _fill_skeleton])
+        withheld = run("2026-01-13", [broken, broken])
+
+    if good["code"] != 0 or good["usage"].get("status") != "ok":
+        failures.append(f"a well behaved slots answer did not ship: code {good['code']}, "
+                        f"status {good['usage'].get('status')!r}, {good['usage'].get('error_message')}")
+    if "{{" in good["text"] or "Prose for SETUP ARX." not in good["text"] \
+            or "| Ticker | Gap % | Price | Premarket RVOL" not in good["text"]:
+        failures.append("the shipped slots report lacks the prose or the skeleton's table")
+    if good["usage"].get("mode") != analyst.MODE_SLOTS or good["usage"].get("slots_filled") != 7:
+        failures.append(f"the usage record does not say slots mode with 7 slots filled: "
+                        f"{good['usage'].get('mode')!r}, {good['usage'].get('slots_filled')!r}")
+    if analyst.GLANCE_MARKER not in good["text"]:
+        failures.append("the slots report has no at a glance strip")
+    if len(rescued["calls"]) != 2 or rescued["calls"][1] is None or rescued["usage"].get("status") != "ok":
+        failures.append("a bad first answer was not asked for again with a correction, or the "
+                        f"good second answer did not ship: {rescued['usage'].get('status')!r}")
+    if withheld["usage"].get("status") != "slots" or not withheld["usage"].get("fallback"):
+        failures.append(f"two bad answers did not fall back with status slots: "
+                        f"{withheld['usage'].get('status')!r}")
+    if withheld["code"] != 0 or "{{" in withheld["text"]:
+        failures.append("the fallback after two bad slots answers is not a clean report")
+    print("  slots mode   a filled skeleton ships with its strip, a bad answer is asked "
+          "again, and two bad answers give the plain report with the reason")
+
+
+def claim_the_slots_prompt_holds_to_the_guard(failures: list[str]) -> None:
+    """doc/prompt_slots.md asks for nothing the guard refuses and names both word lists."""
+    from morning import analyst
+
+    text = config.SLOTS_PROMPT_PATH.read_text(encoding="utf-8")
+    hits = analyst.instruction_violations(text)
+    if hits:
+        failures.append(f"prompt_slots.md asks for what the guard forbids: {hits[:2]}")
+    for word in (*analyst.banned_words(), *analyst.set_words()):
+        if word not in text:
+            failures.append(f"prompt_slots.md does not name the guard word {word!r}")
+    if analyst.INVALIDATION_MARKER not in text:
+        failures.append("prompt_slots.md does not carry the invalidation lead in")
+    if chr(0x2014) in text:
+        failures.append("prompt_slots.md carries an em dash")
+    print("  slots prompt guard clean, names every guard word and the invalidation lead in")
+
+
 def conftest_activate():
     from tests import conftest
 
@@ -13619,6 +13933,11 @@ def main() -> int:
     claim_the_page_opens_at_a_glance(failures)
     claim_the_morning_page_links_to_its_siblings(failures)
     claim_the_archive_carries_the_midday_report(failures)
+    claim_the_skeleton_opens_a_slot_for_each_prose_field(failures)
+    claim_a_slots_answer_is_fitted_back_onto_the_skeleton(failures)
+    claim_the_projection_keeps_what_the_template_names(failures)
+    claim_slots_mode_ships_the_skeleton_and_the_prose(failures)
+    claim_the_slots_prompt_holds_to_the_guard(failures)
 
     if failures:
         for failure in failures:
