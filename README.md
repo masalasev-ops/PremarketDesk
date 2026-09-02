@@ -157,6 +157,16 @@ keys are configured. No email has ever gone out from this system. Until you
 delete that file you read the report by opening `site/PremarketDesk.html` from
 disk, which needs no server and no network.
 
+Every morning's page opens with an at a glance paragraph, written by Python
+from the packet and placed above the disclaimer: the eligibility counts, the
+gap direction split, the strongest scored names with their direction, the
+entry and stop of each day eligible name, the top failed day condition on an
+empty morning, and the four index proxies. Each `runs/YYYY-MM-DD/report.html`
+ends with links to the previous session, that day's midday report once the
+12:00 pass has written it, the archive and the weekly page. Those links are
+paths on this machine, so the emailed copy has them stripped, and the archive
+carries each day's midday report under its morning report.
+
 That gate is deliberate and it is the one thing in the project a person has to
 clear by hand. Deleting it is a statement that you have taken one live morning's
 numbers, checked them against an independent source, and found them right. See
@@ -176,7 +186,7 @@ morning.
 | 4 | Swing watchlist | Which names passed the swing conditions | Same, on a longer horizon |
 | 5 | Notable movers | What else moved that is not a candidate | Context. Sector and index level moves you would otherwise miss |
 | 6 | Market trends | Index, volatility, rates, oil, dollar | Tone. Never an input to any screen |
-| 7 | Technical signals | Where each candidate sits against prior high, premarket high, 200 day | Per name detail behind the tables |
+| 7 | Technical signals | Where each candidate sits against prior high, premarket high, 200 day | A table of levels for every candidate, then one write up per name on a watchlist, each closing with the line that says what would prove the setup wrong |
 | 8 | Economic data and rates | Today and tomorrow's high importance events | What could overrun everything at 08:30 or 10:00 |
 | 9 | Coming up | Earnings for candidates and notable names reporting tomorrow | Tomorrow's setup, today |
 | 10 | What the record says so far | What the paper ledger has observed across every session it holds | The only section not about today. See below |

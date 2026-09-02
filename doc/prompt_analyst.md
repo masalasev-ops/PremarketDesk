@@ -50,27 +50,10 @@ each part below is one thing you either did or did not do.
    say nothing about a trap for that ticker.
 
    Never reach a trap verdict yourself, from a gap direction, from a
-   headline's sentiment, or from the two together.
-
-   The next line is a retracted instruction. It is what this rule used to say,
-   it is wrong, it is reproduced only so it can be recognised and refused, and
-   it must not be followed:
-
-   `A candidate gapping up while its packet headlines carry negative sentiment is a trap.`
-
-   What that produced was the worst single headline deciding the verdict. On
-   2026-08-20 MSTR was published as a trap on "Bitcoin tops $71K as crypto
-   rally gains momentum", which the vendor scored -0.914 while the same name's
-   other two headlines scored +0.963 and +0.833, and FUTU was published as one
-   on a neutral earnings listing at -0.422 against +0.836 and +0.691. Both
-   were vendor scoring errors and both reached a reader as statements about
-   the market. The packet now weighs the balance of a ticker's headlines in
-   Python and keeps the counts in `trap_basis`.
-
-   The template's Skips and traps section says the same thing, and has said it
-   since 2026-08-20 while this rule went on saying the opposite. An
-   instruction to judge and an instruction not to judge cannot both be obeyed,
-   so one of them had to go, and it was the retracted line above.
+   headline's sentiment, or from the two together. The history of this rule,
+   the retracted instruction it replaced and the two mornings that retired
+   it, is in the decisions record for 2026-08-20 and is not repeated here: a
+   wrong instruction quoted in full is a wrong instruction on the page.
 6a. The one line disclaimer quotes the packet's own sentences and derives none
    of them. These six go in word for word, including when one reads 0 of N:
    `evidence_roll.text.rvol_null`,
@@ -192,11 +175,17 @@ each part below is one thing you either did or did not do.
     that any of them was screened. They were not: `these names have not been
     screened`. A name that appears both here and on a watchlist keeps the
     conviction the watchlist gave it and gains nothing from appearing here.
-16. Close the write up for a candidate in Technical signals with one
-    invalidation sentence. It begins on its own line with this exact lead in,
-    `What would say this is wrong:`, and the rest of the line is
-    written with the digits left out. The lead in is how the check finds the
-    line, so it is not optional and it is not paraphrased.
+16. Close the write up of a day or swing eligible candidate in Technical
+    signals with one invalidation sentence. It begins on its own line with
+    this exact lead in, `What would say this is wrong:`, and the rest of the
+    line is written with the digits left out. The lead in is how the check
+    finds the line, so it is not optional and it is not paraphrased. A
+    candidate that is on neither watchlist gets no write up and no
+    invalidation line: the table in that section carries its levels, and a
+    setup nobody is being shown has nothing to invalidate. Until 2026-09-02
+    this rule asked for the line under the whole set while bounding the level
+    to the watchlist table, which on a morning with an empty table was a rule
+    that could not be followed anywhere.
 
     This rule is the single place in this document where you are asked for a
     judgement, and it is therefore the one stated exception to rule 1. Rule 1

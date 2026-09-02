@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -99,6 +100,35 @@ def already_delivered(html_path: Path) -> dict[str, Any] | None:
     return record if isinstance(record, dict) and record.get("sent_at") else None
 
 
+_LOCAL_ONLY_RE = re.compile(r'<div class="local-only">.*?</div>\s*', re.S)
+
+
+def strip_local_only(html: str) -> str:
+    """Remove the renderer's footer of relative links before emailing.
+
+    render_report writes a div of links to the previous session, the midday
+    page, the archive and the weekly page. They are paths on this machine and
+    every one of them is dead in a mail client, so the div goes rather than
+    ship four broken links under every report.
+    """
+    return _LOCAL_ONLY_RE.sub("", html)
+
+
+def email_subject(html_path: Path, session_date: str) -> str:
+    """The report's own title line as the subject, so the inbox says the mood.
+
+    Read from report.md beside the HTML, which is what render_report titled the
+    page from. Falls back to the dated generic subject when the markdown is
+    not there, which is the case for a hand rendered file.
+    """
+    markdown_path = html_path.with_suffix(".md")
+    if markdown_path.is_file():
+        for line in markdown_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("# "):
+                return f"{line[2:].strip()} ({session_date})"
+    return f"PremarketDesk morning report {session_date}"
+
+
 def deliver(html_path: Path) -> int:
     # The first morning verification gate. verify_morning.py owns the marker;
     # a human deletes it after watching one real morning's numbers, and until
@@ -153,9 +183,16 @@ def deliver(html_path: Path) -> int:
     payload = {
         "from": config.email_from(),
         "to": recipients,
-        "subject": f"PremarketDesk morning report {session_date}",
-        "html": html,
+        "subject": email_subject(html_path, session_date),
+        "html": strip_local_only(html),
     }
+    # A plain text part beside the HTML, from the markdown the HTML was
+    # rendered from. A client that cannot show HTML, and a client that strips
+    # the style block and leaves a ten column table borderless, both fall back
+    # to this rather than to nothing.
+    markdown_path = html_path.with_suffix(".md")
+    if markdown_path.is_file():
+        payload["text"] = markdown_path.read_text(encoding="utf-8")
 
     session = eodhd.build_session()
     try:

@@ -128,6 +128,12 @@ _PAGE = """<!doctype html>
   .day blockquote { border-left: 3px solid var(--line); margin-left: 0;
     padding-left: 12px; color: var(--muted); }
   .day a { color: var(--accent); }
+  .day p.glance { background: var(--active); border-left: 4px solid var(--ink);
+    padding: 10px 14px; font-size: 0.95em; }
+  .day p.disclaimer { font-size: 0.85em; color: var(--muted); }
+  .day .midday { margin-top: 3em; padding-top: 1.5em; border-top: 3px double var(--line); }
+  .day .midday h1 { font-size: 1.3rem; }
+  .day .midday-absent { color: var(--muted); font-size: 0.9em; }
   .empty { max-width: 760px; margin: 40px auto; color: var(--muted); }
 </style>
 </head>
@@ -311,10 +317,24 @@ def collect_runs() -> list[dict[str, Any]]:
         except OSError as exc:
             print(f"archive: skipped {run_dir.name}, report.md unreadable: {exc}")
             continue
+        # The midday report too, where the 12:00 pass wrote one. Until
+        # 2026-09-02 report_midday.md was reachable only by browsing runs/:
+        # nothing delivered it, nothing linked to it and this page did not
+        # carry it. Absent is None, not an empty string, so the day section
+        # can say the pass has not run rather than render nothing.
+        midday_path = run_dir / "report_midday.md"
+        midday_text = None
+        if midday_path.is_file():
+            try:
+                midday_text = midday_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                print(f"archive: {run_dir.name} report_midday.md unreadable, "
+                      f"carried without it: {exc}")
         entries.append({
             "date": run_dir.name,
             "dir": run_dir,
             "markdown": text,
+            "midday_markdown": midday_text,
             "counts": _counts_from_packet(run_dir),
         })
     return entries
@@ -340,8 +360,18 @@ def build(embed_sessions: int) -> Path:
         # _TAG_OPENER_RE.
         body = render_report.to_html(entry["markdown"])
         banner = _fixture_banner(date, entry["counts"])
+        # The midday report under the morning's, through the same renderer,
+        # behind a rule so the two documents read as two. A day without one
+        # says so in a sentence rather than ending where the morning ends.
+        if entry.get("midday_markdown"):
+            midday = ('<div class="midday">'
+                      + render_report.to_html(entry["midday_markdown"])
+                      + "</div>")
+        else:
+            midday = ('<div class="midday"><p class="midday-absent">The 12:00 '
+                      "midday pass has not written a report for this day.</p></div>")
         day_parts.append(f'<section class="day" id="day-{date}" hidden>\n'
-                         f'{banner}{body}\n</section>')
+                         f'{banner}{body}\n{midday}\n</section>')
 
     if linked:
         rail_parts.append('    <div class="rail-note">Older, opens its own page</div>')

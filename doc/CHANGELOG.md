@@ -15,6 +15,81 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty third: the page opens at a glance, the essay becomes a table, and the midday report reaches the reader
+
+Tier 1 of doc/IMPROVEMENT_PLAN.md: the report gets better for its reader
+without the model doing anything new.
+
+AT A GLANCE, ABOVE THE DISCLAIMER. The page opened with the title, the dated
+line and a 1,100 to 1,400 character disclaimer, and the Summary after that.
+analyst.summary_strip now writes one paragraph from the packet, in Python,
+and annotate_summary_strip places it after the dated line and before the
+disclaimer: day and swing eligible counts, the gap direction split (from
+list_shape.text where the packet carries it, counted from score_roll where
+it does not), the strongest scored names with their bucket and direction, the
+entry and stop of each day eligible name, the top failed day condition on an
+empty morning, and the four index proxies with their change. Registered as
+Python written so the final guard pass reads it, and the claim runs the guard
+over it. The renderer classes that paragraph and the disclaimer so the
+stylesheet lifts one and quietens the other. The fallback morning gets the
+strip too, because it is an annotation and not a template slot.
+
+TECHNICAL SIGNALS IS A TABLE, THEN WRITE UPS FOR THE ELIGIBLE NAMES ONLY.
+The template asked for a paragraph per candidate restating levels the tables
+already carried, and both quantifier flags of 2026-09-01 fired on the first
+sentence of that essay. The section now opens with the fixed header the
+fallback already wrote, one row per candidate, and continues with one
+paragraph per day or swing eligible name, closing with the invalidation line.
+Prompt rule 16 is scoped the same way: a candidate on neither watchlist gets
+no write up and no invalidation line, which also makes the rule followable
+on an empty morning, where it had bounded the level to a table with no rows.
+
+THE REPETITION BUDGET. On the 2026-09-01 hand run the lower bound arithmetic
+appeared four times, the estimate sentence twice, the collector check twice
+and MMED's null RVOL reason five times, every one of them instructed. Each
+fact now has one home: the lower bound and the estimate in the disclaimer,
+with the two words lower bound allowed beside a quoted ratio and nothing
+more; the collector volume check and the baseline vintages in Technical
+signals; a name's missing evidence in its own gappers block through
+evidence_missing.text and not again. The Summary block says where those
+facts live and that it does not repeat them.
+
+RULE 5 AND RULE 17, SHORTER. The retracted trap instruction quoted in full
+inside rule 5 is gone, replaced by a pointer to DECISIONS 2026-08-20: a wrong
+instruction reproduced on the page is a wrong instruction on the page. The
+template's restatement of rule 17 under Premarket gappers is a short pointer
+to the rule. Rule 17 itself stays, because the three mechanical tests that
+were measured against it could not replace it. The two documents together
+fall from 67.8 KB to 64.4 KB.
+
+THE MIDDAY REPORT REACHES THE READER. report.html ends with links to the
+previous session, that day's report_midday.html once it exists, the archive
+with the day's hash and the weekly page, inside a div deliver strips before
+emailing because the paths are dead in a mail client. The email gains a text
+part, the markdown the HTML was rendered from, and a subject carrying the
+report's own title. build_archive reads report_midday.md and renders it under
+the morning's report behind a rule, or says the pass has not run. Three
+claims: the strip sits above the disclaimer and is guard clean, the page
+links to its siblings and the emailed copy does not, and the archive carries
+the midday report.
+
+MEASURED ON A HAND RUN of the 2026-09-01 packet after these changes, written
+to runs/2026-09-01/report.handrun-2.md: one attempt, zero quantifier flags,
+containment 57 claims across 5 ticker columns. The lower bound arithmetic
+appears once and the collector check once, against four and two on the
+previous hand run of the same packet. Technical signals is 539 words as a
+table with one closing paragraph, against 457 as an essay, because the table
+carries 96 numbers. The whole report is 6,347 words against 5,725; the strip
+is 147 of the difference and the gappers blocks grew 254 on the same
+instructions, which is run to run variance. Output tokens were 30,951
+against 20,013 and the CLI took 359 seconds against 227: the instruction set
+is smaller and the model thought longer, which is the cost tier 2 of the plan
+removes by rendering the skeleton in Python. The vintage sentence still
+appears in the Summary as well as in Technical signals, because the Summary
+block still asks for the gaps_to_fill weakness and the vintage is in
+gaps_to_fill; noted rather than chased, since tier 2 renders the Summary
+counts and the model's Summary shrinks to the tone.
+
 ## 2026-09-02, thirty second: five defects the whole tree review found, fixed
 
 doc/IMPROVEMENT_PLAN.md, written earlier the same day from a four pass review,

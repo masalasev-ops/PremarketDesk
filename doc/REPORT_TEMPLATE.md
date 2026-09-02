@@ -104,7 +104,11 @@ invent it.}
 {Six to nine sentences. The market tone from the snapshot, then the counts,
 then the strongest conviction names by bucket, then the unsigned score
 sentence, then anything in gaps_to_fill that materially weakens this
-morning's evidence.
+morning's evidence, in one sentence. The collector volume check, the
+baseline vintages and the lower bound arithmetic have their homes in the
+disclaimer and in Technical signals and are not repeated here: on
+2026-09-01 the check's figures appeared in the Summary and again in
+Technical signals, and the lower bound arithmetic four times.
 
 THE BUDGET COUNTS THE MANDATORY ITEMS. It read three to six while the
 items below already required seven: the tone, the quoted ranking sentence,
@@ -266,41 +270,16 @@ eleven of the eleven names it could be asked of, and printing it twelve times
 would have buried the one missing baseline and the four partial windows that
 actually differed.
 
-UNDER EACH QUOTED HEADLINE, ONE SENTENCE SAYING WHO IT IS ABOUT. Three values
-and nothing else: it is about the company itself, about its sector or the wider
-market, or about a peer. Say which, and say what in the headline tells you so.
-
-This is the one thing in this report a reader can check at a glance, which is
-why it goes here and nowhere else: the headline is printed on the line above,
-so a wrong call is visible rather than trusted. It is also why it must not be
-moved to a table. A table cell saying "sector" with the headline three sections
-away is a claim the reader has to go and verify, and a claim nobody verifies is
-worse than no claim.
-
-NOTHING FOLLOWS FROM IT. Not catalyst_class, not the score, not eligibility,
-not watchlist membership, not a trap verdict. It is a description of a text
-that is in front of the reader, and the packet's own fields keep their values
-whatever you write here. A sentence reading "this is about the sector, so the
-catalyst is weaker" is the failure this instruction is written to avoid: you
-are describing the headline, not regrading the candidate.
-
-Why it exists. A market wrap gets tagged by the feed with whatever symbols it
-mentions, so a piece about the session can arrive attached to one company and
-read as that company's news. Three separate tests were built in Python to catch
-this and measured against the whole article corpus: a symbol tag count, a macro
-tag list, and a test for whether the title carries the company. Each caught
-part of it, and "Energy stocks lead in subdued final trading day of August",
-filed against a health care ticker, defeated the count and the title test both.
-A reader glancing at that headline sees the answer immediately. So the answer
-is asked for in words and printed where it can be checked.
-
-AND ONE CLAUSE NAMING WHAT THE HEADLINE SAYS HAPPENED, quoted from the headline
-rather than characterised. catalyst_class is a coarse bucket and beat and
-raised guidance and beat and cut guidance are opposite events inside the single
-class `earnings`. Quote the words the headline uses. Where the headline gives
-no specific event, say that it does not rather than supplying one: the class is
-what the packet computed and the event is what the text says, and a missing
-event is a fact about the headline.}
+Under each quoted headline, the one sentence prompt rule 17 asks for: whether
+the headline is about the company itself, about its sector or the wider
+market, or about a peer, and what in the headline says so, plus one clause quoting what the
+headline says happened, or saying that it names no event. It goes directly
+under the headline and never into a table, because the headline is on the line
+above and a wrong call is visible rather than trusted. Nothing follows from
+it: catalyst_class, the score, the conviction, eligibility and membership keep
+the packet's values whatever you write. Why the sentence exists, and the three
+mechanical tests that were measured and could not replace it, are recorded in
+DECISIONS.md 2026-09-01 tenth and eleventh and are not repeated here.}
 
 ## Day watchlist
 
@@ -543,51 +522,59 @@ says about risk appetite this morning.}
 
 ## Technical signals
 
-{CLOSE THE WRITE UP FOR A CANDIDATE WITH ONE INVALIDATION SENTENCE. It
-begins with this exact lead in, on its own line:
+{A TABLE FIRST, then prose for the eligible names only. The header row is
+fixed and is reproduced exactly as this line, character for character,
+because the containment guard reads ticker claims from a column headed Ticker:
+
+| Ticker | Premarket high | Premarket low | Premarket VWAP | Prior high | 200d avg | Score | Conviction |
+
+One row per candidate, in packet order. A premarket high whose
+pm_window_starts_late is true carries the word partial in its cell. A null
+prints as the word null. A null score prints unscored in the conviction
+column, never a colour. Levels come from the packet and from nowhere else:
+premarket high, low and VWAP, prior day high, the 200 day average. No
+indicator that is not in the packet.
+
+Until 2026-09-02 this section asked for a paragraph per candidate restating
+the levels the tables above already carried, and both quantifier flags of
+2026-09-01 fired on the first sentence of that essay, because twelve
+paragraphs about twelve rows invite a sentence about the set. The table is
+where the levels live. The prose below is for the setups a reader is being
+shown.
+
+THEN ONE PARAGRAPH PER DAY OR SWING ELIGIBLE CANDIDATE, and nothing for a
+candidate that is on neither list. Where both watchlists are empty, write
+this one sentence in place of the paragraphs, quoting the count:
+
+Write ups: 0 of {screen_tally.candidates_examined} candidates are on a
+watchlist this morning.
+
+Each paragraph gives, in words: where price sits against the premarket high,
+low and VWAP, the prior day high and the 200 day average; which score
+components fired, read from score_components; and the entry and stop as the
+levels they are (the premarket high and the premarket low) without restating
+their figures, which sit in the watchlist table. Where the premarket window
+behind a level is partial, say so; where pm_window_thin is true, give the
+minutes and shares from pm_window_thin_reason, because the count is what the
+reader needs and the bare word partial is not enough. Where
+prior_close_disagreement_pct is above the CRITERIA floor, give both prior
+closes and the percentage between them, and do not switch sources or average
+them.
+
+CLOSE EACH PARAGRAPH WITH THE INVALIDATION SENTENCE prompt rule 16 asks for.
+It begins on its own line with this exact lead in:
 
 `What would say this is wrong:`
 
 and the rest of that line is written in words with the digits left out. State
 the level, never restate its figure: "a break back under the premarket VWAP",
-not "a break back under 103.80". The figures sit in the watchlist table a few
-lines above and repeating them here buys the reader nothing.
-
-THE LEAD IN IS NOT DECORATION. It is how the check finds the line. Without a
-fixed opening there is no way to tell an invalidation sentence from any other
-prose, and a rule nothing can locate is a rule nothing enforces.
-
-Two reasons this is a rule rather than a style note, and the second is the
-important one.
-
-The Entry and Stop columns are the two numbers the paper ledger actually books
-against, and they come from CRITERIA [Picks] through one function. A sentence
-that restates one of them slightly differently, or rounds it another way, reads
-as a second opinion about a level that has only one value.
-
-And nothing in this system checks a number you write. The containment check
-validates TICKERS. The quantifier guard refuses sweeping claims about the
-candidate set. Neither reads a price. A numeric containment check was measured
-on 2026-09-01 across the eight archived reports and refused: it flags 32 to 49
-numbers a report, and effectively all of them are legitimate unit conversions,
-a market cap of 211592811493 in the packet printed as 211.59B, or arithmetic
-the prompt asks for, a price pair turned into a percent move. A guard that
-fires forty times a morning on correct writing is a guard nobody reads by the
-end of the week. So the invention surface is REMOVED here instead of watched: a
-sentence written with the digits left out cannot invent a figure, and the suite
-checks that these sentences carry none.
-
-Say what would make the setup wrong, not what would make it work. "The entry
-sits above the last premarket print, so the move has to continue rather than
-merely hold; a slip back under the premarket VWAP before the entry is reached
-would say the bid is not there." Where the premarket window behind a level is
-partial, or its RVOL is a lower bound, that belongs in this sentence too,
-because those are the two things most likely to make the level unreliable.}
-
-{Only levels already present in the packet: premarket high, low, VWAP versus
-price, prior day high versus price, the 200 day average versus price, and the
-score components that fired. For any candidate whose pm_window_starts_late is
-true, any reference to its premarket high must carry the word partial. No indicator not present in the packet.
+not "a break back under 103.80". The lead in is how the check finds the line;
+without a fixed opening there is no way to tell an invalidation sentence from
+other prose. A sentence written with the digits left out cannot invent a
+figure, and the suite checks these sentences carry none. Say what would make
+the setup wrong, not what would make it work, and where the window behind a
+level is partial or its RVOL is a lower bound, that belongs in this sentence
+too.
 
 A COMPONENT THAT IS ABSENT IS NOT A COMPONENT THAT SCORED ZERO. Read
 score_components per candidate and say nothing about a component a candidate
@@ -595,101 +582,57 @@ does not carry. A name whose pm_rvol is null carries premarket_float_rotation
 in that slot instead, and writing that its RVOL component scored zero states
 that a ratio was computed and came out low when the packet says it was never
 computable. Check volume_measure_used before writing any sentence about a
-volume component across more than one name, and if the names do not agree, say
-which measure each of them used rather than generalising over both.
+volume component across more than one name, and if the names do not agree,
+say which measure each of them used.
 
-NEVER SUPPLY THE REASON A NUMBER IS MISSING. pm_rvol_reason holds it. On
-2026-08-19 the reason was a baseline median below the 1,000 share floor, while
-the report wrote that observed volume sat far under the baseline, which was
-backwards: the two names concerned traded more than twice their baseline. A
-cause invented to explain a null is an invented claim even when every figure
-around it is quoted correctly.
+NEVER SUPPLY THE REASON A NUMBER IS MISSING. pm_rvol_reason holds it, and the
+candidate's evidence_missing.text already quoted it in Premarket gappers; do
+not quote it a second time here. On 2026-08-19 the reason was a baseline
+median below the 1,000 share floor while the report wrote that observed
+volume sat far under the baseline, which was backwards.
 
-WHEN A RATIO IS A LOWER BOUND, SAY SO WHEREVER THE RATIO IS DISCUSSED. If
-pm_rvol_basis.is_lower_bound is true, the numerator covers a shorter window
-than the denominator and the ratio can only understate. It is not a reading
-that came out low, and a section describing RVOL across the set without that
-word describes a data gap as a quiet tape. The same applies to
-pm_float_rotation_basis.is_lower_bound, which is the flag for the names scored
-on premarket_float_rotation because their pm_rvol is null: that ratio is a
-lower bound for the same arithmetic reason and must be called one wherever it
-is given.
+THE LOWER BOUND IS SAID ONCE, IN THE DISCLAIMER. evidence_roll.text.rvol_lower_bound
+and evidence_missing_shared.text already carry which ratios are lower bounds
+and the window arithmetic behind it. Here, beside a ratio you quote, write the
+two words lower bound and nothing more. Do not restate the arithmetic, and do
+not write a sentence about the ratios across the set. The same two words
+apply to a float rotation whose pm_float_rotation_basis.is_lower_bound is
+true. On 2026-09-01 the arithmetic was written out four times in one report.
 
-ONE REASON THE RATIO IS A LOWER BOUND, AND ONE MEASUREMENT THAT IS ALREADY IN
-IT. The window shortfall above is arithmetic, it can only understate, and it is
-the ONLY reason left to call an RVOL here a lower bound.
+THE COLLECTOR VOLUME CHECK LIVES HERE AND NOWHERE ELSE. It is the measured
+disagreement between the collector's socket and the vendor's intraday feed on
+identical minutes, and since 2026-08-21 that disagreement is what the capture
+correction divides out, per symbol as pm_capture_share: it is the input to
+every RVOL and float rotation in the packet rather than an error inside them.
+Never write that the ratios understate by this block's percentage; that was
+true until 2026-08-21 and false since. Where the block is present and not
+stale, give its median_abs_pct, its compared count and the day it was taken,
+say it is the measurement the numerator is corrected by, and say what
+survives: the share's session to session dispersion, about 1.5 times against
+a level of about nine. Quote direction_phrase as a description of the check.
+Where the block is null or stale, say so and say what it costs: the per
+symbol shares are that old too, and a symbol the check does not carry falls
+back to the file default. Where collector_silent is above zero, say how many
+subscribed symbols the check never reached.
 
-The packet's collector_volume_check block is a different thing and must not be
-reported as a second error. It is the measured disagreement between the
-collector's socket and the vendor's intraday feed on identical minutes, and
-since 2026-08-21 that disagreement is what the capture correction DIVIDES OUT:
-it is pm_capture_share, applied per symbol, so it is the INPUT to every RVOL
-and float rotation in the packet rather than an error sitting inside them.
-
-Never write that the ratios understate by this block's percentage. That was
-true until 2026-08-21 and the report of that morning published it twice beside
-a table of already-corrected values, which tells a reader to apply a nine times
-correction that the arithmetic has already applied. Doing it again is the same
-size of error as the defect the correction was built to fix, pointed the other
-way.
-
-What to write instead. Where the block is present and not stale, give its
-median_abs_pct, its compared count and the day it was taken, and say that this
-is the measurement the RVOL numerator is corrected by rather than an error
-remaining in it. Say what survives: the share's session to session dispersion,
-which CRITERIA [Collector] premarket_capture_rate measures at about 1.5 times
-against a level of about nine, so a published ratio is an estimate with that
-much play. Quote direction_phrase as a description of the CHECK, never as a
-claim about the published ratios. `mixed` is worth naming because a session
-whose symbols disagree in sign is a session whose shares are less trustworthy
-than usual. Where the block is null or stale, say so and say what it costs:
-the per symbol shares are that old too, and a symbol the check does not carry
-falls back to the file default. Where collector_silent is above zero, say how
-many subscribed symbols the check never reached, because compared and
-unavailable do not partition the subscription on their own.
-
-A THIN WINDOW IS A STRONGER FACT THAN A LATE ONE AND GETS ITS OWN WORDS.
-pm_window_starts_late says a window opened late. pm_window_thin says it holds
-fewer minutes than CRITERIA's floor, and pm_window_thin_reason gives the count.
-Where a candidate is thin, say how many minutes and how many shares every one
-of its premarket levels rests on. The count is what the reader needs and the
-bare word partial is not enough on its own: on 2026-08-20
-SCSC's gap, VWAP and high all came off four bars holding 1,487 shares and the
-report used the same word for it as for AAP's fifty. A thin window that ALSO
-opened late keeps the partial label rule 7 requires and carries the counts as
-well, because the two flags are independent in the packet and SCSC carried
-both.
-
-IF prior_close_disagreement_pct IS ABOVE THE CRITERIA FLOOR FOR A CANDIDATE,
-SAY SO WHERE ITS GAP IS DISCUSSED. Two vendor endpoints carry a prior close and
-the gap is measured from the end of day record. Give both numbers and the
-percentage between them. Do not switch sources and do not average them.
-
-THE BASELINE AGE TRAVELS WITH THE RVOL. baseline.age_days is how old the
-DENOMINATOR is and baseline.computed_today is whether it was warmed this
-morning. Reusing a cached one is the design, not a fault, so state it as a fact
-and never as a warning; the point is that a reader comparing two RVOLs should
-know when they are two different vintages.
+THE BASELINE AGE TRAVELS WITH THE RVOL, in one sentence for the set.
+baseline.age_days is how old the denominator is and baseline.computed_today
+is whether it was warmed this morning. Reusing a cached one is the design,
+not a fault, so state which vintages are in play as a fact and never as a
+warning.
 
 A SILENT SYMBOL AND A REPLAY-ONLY SYMBOL ARE DIFFERENT AND collector_coverage
 TELLS THEM APART. silent_with_nothing delivered nothing whatever;
 silent_with_replay_only delivered a replayed print stamped outside the
-collection window, which is filtered out upstream and proves the subscription
-was accepted. Say "no trade inside the collection window", never "the socket
-delivered no trade", about the second group. On 2026-08-20 NBTX had one 04:23
-print of 20 shares and UUP one 07:00 print of 1 share, and both were described
-as having delivered nothing.
+collection window. Say "no trade inside the collection window", never "the
+socket delivered no trade", about the second group.
 
 IF day_blocked_on_rvol_alone IS NOT EMPTY, NAME THOSE SYMBOLS AND SAY WHAT
 THEY MEAN. They cleared the day screen's other conditions and failed on
-premarket RVOL by itself. On a morning where collector_volume_check shows a
+premarket RVOL by itself. On a morning where the collector check shows a
 large disagreement, an empty day watchlist is an instrument reading rather
 than a quiet market, and the reader has to be told which tickers the
-instrument cost. Say it in the Day watchlist section too, next to the
-failed-condition counts. Write it in counts, never in a quantifier: the guard
-in analyst.py rejects a quantifier standing within six words of candidate,
-name or watchlist, and this sentence is the one place that list may be spelled
-out, which is why it is not spelled out here.}
+instrument cost. Write it in counts, never in a quantifier.}
 
 ## Economic data and rates
 

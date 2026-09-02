@@ -18,6 +18,38 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, second: rule 17 stays, the strip is Python's, and the footer is stripped before it is mailed
+
+Three choices in tier 1 of doc/IMPROVEMENT_PLAN.md.
+
+RULE 17 STAYS. The plan proposed replacing the model's one sentence about who
+a headline is about with the packet's article_scope.why. It was not done. The
+packet field is the mechanical test, and DECISIONS 2026-09-01 tenth and
+eleventh measured three such tests against the article corpus and found the
+case that defeats them, a market wrap tagged to a health care ticker. The
+sentence exists because a reader glancing at the headline sees the answer at
+once, so the judgement is asked for in words and printed where it can be
+checked. Replacing it with the test it was built to outdo would have been
+tidier and worse. What went instead was the duplicated rationale: the template
+restated the rule at length under Premarket gappers, and that restatement is
+now a pointer.
+
+THE STRIP IS WRITTEN BY PYTHON, NOT ASKED OF THE MODEL. The at a glance
+paragraph could have been one more template slot. It is an annotation
+instead, on the same argument as the score band legend and the job health
+line: a paragraph the model writes can be forgotten on an off morning, and
+this is the paragraph a reader should be able to rely on finding. It also
+means the fallback morning has it, which is the morning that most needs a
+first screen that says what happened. The cost is that it is counts and
+quoted fields only, with no tone sentence; the Summary keeps the tone.
+
+THE FOOTER IS STRIPPED RATHER THAN NOT WRITTEN. The links are relative paths
+on this machine and are dead in every mail client. The alternative was to
+render two files, or to render none and leave the midday report unreachable.
+One file with a div the delivery step removes keeps report.html the single
+artefact the archive, the watchdog and the human all read, and puts the
+removal where the knowledge that this copy is going by mail lives.
+
 ## 2026-09-02: the run budget is the morning's, and a question not asked is counted once
 
 Two choices in the tier 0 fixes of doc/IMPROVEMENT_PLAN.md could have gone

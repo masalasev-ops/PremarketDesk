@@ -1067,6 +1067,7 @@ ANNOTATIONS_MODEL_WRITTEN = (
     "annotate_gap_reasons",
 )
 ANNOTATIONS_PYTHON_WRITTEN = (
+    "annotate_summary_strip",
     "annotate_job_health",
     "annotate_score_bands",
     "annotate_column_legends",
@@ -2001,6 +2002,116 @@ def annotate_glossary(report_text: str) -> str:
     return glossary.append_section(report_text)
 
 
+GLANCE_MARKER = "**At a glance.**"
+
+
+def summary_strip(packet: dict[str, Any]) -> str | None:
+    """One paragraph a reader at 08:50 wants first, built from the packet.
+
+    The page used to open with the title, the dated line and then a 1,100 to
+    1,400 character disclaimer, with the Summary after it. The counts, the
+    strongest names with their direction, the tape and the top failed
+    condition were all in the packet and none of them was on the first
+    screen. This puts them there, in Python, on the annotate_score_bands
+    argument: a paragraph the model writes is a paragraph that can be
+    forgotten on an off morning, and the strip is the one thing a reader
+    should be able to rely on finding.
+
+    Everything here is a count or a quoted field, and the text carries no
+    quantifier: the final guard pass reads it like any other Python written
+    annotation. Returns None when the packet carries nothing to say, so a
+    fixture with no tally gets no strip rather than an empty one.
+    """
+    parts: list[str] = []
+    tally = packet.get("screen_tally") or {}
+    examined = tally.get("candidates_examined")
+    day_tally = tally.get("day") or {}
+    swing_tally = tally.get("swing") or {}
+    if examined is not None and day_tally.get("eligible") is not None \
+            and swing_tally.get("eligible") is not None:
+        parts.append(f"Day eligible {day_tally['eligible']} of {examined}, swing "
+                     f"eligible {swing_tally['eligible']} of {examined}.")
+
+    roll = packet.get("score_roll") or {}
+    by_bucket = roll.get("by_bucket") or {}
+    direction = ((packet.get("list_shape") or {}).get("text") or {}).get("gap_direction")
+    if direction:
+        parts.append(str(direction).rstrip(".") + ".")
+    else:
+        ups = sum(1 for rows in by_bucket.values() for r in rows or []
+                  if r.get("direction") == "up")
+        downs = sum(1 for rows in by_bucket.values() for r in rows or []
+                    if r.get("direction") == "down")
+        if ups or downs:
+            parts.append(f"Of the scored rows {ups} gapped up and {downs} gapped down.")
+
+    strongest: list[str] = []
+    for bucket in ("green", "yellow", "red"):
+        for row in by_bucket.get(bucket) or []:
+            strongest.append(f"{_bare(str(row.get('symbol') or ''))} "
+                             f"{_f(row.get('score'), 1)} {bucket}, "
+                             f"{row.get('direction') or 'direction unknown'}")
+        if len(strongest) >= 4:
+            break
+    if strongest:
+        parts.append("Strongest scored: " + "; ".join(strongest[:4]) + ".")
+
+    for candidate in packet.get("candidates") or []:
+        if not candidate.get("day_eligible"):
+            continue
+        entry = candidate.get("entry_ref")
+        stop = candidate.get("stop_ref")
+        if entry is None or stop is None:
+            continue
+        parts.append(f"{_bare(candidate['symbol'])} entry {_f(entry)}, stop {_f(stop)}.")
+
+    if day_tally.get("eligible") == 0 and day_tally.get("failed_summary"):
+        parts.append(f"Day screen failed on: {day_tally['failed_summary']}.")
+
+    tape: list[str] = []
+    for row in packet.get("market_snapshot") or []:
+        label = str(row.get("label") or "")
+        change = row.get("change_pct")
+        if label in ("spy", "qqq", "iwm", "dia") and change is not None:
+            try:
+                tape.append(f"{label.upper()} {float(change):+.2f}%")
+            except (TypeError, ValueError):
+                continue
+    if tape:
+        parts.append("Tape: " + ", ".join(tape) + ".")
+
+    if not parts:
+        return None
+    return GLANCE_MARKER + " " + " ".join(parts)
+
+
+def annotate_summary_strip(report_text: str, packet: dict[str, Any]) -> str:
+    """The at a glance paragraph, after the dated line and before the disclaimer.
+
+    Idempotent, because report.md is written twice on the path where
+    containment examined nothing. Placed after the first non empty line that
+    follows the title, which the template makes the dated subtitle, so the
+    disclaimer that follows it is pushed down rather than removed: the guard
+    still finds "Nothing here is advice" by its opening words.
+    """
+    if GLANCE_MARKER in report_text:
+        return report_text
+    strip = summary_strip(packet)
+    if not strip:
+        return report_text
+    lines = report_text.splitlines()
+    title_at = next((i for i, line in enumerate(lines) if line.startswith("# ")), None)
+    if title_at is None:
+        return report_text
+    subtitle_at = next((i for i in range(title_at + 1, len(lines)) if lines[i].strip()),
+                       None)
+    if subtitle_at is None:
+        return report_text
+    insert_at = subtitle_at + 1
+    lines[insert_at:insert_at] = ["", strip]
+    return "\n".join(lines) + ("\n" if report_text.endswith("\n") else "")
+
+
 def annotate_job_health(report_text: str, packet: dict[str, Any]) -> str:
     """Name any scheduled step that has not succeeded inside its window.
 
@@ -2033,6 +2144,11 @@ def _annotate_body(report_text: str, packet: dict[str, Any],
     RELATIVE TO THE GUARD is not presentational and is checked by
     claim_the_guard_reads_what_ships.
     """
+    # What a reader at 08:50 wants first, above the disclaimer. Python
+    # written from the tally, the score roll and the tape, so the fallback
+    # morning gets it too.
+    report_text = annotate_summary_strip(report_text, packet)
+
     # Overdue scheduled steps, named before the report is written rather than
     # after, so the deterministic fallback report carries the line too.
     report_text = annotate_job_health(report_text, packet)

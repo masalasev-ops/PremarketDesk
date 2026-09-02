@@ -246,6 +246,18 @@ budget approach.
 
 ## Tier 1: report content, no model change
 
+Done 2026-09-02, all five packages, with one departure: package 1.4 kept
+prompt rule 17 rather than replacing it with article_scope.why, for the reason
+DECISIONS 2026-09-02 second gives. Acceptance was a hand run on the 2026-09-01
+packet: one attempt, zero quantifier flags, the strip above the disclaimer,
+Technical signals as a table with the "Write ups: 0 of 12" sentence, the lower
+bound arithmetic once and the collector check once. The report was 6,347 words
+against 5,725 for the previous hand run of the same packet, the strip and the
+table accounting for about 230 of the difference and the rest being run to
+run variance in the gappers blocks; output tokens were 30,951 against 20,013,
+which is the thinking cost tier 2 exists to remove. CHANGELOG 2026-09-02
+thirty third.
+
 ### 1.1 Lead with the decision, not the disclaimer
 
 Files: src/morning/render_report.py (a Treeprocessor or a pre-render pass on

@@ -100,10 +100,29 @@ class _StripEmbeds(markdown.treeprocessors.Treeprocessor):
         parent.remove(child)
 
 
+class _ClassParagraphs(markdown.treeprocessors.Treeprocessor):
+    """Two paragraphs the stylesheet treats differently, found by their words.
+
+    The disclaimer opens with "Nothing here is advice", which is the string
+    analyst.py already keys on, and the at a glance strip opens with the
+    marker analyst.summary_strip writes. Neither can carry a class in
+    markdown, so the class is added here, on the parsed tree.
+    """
+
+    def run(self, root):
+        for element in root.iter("p"):
+            text = "".join(element.itertext()).strip()
+            if text.startswith("Nothing here is advice"):
+                element.set("class", "disclaimer")
+            elif text.startswith("At a glance."):
+                element.set("class", "glance")
+
+
 class _StripEmbedsExtension(markdown.Extension):
     def extendMarkdown(self, md):
         # After the inline processor (priority 20) and before prettify (10).
         md.treeprocessors.register(_StripEmbeds(md), "premarketdesk_strip_embeds", 15)
+        md.treeprocessors.register(_ClassParagraphs(md), "premarketdesk_classes", 14)
 
 
 def to_html(text: str) -> str:
@@ -146,13 +165,63 @@ _SHELL = """<!doctype html>
   code {{ font-family: Consolas, monospace; background: #f5f5f5; padding: 1px 4px; }}
   blockquote {{ border-left: 3px solid #cccccc; margin-left: 0;
                padding-left: 12px; color: #444444; }}
+  p.glance {{ background: #f4f6f8; border-left: 4px solid #1a1a1a;
+              padding: 10px 14px; font-family: Arial, Helvetica, sans-serif;
+              font-size: 0.95em; }}
+  p.disclaimer {{ font-size: 0.85em; color: #555555; }}
+  .local-only {{ margin-top: 2.5em; padding-top: 10px; border-top: 1px solid #cccccc;
+                 font-family: Arial, Helvetica, sans-serif; font-size: 0.85em;
+                 color: #444444; }}
+  .local-only a {{ color: #1a1a1a; }}
 </style>
 </head>
 <body>
 {body}
+{footer}
 </body>
 </html>
 """
+
+# The footer's links are RELATIVE PATHS on this machine, from runs/<date>/ to
+# the sibling sessions and to site/. They are dead in an email, so deliver.py
+# strips the whole div by this class before sending, and the archive never
+# sees it because the archive renders the markdown, not this shell.
+LOCAL_ONLY_CLASS = "local-only"
+
+
+def footer_links(report_path: Path) -> str:
+    """Previous session, this day's midday page, the archive and the weekly page.
+
+    Until 2026-09-02 report.html carried zero anchors: the midday report was
+    written at 12:00 and reachable only by browsing runs/, and nothing linked
+    to the archive or the weekly page from the morning a reader actually
+    opens. Only links whose target exists are written, so a day with no
+    midday pass yet shows none, and the sentence says so instead.
+    """
+    run_dir = report_path.parent
+    runs_dir = run_dir.parent
+    date = run_dir.name
+    links: list[str] = []
+    previous = None
+    if runs_dir.is_dir():
+        for sibling in sorted(runs_dir.iterdir(), key=lambda p: p.name, reverse=True):
+            if sibling.is_dir() and sibling.name < date and (sibling / "report.html").is_file():
+                previous = sibling.name
+                break
+    if previous:
+        links.append(f'<a href="../{previous}/report.html">previous session {previous}</a>')
+    midday = run_dir / "report_midday.html"
+    if midday.is_file():
+        links.append('<a href="report_midday.html">the midday report for this day</a>')
+    else:
+        links.append("the midday report is written at 12:00 and is not here yet")
+    site = runs_dir.parent / "site"
+    if (site / "PremarketDesk.html").is_file():
+        links.append(f'<a href="../../site/PremarketDesk.html#{date}">the archive</a>')
+    if (site / "Weekly.html").is_file():
+        links.append('<a href="../../site/Weekly.html">the weekly page</a>')
+    return (f'<div class="{LOCAL_ONLY_CLASS}"><p>Also on this machine: '
+            + "; ".join(links) + ".</p></div>")
 
 
 def render(report_path: Path, overwrite: bool = False) -> Path:
@@ -185,7 +254,8 @@ def render(report_path: Path, overwrite: bool = False) -> Path:
     # does not parse markup, so it is escaped rather than neutralised: a bare
     # `<` there ends the title element and the rest of the line becomes body.
     html_path.write_text(
-        _SHELL.format(title=html.escape(title, quote=False), body=body),
+        _SHELL.format(title=html.escape(title, quote=False), body=body,
+                      footer=footer_links(report_path)),
         encoding="utf-8")
     return html_path
 
