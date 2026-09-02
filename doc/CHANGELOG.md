@@ -15,6 +15,56 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty fifth: one page shell, dressed tables, and the midday page through the one renderer
+
+Tier 3 of doc/IMPROVEMENT_PLAN.md, packages 3.1 to 3.5. Package 3.6, the
+sparklines, is not done and the plan marks it as not for a junior model.
+
+ONE SHELL. core/page.py holds the theme tokens (light, dark by system
+preference, dark or light by an explicit data-theme stamp), the document
+skeleton with doctype, charset and viewport, and REPORT_CSS, the rules for a
+rendered report body scoped under `.report`. The morning page, the midday page
+and every archived day wrap themselves in that class, so an archived day and a
+fresh report.html are one stylesheet by construction rather than a copy that
+had drifted while build_archive's docstring claimed parity. The weekly page,
+which began at its title element with no doctype, charset or viewport and
+opened from disk in quirks mode, goes through the same shell. Only page.py
+carries a doctype literal now, and a claim reads the four renderers to keep
+it so.
+
+DRESSED TABLES. render_report grew a third Treeprocessor: every table is
+wrapped in a scrolling div so a ten column table scrolls in its own box on a
+phone rather than pushing the page sideways; a cell that holds a number is
+classed num and right aligned with tabular figures; a cell in a column headed
+Conviction is classed by its word so green, yellow, red and unscored are
+colours; every table carries border="1" cellpadding="6" so a mail client that
+strips the style block still shows a table; and a watchlist whose only row
+reads none is collapsed, the sentence beneath it having said the same. The
+markdown keeps the table, because the containment guard reads the markdown.
+The Tier 0 claim that renders the template's empty table examples now asks
+the markdown library alone, since the project's renderer collapses exactly
+that table on purpose.
+
+THE MIDDAY PAGE THROUGH THE ONE RENDERER. render_midday carried its own
+markdown parser and broke two promises its own writer made: _cell escaped a
+pipe and the parser split on the bare pipe anyway, and a headline carrying **
+opened bold for the rest of the line. The parser is gone; to_html renders
+through render_report.to_html into the shared shell with the midday page's
+own few rules on top, which is what the archive already did with the same
+markdown. The midday page therefore also gains the embed stripping, the
+dressed tables and the dark mode it never had.
+
+THE ARCHIVE ON A PHONE AND ON PAPER. Below 720 pixels the rail becomes a
+short scrolling strip above the pane instead of a 250 pixel column beside a
+140 pixel report; in print the rail and the hint are hidden and the pane
+flows, where before the 100vh flex shell printed one viewport and stopped.
+
+Four claims: every page carries the shell mark, a charset and a viewport and
+no renderer has a doctype of its own; the weekly page goes through the shell;
+a rendered table is wrapped, numbered, coloured, bordered and a none only
+watchlist is collapsed with its sentence kept; the midday page has no parser
+of its own and an escaped pipe stays one cell.
+
 ## 2026-09-02, thirty fourth: Python writes the report and the model fills the slots
 
 Tier 2 of doc/IMPROVEMENT_PLAN.md. The largest change to the narrative pass

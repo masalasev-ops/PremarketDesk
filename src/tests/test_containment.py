@@ -283,7 +283,14 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
                         f"{where}: the row {row!r} carries {len(cells)} cells under "
                         f"a {width} cell header, and markdown renders that block "
                         "as a paragraph rather than a table")
-            if "<table" not in render_report.to_html("\n".join(block) + "\n"):
+            # The grammar question, asked of the markdown library alone: the
+            # project's renderer goes on to COLLAPSE a none only table on
+            # purpose (render_report._DressTables), which is the right page and
+            # the wrong instrument for this check.
+            import markdown as _markdown
+
+            if "<table" not in _markdown.markdown("\n".join(block) + "\n",
+                                                  extensions=["tables"]):
                 failures.append(
                     f"{where}: the empty table example under {header!r} does not "
                     "render as a table")

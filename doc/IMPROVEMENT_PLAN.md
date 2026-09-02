@@ -557,6 +557,11 @@ morning and add a claim on the fixture. Effort S. Risk low. Delegable: yes.
 
 ## Tier 3: rendering and delivery
 
+Done 2026-09-02: 3.1 (core/page.py, all four renderers through it), 3.2, 3.3
+(landed in tier 1), 3.4 and 3.5 (the midday hand parser removed in favour of
+render_report.to_html). 3.6, the sparklines, is not done. CHANGELOG
+2026-09-02 thirty fifth, DECISIONS 2026-09-02 fourth.
+
 ### 3.1 One page shell shared by four renderers
 
 Files: new src/core/page.py; src/morning/render_report.py:70-102,

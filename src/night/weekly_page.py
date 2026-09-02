@@ -51,6 +51,7 @@ from typing import Any
 from core import config
 from core import criteria
 from core import ettime
+from core import page
 from core import store
 from night import true_volume
 from ops import job_status
@@ -976,8 +977,6 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
            cost: dict, score: dict | None = None) -> str:
     out: list[str] = []
     add = out.append
-    add("<title>PremarketDesk Weekly</title>")
-    add(f"<style>{_CSS}</style>")
     add("<div class=wrap>")
     add("<h1>PremarketDesk weekly</h1>")
     add(f"<p class=sub>{days[0]} to {days[-1]}, rendered "
@@ -1180,7 +1179,13 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
         "packets' score components, and the picks and paper_trades tables, and "
         "writes this file. Nothing else.</footer>")
     add("</div>")
-    return "\n".join(out)
+    # The shared shell: doctype, charset, viewport and the theme tokens.
+    # Until 2026-09-02 this page began at its <title> and opened from disk
+    # in quirks mode with no charset, which was safe only while every byte
+    # of it happened to be ASCII. Its own CSS follows the tokens; the report
+    # body rules are not included, because nothing here is a report.
+    return page.shell("PremarketDesk Weekly", "\n".join(out), extra_css=_CSS,
+                      include_report_css=False, body_class="weekly")
 
 
 def build(window: int) -> Any:

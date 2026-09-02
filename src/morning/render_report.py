@@ -12,6 +12,7 @@ import argparse
 import html
 import re
 import sys
+import xml.etree.ElementTree as etree
 from pathlib import Path
 
 import markdown
@@ -19,6 +20,7 @@ import markdown
 from core import artifacts
 from core import config
 from core import ettime
+from core import page
 from ops import job_status
 
 _EXTENSIONS = ["tables", "fenced_code", "sane_lists"]
@@ -118,11 +120,101 @@ class _ClassParagraphs(markdown.treeprocessors.Treeprocessor):
                 element.set("class", "glance")
 
 
+_CONVICTION_WORDS = {"green": "conv-green", "yellow": "conv-yellow",
+                     "red": "conv-red", "unscored": "conv-unscored"}
+
+
+class _DressTables(markdown.treeprocessors.Treeprocessor):
+    """What a table needs to read on a phone and in a mail client.
+
+    Every table is wrapped in a scrolling div, so a ten column notable movers
+    table scrolls inside its own box instead of pushing the page sideways on a
+    390 pixel screen. Cells that hold a number are classed `num` and right
+    aligned with tabular figures, so -7.40 and -23.07 line up. A cell in a
+    column headed Conviction is classed by its word, so green, yellow, red and
+    unscored are colours and not four words that look alike. Every table
+    carries border="1" cellpadding="6" as well, because a mail client that
+    strips the style block leaves an HTML table borderless, and ten columns of
+    whitespace separated words is not a table.
+
+    A watchlist table whose only body row reads `none` in its first cell is
+    removed, sentence and all it was: the sentence beneath it already says the
+    screen produced nothing, and the markdown keeps the table because the
+    containment guard reads the markdown, not this page.
+    """
+
+    def run(self, root):
+        for parent in list(root.iter()):
+            for index in range(len(parent) - 1, -1, -1):
+                table = parent[index]
+                if table.tag != "table":
+                    continue
+                if self._is_none_only(table):
+                    tail = table.tail or ""
+                    parent.remove(table)
+                    if index > 0:
+                        parent[index - 1].tail = (parent[index - 1].tail or "") + tail
+                    else:
+                        parent.text = (parent.text or "") + tail
+                    continue
+                self._dress(table)
+                wrapper = etree.Element("div")
+                wrapper.set("class", "tablewrap")
+                wrapper.tail = table.tail
+                table.tail = None
+                parent.remove(table)
+                parent.insert(index, wrapper)
+                wrapper.append(table)
+
+    @staticmethod
+    def _rows(table):
+        for section in table:
+            if section.tag in ("thead", "tbody"):
+                for row in section:
+                    yield section.tag, row
+            elif section.tag == "tr":
+                yield "tbody", section
+
+    def _is_none_only(self, table) -> bool:
+        body_rows = [row for where, row in self._rows(table) if where == "tbody"]
+        if len(body_rows) != 1:
+            return False
+        cells = list(body_rows[0])
+        if not cells:
+            return False
+        first = "".join(cells[0].itertext()).strip().lower()
+        rest = all(not "".join(c.itertext()).strip() for c in cells[1:])
+        return first == "none" and rest
+
+    def _dress(self, table) -> None:
+        table.set("border", "1")
+        table.set("cellpadding", "6")
+        headers: list[str] = []
+        for where, row in self._rows(table):
+            if where == "thead":
+                headers = ["".join(c.itertext()).strip().lower() for c in row]
+                break
+        for where, row in self._rows(table):
+            for position, cell in enumerate(row):
+                text = "".join(cell.itertext()).strip()
+                classes: list[str] = []
+                header = headers[position] if position < len(headers) else ""
+                if where == "tbody" and header == "conviction":
+                    klass = _CONVICTION_WORDS.get(text.lower())
+                    if klass:
+                        classes.append(klass)
+                if where == "tbody" and position > 0 and page.looks_numeric(text):
+                    classes.append("num")
+                if classes:
+                    cell.set("class", " ".join(classes))
+
+
 class _StripEmbedsExtension(markdown.Extension):
     def extendMarkdown(self, md):
         # After the inline processor (priority 20) and before prettify (10).
         md.treeprocessors.register(_StripEmbeds(md), "premarketdesk_strip_embeds", 15)
         md.treeprocessors.register(_ClassParagraphs(md), "premarketdesk_classes", 14)
+        md.treeprocessors.register(_DressTables(md), "premarketdesk_tables", 13)
 
 
 def to_html(text: str) -> str:
@@ -139,48 +231,6 @@ def to_html(text: str) -> str:
     return markdown.markdown(_TAG_OPENER_RE.sub("&lt;", text),
                              extensions=[*_EXTENSIONS, _StripEmbedsExtension()])
 
-_SHELL = """<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title>
-<style>
-  body {{
-    font-family: Georgia, "Times New Roman", serif;
-    color: #1a1a1a;
-    background: #ffffff;
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 24px 16px;
-    line-height: 1.55;
-  }}
-  h1 {{ font-size: 1.6em; border-bottom: 2px solid #1a1a1a; padding-bottom: 6px; }}
-  h2 {{ font-size: 1.2em; margin-top: 1.6em; border-bottom: 1px solid #cccccc;
-       padding-bottom: 4px; }}
-  table {{ border-collapse: collapse; width: 100%; font-size: 0.92em;
-          font-family: Arial, Helvetica, sans-serif; }}
-  th, td {{ border: 1px solid #bbbbbb; padding: 6px 8px; text-align: left; }}
-  th {{ background: #f0f0f0; }}
-  code {{ font-family: Consolas, monospace; background: #f5f5f5; padding: 1px 4px; }}
-  blockquote {{ border-left: 3px solid #cccccc; margin-left: 0;
-               padding-left: 12px; color: #444444; }}
-  p.glance {{ background: #f4f6f8; border-left: 4px solid #1a1a1a;
-              padding: 10px 14px; font-family: Arial, Helvetica, sans-serif;
-              font-size: 0.95em; }}
-  p.disclaimer {{ font-size: 0.85em; color: #555555; }}
-  .local-only {{ margin-top: 2.5em; padding-top: 10px; border-top: 1px solid #cccccc;
-                 font-family: Arial, Helvetica, sans-serif; font-size: 0.85em;
-                 color: #444444; }}
-  .local-only a {{ color: #1a1a1a; }}
-</style>
-</head>
-<body>
-{body}
-{footer}
-</body>
-</html>
-"""
 
 # The footer's links are RELATIVE PATHS on this machine, from runs/<date>/ to
 # the sibling sessions and to site/. They are dead in an email, so deliver.py
@@ -253,9 +303,13 @@ def render(report_path: Path, overwrite: bool = False) -> Path:
     # The title is the model's own mood phrase and goes into an element that
     # does not parse markup, so it is escaped rather than neutralised: a bare
     # `<` there ends the title element and the rest of the line becomes body.
+    # One shell for every page this project writes, see core/page.py. The
+    # body is an article classed report, the same class an archived day and
+    # the midday page carry, so the three cannot drift apart in style.
+    article = ('<article class="report">\n' + body + "\n"
+               + footer_links(report_path) + "\n</article>")
     html_path.write_text(
-        _SHELL.format(title=html.escape(title, quote=False), body=body,
-                      footer=footer_links(report_path)),
+        page.shell(html.escape(title, quote=False), article),
         encoding="utf-8")
     return html_path
 

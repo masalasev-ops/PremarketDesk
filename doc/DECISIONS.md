@@ -18,6 +18,35 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, fourth: the empty table is collapsed on the page and kept in the markdown, and the midday page gives up its parser
+
+Two choices in tier 3 of doc/IMPROVEMENT_PLAN.md.
+
+COLLAPSE ON THE PAGE, KEEP IN THE MARKDOWN. The empty watchlist table, a
+header, a separator and a row reading none, exists in the markdown because
+the containment guard finds ticker columns by the header, and a morning with
+nothing eligible used to switch the guard off by omitting the table
+(2026-08-14). On the rendered page the same table is seven or nine empty
+cells under a header, followed by a sentence saying the screen produced
+nothing. The renderer now removes the table and keeps the sentence. The
+alternative, dropping the table from the markdown on empty mornings and
+teaching the guard to read the sentence instead, would have reopened the
+2026-08-14 hole for the sake of the page. The markdown is the record and the
+guard's input; the page is for the reader; they are allowed to differ by
+exactly this.
+
+THE MIDDAY PAGE GIVES UP ITS PARSER. render_midday's docstring argued for a
+hand parser: the markdown it writes is the markdown it reads, so the grammar
+is closed and everything can be escaped first and marked up after. That
+argument held until the parser broke two of its own writer's promises. The
+choice was to fix the parser or remove it. Removed, because the archive was
+already rendering the same midday markdown through render_report.to_html, so
+the project had two renderings of one document, and because every hardening
+the morning renderer gained, tag neutralising, embed stripping, dressed
+tables, would otherwise have had to be written twice. The midday markdown is
+still written by Python and still carries no model prose; what changed is
+only which parser turns it into a page.
+
 ## 2026-09-02, third: slots rather than structured output, the skeleton's text is canonical, and the guard flips nothing
 
 Three choices in tier 2 of doc/IMPROVEMENT_PLAN.md.

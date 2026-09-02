@@ -9,9 +9,11 @@ The build is a full rebuild from what is on disk, never an append, so running
 it twice is the same as running it once, and deleting site/ entirely costs
 nothing but the next run.
 
-Each run directory contributes its report.md, rendered here with the same
-markdown extensions render_report.py uses, so an archived day and a freshly
-rendered day look identical. The newest embed_sessions days (CRITERIA.md
+Each run directory contributes its report.md and, where the 12:00 pass wrote
+one, its report_midday.md, both rendered through render_report.to_html and
+styled by core/page.py's REPORT_CSS, the same stylesheet report.html and
+report_midday.html carry, so an archived day and a freshly rendered day look
+identical by construction. The newest embed_sessions days (CRITERIA.md
 [archive]) are inlined in full; older days stay in the rail but link out to
 their own runs/<date>/report.html, which is rendered on the spot if the
 morning that wrote report.md never got to the render step.
@@ -30,6 +32,7 @@ from typing import Any
 from core import config
 from core import criteria
 from core import ettime
+from core import page
 from ops import job_status
 from morning import render_report
 
@@ -37,34 +40,11 @@ _CRIT = criteria.load()
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-_PAGE = """<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PremarketDesk Archive</title>
-<style>
-  :root {
-    --bg: #F3F4F6; --surface: #FFFFFF; --ink: #1B222C; --muted: #58636F;
-    --line: #D8DDE3; --accent: #B45E14;
-    --good: #2E7D32; --warn: #B98900; --bad: #C62828;
-    --active: rgba(180, 94, 20, 0.10);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #12161C; --surface: #1A2028; --ink: #E7EAEE; --muted: #97A1AC;
-      --line: #303845; --accent: #E8A254;
-      --good: #6FBF73; --warn: #E0B341; --bad: #E57373;
-      --active: rgba(232, 162, 84, 0.14);
-    }
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    line-height: 1.5;
-  }
+# The archive's own layout: the rail, the pane, the day switching. The
+# tokens and the report body rules come from core/page.py, so an archived
+# day and a freshly rendered report.html share one stylesheet by
+# construction rather than by a copy that drifts.
+_ARCHIVE_CSS = """
   .shell { display: flex; height: 100vh; }
   .rail {
     width: 250px; flex: none; overflow-y: auto;
@@ -116,29 +96,26 @@ _PAGE = """<!doctype html>
     max-width: 760px; margin: 0 auto 18px; font-size: 0.75rem;
     color: var(--muted); font-family: "Cascadia Code", Consolas, monospace;
   }
-  .day h1 { font-size: 1.55rem; letter-spacing: -0.012em;
-    border-bottom: 2px solid var(--ink); padding-bottom: 6px; }
-  .day h2 { font-size: 1.15rem; margin-top: 1.5em;
-    border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-  .day table { border-collapse: collapse; width: 100%; font-size: 0.88em;
-    display: block; overflow-x: auto; }
-  .day th, .day td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
-  .day th { background: var(--active); }
-  .day code { font-family: Consolas, monospace; background: var(--active); padding: 1px 4px; }
-  .day blockquote { border-left: 3px solid var(--line); margin-left: 0;
-    padding-left: 12px; color: var(--muted); }
-  .day a { color: var(--accent); }
-  .day p.glance { background: var(--active); border-left: 4px solid var(--ink);
-    padding: 10px 14px; font-size: 0.95em; }
-  .day p.disclaimer { font-size: 0.85em; color: var(--muted); }
   .day .midday { margin-top: 3em; padding-top: 1.5em; border-top: 3px double var(--line); }
   .day .midday h1 { font-size: 1.3rem; }
   .day .midday-absent { color: var(--muted); font-size: 0.9em; }
   .empty { max-width: 760px; margin: 40px auto; color: var(--muted); }
-</style>
-</head>
-<body>
-<div class="shell">
+  .day.report { padding: 0 0 48px; }
+  @media (max-width: 720px) {
+    .shell { flex-direction: column; height: auto; }
+    .rail { width: auto; max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--line); }
+    .pane { padding: 16px 12px 48px; overflow: visible; }
+    .hint { display: none; }
+  }
+  @media print {
+    .shell { display: block; height: auto; }
+    .rail, .hint { display: none; }
+    .pane { overflow: visible; padding: 0; }
+    .day[hidden] { display: none; }
+  }
+"""
+
+_BODY = """<div class="shell">
   <nav class="rail" aria-label="Sessions">
     <div class="rail-head">
       <strong>PremarketDesk</strong>
@@ -151,7 +128,9 @@ __RAIL__
 __DAYS__
   </main>
 </div>
-<script>
+"""
+
+_SCRIPT = """<script>
 (function () {
   "use strict";
   var buttons = Array.prototype.slice.call(document.querySelectorAll(".rail-day[data-date]"));
@@ -199,8 +178,6 @@ __DAYS__
   fromHash();
 })();
 </script>
-</body>
-</html>
 """
 
 
@@ -370,7 +347,7 @@ def build(embed_sessions: int) -> Path:
         else:
             midday = ('<div class="midday"><p class="midday-absent">The 12:00 '
                       "midday pass has not written a report for this day.</p></div>")
-        day_parts.append(f'<section class="day" id="day-{date}" hidden>\n'
+        day_parts.append(f'<section class="day report" id="day-{date}" hidden>\n'
                          f'{banner}{body}\n{midday}\n</section>')
 
     if linked:
@@ -402,17 +379,19 @@ def build(embed_sessions: int) -> Path:
     for date in fixtures:
         print(f"archive: {date} is carried but is NOT a morning, and the page "
               "says so on the session and in the rail")
-    page = (
-        _PAGE
+    body = (
+        _BODY
         .replace("__SUBTITLE__", subtitle)
         .replace("__RAIL__", "\n".join(rail_parts))
         .replace("__DAYS__", "\n".join(day_parts))
     )
+    document = page.shell("PremarketDesk Archive", body, extra_css=_ARCHIVE_CSS,
+                          script=_SCRIPT, body_class="archive")
 
     site_dir = config.SITE_DIR
     site_dir.mkdir(parents=True, exist_ok=True)
     out_path = site_dir / "PremarketDesk.html"
-    out_path.write_text(page, encoding="utf-8")
+    out_path.write_text(document, encoding="utf-8")
     print(f"archive: wrote {out_path} ({out_path.stat().st_size:,} bytes, "
           f"{len(embedded)} embedded, {len(linked)} linked out)")
     return out_path

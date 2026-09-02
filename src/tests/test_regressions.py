@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and fifty two claims, a count read off
+and the two pages. It now carries one hundred and fifty six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13777,6 +13777,134 @@ def claim_the_slots_prompt_holds_to_the_guard(failures: list[str]) -> None:
     print("  slots prompt guard clean, names every guard word and the invalidation lead in")
 
 
+def claim_every_page_shares_one_shell(failures: list[str]) -> None:
+    """The morning page, the midday page, the archive and the weekly page are
+    one document skeleton from core/page.py, and no renderer writes its own.
+
+    Four renderers wrote four unrelated documents: the weekly page had no
+    doctype, no charset and no viewport and opened from disk in quirks mode;
+    the archive's `.day` rules were a hand copy of render_report's that had
+    drifted while its docstring claimed parity. Now one string, SHELL_MARK,
+    is in every page, only page.py carries a doctype literal, and the three
+    report shaped pages wrap their body in `.report` so REPORT_CSS applies to
+    each the same way.
+    """
+    from core import page
+    from midday import render_midday
+    from morning import render_report
+    from night import build_archive
+    from night import weekly_page
+
+    for module in (render_report, render_midday, build_archive, weekly_page):
+        source = pathlib.Path(module.__file__).read_bytes().decode("utf-8")
+        if "<!doctype" in source.lower():
+            failures.append(f"{module.__name__} carries its own doctype literal instead "
+                            "of going through core.page.shell")
+    with conftest_activate():
+        run_dir = config.run_dir("2026-01-14")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "report.md").write_text("# PremarketDesk: t\n\nNothing here is advice.\n",
+                                           encoding="utf-8")
+        morning = render_report.render(run_dir / "report.md", overwrite=True).read_text(encoding="utf-8")
+        midday = render_midday.to_html("# Midday\n\n| A | B |\n| --- | --- |\n| x | 1.0 |\n", "t")
+        with contextlib.redirect_stdout(io.StringIO()):
+            archive = build_archive.build(embed_sessions=5).read_text(encoding="utf-8")
+    pages = {"report.html": morning, "report_midday.html": midday, "PremarketDesk.html": archive}
+    for name, text in pages.items():
+        lowered = text.lower()
+        for needle in ("<!doctype html>", '<meta charset="utf-8">', 'name="viewport"',
+                       page.SHELL_MARK.lower()):
+            if needle not in lowered:
+                failures.append(f"{name} lacks {needle!r}")
+        if name != "PremarketDesk.html" and 'class="report' not in text:
+            failures.append(f"{name} does not wrap its body in .report")
+    if 'class="day report"' not in archive:
+        failures.append("an archived day is not classed report, so REPORT_CSS does not reach it")
+    if "@media (max-width: 720px)" not in archive or "@media print" not in archive:
+        failures.append("the archive has no phone or print layout")
+    print("  one shell    the morning, midday and archive pages share core.page's "
+          "skeleton and report rules, and no renderer carries a doctype of its own")
+
+
+def claim_the_weekly_page_is_a_whole_document(failures: list[str]) -> None:
+    """Weekly.html has a doctype, a charset and a viewport, through the shared shell."""
+    from core import page
+    from night import weekly_page
+
+    source = pathlib.Path(weekly_page.__file__).read_bytes().decode("utf-8")
+    if "page.shell(" not in source:
+        failures.append("weekly_page does not render through core.page.shell")
+    if "<title>PremarketDesk Weekly</title>" in source:
+        failures.append("weekly_page still writes its own title element")
+    if page.SHELL_MARK not in page.shell("t", "<p>x</p>"):
+        failures.append("page.shell does not stamp SHELL_MARK")
+    print("  weekly shell the weekly page goes through the shared shell rather than "
+          "opening at its title in quirks mode")
+
+
+def claim_the_morning_tables_are_dressed(failures: list[str]) -> None:
+    """Tables scroll in their own box, numbers are right aligned, conviction is a
+    colour class, every table carries a border attribute for mail clients, and
+    a watchlist whose only row is `none` is collapsed.
+
+    On a 390 pixel screen a ten column table pushed the page sideways; -7.40
+    and -23.07 were left aligned; green, yellow and red were four words that
+    looked alike; and a mail client that strips the style block was left with
+    a borderless grid of words.
+    """
+    from morning import render_report
+
+    text = ("## Day watchlist\n\n"
+            "| Ticker | Gap % | Price | Conviction |\n| --- | --- | --- | --- |\n"
+            "| ACME | +14.2 | 18.44 | green |\n| CRUX | -7.1 | null | unscored |\n\n"
+            "## Swing watchlist\n\n"
+            "| Ticker | Gap % | Price | Conviction |\n| --- | --- | --- | --- |\n"
+            "| none | | | |\n\nThe swing screen produced nothing today.\n")
+    rendered = render_report.to_html(text)
+    if rendered.count('<div class="tablewrap">') != 1:
+        failures.append(f"expected one wrapped table, the none only one collapsed: {rendered!r}")
+    if 'border="1"' not in rendered or 'cellpadding="6"' not in rendered:
+        failures.append("the table carries no border attributes for a mail client")
+    if '<td class="num">+14.2</td>' not in rendered or 'class="num">null<' not in rendered:
+        failures.append(f"numeric cells are not classed num: {rendered!r}")
+    if 'class="conv-green"' not in rendered or 'class="conv-unscored num"' not in rendered:
+        failures.append(f"conviction cells are not classed by their word: {rendered!r}")
+    if "<td>ACME</td>" not in rendered:
+        failures.append("the ticker cell was right aligned as a number")
+    if ">none<" in rendered:
+        failures.append("the none only watchlist table was not collapsed")
+    if "The swing screen produced nothing today." not in rendered:
+        failures.append("collapsing the table took the sentence beneath it")
+    print("  dressed      tables scroll, numbers right align, conviction is a colour, "
+          "borders survive a mail client, and a none only table is collapsed")
+
+
+def claim_the_midday_page_renders_through_the_one_renderer(failures: list[str]) -> None:
+    """The midday page has no markdown parser of its own any more.
+
+    Its hand parser split table rows on a bare pipe after _cell had escaped
+    the pipe, so an escaped pipe became an extra column, and it split inline
+    text on ** so a headline carrying two asterisks opened bold for the rest
+    of the line. render_report.to_html handles both and everything else the
+    morning page needed handling.
+    """
+    from midday import render_midday
+
+    source = pathlib.Path(render_midday.__file__).read_bytes().decode("utf-8")
+    if "def _inline" in source or "line.strip(\"|\").split(\"|\")" in source:
+        failures.append("render_midday still carries its own markdown parser")
+    rendered = render_midday.to_html(
+        "# Midday\n\n| A | B |\n| --- | --- |\n| x\\|y | **b** and a ** stray |\n", "t")
+    if "<td>x|y</td>" not in rendered:
+        failures.append(f"an escaped pipe still splits a midday cell: {rendered!r}")
+    if "<strong>b</strong>" not in rendered:
+        failures.append("a bold run was lost")
+    if rendered.count("<strong>") != 1:
+        failures.append(f"a stray ** opened bold: {rendered!r}")
+    print("  midday html  the midday page renders through render_report.to_html, so an "
+          "escaped pipe stays one cell and a stray ** stays text")
+
+
 def conftest_activate():
     from tests import conftest
 
@@ -13938,6 +14066,10 @@ def main() -> int:
     claim_the_projection_keeps_what_the_template_names(failures)
     claim_slots_mode_ships_the_skeleton_and_the_prose(failures)
     claim_the_slots_prompt_holds_to_the_guard(failures)
+    claim_every_page_shares_one_shell(failures)
+    claim_the_weekly_page_is_a_whole_document(failures)
+    claim_the_morning_tables_are_dressed(failures)
+    claim_the_midday_page_renders_through_the_one_renderer(failures)
 
     if failures:
         for failure in failures:

@@ -28,7 +28,9 @@ from core import artifacts
 from core import config
 from core import criteria
 from core import glossary
+from core import page
 from ops import job_status
+from morning import render_report
 
 from midday import scan_midday
 
@@ -37,53 +39,14 @@ HEADLINES_SHOWN = int(criteria.load().number("midday", "headlines_per_mover"))
 REPORT_MD = "report_midday.md"
 REPORT_HTML = "report_midday.html"
 
-_SHELL = """<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title>
-<style>
-  body {{
-    font-family: Georgia, "Times New Roman", serif;
-    color: #1a1a1a;
-    background: #ffffff;
-    /* AN EXPLICIT BASE. There was none, so every size below was a multiple of
-       whatever default the reader's browser happened to apply, and the eight
-       column table scaled off that same unknown. A report whose type size is
-       not decided here is not a report whose type size was decided. */
-    font-size: 17px;
-    /* 760px held eight columns of carry through plus their prose. It does
-       not. */
-    max-width: 940px;
-    margin: 0 auto;
-    padding: 28px 20px 56px;
-    line-height: 1.6;
-  }}
-  h1 {{ font-size: 1.7em; border-bottom: 2px solid #1a1a1a; padding-bottom: 8px;
-       margin-bottom: 0.6em; }}
-  h2 {{ font-size: 1.3em; margin-top: 1.9em; border-bottom: 1px solid #cccccc;
-       padding-bottom: 5px; }}
-  h3 {{ font-size: 1.08em; margin-top: 1.5em; }}
-  p {{ margin: 0.7em 0; }}
-  /* The carry through table is eight columns. It scrolls inside its own box
-     rather than pushing the whole page sideways on a narrow screen. */
-  .tablewrap {{ overflow-x: auto; margin: 1.1em 0; }}
-  table {{ border-collapse: collapse; width: 100%; font-size: 0.97em;
-          font-family: Arial, Helvetica, sans-serif; }}
-  th, td {{ border: 1px solid #bbbbbb; padding: 8px 10px; text-align: left;
-           vertical-align: top; }}
-  th {{ background: #eef0f2; font-weight: 600; }}
-  tbody tr:nth-child(even) td {{ background: #fafafa; }}
-  td:first-child {{ font-weight: 600; white-space: nowrap; }}
-  .note {{ color: #444444; font-size: 0.95em; }}
-  .flag {{ background: #fff6d5; }}
-</style>
-</head>
-<body>
-{body}
-</body>
-</html>
+# The page's own rules, over the shared report rules in core/page.py. The
+# carry through table is eight columns and the notes under it are dense, so
+# the midday page is wider than the morning's and its base type a touch larger.
+_MIDDAY_CSS = """
+.report.midday { max-width: 940px; font-size: 17px; }
+.report.midday td:first-child { font-weight: 600; white-space: nowrap; }
+.report.midday tbody tr:nth-child(even) td { background: var(--surface); }
+.report.midday .note { color: var(--muted); font-size: 0.95em; }
 """
 
 # How each carry through state is said in the report. The packet's spelling is
@@ -389,66 +352,20 @@ def to_markdown(packet: dict[str, Any]) -> str:
 
 
 def to_html(markdown_text: str, title: str) -> str:
-    """Markdown to HTML without a markdown library.
+    """Markdown to a complete page, through the ONE renderer.
 
-    The markdown this module writes is the markdown this module reads, so the
-    grammar is closed: headings, tables, bold runs, list items and paragraphs.
-    Everything is escaped FIRST and markup is added after, so no character from
-    a vendor headline can become a tag.
+    Until 2026-09-02 this module carried its own markdown parser, closed over
+    the grammar it wrote, and it broke two promises its own writer made: _cell
+    escaped a pipe as \\| and the parser split on the bare pipe anyway, and a
+    headline carrying ** opened bold for the rest of the line. render_report
+    handles both, neutralises tag shaped text, strips embeds, wraps and dresses
+    tables, and is what the archive already used for the midday report, so the
+    midday page now looks the same standing alone as it does in the archive.
     """
-    body: list[str] = []
-    in_table = False
-    for raw in markdown_text.splitlines():
-        line = raw.rstrip()
-        if not line:
-            if in_table:
-                body.append("</table>")
-                body.append("</div>")
-                in_table = False
-            continue
-        if line.startswith("|"):
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            if all(set(c) <= set("-: ") for c in cells):
-                continue
-            if not in_table:
-                body.append('<div class="tablewrap">')
-                body.append("<table>")
-                in_table = True
-                tag = "th"
-            else:
-                tag = "td"
-            row = "".join(f"<{tag}>{_inline(c)}</{tag}>" for c in cells)
-            body.append(f"<tr>{row}</tr>")
-            continue
-        if in_table:
-            body.append("</table>")
-            body.append("</div>")
-            in_table = False
-        if line.startswith("### "):
-            body.append(f"<h3>{_inline(line[4:])}</h3>")
-        elif line.startswith("## "):
-            body.append(f"<h2>{_inline(line[3:])}</h2>")
-        elif line.startswith("# "):
-            body.append(f"<h1>{_inline(line[2:])}</h1>")
-        elif line.startswith("- "):
-            body.append(f"<p class=\"note\">&bull; {_inline(line[2:])}</p>")
-        else:
-            body.append(f"<p>{_inline(line)}</p>")
-    if in_table:
-        body.append("</table>")
-        body.append("</div>")
-    return _SHELL.format(title=html.escape(title, quote=False),
-                         body="\n".join(body))
-
-
-def _inline(text: str) -> str:
-    """Escape, then re-add the one inline form this module writes."""
-    escaped = html.escape(text, quote=False)
-    parts = escaped.split("**")
-    out = []
-    for index, part in enumerate(parts):
-        out.append(f"<strong>{part}</strong>" if index % 2 else part)
-    return "".join(out)
+    body = render_report.to_html(markdown_text)
+    return page.shell(html.escape(title, quote=False),
+                      '<article class="report midday">\n' + body + "\n</article>",
+                      extra_css=_MIDDAY_CSS)
 
 
 def render(packet_path: Path, overwrite: bool = False) -> tuple[Path, Path]:
