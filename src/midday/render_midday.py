@@ -317,13 +317,18 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
 
 
 def to_markdown(packet: dict[str, Any]) -> str:
-    source = packet["price_source"]
+    # packet["price_source"] is deliberately not read any more; see the note
+    # on the header line and the one where the provenance section used to be.
     lines = [
         f"# Midday, {packet['session_date']}",
         "",
-        f"Run at {packet['run_time_et']} ET. Prices from "
-        f"{source['endpoint']}, and every move measured against the "
-        f"{packet['prior_session']} close from {source['denominator_endpoint']}. "
+        # The two endpoint names came out of this line on 2026-09-02 with the
+        # provenance section below, for the same reason: which vendor route a
+        # price arrived by is a fact about the plumbing. What the reader needs
+        # is what the move is measured against, and that stays. Both names are
+        # still in midday_packet.json under price_source.
+        f"Run at {packet['run_time_et']} ET. Every move is measured against the "
+        f"{packet['prior_session']} close. "
         f"{packet['quotes_returned']:,} of {packet['universe_size']:,} universe "
         f"names quoted.",
         "",
@@ -332,12 +337,18 @@ def to_markdown(packet: dict[str, Any]) -> str:
         lines += [f"PARTIAL: {_cell(packet['quote_error'])}", ""]
     lines += carry_section(packet)
     lines += movers_section(packet)
+    # The four vendor provenance sentences that stood here until 2026-09-02
+    # are NOT printed any more, at the owner's word: which endpoint publishes
+    # what and when is a fact about this project's plumbing, not about the
+    # session, and the reader of a midday report is looking at what the
+    # morning's picks did. Nothing is lost. price_source still carries
+    # why_not_intraday, denominator_note, open_is_not_the_auction and
+    # extended_hours_reason in midday_packet.json, the measurements behind
+    # them are in DECISIONS 2026-08-31, and the header line above still names
+    # both endpoints and the session the denominator came from, which is the
+    # part a reader needs to judge the numbers. Do not delete those packet
+    # keys because this stopped reading them.
     lines += [
-        "## Where these numbers come from", "",
-        _sentence(source["why_not_intraday"]) + ".", "",
-        _sentence(source["denominator_note"]) + ".", "",
-        _sentence(source["open_is_not_the_auction"]) + ".", "",
-        _sentence(source["extended_hours_reason"]) + ", so they are not read.", "",
         f"Generated {packet['generated_at']}. "
         f"{packet.get('api_calls', 0)} vendor calls.", "",
     ]

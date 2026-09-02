@@ -346,8 +346,8 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
         out["open_tolerance_reason"] = (
             f"the open was {margin:+.2f} percent from the entry, inside the "
             f"{OPEN_TOLERANCE_PCT:g} percent tolerance in CRITERIA [Midday] "
-            "open_tolerance_pct. us-quote-delayed's open is the first "
-            "consolidated print and not the opening auction, so this row could "
+            "open_tolerance_pct. The open read here is the first consolidated "
+            "print and not the opening auction, so this row could "
             f"read {TRIGGERED} rather than {GAPPED_THROUGH} against the "
             "official open, or the reverse")
 

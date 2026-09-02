@@ -15,6 +15,36 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, forty first: the midday report stops explaining the vendor
+
+The owner asked for the midday report's "Where these numbers come from"
+section to go: which endpoint publishes what, and when, is a fact about this
+project's plumbing rather than about the session, and a reader opening a
+midday report wants to know what the morning's picks did.
+
+Removed from render_midday.to_markdown: the heading and its four sentences
+on why intraday bars are not read, which close the denominator comes from
+and why the quote's own previousClosePrice is not trusted, what the open
+actually is, and why the extended hours fields are ignored. The two endpoint
+names came out of the header line for the same reason, and the per row close
+call note now says "the open read here" instead of naming the endpoint. The
+"Generated ... vendor calls" line stays: when the report was made is not a
+fact about the vendor.
+
+NOTHING IS LOST AND NOTHING IS DELETED UPSTREAM. price_source still carries
+why_not_intraday, denominator_note, open_is_not_the_auction and
+extended_hours_reason in midday_packet.json, every measurement behind them is
+in DECISIONS 2026-08-31, and the header still says what each move is measured
+against, which is the part a reader needs to judge a number. scan_midday
+still writes all four. A comment at each site says so, because a key nothing
+reads is a key the next reader deletes.
+
+Today's midday report was re-rendered from the existing packet, no vendor
+call, and the archive rebuilt. One mention survives in it: the close call
+note on the CRDO row was written into the packet at 12:00, before this
+change, and rewriting the packet would cost 143 vendor calls to change one
+sentence. Tomorrow's is clean.
+
 ## 2026-09-02, fortieth: printing keeps the measure and stops gapping before every table
 
 The print rules added in the thirty ninth entry held each table together
