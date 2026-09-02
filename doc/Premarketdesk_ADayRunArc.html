@@ -231,8 +231,9 @@
   <p class="eyebrow">The weekday, end to end</p>
   <h2>The jobs that build the day, one timeline</h2>
   <div class="prose">
-    <p>Every weekday runs itself. Discovery reads no price from today, because at
-    07:15 no source on this plan has one for the whole universe. It builds a
+    <p>Every weekday runs itself. Discovery runs twice, at 03:55 and at 07:15,
+    and reads no price from today at either hour, because no source on this plan
+    has one for the whole universe before the open. It builds a
     candidate pool from four things that are knowable before the open (earnings
     landing between the prior close and this open, overnight news, prior
     session movers, and recent runners), ranks it by tier and then by measured
@@ -253,69 +254,83 @@
   </div>
 
   <figure>
-    <svg viewBox="0 0 940 250" role="img" aria-label="Timeline of one weekday: discover at 07:15, collector from 07:20 to 09:25, the morning chain at 08:45, the midday pass at 12:00 inside the break in the axis, the shared API quota day turning over at 20:00, and the nightly backfill and outcomes jobs at 22:15.">
+    <svg viewBox="0 0 940 300" role="img" aria-label="Timeline of one weekday: discover at 03:55 building a provisional pool, the collector listening from 04:00 to 09:25, discover again at 07:15, the handover onto that pool at 07:20, the morning chain at 08:45 reading a tape the collector is still writing, the midday pass at 12:00 inside the break in the axis, the shared API quota day turning over at 20:00, and the nightly backfill and outcomes jobs at 22:15.">
       <defs>
         <marker id="tl-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
           <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
         </marker>
       </defs>
 
-      <!-- time cursor for 08:45 chain, drawn under the collector bar -->
-      <line x1="436" y1="76" x2="436" y2="156" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
-
       <!-- axis -->
-      <line x1="60" y1="160" x2="596" y2="160" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="640" y1="160" x2="900" y2="160" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="608" y1="168" x2="620" y2="152" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="616" y1="168" x2="628" y2="152" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="60" y1="214" x2="596" y2="214" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="640" y1="214" x2="900" y2="214" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="608" y1="222" x2="620" y2="206" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="616" y1="222" x2="628" y2="206" stroke="currentColor" stroke-width="1.4"/>
 
-      <!-- ticks and labels -->
-      <line x1="148" y1="156" x2="148" y2="164" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="436" y1="156" x2="436" y2="164" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="564" y1="156" x2="564" y2="164" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="760" y1="156" x2="760" y2="164" stroke="currentColor" stroke-width="1.4"/>
-      <line x1="655" y1="156" x2="655" y2="164" stroke="currentColor" stroke-width="1.4"/>
-      <text x="148" y="182" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">07:15</text>
-      <text x="436" y="182" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">08:45</text>
-      <text x="564" y="182" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">09:25</text>
-      <text x="655" y="182" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">20:00</text>
-      <text x="760" y="182" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">22:15</text>
+      <!-- ticks and labels, 1.489 px per minute from 04:00 to 09:25 -->
+      <line x1="80" y1="210" x2="80" y2="218" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="370" y1="210" x2="370" y2="218" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="504" y1="210" x2="504" y2="218" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="564" y1="210" x2="564" y2="218" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="655" y1="210" x2="655" y2="218" stroke="currentColor" stroke-width="1.4"/>
+      <line x1="760" y1="210" x2="760" y2="218" stroke="currentColor" stroke-width="1.4"/>
+      <text x="80" y="236" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">04:00</text>
+      <text x="370" y="236" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">07:15</text>
+      <text x="504" y="236" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">08:45</text>
+      <text x="564" y="236" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">09:25</text>
+      <text x="655" y="236" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">20:00</text>
+      <text x="760" y="236" text-anchor="middle" font-size="11" fill="currentColor" class="svg-mono">22:15</text>
 
       <!-- quota day boundary: the shared EODHD counter resets at midnight UTC -->
-      <line x1="655" y1="40" x2="655" y2="156" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"/>
-      <text x="655" y="34" text-anchor="middle" font-size="10" class="svg-muted svg-mono">quota day turns over</text>
+      <line x1="655" y1="52" x2="655" y2="210" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"/>
+      <text x="655" y="46" text-anchor="middle" font-size="10" class="svg-muted svg-mono">quota day turns over</text>
 
       <!-- market open marker -->
-      <line x1="580" y1="64" x2="580" y2="156" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"/>
-      <text x="584" y="72" font-size="10" class="svg-muted svg-mono">09:30 open</text>
+      <line x1="571" y1="64" x2="571" y2="210" stroke="currentColor" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"/>
+      <text x="575" y="72" font-size="10" class="svg-muted svg-mono">09:30 open</text>
 
-      <!-- discover box -->
-      <rect x="88" y="36" width="120" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.3"/>
-      <text x="148" y="52" text-anchor="middle" font-size="10" class="svg-muted svg-mono">discover.py</text>
-      <text x="148" y="67" text-anchor="middle" font-size="11" fill="currentColor">watchlist + baselines</text>
-      <line x1="148" y1="76" x2="148" y2="154" stroke="currentColor" stroke-width="1"/>
+      <!-- discover, first pass -->
+      <rect x="58" y="44" width="118" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <text x="117" y="60" text-anchor="middle" font-size="10" class="svg-muted svg-mono">discover.py 03:55</text>
+      <text x="117" y="76" text-anchor="middle" font-size="11" fill="currentColor">provisional pool</text>
+      <line x1="73" y1="86" x2="73" y2="210" stroke="currentColor" stroke-width="1"/>
 
-      <!-- chain box -->
-      <rect x="326" y="36" width="220" height="40" rx="6" fill="none" stroke="currentColor" stroke-width="1.3"/>
-      <text x="436" y="52" text-anchor="middle" font-size="10" class="svg-muted svg-mono">morning chain</text>
-      <text x="436" y="67" text-anchor="middle" font-size="10.5" fill="currentColor">scan, analyst, render, deliver, archive</text>
+      <!-- discover, second pass -->
+      <rect x="292" y="44" width="156" height="42" rx="6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <text x="370" y="60" text-anchor="middle" font-size="10" class="svg-muted svg-mono">discover.py 07:15</text>
+      <text x="370" y="76" text-anchor="middle" font-size="11" fill="currentColor">watchlist + baselines</text>
 
-      <!-- collector bar -->
-      <rect x="164" y="108" width="400" height="30" rx="4" class="svg-ink-soft" stroke="currentColor" stroke-width="1.3"/>
-      <text x="364" y="127" text-anchor="middle" font-size="11" fill="currentColor">collector: live websocket minute bars, 07:20 to 09:25</text>
+      <!-- collector bar, drawn before everything that crosses it -->
+      <text x="322" y="102" text-anchor="middle" font-size="11" fill="currentColor">collector: live websocket minute bars, 04:00 to 09:25</text>
+      <rect x="80" y="110" width="484" height="30" rx="4" class="svg-ink-soft" stroke="currentColor" stroke-width="1.3"/>
+      <text x="228" y="129" text-anchor="middle" font-size="10.5" class="svg-muted">listening on the 03:55 pool</text>
+      <text x="440" y="129" text-anchor="middle" font-size="10.5" class="svg-muted">on the 07:15 pool</text>
+
+      <!-- the 07:20 handover, drawn over the bar -->
+      <line x1="378" y1="104" x2="378" y2="210" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="374" y="154" text-anchor="end" font-size="10" class="svg-muted svg-mono">07:20 handover</text>
+
+      <!-- the 08:45 cursor cuts a tape that is still being written -->
+      <line x1="504" y1="110" x2="504" y2="162" stroke="currentColor" stroke-width="1" stroke-dasharray="3 3" opacity="0.7"/>
+
+      <!-- chain box, under the bar because it reads that tape mid write -->
+      <rect x="396" y="162" width="204" height="38" rx="6" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <text x="498" y="177" text-anchor="middle" font-size="10" class="svg-muted svg-mono">morning chain</text>
+      <text x="498" y="192" text-anchor="middle" font-size="10" fill="currentColor">scan, analyst, render, deliver, archive</text>
+      <line x1="504" y1="200" x2="504" y2="210" stroke="currentColor" stroke-width="1"/>
 
       <!-- nightly box (accent) -->
-      <rect x="670" y="42" width="180" height="96" rx="6" class="svg-accent svg-accent-fill" stroke-width="1.6"/>
-      <text x="760" y="60" text-anchor="middle" font-size="10" class="svg-accent-text svg-mono">22:15 nightly</text>
-      <text x="760" y="78" text-anchor="middle" font-size="11" fill="currentColor">backfill_premarket.py</text>
-      <text x="760" y="93" text-anchor="middle" font-size="11" fill="currentColor">fill_outcomes.py</text>
-      <text x="760" y="108" text-anchor="middle" font-size="11" fill="currentColor">pool_recall.py, build_archive.py</text>
-      <text x="760" y="128" text-anchor="middle" font-size="10" class="svg-muted">writes the truth into picks</text>
-      <line x1="760" y1="138" x2="760" y2="154" stroke="currentColor" stroke-width="1"/>
+      <rect x="670" y="60" width="180" height="96" rx="6" class="svg-accent svg-accent-fill" stroke-width="1.6"/>
+      <text x="760" y="78" text-anchor="middle" font-size="10" class="svg-accent-text svg-mono">22:15 nightly</text>
+      <text x="760" y="96" text-anchor="middle" font-size="11" fill="currentColor">backfill_premarket.py</text>
+      <text x="760" y="111" text-anchor="middle" font-size="11" fill="currentColor">fill_outcomes.py</text>
+      <text x="760" y="126" text-anchor="middle" font-size="11" fill="currentColor">pool_recall.py, build_archive.py</text>
+      <text x="760" y="146" text-anchor="middle" font-size="10" class="svg-muted">writes the truth into picks</text>
+      <line x1="760" y1="156" x2="760" y2="210" stroke="currentColor" stroke-width="1"/>
 
-      <text x="60" y="210" font-size="10.5" class="svg-muted">12:00, inside the break above: the midday pass grades the morning's picks against the open session and ranks the day's movers; the watchdog returns 12:25, 12:55, 13:25.</text>
-      <text x="60" y="224" font-size="10.5" class="svg-muted">Sunday 21:00, off this timeline: universe.py rebuilds the 2,751 name discovery population, then gap_stats.py measures the gap propensity the 07:15 pool ranks on.</text>
-      <text x="60" y="238" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST), observed 30 to 32 minutes late: the nightly and next morning spend from the same day; every job logs its quota day.</text>
+      <text x="60" y="258" font-size="10.5" class="svg-muted">12:00, inside the break above: the midday pass grades the morning's picks against the open session and ranks the day's movers; the watchdog returns 12:25, 12:55, 13:25.</text>
+      <text x="60" y="272" font-size="10.5" class="svg-muted">Sunday 21:00, off this timeline: universe.py rebuilds the 2,751 name discovery population, then gap_stats.py measures the gap propensity both discovery passes rank on.</text>
+      <text x="60" y="286" font-size="10.5" class="svg-muted">The shared quota day resets at midnight UTC (20:00 EDT, 19:00 EST), observed 30 to 32 minutes late: the nightly and next morning spend from the same day; every job logs its quota day.</text>
     </svg>
     <figcaption>One weekday. Morning jobs gather live evidence while it exists;
     the noon pass, inside the break in the axis, is the only job here that reads
@@ -331,7 +346,7 @@
 </section>
 
 <section id="morning">
-  <p class="eyebrow">07:15 to 08:55</p>
+  <p class="eyebrow">03:55 to 08:55</p>
   <h2>The morning pipeline: files passed hand to hand</h2>
   <div class="prose">
     <p>Each stage writes one artifact and the next stage reads it. Nothing talks
@@ -447,8 +462,8 @@
       </g>
       <g font-size="9.5" class="svg-muted svg-mono" text-anchor="middle">
         <text x="80"  y="45">SUN 21:00</text>
-        <text x="233" y="45">07:15</text>
-        <text x="386" y="45">07:20-09:25</text>
+        <text x="233" y="45">03:55 and 07:15</text>
+        <text x="386" y="45">04:00-09:25</text>
         <text x="539" y="45">08:45</text>
         <text x="692" y="45">08:45:16</text>
         <text x="845" y="45">08:46:52</text>
@@ -659,19 +674,26 @@
   <p class="eyebrow night">22:15, the part that happens after dark</p>
   <h2>Where the backfill happens, and why it exists at all</h2>
   <div class="prose">
-    <p>Two facts force the backfill to exist. First, the premarket session opens
-    at 04:00 ET but the collector only starts listening at 07:20, so the
-    morning's premarket high, low, and VWAP honestly describe a partial window.
-    Second, EODHD publishes its one minute intraday bars a few hours behind
-    live, so the full 04:00 to 09:30 truth simply does not exist anywhere until
-    the evening.</p>
+    <p>Two facts force the backfill to exist. First, the morning's premarket
+    high, low, and VWAP describe a window that is still not the whole session.
+    Until 2026-09-02 that was the large hole: the session opens at 04:00 ET and
+    the collector only started listening at 07:20. The collector now opens with
+    the session, and what is left is narrower but real. The window still ends at
+    the 08:45 cutoff rather than at 09:30. A name that reaches the pool only at
+    the 07:15 discovery pass is subscribed at the handover, so its tape begins at
+    07:20 and not at 04:00, which is what <code>window_open_at</code> and
+    <code>pm_window_starts_late</code> record. And a name that never reached the
+    pool at all has no tape of any kind. Second, EODHD publishes its one minute
+    intraday bars a few hours behind live, so the full 04:00 to 09:30 truth
+    simply does not exist anywhere until the evening.</p>
     <p>So the day's numbers are written twice. At 08:45 the scan records what
     the collector actually heard, labelled partial where it was partial. At
     22:15 the backfill fetches the now published intraday bars and writes
     <code>pm_high_true</code>, <code>pm_low_true</code>, and
     <code>pm_vwap_true</code> into the same picks rows, next to the morning
     values, never over them. The gap between the two column families is itself
-    a measurement: it is exactly what starting the collector at 07:20 costs.</p>
+    a measurement: it is exactly what listening to part of a session rather than
+    all of it costs, and it is the record that priced the move to 04:00.</p>
     <p><strong>That last sentence needs one qualification, and it is the
     important one.</strong> The gap between the two
     column families conflates THREE causes and cannot separate them: the
@@ -691,7 +713,7 @@
   </div>
 
   <figure>
-    <svg viewBox="0 0 940 250" role="img" aria-label="The premarket session runs 04:00 to 09:30. The live collector only covers 07:20 to 09:25 and produces the morning pm values. The EODHD intraday feed covers the whole session but only becomes available in the evening, when the backfill writes the true values.">
+    <svg viewBox="0 0 940 250" role="img" aria-label="The premarket session runs 04:00 to 09:30. From 2026-09-02 the collector covers 04:00 to 09:25, taking discover's real pool at the 07:20 handover, and the morning reads that tape at 08:45. The EODHD intraday feed covers the whole session but only becomes available in the evening, when the backfill writes the true values.">
       <defs>
         <marker id="cv-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
           <path d="M0,0 L8,4 L0,8 z" fill="currentColor"/>
@@ -702,22 +724,26 @@
       <rect x="70" y="42" width="810" height="30" rx="4" class="svg-accent svg-accent-fill" stroke-width="1.5"/>
       <text x="475" y="61" text-anchor="middle" font-size="11" fill="currentColor">EODHD intraday 1m: the whole premarket, but published hours later</text>
 
-      <!-- collector row -->
-      <rect x="70" y="106" width="491" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4"/>
-      <text x="315" y="125" text-anchor="middle" font-size="10.5" class="svg-muted">no live listener before 07:20, by design</text>
-      <rect x="561" y="106" width="307" height="30" rx="4" class="svg-ink-soft" stroke="currentColor" stroke-width="1.3"/>
-      <text x="714" y="125" text-anchor="middle" font-size="11" fill="currentColor">collector websocket, live</text>
+      <!-- collector row. Solid to the 08:45 read, outlined past it -->
+      <text x="561" y="100" text-anchor="middle" font-size="10" class="svg-muted svg-mono">07:20 handover</text>
+      <rect x="70" y="106" width="700" height="30" rx="4" class="svg-ink-soft" stroke="currentColor" stroke-width="1.3"/>
+      <text x="420" y="125" text-anchor="middle" font-size="11" fill="currentColor">collector websocket, live</text>
+      <line x1="561" y1="106" x2="561" y2="136" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <rect x="770" y="106" width="98" height="30" rx="4" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="819" y="152" text-anchor="middle" font-size="9.5" class="svg-muted">recorded, past the morning read</text>
 
       <!-- axis -->
       <line x1="70" y1="170" x2="880" y2="170" stroke="currentColor" stroke-width="1.4"/>
       <g stroke="currentColor" stroke-width="1.4">
         <line x1="70" y1="166" x2="70" y2="174"/>
         <line x1="561" y1="166" x2="561" y2="174"/>
+        <line x1="770" y1="166" x2="770" y2="174"/>
         <line x1="880" y1="166" x2="880" y2="174"/>
       </g>
       <g font-size="11" fill="currentColor" class="svg-mono">
         <text x="70" y="191" text-anchor="middle">04:00</text>
         <text x="561" y="191" text-anchor="middle">07:20</text>
+        <text x="770" y="191" text-anchor="middle">08:45</text>
         <text x="880" y="191" text-anchor="middle">09:30</text>
       </g>
 
@@ -725,7 +751,11 @@
       <text x="70" y="218" font-size="10.5" class="svg-mono" fill="currentColor">collector bar &#8594; pm_high, pm_low, pm_vwap, written by scan.py at 08:45</text>
       <text x="70" y="237" font-size="10.5" class="svg-mono svg-accent-text">intraday bar &#8594; pm_high_true, pm_low_true, pm_vwap_true, written by backfill at 22:15, beside the morning values, never over them</text>
     </svg>
-    <figcaption>Coverage of the 04:00 to 09:30 premarket session. A true high
+    <figcaption>Coverage of the 04:00 to 09:30 premarket session, as it stands
+    from 2026-09-02. The collector now opens with the session rather than at
+    07:20; what the morning still cannot see is the stretch past its own 08:45
+    cutoff, and, for a name that only reached the pool at 07:15, everything
+    before the handover subscribed it. A true high
     below the live high indicates a feed difference or a bad bar, the trades
     websocket and the published bars can legitimately differ on odd lots,
     condition codes, and late corrections, so the shortfall is recorded as a
@@ -873,10 +903,12 @@
     saying so is the more useful result.</strong> The gap between the live and
     measured levels looks like the socket missing prints inside the
     minutes it heard. Split into its two causes it is +0.10 percent at the
-    median for the sampling and +0.98 for the 04:00 to 07:20 stretch nobody is
+    median for the sampling and +0.98 for the 04:00 to 07:20 stretch nobody was
     listening to. Ten to one the other way. The socket reproduces the extremes
-    of the minutes it does hear almost exactly, so any fix belongs at
-    [Collector] start_time and not at the feed, and none was made.</p>
+    of the minutes it does hear almost exactly, so the fix belonged at
+    [Collector] start_time and not at the feed. That is the measurement the
+    04:00 start was made on, on 2026-09-02, and the same split is what will say
+    afterwards whether it worked.</p>
     <p><strong>Fill plausibility is three states because a fourth would be a
     lie.</strong> plausible, implausible, unknown. A row with no evidence behind
     it is not a row that failed, and no row is called plausible on absent
@@ -1254,23 +1286,39 @@ losers never up more than 0.5%           2 of 11</p>
       limit. No packet, no report, no email past that point.</td>
     </tr>
     <tr>
+      <td>discover.py fails at 03:55</td>
+      <td>There is no watchlist when the collector starts, so it prints the
+      missing file and exits, and the session's first three hours go unheard.
+      The watchdog reruns discover while no watchlist has been written today
+      and restarts a collector that is not alive inside the window, so a single
+      failed pass costs minutes rather than the morning. If the 07:15 pass then
+      succeeds, the day runs as it did before this schedule existed: a collector
+      window that opens at the handover instead of at the session open, recorded
+      as such in window_open_at rather than presented as a full window.</td>
+    </tr>
+    <tr>
       <td>discover.py fails at 07:15</td>
-      <td>No fresh watchlist and no warmed baselines. The collector exits
-      naming the missing file (or runs on yesterday's list if one is on
-      disk). Scan does not rebuild membership and makes no bulk call of its
-      own: it reads the subscribed rows of watchlist.json, so a missing
-      watchlist leaves it with no candidates at all and gaps_to_fill says
-      exactly that. A watchlist that is present and subscribes nobody says so
-      separately, because an empty pool and an absent file are different
-      failures. A stale watchlist still on disk gives it yesterday's pool, which
-      is also what the collector subscribed to, so the morning runs on the wrong
-      names rather than on none. Either way the report goes out with the holes
-      named in the disclaimer. That last sentence is only true while the code
-      actually takes the degrade path, which is why both routes into it are
-      claims in the suite: every per candidate stage sits inside one branch of
-      scan.py, and an empty pool reaching code outside that branch would end the
-      scan with an exception instead of a zero candidate packet, stopping the
-      chain and costing the whole morning.</td>
+      <td>The collector keeps the 03:55 pool. Every refusal inside the handover
+      returns stay put, because the tape already being written is real and a
+      premarket cannot be bought back later: a missing file, an unreadable one,
+      one stamped another day, an empty pool, or any exception at all leaves the
+      run on the pool it opened with and records why. What is lost is the
+      names that only became discoverable after 03:55, mostly the overnight news
+      filed in between, and the warmed volume baselines. Scan does not rebuild
+      membership and makes no bulk call of its own: it reads the subscribed rows
+      of watchlist.json, so a missing watchlist leaves it with no candidates at
+      all and gaps_to_fill says exactly that. A watchlist that is present and
+      subscribes nobody says so separately, because an empty pool and an absent
+      file are different failures. A watchlist that is not today's is refused
+      outright at both the start and the handover, with no override outside the
+      monitor's last resort branch, so the morning never runs on another
+      session's pool wearing the costume of this one. Either way the report goes
+      out with the holes named in the disclaimer. That last sentence is only
+      true while the code actually takes the degrade path, which is why both
+      routes into it are claims in the suite: every per candidate stage sits
+      inside one branch of scan.py, and an empty pool reaching code outside that
+      branch would end the scan with an exception instead of a zero candidate
+      packet, stopping the chain and costing the whole morning.</td>
     </tr>
     <tr>
       <td>collector never connects</td>

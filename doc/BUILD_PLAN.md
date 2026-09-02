@@ -162,6 +162,11 @@ at the root and is gitignored along with .env.
   [Collector] stop_time past the open AND moving start_time earlier than
   07:20, which is the larger of the two prizes: the RVOL numerator starts at
   07:20 and its baseline denominator accumulates from 04:00, and
+  [start_time was moved to 04:00 on 2026-09-02, once this probe had returned
+  a per message cost of zero. See DECISIONS.md 2026-09-02 ninth. The prize
+  turned out to be larger than the ratio: the published entry reference sat a
+  median 1.19 percent from the true premarket high, ten to one attributable to
+  the late start rather than to the feed.]
   collector_window_share puts the median cost of that mismatch at 0.366 over
   all 68 picks rows, and 0.407 over the 46 that survive the capture study's
   session guards. Both are real and neither is the other: the first is the
@@ -529,6 +534,9 @@ table, deliver) ran end to end from the bat with rc=0 at every step.
 register_tasks.ps1 registered all five: discover 07:15 (which also warms the
 baseline cache, an addition to the original brief, because scan must never
 fetch baselines), collector 07:20, morning chain 08:45, nightly 22:15, all
+[the morning half of this moved on 2026-09-02: discover carries a second
+trigger at 03:55 and the collector starts at 04:00 with a six hour execution
+limit, because a four hour one would have killed it at 08:00.]
 Mon to Fri, universe Sunday 20:00. [The universe hour moved twice after this
 was written. 20:00 was the exact instant of the quota reset, so which quota
 day the largest job in the schedule billed to was a coin toss; 20:30 assumed
@@ -1377,9 +1385,15 @@ Open after that morning:
   caps of 42, 67, 92 and 142 recall runs 0.1164, 0.1578, 0.1864, 0.2236 and
   does not flatten. This is a purchasing decision, not a code one: the 50
   socket cap belongs to the vendor. Table in DECISIONS.md.
-- pm_rvol's numerator covers 07:20 onward while its denominator accumulates
-  from 04:00, so the ratio understates. Closing that needs a second baseline
-  keyed to the collector window and a rewarm of the cache.
+- CLOSED 2026-09-02, from the other end. pm_rvol's numerator covered 07:20
+  onward while its denominator accumulated from 04:00, so the ratio
+  understated. Rather than build a second baseline keyed to the collector
+  window, the collector was moved to 04:00 so the two windows agree. See
+  DECISIONS.md 2026-09-02 ninth. Two consequences are open rather than
+  closed: the floors in CRITERIA were fitted on the understated numbers and
+  have deliberately NOT been retuned, so rows before and after that date are
+  not comparable; and a name subscribed only at the 07:20 handover still has
+  the old shape, which window_open_at is what records.
 - The gate marker data/UNVERIFIED is still in place and should stay there
   until a morning's gate table has been read with the new price and clock
   columns in it.

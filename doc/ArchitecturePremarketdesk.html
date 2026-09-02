@@ -176,11 +176,15 @@ tbody tr:hover{background:var(--ground)}
 
 /* coverage bar */
 .cov{margin:22px 0 0}
-.cov .scale{display:flex;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);justify-content:space-between;margin-bottom:5px}
+.cov .scale{position:relative;height:16px;font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-bottom:5px}
+.cov .scale span{position:absolute;top:0;white-space:nowrap}
+.cov .scale span.mid{transform:translateX(-50%)}
+.cov .scale span.end{transform:translateX(-100%)}
 .cov .bar{display:flex;height:38px;border:1px solid var(--rule)}
 .cov .seg{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;letter-spacing:.04em;text-align:center;padding:0 6px}
-.cov .blind{flex:0 0 60.6%;background:repeating-linear-gradient(135deg,var(--ground),var(--ground) 6px,#E4E7EC 6px,#E4E7EC 12px);color:var(--ink-3)}
-.cov .live{flex:1;background:var(--morn-bg);color:var(--morn);border-left:1px solid var(--rule)}
+.cov .blind{flex:0 0 13.6%;background:repeating-linear-gradient(135deg,var(--ground),var(--ground) 6px,#E4E7EC 6px,#E4E7EC 12px);color:var(--ink-3);border-left:1px solid var(--rule)}
+.cov .live{flex:0 0 60.6%;background:var(--morn-bg);color:var(--morn)}
+.cov .live2{flex:1;background:var(--morn-bg);color:var(--morn);border-left:1px dashed var(--morn)}
 .cov .truth{margin-top:8px;height:26px;background:var(--night-bg);border:1px solid var(--night);color:var(--night);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;letter-spacing:.04em}
 
 /* row lifecycle */
@@ -333,11 +337,15 @@ tbody tr:hover{background:var(--ground)}
         <div class="ids">C02 fires C12 then C40 &rarr; writes C26, C41</div>
       </div>
 
-      <div class="t"><b>07:15</b>ET</div>
+      <div class="t"><b>03:55</b>and 07:15 ET</div>
       <div class="c morn">
         <h5>Build the candidate pool, warm the baselines</h5>
-        <p>No price from today is read here, because at 07:15 no source on this plan has one for the
-        whole universe, and reading one that only looked current is what ranked yesterday's movers
+        <p>The same job, run twice. The 03:55 pass exists so the collector has a pool to open the
+        session on; the 07:15 pass is the one the morning screens, and it runs late enough for its
+        news window to reach the hours most earnings actually land in. A name on both keeps its tape
+        unbroken from 04:00. No price from today is read at either hour, because no source on this
+        plan has one for the whole universe before the open,
+        and reading one that only looked current is what ranked yesterday's movers
         every morning. The pool is unioned from four priors instead: earnings landing between the prior
         close and this open (before open today, or after the prior session's close, both tier 1 since
         2026-09-02), an
@@ -354,13 +362,23 @@ tbody tr:hover{background:var(--ground)}
         <div class="ids">C03 fires C13 and C14 &rarr; writes C27, C30</div>
       </div>
 
-      <div class="t"><b>07:20</b>to 09:25</div>
+      <div class="t"><b>04:00</b>to 09:25</div>
       <div class="c morn">
         <h5>Listen to live trades</h5>
-        <p>Opens the trades websocket, subscribes to the eight fixed context tickers plus the names
-        discover marked subscribed, at most 42, which is the socket's 50 subscription cap less the
-        context tickers, and aggregates incoming prints into one-minute bars on disk. This is the
-        only source of today's premarket price path.</p>
+        <p>Opens the trades websocket with the extended session itself, subscribes to the eight fixed
+        context tickers plus the names discover marked subscribed, at most 42, which is the socket's
+        50 subscription cap less the context tickers, and aggregates incoming prints into one-minute
+        bars on disk. This is the only source of today's premarket price path.</p>
+        <p>It opens on the pool the 03:55 pass wrote. From 07:20 it rereads
+        <code>watchlist.json</code> every 30 seconds and, when the <code>generated_at</code> changes,
+        reconnects on the pool discover has just written, logging what was added, dropped and kept.
+        The bar file is keyed by symbol and minute rather than by connection, so a name on both pools
+        carries one unbroken tape across the handover. Every failure in that path returns stay put:
+        the run keeps the pool it opened with, because a partial tape beats none and a premarket
+        cannot be bought back afterwards. At most three reloads, which is the handover plus room for
+        two watchdog reruns of a failed 07:15 pass. Before 2026-09-02 this job started at 07:20 and
+        the session's first three hours and twenty minutes went unheard; see the night section for
+        what that was measured to cost.</p>
         <div class="ids">C04 fires C15 &rarr; writes C28</div>
       </div>
 
@@ -368,7 +386,7 @@ tbody tr:hover{background:var(--ground)}
       <div class="c morn">
         <h5>Gather the evidence and decide</h5>
         <p>No vendor call decides membership: the candidates are the names discover chose at 07:15
-        and the collector subscribed to at 07:20, since the collector is the only source of today's
+        and the collector holds a tape for, since the collector is the only source of today's
         tape and a name found at 08:45 could not be priced anyway. Each is priced from the collector
         file, its gap measured against the prior session close, and the top 12 by that measured gap
         are kept. Then per-candidate enrichment, premarket relative volume against the cached median,
@@ -449,7 +467,7 @@ tbody tr:hover{background:var(--ground)}
         <h5>The shared quota day turns over</h5>
         <p>The EODHD counter resets at midnight UTC, 20:00 ET in daylight time and 19:00 in
         standard time, so one calendar weekday spans two quota days. Tonight's 22:15 nightly and
-        tomorrow's 07:15 and 08:45 jobs all bill to the quota day that opens now, which means any
+        tomorrow's 03:55, 07:15 and 08:45 jobs all bill to the quota day that opens now, which means any
         sibling project spending on the shared key this evening is spending tomorrow morning's
         budget, not today's. Every job log names the quota day it billed to, and discover and scan
         read the meter on entry, before spending anything.</p>
@@ -512,8 +530,8 @@ tbody tr:hover{background:var(--ground)}
     <tbody>
       <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46, C48, C67</td></tr>
       <tr><td class="id">C02</td><td class="nm">job_universe.bat</td><td><span class="lay sched">Scheduler</span></td><td>Sun 21:00</td><td>none</td><td>C12, C40, C34</td></tr>
-      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
-      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:20</td><td>none</td><td>C15, C34</td></tr>
+      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 03:55 and 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
+      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 04:00</td><td>none</td><td>C15, C34</td></tr>
       <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
       <tr><td class="id">C67</td><td class="nm">job_midday.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 12:00</td><td>none</td><td>C50, C68, C69, C34</td></tr>
       <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15 and 07:00. The 07:00 firing is the catch-up and runs C62, C20 and C21 only</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C63, C61, C53, C34</td></tr>
@@ -535,9 +553,9 @@ tbody tr:hover{background:var(--ground)}
 
       <tr><td class="id">C12</td><td class="nm">universe.py</td><td><span class="lay morn">Morning</span></td><td>Weekly</td><td>C35</td><td>C26</td></tr>
       <tr><td class="id">C40</td><td class="nm">gap_stats.py</td><td><span class="lay morn">Morning</span></td><td>Sun 21:00</td><td>C26, C35</td><td>C41</td></tr>
-      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
+      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
       <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>07:15</td><td>C27, C30, C35</td><td>C30</td></tr>
-      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>07:20-09:25</td><td>C27, C36</td><td>C28</td></tr>
+      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>04:00-09:25</td><td>C27, C36</td><td>C28</td></tr>
       <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35, C64 (counts only, via C60)</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
       <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
@@ -607,9 +625,9 @@ tbody tr:hover{background:var(--ground)}
     <div class="relay">
       <div class="box morn"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 21:00. Common stock only, about 2,751 names.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">07:15. Four priors unioned, ranked by tier then gap propensity, 42 subscribed with 4 slots floored per tier.</span></div>
+      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">03:55 and 07:15. Four priors unioned, ranked by tier then gap propensity, 42 subscribed with 4 slots floored per tier.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">07:20-09:25. Websocket trades to 1m bars.</span></div>
+      <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">04:00-09:25. Websocket trades to 1m bars.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C16</span><span class="nm">scan.py</span><span class="dt">08:45. All decisions made here.</span></div>
 
@@ -675,10 +693,10 @@ tbody tr:hover{background:var(--ground)}
   <figure>
     <ol class="steps">
       <li><b>Market snapshot</b><span>The index, volatility, rates, oil, and dollar tickers, last price and change against prior close. Context for the narrative, never an input to eligibility.</span></li>
-      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else, and so is the price every later step measures against. Membership is the subscribed list, so a name that first gaps after 07:20 is never a candidate at all. A subscribed name the collector recorded nothing for has no price either, and the only substitute on offer is a vendor field that at 08:45 still describes the last completed session, so it leaves the candidate list entirely and is named with its reason in <code>dropped_no_coverage</code>, rather than being published at a stale price or carried as a row of nulls. A second cut follows it. A name whose last collector print is older than <code>max_price_age_seconds</code> = 900 at the scan clock sits inside today's premarket window, so the vintage check passes it, but it is not this morning's price, and it leaves for <code>dropped_stale_price</code> carrying its age. On 2026-08-20 that removed ATAT at 4,087 seconds and EQNR at 1,627.</span></li>
-      <li><b>Final candidates</b><span>The names discover subscribed the collector to at 07:20, with no bulk call made here: a name first found at 08:45 has no premarket tape and could not be priced at all. Ranking is by the gap actually measured from the collector's own last bar, keeping the top 12. The size of the pool those names were drawn from, and how many of it were subscribed, is recorded. The pool tier that put each name in front of the collector is carried as a recorded field and never as an ordering, so a prior about who might move cannot reach the report looking like a finding.</span></li>
+      <li><b>Window provenance</b><span>Premarket high, low, and volume-weighted average are read from the collector's file and nowhere else, and so is the price every later step measures against. Membership is the subscribed list, so a name that first becomes discoverable after the 07:15 pass is never a candidate at all. A subscribed name the collector recorded nothing for has no price either, and the only substitute on offer is a vendor field that at 08:45 still describes the last completed session, so it leaves the candidate list entirely and is named with its reason in <code>dropped_no_coverage</code>, rather than being published at a stale price or carried as a row of nulls. A second cut follows it. A name whose last collector print is older than <code>max_price_age_seconds</code> = 900 at the scan clock sits inside today's premarket window, so the vintage check passes it, but it is not this morning's price, and it leaves for <code>dropped_stale_price</code> carrying its age. On 2026-08-20 that removed ATAT at 4,087 seconds and EQNR at 1,627.</span></li>
+      <li><b>Final candidates</b><span>The names discover subscribed the collector to, with no bulk call made here: a name first found at 08:45 has no premarket tape and could not be priced at all. Ranking is by the gap actually measured from the collector's own last bar, keeping the top 12. The size of the pool those names were drawn from, and how many of it were subscribed, is recorded. The pool tier that put each name in front of the collector is carried as a recorded field and never as an ordering, so a prior about who might move cannot reach the report looking like a finding.</span></li>
       <li><b>Per-candidate enrichment</b><span>Runs after the ranking rather than before it, so the vendor calls land on names that already survived the cut. Extended-hours volume and its timestamp, market cap, float, average volume, and the 200-day average from the delayed quote. Prior session close, prior session high, that session's date, and 20-day average volume from one end-of-day record, which is published beside the count of sessions it actually averages, because a twenty day average can quietly be an average of three: close and high are read out of the same daily bar, because when they come from separate places, one from the bulk feed's previousClose and one from end-of-day history, they silently drift a session apart. On 2026-08-14 six candidates carried a prior high below their own prior close, which cannot happen inside one OHLC bar, and the <code>require_above_prior_high</code> gate could never pass. Aligned by construction, that whole class of error is unreachable rather than merely unlikely. Two things break the order. A subscribed name that reached the scan with no prior close from the pool buys one end-of-day call before the ranking, since otherwise it is unrankable. And under a quota-thinned run the quote, history, and news calls are skipped altogether, so these fields are null for quota reasons rather than vendor ones.</span></li>
-      <li><b>Premarket relative volume</b><span>The collector's premarket volume divided by the cached median for the same clock cutoff. Never the quote's extended-hours volume, which describes the previous extended session until the vendor rolls it (measured on 2026-08-14 as after 08:45 and before 08:56, where at 08:45 it gave ARX 20,744,130 shares against a premarket median of 23.5, an RVOL of 882,728), and never full-day relative volume. Fewer than ten baseline sessions, a median below the 1,000 share floor, or a missing collector file produces null plus a written reason. The numerator covers 07:20 onward while the denominator accumulates from 04:00, so the ratio is a lower bound, a direction that can only withhold a candidate from a screen and never smuggle one in.</span></li>
+      <li><b>Premarket relative volume</b><span>The collector's premarket volume divided by the cached median for the same clock cutoff. Never the quote's extended-hours volume, which describes the previous extended session until the vendor rolls it (measured on 2026-08-14 as after 08:45 and before 08:56, where at 08:45 it gave ARX 20,744,130 shares against a premarket median of 23.5, an RVOL of 882,728), and never full-day relative volume. Fewer than ten baseline sessions, a median below the 1,000 share floor, or a missing collector file produces null plus a written reason. Until 2026-09-02 the numerator covered 07:20 onward while the denominator accumulated from 04:00, so the ratio was a lower bound: a direction that could only withhold a candidate from a screen and never smuggle one in. The collector now opens at 04:00 and the two windows agree for a name carried from the session open, which closes that bias and, with it, the safety it bought. The floor in CRITERIA was fitted on the understated numbers and has deliberately NOT been retuned, so rows measured before and after that date are not comparable and the screen now admits names the old ratio would have withheld. A name subscribed only at the 07:20 handover still has the old shape, and <code>window_open_at</code> is what says which of the two a given row is.</span></li>
       <li><b>Catalyst</b><span>Vendor news filtered by symbol tag over 24 hours, top three with headline, publisher, link, time, and sentiment. No keyword matching and no company-name regex, because the feed is already tagged. No tagged story means <code>catalyst_found</code> false. The tag alone is not enough, because a market wrap gets tagged with every symbol it mentions and would otherwise hand its earnings label to whichever stock the feed had attached it to. Three tests set an article aside before it can name anybody: too many symbol tags, too many separate feeds carrying it, and a list of macro tags in <code>CRITERIA.md</code> that only a piece about the SESSION carries, INFLATION, RATES, TREASURIES, GEOPOLITICAL RISKS and the rest. The first two catch the wide roundup that lists forty companies; the third catches the narrow market piece that names one, which a count of tags cannot see. Every classification records the tags behind it, so a wrong call can be argued with rather than guessed at.</span></li>
       <li><b>Calendar</b><span>High-importance US economic events for today and tomorrow, and earnings for the candidates plus notable names reporting tomorrow.</span></li>
       <li><b>Flags and score</b><span>Eligibility booleans read straight from the criteria file with the names of any failed conditions recorded. Then a confluence score from 0 to 10 built from catalyst class, relative volume band, gap band, position against prior high and premarket average, and market cap, bucketed green, yellow, or red. The per-component breakdown is stored, not just the total, so the score can be argued with later.</span></li>
@@ -869,26 +887,34 @@ tbody tr:hover{background:var(--ground)}
 <section id="s7">
   <h2><span class="n">07</span> &nbsp;Coverage</h2>
   <h3>The blind window and the night</h3>
-  <p>Two facts force the night pipeline to exist. The premarket session opens at 04:00 but the
-  collector only starts listening at 07:20, so the morning's premarket high honestly describes a
-  partial window. And the vendor publishes its one-minute intraday bars several hours behind live, so
+  <p>Two facts force the night pipeline to exist. The morning's premarket high describes a window
+  that is still not the whole session. Until 2026-09-02 that was the large hole: the session opens at
+  04:00 and the collector only started listening at 07:20. It now opens with the session, and what
+  remains is narrower but real. The window ends at the 08:45 cutoff rather than at 09:30; a name that
+  reaches the pool only at the 07:15 pass is subscribed at the handover, so its tape begins at 07:20
+  and <code>window_open_at</code> is what records that; and a name that never reached the pool has no
+  tape at all. And the vendor publishes its one-minute intraday bars several hours behind live, so
   the full truth does not exist anywhere until the evening.</p>
 
   <figure>
     <div class="cov">
-      <div class="scale"><span>04:00</span><span>07:20</span><span>09:30 open</span></div>
+      <div class="scale"><span style="left:0">04:00</span><span class="mid" style="left:60.6%">07:20</span><span class="mid" style="left:86.4%">08:45</span><span class="end" style="left:100%">09:30 open</span></div>
       <div class="bar">
-        <div class="seg blind">NO LISTENER, by design</div>
         <div class="seg live">C15 COLLECTOR, LIVE &rarr; C28</div>
+        <div class="seg live2">07:15 POOL</div>
+        <div class="seg blind">PAST THE READ</div>
       </div>
       <div class="truth">C35 INTRADAY 1m: the whole session, published hours later &rarr; C20 at 22:15</div>
     </div>
-    <figcaption><b>Coverage of the 04:00 to 09:30 premarket session.</b> The morning writes what the
+    <figcaption><b>Coverage of the 04:00 to 09:30 premarket session, as it stands from
+    2026-09-02.</b> The dashed divider is the 07:20 handover, where the run moves from the pool the
+    03:55 pass wrote onto the one the 07:15 pass wrote; a name on both carries one unbroken tape
+    across it. The morning writes what the
     collector actually heard, labelled partial where it was partial. The night writes
     <code>pm_high_true</code>, <code>pm_low_true</code>, and <code>pm_vwap_true</code> beside those
     values and never over them. The distance between the two column families is not noise to be
-    cleaned up, it is the measured cost of starting at 07:20 instead of 04:00, and after a month it
-    tells you whether that trade was worth making.</figcaption>
+    cleaned up, it is the measured cost of listening to part of a session rather than all of it, and
+    it is the record that priced the move to 04:00.</figcaption>
   </figure>
 
   <div class="note"><p><b>A second vendor measures the same window, and it is named rather than
@@ -915,9 +941,10 @@ tbody tr:hover{background:var(--ground)}
   entry reference falls from 29 of 48 to 20. The record had been reporting a median name as having
   reached a level it never reached. <b>The premise that specified the work was inverted.</b> Split
   into its two causes, the sampling inside the minutes the socket did hear is +0.10 percent at the
-  median and the 04:00 to 07:20 stretch it never hears is +0.98: ten to one the other way. The socket
-  reproduces the extremes of the minutes it hears almost exactly, and any fix belongs at [Collector]
-  <code>start_time</code> rather than at the feed. Not acted on.</p></div>
+  median and the 04:00 to 07:20 stretch it never heard is +0.98: ten to one the other way. The socket
+  reproduces the extremes of the minutes it hears almost exactly, so the fix belonged at [Collector]
+  <code>start_time</code> rather than at the feed. Acted on 2026-09-02: that is the measurement the
+  04:00 start was made on, and the same split is what will say afterwards whether it worked.</p></div>
 
   <div class="note"><p><b>A level is not a price you could have got.</b> So C59 also asks whether
   anything traded near <code>entry_ref_true</code>: total premarket volume, the volume and notional
@@ -947,9 +974,13 @@ tbody tr:hover{background:var(--ground)}
   land in each morning's packet next to bars_total, so a flaky morning is on the record. Scope:
   both runs rode the quiet evening tape; an earlier window that streamed 1,574 live trade messages
   straddled the counter's daily reset (20:00 ET, midnight UTC, also learned here), so the per
-  message cost on a heavy live tape is the one number still owed. It is measurable any weekday by
-  running <code>measure_socket_cost.py</code> inside the 04:00 to 07:15 window, before the
-  scheduled jobs wake and while no other project touches the key.</p></div>
+  message cost on a heavy live tape is the one number still owed. That window used to be 04:00 to
+  07:15, before the scheduled jobs woke. From 2026-09-02 there is no such gap on a weekday: discover
+  runs at 03:55 and the collector holds the socket from 04:00 to 09:25, and a second live subscription
+  on the same key would contend with the session capture rather than sit beside it. Measuring it now
+  means a weekend or a holiday, when nothing is scheduled and no live tape is running, which is the
+  wrong tape for the question, or an instrumented weekday run under
+  <code>--premarket-dir</code> so the measurement cannot land in the morning's file.</p></div>
 
   <div class="note"><p><b>What one bulk live snapshot costs.</b>
   <code>measure_bulk_cost.py</code> read <code>/api/user</code>, watched the meter sit still for a
@@ -960,10 +991,15 @@ tbody tr:hover{background:var(--ground)}
   morning path does not call it: it serves the last completed session, so ranking by it ranks
   yesterday's movers. It survives only inside <code>measure_bulk_cost.py</code>, and
   <code>test_pool.py</code> fails if <code>discover.py</code> names it again. What the morning buys
-  instead is three end of day bulk calls, all in discover at 07:15: the prior session and the one
+  instead is three end of day bulk calls per discovery pass: the prior session and the one
   before it so the move is read close to close, and a third for the universe closes sidecar, which
-  the report's notable movers section needs at the same vintage as the other two. The 07:15 pass
-  moved the meter by 306 on 2026-08-20 against three bulk calls, so about 100 a call. The nightly
+  the report's notable movers section needs at the same vintage as the other two. One pass
+  moved the meter by 306 on 2026-08-20, and again on 2026-09-01 and 2026-09-02, against three bulk
+  calls, so about 100 a call. From 2026-09-02 discover runs twice, so the morning buys six of them
+  and about 612 a day rather than 306. Against a measured weekday total near 1,628 of 100,000 that is
+  the whole cost of the two phase collector, since the socket itself makes no priced call at all: its
+  only HTTP request is the <code>user</code> preflight, which costs zero, and it costs the same
+  whether it listens for two hours or for five. The nightly
   recall pass buys two more of the same call at 22:15 and the weekly universe rebuild buys twenty,
   one per lookback session. At about 100 each, every one of them sits far
   below the 1,000 per call <code>bulk_redesign_line</code> in <code>CRITERIA.md</code> at which bulk
@@ -1210,9 +1246,9 @@ tbody tr:hover{background:var(--ground)}
     <thead><tr><th>What fails</th><th>Missing downstream</th><th>What the next stage does</th><th>Email?</th></tr></thead>
     <tbody>
       <tr><td class="nm">C12 universe.py<br><span style="font-family:var(--sans);color:var(--ink-3)">Sunday rebuild</span></td><td>Nothing immediately. Last week's C26 is still on disk.</td><td>C13 and C16 run against the stale file until it passes ten days old, then refuse and name the age.</td><td>Yes, until day 10</td></tr>
-      <tr><td class="nm">C13 discover.py<br><span style="font-family:var(--sans);color:var(--ink-3)">07:15</span></td><td>C27 absent or stale, baselines not warmed.</td><td>C15 finds nothing to subscribe to, prints that discover.py must be run first, and exits 1. C16 builds no candidate list of its own any more: membership is exactly the names discover marked subscribed, because the collector is the only source of today's premarket tape and it holds bars only for what was subscribed at 07:20. So an absent <code>watchlist.json</code> leaves the packet with no candidates at all rather than degraded ones, and that morning's tape is gone for good, because nobody listened to it. Baselines are not fetched inline either: CRITERIA [baseline] forbids fetching during the morning run and the warm step lives in job_discover.bat, so the scan reads the cache and publishes a null <code>pm_rvol</code> naming the reason when the cached row is missing or unusable. A stale watchlist fails differently, because nothing reads its date: C15 subscribes to yesterday's names, C16 prices them from today's tape, and a full width report goes out about the previous morning's pool. A watchlist that is PRESENT and subscribes nobody says so in <code>gaps_to_fill</code> in its own words, because an empty pool and an absent file are different failures and a report with empty tables and no sentence explaining them is the worst of both. Both routes into the no-candidate path are held by claims in the suite, for a reason worth stating: a degrade path is only a degrade path if the code actually takes it. Every per candidate stage sits inside one branch of C16, so an empty pool reaching code outside that branch ends the scan with an exception rather than with a thin packet, and because the chain stops on the first non-zero exit the documented degrade would in fact be the total loss, no packet, no report, no email.</td><td>Yes, no candidates</td></tr>
+      <tr><td class="nm">C13 discover.py<br><span style="font-family:var(--sans);color:var(--ink-3)">03:55 and 07:15</span></td><td>C27 absent or stale, baselines not warmed.</td><td>Which pass failed decides the cost. A failed 03:55 pass leaves no watchlist when C15 starts, so it prints that discover.py must be run first and exits 1, and the session opens unheard until the watchdog rebuilds the file and restarts it. A failed 07:15 pass costs nothing already recorded: C15 keeps the 03:55 pool, every refusal inside the handover returns stay put, and what is lost is the names that only became discoverable after 03:55 plus the warmed baselines. If both fail: C16 builds no candidate list of its own any more: membership is exactly the names discover marked subscribed, because the collector is the only source of today's premarket tape and it holds bars only for what was subscribed at 07:20. So an absent <code>watchlist.json</code> leaves the packet with no candidates at all rather than degraded ones, and that morning's tape is gone for good, because nobody listened to it. Baselines are not fetched inline either: CRITERIA [baseline] forbids fetching during the morning run and the warm step lives in job_discover.bat, so the scan reads the cache and publishes a null <code>pm_rvol</code> naming the reason when the cached row is missing or unusable. A watchlist that is not today's is refused outright, at the start and again at the handover, with no override outside the monitor's last resort branch: C15 prints what date the file carries and exits rather than listening perfectly to another session's pool, which is the 2026-08-24 defect this refusal exists for. A watchlist that is PRESENT and subscribes nobody says so in <code>gaps_to_fill</code> in its own words, because an empty pool and an absent file are different failures and a report with empty tables and no sentence explaining them is the worst of both. Both routes into the no-candidate path are held by claims in the suite, for a reason worth stating: a degrade path is only a degrade path if the code actually takes it. Every per candidate stage sits inside one branch of C16, so an empty pool reaching code outside that branch ends the scan with an exception rather than with a thin packet, and because the chain stops on the first non-zero exit the documented degrade would in fact be the total loss, no packet, no report, no email.</td><td>Yes, no candidates</td></tr>
       <tr><td class="nm">C50 market_today.py<br><span style="font-family:var(--sans);color:var(--ink-3)">the calendar refresh, 22:15</span></td><td>Nothing, now. C58 keeps whatever it already held.</td><td>Every weekday job runs this guard first, and its failure direction is deliberate: an unknown calendar reads as OPEN, because a false closed silently loses a real morning where a false open produces one honestly thin report. That trade is only safe while "unknown" is rare, so the refresh writes over the cache only once the vendor has answered. Deleting the cache and then fetching would let a single vendor outage at 22:15 leave no holiday list at all, and on the night before a holiday every job the next morning would assume the market was open, build a watchlist from stale quotes, collect nothing, and report on a session that does not exist.</td><td>Yes, unaffected</td></tr>
-      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">07:20 to 09:25</span></td><td>C28 absent or short.</td><td>C16 prices every candidate from that file and nowhere else, so a name the collector recorded no bars for has no price at all: it is removed into <code>dropped_no_coverage</code> with its reason rather than published at a stale price, and it never reaches picks. An absent file drops the whole subscribed list, so the packet is written with no candidates and the drop list is the record of who was lost. A short file drops only the uncovered names, and a name whose bars start after 07:20 is kept with <code>pm_window_starts_late</code> set, which is what the disclaimer line names.</td><td>Yes, degraded</td></tr>
+      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">04:00 to 09:25</span></td><td>C28 absent or short.</td><td>C16 prices every candidate from that file and nowhere else, so a name the collector recorded no bars for has no price at all: it is removed into <code>dropped_no_coverage</code> with its reason rather than published at a stale price, and it never reaches picks. An absent file drops the whole subscribed list, so the packet is written with no candidates and the drop list is the record of who was lost. A short file drops only the uncovered names, and a name whose bars start after the window opened is kept with <code>pm_window_starts_late</code> set, which is what the disclaimer line names. That is the ordinary state for a name subscribed only at the 07:20 handover, and <code>window_open_at</code> records the window the session actually ran, so the night passes measure each morning against the window it had rather than against the one in CRITERIA today.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
       <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. The case it exists for is a chain that exits zero at every step and publishes a report describing the previous session. That has happened, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>

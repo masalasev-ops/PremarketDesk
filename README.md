@@ -259,7 +259,7 @@ Premarket RVOL unverifiable: 2 of 12. CRUX and FOXO have fewer than ten
 baseline sessions, so no median exists to divide into.
 
 Premarket window starts late: 1 of 12. GRID, whose first collector bar is
-07:48 rather than 07:20, so its premarket high describes 92 minutes of a
+07:48 rather than 04:00, so its premarket high describes 102 minutes of a
 330 minute session.
 
 Premarket path evidence absent: 0 of 12.
@@ -480,14 +480,24 @@ to judge, on purpose, so the verdict cannot be chosen once the counts arrive.
 
 ### A worked example: one morning, end to end
 
-07:15. Discovery ranks 38 names from the four priors and subscribes the
+03:55. Discovery runs for the first time and writes a provisional pool, so the
+collector has something to subscribe to when the extended session opens.
+
+04:00. The collector opens the socket on that pool and starts writing minute
+bars. This is the only source of today's premarket tape, and it is now listening
+from the first print of the session rather than from 07:20.
+
+07:15. Discovery runs again, over a news window that reaches the hours most
+earnings land in, and ranks 38 names from the four priors, subscribing the
 collector to 34 of them, four short of the cap because the pool did not fill it.
 Everything below the cut is written to `watchlist.json` marked
 `not_subscribed`, so the cut is auditable.
 
-07:20. The collector opens the socket and starts writing minute bars. This is
-the only source of today's premarket tape. A name discovery did not subscribe
-cannot be priced at 08:45 no matter what it does.
+07:20. The collector notices the new `generated_at`, reconnects on that pool and
+logs what was added, dropped and kept. A name on both pools keeps its tape
+unbroken from 04:00; a name added here starts at 07:20, which `window_open_at`
+records. A name discovery did not subscribe cannot be priced at 08:45 no matter
+what it does.
 
 08:45. The scan prices all 34 from the collector file, measures each gap against
 the prior session close, and keeps the top 12. It enriches those 12, computes

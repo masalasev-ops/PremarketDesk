@@ -15,6 +15,53 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, forty fourth: the two explainer pages catch up with the collector
+
+The forty third entry changed the schedule and updated README, BUILD_PLAN and
+CRITERIA, and left doc/ArchitecturePremarketdesk.html and
+doc/Premarketdesk_ADayRunArc.html describing the design that had just been
+replaced. Between them they said 07:20 in twenty four places, and several were
+not stale wording but claims a reader would act on: that there is no live
+listener before 07:20 by design, that pm_rvol is a lower bound and can only
+withhold a candidate from a screen, that the per message socket cost is
+measurable inside the 04:00 to 07:15 window before the scheduled jobs wake, and
+that the morning buys three bulk calls a day at 07:15. The first is no longer
+true, the second is no longer true and its safety is gone with it, the third
+would now put a second live subscription on the key while the session capture
+holds one, and the fourth is half the real number.
+
+Both timeline figures were redrawn rather than relabelled, because the shape
+changed and not just the numbers: the collector bar now spans the session, the
+07:20 handover is a divider inside it, and the 08:45 chain sits under a tape it
+is reading while it is still being written. The coverage figure's blind segment
+is no longer the first three hours and twenty minutes; what is left uncovered is
+the stretch past the morning's own 08:45 read.
+
+Two failure table rows were wrong before this change and are corrected here
+too. Both pages said a stale watchlist is used because nothing reads its date,
+which stopped being true on 2026-08-24 when the collector began refusing any
+watchlist that is not today's. And discover failing is now two different
+failures with two different costs, so it is written as two rows: a failed 03:55
+pass costs the session's opening hours until the watchdog rebuilds the file, a
+failed 07:15 pass costs only the names that became discoverable after 03:55,
+because the handover's every refusal returns stay put.
+
+The quota arithmetic is restated with the measured numbers rather than left to
+be inferred: one discovery pass moves the meter by 306, measured on 2026-08-20,
+2026-09-01 and 2026-09-02, so two passes cost 612 a day against a weekday total
+near 1,628 of 100,000. The collector itself makes no priced call at all, its
+only HTTP request being the user preflight, so listening for five and a half
+hours costs exactly what listening for two did.
+
+README's worked example and BUILD_PLAN's open items were carried forward in the
+same pass. The pm_rvol lower bound item is marked CLOSED from the other end:
+rather than build a second baseline keyed to the collector window, the window
+was moved to meet the baseline. Its two consequences stay open on purpose, the
+unretuned floors and the handover subscribed names that still have the old
+shape.
+
+No code changed. Suite green, criteria --check 0 defects.
+
 ## 2026-09-02, forty third: the collector starts at 04:00 and takes its pool in two phases
 
 Owner decision 1 of DECISIONS 2026-09-02 sixth, taken. The collector ran
