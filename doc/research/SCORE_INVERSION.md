@@ -28,6 +28,16 @@ of amendments, so an amendment that is not listed here is one a reader
 cannot date, and the line above said nothing else had changed while a
 section dated the next day sat at the foot of the file.
 
+Amended 2026-09-02, with the record at 80 live picks across 9 sessions, 55
+carrying a true excursion across 7 and 17 booked v1 trades across 7. Two
+things were added, both far ahead of either judging point. A confound: the
+premarket range, written down under "Known confounds" with the measurement
+that found it. And a co-secondary quantity: the median pick day open to
+close, a reference free outcome beside the two reference bound excursions,
+with a commitment to report medians by gap band beside the buckets. No
+judging rule, judging point, outcome or stop rule moved, and no earlier text
+was rewritten.
+
 Nothing in this file is a result. `night/weekly_page.py` renders the groups
 every night and concludes nothing; the judging described here is a separate act
 performed against the rules written below.
@@ -171,6 +181,62 @@ argument for weakening it: those two minimums are read by every group on the
 weekly page, and lowering them so one new split publishes would change
 numbers already published in order to serve it, on the single page built to
 watch for a threshold turned until the output looks the way somebody wanted.
+
+## The premarket range confound, and a reference free co-secondary
+
+Added 2026-09-02, both judging points still far out of reach.
+
+**Every quantity above is measured against a level, and the level moves with
+the gap.** `mfe_pct_true` is the D+1 high against `entry_ref_true`, the
+measured premarket high; `pnl_pct` books a long entered at the premarket high.
+A larger gap comes with a wider premarket range, so the premarket high sits
+further above where the next session opens in proportion to the gap. Measured
+2026-09-02 over the 55 live rows carrying a true excursion, with the premarket
+range defined as `(pm_high_true - pm_low_true) / entry_ref_true`, the measured
+levels from the night's Alpaca pass and not the collector's sampled ones:
+
+  Spearman(|gap_pct|, premarket range share)                          +0.695
+  Spearman(premarket range share, mfe_pct_true)                       -0.351
+  Spearman(|gap_pct|, mfe_pct_true)                                   -0.328
+
+  gap band   n   median range share   median mfe_pct_true
+  3 to 5     21  5.60 percent          -1.13
+  5 to 8     22  8.41 percent          -1.92
+  8 and up   12  15.23 percent         -7.34
+
+  median D+1 open against entry_ref_true: green -8.35 percent, yellow -1.17,
+  red -2.08.
+
+The gap component pays two of the score's ten points to exactly the names
+whose reference level is furthest from where the next session opens. So an
+inversion of the secondary can be produced by the yardstick alone, with the
+names behaving identically, and outcome 3 above would then be a finding about
+the outcome definition and not about the score. The gap direction confound
+does NOT absorb this: measured the same day, inside gap up names green n=12
+median -5.28 against yellow n=12 median -0.54, and inside gap down names green
+-8.39 against yellow +2.93. The inversion holds within each sign.
+
+**Co-secondary: the median pick day open to close.** `picks.pick_day_open` and
+`picks.pick_day_close`, written from 2026-09-02 for every pick by
+`night/fill_outcomes.py` from the same end of day bar the outcome fill already
+fetches, and backfilled once for the rows filled before then. It is reference
+free: it measures what the name did on its own session without a level the
+gap decides. Measured 2026-09-02 over the same 55 rows on the D+1 bar, which
+is the nearest reference free quantity the table held before the columns
+existed: green +0.09, yellow +0.82, red +0.85, nearly flat.
+
+It is reported by the weekly page beside the two excursions under the same
+withholding rule, and it is a SECONDARY like them, judged at the secondary
+point. It does not replace the primary and it does not move any judging rule.
+What it adds is a third reading at the judging point: if the reference bound
+secondaries invert and the reference free one is flat, the finding is about
+the level.
+
+**Medians by gap band are reported beside the buckets** when either point is
+judged, the bands being 3 to 5, 5 to 8 and 8 and up on `abs(gap_pct)`, so a
+reader can see how much of a bucket's median is the gap component's
+population. Written down now for the same reason as the direction split:
+adding it afterwards is not a pre-registration.
 
 ## What "differs by more than half" means
 

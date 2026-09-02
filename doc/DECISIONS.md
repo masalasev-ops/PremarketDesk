@@ -18,6 +18,73 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, sixth: five proposals for the owner, written up and stopped at
+
+Tier 5 of doc/IMPROVEMENT_PLAN.md ends in decisions the project's own rules
+reserve for the owner: a threshold moves only on a pre-registered
+measurement, the score is under a pre-registered evaluation, and a second
+vendor in the selection path bends hard rule 1. Each is written here with the
+measurement that motivates it and nothing is implemented.
+
+1. MOVE [Collector] start_time TOWARD 04:00. The socket was measured free
+   on 2026-09-01: 21,306 messages on a live regular hours tape moved the
+   vendor counter by zero. The day screen's binding condition, premarket
+   RVOL above 1.5, failed 51 of 68 candidates on a numerator that starts at
+   07:20 against a baseline accumulated from 04:00; on the measured number
+   54 of 80 picks clear it instead of 24. Consequences to name before the
+   move: the float rotation edges and the capture rate were fitted on 07:20
+   numerators (CRITERIA [Score premarket float rotation]), and the RVOL floor
+   of 1.5 then means something different. The re-fit study exists offline.
+   Acceptance if adopted: median pm_rvol_true over pm_rvol falls from about
+   4.6 toward about 1.4 over ten sessions, and day eligible counts are
+   published before and after.
+
+2. SIGN AWARE CANDIDATE SELECTION. Top twelve by absolute gap on 2026-09-01
+   yielded twelve gap down names on a long only screen, so nothing could pass
+   by arithmetic, and the report had nothing to publish. Options: top six up
+   and six down, or top twelve by signed gap. Either changes the population
+   the rotation edges were fitted on.
+
+3. TAKE GAP SIZE OUT OF THE SCORE'S SUM, and publish the components as a
+   checklist without the word conviction, per the freeze's clause 2.
+   SCORE_INVERSION.md's 2026-09-02 amendment records that gap size predicts
+   the premarket range and therefore the distance of the reference level from
+   the next open, not follow through; a reference free outcome is nearly flat
+   across buckets. This changes the instrument under evaluation and the
+   owner's own note in CRITERIA [Score gap] reserves it. If taken, rows before
+   the change keep their score and the watch restarts on rows after.
+
+4. A SECOND VENDOR IN THE SELECTION PATH, IF THE OFFLINE TEST PASSES.
+   data/probe-capture-live-2026-08-24.md measured the Alpaca free tier
+   serving a live session's premarket over a window ending fifteen minutes
+   behind the clock, 2,779 symbols in five requests. DECISIONS 2026-08-26
+   declined it as a discovery source on the [Price age] rule, which is a rule
+   about pricing at 08:45 and not about selection at 07:15. Published recall
+   of addressable gappers runs 0.05 to 0.15 and the 42 slot cap is the
+   constraint. IMPROVEMENT_PLAN 5.5 is the offline test: for the live
+   sessions with a closes file, sweep 04:00 to 07:00 of the completed tape,
+   rank by absolute gap against the cached prior close with a volume floor,
+   take 42, and score subscribed_recall_addressable against each session's
+   pool_recall.json, with the bar pre-registered as beating the shipped
+   recall on at least seven of nine sessions. Not run in this pass. If it
+   passes, the vendor enters selection only, the published path stays EODHD,
+   and hard rule 1 is amended to say so.
+
+5. data/UNVERIFIED. The gate is blocked on a decision, not a measurement:
+   the 68 row RVOL study is done. Either proposal 1 lands and one real
+   morning is reviewed against it, or the owner accepts the lower bound as
+   the published number and reviews a morning as it stands. Delivery stays
+   gated until one of those two is chosen.
+
+What this pass did do under tier 5: the SCORE_INVERSION.md amendment (5.1),
+the weekly page's groupings by gap band, direction, catalyst class and screen
+verdict with the two reference free columns and the rule versions side by
+side (5.2), and the pick day open and close for every pick (5.3). The two
+research instruments, the 60 session replay with outcomes (5.4) and the
+premarket sweep prior test (5.5), were not built: each needs a
+pre-registration note written before its first run and an afternoon of
+Alpaca fetches, and a half built instrument is worse than none.
+
 ## 2026-09-02, fifth: the alias stays, the strictest float wins, and three packages are left undone on purpose
 
 Three choices in tier 4 of doc/IMPROVEMENT_PLAN.md.

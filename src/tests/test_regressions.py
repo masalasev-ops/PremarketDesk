@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and sixty two claims, a count read off
+and the two pages. It now carries one hundred and sixty three claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -14135,6 +14135,73 @@ def claim_the_schema_owns_every_picks_column_once(failures: list[str]) -> None:
           "is stamped once")
 
 
+def claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for(failures: list[str]) -> None:
+    """The score watch groups the record by gap band, direction, catalyst class
+    and the day screen's verdict, carries the two reference free columns, and
+    shows the paper rule versions side by side, all under the same withholding.
+
+    IMPROVEMENT_PLAN 5.2. Every grouping is a description by a key the pick
+    already carried; none of them screens. The own session column reads
+    picks.pick_day_open and pick_day_close, which 5.3 added, and is withheld
+    like every other metric when the rows are too few.
+    """
+    from core import store
+    from night import weekly_page
+
+    with conftest_activate():
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            connection.execute("DELETE FROM paper_trades")
+            for index, (date, ticker, gap, klass, eligible) in enumerate((
+                    ("2026-01-05", "AAA.US", 4.0, "earnings", 1),
+                    ("2026-01-05", "BBB.US", -6.0, "none", 0),
+                    ("2026-01-06", "CCC.US", 9.0, "earnings", 1),
+                    ("2026-01-06", "DDD.US", 3.5, "analyst_action", 0))):
+                store.upsert(connection, "picks", ["date", "ticker"], {
+                    "date": date, "ticker": ticker, "source": "live", "conviction": "yellow",
+                    "score": 5.0, "gap_pct": gap, "catalyst_class": klass,
+                    "day_eligible": eligible, "mfe_pct_true": 1.0 + index,
+                    "mae_pct_true": -1.0, "pm_high_broke_next_day": index % 2,
+                    "pick_day_open": 10.0, "pick_day_close": 10.0 + index})
+            connection.commit()
+        with contextlib.redirect_stdout(io.StringIO()):
+            score = weekly_page.how_did_the_score_do()
+
+    titles = [g["title"] for g in score.get("groupings") or []]
+    for wanted in ("By gap size, absolute", "By gap direction", "By catalyst class",
+                   "By the day screen's verdict"):
+        if wanted not in titles:
+            failures.append(f"the score watch has no grouping {wanted!r}: {titles}")
+    bands = {g["group"]: g for grouping in score["groupings"]
+             if grouping["title"] == "By gap size, absolute" for g in grouping["groups"]}
+    if set(bands) != {"3 to 5 percent", "5 to 8 percent", "8 percent and up"}:
+        failures.append(f"the gap bands are {sorted(bands)}")
+    for grouping in score["groupings"]:
+        for group in grouping["groups"]:
+            for key in ("own_session", "broke", "pnl", "mfe", "mae", "trigger"):
+                if key not in group:
+                    failures.append(f"group {group['group']!r} lacks {key}")
+            if group["own_session"]["withheld"] is None:
+                failures.append("a two row group published an own session median under "
+                                "the withholding rule")
+    if "rules" not in score:
+        failures.append("the score watch does not carry the rule versions")
+    import html as _html
+
+    out: list[str] = []
+    weekly_page._render_score_watch(out.append, score)
+    # Unescaped, because the page escapes the apostrophe in "screen's".
+    html_text = _html.unescape("\n".join(out))
+    for needle in ("By gap size, absolute", "By gap direction", "By catalyst class",
+                   "By the day screen's verdict", "Median own session, open to close",
+                   "D+1 broke the premarket high"):
+        if needle not in html_text:
+            failures.append(f"the rendered score watch lacks {needle!r}")
+    print("  groupings    the record is grouped by gap band, direction, catalyst class and "
+          "verdict, with the own session and D+1 break columns withheld like the rest")
+
+
 def conftest_activate():
     from tests import conftest
 
@@ -14306,6 +14373,7 @@ def main() -> int:
     run_claim(failures, claim_a_raising_claim_does_not_end_its_module, failures)
     run_claim(failures, claim_a_sidecar_touch_is_not_a_write, failures)
     run_claim(failures, claim_the_schema_owns_every_picks_column_once, failures)
+    run_claim(failures, claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for, failures)
 
     if failures:
         for failure in failures:

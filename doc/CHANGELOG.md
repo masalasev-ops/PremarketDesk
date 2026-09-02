@@ -15,6 +15,40 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty seventh: the range confound is on the register, and the record is grouped the way a trader asks
+
+Tier 5 of doc/IMPROVEMENT_PLAN.md, the parts a session can do. The five owner
+decisions are written up in DECISIONS 2026-09-02 sixth and stopped at; the two
+research instruments, 5.4 and 5.5, are not built.
+
+THE RANGE CONFOUND. doc/research/SCORE_INVERSION.md gained a dated amendment,
+ahead of both judging points, recording that every quantity it judges is
+measured against the premarket high and that the premarket high sits further
+from the next open in proportion to the gap: over the 55 live rows carrying a
+true excursion, Spearman 0.695 between the absolute gap and the measured
+premarket range as a share of entry_ref_true, and the inversion holds inside
+gap up names and inside gap down names alike, so the direction confound does
+not absorb it. A reference free co-secondary, the pick's own session open to
+close, is committed to beside the two excursions, and medians by gap band are
+committed to beside the buckets. No judging rule, point, outcome or stop rule
+moved.
+
+THE PICK'S OWN SESSION, FOR EVERY PICK. picks gained pick_day_open, high, low
+and close, written by fill_outcomes from the end of day bar it already fetches
+and backfilled once for the 67 live rows filled before the columns existed,
+one end of day call each, run by hand tonight. Written only where null, never
+overwritten, and not an outcome: a row that gained only these tonight does not
+move outcomes_filled_at, which the suite caught on the first attempt.
+
+THE RECORD GROUPED THE WAY A TRADER ASKS. The weekly page's score watch now
+groups the same rows, under the same withholding rule, by gap band (3 to 5, 5
+to 8, 8 and up on the absolute gap), by gap direction, by catalyst class and
+by the day screen's verdict, beside the buckets and the components. Every
+table gained two reference free columns, the median own session open to close
+and the share whose D+1 high broke the morning's premarket high. The paper
+rule versions are shown side by side: rows, booked, wins, stopped out, median
+and worst booked P&L. One claim.
+
 ## 2026-09-02, thirty sixth: one float, one writer, a criteria check, a runner that keeps going
 
 Tier 4 of doc/IMPROVEMENT_PLAN.md, the delegable half: 4.1, 4.2, 4.3, 4.4,

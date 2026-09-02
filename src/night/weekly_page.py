@@ -553,6 +553,14 @@ def _group(rows: list[dict[str, Any]], minimum_rows: int,
     booked = [r for r in rows if r.get("pnl_pct") is not None]
     favourable = [r for r in rows if r.get("mfe_pct_true") is not None]
     adverse = [r for r in rows if r.get("mae_pct_true") is not None]
+    # Two reference free quantities, added 2026-09-02 and withheld by the same
+    # rule. The pick's own session open to close needs both columns, which
+    # exist only on rows filled since the columns did or backfilled since;
+    # the D+1 break of the premarket high is a share and not a median, so it
+    # is a rate over the rows that carry the flag at all.
+    own_session = [r for r in rows if r.get("pick_day_open") and r.get("pick_day_close") is not None]
+    broke_rows = [r for r in rows if r.get("pm_high_broke_next_day") is not None]
+    broke_fired = [r for r in broke_rows if r.get("pm_high_broke_next_day")]
     # THE TRIGGER RATE READS ITS OWN POPULATION, and this is the whole point
     # of the argument the rate exists to support. `rows` is the MEDIANS'
     # population: a pick is in it when it carries an outcome OR a booked
@@ -593,12 +601,18 @@ def _group(rows: list[dict[str, Any]], minimum_rows: int,
     # booked trade, and this reads the picks the rule was applied to.
     trigger["population_rows"] = len(trigger_rows)
     trigger["population_sessions"] = len({r["date"] for r in trigger_rows})
+    broke = rate(broke_fired, broke_rows)
+    broke["population_rows"] = None
     return {
         "rows": len(rows), "sessions": sessions,
         "trigger": trigger,
         "pnl": metric([r["pnl_pct"] for r in booked], booked),
         "mfe": metric([r["mfe_pct_true"] for r in favourable], favourable),
         "mae": metric([r["mae_pct_true"] for r in adverse], adverse),
+        "own_session": metric(
+            [(r["pick_day_close"] - r["pick_day_open"]) / r["pick_day_open"] * 100.0
+             for r in own_session], own_session),
+        "broke": broke,
     }
 
 
@@ -684,6 +698,11 @@ def how_did_the_score_do() -> dict[str, Any]:
         rows = [dict(row) for row in connection.execute(
             "SELECT k.date, k.ticker, k.conviction, k.score, "
             "k.mfe_pct_true, k.mae_pct_true, "
+            # The grouping keys IMPROVEMENT_PLAN 5.2 added on 2026-09-02, and
+            # the two reference free quantities SCORE_INVERSION.md's amendment
+            # of the same day commits to reporting beside the excursions.
+            "k.gap_pct, k.catalyst_class, k.day_eligible, "
+            "k.pm_high_broke_next_day, k.pick_day_open, k.pick_day_close, "
             # booked = 1 has come OFF the join predicate and onto the P&L
             # column. The join must still return exactly one paper_trades row
             # per pick, which PRIMARY KEY (date, ticker, rule_version)
@@ -712,6 +731,7 @@ def how_did_the_score_do() -> dict[str, Any]:
         # firing.
         applied_rows = [dict(row) for row in connection.execute(
             "SELECT k.date, k.ticker, k.conviction, "
+            "k.gap_pct, k.catalyst_class, k.day_eligible, "
             "p.rule_version AS ledger_rule, p.booked, "
             "p.skip_reason, p.exit_reason "
             "FROM picks k JOIN paper_trades p "
@@ -766,6 +786,77 @@ def how_did_the_score_do() -> dict[str, Any]:
                         **_group(held, minimum_rows, minimum_sessions,
                                  applied)})
 
+    # THE GROUPINGS A TRADER WOULD ASK FOR, added 2026-09-02 (IMPROVEMENT_PLAN
+    # 5.2), each over the same rows and the same withholding rule as the
+    # buckets. None of them is a screen: they describe the record by a key the
+    # pick already carried. The gap band is on the ABSOLUTE gap, in the bands
+    # SCORE_INVERSION.md's range confound names; the direction split is
+    # scan.score_roll's, zero counted as up and a null gap its own group.
+    def _gap_band(row: dict[str, Any]) -> str:
+        gap = row.get("gap_pct")
+        if gap is None:
+            return "gap not computed"
+        size = abs(float(gap))
+        if size < 5:
+            return "3 to 5 percent"
+        if size < 8:
+            return "5 to 8 percent"
+        return "8 percent and up"
+
+    def _direction(row: dict[str, Any]) -> str:
+        gap = row.get("gap_pct")
+        if gap is None:
+            return "gap not computed"
+        return "gapped up" if float(gap) >= 0 else "gapped down"
+
+    def _catalyst(row: dict[str, Any]) -> str:
+        return str(row.get("catalyst_class") or "null")
+
+    def _verdict(row: dict[str, Any]) -> str:
+        verdict = row.get("day_eligible")
+        if verdict is None:
+            return "not screened"
+        return "day eligible" if verdict else "not day eligible"
+
+    groupings: list[dict[str, Any]] = []
+    for title, keyer, order in (
+            ("By gap size, absolute", _gap_band,
+             ("3 to 5 percent", "5 to 8 percent", "8 percent and up", "gap not computed")),
+            ("By gap direction", _direction, ("gapped up", "gapped down", "gap not computed")),
+            ("By catalyst class", _catalyst, None),
+            ("By the day screen's verdict", _verdict,
+             ("day eligible", "not day eligible", "not screened"))):
+        keys = list(order) if order else sorted({keyer(r) for r in rows})
+        groups = []
+        for key in keys:
+            held = [r for r in rows if keyer(r) == key]
+            if not held:
+                continue
+            applied = [r for r in applied_rows if keyer(r) == key]
+            groups.append({"group": key, **_group(held, minimum_rows, minimum_sessions,
+                                                  applied)})
+        groupings.append({"title": title, "groups": groups})
+
+    # THE RULE VERSIONS SIDE BY SIDE, from paper_trades alone. Booked count,
+    # wins, median and worst booked P&L, and how many exits were the stop.
+    # Descriptive, no threshold: [Paper] gained v2 on 2026-08-29 and nothing
+    # on this page had shown the two together.
+    with store.session() as connection:
+        ledger_all = [dict(r) for r in connection.execute(
+            "SELECT rule_version, booked, pnl_pct, exit_reason FROM paper_trades")]
+    rules: list[dict[str, Any]] = []
+    for version in sorted({r["rule_version"] for r in ledger_all}):
+        held = [r for r in ledger_all if r["rule_version"] == version]
+        booked_rows = [r for r in held if r["booked"] and r["pnl_pct"] is not None]
+        pnls = [r["pnl_pct"] for r in booked_rows]
+        rules.append({
+            "rule": version, "rows": len(held), "booked": len(booked_rows),
+            "wins": sum(1 for p in pnls if p > 0),
+            "median_pnl": _median(pnls), "worst_pnl": min(pnls) if pnls else None,
+            "stopped": sum(1 for r in booked_rows
+                           if r.get("exit_reason") == paper_ledger.EXIT_STOP),
+        })
+
     by_component: list[dict[str, Any]] = []
     for component in SCORE_COMPONENTS:
         awarded: dict[float, list[dict[str, Any]]] = {}
@@ -798,6 +889,7 @@ def how_did_the_score_do() -> dict[str, Any]:
     return {
         "rows": len(rows), "sessions": len({r["date"] for r in rows}),
         "buckets": buckets, "components": by_component,
+        "groupings": groupings, "rules": rules,
         "minimum_rows": minimum_rows, "minimum_sessions": minimum_sessions,
         "packets_read": len(components),
         "rule_version": primary_rule,
@@ -819,6 +911,16 @@ def _cell(metric: dict[str, Any]) -> str:
                 f"<div class=note>{_esc(metric['withheld'])}</div>")
     return (f"{metric['value']:+.2f}%"
             f"<div class=note>n={metric['rows']} over "
+            f"{metric['sessions']} session(s)</div>")
+
+
+def _share_cell(metric: dict[str, Any]) -> str:
+    """A plain share with its two denominators, or the reason it is withheld."""
+    if metric["withheld"]:
+        return (f"<span class=null>withheld</span>"
+                f"<div class=note>{_esc(metric['withheld'])}</div>")
+    return (f"{metric['value'] * 100:.1f}%"
+            f"<div class=note>{_n(metric['fired'])} of {_n(metric['rows'])} over "
             f"{metric['sessions']} session(s)</div>")
 
 
@@ -928,23 +1030,65 @@ def _render_score_watch(add, score: dict[str, Any]) -> None:
             "or a booked trade yet, so there is nothing to group</span></div>")
         return
 
-    for title, groups, label in (
-            ("By conviction bucket", score["buckets"], "bucket"),
-            (None, None, None)):
-        if title is None:
-            break
-        add(f"<h3>{title}</h3>")
-        add("<div class='card scroll'><table><tr><th>Bucket</th><th>Rows</th>"
+    add("<p class=sub>TWO REFERENCE FREE COLUMNS, added 2026-09-02. Every "
+        "other column here is measured against the premarket high, which "
+        "doc/research/SCORE_INVERSION.md's range confound records as sitting "
+        "further from the next open in proportion to the gap. Own session is "
+        "the pick's own open to close, from picks.pick_day_open and "
+        "pick_day_close, null on rows filled before the columns existed until "
+        "the backfill reaches them. D+1 broke the premarket high is the share "
+        "of rows whose next session high exceeded the morning's premarket "
+        "high. Both are withheld by the same rule as the medians.</p>")
+
+    def _table(groups: list[dict[str, Any]], label: str, head: str) -> None:
+        add(f"<div class='card scroll'><table><tr><th>{_esc(head)}</th><th>Rows</th>"
             "<th>Sessions</th><th>Trigger rate</th>"
             "<th>Median booked P&amp;L</th>"
-            "<th>Median favourable, D+1</th><th>Median adverse, D+1</th></tr>")
+            "<th>Median favourable, D+1</th><th>Median adverse, D+1</th>"
+            "<th>Median own session, open to close</th>"
+            "<th>D+1 broke the premarket high</th></tr>")
         for group in groups:
             add(f"<tr><td>{_esc(group[label])}</td><td>{_n(group['rows'])}</td>"
                 f"<td>{_n(group['sessions'])}</td>"
                 f"<td>{_rate_cell(group['trigger'])}</td>"
                 f"<td>{_cell(group['pnl'])}</td>"
                 f"<td>{_cell(group['mfe'])}</td>"
-                f"<td>{_cell(group['mae'])}</td></tr>")
+                f"<td>{_cell(group['mae'])}</td>"
+                f"<td>{_cell(group['own_session'])}</td>"
+                f"<td>{_share_cell(group['broke'])}</td></tr>")
+        add("</table></div>")
+
+    add("<h3>By conviction bucket</h3>")
+    _table(score["buckets"], "bucket", "Bucket")
+
+    # The groupings a trader asks for and nothing screens on. Same rows, same
+    # withholding, described by a key the pick carried on the morning.
+    for grouping in score.get("groupings") or []:
+        add(f"<h3>{_esc(grouping['title'])}</h3>")
+        if not grouping["groups"]:
+            add("<div class=card><span class=null>no row carries this key yet</span></div>")
+            continue
+        _table(grouping["groups"], "group", grouping["title"].replace("By ", ""))
+
+    rules = score.get("rules") or []
+    if rules:
+        add("<h3>The paper rule versions, side by side</h3>")
+        add("<p class=sub>Descriptive, from paper_trades alone. [Paper] gained "
+            "v2 on 2026-08-29 and the two had not been shown together. The "
+            "primary judging rule is the earliest version; the others are "
+            "here so a reader can see whether the exit, and only the exit, "
+            "changes the shape.</p>")
+        add("<div class='card scroll'><table><tr><th>Rule</th><th>Rows</th>"
+            "<th>Booked</th><th>Wins</th><th>Stopped out</th>"
+            "<th>Median booked P&amp;L</th><th>Worst booked P&amp;L</th></tr>")
+        for rule in rules:
+            median = (f"{rule['median_pnl']:+.2f}%" if rule["median_pnl"] is not None
+                      else "<span class=null>null</span>")
+            worst = (f"{rule['worst_pnl']:+.2f}%" if rule["worst_pnl"] is not None
+                     else "<span class=null>null</span>")
+            add(f"<tr><td>{_esc(rule['rule'])}</td><td>{_n(rule['rows'])}</td>"
+                f"<td>{_n(rule['booked'])}</td><td>{_n(rule['wins'])}</td>"
+                f"<td>{_n(rule['stopped'])}</td><td>{median}</td><td>{worst}</td></tr>")
         add("</table></div>")
 
     add("<h3>By each score component, separately</h3>")

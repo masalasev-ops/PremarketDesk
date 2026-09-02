@@ -499,6 +499,18 @@ OUTCOME_COLUMNS = (
     # them and a reader that has never run the outcome fill still finds them.
     # Declaring a column in two places is one drift away from two declarations.
     ("outcomes_filled_at", "TEXT"),
+    # THE PICK'S OWN SESSION, open to close, for EVERY pick and not only the
+    # booked ones. Added 2026-09-02 (IMPROVEMENT_PLAN 5.3): every outcome
+    # above is measured against a reference level, the premarket high, and
+    # SCORE_INVERSION.md's 2026-09-02 amendment records that the level sits
+    # further from the next open in proportion to the gap, so a reference free
+    # outcome is needed beside them. From the same end of day bar the fill
+    # already fetches, at no extra call. Null for rows filled before the
+    # columns existed until fill_pick_day backfills them, never overwritten.
+    ("pick_day_open", "REAL"),
+    ("pick_day_high", "REAL"),
+    ("pick_day_low", "REAL"),
+    ("pick_day_close", "REAL"),
 )
 
 TRUE_COLUMNS = (

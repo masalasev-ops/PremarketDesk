@@ -101,7 +101,8 @@ inside gap up names and inside gap down names separately, so the direction
 confound SCORE_INVERSION.md lists does not explain it. What does explain most
 of it, and is written nowhere: the outcome is measured against the premarket
 high, and the premarket high sits further from the next open in proportion to
-the gap (Spearman 0.627 between absolute gap and premarket range). The gap
+the gap (Spearman 0.695 between absolute gap and the measured premarket range
+as a share of the entry, re-measured 2026-09-02 on 55 rows). The gap
 component pays two points to exactly the names whose reference level is
 furthest away. A reference free outcome, next day open to close, is nearly flat
 across buckets. The pre-registered judgement is therefore at risk of returning
@@ -780,6 +781,12 @@ Delegable: no, until the marker contract is written down as a spec.
 
 ## Tier 5: scoring, screens and the feedback loop
 
+Done 2026-09-02: 5.1, 5.2, 5.3, and 5.6 written into DECISIONS 2026-09-02
+sixth as five proposals and stopped at. Not built: 5.4 and 5.5, the two
+research instruments, because each needs a pre-registration note written
+before its first run and an afternoon of Alpaca fetches. CHANGELOG 2026-09-02
+thirty seventh.
+
 Most of this tier ends in a written proposal for the owner, because the
 project's own rule is that a threshold moves only on a pre-registered
 measurement and the score is under a pre-registered evaluation. The work a
@@ -789,8 +796,9 @@ model can do is to build the instruments and write the amendments.
 
 File: doc/research/SCORE_INVERSION.md register block.
 
-Add, dated: the premarket range confound (Spearman 0.627 between absolute gap
-and premarket range as a share of entry; range against best excursion -0.343);
+Add, dated: the premarket range confound (Spearman 0.695 between absolute gap
+and the measured premarket range as a share of entry_ref_true; range against
+best excursion -0.351, both re-measured 2026-09-02 on 55 rows);
 the finding that the inversion holds within each gap sign (gap up green n=12
 median -5.28 against yellow n=12 -0.54; gap down green -8.39 against yellow
 +2.93); a reference free co-secondary outcome, next day open to close, which

@@ -145,6 +145,62 @@ def _price_units_broke(
             "units as the entry_ref, stop_ref and pm_high recorded beside it")
 
 
+def _pick_day_columns(bar: dict[str, Any]) -> dict[str, Any]:
+    """The four pick day columns from one end of day bar, null where unreadable."""
+    out: dict[str, Any] = {}
+    for column, field in (("pick_day_open", "open"), ("pick_day_high", "high"),
+                          ("pick_day_low", "low"), ("pick_day_close", "close")):
+        value = _as_float(bar.get(field))
+        if value is not None:
+            out[column] = value
+    return out
+
+
+def fill_pick_day() -> int:
+    """Backfill pick_day_* on live rows filled before the columns existed.
+
+    One end of day call per row, for the pick date alone. The main fill
+    writes these columns from the bar it already fetches, so this pass finds
+    work only for rows whose outcomes were filled before 2026-09-02, and after
+    one run it finds nothing. Never overwrites: a row with a pick_day_close is
+    not selected.
+    """
+    api = eodhd.client()
+    with store.session() as connection:
+        store.init(connection)
+        rows = [dict(r) for r in connection.execute(
+            "SELECT date, ticker FROM picks WHERE source='live' "
+            "AND pick_day_close IS NULL AND next_day_close IS NOT NULL "
+            "ORDER BY date, ticker")]
+    if not rows:
+        print("outcomes: every live pick with an outcome carries its own session's "
+              "open and close, nothing to backfill")
+        return 0
+    writes: list[tuple[dict[str, Any], str, str]] = []
+    unavailable = 0
+    for row in rows:
+        day = ettime.parse_date(row["date"])
+        bars, error = api.eod(row["ticker"], start=day, end=day)
+        bar = next((b for b in (bars or []) if str(b.get("date")) == row["date"]), None)
+        if error or bar is None:
+            print(f"outcomes: {row['ticker']} {row['date']} pick day bar unavailable: "
+                  f"{error or 'no row for the date'}")
+            unavailable += 1
+            continue
+        columns = _pick_day_columns(bar)
+        if columns:
+            writes.append((columns, row["date"], row["ticker"]))
+    with store.session() as connection:
+        for columns, date, ticker in writes:
+            assignments = ", ".join(f"{column}=?" for column in columns)
+            connection.execute(f"UPDATE picks SET {assignments} WHERE date=? AND ticker=?",
+                               [*columns.values(), date, ticker])
+        connection.commit()
+    print(f"outcomes: {len(writes)} pick(s) given their own session's open and close, "
+          f"{unavailable} unavailable")
+    return len(writes)
+
+
 def fill(day_limit: str | None = None) -> int:
     short_n = _CRIT.integer("outcomes", "horizon_sessions_short")
     long_n = _CRIT.integer("outcomes", "horizon_sessions_long")
@@ -227,6 +283,12 @@ def fill(day_limit: str | None = None) -> int:
             # measured against it and each checks its own session's bar.
             pick_bar = by_date.get(date)
             updates: dict[str, Any] = {}
+            # The pick's own session, from the bar this call already returned.
+            # A reference free outcome beside the reference bound ones; see
+            # store.OUTCOME_COLUMNS. Written only where still null, so a row
+            # filled on an earlier night keeps what it has.
+            if pick_bar is not None and pick.get("pick_day_close") is None:
+                updates.update(_pick_day_columns(pick_bar))
             if wants_short:
                 next_bar = by_date.get(next_sessions[short_n - 1])
 
@@ -357,9 +419,13 @@ def fill(day_limit: str | None = None) -> int:
             # night its short leg filled, and overwriting that with tonight's
             # would make the column say the measurement was taken five sessions
             # after it actually was.
+            # The pick day columns are not an outcome either: they describe
+            # the session the pick was made on, and a row that gained only
+            # them tonight has had no outcome measured tonight.
             measured = [column for column in updates
                         if column not in ("day5_refused_reason",
-                                          "next_day_refused_reason")]
+                                          "next_day_refused_reason")
+                        and not column.startswith("pick_day_")]
             if measured:
                 updates["outcomes_filled_at"] = now_stamp
                 filled += 1
@@ -530,6 +596,11 @@ def main(argv: list[str] | None = None) -> int:
     # picks filled, not a backfill count that will be zero every night once it
     # has caught up.
     fill_true_excursions()
+    # The pick day columns for rows filled before they existed. One call per
+    # such row on the first night, none after; the main fill writes them for
+    # every row it reaches from then on. Same reasoning as above about
+    # job_status.produced.
+    fill_pick_day()
     return code
 
 
