@@ -1770,13 +1770,45 @@ against a shared 100,000 a day. The preflight is sized to the sweep and refuses
 rather than truncating: half a universe is not a market wide scan and must not
 be published as one.
 
-min_move_pct                  = >= 5       # SEED. abs lastTradePrice against previousClosePrice, percent. Not a gap: this is the whole session's move so far
-min_day_rvol                  = >= 3       # SEED. today's volume against averageVolume. Without it the list fills with high beta names doing what they always do
+min_move_pct                  = >= 3       # SEED. abs lastTradePrice against the prior close, percent. Not a gap: this is the whole session's move so far. [corrected 2026-09-02: was >= 5, which is a HIGHER bar than the morning's own gap_pct floor of 3, so the section headed "what else moved, that the morning never named" was blind to exactly the band the morning screens. 2,634 of 2,716 judged names failed it on 2026-09-02, NVDA and DELL among them.]
+min_day_rvol                  = >= 3       # SEED. today's volume against averageVolume PRO RATED to the elapsed session; see the pace note below. Without it the list fills with high beta names doing what they always do
 min_price                     = >= 3       # dollars, lastTradePrice. Matches [Universe] so the scan cannot admit what the population already excluded
 list_size                     = 15         # how many ranked movers reach the report
 news_lookups                  = 10         # how many of those get a news call, 5 credits each by [Quota costs], trivial against the sweep that found them
 headlines_per_mover           = 3          # how many of a mover's stories are RENDERED. The packet keeps every one the lookup returned; this only bounds what a reader is asked to read, and the feed tags generic market roundups to most large movers
 rank_by                       = move       # move or rvol. Which of the two floors above orders the list once both are cleared
+
+### The pace note, added 2026-09-02
+
+min_day_rvol divided today's volume by the vendor's averageVolume, and those
+two numbers cover different windows. averageVolume is a WHOLE DAY's average.
+The quote's volume at 12:00 is 150 traded minutes of a 390 minute session. So
+a name trading at exactly its normal pace read 0.385, and a floor of 3 was
+asking for 7.8 times normal pace while this file said three.
+
+What that cost, measured on 2026-09-02 before the change. Of 2,716 judged
+names, 78 cleared the price and move floors. The volume floor rejected 77 of
+them and admitted one, GTLB, whose raw ratio was 3.29 and whose actual pace
+was 8.6 times normal. The owner, watching the same market, said the report was
+not finding anything, and it was not.
+
+day_rvol is now `volume / (averageVolume * elapsed)` where elapsed is the
+fraction of the regular session traded, from [Backfill] market_open to [Paper]
+session_close, clamped into (0, 1]. It reads as a multiple of normal PACE,
+which is what the line above always claimed. The packet carries day_rvol_raw
+beside it so an edition from before this change is still comparable, and
+session_elapsed so the arithmetic can be redone by hand.
+
+THE PRO RATE IS LINEAR AND THE REAL CURVE IS NOT. Intraday volume is U shaped,
+heavy at the open, thin over lunch, heavy into the close, so by noon a typical
+name has traded more than the 38.5 percent of the session that has elapsed.
+Dividing by a linear pro rate therefore uses a denominator that is a little too
+small and reports a pace a little too high, admitting a few more names than a
+measured curve would. That is the conservative direction for a list whose job
+is to show a reader what moved, and it is stated rather than hidden. Replacing
+it with a measured per half hour curve needs intraday bars for the whole
+exchange, which this vendor does not publish until overnight, so this is a SEED
+like everything else in this section.
 
 ### The denominator note
 

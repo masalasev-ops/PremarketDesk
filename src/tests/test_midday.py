@@ -868,6 +868,71 @@ def claim_no_report_prints_an_exchange_qualified_ticker(
           "way the morning names them, with no exchange suffix anywhere")
 
 
+def claim_relative_volume_is_measured_against_the_session_so_far(
+        failures: list[str]) -> None:
+    """day_rvol divides by the average PRO RATED to the elapsed session.
+
+    The vendor's averageVolume covers a whole day and the quote's volume
+    covers the day so far, so dividing one by the other at noon compared 150
+    traded minutes against 390. A name at exactly its normal pace read 0.385,
+    and CRITERIA's floor of 3 was really asking for 7.8 times normal pace. On
+    2026-09-02 it rejected 77 of the 78 names that had moved 5 percent or
+    more, and the owner watching the same market could see the report was
+    finding nothing.
+
+    The raw ratio is kept beside the corrected one so an older packet is
+    still comparable, and the elapsed fraction is kept so the arithmetic can
+    be redone by hand.
+    """
+    import datetime as dt
+
+    day = dt.date(2026, 9, 2)
+    noon = scan_midday.session_elapsed(ettime.at(day, 12, 0))
+    if not (0.38 < noon < 0.39):
+        failures.append(f"12:00 reads {noon:.4f} of the session, wanted about 0.385")
+    if scan_midday.session_elapsed(ettime.at(day, 16, 0)) != 1.0:
+        failures.append("the close is not a whole session")
+    if scan_midday.session_elapsed(ettime.at(day, 18, 0)) != 1.0:
+        failures.append("after the close reads as more than a whole session")
+    before = scan_midday.session_elapsed(ettime.at(day, 6, 0))
+    if not 0 < before < 0.01:
+        failures.append(f"before the open reads {before!r}, which must be small "
+                        "and above zero so nothing divides by nothing")
+
+    # Trading at exactly its average pace: 38.46 percent of a day's average
+    # volume, 38.46 percent of the way through the session. Pace is 1.0, so a
+    # floor of 3 must reject it. The raw ratio, 0.3846, would have rejected it
+    # too, which is why this needs the second name below to show the bug.
+    at_pace = _quote(open=100.0, high=112.0, low=99.0, last=112.0,
+                     prev_close=100.0, volume=38_460, average_volume=100_000)
+    # Four times its normal pace. The raw ratio is 1.538, under the floor of
+    # 3, so before this change it was rejected while trading at four times
+    # normal on a 12 percent move.
+    fast = _quote(open=100.0, high=112.0, low=99.0, last=112.0,
+                  prev_close=100.0, volume=153_800, average_volume=100_000)
+    rows, tally = scan_midday.rank_movers(
+        {"PACE.US": at_pace, "FAST.US": fast}, set(), set(), set(), noon)
+    got = {row["symbol"]: row for row in rows}
+    if "FAST.US" not in got:
+        failures.append("a name trading at four times its normal pace on a 12 "
+                        "percent move did not clear a floor that says three")
+    elif not (3.9 < got["FAST.US"]["day_rvol"] < 4.1):
+        failures.append(f"four times normal pace reads "
+                        f"{got['FAST.US']['day_rvol']}, wanted about 4")
+    elif not (1.5 < got["FAST.US"]["day_rvol_raw"] < 1.6):
+        failures.append(f"the raw ratio was not kept beside it: "
+                        f"{got['FAST.US'].get('day_rvol_raw')}")
+    if "PACE.US" in got:
+        failures.append("a name trading at exactly its normal pace cleared a "
+                        "floor of three times normal pace")
+    if tally["below_rvol"] != 1:
+        failures.append(f"below_rvol counted {tally['below_rvol']}, wanted 1")
+    if not (0.38 < (got.get("FAST.US") or {}).get("session_elapsed", 0) < 0.39):
+        failures.append("the row does not carry the elapsed fraction it was divided by")
+    print("  pace         relative volume divides by the average pro rated to the "
+          "elapsed session, and the raw ratio is kept beside it")
+
+
 CLAIMS = [
     claim_a_gap_through_can_name_a_stop_out_and_an_intraday_fill_cannot,
     claim_the_two_fills_are_the_paper_rule_s_fills,
@@ -888,6 +953,7 @@ CLAIMS = [
     claim_a_headline_cannot_break_the_table_or_the_page,
     claim_the_report_states_its_limits_on_every_edition,
     claim_no_report_prints_an_exchange_qualified_ticker,
+    claim_relative_volume_is_measured_against_the_session_so_far,
 ]
 
 

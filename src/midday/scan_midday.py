@@ -399,10 +399,52 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
 UNPRICED_EXAMPLES = 12
 
 
+def session_elapsed(now: dt.datetime) -> float:
+    """How much of the regular session has been traded, as a fraction of one.
+
+    THE VOLUME FLOOR NEEDS THIS AND DID NOT HAVE IT UNTIL 2026-09-02. The
+    vendor's averageVolume is a WHOLE DAY's average and the quote's volume is
+    the day SO FAR, so dividing one by the other at noon compares 150 traded
+    minutes against 390. A name trading at exactly its normal pace reads 0.385
+    at 12:00, and a floor of 3 therefore demanded 7.8 times normal pace while
+    its own line in CRITERIA said three. It rejected 77 of the 78 names that
+    moved 5 percent or more on 2026-09-02, and the owner, watching the same
+    market, could see it was not finding anything.
+
+    Clamped into (0, 1]. Before the open there is no elapsed session and the
+    ratio would divide by nothing; after the close the day is whole and the
+    raw ratio is already right.
+    """
+    open_h, open_m = _CRIT.clock("backfill", "market_open")
+    close_h, close_m = _CRIT.clock("paper", "session_close")
+    start = (open_h * 60) + open_m
+    end = (close_h * 60) + close_m
+    minute = (now.hour * 60) + now.minute
+    return min(1.0, max((minute - start) / (end - start), 1.0 / (end - start)))
+
+
+# The intraday volume curve is U shaped: heavy at the open, thin over lunch,
+# heavy into the close, so by noon a typical name has traded MORE than the
+# 38.5 percent of the session that has elapsed. Pro rating the average
+# linearly therefore divides by a denominator that is a little too small and
+# reports a pace a little too high, which admits a few more names than a
+# measured curve would. That direction is stated rather than hidden, and it is
+# the conservative one for a list whose job is to show a reader what moved.
+# Replacing this with a measured per-half-hour curve needs intraday bars for
+# the whole exchange, which this vendor does not publish until overnight; the
+# assumption is a SEED and CRITERIA says so.
+PACE_NOTE = ("relative volume is today's volume against the average volume "
+             "pro rated to the fraction of the session that has elapsed, so it "
+             "reads as a multiple of normal PACE rather than of a whole day. "
+             "The pro rate is linear and the real intraday curve is U shaped, "
+             "so before the close this runs a little high")
+
+
 def rank_movers(quotes: dict[str, dict[str, Any]],
                 named_this_morning: set[str],
                 subscribed: set[str] | None,
-                pooled: set[str]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+                pooled: set[str],
+                elapsed: float = 1.0) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Everything clearing all three floors, ranked, with the tally behind it.
 
     A name the morning already named is excluded, because this half of the
@@ -509,7 +551,8 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
         if not move_rule.test(abs(move)):
             tally["below_move"] += 1
             continue
-        rvol = q["volume"] / q["average_volume"]
+        raw_rvol = q["volume"] / q["average_volume"]
+        rvol = raw_rvol / elapsed
         if not rvol_rule.test(rvol):
             tally["below_rvol"] += 1
             continue
@@ -524,6 +567,13 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
             "volume": q["volume"],
             "average_volume": q["average_volume"],
             "day_rvol": round(rvol, 4),
+            # Both, always. The raw ratio is what the vendor's two fields
+            # divide to and is what every edition before 2026-09-02 printed,
+            # so keeping it is what makes an old packet comparable with a new
+            # one. day_rvol is the one the floor and the report use.
+            "day_rvol_raw": round(raw_rvol, 4),
+            "session_elapsed": round(elapsed, 4),
+            "day_rvol_note": PACE_NOTE,
             "market_cap": q["market_cap"],
             # Three states and not two. The collector can only price what it
             # SUBSCRIBED to, 42 names of a pool that was 851 on 2026-08-31, so
@@ -817,7 +867,8 @@ def build_packet(day: str | None = None,
                 "vendor did not answer for, not a quote missing a field")
         carry.append(grade(pick, quote))
 
-    movers, tally = rank_movers(quotes, named, subscribed, pooled)
+    movers, tally = rank_movers(quotes, named, subscribed, pooled,
+                                session_elapsed(now))
     movers = movers[:LIST_SIZE]
     news_calls = attach_news(api, movers, today)
 
@@ -909,6 +960,8 @@ def build_packet(day: str | None = None,
                 "min_day_rvol": _CRIT.rule("midday", "min_day_rvol").describe(),
                 "min_price": _CRIT.rule("midday", "min_price").describe(),
             },
+            "session_elapsed": round(session_elapsed(now), 4),
+            "day_rvol_note": PACE_NOTE,
         },
         "morning_context": context,
         "api_calls": eodhd.call_count(),

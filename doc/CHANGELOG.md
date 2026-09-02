@@ -15,6 +15,50 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, forty second: the midday volume floor was comparing 150 minutes against 390
+
+The owner said the midday report was not finding anything, and named NVDA and
+DELL as movers it had missed. It was right about the report and the cause was
+arithmetic.
+
+THE VOLUME FLOOR. The vendor's averageVolume is a WHOLE DAY's average. The
+quote's volume at 12:00 is 150 traded minutes of a 390 minute session.
+Dividing one by the other compared different windows, so a name trading at
+exactly its normal pace read 0.385 and [Midday] min_day_rvol of 3 was really
+demanding 7.8 times normal pace while its own line said three. On 2026-09-02
+it rejected 77 of the 78 names that had cleared the price and move floors and
+admitted one, GTLB, whose raw ratio was 3.29 and whose true pace was 8.6.
+This is the same defect as the morning's RVOL window mismatch, in a different
+pass.
+
+scan_midday.session_elapsed returns the fraction of the regular session
+traded, from [Backfill] market_open to [Paper] session_close, clamped into
+(0, 1]. day_rvol is now volume over averageVolume pro rated by it, so it
+reads as a multiple of normal PACE. day_rvol_raw and session_elapsed are
+carried beside it so an older packet stays comparable and the arithmetic can
+be redone by hand. The linear pro rate is a SEED and the direction of its
+error is stated in CRITERIA's pace note: the real intraday curve is U shaped,
+so before the close this runs a little high.
+
+THE MOVE FLOOR. min_move_pct was >= 5, which is a HIGHER bar than the
+morning's own gap_pct floor of 3, so the section headed "what else moved,
+that the morning never named" was blind to exactly the band the morning
+screens. Corrected to >= 3. It cost 2,332 of 2,709 judged names on
+2026-09-02 at the new floor and 2,634 at the old one.
+
+MEASURED. A hand sweep at 13:18, written beside the noon packet as
+midday_packet.handrun.json and not over it, admitted 7 names against the noon
+run's 1: OABI +19.93 at 5.49 times pace, EOSE +14.64, MDB -12.63, GTLB
++11.33, DELL +8.12, PCG -7.09, SBS +5.65. Five of the seven were in
+discovery's pool at 07:15 and cut by the 42 slot subscription cap, which is
+the same finding as the GTLB miss from a second direction.
+
+NVDA is still not on the list and should not be. It moved +3.77 percent,
+which clears the new move floor, on 96.1 million shares against a 139.5
+million average, a pace of 1.18. The volume floor exists to keep out names
+doing what they always do, and on this session that is what NVDA was doing.
+PANW, down 10.59 percent at a pace of 1.75, is excluded for the same reason.
+
 ## 2026-09-02, forty first: the midday report stops explaining the vendor
 
 The owner asked for the midday report's "Where these numbers come from"
