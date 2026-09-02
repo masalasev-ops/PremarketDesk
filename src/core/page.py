@@ -204,13 +204,27 @@ REPORT_CSS = """
   .report h2 { font-size: 1.2rem; }
   .report th, .report td { padding: 8px 10px; }
 }
+/* Printing keeps the page's own measure rather than running to the paper's
+   edge, because a printed line is read the same way a screen line is.
+
+   NOTHING IS HELD TOGETHER EXCEPT A ROW. `break-inside: avoid` on a table
+   was tried on 2026-09-02 and reverted the same day: a table that will not
+   fit in what is left of a page moves whole to the next one, and the reader
+   gets a hand's width of blank paper above every table that happened to sit
+   low. Repeating the header on each page is what makes a split table
+   readable, and a split table beats a gapped one. A row is the one thing
+   small enough that holding it together costs nothing. */
 @media print {
   .report { max-width: none; padding: 0; font-size: 11pt; }
-  .report > * { max-width: none; }
+  .report > * { max-width: 68ch; }
+  .report > h1, .report > .tablewrap, .report > table { max-width: none; }
   .report .local-only { display: none; }
   .report a { color: inherit; text-decoration: none; }
-  .report h2 { break-after: avoid; }
-  .report .tablewrap { overflow: visible; break-inside: avoid; }
+  .report h1, .report h2, .report h3 { break-after: avoid; }
+  .report p { orphans: 3; widows: 3; }
+  .report .tablewrap { overflow: visible; }
+  .report thead { display: table-header-group; }
+  .report tr { break-inside: avoid; }
 }
 """
 

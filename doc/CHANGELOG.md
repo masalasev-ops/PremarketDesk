@@ -15,6 +15,31 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, fortieth: printing keeps the measure and stops gapping before every table
+
+The print rules added in the thirty ninth entry held each table together
+with `break-inside: avoid`. A table that will not fit in what is left of a
+page then moves whole to the next one, and the reader gets a hand's width of
+blank paper above every table that happened to sit low. The owner saw it in
+a PDF printed from the morning page and said so.
+
+Reverted the same day. A table may now split across pages, `thead` repeats
+on each page as a table header group, and only a row is held together, which
+is small enough to cost nothing. A split table with its header repeated
+reads better than a gapped one. Headings still avoid a break after them and
+paragraphs carry three line orphans and widows.
+
+Print also keeps the page's own 68 character measure instead of running to
+the paper's edge, which is what the block did before the redesign. A printed
+line is read the same way a screen line is, and the owner's judgement was
+that the screen page read better.
+
+No PDF is generated anywhere in this project. The morning chain writes
+markdown and HTML and emails the HTML; the PDF that prompted this was made
+by hand, once, so the owner could look at the report on another device. The
+rules changed here are the ones a browser uses when somebody prints the
+page.
+
 ## 2026-09-02, thirty ninth: slots mode had never run, and the page is redesigned to be read
 
 The owner said the report looked unprofessional, packed together and out of
