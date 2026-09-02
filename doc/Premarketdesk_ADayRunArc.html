@@ -358,9 +358,10 @@
     already names, the premarket high and the premarket low, read through one
     function that the report and the database row both call, so the page a
     reader sees and the record the night books against cannot come to disagree.
-    Each candidate's write up then closes on a fixed opening, "What would say
-    this is wrong:", and the rest of that line is written in words with the
-    digits left out. It states the level and never restates its figure, because
+    Technical signals is a table of levels for every candidate, and the write
+    ups beneath it are for the names on a watchlist alone; each closes on a
+    fixed opening, "What would say this is wrong:", and the rest of that line
+    is written in words with the digits left out. It states the level and never restates its figure, because
     nothing in this system checks a number the model writes, and a line with no
     digits in it cannot invent one.</p>
 
@@ -521,9 +522,14 @@
     analyst step is the longest silence in the tree and a job the watchdog reads
     as dead gets relaunched mid run.
     <br><br>
-    What the raise buys is room for a trend it does not explain. The step tracks
-    output length, which has climbed from 4,000 to 20,188 tokens against a
-    template whose section count did not move. Two exhausted attempts end at
+    What the raise bought was room for a trend it did not explain: under the
+    freeform mode the step tracked output length, which climbed from 4,000 to
+    20,188 tokens against a template whose section count did not move. Since
+    2026-09-02 the analyst runs in slots mode, where Python writes the page and
+    the model fills five kinds of prose slot, and the same packets take half the
+    clock: 134 and 97 seconds on the two hand runs recorded in CRITERIA's slots
+    note, at opus and low effort. The cap is unchanged until the scheduled
+    mornings under slots give it new evidence. Two exhausted attempts end at
     09:18:53, eleven minutes before the open and six minutes before the 09:25
     watchdog pass, and it is that six minutes, not the eleven, that is the
     margin to watch if this rises again.</figcaption>
@@ -1292,10 +1298,13 @@ losers never up more than 0.5%           2 of 11</p>
       seconds, because a healthy analyst step the watchdog reads as a dead job
       gets relaunched mid run. Then the
       deterministic fallback:
-      report.md is rebuilt as plain tables straight from packet.json, the
-      disclaimer carries the failure reason, analyst_usage.json records
-      status timeout or failed. Render and deliver carry on, the email still
-      goes.</td>
+      report.md is rebuilt straight from packet.json with the slots filled by
+      fixed sentences, the disclaimer carries the failure reason,
+      analyst_usage.json records status timeout, failed, quantifier or slots.
+      The last is the slots mode's own refusal: an answer that altered the
+      report outside its slots or left one unfilled on both attempts, kept
+      beside the report as report.slots-rejected-N.md. Render and deliver
+      carry on, the email still goes.</td>
     </tr>
     <tr>
       <td>deliver.py fails</td>
@@ -1357,7 +1366,7 @@ losers never up more than 0.5%           2 of 11</p>
     </div>
     <div>
       <dt>Python decides, the model narrates.</dt>
-      <dd>Membership, eligibility, scores, and conviction are computed deterministically before analyst.py pipes the packet to the claude CLI. A containment check fails the run if the report mentions a ticker the packet does not carry.</dd>
+      <dd>Membership, eligibility, scores, and conviction are computed deterministically, and since 2026-09-02 so is the report itself: analyst.py writes every table, count and quoted sentence from the packet and the claude CLI fills the marked prose slots. A containment check fails the run if that prose mentions a ticker the packet does not carry.</dd>
     </div>
     <div>
       <dt>Missing evidence is null, with a written reason.</dt>
@@ -1380,7 +1389,7 @@ losers never up more than 0.5%           2 of 11</p>
   <div class="table-wrap">
   <table class="files">
     <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\, glossary the one place a plain English word for a column is written down), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, gap_reasons the explanation pass, render_report, verify_morning, deliver), <strong>midday</strong> (scan_midday, render_midday, the 12:00 pass), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session the Alpaca screen replay, the four probe_ scripts, the four measure_ scripts and the two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate, eighteen modules in all, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the fourteen test_ modules, with test_regressions holding one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the shared Alpaca client. It is emphatically not research only, and believing otherwise is the more dangerous of the two readings: night/true_volume.py imports it at MODULE scope, so it is the Alpaca transport for a SCHEDULED step and deleting it stops the nightly truth pass. night/paper_ledger.py imports it as well, inside <code>book()</code> rather than at module scope, so the 08:45 scan can read the ledger's counts without pulling an HTTP client into that window. Every module runs by name rather than by path, so an import reads <code>from core import config</code> wherever it sits</td></tr>
-    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the eleven fixed report sections), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written while the record was still too small to judge on purpose and with every judging point in it far beyond the count it was written at, COUNTERFACTUAL_WATCHLIST.md, BASELINE_FLOOR.md, CAPTURE_RATE.md and FLOAT_ROTATION_FITS.md: eight in all, counted off the directory rather than remembered</td></tr>
+    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the eleven fixed report sections), prompt_analyst.md, prompt_slots.md (what the model is piped under CRITERIA [Analyst] mode = slots), IMPROVEMENT_PLAN.md (the 2026-09-02 review as work packages, with each tier's status), BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written while the record was still too small to judge on purpose and with every judging point in it far beyond the count it was written at, COUNTERFACTUAL_WATCHLIST.md, BASELINE_FLOOR.md, CAPTURE_RATE.md and FLOAT_ROTATION_FITS.md: eight in all, counted off the directory rather than remembered</td></tr>
     <tr><td>tasks\</td><td>ten job .bat files, eight of which register_tasks.ps1 registers as eleven scheduled tasks: job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat three times, once repeating every 30 minutes through the morning window, once repeating every 30 minutes over the midday job at 12:25, 12:55 and 13:25, and once at 22:45, job_midday.bat at 12:00 on weekdays, and job_meter_sampler.bat every thirty minutes of every day, weekends included. Beside them register_tasks.ps1 and a README of scheduling notes. The other two of the ten .bat files are one off probes that a plain run of the script never registers, so a schedule refresh cannot resurrect a question that has been answered: job_probe_socket_cap, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number. Both of those have run, both questions are answered in DECISIONS.md, and neither is armed. A probe whose question has been answered is deleted rather than left lying about, and several have gone that way: job_probe_socket_cost, which measured the per message cost on a heavy live tape at ZERO across 21,306 messages, and job_probe_alpaca_live and job_probe_live_v1 before it. Every module they wrapped stays under src/research/, and the socket cost one carries a warning, because it writes into the premarket session capture and a run of it has to be arbitrated back out by hand</td></tr>
     <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks, gap_stats, gap_sweeps and paper_trades tables, the last holding one row per live pick PER RULE VERSION, two of them today: the trade the CRITERIA [Paper] rule took, or the reason it declined), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, midday_packet.json, report_midday.md, report_midday.html, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>

@@ -566,6 +566,20 @@ waits for the outcome rows. The items below are the record of what was built,
 not a queue. See DECISIONS.md 2026-08-21 seventh for the rule and its
 reasoning.]**
 
+**[2026-09-02: THE REVIEW AND ITS TIERS. A four pass review of the whole tree
+was written as doc/IMPROVEMENT_PLAN.md and, on the owner's instruction, its
+five tiers were built the same day: five defects fixed; the report reorganised
+around an at a glance strip and a Technical signals table; the narrative pass
+moved to slots mode, in which analyst.fallback_report writes the whole report
+and the model fills five kinds of prose slot (CRITERIA [Analyst] mode = slots,
+effort = low, the measurements in CRITERIA's slots note); one page shell in
+core/page.py; one float reading, one atomic writer and a criteria check in
+core/; and the range confound on SCORE_INVERSION.md's register with the pick
+day open and close stored for every pick. The freeze above was lifted for that
+work by the owner and the items it left open are in the plan's tier notes and
+in DECISIONS 2026-09-02 sixth, which are the five decisions the measurements
+now wait on. CHANGELOG 2026-09-02 thirty second to thirty seventh.]**
+
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:
 
@@ -1367,7 +1381,10 @@ Open after that morning:
   08-17, 0.72 on 08-18, 0.92 on 08-19 and 1.05 on 08-20, each recorded as
   total_cost_usd in that day's analyst_usage.json. It tracks output length, so
   it is climbing with the trend item 5b is watching rather than settling into a
-  range. The knobs are CRITERIA.md [analyst] model and effort.
+  range. The knobs are CRITERIA.md [analyst] model and effort. [2026-09-02: and
+  mode. Under slots the same packets cost 0.39 to 0.73 dollars equivalent
+  against 0.92 to 1.74 freeform, and the trend this paragraph watched was the
+  model reasoning about the whole page, which it no longer writes.]
 - Every job appends to a dated log in logs/. The morning chain stops on the
   first failure, so an empty inbox with a log that stops at scan means the
   packet failed, not the mail.

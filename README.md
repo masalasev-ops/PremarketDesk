@@ -494,10 +494,14 @@ the prior session close, and keeps the top 12. It enriches those 12, computes
 RVOL against the cached baseline, reads catalysts, computes the eligibility
 booleans and the score. It writes `packet.json` and 12 picks rows.
 
-08:46. `vintage.py` has already passed, so `analyst.py` pipes the prompt, the
-template and the packet to the CLI. The model writes prose around numbers that
-are already fixed. A containment check fails the run if the report names a
-ticker the packet does not carry.
+08:46. `vintage.py` has already passed, so `analyst.py` writes the whole report
+from the packet, every table, count and quoted sentence, with marked slots
+where prose is wanted, and pipes `doc/prompt_slots.md`, that skeleton and a
+projected packet to the CLI. The model returns the report with the slots
+filled; the fixed text that ships is Python's, and the model's copy is used
+only to find what it wrote. A containment check fails the run if the prose
+names a ticker the packet does not carry, and the quantifier guard reads the
+slot prose.
 
 08:49. `deliver.py` refuses because `data/UNVERIFIED` exists, and says so.
 `build_archive.py` rebuilds `site/PremarketDesk.html` with this morning in it.
@@ -579,6 +583,9 @@ would have been.
    python -m venv .venv
    .venv\Scripts\pip install -r requirements.txt
    ```
+
+   `requirements-dev.txt` adds pyflakes, which the tree is kept clean under;
+   nothing in the pipeline or the suite needs it.
 
 2. **Configure.** Copy `.env.example` to `.env` and fill in
    `EODHD_API_TOKEN`, which is the only one the pipeline requires.
@@ -683,7 +690,11 @@ Other documents:
 - `doc/ArchitecturePremarketdesk.html` and `doc/Premarketdesk_ADayRunArc.html`
   are the architecture pages; open them in a browser.
 - `doc/REPORT_TEMPLATE.md` and `doc/prompt_analyst.md` are the report shape
-  and the narrative instructions piped to the CLI.
+  and the narrative instructions, the specification of every sentence the
+  skeleton renders and the documents piped to the CLI when `CRITERIA
+  [Analyst] mode` is `freeform`. `doc/prompt_slots.md` is what is piped under
+  `slots`, the setting since 2026-09-02, and `doc/IMPROVEMENT_PLAN.md` is the
+  2026-09-02 review written as work packages, with each tier's status.
 - `doc/ALPACA_PROBE.md` is what the Alpaca free plan was measured to serve and
   to refuse, which is what puts the truth pass at night rather than in the
   morning. `doc/research/` holds the other measurement write ups and the raw
@@ -692,9 +703,9 @@ Other documents:
   because `runs/` and `site/` are gitignored and no real report is in the
   repository. It predates the settled template: its watchlist headers are the
   old ones, so a report shaped like it would be reported by the containment
-  check as omitting both watchlist tables, and its footer records sonnet at low
-  effort where `doc/CRITERIA.md` sets opus at medium. The shape the code
-  actually produces is `doc/REPORT_TEMPLATE.md`.
+  check as omitting both watchlist tables, and its footer records sonnet where
+  `doc/CRITERIA.md` sets opus. The shape the code actually produces is
+  `doc/REPORT_TEMPLATE.md`, rendered by `analyst.fallback_report`.
 
 ## What it costs to run
 
@@ -721,10 +732,15 @@ Other documents:
   cannot afford. The nightly does not preflight. The counter is account wide
   across everything using your token and resets at midnight UTC.
 - **Claude:** one non agentic completion per market day (plus at most one
-  retry), on the subscription. Measured at 48.4, 98.5, 178.9 and 226.1 seconds
+  retry, two CLI runs in total), on the subscription, and a second short call
+  for the "Why these gapped" section. Under the freeform mode that ran until
+  2026-09-02 the narrative was measured at 48.4, 98.5, 178.9 and 226.1 seconds
   of CLI time on the four scheduled mornings of 2026-08-17 to 2026-08-20, and
-  at 335.7 seconds on 2026-08-27, which is the slowest on record. Opus at
-  medium reasoning effort. Nothing has timed out. The rule behind the timeout
+  at 335.7 seconds on 2026-08-27, which is the slowest on record, at opus and
+  medium effort. Under slots mode, opus at low effort, hand runs of the
+  2026-09-01 and 2026-08-31 packets took 134 and 97 seconds and wrote 13k and
+  9k output tokens against 31k and 18k before; CRITERIA's slots note carries
+  the table. Nothing has timed out. The rule behind the timeout
   in `doc/CRITERIA.md` has always been three times the slowest run on record,
   and the evidence under it has moved twice while the rule has not: from the
   five dry runs of 2026-08-14 to the scheduled mornings that overtook them,
@@ -737,6 +753,16 @@ Other documents:
   says so in the report itself.
 
 ## When things go wrong
+
+- **A morning with the title "numbers only, narrative withheld" is the
+  fallback, and its disclaimer says why.** Three things reach it: the CLI
+  failed or timed out on both runs; the quantifier guard refused the model's
+  prose on both attempts, in which case the flag is in
+  `data/quantifier-flags.jsonl` and `ops.quantifier_flags` is how you judge
+  it; or, under slots mode, the model altered the report outside its slots or
+  left one unfilled on both attempts, in which case the rejected answers are
+  beside the report as `report.slots-rejected-N.md`. Read `analyst_usage.json`
+  for `status`, `mode` and `slots_filled` before debugging anything else.
 
 - **The watchdog usually acts first.** `src/ops/monitor_jobs.py` reruns anything
   idempotent at most once per day, restarts a dead collector only while the

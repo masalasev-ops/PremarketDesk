@@ -378,10 +378,17 @@ tbody tr:hover{background:var(--ground)}
 
       <div class="t"><b>08:46</b>ET</div>
       <div class="c morn">
-        <h5>Write the narrative</h5>
-        <p>Pipes the prompt, the template, and the packet to the Claude CLI under the existing
-        subscription. The model writes prose around numbers that are already fixed. A containment
-        check fails the run if the report names a ticker the packet does not carry.</p>
+        <h5>Write the report, then fill the slots</h5>
+        <p>Python writes the whole report from the packet, every table, count and quoted sentence,
+        leaving marked slots for the prose only a model can write: the mood phrase, the market tone,
+        one sentence under each quoted headline saying who it is about, one write up per name on a
+        watchlist closing with the line that says what would prove it wrong, and one sentence on
+        rates. The slots prompt, that skeleton and a projected packet go to the Claude CLI under the
+        existing subscription, and the answer is fitted back onto the skeleton: the fixed text that
+        ships is Python's, the model's copy only locates its slot prose. A containment check fails
+        the run if that prose names a ticker the packet does not carry. Since 2026-09-02; the
+        freeform path, in which the model wrote the page from the template, is one CRITERIA knob
+        away.</p>
         <div class="ids">C05 fires C17 &rarr; reads C24, C25, C29</div>
       </div>
 
@@ -832,7 +839,11 @@ tbody tr:hover{background:var(--ground)}
     tokens, at between $0.26 and $1.05 a morning against the existing Claude subscription rather
     than a metered API key. The analyst is by far the longest step in the chain: measured on the job
     trail it has run 54.4 to 231.7 seconds across mornings where everything else in the chain put
-    together ran 16.6 to 22.3. The growth tracks output length and nothing in the template, whose
+    together ran 16.6 to 22.3. Those figures are the freeform mode's. Under slots mode, since
+    2026-09-02, the same packets cost a third of the input, a third to a half of the output and half
+    the clock: the 2026-09-01 packet went from 227 to 359 seconds down to 134 and from 20k to 31k
+    output tokens down to 13k, at opus and low effort, with the table in CRITERIA's slots note.
+    Under freeform the growth tracked output length and nothing in the template, whose
     section count did not move over the same stretch, which is why the timeout is re-derived against
     the slowest morning on record rather than set once and left.
     <br><br>
@@ -1203,7 +1214,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
       <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. The case it exists for is a chain that exits zero at every step and publishes a report describing the previous session. That has happened, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>
-      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>Narrative prose.</td><td>On timeout past 1007 seconds, non-zero exit, or a refused request, C17 retries once and then writes report.md itself from C29 as plain tables headed "numbers only, narrative unavailable" with the reason. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
+      <tr><td class="nm">C17 analyst.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46</span></td><td>The slot prose.</td><td>On timeout past 1007 seconds, non-zero exit, or a refused request, C17 retries once, two CLI runs in total across the retry and the regeneration, and then writes report.md itself from C29 with the slots filled by fixed sentences, headed "numbers only, narrative unavailable" with the reason. A model answer that alters the fixed text outside its slots, or leaves a slot unfilled, is refused the same way, asked for once more, and the rejected answer is kept beside the report as report.slots-rejected-N.md. C18 renders it like any other report. Status is recorded in <code>analyst_usage.json</code>.</td><td>Yes, tables only</td></tr>
       <tr><td class="nm">C19 deliver.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:46-08:49</span></td><td>The email.</td><td>Exits cleanly with a printed reason. The rendered HTML is still on disk under <code>runs/&lt;date&gt;/</code> and can be opened by hand.</td><td>No</td></tr>
       <tr><td class="nm">C33 gate present<br><span style="font-family:var(--sans);color:var(--ink-3)">by design</span></td><td>The email, deliberately.</td><td>C19 refuses to send no matter what keys are configured. Only a human deleting the marker lifts it.</td><td>No, intentionally</td></tr>
       <tr><td class="nm">C68 scan_midday<br><span style="font-family:var(--sans);color:var(--ink-3)">12:00</span></td><td>The midday packet, and the report C69 renders from it.</td><td>Nothing else is affected. Nothing downstream reads either file and this pass writes to no table, so a lost midday costs one edition and nothing else. The watchdog watches it from 12:25 and REPORTS ONLY, never relaunching, which is the one place its rule is not "rerun what is idempotent": the sweep spends about 2,902 credits on the shared key, and <code>job_midday.bat</code> stamps <code>PMD_JOB</code>, so a rerun would resolve as the owner of today and REPLACE a packet the failed run may already have written. That is worst in the case most likely to bring the watchdog here, a scan that wrote its packet and a render that failed, where the whole sweep is bought again to redo a step that makes no vendor call. The preflight is sized to the whole sweep and refuses rather than truncating, because half a universe is not a market wide scan and must not be published as one.</td><td>Already sent</td></tr>
@@ -1325,7 +1336,7 @@ tbody tr:hover{background:var(--ground)}
     <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55, C59-C63, C68, C69)</span></dd>
 
     <dt>doc\</dt>
-    <dd>CRITERIA.md, prompt_analyst.md, REPORT_TEMPLATE.md (eleven fixed sections), BUILD_PLAN.md,
+    <dd>CRITERIA.md, prompt_analyst.md, prompt_slots.md (piped under [Analyst] mode = slots), REPORT_TEMPLATE.md (eleven fixed sections), IMPROVEMENT_PLAN.md (the 2026-09-02 review as work packages), BUILD_PLAN.md,
     CHANGELOG.md, DECISIONS.md, ALPACA_PROBE.md, sample_report.html, this page, the day run arc page
     beside it, and <b>research\</b> holding the written up studies: COLLECTOR_VOLUME.md,
     VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, which pre-registers what would
