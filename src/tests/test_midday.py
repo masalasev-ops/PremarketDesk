@@ -51,6 +51,7 @@ from typing import Any
 from core import config
 from core import criteria
 from core import ettime
+from core import glossary
 from midday import render_midday
 from midday import scan_midday
 
@@ -801,6 +802,70 @@ def _packet_with_headline(title: str) -> dict[str, Any]:
     }
 
 
+def claim_no_report_prints_an_exchange_qualified_ticker(
+        failures: list[str]) -> None:
+    """AAOI, never AAOI.US, and in every section rather than the tables only.
+
+    THE MORNING GOT THIS FOR FREE AND THE MIDDAY DID NOT, which is the whole
+    lesson. prompt_analyst.md rule 8 tells the model to write bare tickers, and
+    analyst.fallback_report strips the suffix for the mornings the model never
+    runs. The 12:00 pass has NO MODEL to instruct and no fallback to inherit
+    from, so nothing stripped anything: it shipped AAOI.US, AXTI.US, MSTR.US
+    and nine more in its carry table while the 08:45 report about those same
+    twelve picks named them AAOI, AXTI and MSTR. One set of picks, two
+    spellings, and a reader with no reason to know they are the same names.
+
+    A rule the morning obeys because a prompt says so and the midday obeys
+    because somebody remembered is a rule with two chances to break, so the
+    strip is glossary.bare_ticker and this claim reads the RENDERED OUTPUT
+    rather than the call sites. Reading the output is the point: the defect was
+    never a wrong function, it was four emission sites and one sentence of
+    examples that called no function at all, and a claim written against the
+    call sites would have found the four and missed the fifth.
+
+    The pattern allows a dotted decimal, so 1.19B and -0.73 percent are not
+    tickers, and matches a dot followed by two or more capitals, which is what
+    an exchange qualifier is: .US, .INDX, .GBOND.
+    """
+    import re as _re
+
+    from midday import render_midday
+
+    qualified = _re.compile(r"\b[A-Z][A-Z0-9.]{0,7}\.[A-Z]{2,}\b")
+
+    packets = sorted((config.PROJECT_ROOT / "runs").glob("*/midday_packet.json"))
+    checked = 0
+    for path in packets:
+        try:
+            packet = json.loads(path.read_text(encoding="utf-8"))
+            markdown = render_midday.to_markdown(packet)
+        except (OSError, ValueError, KeyError, TypeError):
+            # An archived packet written before a field existed is not this
+            # claim's business. A packet that renders is.
+            continue
+        checked += 1
+        for number, line in enumerate(markdown.splitlines(), start=1):
+            for hit in qualified.findall(line):
+                failures.append(
+                    f"{path.parent.name} midday line {number} prints "
+                    f"{hit!r}, an exchange qualified ticker. The 08:45 report "
+                    "names that stock without the suffix, so one set of picks "
+                    f"carries two spellings: {line[:120]!r}")
+
+    # The helper itself, on the shapes the vendor actually returns, so the
+    # claim still says something on a tree with no rendered session on disk.
+    for symbol, want in (("AAOI.US", "AAOI"), ("ARX", "ARX"),
+                         ("VIX.INDX", "VIX"), ("US10Y.GBOND", "US10Y"),
+                         ("", ""), (None, "")):
+        got = glossary.bare_ticker(symbol)
+        if got != want:
+            failures.append(f"glossary.bare_ticker({symbol!r}) is {got!r} and "
+                            f"the reader facing form is {want!r}")
+
+    print(f"  bare ticker {checked} rendered midday report(s) name stocks the "
+          "way the morning names them, with no exchange suffix anywhere")
+
+
 CLAIMS = [
     claim_a_gap_through_can_name_a_stop_out_and_an_intraday_fill_cannot,
     claim_the_two_fills_are_the_paper_rule_s_fills,
@@ -820,6 +885,7 @@ CLAIMS = [
     claim_a_mover_with_no_headline_stays_on_the_list,
     claim_a_headline_cannot_break_the_table_or_the_page,
     claim_the_report_states_its_limits_on_every_edition,
+    claim_no_report_prints_an_exchange_qualified_ticker,
 ]
 
 

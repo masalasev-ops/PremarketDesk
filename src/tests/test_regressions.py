@@ -2771,7 +2771,7 @@ def claim_a_thin_window_is_not_merely_a_late_one(failures: list[str]) -> None:
     if "pm_window_thin" not in absent or absent["pm_window_thin"] is not None:
         failures.append("an absent window does not carry a null thin flag: "
                         f"{absent.get('pm_window_thin')}")
-    if "INSIDE THE COLLECTION WINDOW" not in (absent.get("pm_reason") or ""):
+    if "inside the collection window" not in (absent.get("pm_reason") or ""):
         failures.append("the no-bars reason still claims the socket was silent "
                         f"all morning: {absent.get('pm_reason')}")
     print("  thin window a four bar window is called thin, a fifty bar one is "

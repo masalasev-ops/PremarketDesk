@@ -212,7 +212,7 @@ def carry_section(packet: dict[str, Any]) -> list[str]:
             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for row in rows:
         out.append(
-            f"| {_cell(row['ticker'])} "
+            f"| {_cell(glossary.bare_ticker(row['ticker']))} "
             f"| {_num(row.get('score'), 1)} {_cell(row.get('conviction') or '')} "
             f"| {_num(row.get('entry_ref'))} "
             f"| {_num(row.get('stop_ref'))} "
@@ -224,7 +224,8 @@ def carry_section(packet: dict[str, Any]) -> list[str]:
 
     out += ["Row by row, with the reason each verdict was reached.", ""]
     for row in rows:
-        out.append(f"**{_cell(row['ticker'])}**: {_prose(row.get('state_reason'))}.")
+        out.append(f"**{_cell(glossary.bare_ticker(row['ticker']))}**: "
+                   f"{_prose(row.get('state_reason'))}.")
         if row.get("stop_state_reason"):
             out.append(f"Stop: {_prose(row['stop_state_reason'])}.")
         if row.get("decided_inside_the_open_tolerance"):
@@ -268,7 +269,7 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
             # field it did carry.
             cap = row.get("market_cap")
             out.append(
-                f"| {_cell(row['symbol'])} "
+                f"| {_cell(glossary.bare_ticker(row['symbol']))} "
                 f"| {_pct(row.get('move_pct'))} "
                 f"| {_num(row.get('day_rvol'))}x "
                 f"| {_num(row.get('last'))} "
@@ -277,7 +278,8 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
         out.append("")
         out += ["### Why each of them moved", ""]
         for row in rows:
-            out.append(f"**{_cell(row['symbol'])}**, {_pct(row.get('move_pct'))}. "
+            out.append(f"**{_cell(glossary.bare_ticker(row['symbol']))}**, "
+                       f"{_pct(row.get('move_pct'))}. "
                        f"{_sentence(row['morning_reach_note'])}.")
             for item in (row.get("news") or [])[:HEADLINES_SHOWN]:
                 out.append(f"- {_cell(item['title'])}")
@@ -329,9 +331,15 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
         # .get on examples, because a packet written before the refused bucket
         # gained a sample list carries every other key and not that one, and a
         # re-render of an archived session must not raise on it.
+        # Bare tickers here too. These are sample SYMBOLS off the packet and
+        # the vendor keys them with the exchange, so without this the one
+        # sentence in the report that names names would print AAOI.US beside a
+        # table printing AAOI. See glossary.bare_ticker.
         examples = "; ".join(
             f"{UNJUDGED_LABELS[name]}: "
-            f"{', '.join(tally['examples'].get(name) or ['none recorded'])}"
+            + (", ".join(glossary.bare_ticker(s)
+                         for s in (tally['examples'].get(name) or []))
+               or "none recorded")
             for name in unpriced)
         out += [f"Not judged, because the pass could not price them: {parts}. "
                 f"These names did not fail a floor, they were never measured. "

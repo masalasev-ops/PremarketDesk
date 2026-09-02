@@ -20,14 +20,16 @@ worded any other way sends those notes to the end of the report instead. After
 it, state that the screen
 thresholds are unvalidated seed values.
 
-DO NOT WORK OUT WHICH CANDIDATES BELONG IN THE NEXT THREE CLAUSES. The packet
+DO NOT WORK OUT WHICH CANDIDATES BELONG IN THE NEXT FOUR CLAUSES. The packet
 has already selected them. Quote `evidence_roll.text.rvol_null`,
-`evidence_roll.text.window_starts_late` and
-`evidence_roll.text.rvol_lower_bound` WORD FOR WORD, in that order, including
+`evidence_roll.text.window_starts_late`,
+`evidence_roll.text.rvol_lower_bound` and
+`evidence_roll.text.dropped_no_coverage` WORD FOR WORD, in that order,
+including
 the mornings when one of them reads 0 of N. You may join them with commas and
 semicolons into the one line this disclaimer is, and you may not reword them,
 drop one for reading zero, or re-derive the membership from the candidate
-blocks. Python performed those three filters before you ran, and a filter
+blocks. Python performed those four filters before you ran, and a filter
 performed a second time in prose is a membership claim nothing checks. That is
 the shape of the 2026-08-18 sentence this template's audit began with, which
 asserted a missed condition over the whole screened set when one of the twelve
@@ -38,11 +40,17 @@ line so the guard reads it as one:
 The lower bound line is quoted even when the null line names nobody, and
 scoping the volume caveat to the null names alone would tell the reader the
 rest have complete volume evidence: on 2026-08-19 every one of the other ten
-was a lower bound. If dropped_no_coverage is not empty, name the symbols in it in the
-same line with the reason the packet records against it, and say it had no
-premarket price and was dropped rather than published at a stale prior
-session close. A reader who watched one of those names gap has to be told
-why it is absent. If dropped_stale_price is not empty, name those symbols
+was a lower bound. The dropped line is quoted on a quiet morning too, and
+that is the reason it is a supplied sentence rather than an instruction: it
+reports its own count of zero against its own denominator, which is a fact
+about the packet, where prose composed for the empty case is a claim about the
+screened set and the obvious phrasing for it trips the quantifier guard. Its
+denominator is candidates plus dropped, which is what reached the coverage cut,
+and it is NOT `evidence_roll.candidates_examined`. Where that line names
+symbols, give the reason the packet records against it in
+`evidence_roll.dropped_no_coverage`, because a reader who watched one of those
+names gap has to be told why it is absent.
+If dropped_stale_price is not empty, name those symbols
 too, with the price age the packet records against each, and say the collector
 did record a price for them and it was too old to publish as this morning's.
 They are a different failure from the line above and the fixes differ, so do
@@ -734,8 +742,9 @@ counts when you name a trap, so a reader can disagree with the call. Where
 trap_basis carries `headlines_in_window` and `headlines_displayed`, quote those
 two as well: the balance is counted over the whole window while this report
 prints only the newest few, so a bare `headlines_scored` invites a reader to
-check it against headlines that are not in front of them. Then name the symbols in dropped_no_coverage
-with its recorded reason: those names cleared selection and were dropped
+check it against headlines that are not in front of them. Then, where
+`evidence_roll.dropped_no_coverage` carries rows, name those symbols with the
+recorded reason: they cleared selection and were dropped
 before pricing because the collector had no bars for them, so they carry no
 premarket price. Do NOT add a clause claiming they are absent from the rest of
 this document: the disclaimer line names them, this template requires it to,

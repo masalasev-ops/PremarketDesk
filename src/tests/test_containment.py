@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import sys
 from typing import Any
 
@@ -1124,6 +1125,64 @@ def claim_a_form_designator_is_not_a_ticker_claim(failures: list[str]) -> None:
           f"ticker claim and {len(keep)} ordinary sentences keep theirs")
 
 
+def claim_the_prompt_holds_itself_to_its_own_capitals_rule(
+        failures: list[str]) -> None:
+    """Rule 8 forbids capitals for emphasis, and rule 8 is written in capitals.
+
+    THE HAZARD IS NOT TIDINESS, it is what emphatic capitals invite. An
+    instruction shouting END EVERY CANDIDATE WITH ONE INVALIDATION SENTENCE is
+    reaching for a universal because capitals reward one, and `every` inside
+    six words of `candidate` is precisely what the quantifier guard refuses.
+    That draft existed and the drift claim caught it, in the one document that
+    must not contain the phrasing it bans. A document that writes the way it
+    tells the model not to write is teaching by example against itself.
+
+    So this holds the prompt to rule 8's own words. It is deliberately NOT
+    applied to REPORT_TEMPLATE.md: that file's capitals are addressed to the
+    model about the template rather than being wording the report reproduces,
+    and widening this claim to cover it would be a style rule wearing a
+    correctness claim's clothes.
+
+    Headings are exempt because analyst.instruction_violations exempts them
+    too, and the two must agree about what a line is. The allowlist holds
+    TICKERS, file names and acronyms, which are not emphasis and never were,
+    and it is a closed list rather than a pattern so that a new shout cannot
+    arrive wearing an acronym's shape.
+    """
+    allowed = {
+        # Tickers named in the incident notes.
+        "ARX", "AS", "MSTR", "FUTU", "AAP",
+        # File and section names.
+        "CRITERIA",
+        # Column and field acronyms a reader of the report meets.
+        "RVOL", "VWAP", "US", "ET",
+    }
+    prompt = config.ANALYST_PROMPT_PATH.read_text(encoding="utf-8")
+    shouted: list[str] = []
+    for number, line in enumerate(prompt.splitlines(), start=1):
+        if line.strip().startswith("#"):
+            continue
+        for match in re.finditer(r"\b[A-Z]{2,}\b", line):
+            if match.group(0) not in allowed:
+                shouted.append(f"line {number}: {match.group(0)}")
+    if shouted:
+        failures.append(
+            "prompt_analyst.md writes ordinary words in capitals, which is what "
+            "its own rule 8 forbids the model doing and what invited the "
+            "universal phrasing the quantifier guard refuses: "
+            + ", ".join(shouted[:8]))
+
+    # And the rule that makes this claim legible has to still be in the file,
+    # or the claim is enforcing a convention the document no longer states.
+    if "capitals for emphasis anywhere in the report" not in prompt:
+        failures.append(
+            "prompt_analyst.md no longer carries rule 8's capitals sentence, "
+            "so this claim is enforcing a rule the prompt has stopped giving")
+
+    print("  prompt caps  the prompt writes no ordinary word in capitals, so it "
+          "does not model the emphasis that invites a banned universal")
+
+
 def main() -> int:
     # Every check below reads the universe through analyst.check_report. It
     # reads THIS fixture, not whatever the live file holds today, and the
@@ -1318,6 +1377,7 @@ def _checks() -> int:
     claim_the_conviction_bands_are_defined_where_they_are_first_shown(failures)
     claim_the_fallback_closes_every_table_it_opens(failures)
     claim_a_form_designator_is_not_a_ticker_claim(failures)
+    claim_the_prompt_holds_itself_to_its_own_capitals_rule(failures)
 
     if failures:
         for failure in failures:

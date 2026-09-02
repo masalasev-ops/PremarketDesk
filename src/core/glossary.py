@@ -28,6 +28,32 @@ project.
 
 from __future__ import annotations
 
+
+def bare_ticker(symbol: object) -> str:
+    """The reader facing form of a symbol: ARX, never ARX.US.
+
+    ONE DEFINITION, for the same reason every other name in this module has
+    one. The vendor keys everything by exchange qualified symbol, and every
+    surface a reader sees is supposed to strip it: prompt_analyst.md rule 8
+    tells the model to write ARX and not ARX.US, analyst.fallback_report strips
+    it when the model does not run at all, and scan's evidence roll strips it
+    in the sentences the report quotes. The 12:00 report did not, because it
+    has NO MODEL to instruct and nobody had written the strip for it, so it
+    published AAOI.US, AXTI.US and eleven more where the 08:45 report published
+    AAOI and AXTI. Two reports about the same picks, naming them differently.
+
+    That is exactly the drift this module exists against, and the reason the
+    strip belongs HERE rather than a fourth time in the midday renderer: a rule
+    the morning obeys because a prompt says so and the midday obeys because
+    somebody remembered is a rule with two chances to break.
+
+    Split on the dot rather than removing a ".US" suffix, so a symbol on any
+    other exchange loses its qualifier too. A symbol with no dot is returned
+    unchanged, and so is an empty one.
+    """
+    return str(symbol or "").split(".")[0]
+
+
 # term -> one or two sentences a reader with no finance background can follow.
 # Ordered by how early a reader meets the term, not alphabetically, because
 # the glossary is read top to bottom the first time and searched after that.

@@ -15,6 +15,93 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, twenty ninth: five holes in the analyst prompt, and the midday report learns to name a stock
+
+Five defects in doc/prompt_analyst.md, found by reading it as a contract
+rather than as prose, plus one the reader found in the 12:00 report.
+
+1. THE EMPTY CASE HAD NO SUPPLIED SENTENCE. Rule 6 handed the model prebuilt
+text for rvol_null, window_starts_late, rvol_lower_bound and
+score_roll.unscored, quoted word for word including when one reads 0 of N, and
+then described dropped_no_coverage in words: "if it is not empty, name the
+symbols in it". On a morning that dropped nobody the natural phrasing is "no
+candidate was dropped", which is a banned word inside six words of a set word.
+The prompt was asking for a sentence and the guard was flagging it, which is
+the exact shape of the two live flags on record. evidence_roll now publishes
+text.dropped_no_coverage on the same pattern as the other four.
+
+Its DENOMINATOR is its own and is computed rather than shared: candidates plus
+dropped, which is what reached the coverage cut. Sharing candidates_examined
+would report "1 of 12" on a morning that reached thirteen names and dropped
+one, and a count against the wrong denominator is worse than no count. Reasons
+are deliberately left out of the quoted sentence, on the pattern of the eight
+lists beside it: a reason is Python written prose that can carry a capital,
+and rule 8 forbids the model reproducing capitals, so a string built to be
+quoted must not carry one. Which found a second thing. pm_reason read "no bars
+INSIDE THE COLLECTION WINDOW" and the template tells the model to quote it,
+so the report was being told to reproduce capitals the prompt bans. Lowercased,
+the same conflict score_roll.direction_note already had with the word ABSOLUTE.
+
+2. RULE 16 ASKED FOR JUDGEMENT AND RULE 1 FORBADE IT. "Say what would make the
+setup wrong" requires deciding which level's violation invalidates the thesis;
+rule 1 says the model decides nothing. Rule 5's whole lesson is that an
+instruction to judge and an instruction not to judge cannot both be obeyed,
+and this pair was unacknowledged. 16 is not removed. It now names itself as the
+single stated exception to rule 1, rule 1 points at it, and the exception is
+bounded: the level named must be one already printed for that ticker in the
+watchlist table. 16 implied that constraint and never stated it.
+
+3. THE RETRACTED INSTRUCTION WAS UNLABELLED. The superseded trap rule sat in
+backticks between two paragraphs. Read at speed, an imperative shaped sentence
+with nothing attached to it reads as an instruction. It now carries a lead in
+saying it is what the rule used to say, that it is wrong, and that it is
+reproduced only so it can be refused.
+
+4. RULES 6 AND 3 WERE COMPOUND, carrying four obligations and three. A dropped
+obligation inside a compound rule is the hardest failure to notice, which is
+the failure this whole document exists to prevent. Split into 3a, 3b, 3c and
+6a, 6b, 6c, one obligation each, with the incident notes kept attached to the
+half they belong to. LETTERS RATHER THAN RENUMBERING, because "rule 5", "rule
+8", "rule 12" and "rule 13" are cited from analyst.py, scan.py, four test
+modules, REPORT_TEMPLATE.md, TEMPLATE_DERIVATIONS.md and BUILD_PLAN.md, and
+nothing checks those references. Renumbering would break them silently.
+
+Rule 6 lost an obligation rather than gaining a letter for it: "name
+dropped_no_coverage" is now just another quoted sentence under 6a, because of
+the fix above.
+
+analyst._LIST_ITEM_RE widened to `^(?:\d+[a-z]?\.|[-*+])\s` so a lettered
+sub rule starts its own scan unit. Without it, rule 5's closing paragraph and
+the whole of 6a, 6b and 6c scan as one blob and a banned word ending one rule
+pairs with a set word opening the next. The widening makes the check STRICTER,
+never looser: more units means shorter windows.
+
+5. THE EMPHASIS CONVENTION WAS A HAZARD. The prompt shouted in capitals
+throughout, and rule 16's own history is that the draft read END EVERY
+CANDIDATE WITH ONE INVALIDATION SENTENCE and the drift claim caught `every`
+near `candidate`. Emphatic capitals invite exactly the universal phrasing the
+guard refuses, in the one document that must not contain it, and rule 8 already
+forbids capitals in the report. The prompt now holds itself to its own rule,
+and claim_the_prompt_holds_itself_to_its_own_capitals_rule keeps it there
+against a closed allowlist of tickers, file names and column acronyms.
+
+AND THE MIDDAY REPORT WAS NAMING STOCKS AAOI.US. Reported from the rendered
+page. The morning gets bare tickers two ways, prompt rule 8 when the model runs
+and analyst._bare when it does not. The 12:00 pass has no model to instruct and
+no fallback to inherit from, so nothing stripped anything: its carry table said
+AAOI.US, AXTI.US, MSTR.US and nine more about the same twelve picks the 08:45
+report named AAOI, AXTI and MSTR. One set of picks, two spellings.
+
+glossary.bare_ticker is now the one definition and analyst._bare, scan's
+evidence roll and four midday emission sites all call it. The fifth site is the
+lesson: the unjudged bucket's sentence of example symbols called no function at
+all, so claim_no_report_prints_an_exchange_qualified_ticker reads the RENDERED
+markdown of every midday packet on disk rather than the call sites. A claim
+written against the call sites would have found four and missed the fifth.
+
+Suite green at 143 claims, no drift. No threshold moved and no report content
+changed except the spelling of a ticker.
+
 ## 2026-09-01, twenty eighth: the two architecture pages become one continuous explanation
 
 Both pages had become part document and part diary. The architecture page

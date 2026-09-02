@@ -432,23 +432,78 @@ def claim_the_rolls_own_words_pass_the_quantifier_guard(failures: list[str]) -> 
     """
     from morning import analyst, scan
 
+    # THE DROPPED LIST IS EXERCISED IN EVERY SHAPE, because it is the one line
+    # whose members are not in `candidates` and whose denominator is therefore
+    # its own. Empty is the case it was built for: the natural prose for a
+    # morning that dropped nobody puts a banned word inside six words of a set
+    # word, so before the packet supplied this sentence the model was being
+    # asked for one and then flagged for writing it.
+    drop_shapes = {
+        "none dropped": [],
+        "one dropped": [{"symbol": "CCC.US",
+                         "reason": "the collector recorded no bars for it"}],
+        "two dropped": [
+            {"symbol": "CCC.US", "reason": "not on watchlist.json"},
+            {"symbol": "DDD.US", "reason": "no bars inside the window"}],
+    }
+
     seen = 0
     for case, candidates in _ROLL_CASES.items():
-        for key, text in scan.evidence_roll(candidates)["text"].items():
-            seen += 1
-            for hit in analyst.quantifier_violations(text):
+        for shape, dropped in drop_shapes.items():
+            roll = scan.evidence_roll(candidates, dropped)
+            # Each line's own denominator, not one shared number. dropped names
+            # left the candidate list before the roll saw them, so counting
+            # them against candidates_examined would report "1 of 12" on a
+            # morning that reached thirteen names and dropped one.
+            denominators = {
+                "dropped_no_coverage": len(candidates) + len(dropped),
+            }
+            for key, line in roll["text"].items():
+                seen += 1
+                for hit in analyst.quantifier_violations(line):
+                    failures.append(
+                        f"the roll's {key} line on the {case} case with "
+                        f"{shape} asserts {hit['quantifier']!r} near "
+                        f"{hit['set_word']!r}, and the report quotes it word "
+                        f"for word: {line!r}")
+                # A line that names nobody must still carry its denominator.
+                # "0 of 5" tells a reader the screen examined five and found
+                # none; a bare sentence with the names left out does not.
+                want = denominators.get(key, len(candidates))
+                if f"of {want}" not in line:
+                    failures.append(
+                        f"the roll's {key} line on the {case} case with "
+                        f"{shape} does not carry its denominator, which is "
+                        f"{want}: {line!r}")
+
+            # The dropped line names whom it says it names, and nobody else.
+            named = roll["text"]["dropped_no_coverage"]
+            for row in dropped:
+                if row["symbol"].removesuffix(".US") not in named:
+                    failures.append(
+                        f"the dropped line on {case}/{shape} does not name "
+                        f"{row['symbol']}: {named!r}")
+            if not dropped and ":" in named:
                 failures.append(
-                    f"the roll's {key} line on the {case} case asserts "
-                    f"{hit['quantifier']!r} near {hit['set_word']!r}, and the "
-                    f"report quotes it word for word: {text!r}")
-            # A line that names nobody must still carry its denominator. "0 of
-            # 5" tells a reader the screen examined five and found none; a bare
-            # sentence with the names left out does not.
-            if f"of {len(candidates)}" not in text:
-                failures.append(f"the roll's {key} line on the {case} case does "
-                                f"not carry its denominator: {text!r}")
-    print(f"  roll words   {seen} quoted line(s) across 3 candidate sets, and "
-          "not one asserts a quantifier over the screened set")
+                    f"the dropped line names somebody on an empty drop list: "
+                    f"{named!r}")
+            if [r["symbol"] for r in roll["dropped_no_coverage"]] != [
+                    r["symbol"] for r in dropped]:
+                failures.append(
+                    f"the roll's structured dropped rows on {case}/{shape} are "
+                    f"{roll['dropped_no_coverage']} against {dropped}")
+
+    # A ROLL CALLED THE OLD WAY STILL ANSWERS, because the packet is not the
+    # only caller and a signature change that breaks a hand run breaks the
+    # instrument somebody reaches for when a morning has gone wrong.
+    plain = scan.evidence_roll(_ROLL_CASES["mixed"])
+    if "0 of" not in plain["text"]["dropped_no_coverage"]:
+        failures.append("evidence_roll called without a dropped list does not "
+                        "report zero dropped: "
+                        f"{plain['text']['dropped_no_coverage']!r}")
+
+    print(f"  roll words   {seen} quoted line(s) across 3 candidate sets and 3 "
+          "drop shapes, and not one asserts a quantifier over the screened set")
 
 
 def claim_the_template_reads_the_roll_rather_than_deriving_it(
@@ -468,6 +523,12 @@ def claim_the_template_reads_the_roll_rather_than_deriving_it(
     for field in ("evidence_roll.text.rvol_null",
                   "evidence_roll.text.window_starts_late",
                   "evidence_roll.text.rvol_lower_bound",
+                  # The dropped line, which the template DESCRIBED for as long
+                  # as the packet did not supply it. An instruction reading
+                  # "if dropped_no_coverage is not empty, name the symbols"
+                  # leaves the empty morning to the model, and the phrasing it
+                  # reaches for there is the one the quantifier guard refuses.
+                  "evidence_roll.text.dropped_no_coverage",
                   "evidence_roll.text.catalyst_absent",
                   "evidence_roll.text.catalyst_unknown",
                   "evidence_roll.text.thin_baseline"):
@@ -475,9 +536,15 @@ def claim_the_template_reads_the_roll_rather_than_deriving_it(
             failures.append(f"REPORT_TEMPLATE.md does not quote {field}, so the "
                             "model is left to derive that membership again")
     if "evidence_roll" not in prompt:
-        failures.append("prompt_analyst.md rule 6 does not name evidence_roll, "
+        failures.append("prompt_analyst.md rule 6a does not name evidence_roll, "
                         "so the prompt and the template disagree about who "
                         "performs the filter")
+    if "evidence_roll.text.dropped_no_coverage" not in prompt:
+        failures.append(
+            "prompt_analyst.md does not tell the model to quote "
+            "evidence_roll.text.dropped_no_coverage, so on a morning that "
+            "dropped nobody it composes that clause itself and the phrasing it "
+            "reaches for is refused by the guard")
     if "score_roll.unscored" not in text:
         failures.append("REPORT_TEMPLATE.md must read score_roll.unscored for "
                         "the unscored names rather than scanning for a null score")

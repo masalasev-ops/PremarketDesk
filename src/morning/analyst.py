@@ -170,7 +170,7 @@ def invoke_claude(
             resolve_cli(), "-p", "--model", model, "--output-format", "json",
             "--tools", "", "--effort", _CRIT.text("analyst", "effort"),
             "--system-prompt",
-            "You are the narrative pass of PremarketDesk. Follow the piped "
+            "Follow the piped "
             "instructions exactly and output only the finished report markdown.",
         ]
     except FileNotFoundError as exc:
@@ -296,7 +296,11 @@ def _cell(value: Any) -> str:
 
 
 def _bare(symbol: str) -> str:
-    return str(symbol).split(".")[0]
+    """See glossary.bare_ticker. Kept as a name because this module reads
+    better with a two character helper, and delegating rather than repeating
+    is what keeps the morning and the midday reports naming a stock the same
+    way."""
+    return glossary.bare_ticker(symbol)
 
 
 def _conviction(candidate: dict[str, Any]) -> str:
@@ -1139,8 +1143,18 @@ def set_words() -> tuple[str, ...]:
 # half a document by way of one stray backtick.
 _CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
 
-# A numbered rule or a bullet starts a fresh unit. See instruction_violations.
-_LIST_ITEM_RE = re.compile(r"^(?:\d+\.|[-*+])\s")
+# A numbered rule, a LETTERED SUB RULE, or a bullet starts a fresh unit. See
+# instruction_violations.
+#
+# The optional letter is not decoration. prompt_analyst.md splits its compound
+# rules into 3a, 3b, 3c and 6a, 6b, 6c so that each part carries exactly one
+# obligation, and a part that does not start a unit gets JOINED to whatever
+# came before it. Without the letter here, rule 5's closing paragraph and the
+# whole of 6a, 6b and 6c scan as one blob, and a banned word ending one rule
+# pairs with a set word opening the next to invent a claim neither sentence
+# makes. Widening this makes the check STRICTER, never looser: more units means
+# shorter windows.
+_LIST_ITEM_RE = re.compile(r"^(?:\d+[a-z]?\.|[-*+])\s")
 
 
 def instruction_violations(text: str) -> list[dict[str, Any]]:

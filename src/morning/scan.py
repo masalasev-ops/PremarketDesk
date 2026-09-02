@@ -38,6 +38,7 @@ from core import criteria
 from selection import discover
 from core import eodhd
 from core import ettime
+from core import glossary
 from night import paper_ledger
 from ops import job_status
 from core import store
@@ -823,9 +824,15 @@ def attach_premarket_path(
                     "It started gapping after the collector chose its symbols."
                 )
             else:
+                # LOWER CASE, and that is not a style choice. The template
+                # tells the model to quote this reason, and prompt_analyst.md
+                # rule 8 forbids it reproducing ordinary words in capitals, so
+                # a string written to be quoted cannot carry them. This is the
+                # same conflict score_roll.direction_note already had with the
+                # word ABSOLUTE, fixed there by publishing a quotable form.
                 candidate["pm_reason"] = (
-                    "on the watchlist but the collector recorded no bars INSIDE "
-                    "THE COLLECTION WINDOW for it. A replayed print from before "
+                    "on the watchlist but the collector recorded no bars inside "
+                    "the collection window for it. A replayed print from before "
                     "the window is filtered out upstream and is not a bar here, "
                     "so this does not assert the socket was silent all morning"
                 )
@@ -3223,7 +3230,10 @@ def score_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+def evidence_roll(
+    candidates: list[dict[str, Any]],
+    dropped: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """The membership lists the template used to make the model filter for.
 
     TEMPLATE_DERIVATIONS.md rows T2, T3, T15 and P1. Each of them asks the
@@ -3276,11 +3286,31 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     window is partial path evidence, and no coverage at all is absent path
     evidence. claim_the_roll_and_the_fallback_agree_on_partial_evidence holds
     that their union is what the fallback marks.
+
+    dropped_no_coverage is the ONE list here whose members are not in
+    `candidates`, which is why it arrives as its own argument. drop_uncovered
+    took them out of the candidate list before this ran, and the roll needs
+    them because prompt_analyst.md rule 6a asks the disclaimer to name them.
+
+    Its DENOMINATOR is therefore different from every other line's and is
+    computed rather than shared: candidates plus dropped, which is what reached
+    the coverage cut. Using candidates_examined would report "1 of 12" on a
+    morning that examined thirteen names and dropped one, and a count against
+    the wrong denominator is worse than no count.
+
+    It exists because the empty case had no supplied sentence and the other
+    lines did. The natural prose for a morning that dropped nobody is "no
+    candidate was dropped", which is a banned word inside six words of a set
+    word, so the model was being asked for a sentence and then flagged for
+    writing it. That is the same shape as the two live flags of 2026-08-28.
     """
     examined = len(candidates)
 
     def bare(symbol: str) -> str:
-        return str(symbol or "").upper().removesuffix(".US")
+        # upper() first because these strings are quoted into the report and a
+        # lower case ticker is not a ticker. See glossary.bare_ticker for why
+        # the strip itself lives in one place.
+        return glossary.bare_ticker(str(symbol or "").upper())
 
     def names(rows: list[dict[str, Any]]) -> str:
         return ", ".join(bare(r["symbol"]) for r in rows)
@@ -3322,6 +3352,26 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     band_thin = [{"symbol": c["symbol"], "why": c.get("pm_band_why")}
                  for c in candidates if c.get("pm_band_state") == BAND_THIN]
 
+    # THE NAMES THAT LEFT BEFORE THE ROLL SAW THEM. Reasons are deliberately
+    # NOT folded into the quoted sentence, on the pattern of the eight lists
+    # above: every one of them names symbols and keeps its reasons in the
+    # structured rows. A reason is Python written prose that may carry a proper
+    # noun or a capital, and rule 8 forbids the model reproducing capitals, so
+    # a sentence built to be quoted word for word must not carry one.
+    dropped_rows = [{"symbol": row["symbol"], "reason": row.get("reason")}
+                    for row in (dropped or [])]
+    reached = examined + len(dropped_rows)
+
+    def dropped_line() -> str:
+        """Same count led shape as line(), against its own denominator."""
+        what = ("were dropped for having no collector coverage, so they carry "
+                "no premarket price and were left out rather than published at "
+                "a stale prior session close")
+        if not dropped_rows:
+            return f"0 of {reached} candidates that reached the coverage cut {what}."
+        return (f"{len(dropped_rows)} of {reached} candidates that reached the "
+                f"coverage cut {what}: {names(dropped_rows)}.")
+
     # THE THIN DENOMINATOR, as a membership list for the same reason as the
     # seven above. _gap_for_thin_baselines already computes this and puts it in
     # gaps_to_fill, and gaps_to_fill reaches the report only through the
@@ -3360,7 +3410,13 @@ def evidence_roll(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "catalyst_unknown": unknown,
         "band_thin": band_thin,
         "thin_baseline": thin_baseline,
+        "dropped_no_coverage": dropped_rows,
+        # The denominator this one line is counted against, published beside
+        # it so a reader of the packet can check the arithmetic rather than
+        # having to work out which population it means.
+        "coverage_cut_reached": reached,
         "text": {
+            "dropped_no_coverage": dropped_line(),
             "rvol_null": line(
                 rvol_null, "carry a null premarket RVOL, so their premarket "
                            "volume evidence is missing"),
@@ -5278,8 +5334,10 @@ def build_packet() -> dict[str, Any]:
         # ask the model to filter for. TEMPLATE_DERIVATIONS T2, T3, T15 and P1.
         # Each carries a ready to quote sentence written in counts, because the
         # report quotes these word for word and the quantifier guard scans what
-        # comes back. See evidence_roll.
-        "evidence_roll": evidence_roll(candidates),
+        # comes back. See evidence_roll. dropped is passed because its names
+        # are NOT in candidates and rule 6a asks the disclaimer to quote a
+        # sentence about them.
+        "evidence_roll": evidence_roll(candidates, dropped),
         # Transient. main pops this before write_packet, so it never reaches
         # disk; the leading underscore is the convention true_volume uses for
         # the same reason.
