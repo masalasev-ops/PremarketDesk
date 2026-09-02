@@ -172,6 +172,23 @@ decide nothing.
     that any of them was screened. They were not: `these names have not been
     screened`. A name that appears both here and on a watchlist keeps the
     conviction the watchlist gave it and gains nothing from appearing here.
+16. Close the write up for a candidate in Technical signals with ONE
+    INVALIDATION SENTENCE. It begins on its own line with this exact lead in,
+    `What would say this is wrong:`, and the rest of the line is
+    written with the digits left out. The lead in is how the check finds the
+    line, so it is not optional and it is not paraphrased. State the level,
+    never restate its figure: "a break back under the premarket VWAP", not "a
+    break back under 103.80".
+    The figures are in the watchlist table above, and Entry and Stop there are
+    the two numbers the paper ledger books against, so a sentence restating
+    one of them in another rounding reads as a second opinion about a level
+    with one value. This is also the only place the no invented number rule is
+    ENFORCED rather than instructed: a numeric containment check was measured
+    on 2026-09-01 and refused, because it flags 32 to 49 numbers a report and
+    effectively all of them are legitimate unit conversions or arithmetic the
+    prompt asks for. A sentence written with the digits left out cannot invent
+    a figure, and the suite checks these sentences carry none. Say what would
+    make the setup WRONG, not what would make it work.
 
 ## Why these rules exist
 

@@ -2882,6 +2882,49 @@ def classify_catalyst(
     return "none", "no news carried the symbol tag in the window"
 
 
+_REFERENCE_FIELDS = ("pm_high", "pm_low", "pm_vwap")
+
+
+def reference_levels(candidate: dict[str, Any]) -> tuple[Any, Any]:
+    """(entry_ref, stop_ref) from the fields CRITERIA [Picks] names.
+
+    ONE DEFINITION, called by attach_reference_levels for the packet and by
+    write_picks for the database row, because those two numbers are the levels
+    the paper ledger books against and a report quoting a different entry from
+    the one the ledger used would be describing a trade nobody took. Reading
+    the field NAMES from CRITERIA rather than hardcoding pm_high is the same
+    reason: change entry_ref_field there and the report follows, instead of
+    quietly disagreeing with the ledger from the next morning on.
+
+    A null level stays null. A reference that was never observed is not a
+    reference, and a zero here would be a price.
+    """
+    entry_field = _CRIT.text("picks", "entry_ref_field")
+    stop_field = _CRIT.text("picks", "stop_ref_field")
+    for field in (entry_field, stop_field):
+        if field not in _REFERENCE_FIELDS:
+            raise criteria.CriteriaError(
+                f"picks reference field {field!r} is not one of "
+                f"{sorted(_REFERENCE_FIELDS)}")
+    return candidate.get(entry_field), candidate.get(stop_field)
+
+
+def attach_reference_levels(candidates: list[dict[str, Any]]) -> None:
+    """Put the entry and the stop on every candidate, for the packet.
+
+    They were computed only inside write_picks until 2026-09-01, so they
+    reached the database and never the report. The report printed the
+    premarket high, which IS the entry under the shipped criteria, without
+    saying so, and printed no stop at all. The glossary added the same day
+    explains both to a reader, which made their absence from the page a
+    defect rather than a gap.
+    """
+    for candidate in candidates:
+        entry, stop = reference_levels(candidate)
+        candidate["entry_ref"] = entry
+        candidate["stop_ref"] = stop
+
+
 def evaluate_eligibility(candidate: dict[str, Any]) -> None:
     """day_eligible and swing_eligible, straight from CRITERIA.md.
 
@@ -3523,6 +3566,9 @@ def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) 
         candidate["catalyst_why"] = why
         evaluate_eligibility(candidate)
         score_candidate(candidate)
+    # After the screen and the score, because neither reads them, and before
+    # the packet is written, because the report does.
+    attach_reference_levels(candidates)
 
 
 # ------------------------------------------------------------------- runner
@@ -5547,15 +5593,6 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
     market than the one the report is about, and test rows must never
     interleave silently with the real record.
     """
-    reference_fields = {"pm_high", "pm_low", "pm_vwap"}
-    entry_field = _CRIT.text("picks", "entry_ref_field")
-    stop_field = _CRIT.text("picks", "stop_ref_field")
-    for field in (entry_field, stop_field):
-        if field not in reference_fields:
-            raise criteria.CriteriaError(
-                f"picks reference field {field!r} is not one of {sorted(reference_fields)}"
-            )
-
     window_start = _CRIT.clock_text("picks", "live_window_start")
     window_end = _CRIT.clock_text("picks", "live_window_end")
     run_hhmm = str(payload.get("run_time_et") or "")
@@ -5609,8 +5646,11 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 "pm_window_start": candidate.get("pm_window_start"),
                 "prior_high": candidate.get("prior_high"),
                 "catalyst_class": candidate.get("catalyst_class"),
-                "entry_ref": candidate.get(entry_field),
-                "stop_ref": candidate.get(stop_field),
+                # Through the shared helper, not from the candidate's own
+                # entry_ref key, so a packet written before those keys existed
+                # still writes the same row it always did.
+                "entry_ref": reference_levels(candidate)[0],
+                "stop_ref": reference_levels(candidate)[1],
                 "source": source,
                 "score_partial": candidate.get("score_partial"),
                 "score_unavailable": ", ".join(candidate.get("score_unavailable") or []) or None,

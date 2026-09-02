@@ -193,7 +193,7 @@ say, and never add a headline the packet does not carry.}
 header row is fixed and is reproduced exactly as this line, character for
 character, because the containment guard locates ticker columns by it:
 
-| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Entry | Stop | Score | Conviction |
 
 A candidate whose score is null gets the word unscored in the conviction
 column, never a bucket color. Membership is decided by the day_eligible
@@ -242,7 +242,7 @@ same defect wearing a disclosure.
 If none are eligible the table is still written, header and separator and one
 row, exactly like this:
 
-| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Entry | Stop | Score | Conviction |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | none | | | | | | | |
 
@@ -419,6 +419,47 @@ proxy using the packet's proxy note. Two or three sentences on what the mix
 says about risk appetite this morning.}
 
 ## Technical signals
+
+{CLOSE THE WRITE UP FOR A CANDIDATE WITH ONE INVALIDATION SENTENCE. It
+begins with this exact lead in, on its own line:
+
+`What would say this is wrong:`
+
+and the rest of that line is written in words with the digits left out. State
+the level, never restate its figure: "a break back under the premarket VWAP",
+not "a break back under 103.80". The figures sit in the watchlist table a few
+lines above and repeating them here buys the reader nothing.
+
+THE LEAD IN IS NOT DECORATION. It is how the check finds the line. Without a
+fixed opening there is no way to tell an invalidation sentence from any other
+prose, and a rule nothing can locate is a rule nothing enforces.
+
+Two reasons this is a rule rather than a style note, and the second is the
+important one.
+
+The Entry and Stop columns are the two numbers the paper ledger actually books
+against, and they come from CRITERIA [Picks] through one function. A sentence
+that restates one of them slightly differently, or rounds it another way, reads
+as a second opinion about a level that has only one value.
+
+And nothing in this system checks a number you write. The containment check
+validates TICKERS. The quantifier guard refuses sweeping claims about the
+candidate set. Neither reads a price. A numeric containment check was measured
+on 2026-09-01 across the eight archived reports and refused: it flags 32 to 49
+numbers a report, and effectively all of them are legitimate unit conversions,
+a market cap of 211592811493 in the packet printed as 211.59B, or arithmetic
+the prompt asks for, a price pair turned into a percent move. A guard that
+fires forty times a morning on correct writing is a guard nobody reads by the
+end of the week. So the invention surface is REMOVED here instead of watched: a
+sentence written with the digits left out cannot invent a figure, and the suite
+checks that these sentences carry none.
+
+Say what would make the setup wrong, not what would make it work. "The entry
+sits above the last premarket print, so the move has to continue rather than
+merely hold; a slip back under the premarket VWAP before the entry is reached
+would say the bid is not there." Where the premarket window behind a level is
+partial, or its RVOL is a lower bound, that belongs in this sentence too,
+because those are the two things most likely to make the level unreliable.}
 
 {Only levels already present in the packet: premarket high, low, VWAP versus
 price, prior day high versus price, the 200 day average versus price, and the

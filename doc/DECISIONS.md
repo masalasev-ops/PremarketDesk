@@ -6261,3 +6261,106 @@ Every comparable measurement in this project already did this: pm_rvol through
 true_baseline_sessions, gap_stats through sessions_used, the truth pass through
 true_bars. These were the two that did not.
 
+## 2026-09-01, fifteenth: entry and stop become columns, and the one line where an invented number is stopped rather than watched
+
+WHAT WAS ASKED. Can the analyst print better information about specific
+candidates, entry and exit points among them.
+
+### Entry and stop already existed and were never printed
+
+CRITERIA [Picks] sets entry_ref_field = pm_high and stop_ref_field = pm_low,
+and write_picks stored both per name per day. So the report was ALREADY
+printing the entry, in a column called Premarket high, without saying that is
+what it was, and printed no stop at all. The glossary shipped earlier the same
+day explains "Entry, stop" to a reader, which turned their absence from the
+page into a defect rather than a gap.
+
+scan.reference_levels is now the single definition, read by
+attach_reference_levels for the packet and by write_picks for the database row.
+Both read the field NAMES out of CRITERIA rather than hardcoding pm_high, so
+changing entry_ref_field moves the report and the ledger together instead of
+letting them disagree from the next morning on. Verified on 2026-08-27: the
+report renders PURR entry 12.2600 stop 12.0000 and the picks row holds 12.26
+and 12.0.
+
+The day watchlist header gained two columns and had to be changed in THREE
+places, which the suite found: REPORT_TEMPLATE.md, analyst._REQUIRED_TABLES
+and fallback_report, the last because a fallback that does not reproduce the
+header character for character fails the structure gate on the morning that
+needed it most.
+
+The SWING watchlist deliberately did not gain them. Those levels are a
+premarket high and low, a day trade construct, and the ledger trades the day
+session.
+
+### An exit target was not added, and why
+
+There is no target anywhere in this system. paper_ledger has two real exits,
+stop and session close, so a trade that does not stop out is held to the bell.
+Adding one is a TRADING RULE change: a CRITERIA parameter, a third exit state
+in the ledger, and the outcome columns measured against it. It needs a
+derivation and a pre-registration the way the score work has. Not done here,
+and the owner was offered it as a separate piece of work.
+
+### The numeric guard was built, measured, and refused
+
+prompt_analyst.md rule 1 has always said "never invent a catalyst, a number, a
+headline, a ticker, or a time", and NOTHING has ever checked the number half.
+check_report validates tickers. quantifier_violations refuses sweeping claims
+about the candidate set. Neither reads a price.
+
+So a numeric containment check was written and run across the eight archived
+report and packet pairs, extracting every number from each report and matching
+it against every number the packet carries at five roundings, with and without
+thousands separators, plus the numbers inside the packet's prebuilt sentences.
+
+    2026-08-21   4      2026-08-24  49      2026-08-25  48
+    2026-08-26  43      2026-08-27  46      2026-08-28  32
+    2026-08-31  35
+
+REFUSED. Effectively every one of those is correct writing, and two shapes
+account for almost the whole count. UNIT CONVERSION: the packet holds MRVL's
+market cap as 211592811493 and the report prints 211.59B, which is what the
+template asks for. ARITHMETIC THE PROMPT ASKS FOR: a pair of index prices
+turned into a percent move. A guard firing forty times a morning on correct
+writing is a guard nobody reads by the end of the week, which is the cry wolf
+shape this project has now reasoned its way out of three times in one day.
+
+### So the surface is removed on the one line where it matters
+
+Technical signals now closes each candidate with an invalidation sentence
+opening on a fixed lead in, "What would say this is wrong:", with the digits
+left out. It names the level in words and never restates its figure, because
+Entry and Stop in the table above it are the two numbers the paper ledger
+books against and a sentence restating one in another rounding reads as a
+second opinion about a level with one value.
+
+A line with the digits left out cannot invent a figure, which is exact and
+cheap where the general check was neither. analyst.invalidation_violations runs
+in the FINAL pass over the finished body, the same pass the quantifier guard
+now uses, and a digit there is said on the disclaimer rather than regenerated:
+losing a narrative over a stray figure is disproportionate when the number it
+would have invented is one line above it in the table.
+
+THE LEAD IN IS LOAD BEARING, because it is the only thing that makes the line
+findable, and it is pinned across both documents and the module.
+claim_the_invalidation_line_names_a_level_and_not_a_figure fails if any of the
+three drift, because when they drift the check finds nothing and reports
+success.
+
+One thing the guard caught on the way in, worth recording: the first draft of
+the instruction opened "END EVERY CANDIDATE WITH ONE INVALIDATION SENTENCE",
+and the suite refused it. "every" sits within six words of "candidate", which
+is exactly the phrasing the quantifier guard would reject in a report, and
+there is a claim that the prompt and template may not ASK for what the guard
+forbids. The instruction was reworded rather than the claim relaxed.
+
+### What the record says, which is why none of this is a recommendation
+
+Printing levels more prominently does not make them better levels. The score is
+still ordering outcomes backwards on the record as it stands, median favourable
+excursion -6.88 percent for green against +1.36 for yellow and +1.91 for red,
+and the ledger is 5 wins in 17 booked at a median of -1.70 percent.
+SCORE_INVERSION.md pre-registers what would have to be true to call it either
+way, and nothing here moves that.
+

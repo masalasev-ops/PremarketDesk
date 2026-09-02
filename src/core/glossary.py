@@ -151,6 +151,14 @@ COLUMNS: dict[str, str] = {
     "Premarket low": "the lowest price seen before the market opened",
     "Premarket VWAP": "the average price paid per share before the open, "
                       "weighted by trade size",
+    # THE SAME TWO NUMBERS THE PAPER LEDGER BOOKS AGAINST. Both come from
+    # scan.reference_levels, which reads the field names out of CRITERIA
+    # [Picks], so a reader comparing the report against the record is looking
+    # at one number rather than two that happen to agree today.
+    "Entry": "the price at which these rules would start a position, which is "
+             "the premarket high: the move has to carry on, not merely hold",
+    "Stop": "the price at which these rules would accept the position was "
+            "wrong and close it, which is the premarket low",
     "200d avg": "the average closing price over the last 200 trading days",
     "Score": "this system's own 0 to 10 rating, which is not a prediction",
     "Conviction": "the score's band: green is highest, red is lowest",

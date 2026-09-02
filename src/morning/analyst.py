@@ -479,15 +479,23 @@ def fallback_report(
     # omitted table takes its Ticker header with it, and that header is what
     # the containment guard locates ticker claims by, so an empty screen used
     # to switch the guard off for the whole report. See REPORT_TEMPLATE.md.
-    add("| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |")
-    add("|---|---|---|---|---|---|---|---|")
+    add("| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP "
+        "| Entry | Stop | Score | Conviction |")
+    add("|---|---|---|---|---|---|---|---|---|---|")
     if day:
         for c in day:
+            # entry_ref and stop_ref are put on the candidate by
+            # scan.attach_reference_levels, from the field names CRITERIA
+            # [Picks] gives, so this prints the same two numbers the paper
+            # ledger books against rather than a second opinion about them. A
+            # packet written before 2026-09-01 carries neither key and the
+            # cells come out empty, which is the truth about that packet.
             add(f"| {_bare(c['symbol'])} | {_f(c.get('gap_pct'))} | {_f(c.get('price'))} "
                 f"| {_f(c.get('pm_rvol'))} | {_f(c.get('pm_high'), 4)} | {_f(c.get('pm_vwap'), 4)} "
+                f"| {_f(c.get('entry_ref'), 4)} | {_f(c.get('stop_ref'), 4)} "
                 f"| {_f(c.get('score'), 1)} | {_conviction(c)} |")
     else:
-        add("| none | | | | | | | |")
+        add("| none | | | | | | | | | |")
     add("")
     # The RVOL column is an ESTIMATE, and the fallback says so for the same
     # reason the template does: this runs on the morning the narrative already
@@ -921,6 +929,49 @@ ANNOTATIONS_PYTHON_WRITTEN = (
     "annotate_warned_quantifiers",
     "annotate_unvalidated",
 )
+
+
+INVALIDATION_MARKER = "What would say this is wrong:"
+
+
+def invalidation_violations(report: str) -> list[dict[str, Any]]:
+    """Invalidation lines carrying a digit. One per offending line.
+
+    WHY A DIGIT IS THE TEST, and why there is no general check on numbers.
+    Nothing in this system validates a figure. check_report validates TICKERS;
+    quantifier_violations refuses sweeping claims about the candidate set;
+    neither reads a price. A general numeric containment check was built and
+    MEASURED on 2026-09-01 across the eight archived reports and refused: it
+    flags 32 to 49 numbers a report, and effectively all of them are correct.
+    Two shapes account for almost the whole count. Unit conversion, a market
+    cap the packet holds as 211592811493 printed as 211.59B. And arithmetic the
+    prompt explicitly asks for, a pair of prices turned into a percent move. A
+    guard that fires forty times a morning on correct writing is a guard nobody
+    reads by the end of the week, which is the failure this project has already
+    reasoned its way out of twice.
+
+    So the invention surface is REMOVED on this one line rather than watched.
+    The invalidation sentence names a level in words and never restates its
+    figure, because the figure is in the watchlist table above it and Entry and
+    Stop there are the numbers the paper ledger books against. A sentence
+    written with the digits left out cannot invent one, and that is cheap to
+    check exactly.
+
+    The lead in is what makes the line findable. Without a fixed opening there
+    is nothing to tell an invalidation sentence from any other prose, and a
+    rule nothing can locate is a rule nothing enforces.
+    """
+    out: list[dict[str, Any]] = []
+    for number, line in enumerate(report.splitlines(), start=1):
+        stripped = line.strip().lstrip("*-> ").strip()
+        if not stripped.startswith(INVALIDATION_MARKER):
+            continue
+        rest = stripped[len(INVALIDATION_MARKER):]
+        digits = sorted({ch for ch in rest if ch.isdigit()})
+        if digits:
+            out.append({"line": number, "text": stripped[:200],
+                        "digits": "".join(digits)})
+    return out
 
 
 def guard_mode() -> str:
@@ -1432,7 +1483,7 @@ NOTABLE_HEADER = (
 _REQUIRED_TABLES = {
     "day watchlist": (
         "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
-        "Premarket VWAP | Score | Conviction |"
+        "Premarket VWAP | Entry | Stop | Score | Conviction |"
     ),
     "swing watchlist": (
         "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
@@ -2065,6 +2116,24 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # So the finished body is scanned, and what the narrative already raised is
     # subtracted, because in warn mode a flagged narrative ships and would be
     # found twice. What is left was introduced by an annotation.
+    # The invalidation lines, checked on the finished body for the same
+    # reason the quantifier guard now is: this is the version a reader sees.
+    # A stray digit here is NOT worth losing a narrative over, so unlike a
+    # quantifier claim it is said on the disclaimer rather than regenerated.
+    # The number it would have invented is one line above it in the table.
+    figures = invalidation_violations(report_text)
+    if figures:
+        usage["invalidation_figures"] = figures
+        print(f"analyst: {len(figures)} invalidation line(s) restate a figure "
+              "instead of naming the level")
+        for hit in figures:
+            print(f"analyst:   line {hit['line']}: {hit['text'][:120]}")
+        report_text = _append_to_disclaimer(
+            report_text,
+            f"{len(figures)} invalidation line(s) quote a figure rather than "
+            "naming the level, and a figure written there is not checked "
+            "against the packet")
+
     late = _late_hits(report_text, quantifier_violations(without_model))
     if late:
         late_ids = record_quantifier_flags(

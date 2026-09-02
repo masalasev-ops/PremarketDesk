@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty seventh: entry and stop become columns, and the invalidation line
+
+The report was already printing the entry and not saying so. CRITERIA [Picks]
+sets entry_ref_field = pm_high, so the Premarket high column IS the entry, and
+the stop was not printed at all. The glossary added earlier the same day
+explains both to a reader, which made their absence a defect rather than a gap.
+
+scan.reference_levels is the single definition now, read by the packet and by
+the picks row, both through the field NAMES in CRITERIA rather than a hardcoded
+pm_high, so the report and the paper ledger move together. Verified on
+2026-08-27: the report renders PURR entry 12.2600 stop 12.0000 and the picks
+row holds 12.26 and 12.0.
+
+The header had to change in three places and the suite found all three:
+REPORT_TEMPLATE.md, analyst._REQUIRED_TABLES, and fallback_report, the last
+because a fallback that does not reproduce the header character for character
+fails the structure gate on the morning that needed it most. The swing
+watchlist deliberately did not gain them: a premarket high and low are a day
+trade construct and the ledger trades the day session.
+
+NO EXIT TARGET WAS ADDED. There is none in the system: paper_ledger has two
+real exits, stop and session close. Adding one is a trading rule change, a
+CRITERIA parameter plus a third ledger exit state plus outcomes measured
+against it, and it needs a derivation and a pre-registration.
+
+### The numeric guard was built, measured, and refused
+
+Rule 1 of the prompt has always said "never invent a number" and nothing has
+ever checked it. A numeric containment check was written and run over the eight
+archived report and packet pairs: it flags 4, 49, 48, 43, 46, 32 and 35 numbers
+across them, and effectively every one is correct writing. Two shapes account
+for nearly the whole count: unit conversion, a market cap held as 211592811493
+printed as 211.59B, and arithmetic the prompt asks for, two prices turned into
+a percent move. Refused, on the same argument as the two cry wolf refusals
+earlier today.
+
+So the surface is removed where it matters instead. Technical signals now
+closes each candidate with an invalidation sentence on a fixed lead in, "What
+would say this is wrong:", with the digits left out: it names the level and
+never restates its figure, because Entry and Stop above it are the numbers the
+ledger books against. invalidation_violations runs in the final pass over the
+finished body and a digit there is said on the disclaimer rather than
+regenerated, since the number it would have invented is one line above it.
+
+The lead in is pinned across both documents and the module, because when it
+drifts the check finds nothing and reports success.
+
+The guard caught the first draft of the instruction, which opened "END EVERY
+CANDIDATE WITH ONE INVALIDATION SENTENCE". "every" within six words of
+"candidate" is what the quantifier guard refuses in a report, and a claim
+forbids the prompt asking for what the guard forbids. Reworded rather than
+relaxed.
+
+Suite green, 141 claims, no drift.
+
 ## 2026-09-01, twenty sixth: the two architecture pages, back in sync and in plainer words
 
 Both pages had drifted. ArchitecturePremarketdesk.html was last written at

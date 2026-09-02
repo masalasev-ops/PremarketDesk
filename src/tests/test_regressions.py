@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and forty claims, a count read off
+and the two pages. It now carries one hundred and forty one claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11548,6 +11548,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         138: "one hundred and thirty eight",
         139: "one hundred and thirty nine",
         140: "one hundred and forty",
+        141: "one hundred and forty one",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -12548,6 +12549,89 @@ def claim_the_guard_reads_what_ships(failures: list[str]) -> None:
           "explanation is found")
 
 
+def claim_the_invalidation_line_names_a_level_and_not_a_figure(
+        failures: list[str]) -> None:
+    """The one line where "never invent a number" is enforced, not instructed.
+
+    THE HOLE THIS SITS IN. prompt_analyst.md rule 1 has always said "never
+    invent a catalyst, a number, a headline, a ticker, or a time", and NOTHING
+    checks the number half. check_report validates tickers. The quantifier
+    guard refuses sweeping claims about the candidate set. Neither reads a
+    price. So the report's figures rest on the model doing as it is told.
+
+    A GENERAL NUMERIC CHECK WAS BUILT AND REFUSED, on measurement rather than
+    on taste. Run across the eight archived report and packet pairs it flags
+    32 to 49 numbers a report, and effectively all of them are correct writing.
+    Two shapes account for nearly the whole count: unit conversion, where the
+    packet holds a market cap of 211592811493 and the report prints 211.59B;
+    and arithmetic the prompt asks for, where two prices become a percent move.
+    A guard that fires forty times a morning on correct writing is a guard
+    nobody reads by the end of the week.
+
+    So the surface is REMOVED on the one line where a figure would do real
+    harm. The invalidation sentence names a level in words and never restates
+    its figure, because Entry and Stop in the table above it are the two
+    numbers the paper ledger books against, and a sentence restating one in
+    another rounding reads as a second opinion about a level with one value. A
+    line with the digits left out cannot invent a figure, and that is exact.
+
+    The lead in is load bearing: it is the only thing that makes the line
+    findable. It is pinned here across BOTH documents and the module, because
+    three copies of a string is three chances for one of them to drift, and
+    when it drifts the check finds nothing and reports success.
+    """
+    from morning import analyst
+
+    marker = analyst.INVALIDATION_MARKER
+    root = config.PROJECT_ROOT
+    for rel in ("doc/prompt_analyst.md", "doc/REPORT_TEMPLATE.md"):
+        text = (root / rel).read_text(encoding="utf-8")
+        if marker not in text:
+            failures.append(
+                f"{rel} does not carry the invalidation lead in {marker!r} that "
+                "analyst.invalidation_violations searches for, so the model is "
+                "being asked for one shape and checked for another")
+
+    clean = f"{marker} a slip back under the premarket VWAP before the entry."
+    if analyst.invalidation_violations(clean):
+        failures.append(
+            "an invalidation line naming a level in words was flagged, so the "
+            "check refuses the writing it exists to ask for")
+
+    for bad in (f"{marker} a break back under 103.80.",
+                f"- {marker} under 99.",
+                f"**{marker}** a slip under 12.5 before the open."):
+        if not analyst.invalidation_violations(bad):
+            failures.append(
+                f"an invalidation line restating a figure passed the check: "
+                f"{bad!r}. That is the one number in the report nothing else "
+                "validates")
+
+    # The marker has to be found where it actually appears, which is inside a
+    # section of prose rather than at the top of a file.
+    body = ("## Technical signals\n\nAAA looks extended.\n"
+            f"{marker} a break back under 45.10 before the entry.\n\n"
+            "## Skips and traps\n\nNothing.\n")
+    hits = analyst.invalidation_violations(body)
+    if len(hits) != 1 or hits[0]["line"] != 4:
+        failures.append(
+            f"the check did not locate the invalidation line inside a report "
+            f"body: {hits}")
+
+    # And the disclaimer has to say so, because the finding is only worth
+    # anything if the reader is told.
+    stamped = analyst._append_to_disclaimer(
+        "Nothing here is advice.", "1 invalidation line(s) quote a figure")
+    if "invalidation line" not in stamped:
+        failures.append(
+            "the disclaimer does not carry the invalidation finding, so a "
+            "figure nothing validated would ship with nothing said about it")
+
+    print("  invalidation the one line that must name a level and not a figure "
+          "is found by a lead in pinned in both documents, a digit in it is "
+          "caught, and the reader is told on the disclaimer")
+
+
 def claim_no_em_dash_survives_anywhere(failures: list[str]) -> None:
     """Hard rule 4 is guarded by something other than good intentions.
 
@@ -13087,6 +13171,7 @@ def main() -> int:
     claim_every_production_read_of_picks_is_fenced(failures)
     claim_a_reconstruction_never_displaces_the_record(failures)
     claim_the_guard_reads_what_ships(failures)
+    claim_the_invalidation_line_names_a_level_and_not_a_figure(failures)
 
     if failures:
         for failure in failures:
