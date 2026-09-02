@@ -15,6 +15,46 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty eighth: names that reported after the prior close are tier 1
+
+Discovery's earnings source read the calendar for today only and kept
+BeforeMarket rows, so a name that reported after the prior session's close had
+no tier of its own and reached the pool through the news sweep alone, ranked
+inside tier 2 by gap propensity. GTLB reported after the 2026-09-01 close,
+opened about 25 percent higher this morning, and was cut at pool rank 41 with
+14 fresh items and the headline "GitLab Stock Soars 21% After Earnings" in its
+evidence. The collector never subscribed to it, so no file of this morning
+carries a premarket print for it and the scan could not have found it.
+
+selection/discover.py `earnings_reporters` replaces `earnings_before_open` as
+the source: one calendar call from the prior session to today, BeforeMarket
+rows dated today keyed `earnings_before_open`, AfterMarket rows dated the
+prior session keyed `earnings_after_close`, both tier 1 in CRITERIA.md [Pool
+tiers]. Rows that gapped yesterday or gap tomorrow are dropped. The source
+records the window it read, the prior session it asked the calendar for, the
+vendor's published actual where it has one, and a prior_session_error when
+the exchange calendar could not name the prior session and today alone was
+read. `assemble` takes the tier key from each name's evidence, defaulting to
+before open for the replay cache, whose sixty sessions predate the change.
+`earnings_before_open` stays as the before open half for that cache.
+src/research/backtest_pool.py fetches through the new source.
+
+Measured before the change, one calendar call (2026-08-19 to 2026-09-01)
+crossed with the eight pool_recall.json files: 26 prior day after close
+reporters gapped past 3 percent, 23 in the pool, 2 subscribed. Today's
+calendar named five, CRDO, DELL, GTLB, MDB and PANW; only CRDO was
+subscribed, on two other priors. The note is in CRITERIA.md [Pool tiers] and
+the reasoning in DECISIONS.md 2026-09-02, seventh. tests/test_pool.py claim
+two and three now covers both rows, the dropped rows, the window, and the
+tier the pool gives an after close name. README, the two architecture pages
+and doc/IMPROVEMENT_PLAN.md say so; the plan carries it as 0.6 and drops the
+data/UNVERIFIED proposal from 5.6 at the owner's word.
+
+Also in this commit: the archive claim in tests/test_regressions.py embedded a
+fixed ten sessions over a sandbox that copies the live runs tree, so this
+morning's report, the ninth real one, pushed its January fixture out of the
+embedded set and the claim raised. It now embeds every session it finds.
+
 ## 2026-09-02, thirty seventh: the range confound is on the register, and the record is grouped the way a trader asks
 
 Tier 5 of doc/IMPROVEMENT_PLAN.md, the parts a session can do. The five owner

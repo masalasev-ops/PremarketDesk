@@ -577,8 +577,14 @@ core/page.py; one float reading, one atomic writer and a criteria check in
 core/; and the range confound on SCORE_INVERSION.md's register with the pick
 day open and close stored for every pick. The freeze above was lifted for that
 work by the owner and the items it left open are in the plan's tier notes and
-in DECISIONS 2026-09-02 sixth, which are the five decisions the measurements
-now wait on. CHANGELOG 2026-09-02 thirty second to thirty seventh.]**
+in DECISIONS 2026-09-02 sixth, which are the decisions the measurements now
+wait on; the owner dropped the fifth of them, the UNVERIFIED disposition, from
+the plan the same day and the gate is unchanged. CHANGELOG 2026-09-02 thirty
+second to thirty seventh. Later that morning GTLB opened about 25 percent
+higher after reporting after the prior close and was not on the list, because
+the earnings prior read only before open reporters; discover.earnings_reporters
+now reads the prior session's after close rows as tier 1 (plan 0.6, CHANGELOG
+thirty eighth, DECISIONS seventh).]**
 
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:

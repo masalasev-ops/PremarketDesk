@@ -18,6 +18,64 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, seventh: after close reporters are the same prior as before open reporters, and the UNVERIFIED proposal leaves the plan
+
+The owner asked why GTLB was not on this morning's list after opening about
+25 percent higher. The trace: GitLab reported after the 2026-09-01 close.
+The earnings source asked the calendar for today and kept BeforeMarket rows,
+so the report earned GTLB no tier. The news sweep found 14 items, the newest
+at 05:52 reading "GitLab Stock Soars 21% After Earnings", which put GTLB in
+tier 2, where names are ordered by gap propensity, a historical frequency
+that knows nothing about the catalyst in hand. GTLB's is 0.108, rank 41 in a
+pool whose tier 2 cut fell at rank 30 with tiers 3 to 5 taking their twelve
+floored slots. Written to watchlist.json as not_subscribed, never subscribed
+by the collector, absent from every artifact of the morning.
+
+Three choices, and the reasoning for each.
+
+THE AFTER CLOSE ROW IS A TIER, NOT A RANKING TWEAK. The alternative was to
+let the news sweep's item count or headline text lift a name inside tier 2.
+That would have been a heuristic about headlines standing in for a fact the
+calendar states outright, and it would have moved names that were not
+reporters. The calendar row is the fact. Reading it costs nothing: the same
+call, with from set to the prior session instead of today.
+
+TIER 1, NOT A NEW TIER BETWEEN 1 AND 2. A name that reported after the close
+and a name reporting before the open are one catalyst dated one row apart,
+and the module's own docstring called that catalyst the largest single
+source of premarket gaps. Giving it a lower tier would say it is a weaker
+prior, which nothing measured. Keeping the integers below unchanged also
+keeps pool_tier comparable across every pool_recall.json and the replay
+cache. The cost is that on a heavy morning the two rows compete for tier 1
+slots on gap propensity, an ordering measured on before open reporters
+alone; the after close note in CRITERIA.md says that is unmeasured.
+
+WHAT THE NUMBER RESTS ON. One calendar call, 2026-08-19 to 2026-09-01, 6,616
+rows, crossed with the eight pool_recall.json files: 26 prior day after
+close reporters in the universe gapped past 3 percent at the open, 23 were
+in the pool by way of news, 2 were subscribed. OKTA +23.6 at rank 41, ESTC
++24.1 at rank 46, GAP +18.7, VEEV +12.4, CRM +11.9, CRWD +10.1, QFIN -15.9
+were all cut. Eight sessions is a short window and includes an earnings
+heavy fortnight; the 60 session replay can measure the tier properly once
+its cache is refetched through the new source, and that measurement is
+owed. It is not waited for, because the mechanism is not in doubt: the
+source did not read the row.
+
+THE OWNER DROPPED PROPOSAL 5 OF THE SIXTH ENTRY. data/UNVERIFIED stays where
+it is and leaves doc/IMPROVEMENT_PLAN.md's list of owner decisions, which
+now holds four. The gate itself is unchanged: delivery still stops at the
+marker until the owner removes it, this entry only records that the plan no
+longer asks the question. The after close blind spot is on the plan as 0.6,
+the top priority, and is built in the same commit as this entry.
+
+WHAT THIS DOES NOT DO FOR TODAY. The collector's window closed at 09:25 with
+GTLB never subscribed. Nothing in the published path can recover a premarket
+tape it did not record: EODHD publishes intraday bars overnight and the
+websocket does not replay. A rerun of the morning with the corrected pool
+can measure GTLB's gap from the quote, and must show its premarket volume,
+high and low as null with the reason, which is what the packet's null rule
+requires and what such a report will say.
+
 ## 2026-09-02, sixth: five proposals for the owner, written up and stopped at
 
 Tier 5 of doc/IMPROVEMENT_PLAN.md ends in decisions the project's own rules

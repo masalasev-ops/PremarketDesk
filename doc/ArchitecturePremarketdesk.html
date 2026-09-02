@@ -338,7 +338,9 @@ tbody tr:hover{background:var(--ground)}
         <h5>Build the candidate pool, warm the baselines</h5>
         <p>No price from today is read here, because at 07:15 no source on this plan has one for the
         whole universe, and reading one that only looked current is what ranked yesterday's movers
-        every morning. The pool is unioned from four priors instead: earnings before today's open, an
+        every morning. The pool is unioned from four priors instead: earnings landing between the prior
+        close and this open (before open today, or after the prior session's close, both tier 1 since
+        2026-09-02), an
         overnight news sweep from 16:00 the prior day, prior session movers measured close to close
         over two bulk end of day calls, and recent runners from the picks table, decay weighted so a
         name from three days ago outranks one from three weeks. It is ranked by tier, then within

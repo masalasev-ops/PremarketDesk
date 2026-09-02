@@ -655,10 +655,41 @@ precede a premarket gap, not a measured base rate. pool_recall.json in the
 nightly pass is what will eventually replace the assumption with a measurement.
 
 tier = earnings_before_open : 1
+tier = earnings_after_close : 1          # added 2026-09-02, see the after close note below
 tier = news_fresh : 2
 tier = news_stale : 3
 tier = prior_session_mover : 4
 tier = recent_runner : 5
+
+### The after close note
+
+Until 2026-09-02 the earnings source read the calendar for today alone and
+kept BeforeMarket rows. A name that reported after the prior session's close
+is the same catalyst one calendar row earlier, and it was never given a tier:
+it reached the pool through the news sweep, at tier 2, and was then ranked by
+gap propensity like any other headline. GTLB reported after the 2026-09-01
+close, opened about 25 percent higher on 2026-09-02, and was cut at pool rank
+41 while its newest headline read "GitLab Stock Soars 21% After Earnings".
+
+Measured on 2026-09-02 with one calendar call, 2026-08-19 to 2026-09-01,
+crossed with the eight pool_recall.json files then on disk: 26 prior day
+after close reporters gapped past the 3 percent floor, 23 of them were in the
+pool and 2 were subscribed. Cut with GTLB's pattern: OKTA +23.6 at rank 41,
+ESTC +24.1 at rank 46, GAP +18.7, VEEV +12.4, CRM +11.9, CRWD +10.1, QFIN
+-15.9. On 2026-09-02 itself the calendar named five such universe names,
+CRDO, DELL, GTLB, MDB and PANW; CRDO was subscribed because two other priors
+also claimed it, the other four were cut.
+
+So earnings_after_close is tier 1, the same tier as before open reporters,
+because it is the same prior rather than a weaker one. The tier numbers of
+everything below are unchanged, so pool_tier in older pool_recall.json files
+and in the replay cache compares directly. The same calendar call serves
+both rows, from the prior session to today, and the source records the
+window it read. Names in tier 1 are ordered by the within_tier_key like any
+other tier; that ordering was measured on before open reporters only and is
+not re-measured here. What the 60 session replay says about the added tier
+is a question for src/research/backtest_pool.py once its cache has been
+refetched, and until then the number above is the whole evidence.
 
 ### The ghost row note, history rather than current behaviour
 

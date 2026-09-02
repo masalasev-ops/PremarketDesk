@@ -17,8 +17,10 @@ one for the whole universe, and pretending otherwise is what caused the
 problem. Instead the pass assembles a PRIOR from four things that are all
 knowable before the open:
 
-  earnings before open today   the largest single source of premarket gaps,
-                               and known in advance by definition
+  earnings around this open    the largest single source of premarket gaps,
+                               and known in advance by definition: names
+                               reporting before today's open and names that
+                               reported after the prior session's close
   overnight news               what was said between yesterday's close and now
   prior session movers         continuation, correctly labelled as a prior
                                rather than mistaken for today's gap
@@ -67,19 +69,53 @@ def _source(status: str, names: dict[str, Any], **extra: Any) -> dict[str, Any]:
     return {"status": status, "names": names, **extra}
 
 
-# --------------------------------------------------- source 1, earnings today
+# ------------------------------------ source 1, earnings around this open
 
-def earnings_before_open(
-    api: eodhd.EodhdClient, universe_symbols: set[str], today: dt.date
+TIMING_PRECISION = (
+    "before or after market only; EODHD's calendar carries no clock time, so "
+    "07:00 and 08:30 reporters are not distinguishable here"
+)
+
+
+def earnings_reporters(
+    api: eodhd.EodhdClient, universe_symbols: set[str], today: dt.date,
+    prior_session: dt.date | None = None,
 ) -> dict[str, Any]:
-    """Names in the universe reporting before today's open.
+    """Names in the universe whose earnings land between the prior close and this open.
+
+    Two kinds of row, one calendar call, one tier. A name reporting before
+    today's open gaps on this morning's tape, and so does a name that reported
+    after the prior session's close: the catalyst is the same one, dated one
+    row earlier. Until 2026-09-02 only the first kind was read, and the second
+    reached the pool through the news sweep alone, where it was ranked by gap
+    propensity like any other headline. GTLB reported after the 2026-09-01
+    close, gapped about 25 percent the next morning, and was cut at pool rank
+    41 with the headline "GitLab Stock Soars 21% After Earnings" already in its
+    evidence. Across the eight sessions with a pool_recall.json, 26 prior day
+    after close reporters gapped past 3 percent, 23 were in the pool and 2
+    were subscribed. See DECISIONS.md 2026-09-02, seventh.
+
+    Each name carries tier_key: earnings_before_open for a BeforeMarket row
+    dated today, earnings_after_close for an AfterMarket row dated the prior
+    session. A BeforeMarket row dated the prior session already gapped
+    yesterday and an AfterMarket row dated today gaps tomorrow, so both are
+    dropped. When the exchange calendar cannot name the prior session the call
+    covers today alone and prior_session_error says so, because a source that
+    silently read half its window is the fault this module exists to avoid.
 
     EODHD's calendar gives before_after_market and a report_date. It does NOT
     give a clock time, so a name reporting at 07:00 and one reporting at 08:30
     are indistinguishable in this feed. The field is recorded as the vendor
     supplies it rather than invented, and timing_precision says so.
     """
-    rows, error = api.earnings_calendar(today, today)
+    prior_error: str | None = None
+    if prior_session is None:
+        prior_session = vintage.previous_trading_session(today)
+        if prior_session is None:
+            prior_error = ("the exchange calendar could not name the prior trading "
+                           "session, so after close reporters were not read")
+    start = prior_session or today
+    rows, error = api.earnings_calendar(start, today)
     if error:
         return _source(NOT_FETCHED, {}, error=error)
 
@@ -92,19 +128,54 @@ def earnings_before_open(
         if symbol not in universe_symbols:
             continue
         timing = str(row.get("before_after_market") or "").strip()
-        if timing.lower() != "beforemarket":
+        report_date = str(row.get("report_date") or "").strip()
+        if timing.lower() == "beforemarket" and report_date == today.isoformat():
+            tier_key = "earnings_before_open"
+        elif (timing.lower() == "aftermarket" and prior_session is not None
+              and report_date == prior_session.isoformat()):
+            tier_key = "earnings_after_close"
+        else:
+            continue
+        # A name on both rows is the same catalyst twice; today's row is the
+        # one the morning is about, so it is not overwritten by the older one.
+        if symbol in names and names[symbol]["tier_key"] == "earnings_before_open":
             continue
         names[symbol] = {
+            "tier_key": tier_key,
             "timing": timing,
-            "timing_precision": (
-                "before or after market only; EODHD's calendar carries no clock "
-                "time, so 07:00 and 08:30 reporters are not distinguishable here"
-            ),
+            "timing_precision": TIMING_PRECISION,
             "report_date": row.get("report_date"),
             "estimate": row.get("estimate"),
+            # Filled by the vendor once the number is out, which for an after
+            # close reporter is usually before 07:15. Null until then.
+            "actual": row.get("actual"),
         }
-    return _source(FETCHED if names else FETCHED_EMPTY, names,
-                   rows_in_window=len(rows or []))
+    extra: dict[str, Any] = {
+        "rows_in_window": len(rows or []),
+        "window": [start.isoformat(), today.isoformat()],
+        "prior_session": prior_session.isoformat() if prior_session else None,
+    }
+    if prior_error:
+        extra["prior_session_error"] = prior_error
+    return _source(FETCHED if names else FETCHED_EMPTY, names, **extra)
+
+
+def earnings_before_open(
+    api: eodhd.EodhdClient, universe_symbols: set[str], today: dt.date
+) -> dict[str, Any]:
+    """The before open half of earnings_reporters, kept for the replay cache.
+
+    src/research/backtest_pool.py cached sixty sessions of inputs under this
+    name and its ordering note in CRITERIA.md was measured on them. Anything
+    new reads earnings_reporters.
+    """
+    source = earnings_reporters(api, universe_symbols, today, prior_session=today)
+    names = {symbol: evidence for symbol, evidence in source["names"].items()
+             if evidence["tier_key"] == "earnings_before_open"}
+    source["names"] = names
+    if source["status"] != NOT_FETCHED:
+        source["status"] = FETCHED if names else FETCHED_EMPTY
+    return source
 
 
 # ---------------------------------------------------- source 2, overnight news
@@ -778,7 +849,10 @@ def assemble(
             entry["pool_tier_reason"] = tier_key
 
     for symbol, evidence in sources["earnings"]["names"].items():
-        claim(symbol, "earnings", "earnings_before_open", evidence)
+        # Cached replay inputs from before 2026-09-02 carry no tier_key and
+        # were all before open reporters, which is what the default says.
+        claim(symbol, "earnings", evidence.get("tier_key") or "earnings_before_open",
+              evidence)
 
     for symbol, evidence in sources["news"]["names"].items():
         when = dt.datetime.fromisoformat(evidence["newest_item_at"])
@@ -867,7 +941,7 @@ def build(write: bool = True) -> dict[str, Any]:
 
     api = eodhd.client()
     sources = {
-        "earnings": earnings_before_open(api, universe_symbols, today),
+        "earnings": earnings_reporters(api, universe_symbols, today),
         "news": overnight_news(api, universe_symbols, news_since, now),
         "movers": prior_session_movers(api, universe_symbols, dollar_volume_20d, today),
         "runners": recent_runners(universe_symbols, today),
@@ -918,10 +992,11 @@ def build(write: bool = True) -> dict[str, Any]:
         "universe_started_with": len(universe_symbols),
         "universe_generated_at": universe_payload.get("generated_at"),
         "selection_method": (
-            "a prior assembled from earnings, overnight news, prior session "
-            "movers and recent runners. No price from today is read here, "
-            "because no source on this plan has one for the whole universe at "
-            "07:15. See DECISIONS.md 2026-08-14."
+            "a prior assembled from earnings landing between the prior close "
+            "and this open, overnight news, prior session movers and recent "
+            "runners. No price from today is read here, because no source on "
+            "this plan has one for the whole universe at 07:15. See "
+            "DECISIONS.md 2026-08-14 and 2026-09-02, seventh."
         ),
         # names and closes are per symbol payloads carried on the pool rows
         # themselves; repeating them here would put the whole universe's closes

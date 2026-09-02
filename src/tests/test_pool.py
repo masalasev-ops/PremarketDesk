@@ -117,6 +117,55 @@ def claim_two_and_three(failures: list[str]) -> None:
     if not found["names"]["AAA.US"].get("timing"):
         failures.append("an earnings name carries no timing field")
 
+    # The whole source: a before open row dated today and an after close row
+    # dated the prior session are both tier 1 reporters. An after close row
+    # dated today gaps tomorrow, a before open row dated the prior session
+    # gapped yesterday, and a name outside the universe is nobody's business.
+    prior = dt.date(2026, 8, 13)
+    wide = discover.earnings_reporters(
+        _Api(earnings=[
+            {"code": "AAA", "before_after_market": "BeforeMarket", "report_date": "2026-08-14"},
+            {"code": "BBB", "before_after_market": "AfterMarket", "report_date": "2026-08-13",
+             "estimate": -0.07, "actual": -0.03},
+            {"code": "CCC", "before_after_market": "AfterMarket", "report_date": "2026-08-14"},
+            {"code": "DDD", "before_after_market": "BeforeMarket", "report_date": "2026-08-13"},
+            {"code": "ZZZ", "before_after_market": "AfterMarket", "report_date": "2026-08-13"},
+        ]), {"AAA.US", "BBB.US", "CCC.US", "DDD.US"}, today, prior_session=prior)
+    if set(wide["names"]) != {"AAA.US", "BBB.US"}:
+        failures.append(f"earnings_reporters kept {sorted(wide['names'])}, "
+                        "wanted the before open name and the prior day after close name")
+    else:
+        if wide["names"]["AAA.US"]["tier_key"] != "earnings_before_open":
+            failures.append("a before open reporter is not keyed earnings_before_open")
+        if wide["names"]["BBB.US"]["tier_key"] != "earnings_after_close":
+            failures.append("a prior day after close reporter is not keyed earnings_after_close")
+        if wide["names"]["BBB.US"].get("actual") != -0.03:
+            failures.append("the after close reporter's published actual was not carried")
+    if wide.get("window") != ["2026-08-13", "2026-08-14"]:
+        failures.append(f"the calendar window read was {wide.get('window')!r}, "
+                        "not the prior session to today")
+    if "prior_session_error" in wide:
+        failures.append("a named prior session still recorded a prior_session_error")
+
+    # And the tier the pool gives it: 1, with the reason on the row, so the
+    # 2026-09-02 GTLB miss cannot recur with the news sweep as its only route.
+    ranked = discover.assemble(
+        {"earnings": wide,
+         "news": {"status": discover.FETCHED, "names": {
+             "BBB.US": {"newest_item_at": "2026-08-14T05:52:00-04:00", "items": 14}}},
+         "movers": {"status": discover.FETCHED_EMPTY, "names": {}, "closes": {}},
+         "runners": {"status": discover.FETCHED_EMPTY, "names": {}}},
+        {"AAA.US": {"gap_propensity": 0.3}, "BBB.US": {"gap_propensity": 0.108}},
+        ettime.at(today, 7, 15),
+    )
+    by_symbol = {row["symbol"]: row for row in ranked}
+    after_close = by_symbol.get("BBB.US") or {}
+    if after_close.get("pool_tier") != 1 or after_close.get("pool_tier_reason") != "earnings_after_close":
+        failures.append(f"the after close reporter was tiered {after_close.get('pool_tier')!r} "
+                        f"for {after_close.get('pool_tier_reason')!r}, not tier 1 earnings_after_close")
+    if sorted(after_close.get("pool_source") or []) != ["earnings", "news"]:
+        failures.append(f"the after close reporter's sources were {after_close.get('pool_source')!r}")
+
     since = ettime.at(dt.date(2026, 8, 13), 16, 0)
     until = ettime.at(dt.date(2026, 8, 14), 7, 15)
     news_empty = discover.overnight_news(_Api(news_pages=[[]]), universe_symbols, since, until)

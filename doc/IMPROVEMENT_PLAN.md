@@ -154,6 +154,63 @@ Done 2026-09-02, all five, in the commit that follows ae0230d. CHANGELOG
 the two choices. The packages are kept below as written so the acceptance
 tests can be read against the claims that now hold them.
 
+Package 0.6 was added later the same day at the owner's word, as the top
+priority on this plan, after GTLB opened about 25 percent higher and was not
+on the list. It is also done; CHANGELOG thirty eighth and DECISIONS seventh.
+
+### 0.6 Names that reported after the prior close have no tier (top priority)
+
+Files: src/selection/discover.py `earnings_before_open` and `assemble`,
+doc/CRITERIA.md [Pool tiers], src/research/backtest_pool.py line 144,
+src/tests/test_pool.py claim two and three.
+
+What is wrong: the earnings source asks EODHD's calendar for today only and
+keeps `BeforeMarket` rows. A name that reported `AfterMarket` on the prior
+session, which gaps on this morning's tape, earns no tier. It reaches the pool
+only if the overnight news sweep finds it, at tier 2, and is then ordered by
+gap propensity like any headline. GTLB on 2026-09-02: 14 fresh items, newest
+headline "GitLab Stock Soars 21% After Earnings", propensity 0.108, pool rank
+41, tier 2 cut at rank 30, never subscribed, so no artifact of the morning
+carries a premarket print for it.
+
+Measured before fixing: one calendar call (2026-08-19 to 2026-09-01) crossed
+with the eight `runs/*/pool_recall.json` files. 26 prior day after close
+reporters gapped past 3 percent, 23 were in the pool, 2 were subscribed. OKTA
++23.6 (rank 41), ESTC +24.1 (rank 46), GAP +18.7, VEEV +12.4, CRM +11.9, CRWD
++10.1 and QFIN -15.9 were all cut. Today's five (CRDO, DELL, GTLB, MDB, PANW):
+one subscribed, on other priors.
+
+Steps:
+
+1. Replace `earnings_before_open` with `earnings_reporters(api, universe,
+   today, prior_session=None)`. Prior session from
+   `vintage.previous_trading_session(today)`; one call
+   `earnings_calendar(prior_session, today)`. Keep `BeforeMarket` rows dated
+   today as `tier_key = earnings_before_open` and `AfterMarket` rows dated the
+   prior session as `tier_key = earnings_after_close`. Drop the other two
+   combinations. Record `window`, `prior_session`, the vendor's `actual`, and
+   `prior_session_error` when the calendar could not name the prior session
+   and today alone was read.
+2. `assemble` claims each earnings name with `evidence.get("tier_key") or
+   "earnings_before_open"`, so the replay cache from before the change still
+   tiers as it did.
+3. CRITERIA [Pool tiers]: `tier = earnings_after_close : 1` and a note with
+   the measurement above. Tier 1, not a new tier, so `pool_tier` integers stay
+   comparable across old `pool_recall.json` files.
+4. Keep `earnings_before_open` as the before open half, for
+   `backtest_pool.py`'s cached inputs, and point the fetch at the new source.
+
+Acceptance: a fake calendar with the four timing and date combinations yields
+exactly the two reporters, keyed and tiered 1 by `assemble`; the window read
+is the prior session to today; a missing prior session is recorded, not
+silent. `python -m tests.test_pool` passes; `python -m core.criteria --check`
+reads the new key.
+
+Effort S. Risk: on an earnings heavy morning tier 1 now holds both rows and
+they compete on gap propensity, an ordering measured on before open reporters
+only. The 60 session replay should be refetched through the new source and
+re-run; that is the follow up, not a blocker.
+
 ### 0.1 The empty table example does not render
 
 Files: doc/REPORT_TEMPLATE.md:321-323 and :360-362, doc/prompt_analyst.md:132,
@@ -898,10 +955,10 @@ motivates it, and stop.
    1 at 07:15 while leaving the published path EODHD only. Needs its own
    DECISIONS entry and a CRITERIA [Pool tiers] source with 403 recorded as
    not_fetched.
-5. `data/UNVERIFIED`. The gate is blocked on a decision, not a measurement:
-   the 68 row RVOL study is done. Either decision 1 above lands and one real
-   morning is reviewed, or the owner accepts the lower bound and reviews a
-   morning as is.
+
+A fifth item, the disposition of `data/UNVERIFIED`, stood here until
+2026-09-02 and was dropped from the plan at the owner's word (DECISIONS
+2026-09-02, seventh). The gate itself is unchanged.
 
 ---
 
@@ -909,12 +966,13 @@ motivates it, and stop.
 
 | Order | Packages | Buys |
 | --- | --- | --- |
+| First | 0.6 | A name that reported after yesterday's close is a tier 1 candidate this morning, not a headline ranked by history; GTLB's miss cannot recur by that route |
 | Day 1 | 0.1, 0.2, 0.3, 0.4, 0.5 | The next empty morning renders its watchlist; the glossary says the right thing; the fallback is complete; no tracking pixel; the clock arithmetic is honest |
 | Week 1 | 1.1, 1.2, 1.3, 1.4, 2.3, 2.4 steps 1 and 2, 2.6, 3.2, 3.3 | A report that leads with the decision, half the repetition, a guard that stops eating mornings, a third off the input tokens, an email with a text part |
 | Week 2 | 2.1 or 2.2, 2.5, 1.5, 3.1, 3.4, 3.5 | Output tokens down by two thirds, CLI time under two minutes, the guards scanning a few hundred words, one page shell, midday reachable |
 | Week 3 | 4.1 to 4.7, 4.9, 5.1, 5.2, 5.3 | Nine floats become one, six writers become one, CRITERIA checked at test time, the suite cannot hide a raising claim, the record page answers the questions a trader asks |
 | Week 4 | 5.4, 5.5 | The 60 session replay and the fifth prior test, both free, both pre-registered, both ending in a table the owner can decide on |
-| Owner | 5.6 | The five decisions the measurements are waiting on |
+| Owner | 5.6 | The four decisions the measurements are waiting on |
 | Later | 3.6, 4.8, 4.10 | Sparklines, the scan split, the single entrypoint |
 
 ## What was read and found sound

@@ -234,8 +234,9 @@
     <p>Every weekday runs itself. Discovery reads no price from today, because at
     07:15 no source on this plan has one for the whole universe. It builds a
     candidate pool from four things that are knowable before the open (earnings
-    before today's open, overnight news, prior session movers, and recent
-    runners), ranks it by tier and then by measured gap propensity, and
+    landing between the prior close and this open, overnight news, prior
+    session movers, and recent runners), ranks it by tier and then by measured
+    gap propensity, and
     subscribes the collector to at most 42 names, with a floor of four slots per
     populated tier so a heavy earnings morning cannot spend the whole cap on one
     tier. The rest of the pool is written to watchlist.json marked

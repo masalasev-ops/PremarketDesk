@@ -141,7 +141,12 @@ def fetch_session(
     # apart is what made every Monday in this cache unrepresentative.
     news_since = discover.news_window_start(session)
 
-    earnings = discover.earnings_before_open(api, universe_symbols, session)
+    # Sessions cached before 2026-09-02 hold before open reporters only; a
+    # fetch from that date on also holds the prior session's after close
+    # reporters, each name carrying tier_key so assemble tiers it as
+    # production does. The ordering note in CRITERIA.md was measured on the
+    # older cache.
+    earnings = discover.earnings_reporters(api, universe_symbols, session)
     news = discover.overnight_news(api, universe_symbols, news_since, run_clock)
 
     # The movers source, recomputed here from the cached bars rather than by

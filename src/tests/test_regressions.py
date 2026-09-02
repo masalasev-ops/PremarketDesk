@@ -13474,8 +13474,12 @@ def claim_the_archive_carries_the_midday_report(failures: list[str]) -> None:
         (config.run_dir("2026-01-13") / "report_midday.md").write_text(
             "# Midday, 2026-01-13\n\n## What the morning's picks did\n\nA midday sentence.\n",
             encoding="utf-8")
+        # Embed every session the sandbox copied. The sandbox carries the live
+        # runs tree, so a fixed ten pushed the January fixtures out of the
+        # embedded set on the morning the tenth real report landed.
+        sessions = sum(1 for p in config.RUNS_DIR.iterdir() if p.is_dir())
         with contextlib.redirect_stdout(io.StringIO()):
-            page = build_archive.build(embed_sessions=10).read_text(encoding="utf-8")
+            page = build_archive.build(embed_sessions=sessions + 2).read_text(encoding="utf-8")
 
     with_it = page.split('id="day-2026-01-13"', 1)[1].split("</section>", 1)[0]
     without = page.split('id="day-2026-01-12"', 1)[1].split("</section>", 1)[0]
