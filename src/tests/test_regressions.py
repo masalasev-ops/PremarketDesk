@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and forty one claims, a count read off
+and the two pages. It now carries one hundred and forty four claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -9706,6 +9706,22 @@ def claim_a_vendor_headline_cannot_write_markup(failures: list[str]) -> None:
     if "<blockquote>" not in quoted:
         failures.append(f"a blockquote stopped rendering: {quoted!r}")
 
+    # Markdown's OWN syntax is the second door. An image is a fetch to a host
+    # the feed chose, in an emailed report and in an archive that promises no
+    # network request; a javascript: anchor runs when clicked. Both come back
+    # as their text, and an ordinary web link survives.
+    embedded = render_report.to_html(
+        'Headline: "Beat [details](javascript:alert(1)) and '
+        '![pixel](http://evil.example/t.gif) raised" and [site](https://example.com/x).')
+    for fragment in ("<img", "javascript:"):
+        if fragment in embedded:
+            failures.append(f"render_report.to_html kept {fragment!r} from markdown "
+                            f"syntax: {embedded!r}")
+    if "details" not in embedded or "pixel" not in embedded:
+        failures.append(f"stripping an embed dropped its text as well: {embedded!r}")
+    if 'href="https://example.com/x"' not in embedded:
+        failures.append(f"an ordinary https link was removed too: {embedded!r}")
+
     # The title goes into an element that does not parse markup, so a bare `<`
     # there ends the element rather than being escaped by markdown.
     source = _pathlib.Path(render_report.__file__).read_bytes().decode("utf-8")
@@ -11549,6 +11565,15 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         139: "one hundred and thirty nine",
         140: "one hundred and forty",
         141: "one hundred and forty one",
+        142: "one hundred and forty two",
+        143: "one hundred and forty three",
+        144: "one hundred and forty four",
+        145: "one hundred and forty five",
+        146: "one hundred and forty six",
+        147: "one hundred and forty seven",
+        148: "one hundred and forty eight",
+        149: "one hundred and forty nine",
+        150: "one hundred and fifty",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -13022,6 +13047,261 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
 
 # ---------------------------------------------------------------- plumbing
 
+def claim_the_glossary_explains_each_column_once(failures: list[str]) -> None:
+    """A dict literal with a repeated key is legal Python and a silent defect.
+
+    core/glossary.py carried "Stop" twice, the morning's watchlist definition
+    and the midday's, because the midday table itself headed two columns Stop,
+    the stop price and whether it was reached. Python kept the second, so the
+    morning's Stop column was explained as the midday's for as long as both
+    existed. The midday column is now "Stop state". Two checks: the COLUMNS
+    literal repeats no key, read from the source rather than the dict (the dict
+    cannot remember what it lost), and the midday table heads no two columns
+    with one word.
+    """
+    import ast
+
+    from core import glossary
+    from midday import render_midday
+
+    source = pathlib.Path(glossary.__file__).read_bytes().decode("utf-8")
+    tree = ast.parse(source)
+    literal = None
+    for node in tree.body:
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        if any(isinstance(t, ast.Name) and t.id == "COLUMNS" for t in targets):
+            literal = node.value
+    if not isinstance(literal, ast.Dict):
+        failures.append("core/glossary.py no longer defines COLUMNS as a dict literal")
+    else:
+        keys = [k.value for k in literal.keys if isinstance(k, ast.Constant)]
+        repeated = sorted({k for k in keys if keys.count(k) > 1})
+        if repeated:
+            failures.append(f"core/glossary.COLUMNS repeats the key(s) {repeated}; "
+                            "the second definition silently replaces the first")
+
+    packet = {"carry_through": {
+        "rows": [{
+            "ticker": "AAA.US", "score": 7.0, "conviction": "green",
+            "entry_ref": 10.0, "stop_ref": 9.0, "state": "never_triggered",
+            "stop_state": "not_applicable", "state_reason": "the high fell short",
+            "stop_state_reason": None, "levels_are": "the morning's levels"}],
+        "not_checked": "fill plausibility is not checked at midday",
+        "sequence_unknown_note": "a daily low carries no timestamp",
+        "decided_inside_the_open_tolerance_rows": 0}}
+    header = next((line for line in render_midday.carry_section(packet)
+                   if line.startswith("| Ticker")), "")
+    cells = [c.strip() for c in header.strip("|").split("|")]
+    if len(cells) != len(set(cells)):
+        failures.append(f"the midday carry table heads two columns with one word: {header}")
+    if "Stop state" not in glossary.COLUMNS:
+        failures.append("the glossary does not explain the midday Stop state column")
+    print("  glossary     COLUMNS repeats no key and the midday table heads "
+          "every column with its own word")
+
+
+def claim_the_fallback_carries_every_template_section(failures: list[str]) -> None:
+    """The fallback report has the template's sections, and leaks no Python.
+
+    Four things a 2026-09-01 fallback morning published, all fixed 2026-09-02
+    and pinned here. It had no "What the record says so far" section, so the
+    one section not about today vanished on exactly the mornings nobody reads
+    closely. Its economic line read "actual None", a repr and not a value.
+    Its Skips section named all twelve candidates as "trap undecided" when
+    every one had gapped down and the question had not been asked of any of
+    them. And its disclaimer carried the operator's shell command, a
+    `set PYTHONPATH=... &&` invocation, in front of the reader.
+
+    The section check is structural: every `## ` heading in REPORT_TEMPLATE.md
+    must appear in the fallback, so a section added to the template later
+    cannot be quietly absent from the report that runs when the model does not.
+    """
+    from morning import analyst
+
+    template = config.REPORT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    wanted = [line.strip() for line in template.splitlines()
+              if line.startswith("## ")]
+
+    def candidate(symbol, gap, trap_why, found=True):
+        return {"symbol": symbol, "gap_pct": gap, "price": 10.0, "prior_close": 10.5,
+                "pm_high": 10.4, "pm_low": 9.9, "pm_vwap": 10.1, "score": 4.0,
+                "conviction": "yellow", "catalyst_found": found,
+                "catalyst_class": "earnings" if found else "none",
+                "collector_covered": True, "trap": None, "trap_why": trap_why,
+                "quote": {"name": symbol}}
+
+    packet = {
+        "session_date": "2026-01-02", "generated_at": "2026-01-02T08:45:00-05:00",
+        "candidates": [
+            candidate("AAA.US", -7.4, "a trap is a gap UP contradicted by its news; "
+                      "this gap is -7.40 percent, below the 3 percent this question "
+                      "is asked above"),
+            candidate("BBB.US", -3.5, "a trap is a gap UP contradicted by its news; "
+                      "this gap is -3.50 percent, below the 3 percent this question "
+                      "is asked above"),
+            candidate("CCC.US", 6.0, "1 scored headline(s) of 1 in the window, "
+                      "below the 2 needed for a balance"),
+        ],
+        "economic": {"events": [{"time_et": "2026-01-02T10:00:00-05:00",
+                                 "title": "ISM Manufacturing PMI", "forecast": 55.2,
+                                 "previous": 55.6, "actual": None}]},
+        "record_so_far": {
+            "picks": {"rows": 68, "sessions": 8}, "booked": {"rows": 17, "sessions": 7},
+            "never_triggered": {"rows": 29, "sessions": 7},
+            "triggered_but_unsized": {"rows": 0, "sessions": 0},
+            "triggered_within_30_min": 15, "triggered_total": 17,
+            "median_minutes_to_trigger": 1, "peaked_within_10_min": 11,
+            "peaked_within_10_min_closed_red": 11, "peaked_after_100_min": 4,
+            "peaked_after_100_min_closed_green": 4, "median_best_while_held": 1.6341,
+            "median_booked_pct": -1.6971, "rule_version": "v1"},
+        "market_snapshot": [], "job_health": {"overdue": [], "line": None},
+    }
+    with conftest_activate():
+        rendered = analyst.fallback_report(packet, "the model timed out")
+    headings = [line.strip() for line in rendered.splitlines() if line.startswith("## ")]
+    for heading in wanted:
+        if heading not in headings:
+            failures.append(f"the fallback report has no {heading!r} section while "
+                            "REPORT_TEMPLATE.md requires it")
+    if "68 picks across 8 sessions, of which 17 were traded across 7" not in rendered:
+        failures.append("the fallback's record section does not quote the ledger "
+                        "with its denominators")
+    if "0 picks reached their trigger and the sizing rule declined" not in rendered:
+        failures.append("the fallback's record section drops the zero count line")
+    if "actual pending" not in rendered or "actual None" in rendered:
+        failures.append("an unpublished release does not read 'actual pending' in "
+                        "the fallback's economic line")
+    if re.search(r"\bNone\b", rendered):
+        failures.append("the fallback report carries the Python word None somewhere")
+    skips = rendered.split("## Skips and traps", 1)[1]
+    if "not asked of 2 of 3 candidates" not in skips:
+        failures.append("two gap down names were not counted once as 'question not "
+                        f"asked': {skips[:400]!r}")
+    if re.search(r"Trap undecided for .*\bAAA\b", skips) or re.search(r"Trap undecided for .*\bBBB\b", skips):
+        failures.append("a gap down name is still listed as trap undecided")
+    if "Trap undecided for CCC" not in skips:
+        failures.append("the name whose trap question was asked and unanswered "
+                        "lost its line")
+
+    reason = analyst.quantifier_reason(
+        [{"quantifier": "no", "set_word": "candidate", "text": "No candidate cleared.",
+          "line": 3}], [9])
+    if "PYTHONPATH" in reason or ".venv" in reason:
+        failures.append("the withheld disclaimer still carries the operator's shell "
+                        f"command: {reason!r}")
+    if "flag 9" not in reason:
+        failures.append(f"the withheld disclaimer lost the flag id: {reason!r}")
+    print("  fallback     every template section, 'actual pending', gap down names "
+          "counted once, and no shell command on the disclaimer")
+
+
+def claim_a_morning_spends_at_most_max_attempts_cli_runs(failures: list[str]) -> None:
+    """max_attempts is the morning's total, across the first call and the retry.
+
+    invoke_claude retried max_attempts times on a CLI failure and write_report
+    called it again for the quantifier regeneration, which retried max_attempts
+    times of its own: four runs of timeout_s at worst, ending after the open,
+    against a CRITERIA arithmetic that had written down two. analyst.RunBudget
+    now holds the morning to max_attempts runs across both calls.
+
+    Driven at the subprocess seam rather than at invoke_claude, because the
+    budget lives inside invoke_claude and a stub there would not exercise it.
+    The first run times out, the second answers with a flagged report; with a
+    budget of two the regeneration is not attempted, the morning gets the plain
+    table, and the disclaimer says the budget was spent. A second scenario, a
+    timeout and then a clean answer, still ships the narrative on two runs.
+    """
+    import subprocess as _subprocess
+
+    from morning import analyst
+    from morning import gap_reasons
+
+    budget_total = analyst._CRIT.integer("analyst", "max_attempts")
+    if budget_total != 2:
+        failures.append(f"this claim reads max_attempts = 2 and it is {budget_total}; "
+                        "rewrite the scenario before changing the knob")
+        return
+
+    tables = (conftest.watchlist_table(
+        "day watchlist",
+        ["| ARX | 43.02 | 19.00 | 2.0 | 19.51 | 19.10 | 19.51 | 18.90 | 7.0 | green |"])
+        + "\n" + conftest.watchlist_table("swing watchlist"))
+    flagged = ("# PremarketDesk test\n\nNothing here is advice, the screen thresholds "
+               "are unvalidated seed values.\n\nNo candidate cleared the prior high.\n\n"
+               + tables)
+    clean = ("# PremarketDesk test\n\nNothing here is advice, the screen thresholds "
+             "are unvalidated seed values.\n\nDay eligible 1 of 1.\n\n" + tables)
+
+    def run(session: str, answer: str) -> dict[str, Any]:
+        packet = {
+            "session_date": session, "generated_at": session + "T08:45:00-05:00",
+            "candidates": [{
+                "symbol": "ARX.US", "conviction": "green", "day_eligible": True,
+                "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02, "price": 19.0,
+                "prior_close": 13.3, "pm_high": 19.51, "pm_vwap": 19.1,
+                "pm_low": 18.9, "entry_ref": 19.51, "stop_ref": 18.9,
+                "catalyst_found": True, "catalyst_class": "earnings",
+                "collector_covered": True, "quote": {"name": "Aeries"}}],
+            "market_snapshot": [], "job_health": {"overdue": [], "line": None},
+        }
+        run_directory = config.run_dir(session)
+        run_directory.mkdir(parents=True, exist_ok=True)
+        packet_path = run_directory / "packet.json"
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
+        calls: list[int] = []
+
+        def fake_run(command, **kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                raise _subprocess.TimeoutExpired(command, kwargs.get("timeout", 1))
+            payload = {"subtype": "success", "is_error": False, "result": answer,
+                       "usage": {"output_tokens": 1}, "total_cost_usd": 0.01,
+                       "duration_ms": 1, "num_turns": 1, "session_id": "s"}
+            return _subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+        real = (analyst.subprocess.run, analyst.resolve_cli, analyst.guard_mode,
+                gap_reasons.explain)
+        analyst.subprocess.run = fake_run
+        analyst.resolve_cli = lambda: "claude"
+        analyst.guard_mode = lambda: analyst.GUARD_ENFORCING
+        gap_reasons.explain = lambda candidates: ({}, None, "stubbed by the suite")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = analyst.write_report(packet_path)
+        finally:
+            (analyst.subprocess.run, analyst.resolve_cli, analyst.guard_mode,
+             gap_reasons.explain) = real
+        usage = json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))
+        text = (run_directory / "report.md").read_text(encoding="utf-8")
+        return {"code": code, "calls": len(calls), "usage": usage, "text": text}
+
+    with conftest_activate():
+        withheld = run("2026-01-06", flagged)
+        shipped = run("2026-01-07", clean)
+
+    if withheld["calls"] != budget_total:
+        failures.append(f"a timeout then a flagged answer cost {withheld['calls']} CLI "
+                        f"run(s); the budget is {budget_total}")
+    if withheld["usage"].get("status") != "quantifier" or not withheld["usage"].get("fallback"):
+        failures.append("a flagged answer with no budget left did not fall back to the "
+                        f"plain table: {withheld['usage'].get('status')!r}")
+    if "budget" not in str(withheld["usage"].get("error_message")):
+        failures.append("the withheld disclaimer does not say the run budget was spent: "
+                        f"{withheld['usage'].get('error_message')!r}")
+    if withheld["code"] != 0:
+        failures.append(f"the fallback morning exited {withheld['code']}, expected 0")
+    if shipped["calls"] != budget_total or shipped["usage"].get("status") != "ok":
+        failures.append(f"a timeout then a clean answer cost {shipped['calls']} run(s) "
+                        f"and shipped with status {shipped['usage'].get('status')!r}; "
+                        "expected two runs and the narrative")
+    print(f"  run budget   a morning spends at most {budget_total} CLI runs across the "
+          "first call and the regeneration, and says so when that costs the narrative")
+
+
 def conftest_activate():
     from tests import conftest
 
@@ -13172,6 +13452,9 @@ def main() -> int:
     claim_a_reconstruction_never_displaces_the_record(failures)
     claim_the_guard_reads_what_ships(failures)
     claim_the_invalidation_line_names_a_level_and_not_a_figure(failures)
+    claim_the_glossary_explains_each_column_once(failures)
+    claim_the_fallback_carries_every_template_section(failures)
+    claim_a_morning_spends_at_most_max_attempts_cli_runs(failures)
 
     if failures:
         for failure in failures:

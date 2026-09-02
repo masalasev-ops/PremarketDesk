@@ -148,6 +148,11 @@ a less capable model can build it from this text alone.
 
 ## Tier 0: defects, fix today
 
+Done 2026-09-02, all five, in the commit that follows ae0230d. CHANGELOG
+2026-09-02 thirty second records what changed and DECISIONS 2026-09-02 records
+the two choices. The packages are kept below as written so the acceptance
+tests can be read against the claims that now hold them.
+
 ### 0.1 The empty table example does not render
 
 Files: doc/REPORT_TEMPLATE.md:321-323 and :360-362, doc/prompt_analyst.md:132,

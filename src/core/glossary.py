@@ -195,7 +195,14 @@ COLUMNS: dict[str, str] = {
     "Report date": "the date the company is due to report its profits",
     "Session": "whether that report lands before or after the market is open",
     "Morning entry": "the price the morning published as the intended entry",
-    "Stop": "the price at which the rules would close the position for a loss",
+    # NOT a second "Stop". The midday table carried two columns both headed
+    # Stop until 2026-09-02, the stop price and whether it was reached, and
+    # this dict carried the key twice, so the second definition silently
+    # replaced the first and the morning's Stop column was explained as the
+    # midday's. A dict literal with a repeated key is legal Python and the
+    # suite now refuses one here.
+    "Stop state": "whether the stop price was reached during the session, and "
+                  "whether a daily quote can even say so",
     "What happened": "whether the intended entry price was ever reached",
     "Now vs fill": "where the price is now against the price it started at",
     "Best vs fill": "the best the position was worth against where it started",

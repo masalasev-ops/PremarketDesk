@@ -18,6 +18,48 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02: the run budget is the morning's, and a question not asked is counted once
+
+Two choices in the tier 0 fixes of doc/IMPROVEMENT_PLAN.md could have gone
+the other way.
+
+THE BUDGET, OR THE NOTE. CRITERIA's clock arithmetic said two CLI runs at
+worst and the code allowed four. Either the code is held to two or the note
+is corrected to four and the risk accepted. The owner's 2026-08-29 choice was
+a wider timeout over fewer retries, on the ground that a correct and detailed
+report is the point, and that argues for accepting four. It was not taken,
+because four runs of 1,007 seconds end at 09:52 and the watchdog's 09:25 pass
+would then be reasoning about a chain still running, which is the situation
+the timeout note names as the one to avoid. The budget is enforced at two,
+and the one thing it costs is named: a first call that needed both runs to
+get an answer has no run left for a regeneration, so a flag on that answer
+goes straight to the plain table. That path needs a CLI failure AND a guard
+flag in one morning, and the disclaimer says the budget was the reason.
+Raising max_attempts to three is one CRITERIA edit if the owner prefers the
+other side of the trade; the arithmetic in the note then moves with it.
+
+Module state rather than a parameter. invoke_claude(packet_text, correction)
+is stubbed by two argument lambdas in three test modules, and a third
+parameter would TypeError each of them on the morning the guard fires, which
+is exactly the morning the stubs exist to rehearse. A module level budget the
+stubs never see is the smaller change, and it is set at the top of
+write_report and read at the top of invoke_claude, so there is one writer and
+one reader.
+
+NOT ASKED IS NOT UNDECIDED. The fallback's trap line listed every candidate
+whose trap field was null. scan sets null in three cases: the news feed was
+never read, too few headlines were scored for a balance, and the gap was down
+or under [Traps] min_gap_pct so the question does not apply. The first two are
+facts about a name and the name stays on the page. The third is a fact about
+the question, and on 2026-09-01 it was true of all twelve, so the line named
+twelve names as though twelve verdicts were pending. Those are counted once
+now, as "the trap question was not asked of N of M", with the floor quoted.
+The test could have read the trap_why string for the not asked wording; it
+reads the gap against the CRITERIA floor instead, because a string is a
+description and the floor is the rule, and the two can only disagree if scan
+has changed the rule without changing CRITERIA, which the suite would catch
+elsewhere.
+
 ## 2026-08-31: shipping the re-fit, and what counts as drift worth fixing
 
 Two numbers looked wrong today and only one of them was fixed. The difference

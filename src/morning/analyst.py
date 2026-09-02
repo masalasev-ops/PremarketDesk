@@ -144,13 +144,48 @@ def _trim_to_report(text: str) -> str:
     return text + "\n"
 
 
+class RunBudget:
+    """How many narrative CLI runs one morning may still spend.
+
+    CRITERIA [Analyst] max_attempts is documented as the TOTAL number of
+    tries, and the timeout note's clock arithmetic multiplies timeout_s by
+    exactly that number. Until 2026-09-02 nothing enforced the total:
+    invoke_claude retried max_attempts times on a CLI failure, and
+    write_report then called invoke_claude again for a quantifier
+    regeneration, which retried max_attempts times of its own. Two and two is
+    four runs of 1,007 seconds each, and four runs from 08:45 end after the
+    open, on a morning whose worst case CRITERIA had written down as 09:18:53.
+
+    One budget object per morning, created by write_report and consulted by
+    invoke_claude, so the regeneration can only spend what the first call left.
+    Module state rather than a parameter, because the suite stubs
+    invoke_claude with two argument lambdas and a third parameter would
+    TypeError every one of them on the morning the guard fires.
+    """
+
+    def __init__(self, total: int) -> None:
+        self.total = total
+        self.spent = 0
+
+    @property
+    def remaining(self) -> int:
+        return max(self.total - self.spent, 0)
+
+    def spend(self) -> None:
+        self.spent += 1
+
+
+_budget: RunBudget | None = None
+
+
 def invoke_claude(
     packet_text: str, correction: str | None = None
 ) -> tuple[str | None, dict[str, Any], str | None, str]:
     """Run the CLI. Returns (report_text, usage_record, error, failure_kind).
 
     failure_kind is "ok" on success, "timeout" when the last attempt ran out
-    of clock, "failed" for every other way the CLI can disappoint.
+    of clock, "budget" when the morning's run budget was already spent before
+    this call could start, "failed" for every other way the CLI can disappoint.
 
     correction, when given, is appended to the piped document. It carries the
     reason a previous answer was thrown away, so a regeneration is told what
@@ -159,6 +194,12 @@ def invoke_claude(
     model = _CRIT.text("analyst", "model")
     timeout_s = _CRIT.integer("analyst", "timeout_s")
     attempts = _CRIT.integer("analyst", "max_attempts")
+    if _budget is not None:
+        attempts = min(attempts, _budget.remaining)
+        if attempts < 1:
+            return (None, {},
+                    f"the morning's CLI run budget of {_budget.total} is spent",
+                    "budget")
     try:
         # One text generation, not an agent loop. --tools "" removes every
         # tool, so there is nothing to take a second turn on (verified: this
@@ -181,6 +222,8 @@ def invoke_claude(
     last_kind = "failed"
     for attempt in range(1, attempts + 1):
         print(f"analyst: attempt {attempt} of {attempts}, model {model}")
+        if _budget is not None:
+            _budget.spend()
         try:
             proc = subprocess.run(
                 command,
@@ -699,9 +742,15 @@ def fallback_report(
             "An unchecked calendar is not an empty one.")
     elif events:
         for event in events:
+            # _cell, not the raw value: a release that has not printed yet
+            # carries actual null, and str() of that is the word None, which
+            # this report published on 2026-09-01 as "actual None". A reader
+            # cannot tell a Python repr from a vendor value.
+            actual = event.get("actual")
             add(f"- {event.get('time_et')}: {event.get('title')} "
-                f"(forecast {event.get('forecast')}, previous {event.get('previous')}, "
-                f"actual {event.get('actual')})")
+                f"(forecast {_cell(event.get('forecast'))}, "
+                f"previous {_cell(event.get('previous'))}, "
+                f"actual {'pending' if actual is None else _cell(actual)})")
     else:
         add("No high importance events in the packet window.")
     add("")
@@ -720,6 +769,72 @@ def fallback_report(
                 f"| {row.get('report_date')} | {row.get('before_after_market') or ''} |")
     else:
         add("No notable earnings in the packet window.")
+    add("")
+    # THE ONE SECTION NOT ABOUT TODAY, in the template's position, between
+    # Coming up and Skips and traps. Absent from this report until 2026-09-02,
+    # so a fallback morning silently dropped the ledger's record while the
+    # template made it mandatory; the section parity claim now reads this.
+    # Every figure is quoted from record_so_far with its denominator beside
+    # it, and a missing figure prints as null rather than as a zero, because
+    # the ledger not having an answer is a different fact from the answer
+    # being nothing.
+    add("## What the record says so far")
+    add("")
+    record = packet.get("record_so_far") or {}
+    if not record:
+        add("The packet carries no paper ledger block, so the record is not "
+            "reported this morning. An absent record is not an empty one.")
+    else:
+        def _n(value: Any) -> str:
+            if value is None:
+                return "null"
+            if isinstance(value, bool):
+                return str(value).lower()
+            if isinstance(value, int):
+                return f"{value:,}"
+            return _f(value)
+
+        def _pair(key: str) -> tuple[str, str]:
+            block = record.get(key) or {}
+            return _n(block.get("rows")), _n(block.get("sessions"))
+
+        picks_rows, picks_sessions = _pair("picks")
+        booked_rows, booked_sessions = _pair("booked")
+        never_rows, never_sessions = _pair("never_triggered")
+        unsized_rows, unsized_sessions = _pair("triggered_but_unsized")
+        add(f"The ledger holds {picks_rows} picks across {picks_sessions} "
+            f"sessions, of which {booked_rows} were traded across "
+            f"{booked_sessions}. The sample unit is the session and not the "
+            f"pick, so this rests on {booked_sessions} observations rather than "
+            "on the row count.")
+        add("")
+        median_minutes = record.get("median_minutes_to_trigger")
+        minutes_word = "minute" if median_minutes == 1 else "minutes"
+        add(f"- {_n(record.get('triggered_within_30_min'))} of "
+            f"{_n(record.get('triggered_total'))} trades reached their trigger "
+            "within thirty minutes of the open, at a median of "
+            f"{_n(median_minutes)} {minutes_word}.")
+        add(f"- {never_rows} picks never reached their trigger at all, across "
+            f"{never_sessions} sessions.")
+        add(f"- {unsized_rows} picks reached their trigger and the sizing rule "
+            f"declined to buy anything, across {unsized_sessions} sessions. "
+            "That is a fact about CRITERIA [Paper] sizing and not about the "
+            "screen.")
+        add(f"- {_n(record.get('peaked_within_10_min_closed_red'))} of "
+            f"{_n(record.get('peaked_within_10_min'))} trades that made their "
+            "best price within ten minutes of entry went on to close below "
+            "their entry.")
+        add(f"- {_n(record.get('peaked_after_100_min_closed_green'))} of "
+            f"{_n(record.get('peaked_after_100_min'))} trades that made their "
+            "best price more than a hundred minutes after entry closed above it.")
+        add("")
+        add(f"The best a position was worth while open was a median "
+            f"{_f(record.get('median_best_while_held'))} percent, against a "
+            f"median {_f(record.get('median_booked_pct'))} percent booked at "
+            f"the exit. Rule version {record.get('rule_version') or 'unrecorded'}. "
+            "These are counts over a small record and describe nothing beyond "
+            "what was observed. The ledger is as of last night: tonight's pass "
+            "has not run, so today's picks are in no figure above.")
     add("")
     add("## Skips and traps")
     add("")
@@ -741,13 +856,39 @@ def fallback_report(
     # verdict computed in Python is exactly the kind of thing this degraded
     # path is for.
     traps = [_bare(c["symbol"]) for c in candidates if c.get("trap") is True]
-    unweighable = [_bare(c["symbol"]) for c in candidates if c.get("trap") is None]
     if traps:
         add(f"Gapping up against the balance of their own headlines, a trap: "
             f"{', '.join(traps)}.")
     else:
         add(f"Traps: 0 of {len(candidates)} candidates gap up against the "
             "balance of their own headlines.")
+    # TWO KINDS OF UNDECIDED, and only one of them is about a name. A trap is
+    # a gap UP contradicted by its news, so scan never asks the question of a
+    # name gapping down or under [Traps] min_gap_pct, and trap_why says so.
+    # On 2026-09-01 every one of twelve candidates gapped down, and this line
+    # named all twelve as "undecided", which reads as twelve warnings about a
+    # question that did not apply to any of them. Those are counted once. The
+    # names whose question WAS asked and could not be answered, too few scored
+    # headlines or a news feed never read, keep their names on the page,
+    # because for them undecided really is not a verdict of safe.
+    min_gap = _CRIT.number("traps", "min_gap_pct")
+
+    def _trap_not_asked(candidate: dict[str, Any]) -> bool:
+        gap = candidate.get("gap_pct")
+        try:
+            return gap is None or float(gap) < min_gap
+        except (TypeError, ValueError):
+            return True
+
+    undecided = [c for c in candidates if c.get("trap") is None]
+    not_asked = [c for c in undecided
+                 if c.get("catalyst_found") is not None and _trap_not_asked(c)]
+    unweighable = [_bare(c["symbol"]) for c in undecided if c not in not_asked]
+    if not_asked:
+        add(f"The trap question was not asked of {len(not_asked)} of "
+            f"{len(candidates)} candidates: a trap is a gap up contradicted by "
+            f"its news, and those gaps are below the {min_gap:g} percent the "
+            "question is asked above, or were never computed.")
     if unweighable:
         add(f"Trap undecided for {', '.join(unweighable)}: trap_why on those "
             "rows carries the reason, and undecided is not a verdict of safe.")
@@ -1293,10 +1434,16 @@ def quantifier_reason(hits: list[dict[str, Any]], ids: list[int]) -> str:
     from ops import quantifier_flags
 
     plural = "" if len(hits) == 1 else f", {len(hits)} in total"
+    # The flag id and the sentence, and NOT the operator's shell command. This
+    # string is the disclaimer line of a report that is rendered and emailed,
+    # and until 2026-09-02 it carried quantifier_flags.RUN_PREFIX, a
+    # `set PYTHONPATH=... && .venv\...` invocation, in front of the reader. The
+    # command belongs on the console and in analyst_usage.json, where the
+    # operator is, and write_report prints it there.
     return (
         f"the model asserted a quantifier over the candidate set on both "
         f"attempts, matching {first['quantifier']!r} near {first['set_word']!r}{plural} "
-        f'in "{sentence}" ({where}, judge it with {quantifier_flags.RUN_PREFIX})'
+        f'in "{sentence}" ({where})'
     )
 
 
@@ -1992,6 +2139,12 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     enforcing = guard_mode() == GUARD_ENFORCING
     attempts = (_CRIT.integer("analyst", "quantifier_regenerations") + 1
                 if enforcing else 1)
+    # ONE BUDGET FOR THE WHOLE MORNING, shared by the first call and the
+    # regeneration. max_attempts is the total number of CLI runs the narrative
+    # may cost, and the clock arithmetic in CRITERIA rests on that reading.
+    # See RunBudget.
+    global _budget
+    _budget = RunBudget(_CRIT.integer("analyst", "max_attempts"))
     report_text: str | None = None
     usage: dict[str, Any] = {}
     reason: str | None = None
@@ -2040,7 +2193,11 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             report_text = text
             break
 
-        final = attempt == attempts
+        # Final when the regenerations are used up OR when the run budget is.
+        # A first call that needed both of its tries on a CLI failure has
+        # spent the morning's budget, and a regeneration then would be a third
+        # run that the clock arithmetic never allowed for.
+        final = attempt == attempts or _budget.remaining < 1
         ids = record_quantifier_flags(
             hits, session_date, report_path.name, attempt,
             OUTCOME_FELL_BACK if final else OUTCOME_REGENERATED,
@@ -2051,7 +2208,8 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             for hit, flag_id in zip(hits, ids or [None] * len(hits))
         )
         if not final:
-            print(f"analyst: regenerating, {attempts - attempt} attempt(s) left. "
+            print(f"analyst: regenerating, {attempts - attempt} attempt(s) left "
+                  f"and {_budget.remaining} CLI run(s) in the budget. "
                   "The rejected sentences go back to the model with the report "
                   "request, so the second answer is told what to avoid.")
             correction = quantifier_correction(hits)
@@ -2059,6 +2217,25 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
         kind = "quantifier"
         cause = CAUSE_WITHHELD
         reason = quantifier_reason(hits, ids)
+        if attempt < attempts:
+            reason += (f"; a regeneration was not attempted because the "
+                       f"morning's budget of {_budget.total} CLI run(s) was "
+                       "already spent")
+        # The operator's command goes to the console, where the operator is,
+        # and not into the report's disclaimer. See quantifier_reason.
+        print(f"analyst: judge the flag(s) with {quantifier_flags.RUN_PREFIX} "
+              "--pending")
+        # Final means final. Before the budget, final coincided with the last
+        # loop iteration and the loop ended on its own; a budget can make the
+        # first attempt final, and without this the loop would ask
+        # invoke_claude once more, be refused, and record the morning as a
+        # budget failure rather than the quantifier withholding it was.
+        break
+
+    # The budget is this morning's and nothing after the loop spends it. Left
+    # set, a hand call to invoke_claude in the same process, which the suite
+    # makes, would be refused with a message about a morning that is over.
+    _budget = None
 
     if report_text is None:
         print(f"analyst: {cause} ({kind}): {reason}")

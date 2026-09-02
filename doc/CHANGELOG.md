@@ -15,6 +15,77 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty second: five defects the whole tree review found, fixed
+
+doc/IMPROVEMENT_PLAN.md, written earlier the same day from a four pass review,
+opened with five packages it called bugs rather than debt. This entry closes
+all five. Nothing else in the plan was touched.
+
+THE EMPTY TABLE EXAMPLE COULD NOT RENDER. REPORT_TEMPLATE.md showed the
+empty day watchlist "exactly like this" with a ten cell header, which Entry
+and Stop made it on 2026-09-01, over an eight cell separator and an eight cell
+none row. Prompt rule 12 spelled the same eight cell row. python-markdown's
+tables extension requires the separator to match the header width and
+otherwise emits the block as a paragraph of pipes, verified on this machine
+with the venv's markdown 3.10.3, and the containment guard reads the header
+line alone so it cannot tell the two apart. The next morning with nothing day
+eligible would have shipped a watchlist that was a paragraph. Both rows are
+ten cells now in the template and the prompt, the fallback already wrote ten,
+and claim_headers_cannot_diverge walks every empty table block in the
+template and in the fallback, checks each row's cell count against its header
+and renders the block through render_report.to_html asserting a table comes
+back. README's worked day watchlist example gained the two columns too.
+
+THE GLOSSARY EXPLAINED THE WRONG STOP. core/glossary.COLUMNS carried the key
+"Stop" twice, the morning's definition and the midday's, because the midday
+carry table headed two columns Stop: the stop price and whether it was
+reached. Python keeps the last, so the morning's Stop column was explained as
+the midday's. The midday's eighth column is now "Stop state" with its own
+line, the duplicate key is gone, and claim_the_glossary_explains_each_column_once
+parses the dict literal from source, where a repeated key still exists, and
+checks the midday header repeats no word.
+
+THE FALLBACK REPORT WAS MISSING A SECTION AND LEAKING THREE THINGS. It had no
+"What the record says so far", so the one section not about today vanished on
+exactly the mornings nobody reads closely; it now quotes record_so_far in the
+template's order with every denominator and prints null, not zero, where the
+ledger has no answer. Its economic line printed the Python repr "actual None"
+for a release that had not printed; it reads "actual pending". Its Skips
+section named all twelve 2026-09-01 candidates as "trap undecided" when every
+one had gapped down and scan had not asked the question of any of them; those
+are now counted once as not asked, above [Traps] min_gap_pct, while a name
+whose question was asked and could not be answered keeps its line. And the
+withheld disclaimer carried quantifier_flags.RUN_PREFIX, the operator's
+`set PYTHONPATH=... &&` command, into a rendered and emailed page; it keeps
+the flag id and the sentence, and the command prints to the console.
+claim_the_fallback_carries_every_template_section checks all four, and its
+section check is structural: every `## ` heading in the template must be in
+the fallback.
+
+MARKDOWN SYNTAX WAS THE SECOND DOOR FOR THIRD PARTY MARKUP. render_report
+neutralised a raw tag and then let `![p](url)` render an image and
+`[x](javascript:...)` an anchor, from a vendor headline as readily as from
+the template. An image in the emailed report is a fetch to a host the feed
+chose, and build_archive promises the archive makes no network request. A
+Treeprocessor now drops every image and every anchor whose href is not plain
+http(s), keeping the text where the element was, and
+claim_a_vendor_headline_cannot_write_markup carries both payloads.
+
+THE WORST CASE CLOCK WAS FOUR RUNS, NOT TWO. invoke_claude retried
+max_attempts times on a CLI failure and write_report called it again for the
+quantifier regeneration, which retried max_attempts times again. CRITERIA's
+arithmetic multiplied timeout_s by two and said a third run was not
+reachable. analyst.RunBudget, one per morning, now holds both calls to
+max_attempts runs in total: a first call that needed both runs has none left
+for a regeneration, and a flag on that answer goes to the plain table with
+the disclaimer saying the budget was spent. Module state rather than a
+parameter, because the suite stubs invoke_claude with two argument lambdas.
+claim_a_morning_spends_at_most_max_attempts_cli_runs drives it at the
+subprocess seam: a timeout then a flagged answer costs two runs and the plain
+table, a timeout then a clean answer costs two runs and ships. CRITERIA's
+max_attempts comment and the "clock does not move" paragraph carry the
+correction.
+
 ## 2026-09-02, thirty first: the record speaks about a name, and composition gains a direction and a scale
 
 WHAT A REPEAT DID, and it is read off the RIGHT SESSION. list_shape already

@@ -188,11 +188,16 @@ The table has a fixed header, character for character, because the containment
 guard locates the ticker column by it:
 
 ```
-| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Score | Conviction |
-| ------ | -----:| -----:| --------------:| --------------:| --------------:| -----:| ---------- |
-| ACME   | +14.2 | 18.44 |            6.1 |          18.90 |          17.95 |   7.0 | green      |
-| BOLT   |  +9.8 | 42.10 |            2.3 |          43.05 |          41.60 |   5.0 | yellow     |
-| CRUX   |  +7.1 |  6.22 |           null |           6.40 |           6.05 |  null | unscored   |
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Entry | Stop | Score | Conviction |
+| ------ | -----:| -----:| --------------:| --------------:| --------------:| -----:| -----:| -----:| ---------- |
+| ACME   | +14.2 | 18.44 |            6.1 |          18.90 |          17.95 | 18.90 | 17.60 |   7.0 | green      |
+| BOLT   |  +9.8 | 42.10 |            2.3 |          43.05 |          41.60 | 43.05 | 40.90 |   5.0 | yellow     |
+| CRUX   |  +7.1 |  6.22 |           null |           6.40 |           6.05 |  6.40 |  5.98 |  null | unscored   |
+
+Entry and Stop are the two numbers the paper ledger books against, read from
+CRITERIA [Picks] through one function: the entry is the premarket high and the
+stop is the premarket low, so a name has to carry on past its premarket high
+rather than merely hold. They joined the table on 2026-09-01.
 ```
 
 **`Premarket RVOL` is an estimate, not a measurement**, and the report says so
@@ -317,7 +322,7 @@ yet.
 against the levels the morning published. Invented numbers, but the shape is
 real:
 
-| Ticker | Score | Morning entry | Stop | What happened | Now vs fill | Best vs fill | Stop |
+| Ticker | Score | Morning entry | Stop | What happened | Now vs fill | Best vs fill | Stop state |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | MNSO.US | 7.0 green | 9.69 | 9.46 | never triggered | n/a | n/a | not applicable |
 | SAIC.US | 10.0 green | 137.40 | 134.00 | gapped through at the open | -8.87% | +1.62% | stopped out |

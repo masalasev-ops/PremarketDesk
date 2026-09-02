@@ -358,8 +358,16 @@ If none are eligible the table is still written, header and separator and one
 row, exactly like this:
 
 | Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Entry | Stop | Score | Conviction |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| none | | | | | | | |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| none | | | | | | | | | |
+
+The separator row and the none row carry TEN cells each, one per header
+cell. The markdown renderer requires the separator to match the header width
+and otherwise emits the whole block as a paragraph of pipes rather than a
+table, which the containment guard cannot tell from a table because it reads
+the header line alone. Until 2026-09-02 this example carried eight cell rows
+under the ten cell header Entry and Stop had made, so the example was an
+instruction to write a table that could not render.
 
 then one sentence below it, and that sentence QUOTES the packet rather than
 working anything out. Write exactly:

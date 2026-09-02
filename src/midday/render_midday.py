@@ -207,8 +207,12 @@ def carry_section(packet: dict[str, Any]) -> list[str]:
                 "The picks table carries no live rows for this session.", ""]
         return out
 
+    # Two columns about the stop, two different headers. The eighth column was
+    # also headed Stop until 2026-09-02, and the glossary, keyed on header text,
+    # could hold one definition for the word, so the morning's Stop column was
+    # explained as this one. See core/glossary.py.
     out += ["| Ticker | Score | Morning entry | Stop | What happened | Now vs fill "
-            "| Best vs fill | Stop |",
+            "| Best vs fill | Stop state |",
             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     for row in rows:
         out.append(

@@ -52,6 +52,59 @@ _EXTENSIONS = ["tables", "fenced_code", "sane_lists"]
 # span at all, and the alternative is passthrough.
 _TAG_OPENER_RE = re.compile(r"<(?=[a-zA-Z/!?])")
 
+# The other way third party text reaches the page as markup. _TAG_OPENER_RE
+# stops a raw tag, and markdown's own syntax then puts two back: `![p](url)`
+# renders an <img> and `[x](url)` an <a>, from a vendor headline as readily as
+# from the template. An image in the emailed report is a fetch to a host the
+# feed chose, which is a tracking pixel, and build_archive promises the archive
+# makes no network request of any kind. A javascript: href in an anchor runs
+# when clicked. No archived report carries a link or an image and nothing in
+# REPORT_TEMPLATE.md asks for one, so nothing legitimate is removed; the one
+# link the renderer keeps is an ordinary http(s) anchor, because a future
+# footer may want one and a plain web link is not the hazard.
+_SAFE_HREF_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+class _StripEmbeds(markdown.treeprocessors.Treeprocessor):
+    """Drop every image and every anchor whose href is not plain http(s).
+
+    A Treeprocessor runs over the parsed tree after inline patterns, which is
+    the one place the image and the anchor exist as elements rather than as
+    text that might or might not be syntax. The element is replaced by its own
+    text (the alt text or the link text), so the sentence still reads.
+    """
+
+    def run(self, root):
+        for parent in list(root.iter()):
+            # Last child first, so removing one never shifts the index of a
+            # sibling still to be visited. Walking forward, the second embed
+            # in a sentence took the first one's slot, was handed its own
+            # text as a tail, and was then removed with it.
+            for index in range(len(parent) - 1, -1, -1):
+                child = parent[index]
+                if child.tag == "img":
+                    self._unwrap(parent, index, child, child.get("alt") or "")
+                elif child.tag == "a" and not _SAFE_HREF_RE.match(child.get("href") or ""):
+                    self._unwrap(parent, index, child, "".join(child.itertext()))
+
+    @staticmethod
+    def _unwrap(parent, index, child, text):
+        # Keep the text where the element was: onto the previous sibling's
+        # tail, or the parent's text if the element came first.
+        tail = child.tail or ""
+        if index == 0:
+            parent.text = (parent.text or "") + text + tail
+        else:
+            previous = parent[index - 1]
+            previous.tail = (previous.tail or "") + text + tail
+        parent.remove(child)
+
+
+class _StripEmbedsExtension(markdown.Extension):
+    def extendMarkdown(self, md):
+        # After the inline processor (priority 20) and before prettify (10).
+        md.treeprocessors.register(_StripEmbeds(md), "premarketdesk_strip_embeds", 15)
+
 
 def to_html(text: str) -> str:
     """Report markdown to a body fragment, with raw HTML neutralised.
@@ -65,7 +118,7 @@ def to_html(text: str) -> str:
     eleven other mornings.
     """
     return markdown.markdown(_TAG_OPENER_RE.sub("&lt;", text),
-                             extensions=_EXTENSIONS)
+                             extensions=[*_EXTENSIONS, _StripEmbedsExtension()])
 
 _SHELL = """<!doctype html>
 <html>

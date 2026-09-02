@@ -129,8 +129,13 @@ each part below is one thing you either did or did not do.
 
     Both tables are written every morning, including mornings when nothing
     is eligible. An empty screen gets the header row, the separator
-    row, and a single row reading `| none | | | | | | | |`, followed by the
-    sentence explaining what failed. Do not replace an empty table with prose.
+    row, and a single row reading `none` in the first cell with every other
+    cell empty, so the day table's none row is `| none | | | | | | | | | |`
+    and the swing table's is `| none | | | | | | | |`. The separator and the
+    none row carry exactly as many cells as the header above them: a
+    separator narrower than its header is rendered as a paragraph of pipes,
+    not a table. Then the sentence explaining what failed follows. Do not
+    replace an empty table with prose.
     Dropping the table drops the header, and dropping the header switches the
     guard off for the whole report, which is what happened on 2026-08-14: both
     screens were empty, both tables were omitted, and the twelve tickers named

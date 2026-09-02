@@ -246,6 +246,48 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
                 f"pins, so a fallback report would fail the structure gate.\n"
                 f"      wanted: {header}")
 
+    # (2b) and every empty table example the template shows RENDERS AS A
+    # TABLE. The guard reads the header line alone, so it cannot tell a table
+    # from a paragraph of pipes, and python-markdown emits the paragraph when
+    # the separator row is narrower than the header. On 2026-09-02 both of the
+    # template's "exactly like this" day watchlist blocks carried an eight cell
+    # separator under the ten cell header Entry and Stop had made, so the
+    # instruction was to write a table that could not render, and the fallback
+    # is checked the same way because it writes the same rows.
+    from morning import render_report
+
+    def _empty_blocks(text: str) -> list[tuple[str, list[str]]]:
+        lines = text.splitlines()
+        headers = set(conftest.template_headers().values())
+        blocks: list[tuple[str, list[str]]] = []
+        for index, line in enumerate(lines[:-2]):
+            if line.strip() in headers and lines[index + 1].strip().startswith("| ---") \
+                    and lines[index + 2].strip().startswith("| none"):
+                blocks.append((line.strip(), [l.strip() for l in lines[index:index + 3]]))
+        return blocks
+
+    template_text = config.REPORT_TEMPLATE_PATH.read_text(encoding="utf-8")
+    template_blocks = _empty_blocks(template_text)
+    if len(template_blocks) < 2:
+        failures.append("the template no longer shows an empty table example for "
+                        "both watchlists, so this claim has nothing to render")
+    fallback_blocks = _empty_blocks(fallback)
+    for where, blocks in (("REPORT_TEMPLATE.md", template_blocks),
+                          ("fallback_report", fallback_blocks)):
+        for header, block in blocks:
+            width = len(analyst._header_cells(header))
+            for row in block[1:]:
+                cells = row.strip("|").split("|")
+                if len(cells) != width:
+                    failures.append(
+                        f"{where}: the row {row!r} carries {len(cells)} cells under "
+                        f"a {width} cell header, and markdown renders that block "
+                        "as a paragraph rather than a table")
+            if "<table" not in render_report.to_html("\n".join(block) + "\n"):
+                failures.append(
+                    f"{where}: the empty table example under {header!r} does not "
+                    "render as a table")
+
     # (3) and the fallback therefore passes the guard end to end, which is the
     # property all of the above exists to produce.
     _, _, coverage = analyst.check_report(fallback, build_packet_text())

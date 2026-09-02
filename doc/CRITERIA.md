@@ -1872,7 +1872,7 @@ timeout_s                     = 1007       # 3x the slowest morning on record, 3
                                            # [corrected 2026-08-20: was 293, "3x the slowest of five measured opus
                                            # medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds". The
                                            # rule did not change, the evidence under it did.]
-max_attempts                  = 2          # total tries, including the first
+max_attempts                  = 2          # total CLI runs the narrative may spend in one morning, including the first, counting retries on a CLI failure AND the quantifier regeneration together. Enforced by analyst.RunBudget since 2026-09-02; before that each of the two calls retried this many times on its own, four runs at worst, and the arithmetic below never allowed for it. The gap explanation pass is a separate, short call and is outside this count.
 quantifier_regenerations      = 1          # flagged narratives thrown away and asked for again before the plain table takes over
 quantifier_guard              = enforcing  # warn: log and print flags, deliver the narrative anyway. enforcing: regenerate, then fall back. See the note below for the three things that had to be true, and were, on 2026-08-28.
                                            # [corrected 2026-08-28: was warn, from 2026-08-18. The three conditions below
@@ -2087,6 +2087,20 @@ against a 537 second timeout_s. timeout_s is 1007 and the worst case is 2,014
 seconds ending 09:18:53. The ARGUMENT is unchanged, and it is the argument that
 matters here: enforcing adds no CLI run that the two attempt budget did not
 already allow for.]
+[corrected 2026-09-02: the sentence "a third run is not reachable" was not
+true of the code. invoke_claude retried max_attempts times on a CLI failure,
+and write_report called it once more for the regeneration, which retried
+max_attempts times again: a first call that timed out once and then answered
+with a flagged report, followed by a regeneration that timed out once and then
+answered, is FOUR runs of timeout_s, 4,028 seconds, ending 09:52 on a chain
+that started 08:45. Nothing ever took that path. analyst.RunBudget now holds
+the morning to max_attempts runs in total across both calls, so the two run
+worst case this paragraph computes is what the code enforces rather than what
+it hoped. The one trade: a first call that needed both of its runs to get an
+answer has no run left for a regeneration, and a flag on that answer goes
+straight to the plain table with the disclaimer saying why. The gap
+explanation pass is a further short call outside the budget, about twenty
+seconds measured, and is not in this arithmetic.]
 
 The cost of a false positive is one regeneration, and the narrative is lost
 only when the SECOND answer flags too. A false positive is cheap to clear:
