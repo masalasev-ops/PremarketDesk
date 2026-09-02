@@ -198,14 +198,17 @@
   its clock time, reads the files earlier jobs left behind, and leaves files for
   the next. The architecture is the clock.</p>
   <p class="lede">The day has a shape. The morning gathers evidence while it
-  exists and publishes a judgement on it before the open. At noon a third pass,
-  live since 2026-08-31, asks what the session did with the morning's own picks
-  and what else moved that the morning never named. The night comes back
-  once the session is over, measures what was actually true, and books what one
-  written rule would have done about it. The next morning reads that record
-  back. This page follows that loop once, in order, and says what each stage of
-  it is for. What changed on which date is in CHANGELOG.md; why a choice went
-  the way it did is in DECISIONS.md; every threshold is in CRITERIA.md.</p>
+  exists and publishes a judgement on it before the open. At noon a third pass
+  asks what the session did with the morning's own picks and what else moved
+  that the morning never named. The night comes back once the session is over,
+  measures what was actually true, and books what one written rule would have
+  done about it. The next morning reads that record back. This page follows
+  that loop once, in order, and says what each stage of it is for. It describes
+  the system as it stands and nothing else: what changed on which date is in
+  CHANGELOG.md, why a choice that could have gone the other way went the way it
+  did is in DECISIONS.md, and every threshold is in CRITERIA.md. Where a date
+  appears below it is attached to a MEASUREMENT, because a measurement without
+  the day it was taken is worth less than one with it.</p>
 
   <nav class="arcnav">
     <ol>
@@ -242,10 +245,10 @@
     has opened, and the night jobs, shown in amber here and throughout this page,
     come back at 22:15 to write down what was really true. Sunday at 21:00 one more
     pass rebuilds the discovery universe for the coming week and measures the gap
-    propensity the weekday pool is ordered by. It ran at 20:00 until 2026-08-16,
-    which was the exact instant of the quota reset, and at 20:30 until 2026-08-17,
-    which assumed the vendor's counter rolls on the hour; it does not, and the
-    observed roll was 30 to 32 minutes late.</p>
+    propensity the weekday pool is ordered by. The hour is chosen rather than
+    convenient: the shared vendor quota rolls over at 20:00 ET, the counter does
+    not roll punctually, and measured it lands 30 to 32 minutes late, so 21:00
+    clears the reset by roughly double the lag actually observed.</p>
   </div>
 
   <figure>
@@ -342,42 +345,49 @@
     <code>site/PremarketDesk.html</code>, the double click archive of every
     morning's report.</p>
 
-    <p><strong>What the report itself contains changed on 2026-09-01, in three
-    ways a reader sees straight away.</strong> Every table now has a plain
-    English line under it saying what its columns mean, and the page ends with
-    a short list explaining the words, because the report is read by people who
-    do not trade and a row of Gap, RVOL, VWAP and Sigma is a wall to them.
-    Nothing technical was removed. The wording lives in one file,
-    <code>core/glossary.py</code>, so a word cannot come to mean two things in
-    two places.</p>
+    <p><strong>What the report itself holds is worth setting out, because three
+    parts of it do not follow from the pipeline above.</strong> Every table has
+    a plain English line under it saying what its columns mean, and the page
+    ends with a short list explaining the words, because the report is read by
+    people who do not trade and a row of Gap, RVOL, VWAP and Sigma is a wall to
+    them. That wording lives in one file, <code>core/glossary.py</code>, so a
+    word cannot come to mean two things in two places.</p>
 
-    <p>Second, a section called "Why these gapped" now sits under the gappers
-    table, one short paragraph a stock. It replaced the Top headline column,
-    which showed the NEWEST story the news feed had attached to a stock rather
-    than the one that explains the move, and which is how a story about
-    Palantir came to sit against MSTR. It is written by a SECOND model call,
-    <code>morning/gap_reasons.py</code>, deliberately separate from the
+    <p>The day watchlist prints an Entry and a Stop column. Neither is advice
+    and neither is new evidence: they are the two levels CRITERIA [Picks]
+    already names, the premarket high and the premarket low, read through one
+    function that the report and the database row both call, so the page a
+    reader sees and the record the night books against cannot come to disagree.
+    Each candidate's write up then closes on a fixed opening, "What would say
+    this is wrong:", and the rest of that line is written in words with the
+    digits left out. It states the level and never restates its figure, because
+    nothing in this system checks a number the model writes, and a line with no
+    digits in it cannot invent one.</p>
+
+    <p>And a section called "Why these gapped" sits under the gappers table,
+    one short paragraph a stock, written by a SECOND model call,
+    <code>morning/gap_reasons.py</code>. It is deliberately separate from the
     narrative: it runs even when the narrative failed and the morning fell back
     to plain tables, because that morning needs the explanation most, and when
     it fails it costs that section alone. It only sees that stock's own
     headlines and has to quote the one it used; an answer citing a headline
-    nobody supplied is discarded and the row says so.</p>
+    nobody supplied is discarded and the row says so. It stands in place of a
+    Top headline column, which showed the NEWEST story the news feed had
+    attached to a stock rather than the one that explains the move, and which
+    is how a story about Palantir came to sit against MSTR.</p>
 
-    <p>Third, the guard that refuses sweeping claims about the candidate set
-    now reads the FINISHED report rather than just the narrative, because that
-    new section is model written too and was being added after the guard had
-    finished. See the architecture page for how the model's words are told
-    apart from the project's own.</p>
+    <p>Because that section is model written too, the guard that refuses
+    sweeping claims about the candidate set reads the FINISHED report rather
+    than just the narrative. See the architecture page for how the model's
+    words are told apart from the project's own.</p>
 
-    <p><strong>One stage inside scan.py is worth separating out, because it is
-    the newest and it does not behave like the rest.</strong> Everything above
-    is a funnel: 2,751 names in the universe, 2,754 until the 2026-08-30
-    rebuild, a few hundred gapping, twelve candidates, and of those twelve
-    some number that clear the day or swing screen and reach the watchlist.
-    That funnel answers one question, which is
-    what might be worth trading. Layer 4, the notable movers section added on
-    2026-08-20, answers a different one: what MOVED, whether or not it is
-    tradeable. It reads the whole universe rather than the candidate list, over
+    <p><strong>One stage inside scan.py is worth separating out, because it
+    does not behave like the rest.</strong> Everything above is a funnel: about
+    2,751 names in the universe, a few hundred gapping, twelve candidates, and
+    of those twelve some number that clear the day or swing screen and reach
+    the watchlist. That funnel answers one question, which is what might be
+    worth trading. The notable movers section answers a different one: what
+    MOVED, whether or not it is tradeable. It reads the whole universe rather than the candidate list, over
     four ranked lists of five, and it is explicitly not a watchlist. The
     section states that in seven fixed sentences it is not allowed to reword,
     and no row it produces can reach the picks table.</p>
@@ -386,7 +396,7 @@
     working correctly still throws away every name that is unusual but
     untradeable, and on a morning where nothing clears the screens the report
     would otherwise say almost nothing while the market was busy. The cost is
-    that a reader now sees two kinds of list in one document, so every notable
+    that a reader sees two kinds of list in one document, so every notable
     row carries the leg that produced it, the session it is as of, and whether
     the name also reached the watchlist, and a name can appear more than once,
     once per leg, because a row carries one window and one vintage.</p>
@@ -470,46 +480,32 @@
       <text x="870" y="258" text-anchor="end" font-size="10" class="svg-muted">write truth columns into the same picks rows</text>
       <path d="M632 252 q-14 -4 -14 -18" fill="none" stroke="none"/>
     </svg>
-    <figcaption>The morning relay, stage times from the first fully scheduled
-    morning, 2026-08-14: the scan took about 15 seconds (on the build whose
-    scan still made a bulk call it no longer makes), the analyst (opus, one
-    completion, medium effort) 86.5 to 97.7 seconds over five measured runs,
-    and render, deliver, and the archive rebuild 0.7 seconds together, so the
-    chain finished at 08:46:53 with roughly 43 minutes of slack before the
-    09:30 open. A morning that rides both analyst timeouts, 1007 seconds each,
-    into the fallback report still finishes by 09:18:53, leaving 11. The dashed amber arrow is the night returning to the same
-    database rows the 08:45 scan created, hours after the report already
-    went out.
+    <figcaption>The morning relay. The scan takes about 15 seconds, render,
+    deliver and the archive rebuild about 0.7 together, and the analyst is
+    everything else: measured on the job trail it has run 54.4 to 231.7 seconds
+    across the mornings on record, against 16.6 to 22.3 seconds for the whole
+    rest of the chain put together. A normal morning finishes a few minutes
+    after 08:46, with roughly 43 minutes of slack before the 09:30 open. A
+    morning that rides both analyst timeouts, 1007 seconds each, into the
+    fallback report still finishes by 09:18:53. The dashed amber arrow is the
+    night returning to the same database rows the 08:45 scan created, hours
+    after the report already went out.
     <br><br>
-    What five scheduled mornings then measured, from analyst_usage.json:
-    89.1s on 2026-08-14, 48.4s on 08-17, 98.5s on 08-18, 178.9s on 08-19 and
-    226.1s on 08-20, with output tokens over the same five rising 7,697, 4,000,
-    8,954, 16,005, 20,188.
-    On the job trail, which times the whole step rather than the CLI, the
-    analyst took 54.4, 107.5, 185.3 and 231.7 seconds across the four mornings
-    it covers, against 16.6, 20.6, 19.4 and 22.3 seconds for everything else in
-    the chain together. The timeout of 293 seconds had been set at three times the
-    slowest of five dry runs, and the schedule overtook that sample: against
-    the slowest real morning it was 1.6 times. It was re-derived to 537 on
-    2026-08-20 on the same rule, so two exhausted attempts ended at 09:03
-    instead of 08:55, still 27 minutes clear of the open. The raise buys room
-    for the trend and explains none of it: the step went 54.4, 107.5, 185.3,
-    231.7 and it tracks output length, which went to 20,188 tokens on
-    2026-08-20 against a template whose nine sections did not change. The
-    growth slowed on that fourth point rather than doubling again, and 537 was
-    already only 2.4 times the slowest morning then on record.
+    The two attempts are capped at 1007 seconds each because that is three
+    times the slowest morning on record, 335.7 seconds. The rule is fixed and
+    the evidence under it moves, so the cap is re-derived whenever enough new
+    mornings pull the multiple back toward the sample rather than being set once
+    and left. The number does not travel alone: [Monitor]
+    job_log_stale_after_s is derived from it, at 2200 seconds, because a healthy
+    analyst step is the longest silence in the tree and a job the watchdog reads
+    as dead gets relaunched mid run.
     <br><br>
-    The same rule was applied again on 2026-08-29, which is what the paragraph
-    above is now history to. Four more scheduled mornings had overtaken the
-    2026-08-20 sample and the multiple had decayed to 1.6 a second time, so
-    timeout_s was re-derived to 1007, three times the 335.7 seconds of
-    2026-08-27, which is the slowest morning on record. The number does not
-    travel alone: [Monitor] job_log_stale_after_s is derived from it and moved
-    1200 to 2200 with it, because a healthy analyst step is the longest silence
-    in the tree and a job the watchdog reads as dead gets relaunched mid run.
-    Two exhausted attempts now end at 09:18:53, eleven minutes before the open
-    and six minutes before the 09:25 watchdog pass, and it is that six minutes,
-    not the eleven, that is the margin to watch if this rises again.</figcaption>
+    What the raise buys is room for a trend it does not explain. The step tracks
+    output length, which has climbed from 4,000 to 20,188 tokens against a
+    template whose section count did not move. Two exhausted attempts end at
+    09:18:53, eleven minutes before the open and six minutes before the 09:25
+    watchdog pass, and it is that six minutes, not the eleven, that is the
+    margin to watch if this rises again.</figcaption>
   </figure>
 </section>
 
@@ -519,7 +515,7 @@
   <div class="prose">
     <p>The morning publishes a judgement ninety minutes before the open and then
     has nothing further to say about the day it was about. Two of the questions
-    it cannot answer are answerable by lunchtime, and since 2026-08-31 a third
+    it cannot answer are answerable by lunchtime, and a third
     weekday job asks them: what the morning's own picks did once the session
     opened, and what else moved that the morning never named. job_midday.bat
     runs <code>midday.scan_midday</code> and then
@@ -547,7 +543,7 @@
 
   <div class="table-wrap">
   <table class="files">
-    <tr><td>never triggered</td><td>high below entry_ref. No position, and the session low is deliberately NOT read: a low with no trade under it stops nothing. CRITERIA writes this case down first because it is the one the first prototype got wrong on 2026-08-31</td></tr>
+    <tr><td>never triggered</td><td>high below entry_ref. No position, and the session low is deliberately NOT read: a low with no trade under it stops nothing. CRITERIA writes this case down first because it is the easiest of the four to get wrong</td></tr>
     <tr><td>gapped through</td><td>open at or above entry_ref. The fill is the open, exactly as the night's rule fills a gap through, and because that fill is the session's FIRST print a low reaching stop_ref after it is unambiguously a stop out. Order is knowable here and only here</td></tr>
     <tr><td>triggered</td><td>open below entry_ref, high at or above it. The fill is entry_ref, and whether the session low came before or after that fill is UNKNOWABLE from a daily high and low, so a low at or under stop_ref is reported as the stop level reached with the sequence unknown, and never as a stop out</td></tr>
     <tr><td>unknown</td><td>any level the quote did not carry. Null with a reason, which is not a verdict and is never printed as one</td></tr>
@@ -560,8 +556,9 @@
     printed on every edition rather than left to be noticed: a pass that is
     silent about how often it cannot answer reads exactly like a pass that
     always can. Minute bars carrying timestamps would turn that case into the
-    second one's certainty, and job_probe_socket_cost is the instrument that
-    decides whether the socket can afford to stay listening that long. The other
+    second one's certainty, and the vendor's counter is not what stands in the
+    way: the socket has been measured at zero cost per message across a heavy
+    live tape. The other
     thing this pass cannot do is ask whether a level was transactable at all:
     fill_plausible is computed by the night out of Alpaca band volume and does
     not exist at noon, so a midday verdict on an illiquid level is arithmetic
@@ -588,7 +585,8 @@
     <p>Every move reported here divides by the prior session's close, and that
     close comes from eod-bulk-last-day asked for by an EXPLICITLY NAMED date,
     one call for the whole exchange. It is emphatically not the quote's own
-    previousClosePrice, and the first draft of the rule said that it was.</p>
+    previousClosePrice, which is the obvious field to reach for and the wrong
+    one.</p>
     <p>Measured on 2026-08-31 across the 2,391 universe names carrying both,
     previousClosePrice is not one quantity. It equalled the PRIOR session's
     close for about 34 percent of them and TODAY'S close for about 29 percent,
@@ -598,11 +596,11 @@
     correct. The field was RIGHT on rows whose price was wrong, so it is
     evidence about the vendor rather than a check on anything, and nothing
     branches on it.</p>
-    <p><strong>This is the 2026-08-14 defect wearing new clothes.</strong> That
-    morning published a report priced off the last completed session, from an
-    endpoint whose name said live. The lesson then was that a field's name is
-    not its contract, and it holds for a field called previous which is
-    sometimes current.</p>
+    <p><strong>It is the same shape as the defect vintage.py exists to
+    catch:</strong> a report priced off the last completed session, from an
+    endpoint whose name said live. A field's name is not its contract, and that
+    holds just as well for a field called previous which is sometimes
+    current.</p>
   </div>
 
   <div class="prose">
@@ -622,11 +620,10 @@
     hours behaviour is the part that has been measured, on 2026-08-17 at a
     lastTradeTime of 09:56:12 against a 09:57 fetch, and whose premarket
     behaviour is untested. 12:00 sits well inside the window that was measured.
-    The job also spent its first day watched by nothing, because the weekday
-    watchdog's last pass is 09:25 and the night one is at 22:45, so a midday
-    failure would first have been named by the next morning's packet about
-    eighteen hours later. A second watchdog trigger was registered the same day
-    and fires at 12:25, 12:55 and 13:25.</p>
+    The watchdog covers the job at 12:25, 12:55 and 13:25 for a reason worth
+    saying: the weekday watchdog's last morning pass is 09:25 and the night one
+    is at 22:45, so an unwatched midday failure would first be named by the next
+    morning's packet, about eighteen hours later.</p>
   </div>
 </section>
 
@@ -647,8 +644,8 @@
     <code>pm_vwap_true</code> into the same picks rows, next to the morning
     values, never over them. The gap between the two column families is itself
     a measurement: it is exactly what starting the collector at 07:20 costs.</p>
-    <p><strong>That last sentence was wrong for a year of this project's short
-    life and was corrected on 2026-08-28.</strong> The gap between the two
+    <p><strong>That last sentence needs one qualification, and it is the
+    important one.</strong> The gap between the two
     column families conflates THREE causes and cannot separate them: the
     collector's late start, a feed disagreement inside the minutes both sources
     saw, and the window END, since the true window ran to 09:30 while the
@@ -715,9 +712,10 @@
       <li>That runs <span class="mono">tasks\job_nightly.bat</span>, which refreshes
         the exchange calendar so the 08:45 window never has to, then runs
         <span class="mono">night.backup_evidence</span> first of all, because it
-        copies the day's premarket capture, its two sidecars and the packet
-        outside the working tree, and those four are the only artifacts here
-        that cannot be rebuilt, then
+        copies the day's premarket capture, its two sidecars, the packet and the
+        report in both markdown and HTML outside the working tree, and those six
+        are the only artifacts here that cannot be rebuilt: a report least of
+        all, because the same input does not produce the same words twice, then
         <span class="mono">python -m night.backfill_premarket</span>, then
         <span class="mono">night.fill_outcomes</span>, then
         <span class="mono">night.true_volume</span>, then
@@ -728,9 +726,8 @@
         <span class="mono">night.build_archive</span> on this machine. The
         ledger comes after truth and not before it, because it reads
         entry_ref_true, stop_ref_true and fill_plausible and every one of those
-        is written by that step. Every module
-        moved into a package on 2026-08-16 and every job now runs by module name
-        rather than by file path. The recall
+        is written by that step. Every job runs by module name rather than by
+        file path. The recall
         step is the one that never fails the chain: it measures which real
         gappers the morning's pool missed, and since nothing downstream reads
         the answer, a bad measurement must not cost the archive its rebuild.</li>
@@ -740,14 +737,11 @@
         volume check, saved to <span class="mono">runs\&lt;date&gt;\verify_intraday.json</span>.
         The true premarket columns are gated on the day having live picks rows,
         because that is what they widen. The volume check is not, and the
-        distinction was learned the hard way: it used to sit at the tail of the
-        same function, after the early return for a day with no picks, so
-        emptying the table on 2026-08-19 also stopped the nightly writing
-        verify_intraday.json, the instrument for the open question went
-        quiet on the night the question got most urgent. It now runs first and
-        reads the collector bar file rather than the table. A separate sweep
-        picks up recent sessions that were collected and never measured, so
-        2026-08-19's own reading lands on the next nightly.</li>
+        distinction carries real weight: sitting behind the early return for a
+        day with no picks would silence the instrument on exactly the nights the
+        question is most urgent. So it runs first and reads the collector bar
+        file rather than the table, and a separate sweep picks up any recent
+        session that was collected and never measured.</li>
       <li>Everything it prints lands in <span class="mono">logs\nightly-&lt;date&gt;.log</span>.</li>
     </ol>
   </div>
@@ -814,9 +808,9 @@
 
   <div class="callout">
     <h3>The one that matters most: the outcome columns describe the wrong day</h3>
-    <p>Writing the paper rule forced the question of which session it trades,
-    and the answer exposed an off by one that had been in the record from the
-    start.</p>
+    <p>The columns that say what happened next describe the session AFTER the
+    one the report was about. That off by one is real, it is known, and it is
+    left in place on purpose.</p>
     <p>The scan runs at 08:45 on the pick's own date and the report is about the
     open ninety minutes later. But <span class="mono">next_day_open</span>,
     <span class="mono">next_day_high</span>, <span class="mono">next_day_low</span>,
@@ -829,27 +823,27 @@
     <p class="asof">AXTI, picked 2026-08-27, entry_ref 70.94<br>
     its own session:   opened 70.30, reached 70.85   &rarr; a miss by 0.13%<br>
     next_day_high:     65.4155, from 2026-08-28      &rarr; mfe_pct reads -7.79</p>
-    <p>Nothing in the outcome columns was changed. Repointing them rewrites the
-    meaning of every row already in the table and destroys the comparison. The
+    <p>Nothing in the outcome columns is repointed. Doing so would rewrite the
+    meaning of every row already in the table and destroy the comparison. The
     ledger fetches its own bars for its own session instead, and the mismatch is
     written into CRITERIA [Paper], into paper_ledger's docstring, and into the
     ledger's own summary line, which states on every printing that the bound
     beside the booked P&amp;L comes from a different day.</p>
   </div>
 
-  <h3>Two of these passes changed what the record says, not just what it holds</h3>
+  <h3>Two of these passes decide what the record says, not just what it holds</h3>
   <div class="prose">
     <p><strong>Measuring the reference levels moved both excursion medians
     across zero.</strong> On the sampled levels the median name looked to have
     run +0.81 percent past its entry reference and given back -1.92 against its
     stop. On the measured ones it is -2.13 and +0.15, and the count that reached
-    the entry reference at all falls from 29 of 48 to 20. The record had been
-    reporting a median name as having reached a level it never reached. That is
-    the whole argument for the pass: not that the old numbers were imprecise,
-    but that they had the sign wrong.</p>
-    <p><strong>The premise that specified the work was itself inverted, and
+    the entry reference at all falls from 29 of 48 to 20. On the sampled levels
+    alone the record would report a median name as having reached a level it
+    never reached. That is the whole argument for the pass: not that the sampled
+    numbers are imprecise, but that they have the sign wrong.</p>
+    <p><strong>The obvious explanation for that gap is the wrong one, and
     saying so is the more useful result.</strong> The gap between the live and
-    measured levels was assumed to be the socket missing prints inside the
+    measured levels looks like the socket missing prints inside the
     minutes it heard. Split into its two causes it is +0.10 percent at the
     median for the sampling and +0.98 for the 04:00 to 07:20 stretch nobody is
     listening to. Ten to one the other way. The socket reproduces the extremes
@@ -879,9 +873,9 @@
   </div>
 
   <div class="prose">
-    <p><strong>Two definitions of fill plausibility were built and thrown away
-    first,</strong> both caught by the calibration rather than by review, and
-    both are in DECISIONS.md. Counting a minute by its own volume weighted price
+    <p><strong>Two other definitions of fill plausibility were tried and
+    refused,</strong> both caught by the calibration rather than by review, and
+    both written up in DECISIONS.md. Counting a minute by its own volume weighted price
     is the obvious rule and measures the wrong thing: entry_ref is a session
     HIGH, an extreme no whole minute averages near, so BABA's 2,986,339
     premarket shares over 268 minutes scored a band volume of zero. It ranked
@@ -896,12 +890,12 @@
     running from below up into the band counts whole. Correcting it needs trade
     level data this plan does not buy, so it is stated as a bound, the way
     premarket RVOL already is.</p>
-    <p><strong>The fill band floor is now derived rather than asserted.</strong>
-    [Truth] min_fill_band_notional was set at 250,000 as a placeholder before
-    any rule named a position size. [Paper] then named 10,000 dollars at a 4
-    percent participation cap, and 10,000 / 0.04 is exactly 250,000. One shipped
-    value, in [Truth], with the coupling machine checked, the same shape as the
-    analyst timeout and the watchdog's stale window.</p>
+    <p><strong>The fill band floor is derived rather than asserted.</strong>
+    [Truth] min_fill_band_notional is 250,000, and that is not a round number
+    somebody liked: [Paper] names a 10,000 dollar position at a 4 percent
+    participation cap, and 10,000 / 0.04 is exactly 250,000. One shipped value,
+    in [Truth], with the coupling machine checked, the same shape as the analyst
+    timeout and the watchdog's stale window.</p>
   </div>
 </section>
 
@@ -989,7 +983,7 @@ losers never up more than 0.5%           2 of 11</p>
     <p><strong>A fifth pass writes to a different table.</strong>
     paper_ledger.py applies the one written rule to each pick and books the
     result into <span class="mono">paper_trades</span>, one row per pick per
-    rule version. That is what turned mfe_pct from a result into a diagnostic:
+    rule version. That is what makes mfe_pct a diagnostic rather than a result:
     the excursion says how far the tape ran past a reference at its best moment,
     which a real rule captures only with perfect exit timing and usually does
     not capture at all.</p>
@@ -1070,10 +1064,10 @@ losers never up more than 0.5%           2 of 11</p>
   <p class="eyebrow">08:45, what the night taught the morning</p>
   <h2>The fill warning, which is a warning and never an approval</h2>
   <div class="prose">
-    <p>The night's fill verdict was the first thing it measured that the
-    morning could act on. A third of what the report publishes has a headline
-    level no market stands behind, and a reader who found that out three weeks
-    later in a database was not helped by it.</p>
+    <p>The night's fill verdict is the one thing it measures that the morning
+    can act on. A third of what the report publishes has a headline level no
+    market stands behind, and a reader who finds that out three weeks later in a
+    database is not helped by it.</p>
     <p>The morning cannot run the real check, because Alpaca refuses a session
     that is still running. So it computes its own band from the collector's
     sample at 08:45 and prints it in Skips and traps. <strong>Being a worse
@@ -1178,8 +1172,7 @@ losers never up more than 0.5%           2 of 11</p>
     what lets it sit inside a window that has forty five minutes and one chance.
     paper_ledger reaches its Alpaca client inside <span class="mono">book()</span>
     rather than at module scope, so the scan can import the ledger without
-    pulling an HTTP client into 08:45 for the first time in the project's
-    life.</p>
+    pulling an HTTP client into the 08:45 window at all.</p>
   </div>
 
   <div class="table-wrap">
@@ -1221,11 +1214,10 @@ losers never up more than 0.5%           2 of 11</p>
       collection, no report about a session that does not exist. If the
       calendar is unreachable and no cache exists, the guard assumes the market
       is open, because a false closed silently loses a real morning. That trade
-      is only safe while "no cache" is rare, and until 2026-08-20 it was not:
-      the nightly refresh deleted the cache before fetching, so one vendor
-      outage at 22:15 left no holiday list at all and the next morning ran on
-      the assumption that the market was open. The refresh now overwrites only
-      once the vendor has answered.</td>
+      is only safe while "no cache" is rare, so the refresh overwrites only once
+      the vendor has answered. Deleting the cache and then fetching would let
+      one vendor outage at 22:15 leave no holiday list at all, and the next
+      morning would run on the assumption that the market was open.</td>
     </tr>
     <tr>
       <td>universe.py fails Sunday</td>
@@ -1237,21 +1229,20 @@ losers never up more than 0.5%           2 of 11</p>
       <td>discover.py fails at 07:15</td>
       <td>No fresh watchlist and no warmed baselines. The collector exits
       naming the missing file (or runs on yesterday's list if one is on
-      disk). Scan no longer rebuilds membership and makes no bulk call of its
+      disk). Scan does not rebuild membership and makes no bulk call of its
       own: it reads the subscribed rows of watchlist.json, so a missing
       watchlist leaves it with no candidates at all and gaps_to_fill says
       exactly that. A watchlist that is present and subscribes nobody says so
       separately, because an empty pool and an absent file are different
-      failures and only the second used to be named. A stale watchlist still on
-      disk gives it yesterday's pool, which is also what the collector
-      subscribed to, so the morning runs on the wrong names rather than on
-      none. Either way the report goes out with the holes named in the
-      disclaimer. That last sentence was false until 2026-08-20: every per
-      candidate stage sits inside one branch of scan.py, one of its outputs was
-      read outside that branch, and an empty pool ended the scan with an
-      UnboundLocalError instead of a zero candidate packet, which stopped the
-      chain and cost the whole morning. Fixed, and both routes into it are now
-      claims in the suite.</td>
+      failures. A stale watchlist still on disk gives it yesterday's pool, which
+      is also what the collector subscribed to, so the morning runs on the wrong
+      names rather than on none. Either way the report goes out with the holes
+      named in the disclaimer. That last sentence is only true while the code
+      actually takes the degrade path, which is why both routes into it are
+      claims in the suite: every per candidate stage sits inside one branch of
+      scan.py, and an empty pool reaching code outside that branch would end the
+      scan with an exception instead of a zero candidate packet, stopping the
+      chain and costing the whole morning.</td>
     </tr>
     <tr>
       <td>collector never connects</td>
@@ -1272,16 +1263,13 @@ losers never up more than 0.5%           2 of 11</p>
     </tr>
     <tr>
       <td>analyst.py fails or times out</td>
-      <td>Two attempts at 1007 seconds each, set at three times the slowest
-      measured MORNING, 335.7 seconds on 2026-08-27, so two exhausted attempts
-      end at 09:18:53, eleven minutes before the open. It was 537 against the
-      178.9 seconds of 2026-08-19 until 2026-08-29, by which point four more
-      scheduled mornings had taken the multiple down to 1.6 and the same rule
-      was applied to the newer evidence. The rule did not change and what it
-      was measured against did, and [Monitor] job_log_stale_after_s moved 1200
-      to 2200 with it, because that number is derived from this one and a
-      healthy analyst step the watchdog reads as a dead job gets relaunched
-      mid run. Then the
+      <td>Two attempts at 1007 seconds each, which is three times the slowest
+      morning on record, 335.7 seconds, so two exhausted attempts end at
+      09:18:53, eleven minutes before the open. The rule is fixed and the
+      evidence under it moves, so the cap is re-derived rather than set once,
+      and [Monitor] job_log_stale_after_s is derived from it in turn, at 2200
+      seconds, because a healthy analyst step the watchdog reads as a dead job
+      gets relaunched mid run. Then the
       deterministic fallback:
       report.md is rebuilt as plain tables straight from packet.json, the
       disclaimer carries the failure reason, analyst_usage.json records
@@ -1323,12 +1311,12 @@ losers never up more than 0.5%           2 of 11</p>
       <td>nightly jobs fail</td>
       <td>The true premarket columns and outcomes stay null. Both jobs are
       idempotent and fill only what is missing, so the next night's run picks
-      up the backlog on its own. The morning report is no longer unaffected,
-      and that is deliberate: every scheduled step records its outcome to
+      up the backlog on its own. The morning report does not ignore it, and
+      that is deliberate: every scheduled step records its outcome to
       data/job-status.jsonl as it exits, and the next morning's disclaimer
       names any step that has not succeeded inside the window CRITERIA.md
-      gives it. A nightly failing quietly is precisely what went unnoticed for
-      a week before that record existed.</td>
+      gives it. A nightly that fails quietly is exactly the failure nothing
+      else in the system would notice.</td>
     </tr>
   </table>
   </div>
@@ -1370,9 +1358,9 @@ losers never up more than 0.5%           2 of 11</p>
   <h2>File map</h2>
   <div class="table-wrap">
   <table class="files">
-    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\, glossary the one place a plain English word for a column is written down), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, gap_reasons the explanation pass, render_report, verify_morning, deliver), <strong>midday</strong> (scan_midday, render_midday, the 12:00 pass that shipped 2026-08-31), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session the Alpaca screen replay, the four probe_ scripts, the four measure_ scripts and the two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate, eighteen modules in all, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the fourteen test_ modules, the newest being test_midday, which shipped with the 12:00 pass on 2026-08-31, with test_regressions holding one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the shared Alpaca client. Until 2026-08-31 this row said it is research only and that no pipeline module imports it, which is false and is the more dangerous of the two things to believe: night/true_volume.py imports it at MODULE scope, so it is the Alpaca transport for a SCHEDULED step and deleting it stops the nightly truth pass. night/paper_ledger.py imports it as well, inside <code>book()</code> rather than at module scope, so the 08:45 scan can read the ledger's counts without pulling an HTTP client into that window. BUILD_PLAN.md withdrew the same sentence on 2026-08-22. Module names did not change when they moved, so an import reads <code>from core import config</code> and every usage stayed valid</td></tr>
-    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the eleven fixed report sections, nine until Layer 4 added notable movers on 2026-08-20 and ten until the record block landed on 2026-08-29), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written 2026-08-29 at 66 picks with every judging point in it far beyond that count, and COUNTERFACTUAL_WATCHLIST.md, the fifth, which landed 2026-09-01 and which this list read four studies without until then</td></tr>
-    <tr><td>tasks\</td><td>ten job .bat files, eight of which register_tasks.ps1 registers as eleven scheduled tasks: job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat three times, once repeating every 30 minutes through the morning window, once repeating every 30 minutes over the midday job at 12:25, 12:55 and 13:25, and once at 22:45, job_midday.bat at 12:00 on weekdays, and job_meter_sampler.bat every thirty minutes of every day, weekends included. The midday watchdog firings were added on 2026-08-31 and took the schedule from ten registered tasks to eleven. Beside them register_tasks.ps1 and a README of scheduling notes. The other two of the ten .bat files are one off probes that a plain run of the script never registers, so a schedule refresh cannot resurrect a question that has been answered: job_probe_socket_cap, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number. Both of those have run, both questions are answered in DECISIONS.md, and neither is armed. A third, job_probe_socket_cost, sat here until 2026-09-01. It ran that morning at 10:00, measured the per message cost on a heavy live tape at ZERO across 21,306 messages, and its task and .bat were deleted the same day on its own header's instruction. Its module stays under src/research/ and carries a warning, because it writes into the premarket session capture and that run had to be arbitrated back out. job_probe_alpaca_live and job_probe_live_v1 sat here too and were deleted once the same was true of them</td></tr>
+    <tr><td>src\</td><td>split into packages by role, with src\ itself as the import root so every module runs as <code>python -m package.module</code>: <strong>core</strong> (config, criteria, ettime, store, eodhd, artifacts the overwrite guard for files under runs\, glossary the one place a plain English word for a column is written down), <strong>ops</strong> (job_status, market_today the trading day guard, monitor_jobs the watchdog, meter_sampler the half hourly quota reading, quantifier_flags the hand judging tool for the guard's flag log), <strong>selection</strong> (universe, discover, gap_stats), <strong>collect</strong> (collect_premarket, baseline), <strong>morning</strong> (scan, vintage, analyst, gap_reasons the explanation pass, render_report, verify_morning, deliver), <strong>midday</strong> (scan_midday, render_midday, the 12:00 pass), <strong>night</strong> (backfill_premarket, fill_outcomes, true_volume the Alpaca measurement pass, paper_ledger the one rule ledger, pool_recall, prune_data, weekly_page, backup_evidence, build_archive), <strong>research</strong> (backtest_pool, float_cache, float_rotation_study, addressable_sweep, vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session the Alpaca screen replay, the four probe_ scripts, the four measure_ scripts and the two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate, eighteen modules in all, instruments rather than pipeline), and <strong>tests</strong> (conftest, run_tests and the fourteen test_ modules, with test_regressions holding one claim per defect the 2026-08-20 audit confirmed). One file sits at the root beside the packages, probe_alpaca.py, the shared Alpaca client. It is emphatically not research only, and believing otherwise is the more dangerous of the two readings: night/true_volume.py imports it at MODULE scope, so it is the Alpaca transport for a SCHEDULED step and deleting it stops the nightly truth pass. night/paper_ledger.py imports it as well, inside <code>book()</code> rather than at module scope, so the 08:45 scan can read the ledger's counts without pulling an HTTP client into that window. Every module runs by name rather than by path, so an import reads <code>from core import config</code> wherever it sits</td></tr>
+    <tr><td>doc\</td><td>CRITERIA.md (every threshold), CHANGELOG.md (what changed and when), DECISIONS.md (why a choice that could have gone the other way went the way it did, cited by date from discover.py and scan.py), REPORT_TEMPLATE.md (the eleven fixed report sections), prompt_analyst.md, BUILD_PLAN.md, ALPACA_PROBE.md, sample_report.html, this page and the system architecture page beside it, and <strong>research\</strong> holding the written up studies: COLLECTOR_VOLUME.md, VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, the pre-registration for the conviction score's ordering, written while the record was still too small to judge on purpose and with every judging point in it far beyond the count it was written at, COUNTERFACTUAL_WATCHLIST.md, BASELINE_FLOOR.md, CAPTURE_RATE.md and FLOAT_ROTATION_FITS.md: eight in all, counted off the directory rather than remembered</td></tr>
+    <tr><td>tasks\</td><td>ten job .bat files, eight of which register_tasks.ps1 registers as eleven scheduled tasks: job_nightly.bat twice, at 22:15 and again at 07:00 to catch up on data the vendor published overnight, job_monitor.bat three times, once repeating every 30 minutes through the morning window, once repeating every 30 minutes over the midday job at 12:25, 12:55 and 13:25, and once at 22:45, job_midday.bat at 12:00 on weekdays, and job_meter_sampler.bat every thirty minutes of every day, weekends included. Beside them register_tasks.ps1 and a README of scheduling notes. The other two of the ten .bat files are one off probes that a plain run of the script never registers, so a schedule refresh cannot resurrect a question that has been answered: job_probe_socket_cap, armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, and job_probe_capture, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is [Scan] run_time rather than a chosen number. Both of those have run, both questions are answered in DECISIONS.md, and neither is armed. A probe whose question has been answered is deleted rather than left lying about, and several have gone that way: job_probe_socket_cost, which measured the per message cost on a heavy live tape at ZERO across 21,306 messages, and job_probe_alpaca_live and job_probe_live_v1 before it. Every module they wrapped stays under src/research/, and the socket cost one carries a warning, because it writes into the premarket session capture and a run of it has to be arbitrated back out by hand</td></tr>
     <tr><td>data\</td><td>job-status.jsonl (one line per scheduled step per run: job, step, start and end in ET, status, exception type and one count of what it produced), universe.json, watchlist.json, universe-closes-&lt;date&gt;.json, premarket\&lt;date&gt;.jsonl minute bars beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json, premarketdesk.db (the baseline, picks, gap_stats, gap_sweeps and paper_trades tables, the last holding one row per live pick PER RULE VERSION, two of them today: the trade the CRITERIA [Paper] rule took, or the reason it declined), exchange-details.json holiday cache, monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard has fired live, and the UNVERIFIED gate marker</td></tr>
     <tr><td>runs\&lt;date&gt;\</td><td>packet.json, premarket_snapshot.jsonl, report.md, report.html, analyst_usage.json, midday_packet.json, report_midday.md, report_midday.html, pool_recall.json, verify_intraday.json, and packet_degraded.json only when a quota thinned rerun would otherwise have replaced a fuller packet</td></tr>
     <tr><td>site\</td><td>PremarketDesk.html, the single file report archive: newest sessions inlined, older ones linking out, rebuilt whole after every morning chain and every nightly run</td></tr>

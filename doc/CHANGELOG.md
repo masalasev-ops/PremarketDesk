@@ -15,6 +15,57 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-01, twenty eighth: the two architecture pages become one continuous explanation
+
+Both pages had become part document and part diary. The architecture page
+opened on a section called "What changed on 2026-09-01"; a row in its nightly
+timeline carried a bracketed correction about a count that was wrong in one
+module and travelled into three documents; its analyst caption ended on the
+sentence "the numbers in this caption are the four mornings it was written
+about and are left as they were". The day run page had a caption saying the
+paragraph above it "is now history to" the paragraph below. A reader who wants
+to know how the system works was reading, instead, how the description of the
+system had been edited.
+
+That is what this file and DECISIONS.md are for, so the history moves out and
+both pages are now written as one continuous explanation of the system as it
+stands. Every "used to", "no longer", "was added on" and "until 2026-08-XX" is
+either gone or rewritten to state the rule and the reason without the
+biography. Section 00 of the architecture page is deleted whole. Both pages now
+open with the same contract, which is also the test for anything written into
+them later: this page describes the system as it stands, what changed on which
+date is in CHANGELOG.md, why a choice went the way it did is in DECISIONS.md.
+
+A DATE ATTACHED TO A MEASUREMENT STAYS, and both pages say so. "measured
+2026-08-13 at 23:05 ET, the counter moved by 100" is not history, it is the
+provenance of a number, and a project that refuses a statistic without its
+denominator cannot strip the day a measurement was taken. What went is the date
+attached to an EDIT. The rule reads: keep the reason, drop the biography. So
+"the hour moved twice: 20:00 was the exact instant of the quota reset, 20:30
+assumed the counter rolls on the hour" became "the shared quota rolls over at
+20:00 ET, the counter lands 30 to 32 minutes late measured, so 21:00 clears it
+by roughly double the observed lag". Same evidence, same conclusion, no diary.
+
+FOUR THINGS WERE OUT OF SYNC AND ARE FIXED, which is the more useful half.
+Both pages said backup_evidence copies FOUR artifacts; _ARTIFACTS has copied
+six since report.md and report.html joined it, and the reason a report is on
+that list, that the same input does not produce the same words twice, was in
+neither page. Neither page mentioned the Entry and Stop columns or the
+invalidation line, both of which a reader sees on every report. Neither
+mentioned the macro tag test that stops a market wrap handing a stock a
+catalyst, though it is one of three tests in the scan. And the day run page
+listed five research write ups where there are eight.
+
+THE COUNT CLAIM CAUGHT NOTHING THIS TIME, which is the point of it. The four
+counted phrases both pages carry, fourteen test_ modules, eighteen modules in
+all, ten .bat files in all, eight write ups in all, all survived the rewrite
+intact and still match the directory. The three counts nothing was checking,
+the backup artifacts, the research write ups in the day run page, and the
+studies named against that number, are exactly the three that were wrong, which
+is the argument for the claim rather than an argument against it.
+
+Suite green at 141 claims, no drift. No code changed.
+
 ## 2026-09-01, twenty seventh: entry and stop become columns, and the invalidation line
 
 The report was already printing the entry and not saying so. CRITERIA [Picks]
