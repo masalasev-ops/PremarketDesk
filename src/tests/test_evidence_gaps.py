@@ -332,6 +332,325 @@ _ROLL_CASES = {
 }
 
 
+_SHAPE_CANDIDATES = [
+    {"symbol": "AAA.US", "quote": {"sector": "Information Technology"},
+     "catalyst_class": "earnings", "pm_rvol": 2.0, "pm_window_start": "07:20",
+     "pm_window_thin": False, "score": 7.0, "pm_band_state": "thin",
+     "catalyst_found": True, "pm_rvol_basis": {"is_lower_bound": True}},
+    {"symbol": "BBB.US", "quote": {"sector": "Information Technology"},
+     "catalyst_class": "earnings", "pm_rvol": 3.0, "pm_window_start": "07:20",
+     "pm_window_thin": False, "score": 5.0, "pm_band_state": "not flagged",
+     "catalyst_found": True, "pm_rvol_basis": {"is_lower_bound": True}},
+    # No RVOL at all, so the lower bound question cannot be ASKED of it. This
+    # row is what makes the shared/askable split observable.
+    {"symbol": "CCC.US", "quote": {"sector": "Health Care"},
+     "catalyst_class": None, "pm_rvol": None, "pm_window_start": "07:41",
+     "pm_window_starts_late": True,
+     "pm_window_thin": False, "score": 2.0, "pm_band_state": "unknown",
+     "catalyst_found": None, "pm_rvol_basis": {}},
+]
+
+
+def claim_the_list_shape_is_counted_and_never_derived(
+        failures: list[str]) -> None:
+    """What the twelve look like TOGETHER, on the screen_tally pattern.
+
+    The report has always said a great deal about one candidate at a time and
+    nothing about the list as a group. Nine of twelve names in one sector is a
+    fact about the morning rather than about any of the nine, and a name picked
+    on three of the last five recorded sessions is a different object from a
+    first appearance. Neither is a property of a candidate, so neither is
+    visible from a per candidate block however carefully it is read.
+
+    COUNTED HERE BECAUSE IT IS A COUNT ACROSS THE SET, which is the exact shape
+    of derivation that produced the false universal of 2026-08-18. There is one
+    correct answer to "how many share a sector" and a filter performed in prose
+    over a set the packet already holds is a membership claim nothing can
+    check.
+
+    Every sentence faces the quantifier guard here, because the report quotes
+    them word for word. That includes the SECTOR LABELS, which are vendor text
+    rather than this project's, so a label carrying a banned word would be
+    built by Python, quoted under instruction, and flagged against the model.
+
+    A null sector is its own named bucket. Folding it into the smallest real
+    one would report a concentration that nobody measured.
+    """
+    from morning import analyst, scan
+
+    shape = scan.list_shape(_SHAPE_CANDIDATES, "2026-01-02")
+
+    if shape["sectors"] != {"Information Technology": ["AAA", "BBB"],
+                            "Health Care": ["CCC"]}:
+        failures.append(f"the sector grouping is {shape['sectors']}, and the "
+                        "fixture holds two technology names and one health care")
+    if shape["catalyst_classes"] != {"earnings": ["AAA", "BBB"],
+                                     "unknown": ["CCC"]}:
+        failures.append(
+            f"the catalyst class grouping is {shape['catalyst_classes']}. A "
+            "null class is its own named bucket, never folded into a real one")
+
+    for key, line in shape["text"].items():
+        for hit in analyst.quantifier_violations(line):
+            failures.append(
+                f"list_shape's {key} sentence asserts {hit['quantifier']!r} "
+                f"near {hit['set_word']!r} and the report quotes it word for "
+                f"word: {line!r}")
+        if f"of {len(_SHAPE_CANDIDATES)}" not in line and "across" not in line:
+            failures.append(f"list_shape's {key} sentence carries no "
+                            f"denominator: {line!r}")
+
+    # A null sector is NAMED rather than dropped or folded.
+    unknown_sector = scan.list_shape(
+        [{"symbol": "DDD.US", "quote": {}, "catalyst_class": "earnings"}],
+        "2026-01-02")
+    if "unknown" not in unknown_sector["sectors"]:
+        failures.append("a candidate whose vendor quote carries no sector is "
+                        "not bucketed as unknown: "
+                        f"{unknown_sector['sectors']}")
+
+    # And it describes rather than screens: nothing it touches is a decision.
+    for candidate in _SHAPE_CANDIDATES:
+        for decided in ("day_eligible", "swing_eligible", "conviction", "score"):
+            if decided in candidate and decided == "day_eligible":
+                failures.append("the shape fixture carries an eligibility "
+                                "field, so this claim cannot show that "
+                                "list_shape leaves one alone")
+
+    print("  list shape  sector, catalyst class and repeat counts are computed "
+          "against their denominators, a null sector is named, and not one "
+          "sentence asserts a quantifier over the screened set")
+
+
+def claim_a_repeat_appearance_reads_only_live_rows_before_today(
+        failures: list[str]) -> None:
+    """The repeat count is fenced twice, and both fences carry weight.
+
+    SOURCE. The picks table holds live, test and reconstructed rows. Only live
+    is the record of what a morning actually published, so a replayed session
+    or a hand run would otherwise report a name as a repeat appearance when no
+    reader ever saw it named.
+
+    DATE. Today's own picks rows are written by this same scan a few lines
+    after this runs. A read that did not exclude them would report every
+    candidate as having appeared today, which is true and useless, and the
+    order of two calls inside one function is a bad place to keep a fact.
+
+    Sessions are counted as DISTINCT DATES ALREADY IN THE TABLE rather than as
+    calendar days back, because five calendar days over a long weekend is three
+    sessions and over a holiday week is fewer. A calendar window would silently
+    shrink in exactly the weeks a reader is least able to remember what ran.
+    """
+    from core import store
+    from morning import scan
+
+    with store.session() as connection:
+        store.init(connection)
+        connection.execute("DELETE FROM picks")
+        rows = [
+            # Two live sessions before today, one of them holding AAA twice
+            # over, which a DISTINCT date read must not double count.
+            ("2026-01-01", "AAA.US", "live"),
+            ("2026-01-01", "BBB.US", "live"),
+            ("2025-12-31", "AAA.US", "live"),
+            # A reconstruction and a hand run on a third date. Neither was ever
+            # published, so neither is a prior appearance.
+            ("2025-12-30", "AAA.US", "reconstructed"),
+            ("2025-12-30", "CCC.US", "test"),
+            # Today. Written by this morning's own scan.
+            ("2026-01-02", "AAA.US", "live"),
+        ]
+        for date, ticker, source in rows:
+            connection.execute(
+                "INSERT INTO picks (date, ticker, source) VALUES (?, ?, ?)",
+                (date, ticker, source))
+        connection.commit()
+
+    seen = scan.prior_appearances(
+        ["AAA.US", "BBB.US", "CCC.US"], "2026-01-02", 5)
+    if seen.get("AAA.US") != ["2026-01-01", "2025-12-31"]:
+        failures.append(
+            f"AAA's prior appearances read {seen.get('AAA.US')}. They are the "
+            "two live sessions before today: not today's own row, and not the "
+            "reconstruction on 2025-12-30")
+    if seen.get("BBB.US") != ["2026-01-01"]:
+        failures.append(f"BBB's prior appearances read {seen.get('BBB.US')}")
+    if seen.get("CCC.US"):
+        failures.append(
+            f"CCC has prior appearances {seen.get('CCC.US')}, and its only row "
+            "is a hand run nobody ever read")
+
+    # The lookback counts SESSIONS, not calendar days: one session back from
+    # today is 2026-01-01 alone, even though 2025-12-31 is two days away.
+    one_back = scan.prior_appearances(["AAA.US"], "2026-01-02", 1)
+    if one_back.get("AAA.US") != ["2026-01-01"]:
+        failures.append(
+            f"a one session lookback returned {one_back.get('AAA.US')}, so the "
+            "window is counting days rather than recorded sessions")
+
+    with store.session() as connection:
+        connection.execute("DELETE FROM picks")
+        connection.commit()
+
+    print("  repeats     a prior appearance is a live row on an earlier "
+          "recorded session, never a reconstruction, a hand run or today's own")
+
+
+def claim_a_gap_the_whole_list_shares_is_said_once(failures: list[str]) -> None:
+    """Per name when it differs, once when it does not, on the askable set.
+
+    The report only describes what the packet holds, which reads as
+    completeness to a reader who cannot see the fields that came back empty.
+    The disclaimer names these as SETS, and a set says somebody is short of
+    evidence without saying which name in front of them is the one.
+
+    THE SUPPRESSION IS WHAT MAKES IT READABLE and it was learned from output.
+    Measured on 2026-09-01, ELEVEN OF THE ELEVEN candidates it could be asked
+    of carried rvol_lower_bound, because it is structural: the numerator covers
+    07:20 onward and the denominator accumulates from 04:00. Printed per name
+    that is the same sentence eleven times, which buries the one missing
+    baseline and the four partial windows that actually differed.
+
+    SHARED IS MEASURED OVER THE ASKABLE SET, not over every row, and that is
+    the whole subtlety. A name with no RVOL did not answer no to "is your RVOL
+    a lower bound", it was never asked. Counting it as a no turns a cause the
+    entire measurable list shares into one that only most of it shares, and the
+    only alternative is a percentage threshold picked inside a continuum, which
+    this project refuses elsewhere for the same reason.
+    """
+    from morning import analyst, scan
+
+    candidates = [dict(c) for c in _SHAPE_CANDIDATES]
+    shared = scan.attach_evidence_missing(candidates)
+
+    if shared["shared_by_all"] != ["rvol_lower_bound"]:
+        failures.append(
+            f"the shared causes read {shared['shared_by_all']}. Both names "
+            "carrying an RVOL carry a lower bound, and the third has no RVOL "
+            "to ask the question of, so the lower bound is shared")
+    if shared["asked_of"].get("rvol_lower_bound") != 2:
+        failures.append(
+            f"the shared denominator is {shared['asked_of']}, and the question "
+            "could be asked of two of the three")
+    for hit in analyst.quantifier_violations(shared["text"]):
+        failures.append(
+            f"the shared sentence asserts {hit['quantifier']!r} near "
+            f"{hit['set_word']!r} and the disclaimer quotes it: "
+            f"{shared['text']!r}")
+
+    by_symbol = {c["symbol"]: c["evidence_missing"] for c in candidates}
+    if by_symbol["AAA.US"]["causes"]:
+        failures.append(
+            "AAA carries a per name gap and its only gap is the one the whole "
+            f"list shares: {by_symbol['AAA.US']}")
+    if by_symbol["AAA.US"]["text"]:
+        failures.append(
+            "a candidate with nothing specific to it carries a line anyway, "
+            "which is what teaches a reader to skip the ones that do: "
+            f"{by_symbol['AAA.US']['text']!r}")
+    if by_symbol["AAA.US"]["shared_by_all"] != ["rvol_lower_bound"]:
+        failures.append(
+            "the suppressed cause is not recorded against the name it was "
+            f"suppressed for: {by_symbol['AAA.US']}")
+    for want in ("catalyst_unchecked", "no_baseline", "window_partial",
+                 "fill_untested"):
+        if want not in by_symbol["CCC.US"]["causes"]:
+            failures.append(
+                f"CCC does not carry {want}, and the fixture gives it an "
+                f"unchecked feed, no baseline, a late window and no band "
+                f"evidence: {by_symbol['CCC.US']['causes']}")
+    for hit in analyst.quantifier_violations(by_symbol["CCC.US"]["text"]):
+        failures.append(
+            f"a per name gap line asserts {hit['quantifier']!r} near "
+            f"{hit['set_word']!r}: {by_symbol['CCC.US']['text']!r}")
+
+    # ONE CANDIDATE IS ITS OWN LIST. Suppressing there would leave a lone name
+    # with an empty line and the fact nowhere.
+    lone = [dict(_SHAPE_CANDIDATES[0])]
+    lone_shared = scan.attach_evidence_missing(lone)
+    if lone_shared["shared_by_all"]:
+        failures.append(
+            "a single candidate morning suppressed a cause as shared, so the "
+            f"only name in the report carries no line and neither does the "
+            f"disclaimer: {lone_shared['shared_by_all']}")
+    if "lower bound" not in lone[0]["evidence_missing"]["text"]:
+        failures.append(
+            "a single candidate's own gap did not reach its line: "
+            f"{lone[0]['evidence_missing']['text']!r}")
+
+    # IDEMPOTENT, and the packet depends on it: stamp_all calls this for the
+    # attachment and build_packet calls it again for the shared half, so one
+    # function stays the only place either answer is worked out. A second call
+    # that read the key it wrote rather than the underlying fields would
+    # suppress the already suppressed and empty the disclaimer line.
+    again = scan.attach_evidence_missing(candidates)
+    if again != shared or [c["evidence_missing"] for c in candidates] != [
+            by_symbol[c["symbol"]] for c in candidates]:
+        failures.append(
+            "attach_evidence_missing is not idempotent, and build_packet calls "
+            "it a second time to publish the shared block")
+
+    print("  what is not a gap the measurable list shares is said once in the "
+          "disclaimer, a gap one name carries is said against that name, and a "
+          "name missing nothing carries no line")
+
+
+def claim_the_instructions_ask_for_the_shape_and_the_absence(
+        failures: list[str]) -> None:
+    """Both documents quote the new fields rather than describing them.
+
+    The same pairing every supplied sentence in this project needs. Dropping
+    the old wording without naming the field leaves the model to invent the
+    section; naming the field while an instruction to derive it stands leaves
+    two ways to answer and no reason to prefer either.
+
+    The aboutness sentence is checked differently, because it is the one thing
+    here Python does not supply: what is asserted is that it is asked for where
+    the headline is PRINTED. That placement is the entire safeguard. A reader
+    can check "about a peer" against the headline on the line above at a
+    glance; the same words in a table three sections away are a claim nobody
+    verifies, which is worse than no claim.
+    """
+    template = TEMPLATE.read_text(encoding="utf-8")
+    prompt = (config.PROJECT_ROOT / "doc" / "prompt_analyst.md").read_text(
+        encoding="utf-8")
+
+    for field in ("list_shape.text.sectors",
+                  "list_shape.text.catalyst_classes",
+                  "list_shape.text.repeat_appearances",
+                  "evidence_missing.text",
+                  "evidence_missing_shared.text"):
+        for label, document in (("REPORT_TEMPLATE.md", template),
+                                ("prompt_analyst.md", prompt)):
+            if field not in document:
+                failures.append(
+                    f"{label} does not name {field}, so the model either "
+                    "derives that sentence or omits it")
+
+    # The aboutness sentence belongs under the printed headline. Premarket
+    # gappers is the section that prints headline titles; Skips and traps
+    # names symbols and reasons and prints no headline text.
+    gappers = template.split("## Premarket gappers", 1)
+    if len(gappers) != 2:
+        failures.append("REPORT_TEMPLATE.md has no Premarket gappers section, "
+                        "which is where the headline titles are printed")
+    else:
+        block = gappers[1].split("\n## ", 1)[0]
+        if "about the company" not in block:
+            failures.append(
+                "the aboutness sentence is not asked for in Premarket gappers, "
+                "which is the only section that prints the headline itself. "
+                "Asked for anywhere else, the reader cannot check it against "
+                "the text it describes")
+        if "evidence_missing.text" not in block:
+            failures.append(
+                "the per name evidence gap line is not asked for in the "
+                "section that carries one block per candidate")
+
+    print("  asked for   both documents quote the shape and the absence, and "
+          "the aboutness sentence is asked for under the printed headline")
+
+
 def claim_the_roll_selects_by_the_predicate_it_names(failures: list[str]) -> None:
     """Five filters the template used to make the model perform in prose.
 
@@ -696,6 +1015,10 @@ def main() -> int:
     claim_a_lower_bound_reaches_gaps_to_fill(failures)
     claim_the_template_does_not_ask_for_the_false_sentences(failures)
     claim_the_roll_selects_by_the_predicate_it_names(failures)
+    claim_the_list_shape_is_counted_and_never_derived(failures)
+    claim_a_repeat_appearance_reads_only_live_rows_before_today(failures)
+    claim_a_gap_the_whole_list_shares_is_said_once(failures)
+    claim_the_instructions_ask_for_the_shape_and_the_absence(failures)
     claim_the_roll_and_the_fallback_agree_on_partial_evidence(failures)
     claim_the_rolls_own_words_pass_the_quantifier_guard(failures)
     claim_the_template_reads_the_roll_rather_than_deriving_it(failures)

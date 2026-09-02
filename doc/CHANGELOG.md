@@ -15,6 +15,98 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirtieth: what the headline is about, what the list looks like, and what is missing
+
+Four additions to what the report says. Two are asked of the model and two are
+counted in Python, and the split is the usual one: a judgement a reader can
+check against a text in front of them is asked for, a count across the
+candidate set is computed.
+
+HEADLINE ABOUTNESS, one sentence under each quoted headline saying whether it
+is about the company itself, about its sector or the wider market, or about a
+peer, and what in the headline says so. This is the wrap problem that defeated
+three measured attempts in Python: the symbol tag count, the macro tag list and
+the title naming test, each of which caught part of it and none of which caught
+"Energy stocks lead in subdued final trading day of August" filed against a
+health care ticker. A model reads that in a glance.
+
+TWO BOUNDS, and they are what make it safe to ask for. It goes directly under
+the printed headline, never into a table, because that placement IS the
+safeguard: a reader checks "about a peer" against the line above at a glance,
+where the same words three sections away are a claim nobody verifies. And
+nothing follows from it. catalyst_class, the score, the conviction, eligibility
+and watchlist membership keep the values the packet gives them.
+
+The template specifies it in Premarket gappers rather than in Skips and traps.
+Skips and traps names symbols and reasons and prints no headline text, so the
+sentence there would have had nothing above it to be checked against, which is
+the one property the whole thing rests on.
+
+THE SPECIFIC EVENT, one clause naming what the headline says happened, quoted
+rather than characterised. catalyst_class is coarse and beat and raised
+guidance and beat and cut guidance are opposite events inside the single class
+`earnings`.
+
+WHAT THE LIST LOOKS LIKE TOGETHER. scan.list_shape counts three things and the
+Summary quotes them: the sector split, the catalyst class split, and which of
+today's names were also picked inside the last [Composition]
+repeat_lookback_sessions recorded sessions. On 2026-09-01 that reads nine of
+twelve in Information Technology and six of twelve seen before within five
+sessions, neither of which the report had any way to say. Computed in Python on
+the screen_tally pattern, because a count across the candidate set performed in
+prose is the derivation that produced the false universal of 2026-08-18.
+
+The repeat read is FENCED TWICE. To source='live', because a replayed session
+or a hand run was never published and would otherwise report a name as a repeat
+nobody saw. And to dates before today, because this morning's own picks rows
+are written by the same scan a few lines later, so an unfenced read would call
+every candidate a repeat. Sessions are counted as DISTINCT DATES ALREADY IN THE
+TABLE rather than calendar days back: five calendar days over a long weekend is
+three sessions, so a calendar window would silently shrink in exactly the weeks
+a reader is least able to remember what ran.
+
+DESCRIBES AND NEVER SCREENS, stated in CRITERIA and in both documents. A sector
+crowd is for a reader to weigh; refusing a setup for the company its peers keep
+would be screening on the neighbours. Nothing in [Composition] can become a
+threshold and there is no parameter in it that could.
+
+WHAT IS ABSENT, per name. Each candidate carries a line naming the evidence
+that would have changed the reading of it and was not available, and a
+candidate missing nothing carries no line at all, because a line reading
+"nothing is missing" against seven of twelve rows is what teaches a reader to
+skip the five that carry something.
+
+THE SUPPRESSION IS THE PART THAT WAS LEARNED FROM OUTPUT. The first version
+printed a line against all twelve and eleven of them were the same sentence:
+rvol_lower_bound is structural, the numerator covers 07:20 onward and the
+denominator accumulates from 04:00. So a cause the whole list shares is cut
+from the rows and said once in the disclaimer, and the one missing baseline and
+four partial windows that actually differed are what is left.
+
+SHARED IS MEASURED OVER THE ASKABLE SET, which is the subtlety. The first cut
+of that used "every candidate", and it found nothing: MMED has no RVOL at all,
+so it did not answer no to a question about its RVOL, it was never asked.
+Counting it as a no turns a cause the entire measurable list shares into one
+only most of it shares. Each cause now carries the predicate that says whether
+the question could be asked, which is the measured versus unmeasured split this
+project uses everywhere else. The alternative was a percentage threshold picked
+inside a continuum, which is what this project refuses to do.
+
+price_stale was drafted as a cause and REMOVED before shipping: [Price age]
+max_price_age_seconds is a hard cut, so a candidate older than it has already
+left for dropped_stale_price and cannot reach the function. A cause that cannot
+fire reads as coverage and gives none.
+
+The guard caught this project's own wording twice more while writing it. The
+shared sentence read "rather than against each name", and `each` sits inside
+six words of `name`. The template read "a great deal about each candidate".
+Both reworded, neither relaxed.
+
+Suite green, no drift. test_regressions carries one hundred and forty one
+claims and the suite as a whole is 289 across fourteen modules, four of them
+added here. No threshold moved, no score changed, and no candidate's
+eligibility depends on anything added here.
+
 ## 2026-09-02, twenty ninth: five holes in the analyst prompt, and the midday report learns to name a stock
 
 Five defects in doc/prompt_analyst.md, found by reading it as a contract
@@ -99,8 +191,12 @@ all, so claim_no_report_prints_an_exchange_qualified_ticker reads the RENDERED
 markdown of every midday packet on disk rather than the call sites. A claim
 written against the call sites would have found four and missed the fifth.
 
-Suite green at 143 claims, no drift. No threshold moved and no report content
-changed except the spelling of a ticker.
+Suite green, no drift. Two claims added, one to test_containment and one to
+test_midday. [corrected 2026-09-02: this read "143 claims", which took
+test_regressions' own self count for the whole suite's. That count is 141 and
+nothing here changed it; the suite total is 289 across fourteen modules.] No
+threshold moved and no report content changed except the spelling of a
+ticker.
 
 ## 2026-09-01, twenty eighth: the two architecture pages become one continuous explanation
 
@@ -151,7 +247,9 @@ the backup artifacts, the research write ups in the day run page, and the
 studies named against that number, are exactly the three that were wrong, which
 is the argument for the claim rather than an argument against it.
 
-Suite green at 141 claims, no drift. No code changed.
+Suite green, no drift. [corrected 2026-09-02: this read "141 claims" as though
+it were the suite total. 141 is test_regressions' own self count; the suite is
+289 claims across fourteen modules.] No code changed.
 
 ## 2026-09-01, twenty seventh: entry and stop become columns, and the invalidation line
 

@@ -124,6 +124,33 @@ eligible {screen_tally.day.eligible} of {screen_tally.candidates_examined},
 swing eligible {screen_tally.swing.eligible} of
 {screen_tally.candidates_examined}.
 
+WHAT THE LIST LOOKS LIKE TOGETHER, quoted from `list_shape.text` and never
+counted by you. Three sentences, in this order, word for word:
+
+- `list_shape.text.sectors`
+- `list_shape.text.catalyst_classes`
+- `list_shape.text.repeat_appearances`
+
+The report has always said a great deal about one candidate at a time and
+nothing about the twelve as a group. Nine of twelve in one sector is a fact
+about the morning rather than about any of the nine, and a name picked on three
+of the last five recorded sessions is a different object from a first
+appearance. Neither is visible from a per candidate block, because neither is a
+property of a candidate.
+
+THESE DESCRIBE AND NEVER SCREEN. Nothing in them touches eligibility, the score
+or watchlist membership, and you may not write that a concentration makes a
+name weaker or stronger. A sector crowd is something for a reader to weigh; a
+system that refused a setup for the company its peers keep would be screening
+on the neighbours. The same boundary the notable movers section holds.
+
+They are counted in Python for the reason screen_tally is: a count across the
+candidate set performed in prose is a membership claim nothing can check, and
+it is exactly the derivation that produced the false universal of 2026-08-18.
+Quote them. Do not re-order the names inside them, do not summarise a sentence
+that names six symbols down to "several", and do not drop one for reading
+zero.
+
 WHEN cleared_floors AND kept DIFFER, SAY WHY IN THE SAME BREATH. The
 difference is candidate_provenance.ranking.capped_out, and those names were
 CUT BY THE RANK CAP rather than rejected by a screen. Give the count, the cap
@@ -193,7 +220,67 @@ catalyst story: the full headline titles from the packet with publisher and
 published time, the catalyst class Python assigned, and catalyst_why. A
 candidate with catalyst_found false is written as moving on no found catalyst,
 a skip per the rules. Never summarize a headline into something it does not
-say, and never add a headline the packet does not carry.}
+say, and never add a headline the packet does not carry.
+
+THEN, WHERE THE CANDIDATE'S `evidence_missing.text` IS NOT EMPTY, QUOTE IT WORD
+FOR WORD as the last line of that block. It names the evidence that would have
+changed the reading of this name and was not available. Where it is empty,
+write nothing: a line saying nothing is missing, printed against seven of
+twelve names, is what teaches a reader to skip the five that carry something.
+
+The disclaimer already names these as SETS, "3 of 12 carry a null RVOL", and a
+set tells a reader that somebody is short of evidence without telling them
+which name in front of them they know least about. This is the same facts,
+per name.
+
+It is a DESCRIPTION and never a penalty. A name with a null RVOL has already
+failed the volume condition on its own terms and saying so here is not a second
+mark against it. Do not write that a candidate is weaker for what is missing,
+and do not lower or hedge its conviction: the conviction is in the packet.
+
+A cause the whole measurable list shares is NOT on any candidate's line,
+because it is a fact about the morning rather than about a name. Python cuts
+those and puts them in `evidence_missing_shared.text`, which the disclaimer
+quotes once. Measured on 2026-09-01 that was the RVOL lower bound, true of
+eleven of the eleven names it could be asked of, and printing it twelve times
+would have buried the one missing baseline and the four partial windows that
+actually differed.
+
+UNDER EACH QUOTED HEADLINE, ONE SENTENCE SAYING WHO IT IS ABOUT. Three values
+and nothing else: it is about the company itself, about its sector or the wider
+market, or about a peer. Say which, and say what in the headline tells you so.
+
+This is the one thing in this report a reader can check at a glance, which is
+why it goes here and nowhere else: the headline is printed on the line above,
+so a wrong call is visible rather than trusted. It is also why it must not be
+moved to a table. A table cell saying "sector" with the headline three sections
+away is a claim the reader has to go and verify, and a claim nobody verifies is
+worse than no claim.
+
+NOTHING FOLLOWS FROM IT. Not catalyst_class, not the score, not eligibility,
+not watchlist membership, not a trap verdict. It is a description of a text
+that is in front of the reader, and the packet's own fields keep their values
+whatever you write here. A sentence reading "this is about the sector, so the
+catalyst is weaker" is the failure this instruction is written to avoid: you
+are describing the headline, not regrading the candidate.
+
+Why it exists. A market wrap gets tagged by the feed with whatever symbols it
+mentions, so a piece about the session can arrive attached to one company and
+read as that company's news. Three separate tests were built in Python to catch
+this and measured against the whole article corpus: a symbol tag count, a macro
+tag list, and a test for whether the title carries the company. Each caught
+part of it, and "Energy stocks lead in subdued final trading day of August",
+filed against a health care ticker, defeated the count and the title test both.
+A reader glancing at that headline sees the answer immediately. So the answer
+is asked for in words and printed where it can be checked.
+
+AND ONE CLAUSE NAMING WHAT THE HEADLINE SAYS HAPPENED, quoted from the headline
+rather than characterised. catalyst_class is a coarse bucket and beat and
+raised guidance and beat and cut guidance are opposite events inside the single
+class `earnings`. Quote the words the headline uses. Where the headline gives
+no specific event, say that it does not rather than supplying one: the class is
+what the packet computed and the event is what the text says, and a missing
+event is a fact about the headline.}
 
 ## Day watchlist
 

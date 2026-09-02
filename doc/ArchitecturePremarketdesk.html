@@ -758,6 +758,45 @@ tbody tr:hover{background:var(--ground)}
     lives in one file, <code>core/glossary.py</code>, so a word cannot come to mean two things in
     two places.</p>
 
+    <h4>What the model is asked to judge, and the two bounds on it</h4>
+    <p style="font-size:13.5px">Under each headline it quotes, the report says in one sentence
+    whether that headline is about the company itself, about its sector or the wider market, or
+    about a peer, and what in the headline says so. That is a judgement, and it is asked for because
+    three separate tests were built in Python to make it mechanically and measured against the whole
+    article corpus: a symbol tag count, a macro tag list, and a test for whether the title carries
+    the company. Each caught part of the problem. A wire piece headlined "Energy stocks lead in
+    subdued final trading day of August", filed by the feed against a health care ticker, defeated
+    the count and the title test both, and a reader glancing at it sees the answer at once.
+    <br><br>
+    Two bounds keep it honest. It sits directly under the printed headline, so a wrong call is
+    visible rather than trusted, which is why it is not allowed into a table where the reader would
+    have to go and check it. And nothing follows from it: the catalyst class, the score, the
+    conviction and watchlist membership keep the values Python gave them whatever the sentence says.
+    Beside it goes one clause naming what the headline says HAPPENED, quoted from the headline,
+    because the class is coarse and beat and raised guidance and beat and cut guidance are opposite
+    events inside the single class earnings.</p>
+
+    <h4>What the list looks like together, and what is missing from it</h4>
+    <p style="font-size:13.5px">The report said a great deal about one candidate at a time and
+    nothing about the twelve as a group, so <code>list_shape</code> counts three things in Python
+    and the Summary quotes them: how the candidates fall by sector, how they fall by catalyst class,
+    and which of them were also picked inside the last few recorded sessions. On 2026-09-01 that was
+    nine of twelve in Information Technology and six of twelve seen before within five sessions.
+    These describe and never screen: a system that refused a setup for the company its peers keep
+    would be screening on the neighbours, so nothing here touches eligibility or the score. The
+    repeat count is one local table read fenced to live rows on dates before today, because a
+    replayed session was never published and this morning's own rows are written a few lines later.
+    <br><br>
+    And each candidate carries a line naming the evidence that would have changed the reading of it
+    and was not there: no catalyst checked, no baseline, a partial or thin window, an incomplete
+    score, no fill evidence. A candidate missing nothing carries no line at all. A cause the whole
+    measurable list shares is cut from every row and said once in the disclaimer instead, which
+    matters more than it sounds: measured on 2026-09-01, eleven of the eleven names it could be
+    asked of carried a lower bound RVOL, and printing that eleven times would have buried the one
+    missing baseline and the four partial windows that actually differed. Shared is measured over
+    the names the question could be ASKED of, not over every row, because a name with no RVOL did
+    not answer no to a question about its RVOL.</p>
+
     <h4>The one sentence where the model is held to a level</h4>
     <p style="font-size:13.5px">Each candidate's write up closes on a fixed opening, "What would say
     this is wrong:", and the rest of that line is written in words with the digits left out. It

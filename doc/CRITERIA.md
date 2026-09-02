@@ -234,6 +234,37 @@ min_return_stdev_pct          = 0.1        # SEED, not measured. Below this the 
                                            # sessions would otherwise report an
                                            # enormous sigma on any move at all.
 
+## Composition
+
+What the morning's list looks like TOGETHER, which is a different question from
+what each name looks like. Read by morning/scan.py list_shape and by nothing
+else. Nothing in this section reaches eligibility, the score or the picks table.
+
+The report has always said a great deal about each candidate and nothing at all
+about the twelve as a group. Three energy names on one morning is a fact about
+the morning rather than about any of the three, and a name that has now been
+picked on three of the last five sessions is a different object from a first
+appearance. Neither is visible from a per candidate block, because neither is a
+property of a candidate.
+
+DESCRIBING IS NOT SCREENING and the boundary is the same one the notable movers
+section holds. A sector concentration is something for a reader to weigh, not
+evidence about any one name, and screening on it would mean refusing a good
+setup for the company its peers keep. There is no threshold here and no
+parameter that could become one: the counts are published and the reader
+decides what they mean.
+
+repeat_lookback_sessions      = 5          # how many RECORDED SESSIONS back the repeat
+                                           # appearance count reaches, counted as distinct
+                                           # dates already in picks rather than as calendar
+                                           # days. Five calendar days over a long weekend is
+                                           # three sessions and over a holiday week is fewer,
+                                           # so a calendar window would silently shrink in
+                                           # exactly the weeks a reader is least able to
+                                           # remember what ran last. SEED, not measured:
+                                           # it is a reporting window, not a threshold, and
+                                           # nothing branches on it
+
 ## Price age
 
 How old the last collector print behind a published price may be, measured

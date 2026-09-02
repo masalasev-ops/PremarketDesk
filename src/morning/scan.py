@@ -2916,6 +2916,84 @@ def reference_levels(candidate: dict[str, Any]) -> tuple[Any, Any]:
     return candidate.get(entry_field), candidate.get(stop_field)
 
 
+def attach_evidence_missing(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Every candidate carries the key, and a cause the whole list shares is cut.
+
+    A key present on some rows and absent on others cannot be told from a key
+    nobody filled, which is the one rule this project has about missing
+    evidence, so a complete candidate carries an empty list and an empty
+    string rather than no key.
+
+    THE SUPPRESSION IS THE POINT OF THIS FUNCTION and it was learned by looking
+    at the output. Measured on 2026-09-01, TWELVE OF TWELVE candidates carried
+    rvol_lower_bound, because it is structural rather than incidental: the
+    numerator covers 07:20 onward and the denominator accumulates from 04:00,
+    so on a normal morning it is true of the whole list. A per name line saying
+    the same sentence twelve times drowns the two causes that actually differ,
+    which on that morning were MMED's missing baseline and four partial
+    windows, and teaches a reader to skip the section that carries them.
+
+    So a cause held by EVERY candidate is a fact about the morning and belongs
+    in the disclaimer, which already carries it as a set line with its
+    denominator. A cause held by SOME is a fact about a name and belongs here.
+    Nothing is lost: the suppressed causes are published under
+    `shared_by_all` with their count, so a reader of the packet can see what
+    was cut and the report can say it once.
+
+    Suppression needs at least two candidates to mean anything. On a morning
+    with one name, that name IS the list and every cause it carries is its own.
+
+    IDEMPOTENT, and the packet depends on it. Every cause is recomputed from
+    the candidate's own underlying fields rather than from the key this writes,
+    so calling it a second time produces the same attachment and the same
+    returned block. stamp_all calls it for the attachment and build_packet
+    calls it for the shared half, which keeps one function as the only place
+    either answer is worked out.
+    """
+    raw_causes = {c["symbol"]: evidence_missing(c) for c in candidates}
+    shared: list[str] = []
+    shared_denominators: dict[str, int] = {}
+    for key, _text, askable in _MISSING_CAUSES:
+        # Only the candidates the question could be asked of. A name with no
+        # RVOL did not answer no to "is your RVOL a lower bound", it was never
+        # asked, and counting it as a no is what makes a universal look partial.
+        asked = [c for c in candidates if askable(c)]
+        if len(asked) > 1 and all(key in raw_causes[c["symbol"]] for c in asked):
+            shared.append(key)
+            shared_denominators[key] = len(asked)
+    wording = {key: text for key, text, _askable in _MISSING_CAUSES}
+    for candidate in candidates:
+        kept = [key for key in raw_causes[candidate["symbol"]]
+                if key not in shared]
+        candidate["evidence_missing"] = {
+            "causes": kept,
+            # What was cut, per name, so a packet reader can tell a candidate
+            # that is missing nothing from one whose every gap is the list's.
+            "shared_by_all": [key for key in raw_causes[candidate["symbol"]]
+                              if key in shared],
+            "text": ("What is not known about it: "
+                     + "; ".join(wording[key] for key in kept) + ".")
+            if kept else "",
+        }
+    return {
+        "shared_by_all": shared,
+        "candidates_examined": len(candidates),
+        # Per cause, how many candidates the question was asked of. This is the
+        # denominator the sentence quotes and it is NOT candidates_examined,
+        # because a cause can be shared by every measurable name while some
+        # name was never measured for it.
+        "asked_of": shared_denominators,
+        # The one sentence the report says instead of saying it per name. Empty
+        # when nothing is shared, which is not the same as a morning with
+        # nothing missing.
+        "text": ("; ".join(
+            f"{shared_denominators[key]} of {shared_denominators[key]} "
+            f"candidates it could be asked of share this, so it is stated "
+            f"once here rather than per row: {wording[key]}"
+            for key in shared) + ".") if shared else "",
+    }
+
+
 def attach_reference_levels(candidates: list[dict[str, Any]]) -> None:
     """Put the entry and the stop on every candidate, for the packet.
 
@@ -3052,6 +3130,239 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
     candidate["swing_failed"] = [why for _key, why, _m in swing]
     candidate["swing_failed_conditions"] = [key for key, _why, _m in swing]
     candidate["swing_failed_unmeasured"] = [key for key, _why, m in swing if not m]
+
+
+def prior_appearances(
+    symbols: list[str], session_date: str, sessions: int
+) -> dict[str, list[str]]:
+    """Which of today's names were picked on the last N sessions before today.
+
+    ONE READ OF A LOCAL TABLE, no vendor call, so the 08:45 window pays nothing
+    for it. The same argument that lets the morning read the paper ledger.
+
+    FENCED TO source='live' AND TO DATES BEFORE TODAY, and both halves matter.
+    The table holds three kinds of row and only live is the record of what a
+    morning actually published, so a replayed session or a hand run would
+    otherwise report a name as a repeat appearance when nobody ever saw it. And
+    today's own rows are written by this same scan a few lines later, so a run
+    that wrote picks before calling this would report every candidate as having
+    appeared today, which is true and useless.
+
+    Sessions are counted as DISTINCT DATES ALREADY IN THE TABLE, not as calendar
+    days back, because a five calendar day window over a long weekend is three
+    sessions and over a holiday week is fewer still. The lookback is a count of
+    the last N sessions the record actually holds.
+    """
+    if not symbols or sessions <= 0:
+        return {}
+    with store.session() as connection:
+        store.init(connection)
+        dates = [row[0] for row in connection.execute(
+            "SELECT DISTINCT date FROM picks WHERE source='live' AND date < ? "
+            "ORDER BY date DESC LIMIT ?", (session_date, sessions))]
+        if not dates:
+            return {symbol: [] for symbol in symbols}
+        marks = ",".join("?" * len(dates))
+        rows = connection.execute(
+            f"SELECT ticker, date FROM picks WHERE source='live' "
+            f"AND date IN ({marks}) ORDER BY date DESC", tuple(dates)).fetchall()
+    seen: dict[str, list[str]] = {symbol: [] for symbol in symbols}
+    wanted = set(symbols)
+    for ticker, date in rows:
+        if ticker in wanted:
+            seen[ticker].append(date)
+    return seen
+
+
+def list_shape(
+    candidates: list[dict[str, Any]], session_date: str
+) -> dict[str, Any]:
+    """What the list looks like TOGETHER, which nothing else in the packet says.
+
+    The report says a great deal about each candidate and, until this existed,
+    nothing at all about the twelve as a group. Three energy names on one
+    morning is a fact about the morning rather than about any of the three, and
+    a name that has now gapped on three of the last five sessions is a
+    different object from a first appearance. Neither is visible from a per
+    candidate block, because neither is a property of a candidate.
+
+    COMPUTED HERE AND QUOTED THERE, on the screen_tally pattern and for the
+    same reason. Each of these is a count across the candidate set, which is
+    exactly the shape of derivation that produced the false universal of
+    2026-08-18: a filter performed in prose over a set the packet already holds
+    is a membership claim nothing can check. There is one correct answer to
+    "how many share a sector", so it is the packet's job.
+
+    NEITHER TOUCHES ELIGIBILITY NOR THE SCORE, and that is deliberate rather
+    than incidental. A sector concentration is a fact a reader should weigh and
+    is not evidence about any one name: screening on it would mean refusing a
+    good setup for the company its peers keep. This section describes and never
+    filters, the same boundary the notable movers section holds.
+
+    Sentences are written in counts against their denominator, never in
+    quantifiers, because the report quotes them word for word and
+    analyst.quantifier_violations then scans what comes back. A line reading
+    "every candidate is in one sector" would be built by Python, quoted under
+    instruction, and flagged against the model.
+    """
+    examined = len(candidates)
+
+    def bare(symbol: object) -> str:
+        return glossary.bare_ticker(str(symbol or "").upper())
+
+    # SECTOR. Read off the quote already in the packet, so this costs no call.
+    # A null sector is its own bucket and is named, never folded into the
+    # smallest real one: "unknown" is a fact about the vendor's answer.
+    sectors: dict[str, list[str]] = {}
+    for candidate in candidates:
+        name = (candidate.get("quote") or {}).get("sector") or "unknown"
+        sectors.setdefault(str(name), []).append(bare(candidate["symbol"]))
+    ranked_sectors = sorted(sectors.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
+    # CATALYST CLASS. The coarse bucket, counted. The report says what each
+    # name's class is; this says how much of the morning rests on one kind of
+    # news, which is the thing a reader cannot see from twelve separate rows.
+    classes: dict[str, list[str]] = {}
+    for candidate in candidates:
+        label = candidate.get("catalyst_class") or "unknown"
+        classes.setdefault(str(label), []).append(bare(candidate["symbol"]))
+    ranked_classes = sorted(classes.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+
+    lookback = _CRIT.integer("composition", "repeat_lookback_sessions")
+    appearances = prior_appearances(
+        [c["symbol"] for c in candidates], session_date, lookback)
+    repeats = [
+        {"symbol": bare(c["symbol"]),
+         "sessions": len(appearances.get(c["symbol"]) or []),
+         "dates": appearances.get(c["symbol"]) or []}
+        for c in candidates
+        if appearances.get(c["symbol"])
+    ]
+    repeats.sort(key=lambda r: (-r["sessions"], r["symbol"]))
+
+    def group_line(ranked: list[tuple[str, list[str]]], what: str) -> str:
+        if not ranked:
+            return f"0 of {examined} candidates carry a {what}."
+        parts = ", ".join(f"{label} {len(names)} ({', '.join(names)})"
+                          for label, names in ranked)
+        return (f"{examined} candidates across {len(ranked)} {what} groups: "
+                f"{parts}.")
+
+    if repeats:
+        detail = "; ".join(
+            f"{r['symbol']} on {r['sessions']} of them, {', '.join(r['dates'])}"
+            for r in repeats)
+        repeat_line = (
+            f"{len(repeats)} of {examined} candidates were also picked inside "
+            f"the last {lookback} recorded sessions: {detail}.")
+    else:
+        repeat_line = (
+            f"0 of {examined} candidates were picked inside the last "
+            f"{lookback} recorded sessions.")
+
+    return {
+        "candidates_examined": examined,
+        "lookback_sessions": lookback,
+        "sectors": {label: names for label, names in ranked_sectors},
+        "catalyst_classes": {label: names for label, names in ranked_classes},
+        "repeat_appearances": repeats,
+        "text": {
+            "sectors": group_line(ranked_sectors, "sector"),
+            "catalyst_classes": group_line(ranked_classes, "catalyst class"),
+            "repeat_appearances": repeat_line,
+        },
+    }
+
+
+# What each of these says when it is the thing a candidate lacks, and when the
+# question behind it could be ASKED at all. Written here rather than at the
+# call site so the wording is one string per cause, and ordered by how much it
+# costs a reader: an unchecked catalyst is a hole in the reason a name is on
+# the list at all, where a late window narrows a level.
+#
+# THE THIRD ELEMENT IS THE MEASURED VERSUS UNMEASURED SPLIT this project uses
+# everywhere else, and it is here because "every candidate carries this" is the
+# wrong test without it. rvol_lower_bound is a property of an RVOL, so a name
+# with NO RVOL is not a name that answered no, it is a name nobody could ask.
+# Counting it as a no makes a cause the whole measurable list shares look like
+# a cause only most of it shares, and the alternative to this split is a
+# percentage threshold picked inside a continuum, which is what this project
+# refuses to do.
+_MISSING_CAUSES: tuple[tuple[str, str, Any], ...] = (
+    ("catalyst_unchecked",
+     "the news feed was never read for it, so there is no catalyst evidence "
+     "either way",
+     lambda c: True),
+    ("no_baseline",
+     "it has no usable premarket volume baseline, so its relative volume is "
+     "null rather than low",
+     lambda c: True),
+    ("rvol_lower_bound",
+     "its relative volume understates as a lower bound, because the numerator "
+     "covers a shorter window than the denominator",
+     lambda c: c.get("pm_rvol") is not None),
+    ("window_partial",
+     "its premarket window opened late, so its premarket high, low and average "
+     "describe part of the session",
+     lambda c: c.get("pm_window_start") is not None),
+    ("window_thin",
+     "its premarket window carries too few minutes to describe a path",
+     lambda c: c.get("pm_window_thin") is not None),
+    ("score_incomplete",
+     "a score component input was never observed, so the score rests on less "
+     "than the whole rubric",
+     lambda c: c.get("score") is not None),
+    ("fill_untested",
+     "nothing is known about what traded near its premarket high, so the level "
+     "may be a print rather than a price",
+     lambda c: c.get("pm_band_state") is not None),
+)
+
+
+def evidence_missing(candidate: dict[str, Any]) -> list[str]:
+    """Per name, the evidence that would have changed the reading and was absent.
+
+    THE REPORT ONLY DESCRIBES WHAT THE PACKET HOLDS, which reads as completeness
+    to somebody who cannot see the fields that came back empty. The disclaimer
+    already names these as SETS, "3 of 12 carry a null RVOL", and a set tells a
+    reader that somebody is missing evidence without telling them which name in
+    front of them they know least about.
+
+    So this is the same facts, per candidate, and it is deliberately a
+    DESCRIPTION rather than a penalty. Nothing here reaches eligibility or the
+    score. A name with a null RVOL already fails the volume condition on its
+    own terms; saying so twice would double count it.
+
+    An empty list is the answer for a candidate with complete evidence, and
+    the text is then the empty string rather than a sentence saying nothing is
+    missing. A line per name saying "nothing is missing" on eleven of twelve
+    rows is noise that teaches a reader to skip the twelfth.
+
+    A STALE PRICE IS DELIBERATELY ABSENT FROM THE LIST and its absence is a
+    decision. [Price age] max_price_age_seconds is a hard cut, so a candidate
+    whose last collector print is older than it has already left for
+    dropped_stale_price and cannot reach this function. A cause that cannot
+    fire is a line that reads as coverage and gives none.
+    """
+    basis = candidate.get("pm_rvol_basis") or {}
+    baseline_row = candidate.get("baseline") or {}
+    causes: list[str] = []
+    if candidate.get("catalyst_found") is None:
+        causes.append("catalyst_unchecked")
+    if candidate.get("pm_rvol") is None:
+        causes.append("no_baseline")
+    if basis.get("is_lower_bound"):
+        causes.append("rvol_lower_bound")
+    if candidate.get("pm_window_starts_late"):
+        causes.append("window_partial")
+    if candidate.get("pm_window_thin"):
+        causes.append("window_thin")
+    if candidate.get("score_partial") or candidate.get("score_unavailable"):
+        causes.append("score_incomplete")
+    if candidate.get("pm_band_state") == BAND_UNKNOWN:
+        causes.append("fill_untested")
+
+    return [key for key, _, _askable in _MISSING_CAUSES if key in causes]
 
 
 def screen_tally(candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -3625,6 +3936,14 @@ def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) 
     # After the screen and the score, because neither reads them, and before
     # the packet is written, because the report does.
     attach_reference_levels(candidates)
+    # After the score, because score_partial and score_unavailable are two
+    # of the causes it reads. Before the packet, because the packet
+    # publishes what it attaches. The SHARED half is re-derived at the packet
+    # site rather than carried across two functions in a local: this is pure
+    # arithmetic over fields nothing between here and there touches, and one
+    # function returning two things into two different scopes is how the two
+    # come to disagree.
+    attach_evidence_missing(candidates)
 
 
 # ------------------------------------------------------------------- runner
@@ -5313,6 +5632,17 @@ def build_packet() -> dict[str, Any]:
         # What cleared and what failed, per screen condition. The report quotes
         # this rather than counting; see screen_tally for why.
         "screen_tally": screen_tally(candidates),
+        # WHAT THE LIST LOOKS LIKE TOGETHER: sector and catalyst class
+        # concentration, and which of today's names were also picked inside the
+        # last few recorded sessions. Counts across the candidate set, so they
+        # are computed here and quoted there for the same reason screen_tally
+        # is. One local table read and no vendor call. See list_shape.
+        "list_shape": list_shape(candidates, session_date),
+        # THE CAUSES THE WHOLE LIST SHARES, said once. Per candidate causes sit
+        # on the candidate as evidence_missing; a cause every one of them
+        # carries is a fact about the morning and is published here so the
+        # report states it once with its denominator instead of twelve times.
+        "evidence_missing_shared": attach_evidence_missing(candidates),
         # The briefing section. Three legs, four ranked lists, universe wide
         # for two of them, and no name here is screened, scored, given a
         # conviction or written to picks. See notable_movers.

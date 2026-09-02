@@ -72,14 +72,17 @@ each part below is one thing you either did or did not do.
    instruction to judge and an instruction not to judge cannot both be obeyed,
    so one of them had to go, and it was the retracted line above.
 6a. The one line disclaimer quotes the packet's own sentences and derives none
-   of them. These five go in word for word, including when one reads 0 of N:
+   of them. These six go in word for word, including when one reads 0 of N:
    `evidence_roll.text.rvol_null`,
    `evidence_roll.text.window_starts_late`,
    `evidence_roll.text.rvol_lower_bound`,
    `evidence_roll.text.dropped_no_coverage`,
+   `evidence_missing_shared.text` where it is not empty, which is the one
+   evidence gap the whole measurable list shares and is therefore said once
+   here instead of against a name,
    and `score_roll.unscored`, which names the unscored.
 6b. Do not read the candidate blocks to work out who belongs in any of those
-   five. Python selected them before you ran, and selecting them again in
+   six. Python selected them before you ran, and selecting them again in
    prose is a membership claim nothing can check. The dropped line is quoted
    on a quiet morning too: its own sentence reports a count of zero against
    its denominator, which is a fact about the packet, where a sentence you
@@ -212,6 +215,34 @@ each part below is one thing you either did or did not do.
     prompt asks for. A sentence written with the digits left out cannot invent
     a figure, and the suite checks these sentences carry none. Say what would
     make the setup wrong, not what would make it work.
+17a. Under each headline you quote in Premarket gappers, write one sentence
+    saying whether that headline is about the company itself, about its sector
+    or the wider market, or about a peer, and what in the headline says so.
+    This is the second place judgement is asked for and it is bounded the same
+    way 16 is: you are describing a text the reader can see on the line above,
+    which is why it goes directly under the headline and never into a table.
+17b. Nothing follows from that sentence. catalyst_class, the score, the
+    conviction, eligibility and watchlist membership keep the values the packet
+    gives them, whatever you write. Do not write that a sector piece makes a
+    catalyst weaker. You are describing the headline, not regrading the
+    candidate.
+17c. Add one clause naming what the headline says happened, quoted from the
+    headline rather than characterised. catalyst_class is coarse: beat and
+    raised guidance, and beat and cut guidance, are opposite events inside the
+    single class `earnings`. Where the headline names no specific event, say
+    that it does not rather than supplying one.
+18. Quote `list_shape.text.sectors`, `list_shape.text.catalyst_classes` and
+    `list_shape.text.repeat_appearances` word for word in the Summary. They say
+    what the list looks like together, which is not a property of a candidate
+    and is not visible from a per candidate block. They describe and never
+    screen: you may not write that a concentration makes a name weaker or
+    stronger, because nothing in this system screens a company on the
+    neighbours it keeps. Counted in Python for the reason screen_tally is.
+19. Where a candidate's `evidence_missing.text` is not empty, quote it word for
+    word as the last line of that candidate's Premarket gappers block. Where it
+    is empty, write nothing at all rather than a line saying nothing is
+    missing. It is a description of what was not available and never a penalty:
+    do not lower a conviction for it and do not call a name weaker for it.
 
 ## Why these rules exist
 
