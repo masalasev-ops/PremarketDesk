@@ -19,6 +19,8 @@ Three claims:
 
 from __future__ import annotations
 
+from tests.conftest import run_claim
+
 import sys
 
 import requests
@@ -137,9 +139,9 @@ def main() -> int:
         print("SKIP  no token is configured, so the client cannot be built")
         return 0
 
-    claim_one(failures)
-    claim_two(failures)
-    claim_three(failures)
+    run_claim(failures, claim_one, failures)
+    run_claim(failures, claim_two, failures)
+    run_claim(failures, claim_three, failures)
 
     if failures:
         for failure in failures:

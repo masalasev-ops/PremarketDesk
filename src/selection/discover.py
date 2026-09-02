@@ -59,14 +59,8 @@ FETCHED_EMPTY = "fetched_and_empty"
 NOT_FETCHED = "not_fetched"
 
 
-def _as_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return out if out == out else None
+# The shared reading of "is this a number", see core/numbers.py.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 def _source(status: str, names: dict[str, Any], **extra: Any) -> dict[str, Any]:

@@ -401,14 +401,12 @@ def ca_bundle() -> str | bool:
         merged.append(f"# from {source}\n")
         merged.append(body)
         merged.append("\n")
-    partial = CA_BUNDLE_PATH.with_name(CA_BUNDLE_PATH.name + ".partial")
-    try:
-        partial.write_text("\n".join(merged), encoding="utf-8")
-        os.replace(partial, CA_BUNDLE_PATH)
-    finally:
-        # A crash between the write and the replace leaves the sibling behind.
-        # Nothing reads it, but it should not accumulate.
-        partial.unlink(missing_ok=True)
+    # Through core/files.py, the one atomic writer, since 2026-09-02. The
+    # docstring above explains why this could not reuse universe's copy: core
+    # cannot import selection. It can import core.
+    from core import files
+
+    files.write_text_atomically(CA_BUNDLE_PATH, "\n".join(merged))
     return str(CA_BUNDLE_PATH)
 
 

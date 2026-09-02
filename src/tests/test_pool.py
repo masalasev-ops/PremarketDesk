@@ -50,6 +50,7 @@ from typing import Any
 from core import config
 from core import criteria
 from tests import conftest
+from tests.conftest import run_claim
 from selection import discover
 from core import eodhd
 from core import ettime
@@ -443,12 +444,16 @@ def claim_ten(failures: list[str]) -> None:
         # to reach it is to break the rename itself.
         import os as _os
 
+        # The rename lives in core/files.py since 2026-09-02, so that is where
+        # it is broken from; universe.write_atomically is a caller of it.
+        from core import files
+
         real_replace = _os.replace
 
         def broken_replace(src, dst):
             raise OSError("simulated rename failure")
 
-        universe.os.replace = broken_replace
+        files.os.replace = broken_replace
         try:
             universe.write_atomically({"count": 1, "symbols": [{"symbol": "X.US"}]})
         except OSError:
@@ -456,7 +461,7 @@ def claim_ten(failures: list[str]) -> None:
         else:
             failures.append("a failing rename did not raise")
         finally:
-            universe.os.replace = real_replace
+            files.os.replace = real_replace
 
         after = config.UNIVERSE_PATH.read_text(encoding="utf-8")
         if after != before:
@@ -1178,22 +1183,22 @@ def claim_seventeen(failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
-    claim_one(failures)
-    claim_two_and_three(failures)
-    claim_four(failures)
-    claim_five(failures)
-    claim_six(failures)
-    claim_seven(failures)
-    claim_eight(failures)
-    claim_nine(failures)
-    claim_ten(failures)
-    claim_eleven(failures)
-    claim_twelve(failures)
-    claim_thirteen(failures)
-    claim_fourteen(failures)
-    claim_fifteen(failures)
-    claim_sixteen(failures)
-    claim_seventeen(failures)
+    run_claim(failures, claim_one, failures)
+    run_claim(failures, claim_two_and_three, failures)
+    run_claim(failures, claim_four, failures)
+    run_claim(failures, claim_five, failures)
+    run_claim(failures, claim_six, failures)
+    run_claim(failures, claim_seven, failures)
+    run_claim(failures, claim_eight, failures)
+    run_claim(failures, claim_nine, failures)
+    run_claim(failures, claim_ten, failures)
+    run_claim(failures, claim_eleven, failures)
+    run_claim(failures, claim_twelve, failures)
+    run_claim(failures, claim_thirteen, failures)
+    run_claim(failures, claim_fourteen, failures)
+    run_claim(failures, claim_fifteen, failures)
+    run_claim(failures, claim_sixteen, failures)
+    run_claim(failures, claim_seventeen, failures)
 
     if failures:
         for failure in failures:

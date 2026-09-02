@@ -254,8 +254,6 @@ def claim_headers_cannot_diverge(failures: list[str]) -> None:
     # separator under the ten cell header Entry and Stop had made, so the
     # instruction was to write a table that could not render, and the fallback
     # is checked the same way because it writes the same rows.
-    from morning import render_report
-
     def _empty_blocks(text: str) -> list[tuple[str, list[str]]]:
         lines = text.splitlines()
         headers = set(conftest.template_headers().values())
@@ -675,7 +673,7 @@ def claim_the_watchdog_names_the_unjudged(failures: list[str]) -> None:
     import io
     from contextlib import redirect_stdout
     from core import criteria, ettime
-    from ops import monitor_jobs, quantifier_flags
+    from ops import monitor_jobs
 
     now = ettime.now_et()
     real_query = monitor_jobs.query_task

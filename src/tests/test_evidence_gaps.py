@@ -27,6 +27,8 @@ than dropped, and is never totalled into the morning's own minutes.
 
 from __future__ import annotations
 
+from tests.conftest import run_claim
+
 import json
 import pathlib
 import re
@@ -1223,24 +1225,24 @@ def main() -> int:
     failures: list[str] = []
     with tempfile.TemporaryDirectory(prefix="pmd-gaps-") as raw:
         tmp = Path(raw)
-        claim_a_refused_run_still_reports_what_it_heard(tmp, failures)
-        claim_uncounted_is_not_zero(tmp, failures)
-        claim_replay_is_tagged_and_never_totalled(tmp, failures)
-    claim_a_failure_today_reaches_the_report(failures)
-    claim_the_failure_line_stays_readable(failures)
-    claim_a_lower_bound_reaches_gaps_to_fill(failures)
-    claim_the_template_does_not_ask_for_the_false_sentences(failures)
-    claim_the_roll_selects_by_the_predicate_it_names(failures)
-    claim_the_list_shape_is_counted_and_never_derived(failures)
-    claim_a_prior_outcome_is_read_off_the_right_session(failures)
-    claim_the_composition_carries_direction_and_a_scale(failures)
-    claim_a_repeat_appearance_reads_only_live_rows_before_today(failures)
-    claim_a_gap_the_whole_list_shares_is_said_once(failures)
-    claim_the_instructions_ask_for_the_shape_and_the_absence(failures)
-    claim_the_roll_and_the_fallback_agree_on_partial_evidence(failures)
-    claim_the_rolls_own_words_pass_the_quantifier_guard(failures)
-    claim_the_template_reads_the_roll_rather_than_deriving_it(failures)
-    claim_a_thin_denominator_is_named_and_never_refused(failures)
+        run_claim(failures, claim_a_refused_run_still_reports_what_it_heard, tmp, failures)
+        run_claim(failures, claim_uncounted_is_not_zero, tmp, failures)
+        run_claim(failures, claim_replay_is_tagged_and_never_totalled, tmp, failures)
+    run_claim(failures, claim_a_failure_today_reaches_the_report, failures)
+    run_claim(failures, claim_the_failure_line_stays_readable, failures)
+    run_claim(failures, claim_a_lower_bound_reaches_gaps_to_fill, failures)
+    run_claim(failures, claim_the_template_does_not_ask_for_the_false_sentences, failures)
+    run_claim(failures, claim_the_roll_selects_by_the_predicate_it_names, failures)
+    run_claim(failures, claim_the_list_shape_is_counted_and_never_derived, failures)
+    run_claim(failures, claim_a_prior_outcome_is_read_off_the_right_session, failures)
+    run_claim(failures, claim_the_composition_carries_direction_and_a_scale, failures)
+    run_claim(failures, claim_a_repeat_appearance_reads_only_live_rows_before_today, failures)
+    run_claim(failures, claim_a_gap_the_whole_list_shares_is_said_once, failures)
+    run_claim(failures, claim_the_instructions_ask_for_the_shape_and_the_absence, failures)
+    run_claim(failures, claim_the_roll_and_the_fallback_agree_on_partial_evidence, failures)
+    run_claim(failures, claim_the_rolls_own_words_pass_the_quantifier_guard, failures)
+    run_claim(failures, claim_the_template_reads_the_roll_rather_than_deriving_it, failures)
+    run_claim(failures, claim_a_thin_denominator_is_named_and_never_refused, failures)
 
     if failures:
         for failure in failures:

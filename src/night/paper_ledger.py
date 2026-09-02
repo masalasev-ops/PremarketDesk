@@ -212,11 +212,9 @@ EXIT_OPEN_AT_END = ("the session's minutes end with the position still open, "
                     "so there is no exit price and the trade is not booked")
 
 
-def _as_float(value: Any) -> float | None:
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
+# The shared reading of "is this a number", see core/numbers.py. This copy
+# accepted NaN as a float until 2026-09-02; the shared one refuses it.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 def session_window(day: str) -> tuple[dt.datetime, dt.datetime]:

@@ -18,6 +18,37 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, fifth: the alias stays, the strictest float wins, and three packages are left undone on purpose
+
+Three choices in tier 4 of doc/IMPROVEMENT_PLAN.md.
+
+THE OLD NAME STAYS AS AN ALIAS. Nine modules called `_as_float` and one
+called `_f`. The tidy change renames every call site to numbers.as_float; the
+change made imports the shared function under the old local name, at the
+spot the copy used to be, with a comment saying where it went. Fewer lines
+touched, no call site moved, and a reader of any one module still finds the
+helper where it was. The cost is an import that is not at the top of the
+file, which this tree already does inside functions wherever a cycle or a
+layering rule asks for it.
+
+THE STRICTEST READING WINS. The three behaviours disagreed on NaN and on the
+string "NA". The shared function refuses both, and infinity, because the
+project's rule 4 says a value the pipeline could not read is null with a
+reason and never a number, and a NaN that survives into a median is a number
+that poisons every figure around it. Two night modules change behaviour: a
+vendor NaN they used to carry now reads as missing. No live row was found
+carrying one, so this is a fence rather than a fix.
+
+THREE PACKAGES LEFT UNDONE. 4.5 (copy data/ once per module in conftest),
+4.8 (split scan.py into eight modules) and 4.10 (one job entrypoint replacing
+the ten .bat preambles) were not attempted. The plan marks each as needing
+judgement a spec cannot carry: 4.5 because some claims rely on the copied
+database and universe and each module has to be run while changing it, 4.8
+because the suite pins private names and the import graph has three lazy
+cycles, 4.10 because the echo markers are one contract in two places and
+have to be written down before either side moves. They are the right next
+code health work and they are the owner's to schedule.
+
 ## 2026-09-02, fourth: the empty table is collapsed on the page and kept in the markdown, and the midday page gives up its parser
 
 Two choices in tier 3 of doc/IMPROVEMENT_PLAN.md.

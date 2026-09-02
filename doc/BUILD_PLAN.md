@@ -57,8 +57,11 @@ at src/core/config.py and resolves the project root two levels up. Everything a 
 at the root and is gitignored along with .env.
 
 - src/ is split into packages by role, and src/ itself is the import root:
-  - core/    config, criteria, ettime, store, eodhd, artifacts. Infrastructure
-             every other package rests on; nothing here knows what a gapper is.
+  - core/    config, criteria, ettime, store, eodhd, artifacts, and since
+             2026-09-02 numbers (the one reading of a vendor number), files
+             (the one atomic writer) and page (the one HTML shell every
+             renderer wraps its body in). Infrastructure every other package
+             rests on; nothing here knows what a gapper is.
   - ops/     job_status, market_today, monitor_jobs, meter_sampler,
              quantifier_flags. Whether the machine is running correctly: the
              status record, the trading day guard, the watchdog, the half

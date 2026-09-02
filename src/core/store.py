@@ -474,6 +474,73 @@ def guard_live_database(path: Path) -> None:
     )
 
 
+# THE NIGHT'S COLUMNS ON picks, declared here beside the morning's. Until
+# 2026-09-02 fill_outcomes and backfill_premarket each declared their own
+# tuple and widened the table themselves, so a fresh database held about 85
+# picks columns declared across four files, and store.py:291 records the
+# night the weekly page raised on a column only fill_outcomes knew about. The
+# night modules alias these; the declaration lives in one place.
+OUTCOME_COLUMNS = (
+    ("next_day_open", "REAL"),
+    ("next_day_high", "REAL"),
+    ("next_day_low", "REAL"),
+    ("next_day_close", "REAL"),
+    ("day5_close", "REAL"),
+    # Why the fifth session was refused, on the rows where it was. A null
+    # day5_close is also how a fill that is simply not due yet looks, and until
+    # 2026-08-20 the units guard in fill_outcomes had no way to say which of
+    # the two a given null was. See the long leg in fill_outcomes.fill().
+    ("day5_refused_reason", "TEXT"),
+    ("pm_high_broke_next_day", "INTEGER"),
+    ("mfe_pct", "REAL"),
+    ("mae_pct", "REAL"),
+    # mfe_pct_true and mae_pct_true are NOT in this tuple. They are declared
+    # beside the other _true columns in _PICKS_LATER_COLUMNS, so init creates
+    # them and a reader that has never run the outcome fill still finds them.
+    # Declaring a column in two places is one drift away from two declarations.
+    ("outcomes_filled_at", "TEXT"),
+)
+
+TRUE_COLUMNS = (
+    ("pm_high_true", "REAL"),
+    ("pm_low_true", "REAL"),
+    ("pm_vwap_true", "REAL"),
+    ("pm_true_bars", "INTEGER"),
+    # The percentage by which the true high undercuts the live high. NULL
+    # means the backfill has not checked this row (or could not, both highs
+    # are needed); 0.0 means checked and clean. A magnitude, not a boolean:
+    # feed noise and bad bars both trip a boolean, and then nobody can tell
+    # them apart. Queries counting clean rows must test = 0.0, never IS NULL.
+    ("pm_source_disagreement", "REAL"),
+    # The same three values over the COLLECTOR'S OWN window, 07:20 to the scan
+    # cutoff, from the same bars in the same pass at no extra call. Without
+    # these the difference between live and true is one number covering three
+    # causes; with them it decomposes. See backfill_premarket's docstring.
+    ("pm_high_collector_window", "REAL"),
+    ("pm_low_collector_window", "REAL"),
+    ("pm_vwap_collector_window", "REAL"),
+    ("pm_collector_window_bars", "INTEGER"),
+    # What that window actually was on this row, never assumed by a reader.
+    # The morning's cutoff snaps to [Scan] run_time only inside
+    # rvol_cutoff_snap_minutes, so a rerun genuinely has a different clock.
+    ("pm_collector_window", "TEXT"),
+    ("backfilled_at", "TEXT"),
+)
+
+# The schema's own version, stamped into the database the first time init
+# runs against it and read back after. One row per version applied, so a
+# migration that has run once is not run again: the source='test' backfill in
+# init ran a full table scan on every connection until 2026-09-02, because
+# nothing recorded that it had already run.
+SCHEMA_VERSION = 1
+_SCHEMA_VERSION_TABLE = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version    INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL
+);
+"""
+
+
 def connect() -> sqlite3.Connection:
     guard_live_database(config.DB_PATH)
     config.ensure_dirs()
@@ -509,12 +576,22 @@ def init(connection: sqlite3.Connection | None = None) -> None:
     connection = connection or connect()
     try:
         connection.executescript(_SCHEMA)
+        connection.executescript(_SCHEMA_VERSION_TABLE)
         ensure_columns(connection, "picks", _PICKS_LATER_COLUMNS)
+        ensure_columns(connection, "picks", OUTCOME_COLUMNS)
+        ensure_columns(connection, "picks", TRUE_COLUMNS)
         ensure_columns(connection, "paper_trades", _PAPER_LATER_COLUMNS)
-        # Any row without a source predates the source column, and everything
-        # written before it existed was test data. Writers always set source,
-        # so this can never touch a post migration row.
-        connection.execute("UPDATE picks SET source='test' WHERE source IS NULL")
+        applied = {row[0] for row in
+                   connection.execute("SELECT version FROM schema_version").fetchall()}
+        if SCHEMA_VERSION not in applied:
+            # Any row without a source predates the source column, and
+            # everything written before it existed was test data. Writers
+            # always set source, so this can never touch a post migration row.
+            # Run once per database, recorded, rather than on every connection.
+            connection.execute("UPDATE picks SET source='test' WHERE source IS NULL")
+            connection.execute(
+                "INSERT INTO schema_version (version, applied_at) VALUES (?, "
+                "strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))", (SCHEMA_VERSION,))
         connection.commit()
     finally:
         if owned:

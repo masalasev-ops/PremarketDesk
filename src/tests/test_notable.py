@@ -43,6 +43,8 @@ left for the reader to derive from a scan clock the report does not print.
 
 from __future__ import annotations
 
+from tests.conftest import run_claim
+
 import datetime as dt
 import json
 import sys
@@ -2461,7 +2463,7 @@ def main() -> int:
     # a different shape. The order below is the order they are declared in.
     _write_closes()
     for claim in CLAIMS:
-        claim(failures)
+        run_claim(failures, claim, failures)
         _write_closes()
     if failures:
         return _report(failures)

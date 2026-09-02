@@ -80,12 +80,10 @@ import argparse
 import datetime as dt
 import json
 import statistics
-import sys
 from typing import Any
 
 import probe_alpaca
 
-from core import config
 from core import criteria
 from core import ettime
 from core import store

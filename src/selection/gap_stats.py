@@ -142,14 +142,8 @@ def init(connection) -> None:
     connection.commit()
 
 
-def _as_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return out if out == out else None
+# The shared reading of "is this a number", see core/numbers.py.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 def compute(bars: list[dict[str, Any]], as_of: dt.date) -> dict[str, Any]:

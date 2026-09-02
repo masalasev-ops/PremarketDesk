@@ -56,14 +56,11 @@ MIN_BARS_FOR_FULL_WINDOW = _CRIT.integer("scan", "min_bars_for_full_window")
 PRIOR_CLOSE_DISAGREEMENT_PCT = _CRIT.number("scan", "prior_close_disagreement_pct")
 
 
-def _as_float(value: Any) -> float | None:
-    if value is None or value == "" or value == "NA":
-        return None
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return out if out == out else None
+# One reading of "is this a number" for every module that asks a vendor, see
+# core/numbers.py. Nine copies with three behaviours lived across the tree
+# until 2026-09-02; this one already refused "NA", the shared one refuses it
+# for everyone.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 def gap_direction(gap_pct: Any) -> str | None:
@@ -3575,7 +3572,6 @@ def evidence_missing(candidate: dict[str, Any]) -> list[str]:
     fire is a line that reads as coverage and gives none.
     """
     basis = candidate.get("pm_rvol_basis") or {}
-    baseline_row = candidate.get("baseline") or {}
     causes: list[str] = []
     if candidate.get("catalyst_found") is None:
         causes.append("catalyst_unchecked")
@@ -6185,15 +6181,11 @@ def write_packet(payload: dict[str, Any], overwrite: bool = False) -> Any:
     path, _spared = artifacts.resolve(
         run_directory / "packet.json",
         overwrite or artifacts.scheduled_run(), what="scan")
-    temporary = path.with_name(path.name + ".partial")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True),
-                             encoding="utf-8")
-        os.replace(temporary, path)
-    finally:
-        # A crash between the write and the replace leaves the partial behind;
-        # nothing reads it, but it should not accumulate.
-        temporary.unlink(missing_ok=True)
+    # core/files.py is the one atomic writer since 2026-09-02; sort_keys is this
+    # file's own requirement, because its readers are diffed across sessions.
+    from core import files
+
+    files.write_json_atomically(path, payload, indent=2, sort_keys=True)
     return path
 
 

@@ -41,6 +41,7 @@ import sys
 from pathlib import Path
 
 from tests import conftest
+from tests.conftest import run_claim
 
 # One row of the meter trail, shaped as ops/job_status.record_meter writes it.
 ROW = {
@@ -272,9 +273,9 @@ def main() -> int:
                       claim_the_appended_bytes_must_parse,
                       claim_a_test_writing_to_logs_still_fails):
             before = len(failures)
-            claim(Path(raw) / claim.__name__, failures)
+            run_claim(failures, claim, Path(raw) / claim.__name__, failures)
             del before
-    claim_the_real_logs_are_watched_by_default(failures)
+    run_claim(failures, claim_the_real_logs_are_watched_by_default, failures)
 
     if failures:
         for failure in failures:

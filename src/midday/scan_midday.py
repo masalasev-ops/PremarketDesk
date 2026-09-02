@@ -38,7 +38,6 @@ import argparse
 import datetime as dt
 import html
 import json
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -154,15 +153,9 @@ def prior_closes(api: eodhd.EodhdClient, expect_prior: str) -> dict[str, float]:
     return closes
 
 
-def _f(value: Any) -> float | None:
-    """A float, or None. A blank string is not a zero."""
-    if value is None or value == "":
-        return None
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return out if out == out else None
+# A float, or None. A blank string is not a zero. The shared reading, see
+# core/numbers.py.
+from core.numbers import as_float as _f  # noqa: E402
 
 
 def _prev_close_date(raw: Any) -> str | None:

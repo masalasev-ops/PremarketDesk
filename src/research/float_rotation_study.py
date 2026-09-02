@@ -93,7 +93,6 @@ import statistics
 import sys
 from typing import Any
 
-from collect import baseline
 from core import config, criteria, ettime
 from night import pool_recall
 from research import float_cache
@@ -804,7 +803,7 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     _show("RVOL reconstructed, all addressable", result["rvol_reconstructed"]["all_addressable"], 3)
     _show(f"RVOL reconstructed, top {candidate_count}", result["rvol_reconstructed"]["top_by_gap"], 3)
 
-    print(f"\n  OVERLAP RECONCILIATION")
+    print("\n  OVERLAP RECONCILIATION")
     print(f"    names carrying both measures, all addressable : "
           f"{matched['paired_n_all_addressable']}")
     print(f"    the same, restricted to the top {candidate_count} by gap  : "

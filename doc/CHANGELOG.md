@@ -15,6 +15,65 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty sixth: one float, one writer, a criteria check, a runner that keeps going
+
+Tier 4 of doc/IMPROVEMENT_PLAN.md, the delegable half: 4.1, 4.2, 4.3, 4.4,
+4.6, 4.7 and 4.9. Not done, and the plan says why: 4.5 (the conftest copy
+per module), 4.8 (the scan.py split) and 4.10 (a single job entrypoint).
+
+ONE FLOAT. core/numbers.as_float replaces nine `_as_float` copies with three
+behaviours: one refused "NA", five refused the empty string and NaN, and
+three, in fill_outcomes, paper_ledger and true_volume, accepted NaN as a
+float, so a vendor NaN reached the paper ledger as a number. Every module
+aliases the shared one under its old name, which refuses None, the empty
+string, "NA", NaN and infinity. A claim holds the table and checks each
+alias is the shared function.
+
+ONE WRITER. core/files.write_text_atomically and write_json_atomically replace
+six temp sibling plus os.replace implementations, two of them with retry
+loops for the antivirus that denies a first write, in config.ca_bundle,
+deliver's send once record, scan's packet, market_today's holiday cache,
+monitor_jobs' rerun state and universe.write_atomically, which stays as a
+wrapper because both its callers import it and its docstring holds the
+argument. config's docstring had explained it could not reuse universe's
+copy because core cannot import selection; core can import core. A claim
+writes, overwrites, retries a denied rename and asserts no .partial survives,
+and reads the six modules for a sibling write of their own.
+
+A CRITERIA CHECK. `python -m core.criteria --check` asks three questions the
+parser cannot at read time: is any key prose (the parser reads every column
+zero line holding an equals sign as a pair, and [paper] had carried the key
+"quotient: 10,000 / 0.04" from a sentence since 2026-08-29); does every
+literal `_CRIT.<accessor>("section", "key")` in src/ resolve; and which pairs
+no literal call reads, as information. The sentence is reworded, the live
+tree passes with zero defects, and the claim runs the check on the live tree
+and on a fixture carrying a prose key, a missing key and a missing section.
+
+A RUNNER THAT KEEPS GOING. conftest.run_claim calls a claim and turns a raise
+into a recorded failure with its traceback, and every test module's main()
+routes its claims through it: 240 call sites rewritten, test_regressions
+alone 156. Until now run_tests caught the exception at module level and every
+claim after the one that raised never ran. The self counting claim reads the
+claim name out of the second argument.
+
+A SIDECAR TOUCH IS NOT A WRITE. The tree photograph forgives a change to the
+live database's -shm or -wal file when the sidecar's size is unchanged and
+the .db itself did not move, the third behaviour exemption beside the sampler
+and the editor's fetch. On 2026-09-02 a suite run in which every claim
+passed reported FAILED on a -shm touch from a process that had the database
+open. A grown sidecar, a moved database and any other path still fail.
+
+THE SCHEMA OWNS EVERY PICKS COLUMN. The night's two column tuples moved from
+fill_outcomes and backfill_premarket into store.py as OUTCOME_COLUMNS and
+TRUE_COLUMNS, the night modules alias them, and init creates them on a fresh
+database before either step has run. A schema_version table is stamped once,
+and the source='test' backfill that ran a full table scan on every connection
+now runs once per database.
+
+ALSO. pyflakes is clean over src/ and declared in requirements-dev.txt; the
+unused imports and the f-strings with no placeholders it listed are gone.
+Six claims.
+
 ## 2026-09-02, thirty fifth: one page shell, dressed tables, and the midday page through the one renderer
 
 Tier 3 of doc/IMPROVEMENT_PLAN.md, packages 3.1 to 3.5. Package 3.6, the

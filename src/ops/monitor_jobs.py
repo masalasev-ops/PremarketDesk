@@ -49,11 +49,9 @@ import csv
 import datetime as dt
 import io
 import json
-import os
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -344,22 +342,16 @@ def _record_rerun(day: str, job: str) -> None:
     state[day][job] = state[day].get(job, 0) + 1
 
     body = json.dumps(state, indent=2)
-    temporary = STATE_PATH.with_name(STATE_PATH.name + ".partial")
+    # core/files.py is the one atomic writer since 2026-09-02, retries included.
+    from core import files
+
     last: Exception | None = None
-    for attempt in range(STATE_WRITE_ATTEMPTS):
-        try:
-            temporary.write_text(body, encoding="utf-8")
-            os.replace(temporary, STATE_PATH)
-            return
-        except OSError as exc:
-            last = exc
-            if attempt + 1 < STATE_WRITE_ATTEMPTS:
-                time.sleep(STATE_WRITE_RETRY_S)
-        finally:
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
+    try:
+        files.write_text_atomically(STATE_PATH, body, attempts=STATE_WRITE_ATTEMPTS,
+                                    retry_s=STATE_WRITE_RETRY_S)
+        return
+    except OSError as exc:
+        last = exc
 
     print(f"monitor: {job} was relaunched and the rerun could not be recorded "
           f"after {STATE_WRITE_ATTEMPTS} attempts ({type(last).__name__}: {last}); "

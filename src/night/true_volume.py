@@ -297,17 +297,11 @@ def volume_ratio(row: Any) -> tuple[float | None, str]:
     return _get("pm_rvol"), "estimated"
 
 
-def _as_float(value: Any) -> float | None:
-    """A number the vendor may not have sent, coerced or refused. Never raises.
-
-    The same shape scan._as_float has. usable_float below is handed raw quote
-    fields, and a string, a None or a malformed value must come back as "no
-    number" rather than as an exception inside a night job.
-    """
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
+# A number the vendor may not have sent, coerced or refused, never raising:
+# the shared reading in core/numbers.py. usable_float below is handed raw
+# quote fields, and a string, a None, a NaN or a malformed value comes back as
+# "no number" rather than as an exception inside a night job.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 def _ratio(top: float | None, bottom: float | None) -> float | None:

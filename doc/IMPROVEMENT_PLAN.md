@@ -652,6 +652,10 @@ symbols. Effort M. Risk medium. Delegable: no.
 
 ## Tier 4: code health
 
+Done 2026-09-02: 4.1, 4.2, 4.3, 4.4, 4.6, 4.7, 4.9. Not done, and left to the
+owner to schedule for the reasons DECISIONS 2026-09-02 fifth gives: 4.5, 4.8,
+4.10. CHANGELOG 2026-09-02 thirty sixth.
+
 ### 4.1 One `as_float`
 
 Files: src/morning/scan.py:59, src/selection/discover.py:62,

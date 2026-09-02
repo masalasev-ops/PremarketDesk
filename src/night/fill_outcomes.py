@@ -32,26 +32,10 @@ from core import store
 
 _CRIT = criteria.load()
 
-_OUTCOME_COLUMNS = (
-    ("next_day_open", "REAL"),
-    ("next_day_high", "REAL"),
-    ("next_day_low", "REAL"),
-    ("next_day_close", "REAL"),
-    ("day5_close", "REAL"),
-    # Why the fifth session was refused, on the rows where it was. A null
-    # day5_close is also how a fill that is simply not due yet looks, and until
-    # 2026-08-20 the units guard below had no way to say which of the two a
-    # given null was. See the long leg in fill().
-    ("day5_refused_reason", "TEXT"),
-    ("pm_high_broke_next_day", "INTEGER"),
-    ("mfe_pct", "REAL"),
-    ("mae_pct", "REAL"),
-    # mfe_pct_true and mae_pct_true are NOT in this tuple. They are declared in
-    # store.py beside the other _true columns, so store.init creates them and a
-    # reader that has never run this step still finds them. Declaring a column
-    # in two places is one drift away from two different declarations.
-    ("outcomes_filled_at", "TEXT"),
-)
+# Declared in store.py since 2026-09-02, beside every other picks column, so a
+# fresh database has them before this step has ever run. The name here is an
+# alias the suite and the widening call below still read.
+_OUTCOME_COLUMNS = store.OUTCOME_COLUMNS
 
 
 def _session_calendar(api: eodhd.EodhdClient, back_days: int = 40) -> list[str]:
@@ -99,11 +83,9 @@ def _sessions_after(calendar: list[str], date: str, count: int) -> list[str]:
     return later[:count]
 
 
-def _as_float(value: Any) -> float | None:
-    try:
-        return float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
+# The shared reading of "is this a number", see core/numbers.py. This copy
+# accepted NaN as a float until 2026-09-02; the shared one refuses it.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 def _adjustment_factor(bar: dict[str, Any] | None) -> float | None:

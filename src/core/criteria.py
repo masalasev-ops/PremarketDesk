@@ -289,6 +289,90 @@ def parse_text(text: str, path: Path) -> Criteria:
     return Criteria(sections=sections, path=path)
 
 
+# The accessor names a `_CRIT.<name>("section", "key")` call can use. check()
+# below resolves every such call written with literal arguments.
+_ACCESSORS = frozenset({
+    "rule", "number", "integer", "flag", "text", "text_list", "clock",
+    "clock_text", "bands", "band_number", "band_result", "pair_map", "section",
+})
+# Accessors whose second positional argument is not the key.
+_SECTION_ONLY = frozenset({"bands", "band_number", "band_result", "section"})
+
+
+def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
+    """Three questions the parser cannot ask at read time.
+
+    1. Is any key prose? The parser reads every column zero line holding an
+       equals sign under a `##` heading as a pair, and on 2026-09-02 [paper]
+       carried the key "quotient: 10,000 / 0.04" from a sentence. A key with a
+       space or a colon in it is a sentence.
+    2. Does every literal `_CRIT.<accessor>("section", "key")` in src/ resolve?
+       A typo in a key read inside a function surfaces at 08:45 on the first
+       candidate; this surfaces it in the suite.
+    3. Which pairs does no literal call read? Informational: keys are also
+       read with a variable key (evaluate_eligibility iterates a section), so
+       an unread pair is a candidate for deletion and not a defect.
+
+    Returns {"prose_keys": [...], "unresolved": [...], "unread": [...]}. The
+    first two are defects.
+    """
+    import ast
+
+    prose_keys: list[str] = []
+    for name in crit.section_names():
+        for key, _value in crit.section(name).pairs:
+            if " " in key or ":" in key:
+                prose_keys.append(f"[{name}] {key!r}")
+
+    referenced: set[tuple[str, str]] = set()
+    sections_referenced: set[str] = set()
+    unresolved: list[str] = []
+    for path in sorted(Path(src_root).rglob("*.py")):
+        if "tests" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_bytes().decode("utf-8"))
+        except (SyntaxError, UnicodeDecodeError) as exc:
+            unresolved.append(f"{path.name}: could not parse: {exc}")
+            continue
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr in _ACCESSORS):
+                continue
+            literals = [a.value for a in node.args if isinstance(a, ast.Constant)
+                        and isinstance(a.value, str)]
+            if not literals or len(literals) != len(node.args):
+                continue
+            section = _slug(literals[0])
+            where = f"{path.relative_to(src_root)}:{node.lineno}"
+            try:
+                sec = crit.section(section)
+            except CriteriaError:
+                unresolved.append(f"{where}: no section {literals[0]!r}")
+                continue
+            sections_referenced.add(section)
+            if node.func.attr == "section":
+                continue
+            if node.func.attr in _SECTION_ONLY:
+                key = literals[1] if len(literals) > 1 else "band"
+            elif len(literals) < 2:
+                continue
+            else:
+                key = literals[1]
+            key = key.strip().lower()
+            if not any(pair_key == key for pair_key, _ in sec.pairs):
+                unresolved.append(f"{where}: [{section}] has no key {key!r}")
+                continue
+            referenced.add((section, key))
+
+    unread: list[str] = []
+    for name in crit.section_names():
+        for key, _value in crit.section(name).pairs:
+            if (name, key) not in referenced and name not in sections_referenced:
+                unread.append(f"[{name}] {key}")
+    return {"prose_keys": prose_keys, "unresolved": unresolved, "unread": unread}
+
+
 _cache: Criteria | None = None
 
 
@@ -349,5 +433,21 @@ def _self_check() -> int:
     return 0
 
 
+def _check_main() -> int:
+    """`python -m core.criteria --check`: the three questions, as a report."""
+    report = check(load(), config.PROJECT_ROOT / "src")
+    for label in ("prose_keys", "unresolved"):
+        for line in report[label]:
+            print(f"DEFECT  {label}: {line}")
+    for line in report["unread"]:
+        print(f"unread  {line}")
+    defects = len(report["prose_keys"]) + len(report["unresolved"])
+    print(f"criteria --check: {defects} defect(s), {len(report['unread'])} pair(s) no "
+          "literal call reads")
+    return 1 if defects else 0
+
+
 if __name__ == "__main__":
-    raise SystemExit(_self_check())
+    import sys as _sys
+
+    raise SystemExit(_check_main() if "--check" in _sys.argv[1:] else _self_check())

@@ -1912,10 +1912,6 @@ def quantifier_reason(hits: list[dict[str, Any]], ids: list[int]) -> str:
     if len(sentence) > _QUOTE_LIMIT:
         sentence = sentence[:_QUOTE_LIMIT].rstrip() + "..."
     where = f"logged as flag {ids[0]}" if ids else "not logged, the flag file could not be written"
-    # Local, because ops.quantifier_flags imports this module and a module
-    # level import here would be a cycle.
-    from ops import quantifier_flags
-
     plural = "" if len(hits) == 1 else f", {len(hits)} in total"
     # The flag id and the sentence, and NOT the operator's shell command. This
     # string is the disclaimer line of a report that is rendered and emailed,

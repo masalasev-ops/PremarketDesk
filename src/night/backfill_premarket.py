@@ -82,31 +82,10 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # of the defect _has_measurement below exists to close.
 VOLUME_CHECK_FILE = collect_premarket.VOLUME_CHECK_FILE
 
-_TRUE_COLUMNS = (
-    ("pm_high_true", "REAL"),
-    ("pm_low_true", "REAL"),
-    ("pm_vwap_true", "REAL"),
-    ("pm_true_bars", "INTEGER"),
-    # The percentage by which the true high undercuts the live high. NULL
-    # means the backfill has not checked this row (or could not, both highs
-    # are needed); 0.0 means checked and clean. A magnitude, not a boolean:
-    # feed noise and bad bars both trip a boolean, and then nobody can tell
-    # them apart. Queries counting clean rows must test = 0.0, never IS NULL.
-    ("pm_source_disagreement", "REAL"),
-    # The same three values over the COLLECTOR'S OWN window, 07:20 to the scan
-    # cutoff, from the same bars in the same pass at no extra call. Without
-    # these the difference between live and true is one number covering three
-    # causes; with them it decomposes. See the module docstring.
-    ("pm_high_collector_window", "REAL"),
-    ("pm_low_collector_window", "REAL"),
-    ("pm_vwap_collector_window", "REAL"),
-    ("pm_collector_window_bars", "INTEGER"),
-    # What that window actually was on this row, never assumed by a reader.
-    # The morning's cutoff snaps to [Scan] run_time only inside
-    # rvol_cutoff_snap_minutes, so a rerun genuinely has a different clock.
-    ("pm_collector_window", "TEXT"),
-    ("backfilled_at", "TEXT"),
-)
+# Declared in store.py since 2026-09-02, beside every other picks column, so a
+# fresh database has them before this step has ever run. The name here is an
+# alias the widening call below still reads.
+_TRUE_COLUMNS = store.TRUE_COLUMNS
 
 
 def _window(day: str) -> tuple[dt.datetime, dt.datetime]:

@@ -21,6 +21,8 @@ Claims:
 
 from __future__ import annotations
 
+from tests.conftest import run_claim
+
 import json
 import shutil
 import sys
@@ -196,10 +198,10 @@ def claim_four(failures: list[str]) -> None:
 
 def main() -> int:
     failures: list[str] = []
-    claim_one(failures)
-    claim_two(failures)
-    claim_three(failures)
-    claim_four(failures)
+    run_claim(failures, claim_one, failures)
+    run_claim(failures, claim_two, failures)
+    run_claim(failures, claim_three, failures)
+    run_claim(failures, claim_four, failures)
 
     if failures:
         for failure in failures:

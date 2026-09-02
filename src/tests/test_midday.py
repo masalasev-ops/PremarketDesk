@@ -43,6 +43,8 @@ that starts a line of its own can forge a heading or a table row.
 
 from __future__ import annotations
 
+from tests.conftest import run_claim
+
 import datetime as dt
 import json
 import sys
@@ -893,7 +895,7 @@ def main() -> int:
     failures: list[str] = []
     print("the midday pass, CRITERIA [Midday]:")
     for claim in CLAIMS:
-        claim(failures)
+        run_claim(failures, claim, failures)
     if failures:
         print("")
         for line in failures:

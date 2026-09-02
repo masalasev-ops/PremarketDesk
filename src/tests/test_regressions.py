@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and fifty six claims, a count read off
+and the two pages. It now carries one hundred and sixty two claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -53,6 +53,7 @@ from typing import Any
 from core import config
 from core import ettime
 from tests import conftest
+from tests.conftest import run_claim
 
 
 # --------------------------------------------------------------- the clock
@@ -1406,8 +1407,6 @@ def claim_an_empty_morning_still_carries_its_ranking_counts(failures: list[str])
                         "which is not CRITERIA [Scan] candidate_count")
 
     # The shapes must match, or the report reads two different objects.
-    from core import criteria as _criteria
-
     class Sink:
         def gap(self, note: str) -> None:
             pass
@@ -7586,8 +7585,6 @@ def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
     AND A MISSING MEASUREMENT IS NULL WITH A REASON, never zero. A window with
     no bars and a window nobody asked about are different facts.
     """
-    import shutil
-
     from core import store
     from night import true_volume as _truth
 
@@ -9138,8 +9135,6 @@ def claim_the_weekly_page_reads_and_renders_and_nothing_else(
     reporting page that renders blank sections on a week where nothing ran
     reads the same as a quiet week, and those are opposite facts.
     """
-    import shutil
-
     from core import store
     from night import true_volume as _truth
     from night import weekly_page as _weekly
@@ -10873,8 +10868,8 @@ def claim_the_collector_writes_where_premarket_dir_points(
                         "research run writes it into the session capture while "
                         "the other two go elsewhere")
 
-            print(f"  outdir       --premarket-dir moves all three named "
-                  f"helpers, each checked on its own")
+            print("  outdir       --premarket-dir moves all three named "
+                  "helpers, each checked on its own")
     finally:
         config.PREMARKET_DIR = saved
         _shutil.rmtree(box, ignore_errors=True)
@@ -11538,9 +11533,18 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
     if main_def is None:
         failures.append("test_regressions has no main(), so nothing runs the claims")
         return
-    called = [node.func.id for node in ast.walk(main_def)
-              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-              and node.func.id.startswith("claim_")]
+    # A claim is called directly, or through conftest.run_claim(failures,
+    # claim, ...) since 2026-09-02, where the claim is the second argument.
+    called: list[str] = []
+    for node in ast.walk(main_def):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+            continue
+        if node.func.id.startswith("claim_"):
+            called.append(node.func.id)
+        elif node.func.id == "run_claim" and len(node.args) >= 2 \
+                and isinstance(node.args[1], ast.Name) \
+                and node.args[1].id.startswith("claim_"):
+            called.append(node.args[1].id)
 
     orphaned = sorted(set(defined) - set(called))
     if orphaned:
@@ -11584,6 +11588,16 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         158: "one hundred and fifty eight",
         159: "one hundred and fifty nine",
         160: "one hundred and sixty",
+        161: "one hundred and sixty one",
+        162: "one hundred and sixty two",
+        163: "one hundred and sixty three",
+        164: "one hundred and sixty four",
+        165: "one hundred and sixty five",
+        166: "one hundred and sixty six",
+        167: "one hundred and sixty seven",
+        168: "one hundred and sixty eight",
+        169: "one hundred and sixty nine",
+        170: "one hundred and seventy",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -13905,6 +13919,222 @@ def claim_the_midday_page_renders_through_the_one_renderer(failures: list[str]) 
           "escaped pipe stays one cell and a stray ** stays text")
 
 
+def claim_one_reading_of_a_number(failures: list[str]) -> None:
+    """core.numbers.as_float is the nine copies' one behaviour, the strictest.
+
+    Nine `_as_float` lived across the tree with three behaviours; three of
+    them accepted NaN as a float, so a vendor NaN reached the paper ledger
+    and the outcome fill as a number. Every module now aliases the shared
+    one, and this is its table.
+    """
+    from core import numbers
+    from midday import scan_midday
+    from morning import scan
+    from night import fill_outcomes, paper_ledger, true_volume
+    from selection import discover, gap_stats, universe
+
+    table = [(None, None), ("", None), ("NA", None), ("nan", None), (float("nan"), None),
+             (float("inf"), None), ("abc", None), ([], None), (True, 1.0), ("3.5", 3.5),
+             (" 2 ", 2.0), (7, 7.0), ("1,000", None)]
+    for given, expected in table:
+        got = numbers.as_float(given)
+        if got != expected and not (got is None and expected is None):
+            failures.append(f"as_float({given!r}) is {got!r}, expected {expected!r}")
+    for module, name in ((scan, "_as_float"), (discover, "_as_float"), (gap_stats, "_as_float"),
+                         (universe, "_as_float"), (fill_outcomes, "_as_float"),
+                         (paper_ledger, "_as_float"), (true_volume, "_as_float"),
+                         (scan_midday, "_f")):
+        if getattr(module, name, None) is not numbers.as_float:
+            failures.append(f"{module.__name__}.{name} is not core.numbers.as_float")
+    if numbers.as_int("4.0") != 4 or numbers.as_int("4.5") is not None:
+        failures.append("as_int does not refuse a fraction or accept a whole float")
+    print("  one float    nine readings of a number are one, and a NaN is None everywhere")
+
+
+def claim_one_atomic_writer(failures: list[str]) -> None:
+    """core.files writes through a sibling and os.replace, retries a denied write,
+    and every former copy calls it.
+
+    The file on disk is whole at every instant: either the old bytes or the
+    new ones. A first failure is retried when asked, and the partial sibling
+    never survives.
+    """
+    from core import files
+
+    with tempfile.TemporaryDirectory(prefix="pmd-files-") as raw:
+        target = pathlib.Path(raw) / "x.json"
+        files.write_json_atomically(target, {"a": 1})
+        files.write_text_atomically(target, "second")
+        if target.read_text(encoding="utf-8") != "second":
+            failures.append("write_text_atomically did not replace the file")
+        if list(pathlib.Path(raw).glob("*.partial")):
+            failures.append("a .partial sibling survived the write")
+
+        calls: list[int] = []
+        real_replace = os.replace
+
+        def flaky(src, dst):
+            calls.append(1)
+            if len(calls) == 1:
+                raise PermissionError("denied once")
+            return real_replace(src, dst)
+
+        files.os.replace = flaky
+        try:
+            files.write_text_atomically(target, "third", attempts=3, retry_s=0)
+        finally:
+            files.os.replace = real_replace
+        if len(calls) != 2 or target.read_text(encoding="utf-8") != "third":
+            failures.append(f"a denied first write was not retried: {len(calls)} attempt(s)")
+        try:
+            files.os.replace = lambda s, d: (_ for _ in ()).throw(PermissionError("always"))
+            try:
+                files.write_text_atomically(target, "fourth", attempts=2, retry_s=0)
+            except OSError:
+                pass
+            else:
+                failures.append("spent attempts did not raise the last error")
+        finally:
+            files.os.replace = real_replace
+
+    for module_path in ("core/config.py", "morning/deliver.py", "morning/scan.py",
+                        "ops/market_today.py", "ops/monitor_jobs.py", "selection/universe.py"):
+        source = (config.PROJECT_ROOT / "src" / module_path).read_bytes().decode("utf-8")
+        if 'with_name(' in source and '.partial")' in source:
+            failures.append(f"{module_path} still writes its own .partial sibling")
+    print("  one writer   the six temp sibling writers are one, retried and never leave a partial")
+
+
+def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> None:
+    """core.criteria.check finds a prose key and an unresolvable literal call, and
+    the live CRITERIA.md against the live src/ has neither.
+
+    The parser reads any column zero line holding an equals sign as a pair,
+    and [paper] carried a sentence as a key for four days. A typo in a key
+    read inside a function surfaced at 08:45 on the first candidate.
+    """
+    from core import criteria
+
+    live = criteria.check(criteria.load(), config.PROJECT_ROOT / "src")
+    for label in ("prose_keys", "unresolved"):
+        if live[label]:
+            failures.append(f"criteria --check finds {label} on the live tree: "
+                            f"{live[label][:3]}")
+
+    text = ("## Widget\n\nsize = 3\nthe quotient: 1 / 2 = 0.5.\n\n## Score band\n\n"
+            "band = >= 7 : green\nband = else : red\n")
+    crit = criteria.parse_text(text, pathlib.Path("fixture.md"))
+    with tempfile.TemporaryDirectory(prefix="pmd-crit-") as raw:
+        src = pathlib.Path(raw) / "src"
+        (src / "pkg").mkdir(parents=True)
+        (src / "pkg" / "m.py").write_text(
+            'X = C.integer("widget", "size")\nY = C.integer("widget", "colour")\n'
+            'Z = C.band_result("score_band", 8)\nW = C.text("nowhere", "k")\n',
+            encoding="utf-8")
+        report = criteria.check(crit, src)
+    if not any("quotient" in p for p in report["prose_keys"]):
+        failures.append(f"a sentence read as a key was not reported: {report['prose_keys']}")
+    if not any("'colour'" in u for u in report["unresolved"]):
+        failures.append(f"a literal call to a missing key was not reported: {report['unresolved']}")
+    if not any("'nowhere'" in u for u in report["unresolved"]):
+        failures.append("a literal call to a missing section was not reported")
+    if any("score_band" in u for u in report["unresolved"]):
+        failures.append("band_result with the default key was wrongly reported")
+    print("  criteria     --check reads every literal call, finds a prose key and a bad key, "
+          "and the live tree is clean")
+
+
+def claim_a_raising_claim_does_not_end_its_module(failures: list[str]) -> None:
+    """conftest.run_claim records a raise as a failure and returns.
+
+    run_tests caught a raising claim at module level and every claim after it
+    never ran. Every module's main() now calls its claims through run_claim.
+    """
+    from tests import conftest
+
+    sink: list[str] = []
+
+    def bad(f):
+        raise ValueError("fixture broke")
+
+    def good(f):
+        f.append("ran")
+
+    conftest.run_claim(sink, bad, sink)
+    conftest.run_claim(sink, good, sink)
+    if not any("bad raised ValueError: fixture broke" in s for s in sink):
+        failures.append(f"a raising claim was not recorded with its name and error: {sink}")
+    if "ran" not in sink:
+        failures.append("the claim after the raising one did not run")
+    for name in ("test_regressions.py", "test_entrypoints.py", "test_pool.py",
+                 "test_evidence_gaps.py", "test_midday.py", "test_notable.py"):
+        source = (config.PROJECT_ROOT / "src" / "tests" / name).read_bytes().decode("utf-8")
+        main_body = source.split("\ndef main(", 1)[1] if "\ndef main(" in source else ""
+        if "run_claim(" not in main_body:
+            failures.append(f"{name} main() does not route its claims through run_claim")
+    print("  run_claim    a raising claim is a recorded failure and the next claim runs")
+
+
+def claim_a_sidecar_touch_is_not_a_write(failures: list[str]) -> None:
+    """The tree photograph forgives a SQLite -shm or -wal touch when the .db did
+    not change and the sidecar's size did not move, and nothing else.
+    """
+    from tests import conftest
+
+    db = pathlib.Path("E:/x/data/premarketdesk.db")
+    shm = db.with_name("premarketdesk.db-shm")
+    before = {str(db): ("file", 1.0, 100, "d"), str(shm): ("file", 1.0, 32768, "s")}
+    touched = {str(db): ("file", 1.0, 100, "d"), str(shm): ("file", 2.0, 32768, "s2")}
+    if not conftest._sqlite_sidecar_touch(shm, before[str(shm)], touched[str(shm)], before, touched):
+        failures.append("a same size sidecar touch with an unchanged database was not forgiven")
+    grown = dict(touched, **{str(shm): ("file", 2.0, 65536, "s3")})
+    if conftest._sqlite_sidecar_touch(shm, before[str(shm)], grown[str(shm)], before, grown):
+        failures.append("a sidecar that grew was forgiven")
+    db_moved = dict(touched, **{str(db): ("file", 2.0, 100, "d2")})
+    if conftest._sqlite_sidecar_touch(shm, before[str(shm)], db_moved[str(shm)], before, db_moved):
+        failures.append("a sidecar touch beside a changed database was forgiven")
+    other = pathlib.Path("E:/x/data/notes.txt")
+    if conftest._sqlite_sidecar_touch(other, ("file", 1.0, 5, "a"), ("file", 2.0, 5, "b"), {}, {}):
+        failures.append("a non sidecar path was forgiven")
+    diffs = conftest.differences(before, touched)
+    if diffs:
+        failures.append(f"differences() still reports the sidecar touch: {diffs}")
+    print("  sidecar      a -shm touch beside an unchanged database is forgiven; a grown "
+          "sidecar, a moved database and any other path are not")
+
+
+def claim_the_schema_owns_every_picks_column_once(failures: list[str]) -> None:
+    """store.py declares the night's columns and stamps a schema version, so the
+    source backfill runs once per database and not on every connection.
+    """
+    import sqlite3
+
+    from core import store
+    from night import backfill_premarket, fill_outcomes
+
+    if fill_outcomes._OUTCOME_COLUMNS is not store.OUTCOME_COLUMNS:
+        failures.append("fill_outcomes declares its own outcome columns")
+    if backfill_premarket._TRUE_COLUMNS is not store.TRUE_COLUMNS:
+        failures.append("backfill_premarket declares its own true columns")
+    with tempfile.TemporaryDirectory(prefix="pmd-schema-") as raw:
+        connection = sqlite3.connect(str(pathlib.Path(raw) / "t.db"))
+        connection.row_factory = sqlite3.Row
+        try:
+            store.init(connection)
+            store.init(connection)
+            rows = connection.execute("SELECT version FROM schema_version").fetchall()
+            columns = {r[1] for r in connection.execute("PRAGMA table_info(picks)").fetchall()}
+        finally:
+            connection.close()
+    if [r[0] for r in rows] != [store.SCHEMA_VERSION]:
+        failures.append(f"schema_version holds {rows}, expected one row at {store.SCHEMA_VERSION}")
+    for name, _type in (*store.OUTCOME_COLUMNS, *store.TRUE_COLUMNS):
+        if name not in columns:
+            failures.append(f"a fresh database lacks picks.{name}")
+    print("  schema       the night's columns are declared once in store.py and the version "
+          "is stamped once")
+
+
 def conftest_activate():
     from tests import conftest
 
@@ -13913,163 +14143,169 @@ def conftest_activate():
 
 def main() -> int:
     failures: list[str] = []
-    claim_the_november_transition(failures)
-    claim_economic_events_are_converted_not_relabelled(failures)
-    claim_a_thinner_rerun_stands_down(failures)
-    claim_a_briefing_gain_does_not_cancel_a_screen_loss(failures)
-    claim_an_empty_packet_is_not_a_failed_step(failures)
-    claim_delivery_happens_once(failures)
-    claim_replay_is_counted_once(failures)
-    claim_a_failed_write_holds_its_minutes(failures)
-    claim_outcomes_refuse_a_pick_the_calendar_cannot_date(failures)
-    claim_a_missing_exchange_refuses_the_build(failures)
-    claim_the_watchlist_is_written_atomically(failures)
-    claim_the_stdev_window_is_its_own_name(failures)
-    claim_the_watchdog_survives_a_hung_schtasks(failures)
-    claim_the_baseline_counts_what_it_warmed(failures)
-    claim_vendor_text_cannot_break_a_table(failures)
-    claim_the_quantifier_guard_reads_headings(failures)
-    claim_no_comment_describes_a_helper_that_does_not_exist(failures)
-    claim_the_volume_check_reaches_the_packet(failures)
-    claim_a_trap_is_the_balance_not_the_worst_headline(failures)
-    claim_the_day_screen_names_what_rvol_alone_blocked(failures)
-    claim_a_truncated_name_is_not_a_rejected_one(failures)
-    claim_the_bucket_roll_is_complete_and_signed(failures)
-    claim_an_unmeasured_condition_is_not_a_failed_one(failures)
-    claim_a_thin_window_is_not_merely_a_late_one(failures)
-    claim_a_replayed_print_is_not_silence(failures)
-    claim_the_two_prior_closes_are_compared(failures)
-    claim_the_baseline_age_travels_with_the_rvol(failures)
-    claim_a_hand_run_of_one_suite_cannot_touch_real_data(failures)
+    run_claim(failures, claim_the_november_transition, failures)
+    run_claim(failures, claim_economic_events_are_converted_not_relabelled, failures)
+    run_claim(failures, claim_a_thinner_rerun_stands_down, failures)
+    run_claim(failures, claim_a_briefing_gain_does_not_cancel_a_screen_loss, failures)
+    run_claim(failures, claim_an_empty_packet_is_not_a_failed_step, failures)
+    run_claim(failures, claim_delivery_happens_once, failures)
+    run_claim(failures, claim_replay_is_counted_once, failures)
+    run_claim(failures, claim_a_failed_write_holds_its_minutes, failures)
+    run_claim(failures, claim_outcomes_refuse_a_pick_the_calendar_cannot_date, failures)
+    run_claim(failures, claim_a_missing_exchange_refuses_the_build, failures)
+    run_claim(failures, claim_the_watchlist_is_written_atomically, failures)
+    run_claim(failures, claim_the_stdev_window_is_its_own_name, failures)
+    run_claim(failures, claim_the_watchdog_survives_a_hung_schtasks, failures)
+    run_claim(failures, claim_the_baseline_counts_what_it_warmed, failures)
+    run_claim(failures, claim_vendor_text_cannot_break_a_table, failures)
+    run_claim(failures, claim_the_quantifier_guard_reads_headings, failures)
+    run_claim(failures, claim_no_comment_describes_a_helper_that_does_not_exist, failures)
+    run_claim(failures, claim_the_volume_check_reaches_the_packet, failures)
+    run_claim(failures, claim_a_trap_is_the_balance_not_the_worst_headline, failures)
+    run_claim(failures, claim_the_day_screen_names_what_rvol_alone_blocked, failures)
+    run_claim(failures, claim_a_truncated_name_is_not_a_rejected_one, failures)
+    run_claim(failures, claim_the_bucket_roll_is_complete_and_signed, failures)
+    run_claim(failures, claim_an_unmeasured_condition_is_not_a_failed_one, failures)
+    run_claim(failures, claim_a_thin_window_is_not_merely_a_late_one, failures)
+    run_claim(failures, claim_a_replayed_print_is_not_silence, failures)
+    run_claim(failures, claim_the_two_prior_closes_are_compared, failures)
+    run_claim(failures, claim_the_baseline_age_travels_with_the_rvol, failures)
+    run_claim(failures, claim_a_hand_run_of_one_suite_cannot_touch_real_data, failures)
 
-    claim_an_abbreviation_is_not_a_ticker_claim(failures)
-    claim_the_two_documents_agree_on_who_decides_a_trap(failures)
-    claim_a_roundup_classifies_nobody(failures)
-    claim_a_market_piece_classifies_nobody(failures)
-    claim_the_trap_balance_reads_the_whole_window(failures)
-    claim_the_volume_check_carries_its_sign(failures)
-    claim_a_skipped_quote_is_not_a_missing_float(failures)
-    claim_a_missing_calendar_stands_the_vintage_gate_down(failures)
-    claim_a_half_written_calendar_is_not_a_missing_one(failures)
-    claim_an_unrecorded_relaunch_is_reported_rather_than_raised(failures)
-    claim_an_interrupted_packet_write_leaves_no_half_packet(failures)
-    claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures)
-    claim_reading_a_run_directory_does_not_create_one(failures)
-    claim_a_partial_batch_writes_each_minute_once(failures)
-    claim_a_torn_tail_is_closed_before_the_next_bar(failures)
-    claim_an_unplaceable_trade_is_not_a_lost_connection(failures)
-    claim_a_failed_truth_pass_erases_no_measurement(failures)
-    claim_recall_refuses_a_pool_the_morning_did_not_read(failures)
-    claim_a_split_is_not_a_gap(failures)
-    claim_an_unchecked_earnings_calendar_is_not_an_empty_one(failures)
-    claim_an_empty_morning_still_carries_its_ranking_counts(failures)
-    claim_a_refused_name_is_not_an_overlap(failures)
-    claim_blanking_a_time_does_not_eat_the_next_word(failures)
-    claim_a_non_object_cli_answer_falls_back(failures)
-    claim_the_cost_table_reads_one_quota_day(failures)
-    claim_a_partial_sweep_does_not_outrank_a_complete_one(failures)
-    claim_a_refused_short_leg_says_so_once(failures)
-    claim_the_weekly_page_publishes_what_it_could_not_read(failures)
-    claim_the_previous_session_helper_says_when_it_does_not_know(failures)
-    claim_a_live_job_is_not_rerun_on_top_of_itself(failures)
-    claim_a_previous_session_watchlist_reruns_discover(failures)
-    claim_an_empty_bulk_day_is_not_an_empty_market(failures)
-    claim_recall_never_publishes_an_unknown_as_a_zero(failures)
-    claim_outcomes_refuse_a_split_they_cannot_measure_across(failures)
-    claim_an_unparsable_verification_is_not_a_measurement(failures)
-    claim_ensure_dirs_follows_a_redirected_config(failures)
-    claim_a_refused_sweep_is_not_an_empty_feed(failures)
-    claim_the_volume_check_puts_no_roster_in_the_packet(failures)
-    claim_a_finish_marker_outranks_a_fresh_log(failures)
-    claim_a_hold_needs_a_pass_that_can_act(failures)
-    claim_the_last_pass_counts_what_it_cannot_resolve(failures)
-    claim_the_long_leg_checks_the_units_it_writes(failures)
-    claim_the_buckets_say_what_they_sum_to(failures)
-    claim_a_matching_collector_is_not_called_a_disagreement(failures)
-    claim_the_hand_run_redirect_moves_a_captured_run_directory(failures)
-    claim_an_unread_news_window_is_not_an_empty_one(failures)
-    claim_the_sharing_count_names_the_set_it_was_taken_over(failures)
-    claim_a_lost_second_bulk_call_keeps_the_first(failures)
-    claim_the_watchlist_comment_matches_what_the_watchdog_does(failures)
-    claim_a_partly_refused_sweep_is_reported_as_one(failures)
-    claim_no_em_dash_survives_anywhere(failures)
-    claim_a_partial_minute_counts_only_the_seconds_it_covered(failures)
-    claim_a_flag_the_run_never_recorded_is_not_a_zero(failures)
-    claim_the_trust_store_is_never_served_half_written(failures)
-    claim_the_rotation_study_counts_no_warm_up_session(failures)
-    claim_no_python_here_runs_a_git_fetch(failures)
-    claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted(failures)
-    claim_the_universe_keeps_the_name_the_vendor_sent(failures)
-    claim_the_day_screen_and_the_volume_score_agree_on_one_number(failures)
-    claim_the_floor_sweep_fits_edges_the_way_the_study_does(failures)
-    claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one(failures)
-    claim_an_unfinished_session_is_not_backed_up(failures)
-    claim_the_collector_writes_where_premarket_dir_points(failures)
-    claim_the_socket_probe_cannot_write_the_session_capture(failures)
-    claim_a_held_backup_yields_only_to_a_recorded_verdict(failures)
-    claim_doc_carries_findings_and_not_payloads(failures)
-    claim_the_midday_pass_never_touches_the_morning(failures)
-    claim_the_unsigned_score_says_so_wherever_it_is_named(failures)
-    claim_the_watchdog_reads_every_job_that_writes_a_log(failures)
-    claim_the_suite_can_count_itself(failures)
-    claim_the_documents_count_what_is_actually_here(failures)
-    claim_the_night_refuses_the_floats_the_morning_refuses(failures)
-    claim_the_true_premarket_gap_separates_the_feed_from_the_window(failures)
-    claim_a_vendor_headline_cannot_write_markup(failures)
-    claim_the_universe_covers_the_exchanges_the_file_names(failures)
-    claim_the_watchdog_outlasts_the_longest_healthy_analyst(failures)
-    claim_a_thin_capture_share_is_refused_rather_than_divided_by(failures)
-    claim_the_packet_never_asks_for_the_correction_to_be_applied_twice(failures)
-    claim_a_probe_reading_its_own_noise_cannot_beat_is_refused(failures)
-    claim_the_prune_deletes_only_what_its_whitelist_names(failures)
-    claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(failures)
-    claim_the_true_reference_reads_the_field_the_criteria_names(failures)
-    claim_the_true_reference_pair_is_kept_apart_from_the_sampled_one(failures)
-    claim_the_true_excursion_never_borrows_the_sampled_reference(failures)
-    claim_the_fill_band_counts_the_minutes_that_reached_it(failures)
-    claim_fill_plausibility_is_three_state_and_never_guesses(failures)
-    claim_a_refused_session_still_carries_a_verdict(failures)
-    claim_the_paper_rule_reads_the_minutes_in_order(failures)
-    claim_the_two_sizings_differ_only_in_how_much_they_buy(failures)
-    claim_the_morning_fill_warning_is_never_an_approval(failures)
-    claim_the_record_block_carries_its_own_denominators(failures)
-    claim_the_ledger_records_when_things_happened(failures)
-    claim_the_ledger_writes_the_picks_it_declined(failures)
-    claim_the_fill_band_floor_is_the_position_over_the_participation_cap(failures)
-    claim_the_score_watch_withholds_what_it_cannot_report(failures)
-    claim_the_score_watch_reads_the_points_the_morning_awarded(failures)
-    claim_the_score_watch_keeps_unscored_out_of_red(failures)
-    claim_the_weekly_page_reads_and_renders_and_nothing_else(failures)
-    claim_a_claim_cannot_reach_the_live_database(failures)
-    claim_the_unrebuildable_artifacts_are_held_twice(failures)
-    claim_both_volume_ratios_divide_the_same_tape(failures)
-    claim_a_watchlist_from_another_session_never_reaches_the_socket(failures)
-    claim_unregister_removes_every_probe_register_can_create(failures)
-    claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(failures)
-    claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(failures)
-    claim_the_score_watch_counts_a_pick_once_per_pick(failures)
-    claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not(failures)
-    claim_every_printed_column_has_plain_english(failures)
-    claim_a_lost_session_is_history_and_a_new_one_is_a_finding(failures)
-    claim_every_production_read_of_picks_is_fenced(failures)
-    claim_a_reconstruction_never_displaces_the_record(failures)
-    claim_the_guard_reads_what_ships(failures)
-    claim_the_invalidation_line_names_a_level_and_not_a_figure(failures)
-    claim_the_glossary_explains_each_column_once(failures)
-    claim_the_fallback_carries_every_template_section(failures)
-    claim_a_morning_spends_at_most_max_attempts_cli_runs(failures)
-    claim_the_page_opens_at_a_glance(failures)
-    claim_the_morning_page_links_to_its_siblings(failures)
-    claim_the_archive_carries_the_midday_report(failures)
-    claim_the_skeleton_opens_a_slot_for_each_prose_field(failures)
-    claim_a_slots_answer_is_fitted_back_onto_the_skeleton(failures)
-    claim_the_projection_keeps_what_the_template_names(failures)
-    claim_slots_mode_ships_the_skeleton_and_the_prose(failures)
-    claim_the_slots_prompt_holds_to_the_guard(failures)
-    claim_every_page_shares_one_shell(failures)
-    claim_the_weekly_page_is_a_whole_document(failures)
-    claim_the_morning_tables_are_dressed(failures)
-    claim_the_midday_page_renders_through_the_one_renderer(failures)
+    run_claim(failures, claim_an_abbreviation_is_not_a_ticker_claim, failures)
+    run_claim(failures, claim_the_two_documents_agree_on_who_decides_a_trap, failures)
+    run_claim(failures, claim_a_roundup_classifies_nobody, failures)
+    run_claim(failures, claim_a_market_piece_classifies_nobody, failures)
+    run_claim(failures, claim_the_trap_balance_reads_the_whole_window, failures)
+    run_claim(failures, claim_the_volume_check_carries_its_sign, failures)
+    run_claim(failures, claim_a_skipped_quote_is_not_a_missing_float, failures)
+    run_claim(failures, claim_a_missing_calendar_stands_the_vintage_gate_down, failures)
+    run_claim(failures, claim_a_half_written_calendar_is_not_a_missing_one, failures)
+    run_claim(failures, claim_an_unrecorded_relaunch_is_reported_rather_than_raised, failures)
+    run_claim(failures, claim_an_interrupted_packet_write_leaves_no_half_packet, failures)
+    run_claim(failures, claim_the_archive_does_not_publish_a_fixture_as_a_morning, failures)
+    run_claim(failures, claim_reading_a_run_directory_does_not_create_one, failures)
+    run_claim(failures, claim_a_partial_batch_writes_each_minute_once, failures)
+    run_claim(failures, claim_a_torn_tail_is_closed_before_the_next_bar, failures)
+    run_claim(failures, claim_an_unplaceable_trade_is_not_a_lost_connection, failures)
+    run_claim(failures, claim_a_failed_truth_pass_erases_no_measurement, failures)
+    run_claim(failures, claim_recall_refuses_a_pool_the_morning_did_not_read, failures)
+    run_claim(failures, claim_a_split_is_not_a_gap, failures)
+    run_claim(failures, claim_an_unchecked_earnings_calendar_is_not_an_empty_one, failures)
+    run_claim(failures, claim_an_empty_morning_still_carries_its_ranking_counts, failures)
+    run_claim(failures, claim_a_refused_name_is_not_an_overlap, failures)
+    run_claim(failures, claim_blanking_a_time_does_not_eat_the_next_word, failures)
+    run_claim(failures, claim_a_non_object_cli_answer_falls_back, failures)
+    run_claim(failures, claim_the_cost_table_reads_one_quota_day, failures)
+    run_claim(failures, claim_a_partial_sweep_does_not_outrank_a_complete_one, failures)
+    run_claim(failures, claim_a_refused_short_leg_says_so_once, failures)
+    run_claim(failures, claim_the_weekly_page_publishes_what_it_could_not_read, failures)
+    run_claim(failures, claim_the_previous_session_helper_says_when_it_does_not_know, failures)
+    run_claim(failures, claim_a_live_job_is_not_rerun_on_top_of_itself, failures)
+    run_claim(failures, claim_a_previous_session_watchlist_reruns_discover, failures)
+    run_claim(failures, claim_an_empty_bulk_day_is_not_an_empty_market, failures)
+    run_claim(failures, claim_recall_never_publishes_an_unknown_as_a_zero, failures)
+    run_claim(failures, claim_outcomes_refuse_a_split_they_cannot_measure_across, failures)
+    run_claim(failures, claim_an_unparsable_verification_is_not_a_measurement, failures)
+    run_claim(failures, claim_ensure_dirs_follows_a_redirected_config, failures)
+    run_claim(failures, claim_a_refused_sweep_is_not_an_empty_feed, failures)
+    run_claim(failures, claim_the_volume_check_puts_no_roster_in_the_packet, failures)
+    run_claim(failures, claim_a_finish_marker_outranks_a_fresh_log, failures)
+    run_claim(failures, claim_a_hold_needs_a_pass_that_can_act, failures)
+    run_claim(failures, claim_the_last_pass_counts_what_it_cannot_resolve, failures)
+    run_claim(failures, claim_the_long_leg_checks_the_units_it_writes, failures)
+    run_claim(failures, claim_the_buckets_say_what_they_sum_to, failures)
+    run_claim(failures, claim_a_matching_collector_is_not_called_a_disagreement, failures)
+    run_claim(failures, claim_the_hand_run_redirect_moves_a_captured_run_directory, failures)
+    run_claim(failures, claim_an_unread_news_window_is_not_an_empty_one, failures)
+    run_claim(failures, claim_the_sharing_count_names_the_set_it_was_taken_over, failures)
+    run_claim(failures, claim_a_lost_second_bulk_call_keeps_the_first, failures)
+    run_claim(failures, claim_the_watchlist_comment_matches_what_the_watchdog_does, failures)
+    run_claim(failures, claim_a_partly_refused_sweep_is_reported_as_one, failures)
+    run_claim(failures, claim_no_em_dash_survives_anywhere, failures)
+    run_claim(failures, claim_a_partial_minute_counts_only_the_seconds_it_covered, failures)
+    run_claim(failures, claim_a_flag_the_run_never_recorded_is_not_a_zero, failures)
+    run_claim(failures, claim_the_trust_store_is_never_served_half_written, failures)
+    run_claim(failures, claim_the_rotation_study_counts_no_warm_up_session, failures)
+    run_claim(failures, claim_no_python_here_runs_a_git_fetch, failures)
+    run_claim(failures, claim_the_shipped_rotation_edges_are_the_ones_the_study_fitted, failures)
+    run_claim(failures, claim_the_universe_keeps_the_name_the_vendor_sent, failures)
+    run_claim(failures, claim_the_day_screen_and_the_volume_score_agree_on_one_number, failures)
+    run_claim(failures, claim_the_floor_sweep_fits_edges_the_way_the_study_does, failures)
+    run_claim(failures, claim_the_midday_watchdog_tells_a_hung_job_from_a_live_one, failures)
+    run_claim(failures, claim_an_unfinished_session_is_not_backed_up, failures)
+    run_claim(failures, claim_the_collector_writes_where_premarket_dir_points, failures)
+    run_claim(failures, claim_the_socket_probe_cannot_write_the_session_capture, failures)
+    run_claim(failures, claim_a_held_backup_yields_only_to_a_recorded_verdict, failures)
+    run_claim(failures, claim_doc_carries_findings_and_not_payloads, failures)
+    run_claim(failures, claim_the_midday_pass_never_touches_the_morning, failures)
+    run_claim(failures, claim_the_unsigned_score_says_so_wherever_it_is_named, failures)
+    run_claim(failures, claim_the_watchdog_reads_every_job_that_writes_a_log, failures)
+    run_claim(failures, claim_the_suite_can_count_itself, failures)
+    run_claim(failures, claim_the_documents_count_what_is_actually_here, failures)
+    run_claim(failures, claim_the_night_refuses_the_floats_the_morning_refuses, failures)
+    run_claim(failures, claim_the_true_premarket_gap_separates_the_feed_from_the_window, failures)
+    run_claim(failures, claim_a_vendor_headline_cannot_write_markup, failures)
+    run_claim(failures, claim_the_universe_covers_the_exchanges_the_file_names, failures)
+    run_claim(failures, claim_the_watchdog_outlasts_the_longest_healthy_analyst, failures)
+    run_claim(failures, claim_a_thin_capture_share_is_refused_rather_than_divided_by, failures)
+    run_claim(failures, claim_the_packet_never_asks_for_the_correction_to_be_applied_twice, failures)
+    run_claim(failures, claim_a_probe_reading_its_own_noise_cannot_beat_is_refused, failures)
+    run_claim(failures, claim_the_prune_deletes_only_what_its_whitelist_names, failures)
+    run_claim(failures, claim_the_truth_pass_writes_beside_the_morning_and_never_over_it, failures)
+    run_claim(failures, claim_the_true_reference_reads_the_field_the_criteria_names, failures)
+    run_claim(failures, claim_the_true_reference_pair_is_kept_apart_from_the_sampled_one, failures)
+    run_claim(failures, claim_the_true_excursion_never_borrows_the_sampled_reference, failures)
+    run_claim(failures, claim_the_fill_band_counts_the_minutes_that_reached_it, failures)
+    run_claim(failures, claim_fill_plausibility_is_three_state_and_never_guesses, failures)
+    run_claim(failures, claim_a_refused_session_still_carries_a_verdict, failures)
+    run_claim(failures, claim_the_paper_rule_reads_the_minutes_in_order, failures)
+    run_claim(failures, claim_the_two_sizings_differ_only_in_how_much_they_buy, failures)
+    run_claim(failures, claim_the_morning_fill_warning_is_never_an_approval, failures)
+    run_claim(failures, claim_the_record_block_carries_its_own_denominators, failures)
+    run_claim(failures, claim_the_ledger_records_when_things_happened, failures)
+    run_claim(failures, claim_the_ledger_writes_the_picks_it_declined, failures)
+    run_claim(failures, claim_the_fill_band_floor_is_the_position_over_the_participation_cap, failures)
+    run_claim(failures, claim_the_score_watch_withholds_what_it_cannot_report, failures)
+    run_claim(failures, claim_the_score_watch_reads_the_points_the_morning_awarded, failures)
+    run_claim(failures, claim_the_score_watch_keeps_unscored_out_of_red, failures)
+    run_claim(failures, claim_the_weekly_page_reads_and_renders_and_nothing_else, failures)
+    run_claim(failures, claim_a_claim_cannot_reach_the_live_database, failures)
+    run_claim(failures, claim_the_unrebuildable_artifacts_are_held_twice, failures)
+    run_claim(failures, claim_both_volume_ratios_divide_the_same_tape, failures)
+    run_claim(failures, claim_a_watchlist_from_another_session_never_reaches_the_socket, failures)
+    run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
+    run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
+    run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_the_score_watch_counts_a_pick_once_per_pick, failures)
+    run_claim(failures, claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not, failures)
+    run_claim(failures, claim_every_printed_column_has_plain_english, failures)
+    run_claim(failures, claim_a_lost_session_is_history_and_a_new_one_is_a_finding, failures)
+    run_claim(failures, claim_every_production_read_of_picks_is_fenced, failures)
+    run_claim(failures, claim_a_reconstruction_never_displaces_the_record, failures)
+    run_claim(failures, claim_the_guard_reads_what_ships, failures)
+    run_claim(failures, claim_the_invalidation_line_names_a_level_and_not_a_figure, failures)
+    run_claim(failures, claim_the_glossary_explains_each_column_once, failures)
+    run_claim(failures, claim_the_fallback_carries_every_template_section, failures)
+    run_claim(failures, claim_a_morning_spends_at_most_max_attempts_cli_runs, failures)
+    run_claim(failures, claim_the_page_opens_at_a_glance, failures)
+    run_claim(failures, claim_the_morning_page_links_to_its_siblings, failures)
+    run_claim(failures, claim_the_archive_carries_the_midday_report, failures)
+    run_claim(failures, claim_the_skeleton_opens_a_slot_for_each_prose_field, failures)
+    run_claim(failures, claim_a_slots_answer_is_fitted_back_onto_the_skeleton, failures)
+    run_claim(failures, claim_the_projection_keeps_what_the_template_names, failures)
+    run_claim(failures, claim_slots_mode_ships_the_skeleton_and_the_prose, failures)
+    run_claim(failures, claim_the_slots_prompt_holds_to_the_guard, failures)
+    run_claim(failures, claim_every_page_shares_one_shell, failures)
+    run_claim(failures, claim_the_weekly_page_is_a_whole_document, failures)
+    run_claim(failures, claim_the_morning_tables_are_dressed, failures)
+    run_claim(failures, claim_the_midday_page_renders_through_the_one_renderer, failures)
+    run_claim(failures, claim_one_reading_of_a_number, failures)
+    run_claim(failures, claim_one_atomic_writer, failures)
+    run_claim(failures, claim_criteria_check_reads_what_the_code_asks_for, failures)
+    run_claim(failures, claim_a_raising_claim_does_not_end_its_module, failures)
+    run_claim(failures, claim_a_sidecar_touch_is_not_a_write, failures)
+    run_claim(failures, claim_the_schema_owns_every_picks_column_once, failures)
 
     if failures:
         for failure in failures:

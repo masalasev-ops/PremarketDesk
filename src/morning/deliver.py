@@ -14,10 +14,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
-import time
 from pathlib import Path
 
 from typing import Any
@@ -55,22 +53,16 @@ def write_delivery_record(html_path: Path, record: dict[str, Any]) -> str | None
     """
     path = delivery_record_path(html_path)
     body = json.dumps(record, indent=2, sort_keys=True)
-    temporary = path.with_name(path.name + ".partial")
+    # core/files.py is the one atomic writer since 2026-09-02, retries included.
+    from core import files
+
     last: Exception | None = None
-    for attempt in range(WRITE_ATTEMPTS):
-        try:
-            temporary.write_text(body, encoding="utf-8")
-            os.replace(temporary, path)
-            return None
-        except OSError as exc:
-            last = exc
-            if attempt + 1 < WRITE_ATTEMPTS:
-                time.sleep(WRITE_RETRY_S)
-        finally:
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError:
-                pass
+    try:
+        files.write_text_atomically(path, body, attempts=WRITE_ATTEMPTS,
+                                    retry_s=WRITE_RETRY_S)
+        return None
+    except OSError as exc:
+        last = exc
     return (
         f"deliver: WARNING the email WAS SENT and the send-once record at {path} "
         f"could not be written after {WRITE_ATTEMPTS} attempts ({last}). Nothing "

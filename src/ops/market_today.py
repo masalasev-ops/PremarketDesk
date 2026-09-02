@@ -26,9 +26,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import os
 import sys
-from pathlib import Path
 from typing import Any
 
 from core import config
@@ -119,14 +117,11 @@ def _write_cache_atomically(payload: dict[str, Any]) -> None:
     universe.write_atomically and config.ca_bundle, and inline here rather than
     imported from selection/ because ops must not depend on a later package.
     """
-    temporary = CACHE_PATH.with_name(CACHE_PATH.name + ".partial")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(temporary, CACHE_PATH)
-    finally:
-        # A crash between the write and the replace leaves the partial behind;
-        # nothing reads it, but it should not accumulate.
-        Path(temporary).unlink(missing_ok=True)
+    # core/files.py is the one atomic writer since 2026-09-02, and it is in
+    # core, which ops may depend on.
+    from core import files
+
+    files.write_json_atomically(CACHE_PATH, payload, indent=2)
 
 
 def get_details(refresh_after_days: int, force: bool = False) -> dict[str, Any] | None:

@@ -1,0 +1,6 @@
+# Development only. The runtime dependencies are in requirements.txt and the
+# suite (python -m tests.run_tests) needs nothing beyond them. pyflakes is what
+# the 2026-09-02 review ran to find the unused imports and the f-strings with
+# no placeholders, and it is declared here so the next reader runs the same
+# check rather than rediscovering the list.
+pyflakes>=3.2

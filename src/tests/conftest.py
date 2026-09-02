@@ -199,6 +199,60 @@ _SAMPLER_TRAIL_KEYS = frozenset({"at", "quota_day", "source", "step"})
 # something in this project starts fetching is the day this exemption begins
 # hiding a real write, and the claim fails on that day rather than on the one
 # somebody notices.
+# ------------------------------------------------- running one claim
+#
+# A claim that raised used to end the rest of its module. run_tests caught
+# the exception at module level, printed it, and every claim after the one
+# that raised never ran, so one broken fixture could hide a module's worth of
+# coverage behind a single traceback. Every module's main() now calls its
+# claims through this, which records the traceback as a failure and carries
+# on. test_regressions did this by hand in six places; this is the one place.
+def run_claim(failures: list[str], claim: Any, *args: Any) -> None:
+    """Call claim(*args); a raise becomes a recorded failure, not an abort."""
+    import traceback
+
+    try:
+        claim(*args)
+    except Exception as exc:  # noqa: BLE001, a claim's raise is the finding
+        failures.append(
+            f"{getattr(claim, '__name__', repr(claim))} raised "
+            f"{type(exc).__name__}: {exc}\n"
+            + "".join(traceback.format_exception(exc)).rstrip())
+
+
+# ------------------------------------ the third behaviour exemption
+#
+# The live database's -shm and -wal sidecars, and only when the database
+# itself did not move.
+#
+# SQLite in WAL mode rewrites the shared memory index and touches the write
+# ahead log whenever a connection opens or closes, including a read only
+# connection from another process: an editor extension browsing the file, a
+# hand query in another terminal. On 2026-09-02 a suite run in which every
+# claim passed reported FAILED because data/premarketdesk.db-shm had a new
+# mtime and the same 32,768 bytes, while the .db itself was unchanged and no
+# job had written a status record. That is the same intermittent the two
+# exemptions above exist to remove, and it teaches the same wrong lesson.
+#
+# Three conditions, together: the path is a .db-shm or .db-wal sidecar by
+# name; its size is unchanged, so this is a touch and not a write of new
+# pages; and the .db it belongs to is unchanged between the two snapshots, so
+# no row moved. A sidecar that grew fails. A sidecar whose database also
+# changed fails, because that is a write, whoever made it.
+_SQLITE_SIDECAR_SUFFIXES = (".db-shm", ".db-wal")
+
+
+def _sqlite_sidecar_touch(path: Path, was: Any, now: Any,
+                          before: dict[str, Any], after: dict[str, Any]) -> bool:
+    name = path.name
+    if not name.endswith(_SQLITE_SIDECAR_SUFFIXES):
+        return False
+    if not (was[:1] == ("file",) and now[:1] == ("file",)) or was[2] != now[2]:
+        return False
+    database = str(path.with_name(name.rsplit("-", 1)[0]))
+    return before.get(database) is not None and before.get(database) == after.get(database)
+
+
 @contextlib.contextmanager
 def isolated_store() -> Iterator[Path]:
     """A private data root, runs root and database, for the duration.
@@ -436,6 +490,8 @@ def differences(before: dict[str, Any], after: dict[str, Any],
             continue  # the scheduled sampler ticked mid run, appending only
         if _external_fetch_marker(Path(path)):
             continue  # the editor autofetched mid run, see the note above
+        if _sqlite_sidecar_touch(Path(path), was, now, before, after):
+            continue  # another process holds the live database open
         if was[:1] == ("file",) and now[:1] == ("file",) and was[2] == now[2]:
             out.append(f"modified {path}  mtime only, size unchanged at {now[2]} "
                        "bytes (an external toucher looks like this; so does a "

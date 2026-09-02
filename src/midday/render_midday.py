@@ -20,7 +20,6 @@ import argparse
 import html
 import json
 import re
-import sys
 from pathlib import Path
 from typing import Any
 

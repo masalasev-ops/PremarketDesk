@@ -31,6 +31,8 @@ counted off, which is why the list reaches eleven and carries no 2 and no 5:
 
 from __future__ import annotations
 
+from tests.conftest import run_claim
+
 import json
 from datetime import date as dt_date
 import sys
@@ -732,18 +734,18 @@ def main() -> int:
               "replay that morning are skipped. The rest ran.")
 
     if replayed:
-        claim_one(failures)
-        claim_three(failures)
-        claim_four(failures)
-    claim_six(failures)
+        run_claim(failures, claim_one, failures)
+        run_claim(failures, claim_three, failures)
+        run_claim(failures, claim_four, failures)
+    run_claim(failures, claim_six, failures)
     if replayed:
-        claim_seven(failures)
-        claim_eight(failures)
-    claim_nine(failures)
-    claim_ten(failures)
+        run_claim(failures, claim_seven, failures)
+        run_claim(failures, claim_eight, failures)
+    run_claim(failures, claim_nine, failures)
+    run_claim(failures, claim_ten, failures)
     # claim_eleven carries its own SKIP against its own file, so it decides for
     # itself rather than riding a gate about two other files.
-    claim_eleven(failures)
+    run_claim(failures, claim_eleven, failures)
 
     if failures:
         for failure in failures:

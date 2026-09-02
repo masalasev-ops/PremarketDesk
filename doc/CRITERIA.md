@@ -2858,7 +2858,11 @@ the next pre-registration, written the same way and run beside these two.
 position size, and it was written down as a placeholder that "behaves like the
 right rule for an order of about 10,000 dollars at a 4 percent participation
 cap". Those two numbers now exist here, and the placeholder is exactly their
-quotient: 10,000 / 0.04 = 250,000.
+quotient, 10,000 divided by 0.04, which is 250,000. (Written without an equals
+sign since 2026-09-02: the criteria parser reads any column zero line holding
+one as a key and value, and this sentence had been sitting in [paper] as the
+key "quotient: 10,000 / 0.04" for four days, which core.criteria --check now
+refuses.)
 
 It stays ONE shipped value, in [Truth], because that is the key the code reads
 and a second key holding the same number is two things to keep right. It is

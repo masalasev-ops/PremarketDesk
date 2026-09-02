@@ -38,7 +38,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import os
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -80,14 +79,8 @@ def _norm_code(raw: str) -> str:
     return code.split(".", 1)[0] if code.endswith(".US") else code
 
 
-def _as_float(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return out if out == out else None
+# The shared reading of "is this a number", see core/numbers.py.
+from core.numbers import as_float as _as_float  # noqa: E402
 
 
 # ---------------------------------------------------------------- freshness
@@ -974,14 +967,12 @@ def write_atomically(payload: dict[str, Any], target: Path | None = None) -> Non
     """
     target = Path(target) if target is not None else config.UNIVERSE_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(target.name + ".partial")
-    try:
-        temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        os.replace(temporary, target)
-    finally:
-        # A crash between the write and the replace leaves the partial file
-        # behind; it is never read by anything, but it should not accumulate.
-        temporary.unlink(missing_ok=True)
+    # The mechanism moved to core/files.py on 2026-09-02, where every module
+    # can reach it; this function stays because both callers import it here
+    # and its docstring is where the argument lives.
+    from core import files
+
+    files.write_json_atomically(target, payload, indent=2)
 
 
 # The exit codes that mean this step did its job. Declared at module level so

@@ -915,10 +915,10 @@ def report(day: str | None = None) -> int:
               f"also what refusing most of the requests looks like. The lag, where "
               f"there is one, is a reading of the served part and of nothing else.")
     else:
-        print(f"\nthe verdict rests on two numbers. If active names stays near zero through "
-              f"the morning, the free tier does not serve live premarket and the design in "
-              f"DECISIONS.md 2026-08-16 does not stand. If it is in the thousands, it does, "
-              f"and then the lag decides what freeze time is achievable.")
+        print("\nthe verdict rests on two numbers. If active names stays near zero through "
+              "the morning, the free tier does not serve live premarket and the design in "
+              "DECISIONS.md 2026-08-16 does not stand. If it is in the thousands, it does, "
+              "and then the lag decides what freeze time is achievable.")
     if lags:
         window_lags = sorted({r["window_lag_minutes"] for r in rows})
         past = [r["past_window_minutes"] for r in rows
