@@ -18,6 +18,67 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, eighth: a fail open that nobody can see is a fail silent, and the page is designed for reading rather than for fitting
+
+report_mode() was written to treat an unrecognised CRITERIA value as
+freeform and print that it had. That is the right direction to fail: a
+report written the old way is a report, and a crash at 08:45 is not. It was
+still the wrong mechanism, because the print went to
+logs/morning-chain-2026-09-02.log and the only thing on the outside was the
+report itself looking different, which is exactly what nobody can judge
+without knowing what it should have looked like. Slots mode was live in
+CRITERIA for a day and ran zero times.
+
+Three ways to stop that recurring, and what was taken.
+
+REJECTED, MAKE report_mode() RAISE. A bad mode value would then stop the
+morning. It converts a cosmetic fault into a missing report, and this
+project's own rule is the other way round: a missing report is recoverable
+and a plausible wrong one is not, but a freeform report is not a WRONG
+report, it is a worse one. The fail open stays.
+
+REJECTED, WRITE THE MODE INTO THE REPORT. It is already in
+analyst_usage.json, which is where a machine should read it, and putting a
+knob's value on the page adds operator text to a document the reader is not
+meant to debug.
+
+TAKEN, ASSERT IT IN THE SUITE, AND CATCH THE CLASS IN THE PARSER. One claim
+now asserts that CRITERIA's mode is a mode the code recognises, so the gap
+between what the file says and what runs is a red suite rather than a quiet
+morning. And criteria.check() gains the shadowed question, which catches the
+whole class: a key read one value at a time that its section defines twice.
+That question, not the prose key question, is the one that would have caught
+this, because the key was real and spelled correctly and the second
+definition was a sentence about it. Repeated keys are how pair_map and bands
+are written, so the question is asked only of keys a literal scalar call
+reads.
+
+ON THE PAGE. The redesign follows the reading research rather than taste,
+and the two choices worth recording are the ones that look like mistakes.
+
+FIRST, prose is capped at 68 characters while the container is not. The
+obvious alternative is one width for everything, which is what the file had
+at 760 pixels: it gave a ten column table too little and a paragraph too
+much, and the paragraph is the thing being read for six minutes. Butterick
+puts the readable band at 45 to 90 characters and Nielsen Norman at 50 to
+70; the old page ran past 95.
+
+SECOND, the row divider is deliberately below the 3:1 contrast floor.
+WCAG 1.4.11 applies to graphical objects that carry meaning, and a divider
+between two rows of a table does not: it is there to help the eye track,
+and pushed to 3:1 it becomes the grid that Butterick's tables chapter and
+Rutter's on designing tables to be read both say to remove. The rules that
+DO carry meaning, the line under the header and the line above a total, sit
+at a colour that clears 3:1. Text colours are all at or above 4.5:1 on both
+themes.
+
+The emailed copy gets its custom properties resolved rather than the
+stylesheet rewritten. Keeping one token set is what makes the morning page,
+the midday page and the archive provably identical, and caniemail's number
+for custom properties is under half with classic Outlook at none, so the
+copy that leaves the machine is flattened at the door and the copy on disk
+keeps the properties.
+
 ## 2026-09-02, seventh: after close reporters are the same prior as before open reporters, and the UNVERIFIED proposal leaves the plan
 
 The owner asked why GTLB was not on this morning's list after opening about

@@ -1914,7 +1914,19 @@ prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2,
 
 ### The slots note
 
-mode = slots since 2026-09-02. Under it the narrative pass does not write the
+The mode has been slots since 2026-09-02, and this paragraph does not open
+with the key name and an equals sign, because a column zero line shaped like
+`key = value` under a `##` heading IS a parameter to the parser. It opened
+`mode = slots since 2026-09-02. Under it...` when it was written, which the
+parser read as a second [Analyst] mode whose value was that whole sentence,
+and the accessor takes the last pair, so report_mode() saw an unrecognised
+value and fell back to freeform. Slots mode therefore never ran: the
+2026-09-02 morning chain spent 209 seconds and 17,989 output tokens writing
+the report freeform while this file said slots. Corrected the same day, with
+check() gaining the shadowed-key question so a scalar key defined twice in
+one section is a defect rather than a silent override.
+
+Under slots the narrative pass does not write the
 report. analyst.fallback_report, the same function that has always written
 the plain table on a morning the model failed, writes the whole report with
 slots=True, leaving marked slots for five kinds of prose: the mood phrase in

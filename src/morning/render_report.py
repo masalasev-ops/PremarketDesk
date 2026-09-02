@@ -160,6 +160,13 @@ class _DressTables(markdown.treeprocessors.Treeprocessor):
                 self._dress(table)
                 wrapper = etree.Element("div")
                 wrapper.set("class", "tablewrap")
+                # A box that scrolls sideways has to be reachable from the
+                # keyboard, or a reader who does not use a mouse cannot see
+                # the columns past the edge. WCAG 2.1.1, and the axe rule
+                # scrollable-region-focusable names exactly this element.
+                wrapper.set("tabindex", "0")
+                wrapper.set("role", "region")
+                wrapper.set("aria-label", "table, scrolls sideways")
                 wrapper.tail = table.tail
                 table.tail = None
                 parent.remove(table)

@@ -559,7 +559,13 @@ def claim_a_flag_cannot_cost_the_report(failures: list[str]) -> None:
 
         def stubborn_model(packet_text, correction=None):
             corrections.append(correction)
-            return stubborn, {"output_tokens": 1, "total_cost_usd": 0.01}, None, "ok"
+            # Under slots the model is handed a skeleton and must return it
+            # filled, so the flagged sentence goes where a model would have
+            # written it, in a slot. Returning the freeform document below
+            # would exercise the slot refusal path and never reach the guard.
+            answer = (conftest.filled_skeleton(analyst._skeleton, sentence)
+                      if analyst._skeleton else stubborn)
+            return answer, {"output_tokens": 1, "total_cost_usd": 0.01}, None, "ok"
 
         before = len(quantifier_flags.load_flags())
         real_invoke, real_mode = analyst.invoke_claude, analyst.guard_mode

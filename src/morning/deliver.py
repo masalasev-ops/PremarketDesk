@@ -23,6 +23,7 @@ from typing import Any
 from core import config
 from core import eodhd
 from core import ettime
+from core import page
 from ops import job_status
 
 
@@ -176,7 +177,11 @@ def deliver(html_path: Path) -> int:
         "from": config.email_from(),
         "to": recipients,
         "subject": email_subject(html_path, session_date),
-        "html": strip_local_only(html),
+        # The footer of machine local links goes, and every var() is resolved
+        # to its literal: a mail client that cannot read a custom property
+        # would otherwise render the whole stylesheet's colours and rules as
+        # nothing. See page.flatten_variables.
+        "html": page.flatten_variables(strip_local_only(html)),
     }
     # A plain text part beside the HTML, from the markdown the HTML was
     # rendered from. A client that cannot show HTML, and a client that strips

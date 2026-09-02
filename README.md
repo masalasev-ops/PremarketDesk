@@ -740,7 +740,13 @@ Other documents:
   medium effort. Under slots mode, opus at low effort, hand runs of the
   2026-09-01 and 2026-08-31 packets took 134 and 97 seconds and wrote 13k and
   9k output tokens against 31k and 18k before; CRITERIA's slots note carries
-  the table. Nothing has timed out. The rule behind the timeout
+  the table. The first scheduled morning to actually run in slots mode is
+  2026-09-03: from the flip on 2026-09-02 until that afternoon a sentence in
+  CRITERIA shadowed the mode key and every morning ran freeform, which
+  CHANGELOG 2026-09-02 thirty ninth records. The 2026-09-02 packet regenerated
+  in slots mode took 138 seconds and 13,236 output tokens at $0.68, against
+  209 seconds and 17,989 at $1.27 for the freeform report the chain shipped
+  that morning. Nothing has timed out. The rule behind the timeout
   in `doc/CRITERIA.md` has always been three times the slowest run on record,
   and the evidence under it has moved twice while the rule has not: from the
   five dry runs of 2026-08-14 to the scheduled mornings that overtook them,

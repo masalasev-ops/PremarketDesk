@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and sixty three claims, a count read off
+and the two pages. It now carries one hundred and sixty six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13288,17 +13288,23 @@ def claim_a_morning_spends_at_most_max_attempts_cli_runs(failures: list[str]) ->
             return _subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
 
         real = (analyst.subprocess.run, analyst.resolve_cli, analyst.guard_mode,
-                gap_reasons.explain)
+                gap_reasons.explain, analyst.report_mode)
         analyst.subprocess.run = fake_run
         analyst.resolve_cli = lambda: "claude"
         analyst.guard_mode = lambda: analyst.GUARD_ENFORCING
+        # The answers above are whole freeform reports, so the mode is pinned
+        # rather than read: this claim is about the run budget and must not
+        # move when CRITERIA's mode does. The budget under slots is covered
+        # by the slots mode claim, which asks for two bad answers and counts
+        # the runs that buys.
+        analyst.report_mode = lambda: analyst.MODE_FREEFORM
         gap_reasons.explain = lambda candidates: ({}, None, "stubbed by the suite")
         try:
             with contextlib.redirect_stdout(io.StringIO()):
                 code = analyst.write_report(packet_path)
         finally:
             (analyst.subprocess.run, analyst.resolve_cli, analyst.guard_mode,
-             gap_reasons.explain) = real
+             gap_reasons.explain, analyst.report_mode) = real
         usage = json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))
         text = (run_directory / "report.md").read_text(encoding="utf-8")
         return {"code": code, "calls": len(calls), "usage": usage, "text": text}
@@ -13879,8 +13885,12 @@ def claim_the_morning_tables_are_dressed(failures: list[str]) -> None:
             "| Ticker | Gap % | Price | Conviction |\n| --- | --- | --- | --- |\n"
             "| none | | | |\n\nThe swing screen produced nothing today.\n")
     rendered = render_report.to_html(text)
-    if rendered.count('<div class="tablewrap">') != 1:
+    # The wrapper also carries tabindex, role and a label, and the serializer
+    # sorts attributes, so the class is looked for rather than the whole tag.
+    if rendered.count('class="tablewrap"') != 1:
         failures.append(f"expected one wrapped table, the none only one collapsed: {rendered!r}")
+    if 'tabindex="0"' not in rendered or 'role="region"' not in rendered:
+        failures.append("the sideways scrolling box cannot be reached from the keyboard")
     if 'border="1"' not in rendered or 'cellpadding="6"' not in rendered:
         failures.append("the table carries no border attributes for a mail client")
     if '<td class="num">+14.2</td>' not in rendered or 'class="num">null<' not in rendered:
@@ -14020,20 +14030,29 @@ def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> No
     from core import criteria
 
     live = criteria.check(criteria.load(), config.PROJECT_ROOT / "src")
-    for label in ("prose_keys", "unresolved"):
+    for label in ("prose_keys", "unresolved", "shadowed"):
         if live[label]:
             failures.append(f"criteria --check finds {label} on the live tree: "
                             f"{live[label][:3]}")
 
-    text = ("## Widget\n\nsize = 3\nthe quotient: 1 / 2 = 0.5.\n\n## Score band\n\n"
-            "band = >= 7 : green\nband = else : red\n")
+    # The last two lines of Widget are the 2026-09-02 defect in miniature: a
+    # real key, spelled correctly, written once as a parameter and once as
+    # the opening words of a sentence explaining it. _raw takes the last
+    # pair, so the sentence wins and the parameter is dead. Score band
+    # repeats its key too and must NOT be reported, because bands are read
+    # by an accessor that wants every pair.
+    text = ("## Widget\n\nsize = 3\nthe quotient: 1 / 2 = 0.5.\n"
+            "mode = slots\nmode = slots since Tuesday. Under it the pass does not\n"
+            "\n## Score band\n\nband = >= 7 : green\nband = else : red\n"
+            "\n## Tier map\n\ntier = a : 1\ntier = b : 2\n")
     crit = criteria.parse_text(text, pathlib.Path("fixture.md"))
     with tempfile.TemporaryDirectory(prefix="pmd-crit-") as raw:
         src = pathlib.Path(raw) / "src"
         (src / "pkg").mkdir(parents=True)
         (src / "pkg" / "m.py").write_text(
             'X = C.integer("widget", "size")\nY = C.integer("widget", "colour")\n'
-            'Z = C.band_result("score_band", 8)\nW = C.text("nowhere", "k")\n',
+            'Z = C.band_result("score_band", 8)\nW = C.text("nowhere", "k")\n'
+            'V = C.text("widget", "mode")\nU = C.pair_map("tier_map", "tier")\n',
             encoding="utf-8")
         report = criteria.check(crit, src)
     if not any("quotient" in p for p in report["prose_keys"]):
@@ -14044,8 +14063,125 @@ def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> No
         failures.append("a literal call to a missing section was not reported")
     if any("score_band" in u for u in report["unresolved"]):
         failures.append("band_result with the default key was wrongly reported")
-    print("  criteria     --check reads every literal call, finds a prose key and a bad key, "
-          "and the live tree is clean")
+    if not any("mode" in s for s in report["shadowed"]):
+        failures.append(f"a scalar key defined twice was not reported: {report['shadowed']}")
+    if any("tier" in s for s in report["shadowed"]):
+        failures.append("a pair_map key was reported as shadowed, which is how pair maps "
+                        f"are written: {report['shadowed']}")
+    if any("band" in s for s in report["shadowed"]):
+        failures.append(f"a bands key was reported as shadowed: {report['shadowed']}")
+    print("  criteria     --check reads every literal call, finds a prose key, a bad key "
+          "and a scalar key a sentence shadowed, and the live tree is clean")
+
+
+def claim_the_analyst_mode_on_disk_is_the_mode_that_runs(failures: list[str]) -> None:
+    """CRITERIA [Analyst] mode resolves to a mode the code recognises.
+
+    report_mode() treats an unrecognised value as freeform and says so on
+    stdout, which is the right fail open and is also completely silent in
+    practice: it goes to a log file. Between the slots restructure landing on
+    2026-09-02 and the same afternoon, [Analyst] mode said `slots`, a
+    sentence four lines below it began "mode = slots since 2026-09-02. Under
+    it..." at column zero, the parser read that as a second mode, and every
+    morning ran freeform. The 08:45 chain that day spent 209 seconds and
+    17,989 output tokens writing a report the way the file said it should not
+    be written, and nothing anywhere failed.
+
+    So the mode is asserted, not merely parsed.
+    """
+    from morning import analyst
+
+    mode = analyst.report_mode()
+    if mode not in (analyst.MODE_SLOTS, analyst.MODE_FREEFORM):
+        failures.append(f"report_mode() returned {mode!r}")
+    raw = criteria_module().text("analyst", "mode").strip().lower()
+    if raw != mode:
+        failures.append(
+            f"CRITERIA [Analyst] mode reads {raw!r}, which report_mode() does not "
+            f"recognise, so the morning silently runs {mode!r} instead")
+    print(f"  analyst mode CRITERIA says {mode!r} and that is the mode the morning runs")
+
+
+def criteria_module():
+    from core import criteria
+
+    return criteria.load()
+
+
+def claim_a_list_opens_its_own_block(failures: list[str]) -> None:
+    """A markdown list that follows a paragraph gets a blank line above it.
+
+    Python-Markdown, unlike CommonMark, needs that blank line. Without it the
+    items are a lazy continuation of the paragraph and the list renders as
+    running prose with hyphens in it. The 2026-09-02 report shipped eight
+    lists that way, every quoted headline block among them.
+
+    A blank line BETWEEN items is a different thing and must not appear: it
+    makes the list loose and wraps each item in its own paragraph.
+    """
+    from morning import analyst, render_report
+
+    source = ("Intro sentence.\n- first\n- second\n\nAfter.\n\n"
+              "Already spaced.\n\n- a\n- b\n\n1. one\n2. two\n")
+    fixed = analyst.open_lists_with_a_blank_line("Intro sentence.\n- first\n- second\n")
+    if fixed != "Intro sentence.\n\n- first\n- second\n":
+        failures.append(f"the opening item was not separated, or the items were: {fixed!r}")
+    unchanged = analyst.open_lists_with_a_blank_line(source)
+    if unchanged.count("\n\n- a") != 1 or "\n\n- b" in unchanged:
+        failures.append(f"an already spaced list was disturbed: {unchanged!r}")
+    numbered = analyst.open_lists_with_a_blank_line("Lead.\n1. one\n")
+    if numbered != "Lead.\n\n1. one\n":
+        failures.append(f"a numbered list was not separated: {numbered!r}")
+
+    rendered = render_report.to_html(analyst.open_lists_with_a_blank_line(
+        "**ACME, Acme Corp.** Gap 4.10 percent.\n- \"A headline\" (example.com).\n"))
+    if "<li>" not in rendered:
+        failures.append(f"the list still renders as prose: {rendered!r}")
+    if "<p><li>" in rendered or "<li><p>" in rendered:
+        failures.append(f"the list rendered loose: {rendered!r}")
+    print("  list blocks  a list after a paragraph opens its own block, an already spaced "
+          "list is untouched, and the items stay tight")
+
+
+def claim_the_emailed_copy_carries_no_custom_property(failures: list[str]) -> None:
+    """page.flatten_variables resolves every var() to its LIGHT literal.
+
+    CSS custom properties reach under half the mail clients caniemail tracks
+    and classic Outlook has none, so the emailed report would arrive with
+    every colour and every rule resolving to nothing. deliver.py runs this
+    over the copy it sends. The dark values must not be the ones that win.
+    """
+    from core import page
+    from morning import deliver
+
+    flat = page.flatten_variables(page.TOKENS_CSS + page.REPORT_CSS)
+    if "var(" in flat:
+        failures.append(f"a var() survived flattening: "
+                        f"{[l for l in flat.splitlines() if 'var(' in l][:2]}")
+    if "calc(" in flat:
+        failures.append("a calc() survived flattening, which caniemail rates no better "
+                        "than the properties this removes")
+    light_only = flat.split("@media", 1)[0]
+    if "#12161C" in light_only:
+        failures.append("a dark theme value was resolved into the light rules")
+    if "#16191D" not in flat or "#9AA0A6" not in flat:
+        failures.append("the light ink or rule colour did not reach the flattened copy")
+    # And the declarations themselves stay, for a client that does read them.
+    if "--ink:" not in flat:
+        failures.append("the declarations were removed rather than resolved")
+    # Nothing it cannot resolve is guessed at.
+    kept = page.flatten_variables("a { color: var(--not-a-token); }")
+    if "var(--not-a-token)" not in kept:
+        failures.append(f"an unresolvable var() was not left alone: {kept!r}")
+    fallback = page.flatten_variables("a { color: var(--nope, #123456); }")
+    if "#123456" not in fallback:
+        failures.append(f"a var() fallback was not used: {fallback!r}")
+
+    source = pathlib.Path(deliver.__file__).read_bytes().decode("utf-8")
+    if "flatten_variables" not in source:
+        failures.append("deliver.py does not flatten the copy it emails")
+    print("  email css    every custom property and calc in the emailed copy is resolved "
+          "to its light value, and an unknown token is left alone")
 
 
 def claim_a_raising_claim_does_not_end_its_module(failures: list[str]) -> None:
@@ -14378,6 +14514,9 @@ def main() -> int:
     run_claim(failures, claim_a_sidecar_touch_is_not_a_write, failures)
     run_claim(failures, claim_the_schema_owns_every_picks_column_once, failures)
     run_claim(failures, claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for, failures)
+    run_claim(failures, claim_the_analyst_mode_on_disk_is_the_mode_that_runs, failures)
+    run_claim(failures, claim_a_list_opens_its_own_block, failures)
+    run_claim(failures, claim_the_emailed_copy_carries_no_custom_property, failures)
 
     if failures:
         for failure in failures:

@@ -971,6 +971,42 @@ def template_headers() -> dict[str, str]:
     return found
 
 
+def filled_skeleton(skeleton: str, sentence: str | None = None) -> str:
+    """A slots answer good enough to pass check_slots, for a stubbed model.
+
+    Under CRITERIA [Analyst] mode = slots the model is handed the skeleton
+    and returns it with the markers replaced. A stub that returns a whole
+    freeform report is refused, correctly, and a claim written around one
+    tests the refusal path rather than whatever it meant to test.
+
+    So this fills each marker with prose of the right SHAPE: a few words for
+    a mood, a sentence for a tone or a headline reading, and for a setup the
+    invalidation lead in that check_slots insists on. `sentence` is appended
+    to the first slot, which is how a claim about the quantifier guard puts
+    the sentence it wants flagged where a model would have written it.
+
+    Nothing here asserts. A claim that wants a REJECTED answer builds one
+    itself; this is the accepted one.
+    """
+    from morning import analyst
+
+    filled = skeleton
+    for index, marker in enumerate(analyst.markers_in(skeleton)):
+        name = marker.strip("{}").split(":")[0]
+        if name == analyst.SLOT_MOOD:
+            text = "a stubbed mood"
+        elif name == analyst.SLOT_SETUP:
+            text = ("The level to work from is the premarket high. "
+                    f"{analyst.INVALIDATION_MARKER} a break back under the "
+                    "premarket low on rising volume.")
+        else:
+            text = "A stubbed sentence written by the suite."
+        if index == 0 and sentence:
+            text = f"{text} {sentence}"
+        filled = filled.replace(marker, text, 1)
+    return filled
+
+
 def watchlist_table(kind: str, rows: list[str] | None = None) -> str:
     """A whole table section, header and separator and body, from the template.
 

@@ -648,6 +648,36 @@ def _direction_caveat(packet: dict[str, Any]) -> str:
             "carries no score roll.")
 
 
+_LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]\s|\d+\.\s)")
+
+
+def open_lists_with_a_blank_line(text: str) -> str:
+    """Put a blank line before any list that starts straight after a paragraph.
+
+    Python-Markdown, unlike CommonMark, requires the blank line: without it
+    the item lines are read as a lazy continuation of the paragraph above and
+    the whole list renders as running prose with stray hyphens in it. On the
+    2026-09-02 report that swallowed eight lists, every quoted headline block
+    in Premarket gappers among them, which is the single largest reason that
+    page reads as a wall.
+
+    Only the OPENING item is separated. A blank line between items would make
+    the list loose and wrap every item in its own paragraph, which is a
+    different way of spacing the page out and not the one wanted here. So the
+    rule is narrow: an item whose previous line is non blank and is not itself
+    an item gets one blank line above it. Writing this once, over the finished
+    document, is deliberate: fallback_report emits lists from a dozen places
+    and a rule kept at each of them is a rule that drifts at one of them.
+    """
+    out: list[str] = []
+    for line in text.split("\n"):
+        if (_LIST_ITEM_RE.match(line) and out and out[-1].strip()
+                and not _LIST_ITEM_RE.match(out[-1])):
+            out.append("")
+        out.append(line)
+    return "\n".join(out)
+
+
 def fallback_report(
     packet: dict[str, Any], reason: str, cause: str = CAUSE_UNAVAILABLE,
     slots: bool = False,
@@ -1397,7 +1427,7 @@ def fallback_report(
             add("- " + _EXCHANGE_SUFFIX_RE.sub(lambda m: m.group(1), _cell(gap)))
     else:
         add("Evidence gaps recorded by the scan: 0.")
-    return "\n".join(lines) + "\n"
+    return open_lists_with_a_blank_line("\n".join(lines)) + "\n"
 
 
 # ------------------------------------------------- the containment checker
@@ -2676,14 +2706,32 @@ def _late_hits(report_text: str,
 
     Keyed on (line text, quantifier, matched word) and never on line number,
     because the two bodies differ in length wherever the section sits.
-    """
-    def key(hit: dict[str, Any]) -> tuple[Any, ...]:
-        return (str(hit.get("text") or ""), str(hit.get("quantifier") or ""),
-                str(hit.get("set_word") or ""))
 
-    seen = {key(hit) for hit in already}
-    return [hit for hit in quantifier_violations(report_text)
-            if key(hit) not in seen]
+    THE LINE TEXT IS MATCHED BY CONTAINMENT, not by equality, and slots mode
+    is why. A slot's text is a fragment of the line it is placed in: the mood
+    slot is a phrase inside the title, so a hit the loop raised on the mood
+    reads "a stubbed mood Every candidate missed the prior day high" while
+    the same hit on the finished page reads "PremarketDesk: a stubbed mood
+    Every candidate missed the prior day high". Equality called those two
+    different sentences and logged the same fault twice, once warned and once
+    annotated, on every morning a mood slot was flagged. A register with two
+    ids per fault cannot measure a false positive rate, which is the only
+    reason the register exists. Same quantifier, same matched word, and one
+    sentence inside the other is one fault.
+    """
+    def parts(hit: dict[str, Any]) -> tuple[str, str, str]:
+        return (" ".join(str(hit.get("text") or "").split()),
+                str(hit.get("quantifier") or ""), str(hit.get("set_word") or ""))
+
+    seen = [parts(hit) for hit in already]
+    late: list[dict[str, Any]] = []
+    for hit in quantifier_violations(report_text):
+        text, quantifier, word = parts(hit)
+        if any(quantifier == q and word == w and (text in t or t in text)
+               for t, q, w in seen):
+            continue
+        late.append(hit)
+    return late
 
 
 def write_report(packet_path: Path, overwrite: bool = False) -> int:

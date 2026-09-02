@@ -300,7 +300,7 @@ _SECTION_ONLY = frozenset({"bands", "band_number", "band_result", "section"})
 
 
 def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
-    """Three questions the parser cannot ask at read time.
+    """Four questions the parser cannot ask at read time.
 
     1. Is any key prose? The parser reads every column zero line holding an
        equals sign under a `##` heading as a pair, and on 2026-09-02 [paper]
@@ -309,12 +309,25 @@ def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
     2. Does every literal `_CRIT.<accessor>("section", "key")` in src/ resolve?
        A typo in a key read inside a function surfaces at 08:45 on the first
        candidate; this surfaces it in the suite.
-    3. Which pairs does no literal call read? Informational: keys are also
+    3. Is a key read as a single value defined more than once in its section?
+       Repeated keys are how pair_map and bands are written, so a repeat is
+       only a defect for a key some literal call reads with a SCALAR accessor,
+       and then it is always one: _raw takes the last pair, so the later line
+       silently wins. [Analyst] mode was written as `mode = slots` and then
+       explained in a note whose first line began "mode = slots since
+       2026-09-02. Under it...", at column zero. That sentence parsed as a
+       second mode. report_mode() saw a value that was neither freeform nor
+       slots, said so on a line nobody reads, and fell back to freeform, so
+       the slots restructure never ran in production: the 2026-09-02 chain
+       spent 209 seconds and 17,989 output tokens on a freeform report while
+       this file said slots. Question 1 could not catch it, because the key
+       itself is a real key spelled correctly.
+    4. Which pairs does no literal call read? Informational: keys are also
        read with a variable key (evaluate_eligibility iterates a section), so
        an unread pair is a candidate for deletion and not a defect.
 
-    Returns {"prose_keys": [...], "unresolved": [...], "unread": [...]}. The
-    first two are defects.
+    Returns {"prose_keys": [...], "unresolved": [...], "shadowed": [...],
+    "unread": [...]}. The first three are defects.
     """
     import ast
 
@@ -324,6 +337,9 @@ def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
             if " " in key or ":" in key:
                 prose_keys.append(f"[{name}] {key!r}")
 
+    # Filled below with (section, key) for every literal call that reads one
+    # value, so question 3 asks only of keys whose repetition is a mistake.
+    scalar_reads: set[tuple[str, str]] = set()
     referenced: set[tuple[str, str]] = set()
     sections_referenced: set[str] = set()
     unresolved: list[str] = []
@@ -364,13 +380,25 @@ def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
                 unresolved.append(f"{where}: [{section}] has no key {key!r}")
                 continue
             referenced.add((section, key))
+            if node.func.attr not in _SECTION_ONLY and node.func.attr != "pair_map":
+                scalar_reads.add((section, key))
+
+    shadowed: list[str] = []
+    for section, key in sorted(scalar_reads):
+        values = [value for pair_key, value in crit.section(section).pairs
+                  if pair_key == key]
+        if len(values) > 1:
+            shadowed.append(
+                f"[{section}] {key} is defined {len(values)} times and is read as one "
+                f"value; the last wins, which is {values[-1][:60]!r}")
 
     unread: list[str] = []
     for name in crit.section_names():
         for key, _value in crit.section(name).pairs:
             if (name, key) not in referenced and name not in sections_referenced:
                 unread.append(f"[{name}] {key}")
-    return {"prose_keys": prose_keys, "unresolved": unresolved, "unread": unread}
+    return {"prose_keys": prose_keys, "unresolved": unresolved,
+            "shadowed": shadowed, "unread": unread}
 
 
 _cache: Criteria | None = None
@@ -434,14 +462,15 @@ def _self_check() -> int:
 
 
 def _check_main() -> int:
-    """`python -m core.criteria --check`: the three questions, as a report."""
+    """`python -m core.criteria --check`: the four questions, as a report."""
     report = check(load(), config.PROJECT_ROOT / "src")
-    for label in ("prose_keys", "unresolved"):
+    for label in ("prose_keys", "unresolved", "shadowed"):
         for line in report[label]:
             print(f"DEFECT  {label}: {line}")
     for line in report["unread"]:
         print(f"unread  {line}")
-    defects = len(report["prose_keys"]) + len(report["unresolved"])
+    defects = (len(report["prose_keys"]) + len(report["unresolved"])
+               + len(report["shadowed"]))
     print(f"criteria --check: {defects} defect(s), {len(report['unread'])} pair(s) no "
           "literal call reads")
     return 1 if defects else 0

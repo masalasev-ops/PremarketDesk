@@ -26,28 +26,38 @@ from typing import Any
 # Found by the suite, so a page that skipped the shell is caught.
 SHELL_MARK = "/* premarketdesk page shell */"
 
+# Contrast is checked against the surface the text sits on, to WCAG AA: 4.5:1
+# for body text, 3:1 for a rule that carries meaning. --muted is the value
+# that has to be watched, because it is the one a redesign always lightens:
+# #5B6672 on #FFFFFF is 5.9:1, and the familiar #999 would be 2.8:1 and fail
+# at every size. --line is deliberately BELOW 3:1. A row divider is not a
+# meaningful graphical object, and a divider pushed to 3:1 is the heavy grid
+# that makes a table of numbers hard to read.
 TOKENS_CSS = """
 :root {
-  --bg: #F3F4F6; --surface: #FFFFFF; --ink: #1B222C; --muted: #58636F;
-  --line: #D8DDE3; --accent: #B45E14;
-  --good: #2E7D32; --warn: #B98900; --bad: #C62828;
-  --active: rgba(180, 94, 20, 0.10);
+  --bg: #FFFFFF; --surface: #FFFFFF; --raised: #F6F7F9;
+  --ink: #16191D; --ink-2: #454B54; --muted: #5B6672;
+  --line: #E4E7EB; --line-strong: #9AA0A6; --accent: #A2530F;
+  --good: #10704A; --warn: #8A5300; --bad: #A61B1B;
+  --active: rgba(162, 83, 15, 0.07);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #12161C; --surface: #1A2028; --ink: #E7EAEE; --muted: #97A1AC;
-    --line: #303845; --accent: #E8A254;
+    --bg: #12161C; --surface: #12161C; --raised: #1A2028;
+    --ink: #E7EAEE; --ink-2: #C3CAD3; --muted: #9AA5B1;
+    --line: #2A323D; --line-strong: #6B7683; --accent: #E8A254;
     --good: #6FBF73; --warn: #E0B341; --bad: #E57373;
-    --active: rgba(232, 162, 84, 0.14);
+    --active: rgba(232, 162, 84, 0.10);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #12161C; --surface: #1A2028; --ink: #E7EAEE; --muted: #97A1AC;
-  --line: #303845; --accent: #E8A254;
+  --bg: #12161C; --surface: #12161C; --raised: #1A2028;
+  --ink: #E7EAEE; --ink-2: #C3CAD3; --muted: #9AA5B1;
+  --line: #2A323D; --line-strong: #6B7683; --accent: #E8A254;
   --good: #6FBF73; --warn: #E0B341; --bad: #E57373;
-  --active: rgba(232, 162, 84, 0.14);
+  --active: rgba(232, 162, 84, 0.10);
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -63,44 +73,144 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outlin
 # A rendered report body. The morning page wraps its markdown in
 # <article class="report">, the midday page does the same, and the archive
 # gives every day section the class. Georgia is deliberate: the morning page
-# is read in a mail client at seven in the morning and a serif at 16 pixels is
+# is read in a mail client at seven in the morning and a serif at 17 pixels is
 # what survives every renderer that has ever been tried.
+#
+# Rewritten 2026-09-02 against the reading research, which the 2026-09-02
+# report failed on every count a reader would notice.
+#
+#   MEASURE. Prose is capped at 68 characters and the container is not, so a
+#   ten column table gets the width it needs while a paragraph stays in a
+#   column the eye can track. Butterick puts the readable band at 45 to 90
+#   characters and Nielsen Norman at 50 to 70; a 760 pixel serif paragraph
+#   was running past 95.
+#
+#   HEADING SPACE IS ASYMMETRIC. Two lines above a heading, half a line
+#   below. Equal margins are what makes a heading float between two blocks
+#   and belong to neither, and equal margins are what this file had.
+#
+#   TABLES LOSE THEIR GRID. Horizontal rules only, no verticals, no zebra.
+#   Butterick's tables chapter and Rutter's on designing tables to be read
+#   both say to remove every mark that is not data or white space and then
+#   put back only what is needed; the cell border on all four sides of every
+#   cell of a ten column table is the clutter they are describing. The header
+#   is quieter than the data rather than louder, which is Material's rule,
+#   and the space that the borders used to do the work of now comes from
+#   padding.
+#
+#   FIGURES LINE UP. lining-nums and tabular-nums, without which a column of
+#   numbers in a proportional face does not form a column at all. Arial and
+#   Segoe UI carry tabular figures by default, which is the insurance for the
+#   mail clients that strip the property.
+#
+# The border="1" and cellpadding attributes render_report writes stay on the
+# element for a client that drops this stylesheet: presentational attributes
+# lose to CSS in a browser, so the two do not fight.
 REPORT_CSS = """
 .report {
-  font-family: Georgia, "Times New Roman", serif; font-size: 16px; line-height: 1.55;
-  max-width: 760px; margin: 0 auto; padding: 24px 16px 48px;
+  --measure: 68ch; --u: 1.6rem;
+  font-family: Georgia, "Times New Roman", serif; font-size: 17px; line-height: 1.55;
+  color: var(--ink);
+  max-width: 900px; margin: 0 auto; padding: 40px 24px 64px;
 }
-.report h1 { font-size: 1.6em; letter-spacing: -0.01em; border-bottom: 2px solid var(--ink);
-  padding-bottom: 6px; margin: 0 0 0.6em; }
-.report h2 { font-size: 1.2em; margin-top: 1.6em; border-bottom: 1px solid var(--line);
-  padding-bottom: 4px; }
-.report h3 { font-size: 1.05em; margin-top: 1.4em; }
-.report p { margin: 0.7em 0; }
-.report .tablewrap { overflow-x: auto; margin: 0.9em 0; }
-.report table { border-collapse: collapse; width: 100%; font-size: 0.92em;
-  font-family: Arial, Helvetica, sans-serif; }
-.report th, .report td { border: 1px solid var(--line); padding: 6px 8px; text-align: left;
-  vertical-align: top; }
-.report th { background: var(--active); font-weight: 600; }
-.report td.num, .report th.num { text-align: right; font-variant-numeric: tabular-nums;
-  white-space: nowrap; }
+.report > * { max-width: var(--measure); }
+.report > h1, .report > .tablewrap, .report > table, .report > hr { max-width: none; }
+.report h1 {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 2rem; line-height: 1.15; letter-spacing: -0.02em; font-weight: 600;
+  margin: 0 0 calc(var(--u) * 0.75); padding: 0 0 calc(var(--u) * 0.5);
+  border-bottom: 2px solid var(--line-strong);
+}
+.report h2 {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 1.3rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.01em;
+  margin: calc(var(--u) * 2) 0 calc(var(--u) * 0.5);
+  padding-top: calc(var(--u) * 0.55); border-top: 1px solid var(--line);
+}
+.report h3 {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 1.05rem; line-height: 1.25; font-weight: 600;
+  margin: calc(var(--u) * 1.4) 0 calc(var(--u) * 0.35);
+}
+.report h1 + p, .report h2 + p, .report h3 + p,
+.report h2 + .tablewrap, .report h3 + .tablewrap { margin-top: 0; }
+.report p { margin: 0 0 calc(var(--u) * 0.65); }
+.report ul, .report ol { margin: 0 0 calc(var(--u) * 0.65); padding-left: 1.35em; }
+.report li { margin: 0 0 calc(var(--u) * 0.3); }
+.report li:last-child { margin-bottom: 0; }
+.report li > p { margin-bottom: calc(var(--u) * 0.3); }
+.report strong { font-weight: 700; }
+
+.report .tablewrap {
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  margin: calc(var(--u) * 1) 0 calc(var(--u) * 1.25);
+}
+.report .tablewrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.report table {
+  border-collapse: collapse; width: 100%; border: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+  font-size: 14px; line-height: 1.3;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "lnum" 1, "tnum" 1;
+}
+.report th, .report td {
+  border: 0; border-bottom: 1px solid var(--line);
+  padding: 9px 14px; text-align: left; vertical-align: top;
+}
+.report th:first-child, .report td:first-child { padding-left: 2px; }
+.report th:last-child, .report td:last-child { padding-right: 2px; }
+.report thead th {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); background: transparent; white-space: nowrap;
+  vertical-align: bottom; border-bottom: 1.5px solid var(--line-strong);
+}
+.report tbody tr:last-child td { border-bottom: 0; }
+.report td.num, .report th.num { text-align: right; white-space: nowrap; }
 .report td.conv-green { color: var(--good); font-weight: 600; }
 .report td.conv-yellow { color: var(--warn); font-weight: 600; }
 .report td.conv-red { color: var(--bad); font-weight: 600; }
 .report td.conv-unscored { color: var(--muted); font-style: italic; }
-.report code { font-family: Consolas, monospace; background: var(--active); padding: 1px 4px; }
-.report blockquote { border-left: 3px solid var(--line); margin-left: 0; padding-left: 12px;
-  color: var(--muted); }
-.report p.glance { background: var(--active); border-left: 4px solid var(--ink);
-  padding: 10px 14px; font-family: Arial, Helvetica, sans-serif; font-size: 0.95em; }
-.report p.disclaimer { font-size: 0.85em; color: var(--muted); }
-.report .local-only { margin-top: 2.5em; padding-top: 10px; border-top: 1px solid var(--line);
-  font-family: Arial, Helvetica, sans-serif; font-size: 0.85em; color: var(--muted); }
+
+.report code {
+  font-family: Consolas, "SF Mono", monospace; font-size: 0.9em;
+  background: var(--raised); padding: 1px 5px; border-radius: 2px;
+}
+.report blockquote {
+  border-left: 3px solid var(--line-strong); margin: 0 0 calc(var(--u) * 0.65);
+  padding-left: 16px; color: var(--ink-2);
+}
+.report p.glance {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 15px; line-height: 1.5; color: var(--ink);
+  background: var(--raised); border-left: 3px solid var(--accent);
+  padding: 16px 20px; margin: 0 0 calc(var(--u) * 0.9);
+}
+.report p.disclaimer {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13.5px; line-height: 1.5; color: var(--ink-2);
+  border-top: 1px solid var(--line); padding-top: calc(var(--u) * 0.5);
+  margin: calc(var(--u) * 0.9) 0 calc(var(--u) * 0.65);
+}
+.report .local-only {
+  margin-top: calc(var(--u) * 2.5); padding-top: calc(var(--u) * 0.5);
+  border-top: 1px solid var(--line);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13.5px; color: var(--muted); max-width: none;
+}
 .report .local-only a { color: var(--ink); }
+@media (max-width: 640px) {
+  .report { padding: 24px 16px 48px; font-size: 16px; }
+  .report h1 { font-size: 1.6rem; }
+  .report h2 { font-size: 1.2rem; }
+  .report th, .report td { padding: 8px 10px; }
+}
 @media print {
-  .report { max-width: none; padding: 0; }
+  .report { max-width: none; padding: 0; font-size: 11pt; }
+  .report > * { max-width: none; }
   .report .local-only { display: none; }
   .report a { color: inherit; text-decoration: none; }
+  .report h2 { break-after: avoid; }
+  .report .tablewrap { overflow: visible; break-inside: avoid; }
 }
 """
 
@@ -140,6 +250,62 @@ def shell(title: str, body: str, extra_css: str = "", script: str = "",
         report_css=REPORT_CSS if include_report_css else "",
         extra_css=extra_css, body=body, script=script,
         body_class=f' class="{body_class}"' if body_class else "")
+
+
+_VAR_DECL_RE = re.compile(r"(--[\w-]+)\s*:\s*([^;{}]+)\s*;")
+_VAR_USE_RE = re.compile(r"var\(\s*(--[\w-]+)\s*(?:,\s*([^()]*?)\s*)?\)")
+_DARK_BLOCK_RE = re.compile(
+    r"@media\s*\(prefers-color-scheme:\s*dark\)\s*\{.*?\n\}"
+    r"|:root\[data-theme=\"dark\"\]\s*\{[^}]*\}", re.S)
+_CALC_RE = re.compile(r"calc\(\s*(-?[\d.]+)([a-z%]*)\s*\*\s*(-?[\d.]+)\s*\)")
+
+
+def flatten_variables(document: str) -> str:
+    """Resolve every var() to its light theme literal, for a mail client.
+
+    CSS custom properties reach under half of the mail clients caniemail
+    tracks, and classic Outlook has none at all: there, every colour, every
+    rule, every tint and every margin in this stylesheet resolves to nothing
+    and the report arrives as unstyled text on white. The browser copy keeps
+    the properties, because they are what makes one token set serve three
+    renderers and two themes. The emailed copy gets them resolved.
+
+    THE LIGHT VALUES WIN. The dark blocks are removed from consideration
+    before anything is read, because a client that cannot read a custom
+    property cannot read the dark media query either, and a dark token
+    resolved into a light document is the one outcome worse than no token at
+    all. Declarations themselves are left in place, so a client that does
+    support them computes the same values.
+
+    Multiplications by a constant are folded too, `calc(1.6rem * 2)` into
+    `3.2rem`, because caniemail rates calc() no better than the properties
+    this is here to remove and the spacing is most of the redesign.
+
+    Deliberately small, and it never guesses: a var() whose name it cannot
+    find is left exactly as it was, so anything this misses degrades to
+    today's behaviour rather than to a wrong colour.
+    """
+    light = _DARK_BLOCK_RE.sub("", document)
+    values: dict[str, str] = {}
+    for name, value in _VAR_DECL_RE.findall(light):
+        values.setdefault(name, value.strip())
+
+    def resolve(match: re.Match[str]) -> str:
+        name, fallback = match.group(1), match.group(2)
+        if name in values:
+            return values[name]
+        return fallback if fallback else match.group(0)
+
+    # Twice, so a token defined as another token resolves too. Not a loop:
+    # one level of indirection is what this token set has, and an unbounded
+    # loop over untrusted text is a hazard for no gain.
+    out = _VAR_USE_RE.sub(resolve, _VAR_USE_RE.sub(resolve, document))
+
+    def fold(match: re.Match[str]) -> str:
+        size = float(match.group(1)) * float(match.group(3))
+        return f"{size:.4g}{match.group(2)}"
+
+    return _CALC_RE.sub(fold, out)
 
 
 def escape(value: Any) -> str:

@@ -158,6 +158,66 @@ Package 0.6 was added later the same day at the owner's word, as the top
 priority on this plan, after GTLB opened about 25 percent higher and was not
 on the list. It is also done; CHANGELOG thirty eighth and DECISIONS seventh.
 
+Packages 0.7 to 0.9 were added after the owner said the report looked
+unprofessional. All three are done; CHANGELOG thirty ninth, DECISIONS
+eighth.
+
+### 0.7 Slots mode has never run (the reason the page looks the way it does)
+
+Files: doc/CRITERIA.md the slots note, src/core/criteria.py `check`.
+
+CRITERIA [Analyst] says `mode = slots`. Four lines below it a sentence began
+`mode = slots since 2026-09-02. Under it the narrative pass does not write
+the` at column zero. The parser reads a column zero line with an equals sign
+under a `##` heading as a parameter, so that is a second [Analyst] mode, and
+`_raw` takes the last pair. `report_mode()` saw a value it did not recognise,
+printed so into the log, and fell back to freeform. Every morning since the
+restructure ran freeform.
+
+Cost, measured on the same packet: freeform 209 seconds, 17,989 output
+tokens, $1.27, one 344 word Summary paragraph and a 374 word disclaimer
+paragraph. Slots 138 seconds, 13,236 output tokens, $0.68, 20 slots filled
+first attempt, 5 Summary paragraphs and a separated disclaimer.
+
+Steps: reword the note so it does not open with the key name; add a
+`shadowed` question to `check()` for any key a literal SCALAR accessor reads
+that its section defines more than once, counted as a defect by `--check`;
+add a claim asserting CRITERIA's mode is one `report_mode()` recognises.
+Repeated keys are how pair_map and bands are written, so ask the question
+only of scalar reads.
+
+### 0.8 Markdown lists render as prose
+
+Files: src/morning/analyst.py `fallback_report`.
+
+Python-Markdown needs a blank line between a paragraph and a list after it.
+Without one the items are a lazy continuation of the paragraph. The
+2026-09-02 report shipped eight lists that way, every quoted headline block
+among them, which is most of what "words not aligned" describes.
+
+Steps: `open_lists_with_a_blank_line` over the finished document, separating
+the OPENING item only. A blank line between items makes the list loose and
+wraps each item in a paragraph. Applied at the one return rather than at the
+dozen sites that emit a list.
+
+### 0.9 The page is designed to fit rather than to be read
+
+Files: src/core/page.py, src/morning/render_report.py, src/morning/deliver.py.
+
+Prose measure capped at 68 characters with the container left wide; heading
+space asymmetric, two lines above and half below; tables with horizontal
+rules only, no verticals, no zebra, headers quieter than the data, padding
+where the borders were; lining and tabular figures; the sideways scroll box
+made keyboard reachable per WCAG 2.1.1; colours re-picked to WCAG AA on both
+themes. `page.flatten_variables` resolves every var() and calc() to its light
+literal for the emailed copy, because custom properties reach under half the
+clients caniemail tracks and classic Outlook has none.
+
+Also fixed here: `_late_hits` compared line text by equality, and a slot's
+text is a fragment of the line it lands in, so a flagged mood slot was logged
+twice, warned and annotated. Containment on the same quantifier and matched
+word makes it one fault.
+
 ### 0.6 Names that reported after the prior close have no tier (top priority)
 
 Files: src/selection/discover.py `earnings_before_open` and `assemble`,
@@ -967,6 +1027,7 @@ A fifth item, the disposition of `data/UNVERIFIED`, stood here until
 | Order | Packages | Buys |
 | --- | --- | --- |
 | First | 0.6 | A name that reported after yesterday's close is a tier 1 candidate this morning, not a headline ranked by history; GTLB's miss cannot recur by that route |
+| First | 0.7, 0.8, 0.9 | Slots mode actually runs, at two thirds the tokens and time; lists render as lists; the page is laid out for reading and the emailed copy survives a mail client |
 | Day 1 | 0.1, 0.2, 0.3, 0.4, 0.5 | The next empty morning renders its watchlist; the glossary says the right thing; the fallback is complete; no tracking pixel; the clock arithmetic is honest |
 | Week 1 | 1.1, 1.2, 1.3, 1.4, 2.3, 2.4 steps 1 and 2, 2.6, 3.2, 3.3 | A report that leads with the decision, half the repetition, a guard that stops eating mornings, a third off the input tokens, an email with a text part |
 | Week 2 | 2.1 or 2.2, 2.5, 1.5, 3.1, 3.4, 3.5 | Output tokens down by two thirds, CLI time under two minutes, the guards scanning a few hundred words, one page shell, midday reachable |

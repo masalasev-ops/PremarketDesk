@@ -15,6 +15,78 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, thirty ninth: slots mode had never run, and the page is redesigned to be read
+
+The owner said the report looked unprofessional, packed together and out of
+alignment. Three defects, and the first is the reason for the other two being
+visible at all.
+
+SLOTS MODE HAD NEVER RUN. CRITERIA [Analyst] said `mode = slots`, and four
+lines below it a sentence in the slots note began "mode = slots since
+2026-09-02. Under it the narrative pass does not write the" at column zero.
+The parser reads a column zero line holding an equals sign under a `##`
+heading as a parameter, so that sentence was a SECOND [Analyst] mode, and
+_raw takes the last pair. report_mode() saw a value that was neither
+freeform nor slots, said so on stdout, and fell back to freeform. Every
+morning since the restructure landed ran the mode it was built to replace.
+The 08:45 chain of 2026-09-02 spent 209 seconds and 17,989 output tokens at
+$1.27 writing a freeform report; the same packet regenerated in slots mode
+took 138 seconds and 13,236 output tokens at $0.68, first attempt clean, 20
+slots filled. The wall of prose the owner was looking at was the model's
+paragraphing, not Python's: the freeform Summary was one 344 word paragraph
+and its disclaimer one of 374, against 5 paragraphs and a separated
+disclaimer from the skeleton.
+
+core/criteria.py check() gains a fourth question, `shadowed`: a key some
+literal call reads with a SCALAR accessor and its section defines more than
+once. Repeated keys are how pair_map and bands are written, so the question
+is asked only of keys read one value at a time, and then a repeat is always
+a fault. `--check` counts it as a defect. The note in CRITERIA now explains
+why that paragraph does not open with the key name.
+
+LISTS WERE SWALLOWED. Python-Markdown, unlike CommonMark, needs a blank line
+between a paragraph and a list that follows it; without one the items are a
+lazy continuation and the list renders as running prose with hyphens in it.
+The 2026-09-02 report shipped eight lists that way, every quoted headline
+block in Premarket gappers among them. analyst.open_lists_with_a_blank_line
+separates the opening item of a list and only the opening item, over the
+finished document, so the rule cannot drift at one of the dozen sites that
+emit a list.
+
+THE SAME FAULT WAS LOGGED TWICE. _late_hits subtracted the loop's hits by
+exact line text, and a slot's text is a fragment of the line it lands in:
+the mood slot sits inside the title, so a flagged mood was recorded once as
+warned and again as annotated. Matching by containment on the same
+quantifier and matched word makes it one fault. A register with two ids per
+fault cannot measure the false positive rate it exists to measure.
+
+THE PAGE. core/page.py's REPORT_CSS is rewritten against the reading
+research. Prose is capped at 68 characters and the container is not, so a
+ten column table gets its width while a paragraph stays in a column the eye
+can track; the old 760 pixel serif ran past 95. Heading space is asymmetric,
+two lines above and half a line below, so a heading belongs to the section
+it opens instead of floating between two. Tables lose their grid: horizontal
+rules only, no verticals, no zebra, quieter headers than the data, and the
+space the borders used to occupy given to padding. Figures are lining and
+tabular so a column of numbers forms a column. The scroll box for a wide
+table is reachable from the keyboard, which WCAG 2.1.1 requires and it was
+not. Colours are re-picked to WCAG AA on both themes, with the row divider
+deliberately below 3:1 because a divider is not a meaningful graphical
+object and one pushed to 3:1 is the grid this removes.
+
+page.flatten_variables resolves every var() and every calc() multiplication
+to its LIGHT literal for the emailed copy, which deliver.py now runs.
+Custom properties reach under half the clients caniemail tracks and classic
+Outlook has none, so the emailed report would have arrived with every
+colour, rule and margin resolving to nothing.
+
+Today's report was regenerated from the same packet, in slots mode, and the
+archive rebuilt. GTLB is still absent from it and cannot be added: the
+collector never subscribed to it, so no premarket tape for it exists to
+publish. Three claims added, three updated, one conftest helper
+(filled_skeleton) so the claims that drive write_report exercise the mode
+the schedule runs rather than the one the defect left running.
+
 ## 2026-09-02, thirty eighth: names that reported after the prior close are tier 1
 
 Discovery's earnings source read the calendar for today only and kept

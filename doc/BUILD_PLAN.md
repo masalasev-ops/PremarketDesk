@@ -584,7 +584,13 @@ second to thirty seventh. Later that morning GTLB opened about 25 percent
 higher after reporting after the prior close and was not on the list, because
 the earnings prior read only before open reporters; discover.earnings_reporters
 now reads the prior session's after close rows as tier 1 (plan 0.6, CHANGELOG
-thirty eighth, DECISIONS seventh).]**
+thirty eighth, DECISIONS seventh). The same afternoon the owner said the
+report looked unprofessional, which turned out to be three faults: a sentence
+in CRITERIA shadowed the [Analyst] mode key so slots mode had never once run
+and every morning was written freeform, markdown lists were rendering as
+prose for want of a blank line, and the page was laid out to fit rather than
+to be read. All three are fixed and the day's report regenerated in slots
+mode (plan 0.7 to 0.9, CHANGELOG thirty ninth, DECISIONS eighth).]**
 
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:

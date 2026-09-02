@@ -1646,13 +1646,20 @@ def claim_analyst(failures: list[str]) -> None:
     # Two parameters, because a flagged narrative is regenerated with the
     # rejected sentences appended to the piped document. A one parameter
     # stub would pass here and TypeError on the morning the guard fires.
+    # Under CRITERIA [Analyst] mode = slots the model is handed the skeleton
+    # Python rendered and must return it with only the markers replaced, so
+    # the stub fills the skeleton rather than improvising a document. This
+    # entrypoint claim is the one place the whole morning runs end to end,
+    # and it must run it in the mode the schedule runs.
     analyst.invoke_claude = lambda packet_text, correction=None: (
-        "# Premarket\n\n"
-        + conftest.watchlist_table("day watchlist",
-                                   ["| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |"])
-        + "\n"
-        + conftest.watchlist_table("swing watchlist")
-        + "\nNothing here is advice.\n",
+        (conftest.filled_skeleton(analyst._skeleton) if analyst._skeleton else
+         "# Premarket\n\n"
+         + conftest.watchlist_table(
+             "day watchlist",
+             ["| AAPL | +3.1% | 100.00 | 1.8 | 101.00 | 100.50 | 6.0 | green |"])
+         + "\n"
+         + conftest.watchlist_table("swing watchlist")
+         + "\nNothing here is advice.\n"),
         {"total_cost_usd": 0.0, "duration_ms": 1, "num_turns": 1},
         None,
         "ok",
