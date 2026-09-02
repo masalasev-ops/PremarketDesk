@@ -115,7 +115,18 @@ def _collector_window(day: str) -> tuple[dt.datetime, dt.datetime, str]:
     two, and the full session columns do not need the packet at all.
     """
     date = ettime.parse_date(day)
-    open_h, open_m = _CRIT.clock("collector", "start_time")
+    # The session's OWN collector window, from the sidecar the collector
+    # writes before it opens the socket, falling back to the knob only for a
+    # session that left none. [Collector] start_time moved from 07:20 to 04:00
+    # on 2026-09-02 and reading it here would re-measure every earlier session
+    # against a window its socket never had. See collect_premarket.
+    from collect import collect_premarket
+
+    recorded = collect_premarket.window_open_hhmm(day)
+    if recorded:
+        open_h, open_m = (int(part) for part in recorded.split(":"))
+    else:
+        open_h, open_m = _CRIT.clock("collector", "start_time")
     close_h, close_m = _CRIT.clock("scan", "run_time")
     packet_path = config.run_path(day) / "packet.json"
     if packet_path.is_file():

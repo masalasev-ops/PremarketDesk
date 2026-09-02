@@ -45,8 +45,25 @@ param([switch]$Unregister, [string]$Probe, [string]$Capture, [string]$SocketCost
 $root = Split-Path -Parent $PSScriptRoot
 $weekdays = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 $jobs = @(
-    @{ Name = "discover";      Bat = "job_discover.bat";      Days = $weekdays;    Start = "07:15" },
-    @{ Name = "collector";     Bat = "job_collector.bat";     Days = $weekdays;    Start = "07:20" },
+    # Discover runs TWICE, and the collector starts before the second one.
+    # From 2026-09-02 the socket opens at 04:00, because measuring 2026-08-29
+    # showed the published entry reference sitting a median 1.19 percent from
+    # the true premarket high with nearly all of that gap being 04:00 to 07:20
+    # going unheard. The collector cannot subscribe to a pool that does not
+    # exist yet, so 03:55 builds a provisional one from the same four priors
+    # over a shorter news window, and 07:15 runs as it always has. The
+    # collector rereads the watchlist from [Collector] resubscribe_time and
+    # moves onto the second pool when it appears. See the two phase note in
+    # CRITERIA.
+    #
+    # ExtraStart, not a second job: one task with two triggers, so there is
+    # one place where discover's schedule lives and the pair cannot drift.
+    @{ Name = "discover";      Bat = "job_discover.bat";      Days = $weekdays;    Start = "07:15"; ExtraStart = "03:55" },
+    # Six hours, not the default four. 04:00 to 09:25 is five and a half, and
+    # a four hour limit would have Task Scheduler kill the collector at 08:00,
+    # forty five minutes before the scan reads its tape, on a job whose data
+    # cannot be fetched afterwards from any vendor on this plan.
+    @{ Name = "collector";     Bat = "job_collector.bat";     Days = $weekdays;    Start = "04:00"; LimitHours = 6 },
     @{ Name = "morning-chain"; Bat = "job_morning_chain.bat"; Days = $weekdays;    Start = "08:45" },
     # 12:00, and the hour is the point. us-quote-delayed's REGULAR hours
     # behaviour is what was measured, its premarket behaviour is untested, and
@@ -336,6 +353,19 @@ foreach ($job in $jobs) {
         $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
     }
     $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $job.Days -At $job.Start
+    if ($job.ExtraStart) {
+        # A second weekly trigger on the same task. Register-ScheduledTask
+        # takes an array of triggers, so the pair is registered together and a
+        # -Force rewrite replaces both rather than leaving one behind.
+        $trigger = @($trigger, (New-ScheduledTaskTrigger -Weekly -DaysOfWeek $job.Days -At $job.ExtraStart))
+    }
+    if ($job.RepeatMin -and $job.ExtraStart) {
+        # No job needs both today, and the assignment below would fail on an
+        # array of triggers rather than say why. Refusing here means the next
+        # person to want both reads this instead of debugging a type error.
+        Write-Output "FAILED    PremarketDesk\$($job.Name): RepeatMin and ExtraStart together are not supported"
+        continue
+    }
     if ($job.RepeatMin) {
         # Weekly triggers cannot take repetition parameters directly in this
         # PowerShell version, so borrow the repetition block from a once
@@ -345,8 +375,10 @@ foreach ($job in $jobs) {
             -RepetitionDuration (New-TimeSpan -Hours $job.RepeatHours)
         $trigger.Repetition = $repeater.Repetition
     }
+    $limitHours = 4
+    if ($job.LimitHours) { $limitHours = $job.LimitHours }
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
-        -ExecutionTimeLimit (New-TimeSpan -Hours 4)
+        -ExecutionTimeLimit (New-TimeSpan -Hours $limitHours)
 
     try {
         Register-ScheduledTask -TaskName $job.Name -TaskPath $taskPath `

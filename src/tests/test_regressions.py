@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and sixty six claims, a count read off
+and the two pages. It now carries one hundred and sixty seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -6262,20 +6262,37 @@ def claim_the_watchlist_comment_matches_what_the_watchdog_does(
         subscriptions = collect_premarket.subscriptions_path(day)
         if subscriptions.exists():
             subscriptions.unlink()
-        if monitor_jobs._collector_has_subscribed(day):
+        # Late, well past every reload the collector will do, so only the
+        # absence of the file can open the gate here.
+        late = 9 * 60 + 20
+        if not monitor_jobs._rewriting_the_watchlist_is_free(day, late)[0]:
             failures.append("the watchdog thinks the collector has subscribed with "
                             "no subscription list on disk, so the rerun it gates "
                             "would never fire")
 
-        # And the gate closes again once something IS listening, which is the
-        # half of the paragraph that survives: a rewrite then desyncs the
-        # watchlist from what the socket was asked for.
+        # And the gate closes again once something IS listening AND the
+        # collector has stopped rereading, which is the half of the paragraph
+        # that survives: a rewrite then desyncs the watchlist from what the
+        # socket was asked for.
         subscriptions.parent.mkdir(parents=True, exist_ok=True)
         subscriptions.write_text(json.dumps({"symbols": ["OLD.US"]}), encoding="utf-8")
-        if not monitor_jobs._collector_has_subscribed(day):
+        if monitor_jobs._rewriting_the_watchlist_is_free(day, late)[0]:
             failures.append("a written subscription list does not close the rerun "
                             "gate, so the watchdog would rewrite the watchlist "
                             "under a running collector")
+
+        # But inside the two phase window it is open again, because the
+        # collector rereads the file there and a rewrite is the mechanism
+        # rather than a desync. This is what gives a watchdog rerun of a
+        # failed 07:15 discover somewhere to land: [Monitor] discover_due is
+        # five minutes after [Collector] resubscribe_time on purpose.
+        early = 4 * 60 + 30
+        free, why = monitor_jobs._rewriting_the_watchlist_is_free(day, early)
+        if not free:
+            failures.append("the gate is shut before the handover, so a discover "
+                            "rerun could never reach a two phase collector")
+        elif "rereads" not in why:
+            failures.append(f"the reason given is not the reread: {why!r}")
 
     print("  stale note   no module claims the watchdog cannot rebuild a broken "
           "watchlist, and the condition it does turn on is live")
@@ -7585,6 +7602,7 @@ def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
     AND A MISSING MEASUREMENT IS NULL WITH A REASON, never zero. A window with
     no bars and a window nobody asked about are different facts.
     """
+    from collect import collect_premarket
     from core import store
     from night import true_volume as _truth
 
@@ -7651,6 +7669,16 @@ def claim_the_truth_pass_writes_beside_the_morning_and_never_over_it(
             ("04:00", "09:10"): {"AAA": 10000.0, "BBB": 500.0},
             ("07:20", "09:10"): {"AAA": 4000.0, "BBB": 200.0},
         })
+        # This is a 07:20 morning and the knob has said 04:00 since
+        # 2026-09-02, so the window comes from the sidecar the collector
+        # writes. Without it the socket's own window would be read as the
+        # whole premarket and the two shortfalls would collapse into one,
+        # which is the exact confusion the decomposition exists to undo.
+        sidecar = collect_premarket.subscriptions_path(day)
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps({
+            "window_open_at": f"{day}T07:20:01-04:00", "symbols": ["AAA.US"],
+        }), encoding="utf-8")
         result = _truth.measure(day, probe=probe)
         rows = {row["ticker"]: row for row in result["rows"]}
 
@@ -7881,6 +7909,17 @@ def claim_the_true_reference_pair_is_kept_apart_from_the_sampled_one(
             ("07:20", "08:45"): {"AAA": [{"v": 300.0, "h": 11.5, "l": 9.5,
                                           "c": 10.0, "vw": 10.0}]},
         })
+        # A 07:20 morning, recorded where the collector records it. The knob
+        # has said 04:00 since 2026-09-02, so without this the socket's own
+        # window would be read as the whole premarket and the two shortfalls
+        # would collapse into the one column this claim exists to keep apart.
+        from collect import collect_premarket as _collect_pm
+
+        sidecar = _collect_pm.subscriptions_path(day)
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(_json.dumps({
+            "window_open_at": f"{day}T07:20:01-04:00", "symbols": ["AAA.US"],
+        }), encoding="utf-8")
         result = _truth.measure(day, probe=probe)
         row = {r["ticker"]: r for r in result["rows"]}["AAA.US"]
 
@@ -9804,7 +9843,19 @@ def claim_the_true_premarket_gap_separates_the_feed_from_the_window(
             return bars, None
 
     api = _Api()
-    row, error = backfill._true_path(api, "AAA.US", day)
+    # The session's own collector window, recorded where the collector records
+    # it. Since 2026-09-02 the knob says 04:00 and this fixture is a 07:20
+    # morning, so a pass reading the knob would call the whole session the
+    # collector's window and the three stretches would collapse into two.
+    with conftest_activate():
+        from collect import collect_premarket
+
+        sidecar = collect_premarket.subscriptions_path(day)
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps({
+            "window_open_at": f"{day}T07:20:01-04:00", "symbols": ["AAA.US"],
+        }), encoding="utf-8")
+        row, error = backfill._true_path(api, "AAA.US", day)
     if error:
         failures.append(f"_true_path refused a three bar session: {error}")
         return
@@ -12824,8 +12875,8 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
         if subscriptions.exists():
             failures.append(
                 "the refusal still wrote a subscription list, which closes the "
-                "watchdog's rerun gate through _collector_has_subscribed and "
-                "leaves the morning as stuck as it was before the fix")
+                "watchdog's rerun gate through _rewriting_the_watchlist_is_free "
+                "and leaves the morning as stuck as it was before the fix")
 
         # And today's file gets past. now_et is moved beyond the collector's
         # stop_time so main returns at "the stop time has already passed"
@@ -14074,6 +14125,116 @@ def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> No
           "and a scalar key a sentence shadowed, and the live tree is clean")
 
 
+def claim_the_collector_hands_over_to_the_real_pool(failures: list[str]) -> None:
+    """The two phase morning, and the three ways it must not lose the tape.
+
+    From 2026-09-02 the collector starts at 04:00, before discover has built
+    today's pool, on the provisional watchlist the 03:55 pass wrote. At
+    [Collector] resubscribe_time it starts rereading the watchlist and moves
+    onto the pool discover wrote at 07:15.
+
+    A resubscribe is a reconnect that was asked for, so it must not be counted
+    as one: the reconnect count is what a reader judges a flaky morning by,
+    and a planned handover inflating it would make every ordinary morning look
+    like a bad line.
+
+    And the handover must never be able to cost the tape. A reload that
+    raises, and a reload that returns nothing, both leave the run on the pool
+    it already has. A premarket tape cannot be fetched afterwards from any
+    vendor on this plan, so a morning listening to the provisional pool beats
+    a morning that died at 07:20 reaching for a better one.
+    """
+    import datetime as dt
+
+    from collect import collect_premarket
+    from core import ettime
+
+    class _Socket:
+        """Yields a couple of frames per connection, then times out."""
+
+        def __init__(self, symbols):
+            self.symbols = list(symbols)
+            self.sent = 0
+            opened.append(list(symbols))
+
+        def recv(self):
+            import websocket
+
+            self.sent += 1
+            if self.sent > 2:
+                raise websocket.WebSocketTimeoutException("replay exhausted")
+            return json.dumps({
+                "s": self.symbols[0].split(".")[0], "p": 10.0, "v": 5,
+                "t": ettime.epoch_ms(ettime.now_et()), "dp": False,
+                "ms": "extended-hours",
+            })
+
+        def close(self):
+            pass
+
+    def drive(reload_fn):
+        opened.clear()
+        with conftest_activate():
+            builder = collect_premarket.BarBuilder(
+                collect_premarket.bar_path(), source="ws",
+                window=(0.0, 4e9))
+            real = collect_premarket._connect
+            collect_premarket._connect = _Socket
+            try:
+                stop = ettime.now_et() + dt.timedelta(seconds=2)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    stats = collect_premarket.run_websocket(
+                        ["AAA.US", "BBB.US"], stop, builder,
+                        reload_at=ettime.now_et() - dt.timedelta(minutes=1),
+                        reload=reload_fn)
+            finally:
+                collect_premarket._connect = real
+        return stats
+
+    opened: list[list[str]] = []
+
+    # A pool that changes once. The first connection carries the provisional
+    # names, the second the ones discover wrote.
+    answers = [["AAA.US", "CCC.US"]]
+    stats = drive(lambda: answers.pop(0) if answers else None)
+    if len(opened) < 2 or opened[1] != ["AAA.US", "CCC.US"]:
+        failures.append(f"the handover did not resubscribe to the new pool: {opened}")
+    if stats.get("planned_resubscribes") != 1:
+        failures.append(f"planned_resubscribes is {stats.get('planned_resubscribes')!r}, "
+                        "wanted 1")
+    if stats.get("reconnects"):
+        failures.append(f"the handover counted {stats['reconnects']} reconnect(s); "
+                        "a resubscribe that was asked for is not a lost line, and "
+                        "counting it makes every ordinary morning look flaky")
+    if stats.get("pool_reload_error") is not None:
+        failures.append(f"a clean handover recorded an error: "
+                        f"{stats['pool_reload_error']!r}")
+
+    # A pool that has not changed. Nothing reopens.
+    stats = drive(lambda: None)
+    if len(opened) != 1:
+        failures.append(f"an unchanged pool still reopened the socket: {opened}")
+    if stats.get("planned_resubscribes"):
+        failures.append("an unchanged pool counted a resubscribe")
+
+    # A reload that raises. The run keeps the pool it started with, keeps
+    # collecting, and says what went wrong on the record rather than in a log.
+    def _boom():
+        raise OSError("the watchlist vanished")
+
+    stats = drive(_boom)
+    if len(opened) != 1 or opened[0] != ["AAA.US", "BBB.US"]:
+        failures.append(f"a failing reload disturbed the subscription: {opened}")
+    if not stats.get("pool_reload_error"):
+        failures.append("a failing reload left no reason on the run stats, so the "
+                        "morning cannot say why it stayed on the provisional pool")
+    if stats.get("messages", 0) < 1:
+        failures.append("a failing reload cost the run its tape, which is the one "
+                        "thing the handover must never do")
+    print("  handover     the collector moves onto discover's pool, counts it as no "
+          "reconnect, and keeps its tape when the reload fails")
+
+
 def claim_the_analyst_mode_on_disk_is_the_mode_that_runs(failures: list[str]) -> None:
     """CRITERIA [Analyst] mode resolves to a mode the code recognises.
 
@@ -14514,6 +14675,7 @@ def main() -> int:
     run_claim(failures, claim_a_sidecar_touch_is_not_a_write, failures)
     run_claim(failures, claim_the_schema_owns_every_picks_column_once, failures)
     run_claim(failures, claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for, failures)
+    run_claim(failures, claim_the_collector_hands_over_to_the_real_pool, failures)
     run_claim(failures, claim_the_analyst_mode_on_disk_is_the_mode_that_runs, failures)
     run_claim(failures, claim_a_list_opens_its_own_block, failures)
     run_claim(failures, claim_the_emailed_copy_carries_no_custom_property, failures)

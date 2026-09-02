@@ -445,9 +445,31 @@ def claim_nine(failures: list[str]) -> None:
     elif "pm_rvol is null" not in component["why"]:
         failures.append("the float rotation component does not say it stood in for a "
                         f"null pm_rvol: {component['why']}")
-    if not (candidate["pm_float_rotation_basis"] or {}).get("is_lower_bound"):
-        failures.append("float rotation is not flagged as a lower bound, but the "
-                        "collector starts after the premarket does")
+    # The flag says the numerator is short of the premarket, which is true
+    # exactly while the collector starts after the premarket opens. It was
+    # unconditionally true until 2026-09-02, when [Collector] start_time moved
+    # to 04:00 and met [Baseline] session_start. Asserting the arithmetic
+    # rather than the answer keeps this claim honest whichever way the knob
+    # goes next, and a flag that ignored the clocks would be the real defect:
+    # the whole point of the column is that a reader can tell an understated
+    # ratio from a measured one.
+    from core import criteria as _criteria
+
+    _crit = _criteria.load()
+    collector_open = _crit.clock_text("collector", "start_time")
+    premarket_open = _crit.clock_text("baseline", "session_start")
+    wanted = collector_open > premarket_open
+    got = bool((candidate["pm_float_rotation_basis"] or {}).get("is_lower_bound"))
+    if got != wanted:
+        failures.append(
+            f"float rotation reads is_lower_bound {got} with the collector "
+            f"starting {collector_open} and the premarket opening "
+            f"{premarket_open}; it is a lower bound only while the first is "
+            "after the second")
+    basis_window = (candidate["pm_float_rotation_basis"] or {}).get("numerator_source") or ""
+    if collector_open not in basis_window:
+        failures.append(f"the basis does not name the window it counted from: "
+                        f"{basis_window!r}")
 
     # RVOL wins the slot when both are available, so the better measure is not
     # displaced by the fallback merely because the fallback is newer.

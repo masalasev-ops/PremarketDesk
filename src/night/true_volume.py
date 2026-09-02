@@ -104,7 +104,24 @@ def _window(day: dt.date, cutoff_hhmm: str,
     genuinely has a different clock, and a fixed window here would mismeasure
     precisely the sessions that went wrong.
     """
-    open_h, open_m = _CRIT.clock(*(start_key or ("baseline", "session_start")))
+    if start_key == ("collector", "start_time"):
+        # The session's OWN recorded window, not today's knob. The knob moved
+        # from 07:20 to 04:00 on 2026-09-02, and re-measuring an older session
+        # against it would report a socket that heard the whole premarket for
+        # mornings that only heard the last two hours, which is precisely the
+        # quantity collector_window_share exists to expose. The sidecar the
+        # collector writes before it opens the socket carries window_open_at
+        # per day and survives the two phase handover's rewrite. Falling back
+        # to the knob is right only for a session that left no sidecar.
+        from collect import collect_premarket
+
+        recorded = collect_premarket.window_open_hhmm(day.isoformat())
+        if recorded:
+            open_h, open_m = (int(part) for part in recorded.split(":"))
+        else:
+            open_h, open_m = _CRIT.clock(*start_key)
+    else:
+        open_h, open_m = _CRIT.clock(*(start_key or ("baseline", "session_start")))
     hour, minute = (int(part) for part in cutoff_hhmm.split(":"))
     start = dt.datetime(day.year, day.month, day.day, open_h, open_m,
                         tzinfo=ettime.ET)

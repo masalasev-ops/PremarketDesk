@@ -658,19 +658,43 @@ def _watchlist_vintage(day: str) -> tuple[bool, str]:
     return False, f"data/watchlist.json is today's, written {generated[11:16]} ET"
 
 
-def _collector_has_subscribed(day: str) -> bool:
-    """Has today's collector already asked the socket for a symbol list.
+def _rewriting_the_watchlist_is_free(day: str, now_m: int) -> tuple[bool, str]:
+    """May discover be rerun without desyncing what is being listened to.
 
-    write_subscriptions runs before the socket opens on every collector mode
-    and names exactly what was asked for, so this answers the question the
-    collector start clock was standing in for. Once the file exists, rewriting
-    the watchlist desyncs it from what is actually being listened to, which is
-    the reason CRITERIA gives for not rerunning discover late. Before it
-    exists there is nothing to desync, whatever the clock reads.
+    Two ways it is free, and the second is new on 2026-09-02.
+
+    NOTHING HAS SUBSCRIBED YET. write_subscriptions runs before the socket
+    opens on every collector mode and names exactly what was asked for, so
+    while that file is absent there is nothing to desync, whatever the clock
+    reads. This is the question the collector start clock used to stand in
+    for.
+
+    OR THE COLLECTOR WILL READ IT AGAIN. The run is two phase now: it starts
+    at 04:00 on the provisional pool and rereads data/watchlist.json every
+    [Collector] pool_reload_check_s from resubscribe_time, resubscribing
+    whenever the generated_at changes, up to max_pool_reloads times. A rewrite
+    inside that window is not a desync, it is the mechanism. Before
+    resubscribe_time a rewrite is free because the handover has not happened;
+    the deliberate five minute gap between resubscribe_time and [Monitor]
+    discover_due is what gives a watchdog rerun of a failed 07:15 pass
+    somewhere to land.
+
+    Returns (free, why) so the caller can say which of the two it was.
     """
     from collect import collect_premarket
 
-    return collect_premarket.subscriptions_path(day).is_file()
+    if not collect_premarket.subscriptions_path(day).is_file():
+        return True, ("No subscription list has been written today, so nothing "
+                      "is listening to the watchlist and a rewrite desyncs nothing")
+    reload_end = (_minutes(_CRIT.clock("collector", "resubscribe_time"))
+                  + int(_CRIT.number("collector", "pool_reload_check_s")
+                        * _CRIT.integer("collector", "max_pool_reloads") / 60) + 1)
+    stop = _minutes(_CRIT.clock("collector", "stop_time"))
+    if now_m < min(reload_end, stop):
+        return True, ("the collector is listening but rereads the watchlist "
+                      "after its resubscribe time, so a rewrite now is picked "
+                      "up rather than desynced")
+    return False, ""
 
 
 # ------------------------------------------------- schedule reconciliation
@@ -989,11 +1013,10 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             else:
                 problems += 1
                 stale, vintage = _watchlist_vintage(day)
-                if not _collector_has_subscribed(day):
+                rewrite_free, why_free = _rewriting_the_watchlist_is_free(day, now_m)
+                if rewrite_free:
                     discover_relaunched = maybe_rerun(
-                        "discover", f"{detail}; {vintage}. No subscription list "
-                        "has been written today, so nothing is listening to the "
-                        "watchlist and a rewrite desyncs nothing")
+                        "discover", f"{detail}; {vintage}. {why_free}")
                 elif stale:
                     report("discover", "FAILED", detail + f". {vintage}, and the "
                            "collector has already written its subscription list, "
@@ -1052,7 +1075,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
     # prevent it.
     discover_repairable = (hold_is_answerable
                            and reruns_done.get("discover", 0) < max_reruns
-                           and not _collector_has_subscribed(day))
+                           and _rewriting_the_watchlist_is_free(day, now_m)[0])
     last_chance_args = ((_collect.STALE_WATCHLIST_ARG,)
                         if watchlist_stale and not discover_repairable else ())
     if now_m < collector_start:

@@ -29,6 +29,7 @@ logged by name and gap so the omission is on the record.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import re
 import ssl
@@ -63,6 +64,8 @@ VERIFY_WARMUP_MINUTES = _CRIT.number("collector", "verify_warmup_minutes")
 VERIFY_WINDOW_MINUTES = _CRIT.number("collector", "verify_window_minutes")
 SUBSCRIPTION_RETRY_WAIT_S = _CRIT.number("collector", "subscription_retry_wait_s")
 MAX_SUBSCRIPTION_RETRIES = _CRIT.integer("collector", "max_subscription_retries")
+POOL_RELOAD_CHECK_S = _CRIT.number("collector", "pool_reload_check_s")
+MAX_POOL_RELOADS = _CRIT.integer("collector", "max_pool_reloads")
 VOLUME_CHECK_AGREEMENT_PCT = _CRIT.number("collector", "volume_check_agreement_pct")
 
 
@@ -90,17 +93,58 @@ def write_subscriptions(symbols: list[str], dropped: list[dict[str, Any]]) -> Pa
     subscription list is the answer, not the history of them. A restart that
     subscribes to a different set replaces this, and the count of runs is in
     the stats sidecar for anyone who needs the history.
+
+    window_open_at SURVIVES EVERY REWRITE, and that is the one field here that
+    is about the session rather than about the current subscription. It is the
+    first moment anything subscribed today, which is when the socket's window
+    opened. The night's truth pass needs it: capture_observed divides socket
+    volume by the tape over THE MINUTES THE SOCKET WAS LISTENING TO, and
+    before 2026-09-02 that was read from [Collector] start_time. Reading a
+    knob for a fact about a past session is exactly the mistake this project
+    keeps paying for: the knob moved from 07:20 to 04:00 on 2026-09-02, and
+    every session before it would have been re-measured against a window its
+    socket never had, turning collector_window_share into 1.0 for mornings
+    that really only heard the last two hours. The two phase handover rewrites
+    this file mid-run, so "the last subscribed_at" is not the answer either.
     """
     path = subscriptions_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    now = ettime.stamp(ettime.now_et())
+    window_open_at = now
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        window_open_at = str(existing.get("window_open_at") or
+                             existing.get("subscribed_at") or now)
+    except (OSError, ValueError, TypeError):
+        pass
     path.write_text(json.dumps({
-        "subscribed_at": ettime.stamp(ettime.now_et()),
+        "subscribed_at": now,
+        "window_open_at": window_open_at,
         "requested_count": len(symbols),
         "socket_cap": MAX_SUBSCRIPTIONS,
         "symbols": sorted(symbols),
         "dropped_to_fit_cap": [row.get("symbol") for row in dropped],
     }, indent=2, sort_keys=True), encoding="utf-8")
     return path
+
+
+def window_open_hhmm(day: str | None = None) -> str | None:
+    """The ET clock time the socket's window opened on a day, or None.
+
+    Read from the subscription sidecar rather than from [Collector]
+    start_time, so a session is measured against the window it actually had
+    rather than against the one configured today. None when no sidecar exists,
+    which the caller reads as "fall back to the knob" because for a session
+    with no record the knob is the best available answer.
+    """
+    record = read_subscriptions(day)
+    if not record:
+        return None
+    stamp = str(record.get("window_open_at") or record.get("subscribed_at") or "")
+    try:
+        return ettime.hhmm(dt.datetime.fromisoformat(stamp))
+    except (TypeError, ValueError):
+        return None
 
 
 def read_subscriptions(day: str | None = None) -> dict[str, Any] | None:
@@ -755,18 +799,58 @@ def _connect(symbols: list[str]) -> websocket.WebSocket:
     return socket
 
 
+class _PlannedResubscribe(Exception):
+    """Not a fault. The clock reached resubscribe_time and the pool changed.
+
+    Carried as an exception because the outer loop of run_websocket already
+    knows how to close a socket and open another one with a fresh symbol list,
+    and that path runs on every reconnect of every morning. Reusing it is the
+    whole reason the two phase collector is a small change rather than a
+    second connection manager: the resubscribe is a reconnect that was asked
+    for rather than suffered. It costs no backoff and counts as no reconnect.
+    """
+
+
 def run_websocket(
-    symbols: list[str], stop_at, builder: BarBuilder, chaos_reconnects: int = 0
+    symbols: list[str], stop_at, builder: BarBuilder, chaos_reconnects: int = 0,
+    reload_at=None, reload: Any = None,
 ) -> dict[str, Any]:
     """Collect until stop_at. chaos_reconnects deliberately drops the socket
     that many times, spread across the run, so the cost of a flaky morning
-    (reconnect plus full resubscribe) can be measured rather than assumed."""
+    (reconnect plus full resubscribe) can be measured rather than assumed.
+
+    reload_at and reload are the two phase morning. From 2026-09-02 the
+    collector starts at 04:00, before discover has run, on a provisional pool
+    written by the 03:55 pass. At reload_at, which is discover's old start
+    plus the five minutes the schedule has always allowed it, `reload` is
+    called; it returns the symbol list from the watchlist as it now stands,
+    and if that differs from what this socket is subscribed to the connection
+    is replaced. A name on both lists keeps its tape from 04:00 without a
+    break, because the bar file is per day and per symbol and knows nothing
+    about connections.
+
+    Why this matters more than the volume ratio it was proposed for: measured
+    2026-08-29 over six sessions, the published entry reference sat a median
+    1.19 percent from the true premarket high and up to 20.9 percent, and
+    nearly all of that gap is 04:00 to 07:20 going unheard rather than the
+    socket missing trades inside minutes it listened to. Ten to one on the
+    median. The levels the report prints were wrong, not just the ratio.
+
+    reload is called at most once and its failure is never fatal. A morning
+    listening to the provisional pool is a morning with a tape; a morning that
+    died at 07:20 reaching for a better one is not, and the tape cannot be
+    fetched later.
+    """
     backoff = BACKOFF_START_S
     connections = 0
     reconnects = 0
     refusals = 0
     messages = 0
     last_status = 0.0
+    current = list(symbols)
+    planned_resubscribes = 0
+    reload_error: str | None = None
+    last_reload_check = 0.0
     # Non fatal status frames, kept rather than only printed. A morning that
     # saw six odd frames and still worked is a different morning from a clean
     # one, and the run stats are where that difference has to survive.
@@ -782,12 +866,50 @@ def run_websocket(
     while ettime.now_et() < stop_at:
         socket = None
         try:
-            socket = _connect(symbols)
+            socket = _connect(current)
             connections += 1
-            print(f"collector: connected, subscribed to {len(symbols)} symbols")
+            print(f"collector: connected, subscribed to {len(current)} symbols")
             backoff = BACKOFF_START_S
 
             while ettime.now_et() < stop_at:
+                # The handover, checked on a stamp rather than once on a clock.
+                # discover_due is 07:25, five minutes AFTER resubscribe_time,
+                # so a watchdog rerun of a failed 07:15 pass lands after a
+                # single-shot handover would already have given up. Watching
+                # the watchlist's own generated_at instead means the pool is
+                # picked up whenever it arrives, and a pass that never arrives
+                # costs nothing but the checks.
+                if (reload is not None and reload_at is not None
+                        and planned_resubscribes < MAX_POOL_RELOADS
+                        and ettime.now_et() >= reload_at
+                        and time.time() - last_reload_check >= POOL_RELOAD_CHECK_S):
+                    last_reload_check = time.time()
+                    try:
+                        wanted = reload()
+                    except Exception as exc:  # noqa: BLE001
+                        # Broad on purpose. Whatever went wrong reading a file
+                        # on disk, this socket is already carrying the
+                        # provisional pool's tape and must keep carrying it.
+                        wanted = None
+                        reload_error = f"{type(exc).__name__}: {exc}"
+                        print(f"collector: the handover could not read the new pool "
+                              f"({reload_error}). Staying on the pool this run "
+                              "started with, which is a tape rather than none.")
+                    if wanted is not None:
+                        added = sorted(set(wanted) - set(current))
+                        gone = sorted(set(current) - set(wanted))
+                        print(f"collector: {ettime.hhmm(ettime.now_et())} ET, "
+                              "resubscribing to the pool discover wrote. "
+                              f"{len(added)} added, {len(gone)} dropped, "
+                              f"{len(set(wanted) & set(current))} kept with their "
+                              "tape from the start of the window.")
+                        if added:
+                            print("collector:   added   " + ", ".join(_bare(s) for s in added))
+                        if gone:
+                            print("collector:   dropped " + ", ".join(_bare(s) for s in gone))
+                        current = list(wanted)
+                        planned_resubscribes += 1
+                        raise _PlannedResubscribe()
                 if (chaos_remaining and chaos_next is not None
                         and time.time() >= chaos_next):
                     chaos_remaining -= 1
@@ -815,6 +937,11 @@ def run_websocket(
                         f"trades {builder.trades_seen}  minutes written {builder.rows_written}  "
                         f"open bars {len(builder.open_bars)}"
                     )
+        except _PlannedResubscribe:
+            # No backoff and no reconnect count: nothing failed. The finally
+            # below closes the socket and the outer loop opens the next one
+            # with `current` as it now stands.
+            pass
         except SubscriptionRefused as exc:
             # Almost always this run's own slots, still held by the connection
             # that dropped a second ago. Waiting gets them back; dying does
@@ -835,6 +962,8 @@ def run_websocket(
                     "reconnects": reconnects,
                     "subscription_refusals": refusals,
                     "resubscriptions": connections,
+                    "planned_resubscribes": planned_resubscribes,
+                    "pool_reload_error": reload_error,
                     "messages": messages,
                     "status_frames": len(status_frames),
                     "status_frames_seen": status_frames[:10],
@@ -870,6 +999,8 @@ def run_websocket(
         "reconnects": reconnects,
         "subscription_refusals": refusals,
         "resubscriptions": connections,
+        "planned_resubscribes": planned_resubscribes,
+        "pool_reload_error": reload_error,
         "messages": messages,
         "status_frames": len(status_frames),
         "status_frames_seen": status_frames[:10],
@@ -1689,6 +1820,61 @@ def main(argv: list[str] | None = None) -> int:
     written_to = write_subscriptions(symbols, dropped)
     print(f"collector: subscription list written to {written_to.name}")
 
+    # The second phase. This run starts at [Collector] start_time, which is
+    # before discover has built today's pool, on the provisional watchlist the
+    # 03:55 pass wrote. At resubscribe_time the real one exists, so it is read
+    # and the socket moved onto it. See the two phase note in CRITERIA.
+    reload_at = None
+    if not (args.verify or args.poll or args.minutes is not None):
+        reload_at = ettime.at_hm(now.date(), _CRIT.clock("collector", "resubscribe_time"))
+        if reload_at <= now or reload_at >= stop_at:
+            # A run that started after the handover, which is every watchdog
+            # restart and every hand run, already read the final watchlist.
+            reload_at = None
+        else:
+            print(f"collector: two phase run, listening on the pool this "
+                  f"watchlist names and rereading it at "
+                  f"{ettime.hhmm(reload_at)} ET")
+
+    # The generated_at this run subscribed on. The handover fires when the
+    # file carries a different one, so a watchdog rerun of a failed 07:15 pass
+    # is picked up too, and a pool that never changes costs nothing.
+    subscribed_stamp = str(watchlist.get("generated_at"))
+
+    def reload_pool() -> list[str] | None:
+        """The symbol list if the watchlist has been replaced, else None.
+
+        None means stay put, and every refusal returns it rather than raising:
+        there is nothing wrong with the tape this run is already carrying and
+        it must keep carrying it. Refuses on exactly the ground the startup
+        path refuses on, a watchlist that is not today's, because the handover
+        must not become the door that lets another session's pool in.
+        """
+        nonlocal subscribed_stamp
+        fresh = discover.load_watchlist()
+        if fresh.get("missing"):
+            return None
+        stamp = str(fresh.get("generated_at"))
+        if stamp == subscribed_stamp:
+            return None
+        try:
+            fresh_on = ettime.parse_date(stamp)
+        except (TypeError, ValueError):
+            fresh_on = None
+        if fresh_on != ettime.today_et():
+            print("collector: the watchlist changed but is not today's, so this "
+                  "run stays on the pool it started with")
+            return None
+        wanted, dropped_now = select_symbols(fresh)
+        if not wanted:
+            print("collector: the new watchlist names nothing to subscribe to, "
+                  "so this run stays on the pool it started with")
+            return None
+        subscribed_stamp = stamp
+        write_subscriptions(wanted, dropped_now)
+        print(f"collector: the watchlist was replaced, generated_at {stamp}")
+        return wanted
+
     calls_before = eodhd.call_count()
     refused: str | None = None
     try:
@@ -1698,7 +1884,8 @@ def main(argv: list[str] | None = None) -> int:
             stats = run_poll(symbols, stop_at, builder)
         else:
             stats = run_websocket(symbols, stop_at, builder,
-                                  chaos_reconnects=args.chaos_reconnects)
+                                  chaos_reconnects=args.chaos_reconnects,
+                                  reload_at=reload_at, reload=reload_pool)
     except SubscriptionRefused as exc:
         # Caught rather than allowed to propagate, so the log carries this
         # sentence instead of a traceback and the run stats still get written.

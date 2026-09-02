@@ -15,6 +15,74 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, forty third: the collector starts at 04:00 and takes its pool in two phases
+
+Owner decision 1 of DECISIONS 2026-09-02 sixth, taken. The collector ran
+07:20 to 09:25 because it could not subscribe to a pool that did not exist,
+and discover wrote that pool at 07:15. The cost of the ordering was measured
+long before it was paid.
+
+MEASURED 2026-08-29 over the six sessions whose packets carry an
+rvol_cutoff_hhmm. The published entry reference sat a median 1.19 percent from
+the true premarket high, p90 8.33, max 20.94. Decomposed: the socket missing
+trades inside minutes it WAS listening to accounts for a median 0.095 percent,
+the late start for 0.984. Ten to one. The levels the report printed were
+wrong, and it was almost entirely 04:00 to 07:20 going unheard rather than the
+feed. Separately pm_rvol divided a 07:20 numerator by a 04:00 denominator, a
+median cost of 0.366 over 68 picks rows. The socket is free, measured
+2026-09-01, 21,306 messages moving the vendor counter by zero.
+
+TWO PHASES RATHER THAN AN EARLIER DISCOVER. Moving discover to 03:45 would
+have cut its news window off before the hours most earnings land in, which on
+this very session is where GTLB, DELL and MDB came from. So discover runs
+twice: 03:55 builds a provisional pool from the same four priors over a
+shorter news window, and 07:15 runs unchanged. The collector opens at 04:00 on
+the provisional pool and rereads data/watchlist.json every
+[Collector] pool_reload_check_s from resubscribe_time, resubscribing whenever
+generated_at changes, up to max_pool_reloads times. A name on both keeps its
+tape from 04:00 without a break.
+
+The resubscribe is a reconnect that was asked for, so it reuses the outer loop
+that already runs on every reconnect of every morning: no backoff, no
+reconnect count, and planned_resubscribes on the run stats. Watching a stamp
+rather than firing once on a clock is what lets a watchdog rerun of a failed
+07:15 pass land at all, since [Monitor] discover_due is 07:25, five minutes
+after the handover.
+
+THE HANDOVER CANNOT COST THE TAPE. A reload that raises, returns nothing,
+reads an unreadable file or reads one that is not today's leaves the run on
+the pool it started with and records pool_reload_error. A premarket tape
+cannot be fetched afterwards from any vendor on this plan.
+
+THE SESSION'S OWN WINDOW IS NOW RECORDED. window_open_at survives every
+rewrite of the subscription sidecar and is the first moment anything
+subscribed that day. night/true_volume.py and night/backfill_premarket.py read
+it instead of [Collector] start_time, because re-measuring a 07:20 session
+against today's 04:00 knob would report collector_window_share 1.0 for
+mornings that only heard the last two hours, destroying the measurement that
+justified this change. Sessions before today correctly report 07:20 from the
+sidecars already on disk.
+
+THE WATCHDOG'S GATE MOVED WITH IT. _collector_has_subscribed became
+_rewriting_the_watchlist_is_free: a rewrite is free while nothing has
+subscribed, AND while the collector is still rereading, because there a
+rewrite is the mechanism rather than a desync.
+
+SCHEDULE. tasks/register_tasks.ps1 gives discover a second weekly trigger at
+03:55 and moves the collector to 04:00 with a six hour execution limit. The
+default four hours would have Task Scheduler kill the collector at 08:00,
+forty five minutes before the scan reads its tape. Registered and verified.
+
+WHAT THIS CHANGES DOWNSTREAM, and it is an instrument change. pm_rvol's
+numerator now covers its denominator's window, so the day screen's
+premarket_rvol floor of 1.5 bites on a different quantity: on the 2026-09-01
+measurement 54 of 80 picks clear it where 24 did. [Score premarket float
+rotation]'s edges were fitted on 07:20 numerators. Rows before and after are
+not comparable and the score watch restarts here. is_lower_bound on the float
+rotation basis is now false, correctly, because the collector no longer starts
+after the premarket does; the claim that pinned it true now asserts the
+arithmetic against both clocks instead of the answer.
+
 ## 2026-09-02, forty second: the midday volume floor was comparing 150 minutes against 390
 
 The owner said the midday report was not finding anything, and named NVDA and

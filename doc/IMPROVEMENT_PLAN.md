@@ -994,14 +994,16 @@ S to M. Risk none. Delegable: yes.
 Write each of these into DECISIONS.md as a proposal with the measurement that
 motivates it, and stop.
 
-1. Move [Collector] start_time toward 04:00. The socket was measured free on
-   2026-09-01 (21,306 messages, zero counter movement). Consequences to name:
-   the float rotation edges and the capture rate were fitted on 07:20
-   numerators (CRITERIA [Score premarket float rotation]); the RVOL floor of
-   1.5 then means something different; the re-fit study exists offline.
-   Acceptance if adopted: median `pm_rvol_true / pm_rvol` falls from about
-   4.6 toward about 1.4 over ten sessions, and day eligible counts are
-   published before and after.
+1. TAKEN 2026-09-02. Move [Collector] start_time toward 04:00. Done as a
+   two phase collector: discover at 03:55 and 07:15, the socket opening at
+   04:00 on the provisional pool and moving onto the real one at the
+   handover. DECISIONS 2026-09-02 ninth says what it was chosen over and
+   CHANGELOG forty third what changed. The acceptance test stands and is
+   owed: median pm_rvol_true over pm_rvol from about 4.6 toward about 1.4
+   over ten sessions, day eligible counts published before and after.
+   Neither the RVOL floor nor the float rotation edges is retuned yet, on
+   purpose.
+
 2. Sign aware candidate selection. Top twelve by absolute gap on 2026-09-01
    yielded twelve gap down names on a long only screen, so nothing could pass
    by arithmetic. Options: top six up and six down, or top twelve by signed

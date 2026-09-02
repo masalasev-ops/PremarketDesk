@@ -717,10 +717,61 @@ selection again, the dedup and the age drop have to come back with it.
 
 ## Collector
 
-The 07:20 to 09:25 websocket run that is the only source of today's premarket
+The 04:00 to 09:25 websocket run that is the only source of today's premarket
 price path.
 
-start_time                    = 07:20
+### The two phase note, 2026-09-02
+
+Until this date the run was 07:20 to 09:25 and started five minutes after
+discover wrote the watchlist, which is why it could read one. That ordering
+cost the first three hours and twenty minutes of the premarket, and the cost
+was measured rather than guessed.
+
+MEASURED 2026-08-29 over the six sessions whose packets carry an
+rvol_cutoff_hhmm. The published entry reference sat a median 1.19 percent from
+the true premarket high, p90 8.33, max 20.94; the stop reference a median 1.73
+percent. Decomposed, the socket missing trades inside minutes it WAS listening
+to accounts for a median 0.095 percent and the late start for 0.984, ten to
+one. The levels the morning printed were wrong, and almost all of it was
+04:00 to 07:20 going unheard. Separately, pm_rvol divided a numerator starting
+at 07:20 by a [Baseline] denominator accumulating from 04:00, so the ratio
+understated: collector_window_share puts the median cost at 0.366 over 68
+picks rows. The socket itself is free, measured 2026-09-01, 21,306 messages on
+a live tape moving the vendor counter by zero.
+
+SO THE RUN STARTS AT 04:00 AND THE POOL ARRIVES IN TWO PHASES. discover runs
+twice. The 03:55 pass builds a provisional pool from what is knowable then,
+which is every one of its four priors with a shorter news window. The
+collector starts at 04:00 on that. At resubscribe_time it rereads
+data/watchlist.json, and if the 07:15 pass has replaced it the socket is
+closed and reopened on the new list. A name on both keeps its tape from 04:00
+without a break, because the bar file is keyed by day and symbol and knows
+nothing about connections.
+
+WHY NOT SIMPLY MOVE DISCOVER TO 03:45. Because its news sweep runs from 16:00
+the prior day to its own run time, and 03:45 to 07:15 is when the morning's
+earnings and news actually land. On 2026-09-02 that window is where GTLB, DELL
+and MDB came from. Choosing the pool before it would trade a known cost for a
+larger one.
+
+THE HANDOVER NEVER COSTS THE TAPE. A reload that cannot read a watchlist, or
+reads one that is not today's, leaves the run on the pool it started with and
+says so, and the failure is recorded on the run stats as pool_reload_error.
+A morning listening to the provisional pool has a tape. A morning that died at
+07:20 reaching for a better one does not, and a premarket tape cannot be
+fetched afterwards from any vendor on this plan.
+
+WHAT THIS CHANGES DOWNSTREAM, and it is not small. pm_rvol's numerator now
+covers the same window as its denominator, so the ratio stops understating and
+the day screen's premarket_rvol floor of 1.5 starts biting on a different
+quantity: on the 2026-09-01 measurement 54 of 80 picks clear it where 24 did.
+[Score premarket float rotation]'s edges were fitted on 07:20 numerators and
+are measuring a larger number from this date. Both are instrument changes and
+rows before and after are not comparable; the score watch restarts here, on
+the same terms as any other change to what is being scored.
+
+start_time                    = 04:00      # [corrected 2026-09-02: was 07:20. See the two phase note below: the RVOL numerator started here while its denominator accumulated from 04:00, and the published entry reference sat a median 1.19 percent from the true premarket high because of it]
+resubscribe_time              = 07:20      # ET. The handover: the run rereads the watchlist and moves onto the pool discover wrote at 07:15. See the two phase note
 stop_time                     = 09:25
 context_symbols               = SPY, QQQ, IWM, DIA, TLT, USO, UUP, VIXY
 max_subscriptions             = 50         # hard socket cap including the 8 context tickers, so 42 candidate slots. Overflow comes off the tail of discover's ranked list, the collector does not reorder
@@ -731,7 +782,9 @@ poll_interval_s               = 60         # only used by the --poll fallback
 auth_wait_s                   = 10         # see the handshake note below
 late_trade_grace_s            = 45         # see the late trade note below
 subscription_retry_wait_s     = 60         # measured 2026-08-19: a dropped connection's 50 slots were still held 1s later and free within 105s
-max_subscription_retries      = 4          # four waits is four minutes, against a window that is two hours long
+max_subscription_retries      = 4          # four waits is four minutes, against a window that is now five and a half hours long
+pool_reload_check_s           = 30         # SEED. How often, after resubscribe_time, the run rereads the watchlist looking for a new generated_at. A file stat and a small JSON parse, against a socket that is idle between messages
+max_pool_reloads              = 3          # SEED. The handover, plus room for two watchdog reruns of a failed discover. A cap because each one closes and reopens the socket, and a watchlist rewritten in a loop must not turn into a collector that reconnects in a loop
 verify_warmup_minutes         = 25         # see the verification note below
 verify_window_minutes         = 15
 volume_check_agreement_pct    = 1.0        # SEED, not measured. How close either reading has to sit to the vendor to count as agreement. See the volume check note

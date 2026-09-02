@@ -18,6 +18,66 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, ninth: the collector starts at 04:00, and the pool arrives in two phases rather than early
+
+The owner asked why the collector had not been moved to 04:00, which is
+proposal 1 of the sixth entry, and took the two phase option. What follows is
+what the choice was between, because the obvious version of it is worse.
+
+REJECTED, MOVE DISCOVER TO 03:45 AND THE COLLECTOR TO 04:00. One line in
+CRITERIA and two task triggers. It fails on discover's own design: the news
+sweep runs from 16:00 the prior day to its own run time, and 03:45 to 07:15 is
+when the morning's earnings and news actually land. On this very session that
+window is where GTLB, DELL and MDB came from, all three of them after close
+reporters whose headlines arrived between 05:00 and 07:00. Buying the first
+three hours of tape by choosing the pool before the catalysts are known trades
+a measured cost for a larger one.
+
+REJECTED, PRO RATE THE BASELINE TO THE COLLECTOR'S WINDOW. This is what was
+done for the midday volume floor the same afternoon, and it works there
+because the data exists and only the arithmetic was wrong. Here the data does
+not exist: the socket was not listening, so no amount of arithmetic recovers
+04:00 to 07:20. It would also fix only the ratio. The measurement says the
+larger damage is to the LEVELS, entry_ref and stop_ref, which are the numbers
+a reader acts on, and no denominator correction reaches those.
+
+TAKEN, TWO PHASES. discover runs at 03:55 and again at 07:15. The collector
+opens at 04:00 on the first pool and moves onto the second when it appears.
+The handover is a reconnect that was asked for, so it reuses the loop that
+already runs on every reconnect rather than introducing a second connection
+manager, and it watches the watchlist's generated_at rather than firing once
+on a clock, which is what lets a watchdog rerun of a failed 07:15 pass land at
+all.
+
+THE HANDOVER IS BUILT TO FAIL SAFE, and that is the load bearing part. Every
+refusal path leaves the run on the pool it started with: an unreadable
+watchlist, one that is not today's, one that names nothing, and an exception
+of any kind. A premarket tape cannot be fetched afterwards from any vendor on
+this plan, so a morning listening to the provisional pool is worth more than a
+morning that died at 07:20 reaching for a better one. The failure is recorded
+on the run stats rather than only printed, because the whole class of defect
+this project keeps finding is a fallback nobody could see happening.
+
+A KNOB IS NOT A FACT ABOUT A PAST SESSION. Moving start_time would have
+silently re-measured every earlier session against a window its socket never
+had, and the columns that would have been corrupted are exactly the ones that
+justified the move. So the collector now records window_open_at in its
+subscription sidecar, surviving the handover's rewrite, and the two night
+passes read that instead of the knob. This is the same mistake as reading
+previousClosePrice for a named session's close, and it is written down here
+because it was nearly made twice.
+
+WHAT IS OWED. This is an instrument change. pm_rvol and premarket float
+rotation are measuring larger numbers from 2026-09-03, the day screen's
+premarket_rvol floor of 1.5 will admit far more names, and the float rotation
+edges were fitted on 07:20 numerators. Rows before and after are not
+comparable and the score watch restarts. The acceptance test the sixth entry
+pre-registered stands: median pm_rvol_true over pm_rvol should fall from about
+4.6 toward about 1.4 over ten sessions, and day eligible counts are to be
+published before and after. Neither floor is retuned in this pass, because
+retuning on the first morning of a changed instrument is how a threshold gets
+fitted to one session.
+
 ## 2026-09-02, eighth: a fail open that nobody can see is a fail silent, and the page is designed for reading rather than for fitting
 
 report_mode() was written to treat an unrecognised CRITERIA value as
