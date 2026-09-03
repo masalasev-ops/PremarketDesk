@@ -1050,6 +1050,83 @@ def claim_a_refused_movers_list_says_so_on_the_page(failures: list[str]) -> None
           "list would be")
 
 
+def claim_the_graded_table_is_not_an_execution_record(
+        failures: list[str]) -> None:
+    """Nothing on this page was traded, and the page has to say so.
+
+    The owner read the table of 2026-09-03 and said he had taken no trades and
+    could not tell what it was describing against the morning report. Three
+    things were wrong and this holds all three.
+
+    IT SPOKE AS AN EXECUTION RECORD. Fill, triggered, stopped out and "no
+    fill" are the vocabulary of a position somebody holds, used for a price
+    crossing a level nobody acted on.
+
+    IT CALLED 12 ROWS PICKS. The morning put 3 names on a watchlist that day
+    and the table carried 12 under a heading calling them the morning's picks,
+    with no column saying which was which. A reader holding both pages was
+    comparing a list of 3 against a list of 12. The watchlist names now stand
+    in their own table, and the names the screens turned down in another that
+    says outright that a row in it was not a pick.
+
+    IT CARRIED NO DISCLAIMER AT ALL, on a page of prices and levels, while the
+    morning report has carried one since it shipped.
+    """
+    picked = scan_midday.grade(
+        _pick(ticker="AAA.US", day_eligible=1, swing_eligible=1),
+        _quote(open=9.5, high=11.0, low=9.4, last=10.6))
+    picked.update(_pick(ticker="AAA.US", day_eligible=1, swing_eligible=1))
+    turned_down = scan_midday.grade(
+        _pick(ticker="BBB.US", day_eligible=0, swing_eligible=0),
+        _quote(open=9.5, high=9.8, low=9.4, last=9.6))
+    turned_down.update(_pick(ticker="BBB.US", day_eligible=0, swing_eligible=0))
+
+    packet = _packet_with_headline("nothing interesting")
+    packet["carry_through"]["rows"] = [picked, turned_down]
+    packet["carry_through"]["picks_found"] = 2
+    text = render_midday.to_markdown(packet)
+
+    if "Nothing here is advice" not in text or "no trade was placed" not in text:
+        failures.append("the midday page carries no disclaimer saying that "
+                        "nothing on it was traded")
+    for wanted, what in (
+            ("The names the morning put on a watchlist",
+             "which names the morning actually picked"),
+            ("The names the screens turned down",
+             "which names the screens rejected"),
+            ("A row here was not a pick",
+             "that a rejected row was never a recommendation"),
+            ("AAA on the day and swing screens",
+             "which screen a picked name was on"),
+            ("| Entry reached | Start price | Now vs start | Best vs start "
+             "| Stop reached |",
+             "what each outcome column measures")):
+        if wanted not in text:
+            failures.append(f"the report never says {what} (looked for {wanted!r})")
+
+    # The words of a position, in the table and in the prose beneath it. The
+    # packet's own field names are untouched and are not searched for here:
+    # what is checked is the page.
+    for banned in ("triggered after the open", "gapped through at the open",
+                   "stopped out", "no fill,", "Now vs fill", "Best vs fill",
+                   "vs fill", "the fill happened"):
+        if banned in text:
+            line = next(l for l in text.splitlines() if banned in l)
+            failures.append(f"the page still describes a trade nobody placed, "
+                            f"{banned!r} in: {line.strip()[:110]!r}")
+
+    # One legend for two tables of the same columns, not two.
+    legends = [line for line in text.splitlines()
+               if line.startswith(glossary.LEGEND_PREFIX)
+               and "Entry reached" in line]
+    if len(legends) != 1:
+        failures.append(f"{len(legends)} copies of the graded table's column "
+                        "legend, where two tables of one shape need one")
+    print("  not a trade  the page says nothing was traded, the watchlist "
+          "names stand apart from the names the screens turned down, and no "
+          "column claims a fill")
+
+
 CLAIMS = [
     claim_a_gap_through_can_name_a_stop_out_and_an_intraday_fill_cannot,
     claim_the_two_fills_are_the_paper_rule_s_fills,
@@ -1073,6 +1150,7 @@ CLAIMS = [
     claim_relative_volume_is_measured_against_the_session_so_far,
     claim_a_wrong_date_row_is_dropped_and_not_the_whole_payload,
     claim_a_refused_movers_list_says_so_on_the_page,
+    claim_the_graded_table_is_not_an_execution_record,
 ]
 
 

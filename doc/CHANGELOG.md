@@ -15,6 +15,44 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-03, fifty fourth: the midday page stops reading as a record of trades nobody placed
+
+The owner said the midday table was not very good, and then said what was
+actually wrong with it: he had taken no trades, so what was it saying had
+filled, and how did it square with the morning report. Three defects, all of
+them ours.
+
+IT SPOKE AS AN EXECUTION RECORD. Fill, triggered, stopped out, "no fill" and
+"the fill happened after the open" are the vocabulary of a position somebody
+holds, used throughout for a price crossing a level nobody acted on. The
+columns are Entry reached, Start price, Now vs start, Best vs start and Stop
+reached now, and the row by row prose says the entry was never reached and
+the start price was set after the open. A start price is defined on the page
+as where a position would have begun had somebody acted on the level, and not
+a price anybody paid.
+
+IT CALLED TWELVE ROWS THE MORNING'S PICKS. The morning put 3 names on a
+watchlist that day, SNOW and NTSK on both screens and ASST on the day screen,
+and this table carried 12 rows under a heading calling them picks, with no
+column saying which was which. A reader holding both pages was comparing a
+list of 3 against a list of 12. The watchlist names now stand in their own
+table, named with the screen they cleared, and the 9 the screens turned down
+in a second table that says outright that a row in it was not a pick. They
+are still graded, because what a floor turned down is the only evidence that
+the floor is right.
+
+IT CARRIED NO DISCLAIMER AT ALL. The morning report has opened with one since
+it shipped and the midday page, twelve rows of prices and levels, had none.
+It opens with one now, in the same six words, so the same style and the same
+sentence meet a reader on both pages.
+
+AND TWO SMALLER THINGS THE SPLIT TURNED UP. Score and conviction shared one
+cell, which is why every row wrapped to two lines and why the conviction word
+never took the colour the morning's tables give it; they are two columns now.
+And glossary.annotate_tables prints one legend per SET of columns per page,
+so two tables of one shape no longer carry the same three hundred word legend
+twice.
+
 ## 2026-09-03, fifty third: a headline says who filed it, and a market wrap stops taking a display slot
 
 The owner read the regenerated report and asked what "Stock Market Today: Dow

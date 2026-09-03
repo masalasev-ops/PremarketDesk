@@ -349,16 +349,22 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
         out["state_reason"] = (
             f"the session high {hi:g} came up {_pct(hi, entry):.2f} percent "
             f"short of the {entry:g} entry")
+        # THE PROSE DESCRIBES A PRICE, NOT A TRADE, for the reason the column
+        # headers do since 2026-09-03: nothing on this page was traded, and a
+        # reader told that there was "no fill" reasonably asks what was
+        # supposed to have filled.
         out["stop_state_reason"] = (
-            "no fill, so the session low is not read against the stop: a low "
-            "with no trade under it stops nothing")
+            "the entry was never reached, so the session low is not read "
+            "against the stop: a low with nothing started under it stops "
+            "nothing")
         return out
 
     if o >= entry:
         out["state"] = GAPPED_THROUGH
         out["fill"] = o
-        out["fill_basis"] = ("the session open, which carried through the entry, "
-                             "exactly as CRITERIA [Paper] fills a gap through")
+        out["fill_basis"] = ("the session open, which was already past the "
+                             "entry, exactly as CRITERIA [Paper] prices a gap "
+                             "through")
         out["state_reason"] = (
             f"the open {o:g} was {_pct(o, entry):+.2f} percent past the "
             f"{entry:g} entry")
@@ -397,9 +403,9 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
         out["worst_vs_fill_pct"] = _pct(lo, fill)
     else:
         out["worst_vs_fill_reason"] = (
-            "the fill happened after the open, and a daily low carries no "
-            "timestamp, so whether the session low came before or after the "
-            "fill is unknowable from a quote")
+            "the start price was set after the open, and a daily low carries "
+            "no timestamp, so whether the session low came before or after it "
+            "is unknowable from a quote")
 
     if stop is None:
         out["stop_state_reason"] = (
@@ -416,16 +422,16 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
     elif out["state"] == GAPPED_THROUGH:
         out["stop_state"] = STOP_OUT
         out["stop_state_reason"] = (
-            f"the session low {lo:g} reached the {stop:g} stop, and the fill "
-            "was the opening print, so the low is unambiguously after it")
+            f"the session low {lo:g} reached the {stop:g} stop, and the start "
+            "price was the opening print, so the low is unambiguously after it")
     else:
         out["stop_state"] = STOP_SEQUENCE_UNKNOWN
         out["stop_state_reason"] = (
-            f"the session low {lo:g} reached the {stop:g} stop, but the fill "
-            "happened after the open and a daily low carries no timestamp, so "
-            "whether that low came before or after the fill cannot be told "
-            "from a quote. Extending CRITERIA [Collector] stop_time past the "
-            "open is what would answer it")
+            f"the session low {lo:g} reached the {stop:g} stop, but the start "
+            "price was set after the open and a daily low carries no "
+            "timestamp, so whether that low came before or after it cannot be "
+            "told from a quote. Extending CRITERIA [Collector] stop_time past "
+            "the open is what would answer it")
     return out
 
 
@@ -1019,13 +1025,14 @@ def build_packet(day: str | None = None,
                 1 for row in carry if row["decided_inside_the_open_tolerance"]),
             "sequence_unknown_note": (
                 f"{sequence_unknown} of {len(carry)} graded rows reached their "
-                "stop level after an intraday fill, where a daily high and low "
-                "carry no order, so this pass cannot say whether the stop came "
-                "before or after the entry. Extending CRITERIA [Collector] "
-                "stop_time past the open is what would answer it"),
+                "stop level on a session that had already reached their entry "
+                "after the open, where a daily high and low carry no order, so "
+                "this pass cannot say which of the two came first. Extending "
+                "CRITERIA [Collector] stop_time past the open is what would "
+                "answer it"),
             "not_checked": (
-                "The SKIP condition in CRITERIA [Paper], whether the fill was "
-                "plausible at all, is computed "
+                "The SKIP condition in CRITERIA [Paper], whether a position "
+                "could have been started at that level at all, is computed "
                 "by the night from Alpaca band volume and does not exist at "
                 "midday. These grades do not ask whether the level was "
                 "transactable"),

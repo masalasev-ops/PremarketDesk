@@ -51,17 +51,26 @@ _MIDDAY_CSS = """
 # How each carry through state is said in the report. The packet's spelling is
 # for machines; this is the one a reader sees, and it is here rather than
 # inline so the two halves of the report cannot drift apart.
+#
+# THE WORDS DESCRIBE A PRICE, NOT A TRADE. They read as an execution record
+# until 2026-09-03, when the owner read the table and said outright that he
+# had taken no trades and could not tell what it was describing. Nothing on
+# this page was ever traded: the morning publishes an entry and a stop for
+# every name it scores, and this section reads the session's own high, low and
+# last against those two numbers. "Triggered", "fill" and "stopped out" are
+# the vocabulary of a position somebody holds, and they were being used for a
+# level a price happened to cross.
 STATE_WORDS = {
-    scan_midday.GAPPED_THROUGH: "gapped through at the open",
-    scan_midday.TRIGGERED: "triggered after the open",
-    scan_midday.NEVER_TRIGGERED: "never triggered",
+    scan_midday.GAPPED_THROUGH: "already past at the open",
+    scan_midday.TRIGGERED: "reached after the open",
+    scan_midday.NEVER_TRIGGERED: "never reached",
     scan_midday.UNKNOWN: "unknown",
 }
 STOP_WORDS = {
-    scan_midday.STOP_HELD: "held",
-    scan_midday.STOP_OUT: "stopped out",
-    scan_midday.STOP_SEQUENCE_UNKNOWN: "stop level reached, sequence unknown",
-    scan_midday.STOP_NOT_APPLICABLE: "not applicable",
+    scan_midday.STOP_HELD: "not reached",
+    scan_midday.STOP_OUT: "reached",
+    scan_midday.STOP_SEQUENCE_UNKNOWN: "reached, order unknown",
+    scan_midday.STOP_NOT_APPLICABLE: "no start price",
 }
 
 
@@ -129,12 +138,65 @@ _EMPHASIS_CAPS = ("NOT", "PRICE", "HERE", "READ")
 _EMPHASIS_RE = re.compile("[A-Z]{2,}")
 
 
+# The notes a packet written BEFORE 2026-09-03 carries with a field name in
+# the middle of them. Fixed at the source in scan_midday; this is what a
+# re-render of a packet already on disk gets, and each pair is dead the day
+# the last such packet stops being re-rendered. A named list rather than a
+# blanket underscore strip, for the reason DECISIONS 2026-09-03 thirteenth
+# gives: the same sentences cite CRITERIA keys on purpose.
+_LEGACY_PROSE: tuple[tuple[str, str], ...] = (
+    ("entry_ref and stop_ref as the morning published them, not the "
+     "entry_ref_true and stop_ref_true the night corrects them to",
+     "the entry and stop as the morning published them, not the corrected "
+     "entry and stop the night measures from the full consolidated tape"),
+    ("read triggered rather than gapped_through against",
+     "read as reached after the open rather than already past at the open, "
+     "against"),
+    ("CRITERIA [Paper]'s SKIP condition, fill_plausible, is computed",
+     "The SKIP condition in CRITERIA [Paper], whether a position could have "
+     "been started at that level at all, is computed"),
+    ("The SKIP condition in CRITERIA [Paper], whether the fill was plausible "
+     "at all, is computed",
+     "The SKIP condition in CRITERIA [Paper], whether a position could have "
+     "been started at that level at all, is computed"),
+    ("graded rows reached their stop level after an intraday fill, where a "
+     "daily high and low carry no order, so this pass cannot say whether the "
+     "stop came before or after the entry",
+     "graded rows reached their stop level on a session that had already "
+     "reached their entry after the open, where a daily high and low carry no "
+     "order, so this pass cannot say which of the two came first"),
+    # The four reasons that described a trade nobody placed.
+    ("no fill, so the session low is not read against the stop: a low with no "
+     "trade under it stops nothing",
+     "the entry was never reached, so the session low is not read against the "
+     "stop: a low with nothing started under it stops nothing"),
+    ("the fill happened after the open, and a daily low carries no timestamp, "
+     "so whether the session low came before or after the fill is unknowable "
+     "from a quote",
+     "the start price was set after the open, and a daily low carries no "
+     "timestamp, so whether the session low came before or after it is "
+     "unknowable from a quote"),
+    ("but the fill happened after the open and a daily low carries no "
+     "timestamp, so whether that low came before or after the fill cannot be "
+     "told from a quote",
+     "but the start price was set after the open and a daily low carries no "
+     "timestamp, so whether that low came before or after it cannot be told "
+     "from a quote"),
+    ("and the fill was the opening print, so the low is unambiguously after it",
+     "and the start price was the opening print, so the low is unambiguously "
+     "after it"),
+)
+
+
 def _prose(text: Any) -> str:
-    """Packet prose for a reader: safe in a table, and not shouting."""
+    """Packet prose for a reader: safe in a table, not shouting, no field names."""
+    said = _cell(text)
+    for was, now in _LEGACY_PROSE:
+        said = said.replace(was, now)
     return _EMPHASIS_RE.sub(
         lambda m: m.group(0).lower() if m.group(0) in _EMPHASIS_CAPS
         else m.group(0),
-        _cell(text))
+        said)
 
 
 def _sentence(text: Any) -> str:
@@ -160,33 +222,95 @@ def _sentence(text: Any) -> str:
     return out
 
 
+CARRY_HEADER = ("| Ticker | Score | Conviction | Entry | Stop | Entry reached "
+                "| Start price | Now vs start | Best vs start | Stop reached |")
+_CARRY_RULE = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+
+
+def _carry_rows(rows: list[dict[str, Any]]) -> list[str]:
+    """One table's worth of graded rows, under CARRY_HEADER."""
+    out = [CARRY_HEADER, _CARRY_RULE]
+    for row in rows:
+        out.append(
+            f"| {_cell(glossary.bare_ticker(row['ticker']))} "
+            f"| {_num(row.get('score'), 1)} "
+            f"| {_cell(row.get('conviction') or '')} "
+            f"| {_num(row.get('entry_ref'))} "
+            f"| {_num(row.get('stop_ref'))} "
+            f"| {STATE_WORDS.get(row['state'], row['state'])} "
+            f"| {_num(row.get('fill'))} "
+            f"| {_pct(row.get('now_vs_fill_pct'))} "
+            f"| {_pct(row.get('best_vs_fill_pct'))} "
+            f"| {STOP_WORDS.get(row['stop_state'], row['stop_state'])} |")
+    out.append("")
+    return out
+
+
+def _screens(row: dict[str, Any]) -> str:
+    """Which morning watchlist a row was on, in the words the morning uses."""
+    day, swing = bool(row.get("day_eligible")), bool(row.get("swing_eligible"))
+    if day and swing:
+        return "day and swing"
+    if day:
+        return "day"
+    if swing:
+        return "swing"
+    return ""
+
+
 def carry_section(packet: dict[str, Any]) -> list[str]:
     carry = packet["carry_through"]
     rows = carry["rows"]
-    out = ["## What the morning's picks did", ""]
+    out = ["## What the session did against the morning's levels", ""]
     if not rows:
         out += [carry.get("picks_reason") or
                 "The picks table carries no live rows for this session.", ""]
         return out
 
-    # Two columns about the stop, two different headers. The eighth column was
-    # also headed Stop until 2026-09-02, and the glossary, keyed on header text,
-    # could hold one definition for the word, so the morning's Stop column was
-    # explained as this one. See core/glossary.py.
-    out += ["| Ticker | Score | Morning entry | Stop | What happened | Now vs fill "
-            "| Best vs fill | Stop state |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- |"]
-    for row in rows:
-        out.append(
-            f"| {_cell(glossary.bare_ticker(row['ticker']))} "
-            f"| {_num(row.get('score'), 1)} {_cell(row.get('conviction') or '')} "
-            f"| {_num(row.get('entry_ref'))} "
-            f"| {_num(row.get('stop_ref'))} "
-            f"| {STATE_WORDS.get(row['state'], row['state'])} "
-            f"| {_pct(row.get('now_vs_fill_pct'))} "
-            f"| {_pct(row.get('best_vs_fill_pct'))} "
-            f"| {STOP_WORDS.get(row['stop_state'], row['stop_state'])} |")
-    out.append("")
+    # WHAT THIS SECTION IS, before the first number. The owner read the table
+    # of 2026-09-03 and said he had taken no trades and could not tell what it
+    # was describing against the morning report, which is the whole of what
+    # was wrong with it: the columns were headed with the vocabulary of a
+    # position, the section was titled as though its rows were picks, and 9 of
+    # its 12 rows were names the morning's screens had REJECTED.
+    out += ["The morning publishes an entry and a stop for every name it "
+            "scores. This section reads the session's own high, low and last "
+            "price against those two numbers. A start price below is where a "
+            "position would have begun had somebody acted on the level, and "
+            "it is not a price anybody paid.", ""]
+
+    picked = [row for row in rows if _screens(row)]
+    rejected = [row for row in rows if not _screens(row)]
+
+    # THE WATCHLIST NAMES FIRST AND APART. The morning report's Day watchlist
+    # and Swing watchlist tables carry 3 names on an ordinary morning and this
+    # table carried 12, under a heading calling all of them picks, with no
+    # column saying which was which. A reader comparing the two pages was
+    # comparing a list of 3 against a list of 12.
+    out += ["### The names the morning put on a watchlist", ""]
+    if picked:
+        named = ", ".join(f"{glossary.bare_ticker(row['ticker'])} on the "
+                          f"{_screens(row)} screen"
+                          + ("s" if _screens(row) == "day and swing" else "")
+                          for row in picked)
+        out += [f"{len(picked)} of {len(rows)} graded names reached a watchlist: "
+                f"{named}.", ""]
+        out += _carry_rows(picked)
+    else:
+        out += [f"0 of {len(rows)} graded names reached a watchlist this "
+                "morning, so the screens turned down every name they scored. "
+                "The table below is what those names went on to do.", ""]
+
+    out += ["### The names the screens turned down", ""]
+    if rejected:
+        out += [f"These {len(rejected)} were scored and screened and did NOT "
+                "reach a watchlist. They are graded here on the same levels "
+                "so the record shows what the screens turned down, which is "
+                "the only way a floor can ever be judged. A row here was not "
+                "a pick.", ""]
+        out += _carry_rows(rejected)
+    else:
+        out += ["The screens turned nothing down this morning.", ""]
 
     out += ["Row by row, with the reason each verdict was reached.", ""]
     for row in rows:
@@ -197,7 +321,7 @@ def carry_section(packet: dict[str, Any]) -> list[str]:
         if row.get("decided_inside_the_open_tolerance"):
             out.append(f"Close call: {_prose(row.get('open_tolerance_reason'))}.")
         if row.get("worst_vs_fill_reason"):
-            out.append(f"Worst against fill is not reported: "
+            out.append(f"Worst against the start price is not reported: "
                        f"{_prose(row['worst_vs_fill_reason'])}.")
         out.append("")
 
@@ -339,6 +463,17 @@ def to_markdown(packet: dict[str, Any]) -> str:
         f"{packet['prior_session']} close. "
         f"{packet['quotes_returned']:,} of {packet['universe_size']:,} universe "
         f"names quoted.",
+        "",
+        # THE DISCLAIMER THE MORNING HAS AND THIS PAGE DID NOT. The morning
+        # report opens with one and the midday opened with a table of prices
+        # that read as an execution record. Written to open with the same six
+        # words, because render_report._ClassParagraphs keys the disclaimer
+        # style on them and because a reader who has both pages open should
+        # meet the same sentence on each.
+        "Nothing here is advice, no trade was placed, and nothing on this page "
+        "is a position: it reads the session's own prices against the levels "
+        "the morning published. The thresholds behind those levels are "
+        "unvalidated seed values.",
         "",
     ]
     if packet.get("quote_error"):

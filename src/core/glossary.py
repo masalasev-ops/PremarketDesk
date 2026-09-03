@@ -232,6 +232,20 @@ COLUMNS: dict[str, str] = {
     "Report date": "the date the company is due to report its profits",
     "Session": "whether that report lands before or after the market is open",
     "Morning entry": "the price the morning published as the intended entry",
+    # The midday outcome table, reworded 2026-09-03. Its columns described a
+    # trade that was never placed: What happened, Now vs fill, Best vs fill
+    # and Stop state are the vocabulary of a position somebody holds. These
+    # describe a price crossing a level, which is what is actually measured.
+    # The old keys stay above and below because the archive still carries
+    # pages that print them.
+    "Entry reached": "whether the session's own prices ever reached the entry "
+                     "the morning published, and when",
+    "Start price": "the price a position would have begun at had somebody "
+                   "acted on the level, which is not a price anybody paid",
+    "Now vs start": "where the price is now against that start price",
+    "Best vs start": "the best the price got against that start price",
+    "Stop reached": "whether the session traded down to the stop, and whether "
+                    "a daily high and low can say when",
     # NOT a second "Stop". The midday table carried two columns both headed
     # Stop until 2026-09-02, the stop price and whether it was reached, and
     # this dict carried the key twice, so the second definition silently
@@ -304,9 +318,17 @@ def annotate_tables(report_text: str) -> str:
     Idempotent: a table already followed by a legend is left alone, because the
     morning writes its report twice on the path where containment examined
     nothing and a legend appended twice reads as a stutter.
+
+    ONE LEGEND PER SET OF COLUMNS PER PAGE. The midday report splits its
+    graded rows into two tables of the same shape since 2026-09-03, the
+    watchlist names and the names the screens turned down, and the same 300
+    word legend under both is 300 words nobody reads twice. The second and any
+    later copy is dropped; a legend for a DIFFERENT set of columns still gets
+    its own line wherever its table stands.
     """
     lines = report_text.splitlines()
     out: list[str] = []
+    said: set[str] = set()
     index = 0
     while index < len(lines):
         if not lines[index].lstrip().startswith("|"):
@@ -324,7 +346,10 @@ def annotate_tables(report_text: str) -> str:
         text = legend(headers)
         already = (index < len(lines)
                    and lines[index].startswith(LEGEND_PREFIX))
-        if text and not already:
+        if already:
+            said.add(lines[index])
+        if text and not already and text not in said:
+            said.add(text)
             out.append(text)
             out.append("")
     return "\n".join(out) + ("\n" if report_text.endswith("\n") else "")
