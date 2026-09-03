@@ -33,6 +33,7 @@ from core import config
 from core import criteria
 from core import ettime
 from core import glossary
+from core.numbers import as_float
 from ops import job_status
 
 from morning import gap_reasons
@@ -739,6 +740,66 @@ def _in_readers_words(text: str) -> str:
     return text
 
 
+# The order the gappers section puts its groups in, and the sentinel that
+# means no group is open yet. None is a real key here, the direction of a
+# candidate whose gap was never computed, so the sentinel cannot be None.
+_DIRECTION_ORDER = {"up": 0, "down": 1}
+_NO_DIRECTION_YET = object()
+
+_DIRECTION_TITLES = {
+    "up": ("Gapped up", "opened above yesterday's close"),
+    "down": ("Gapped down", "opened below yesterday's close"),
+}
+
+
+def _direction_of(candidate: dict[str, Any]) -> str | None:
+    """One candidate's gap direction, from the packet or from its own gap.
+
+    THE RULE HAS ONE HOME, scan.gap_direction, and this calls it rather than
+    testing a sign here: exactly 0.0 reads as up there, deliberately, and a
+    second copy of that judgement is how the Summary's direction counts and
+    the headings below them come to disagree.
+
+    The stored key is preferred where the packet carries one, and computed
+    from gap_pct where it does not. gap_direction was added to the candidate
+    on 2026-09-02, so every packet before that date has the gap and not the
+    word, and reading only the key would file a whole older morning under
+    "Gap not measured" while printing its gaps beside the heading.
+
+    A local import, on discover.load_metrics's precedent: scan imports nothing
+    from this module and pulling it in at module scope would make the report
+    renderer depend on the whole scan for one rule.
+    """
+    said = candidate.get("gap_direction")
+    if said in _DIRECTION_ORDER:
+        return str(said)
+    from morning import scan
+
+    return scan.gap_direction(candidate.get("gap_pct"))
+
+
+def _direction_heading(direction: Any, grouped: list[dict[str, Any]],
+                       total: int) -> list[str]:
+    """The heading and count that open one direction's group of blocks.
+
+    THE ORDER CLAIM IS CHECKED BEFORE IT IS MADE. The ranking sorts on the
+    absolute gap, so inside a group the blocks do come largest first, and this
+    says so only where the rows it is about actually are: a sentence on the
+    page has to be true of the page, and this one is cheap to verify and
+    would be quietly wrong the day the sort changes.
+    """
+    members = [c for c in grouped if _direction_of(c) == direction]
+    title, opened = _DIRECTION_TITLES.get(
+        direction, ("Gap not measured", "carry no computed gap at all"))
+    said = f"### {title}"
+    sentence = f"{len(members)} of {total} candidates {opened}"
+    sizes = [abs(value) for value in
+             (as_float(c.get("gap_pct")) for c in members) if value is not None]
+    if len(sizes) == len(members) and sizes == sorted(sizes, reverse=True):
+        sentence += ", largest move first"
+    return [said, "", sentence + ".", ""]
+
+
 _NOT_ABOUT_PREFIX = "not about this name: "
 
 # A pre 2026-09-03 packet wrote this reason as "it carries 1 macro tag(s),
@@ -1120,7 +1181,32 @@ def fallback_report(
         # AND IT IS WRITTEN IN ENGLISH, NOT IN FIELD NAMES. It used to print
         # "catalyst_found true. catalyst_why: ...", which asks a reader to
         # know the packet's schema before the sentence means anything.
-        for c in candidates:
+        #
+        # GROUPED BY DIRECTION, under a heading each. The rank has put gaps up
+        # before gaps down since 2026-09-02, so the order was already right
+        # and nothing on the page said so: twelve blocks ran together and the
+        # reader found the turn from up to down by watching for a minus sign
+        # in the fourth word of a block. The Summary counts the two
+        # directions; this is where a reader meets them.
+        #
+        # THE PACKET'S OWN gap_direction DECIDES, never a sign test here.
+        # scan.gap_direction is the one rule, it reads exactly 0.0 as up and
+        # says so, and it is null when the gap was never computed at all. A
+        # second copy of that judgement is how the Summary's counts and these
+        # headings come to disagree.
+        # Stable, so the ranking's order survives inside each group and only
+        # the grouping is added. A direction the packet never computed sorts
+        # last and gets a heading of its own rather than being folded into
+        # either: a name with no gap is not a name that gapped down.
+        grouped = sorted(candidates,
+                         key=lambda c: _DIRECTION_ORDER.get(_direction_of(c), 2))
+        opened: object = _NO_DIRECTION_YET
+        for c in grouped:
+            direction = _direction_of(c)
+            if direction != opened:
+                opened = direction
+                for line in _direction_heading(direction, grouped, len(candidates)):
+                    add(line)
             quote = c.get("quote") or {}
             add(f"**{_bare(c['symbol'])}, {_cell(quote.get('name')) or 'name not carried'}.** "
                 f"Gap {_f(c.get('gap_pct'))} percent, last {_f(c.get('price'))}, prior "

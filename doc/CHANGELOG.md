@@ -15,6 +15,34 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-03, fifty fifth: the gappers are grouped by direction
+
+The owner asked for the gappers to be grouped, gaps up against gaps down. The
+rank has put gaps up first since the forty fifth, so the order was already
+right and nothing on the page said so: twelve blocks ran together and a
+reader found the turn from up to down by watching for a minus sign in the
+fourth word of a block.
+
+`### Gapped up` and `### Gapped down` now open their groups, each with its
+count, and a third heading takes a candidate whose gap was never computed,
+because a name with no gap is not a name that gapped down. The sort is stable,
+so the ranking's order survives inside each group and only the grouping is
+added.
+
+THE DIRECTION IS scan.gap_direction's AND NOBODY ELSE'S. It reads exactly 0.0
+as up, deliberately and in writing, and a sign test in the renderer would be a
+second copy of that judgement and the way these headings and the Summary's
+direction counts come to disagree. The stored key is preferred where a packet
+carries one and computed from the gap where it does not, because
+`gap_direction` was added to the candidate on 2026-09-02 and reading only the
+key would file every earlier morning under "Gap not measured" while printing
+its gaps beside the heading.
+
+"Largest move first" is printed only where the blocks under it are in that
+order. It is true of both sort paths today, and it is checked rather than
+asserted, because it is cheap to check and would be quietly wrong the day the
+sort changes.
+
 ## 2026-09-03, fifty fourth: the midday page stops reading as a record of trades nobody placed
 
 The owner said the midday table was not very good, and then said what was

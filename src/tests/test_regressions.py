@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and six claims, a count read off
+and the two pages. It now carries two hundred and seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -3098,6 +3098,68 @@ def claim_a_gapper_block_is_split_and_says_no_field_names(
     print(f"  gapper block {len(quoted)} quoted headline(s) stand as their own "
           "paragraph, the catalyst is three questions in English, and the "
           "held back count prints")
+
+
+def claim_the_gappers_are_grouped_by_direction(failures: list[str]) -> None:
+    """Gaps up under one heading, gaps down under another.
+
+    The rank has put gaps up before gaps down since 2026-09-02, so the order
+    was already right and nothing on the page said so: twelve blocks ran
+    together and a reader found the turn by watching for a minus sign in the
+    fourth word of a block.
+
+    THE DIRECTION COMES FROM ONE RULE. scan.gap_direction decides, here as in
+    the Summary's counts, so a packet written before the gap_direction key
+    existed on 2026-09-02 is grouped from its own gap rather than filed whole
+    under "Gap not measured" with its gaps printed beside the heading. A
+    candidate whose gap was never computed does get that heading, because a
+    name with no gap is not a name that gapped down.
+
+    AND THE ORDER CLAIM IS CHECKED BEFORE IT IS MADE. "Largest move first" is
+    printed only where the blocks under it actually are in that order.
+    """
+    from morning import analyst
+
+    packet = _slots_packet()
+    # Neither fixture candidate carries gap_direction, which is the older
+    # packet shape and the case that would have gone wrong.
+    unpriced = {**packet["candidates"][1], "symbol": "CCC.US", "gap_pct": None,
+                "quote": {"name": "Cee Corp"}, "headlines": []}
+    packet["candidates"] = [*packet["candidates"], unpriced]
+    skeleton = analyst.render_skeleton(packet)
+
+    places = {name: skeleton.find(name) for name in
+              ("### Gapped up", "### Gapped down", "### Gap not measured",
+               "**ARX,", "**BBB,", "**CCC,")}
+    for name, at in places.items():
+        if at < 0:
+            failures.append(f"the gappers section carries no {name!r}")
+    if min(places.values()) < 0:
+        return
+    if not (places["### Gapped up"] < places["**ARX,"]
+            < places["### Gapped down"] < places["**BBB,"]
+            < places["### Gap not measured"] < places["**CCC,"]):
+        failures.append("the direction groups do not hold their own blocks: "
+                        f"{sorted(places.items(), key=lambda kv: kv[1])}")
+    for wanted in ("1 of 3 candidates opened above yesterday's close",
+                   "1 of 3 candidates opened below yesterday's close",
+                   "1 of 3 candidates carry no computed gap at all"):
+        if wanted not in skeleton:
+            failures.append(f"the group heading never says {wanted!r}")
+
+    # The order claim, made only where it holds. Two gaps up, the smaller
+    # first, must NOT be described as largest first.
+    out_of_order = _slots_packet()
+    out_of_order["candidates"] = [
+        {**out_of_order["candidates"][0], "symbol": "AAA.US", "gap_pct": 2.0},
+        {**out_of_order["candidates"][0], "symbol": "ZZZ.US", "gap_pct": 9.0},
+    ]
+    if "largest move first" in analyst.render_skeleton(out_of_order):
+        failures.append("the section claims largest move first over blocks "
+                        "that are not in that order")
+    print("  gap groups  gaps up, gaps down and an uncomputed gap each open "
+          "their own heading, counted, and the order is claimed only where "
+          "it holds")
 
 
 def claim_a_headline_says_why_it_is_under_this_ticker(
@@ -16697,6 +16759,7 @@ def main() -> int:
               failures)
     run_claim(failures, claim_a_headline_says_why_it_is_under_this_ticker,
               failures)
+    run_claim(failures, claim_the_gappers_are_grouped_by_direction, failures)
 
     if failures:
         for failure in failures:

@@ -237,8 +237,17 @@ published on 2026-08-18.}
 
 ## Premarket gappers
 
-{One block per candidate, ordered as in the packet. THE PARTS OF A BLOCK ARE
-ONE PARAGRAPH EACH, separated by a blank line. Markdown joins consecutive
+{One block per candidate, ordered as in the packet and GROUPED BY DIRECTION.
+The headings are `### Gapped up`, then `### Gapped down`, then `### Gap not
+measured` where a candidate carries no computed gap, and a count follows
+under one: "7 of 12 candidates opened above yesterday's close". The
+direction is scan.gap_direction's and nothing else's, so these headings and
+the Summary's direction counts cannot disagree. The ranking already put gaps
+up first; what was missing was anything on the page saying where the turn
+came, and a reader was finding it by watching for a minus sign in the fourth
+word of a block.
+
+THE PARTS OF A BLOCK ARE ONE PARAGRAPH EACH, separated by a blank line. Markdown joins consecutive
 lines, and until 2026-09-03 a name with three headlines rendered as one
 unbroken block of about a hundred and forty words. The order is:
 
