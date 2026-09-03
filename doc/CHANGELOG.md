@@ -15,6 +15,31 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-03, fifty sixth: a midday floor names the biggest mover it turned down
+
+The owner brought a vendor list of the session's 47 biggest gainers and asked
+which of them the reports should have carried. The morning half of that
+question was answerable off the packets on disk: 2 were in the report, 25 did
+not gap at the open at all and are outside a premarket report by
+construction, 10 gapped more than the 3 percent floor and were in discover's
+pool with no subscription, 7 gapped and were never pooled, and 2 are not in
+the universe.
+
+THE MIDDAY HALF WAS NOT ANSWERABLE. The 12:00 pass reported 2,459 names below
+the move floor and 230 over the move floor and under the volume floor, as
+bare counts, so which big mover either floor cost could not be asked. The
+unpriced buckets have carried named examples since they were written, on the
+argument that a count with no examples cannot be chased; a floor is where
+that matters most, because a floor is a decision this project made and the
+unpriced buckets are the vendor's.
+
+Both floor buckets now carry the largest movers they turned down, at most
+twelve apiece, by the size of the move, with the volume ratio beside the ones
+the volume floor cut. The names are collected whole and trimmed once at the
+end: trimming inside the walk would have kept whichever names the quote dict
+yielded first, which is alphabetical, and the question is which BIG mover was
+cut.
+
 ## 2026-09-03, fifty fifth: the gappers are grouped by direction
 
 The owner asked for the gappers to be grouped, gaps up against gaps down. The

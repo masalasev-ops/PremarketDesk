@@ -406,6 +406,27 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
             f"{tally['below_price']:,} were under the price floor, "
             f"and {tally['admitted']:,} cleared everything. The rest were not "
             "judged and are named below.", ""]
+    # The largest movers each floor turned down, by name. A floor is a
+    # decision this project made, and until 2026-09-03 the two floor buckets
+    # were bare counts: 2,459 below the move floor and 230 below the volume
+    # floor, with no way to ask which big mover either one cost. .get for a
+    # packet written before the key existed.
+    floors = tally.get("floor_examples") or {}
+    said = []
+    for bucket, label in (("below_move", "under the move floor"),
+                          ("below_rvol", "over the move floor and under the volume floor")):
+        rows_cut = floors.get(bucket) or []
+        if not rows_cut:
+            continue
+        named = ", ".join(
+            f"{glossary.bare_ticker(r['symbol'])} at {r['move_pct']:+.2f}%"
+            + (f" on {r['day_rvol']:.1f} times its usual volume"
+               if r.get("day_rvol") is not None else "")
+            for r in rows_cut)
+        said.append(f"{label}: {named}")
+    if said:
+        out += ["The largest movers each floor turned down, so a count above "
+                "can be chased. " + "; ".join(said) + ".", ""]
     if counted != tally["quoted"]:
         out += [f"THE COUNTS ABOVE DO NOT ADD UP: they cover {counted:,} of "
                 f"{tally['quoted']:,} quoted names, so "

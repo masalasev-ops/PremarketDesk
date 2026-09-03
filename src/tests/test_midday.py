@@ -1127,6 +1127,64 @@ def claim_the_graded_table_is_not_an_execution_record(
           "column claims a fill")
 
 
+def claim_a_floor_names_the_biggest_mover_it_turned_down(
+        failures: list[str]) -> None:
+    """A count with no examples cannot be chased, and a floor is a decision.
+
+    On 2026-09-03 the owner brought a vendor list of the day's gainers and
+    asked which of them the reports should have carried. The 12:00 pass could
+    answer for the names it admitted, and for the ones it never priced, and
+    not at all for the 2,459 the move floor cut or the 230 the volume floor
+    cut: both were bare counts. The unpriced buckets had carried examples
+    since they were written, for exactly this reason, and the floors are where
+    it matters most, because a floor is a decision this project made and the
+    unpriced buckets are the vendor's.
+
+    THE LARGEST MOVER, NOT THE FIRST ONE ALPHABETICALLY. The names are
+    collected whole and trimmed once at the end; trimming inside the walk
+    would keep whichever names the quote dict yielded first, and the question
+    being asked is which big mover a floor cost.
+    """
+    quotes = {}
+    # Two big movers on thin volume, one small mover on heavy volume, one
+    # admitted. The two big ones must come back named, largest first.
+    for symbol, move, volume in (("AAA.US", 20.0, 1.0), ("BBB.US", 40.0, 1.0),
+                                 ("CCC.US", 0.5, 90.0), ("DDD.US", 12.0, 90.0)):
+        quotes[symbol] = {
+            "symbol": symbol, "name": symbol, "refused_reason": None,
+            "last": 100.0 * (1 + move / 100), "prev_close": 100.0,
+            "open": 100.0, "high": 120.0, "low": 99.0,
+            "volume": volume * 1_000_000, "average_volume": 1_000_000,
+            "market_cap": 2e9,
+        }
+    _rows, tally = scan_midday.rank_movers(quotes, set(), set(), set(), 0.5)
+    cut = (tally.get("floor_examples") or {})
+    thin = [r["symbol"] for r in cut.get("below_rvol") or []]
+    if thin[:2] != ["BBB.US", "AAA.US"]:
+        failures.append("the volume floor does not name the movers it turned "
+                        f"down, largest first: {thin}")
+    small = [r["symbol"] for r in cut.get("below_move") or []]
+    if small != ["CCC.US"]:
+        failures.append(f"the move floor names {small}, expected the one name "
+                        "it cut")
+    text = render_midday.to_markdown(_packet_with_floor_cuts(tally))
+    if "The largest movers each floor turned down" not in text:
+        failures.append("the report prints the floor counts and names none of "
+                        "the movers behind them")
+    if "BBB at +40.00%" not in text:
+        failures.append(f"the report does not name the largest mover the "
+                        f"volume floor cut: {text[:0]!r}")
+    print(f"  floor names {len(thin)} mover(s) the volume floor cut and "
+          f"{len(small)} the move floor cut are named, largest first")
+
+
+def _packet_with_floor_cuts(tally: dict[str, Any]) -> dict[str, Any]:
+    """The standing fixture with one pass's real tally dropped into it."""
+    packet = _packet_with_headline("nothing interesting")
+    packet["movers"]["tally"] = {**packet["movers"]["tally"], **tally}
+    return packet
+
+
 CLAIMS = [
     claim_a_gap_through_can_name_a_stop_out_and_an_intraday_fill_cannot,
     claim_the_two_fills_are_the_paper_rule_s_fills,
@@ -1151,6 +1209,7 @@ CLAIMS = [
     claim_a_wrong_date_row_is_dropped_and_not_the_whole_payload,
     claim_a_refused_movers_list_says_so_on_the_page,
     claim_the_graded_table_is_not_an_execution_record,
+    claim_a_floor_names_the_biggest_mover_it_turned_down,
 ]
 
 

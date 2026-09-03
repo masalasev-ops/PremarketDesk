@@ -563,6 +563,15 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
         "examples": {"refused": [], "no_last_price": [], "no_previous_close": [],
                      "no_average_volume": [], "no_volume": [],
                      "zero_average_volume": [], "zero_previous_close": []},
+        # Filled after the walk from `cut` below: the largest movers each
+        # floor turned down, largest first, so the counts beside them can be
+        # chased. See the note at the below_rvol branch.
+        "floor_examples": {"below_move": [], "below_rvol": []},
+        "floor_examples_note": (
+            "the largest movers each floor turned down, by the size of the "
+            f"move, at most {UNPRICED_EXAMPLES} apiece. These are names the "
+            "pass DID measure and did reject, which is what tells them from "
+            "the unpriced buckets"),
         "unpriced_note": (
             "six buckets hold names that were NOT JUDGED, and they are not one "
             "kind. Four name the FIELD the vendor did not carry. refused is a "
@@ -585,6 +594,13 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
         tally[bucket] += 1
         if len(tally["examples"][bucket]) < UNPRICED_EXAMPLES:
             tally["examples"][bucket].append(symbol)
+
+    # Every name a floor turned down, kept whole and trimmed once at the end.
+    # Trimming inside the walk would keep the first N the quote dict happens
+    # to yield, which is alphabetical order, and the question this answers is
+    # which BIGGEST mover was cut.
+    cut: dict[str, list[tuple[float, str, float, float | None]]] = {
+        "below_move": [], "below_rvol": []}
 
     rows: list[dict[str, Any]] = []
     for symbol, q in quotes.items():
@@ -632,11 +648,22 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
             continue
         if not move_rule.test(abs(move)):
             tally["below_move"] += 1
+            cut["below_move"].append((abs(move), symbol, move, None))
             continue
         raw_rvol = q["volume"] / q["average_volume"]
         rvol = raw_rvol / elapsed
         if not rvol_rule.test(rvol):
             tally["below_rvol"] += 1
+            # THE BIGGEST MOVER A FLOOR TURNED DOWN, BY NAME. On 2026-09-03
+            # the owner brought a vendor list of the day's gainers and asked
+            # which of them the reports should have carried, and this pass
+            # could answer for the names it admitted and for the ones it
+            # never priced, and not at all for the 2,459 the move floor cut
+            # or the 230 the volume floor did. A count with no examples
+            # cannot be chased, which is the argument the unpriced buckets
+            # were already given; a floor is exactly where it matters most,
+            # because a floor is a decision this project made.
+            cut["below_rvol"].append((abs(move), symbol, move, rvol))
             continue
         tally["admitted"] += 1
         rows.append({
@@ -687,6 +714,14 @@ def rank_movers(quotes: dict[str, dict[str, Any]],
             "news": None,
             "news_reason": None,
         })
+
+    for bucket, seen in cut.items():
+        seen.sort(key=lambda item: (-item[0], item[1]))
+        tally["floor_examples"][bucket] = [
+            {"symbol": symbol, "move_pct": round(move, 4),
+             "day_rvol": None if rvol is None else round(rvol, 4)}
+            for _size, symbol, move, rvol in seen[:UNPRICED_EXAMPLES]
+        ]
 
     key = (lambda r: (-abs(r["move_pct"]), r["symbol"])) if RANK_BY == "move" else (
         lambda r: (-r["day_rvol"], r["symbol"]))
