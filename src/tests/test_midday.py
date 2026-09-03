@@ -306,14 +306,25 @@ def claim_a_graded_row_says_which_levels_it_used(failures: list[str]) -> None:
 
     Two passes reaching different verdicts on one trade is fine and expected.
     A reader who cannot tell which levels produced which verdict is not.
+
+    IN WORDS, NOT IN FIELD NAMES. This claim used to demand the strings
+    entry_ref, stop_ref and true, which is how the packet's schema came to be
+    printed in a report. The distinction it exists to protect is the morning's
+    published levels against the night's corrected ones, and that is what is
+    checked; the words the sentence says it in are a reader's.
     """
     row = scan_midday.grade(
         _pick(), _quote(open=10.5, high=11.0, low=10.2, last=10.9))
     text = str(row.get("levels_are") or "")
-    for wanted in ("entry_ref", "stop_ref", "true"):
+    for wanted in ("the entry and stop as the morning published them",
+                   "corrected entry and stop", "night"):
         if wanted not in text:
             failures.append(f"the levels disclosure does not mention {wanted!r}: "
                             f"{text!r}")
+    for leaked in ("entry_ref", "stop_ref", "_true"):
+        if leaked in text:
+            failures.append(f"the levels disclosure prints the field name "
+                            f"{leaked!r}: {text!r}")
     print("  levels       every graded row names the morning's levels and says "
           "they are not the night's corrected ones")
 
@@ -722,9 +733,10 @@ def claim_the_report_states_its_limits_on_every_edition(
     packet = _packet_with_headline("nothing interesting")
     text = render_midday.to_markdown(packet)
     for wanted, what in (
-            ("fill_plausible", "that these grades never ask whether the level "
-                               "was transactable"),
-            ("entry_ref", "which levels the grades used"),
+            ("whether the fill was plausible",
+             "that these grades never ask whether the level was transactable"),
+            ("the entry and stop as the morning published them",
+             "which levels the grades used"),
             ("sequence", "how often the order of the high and the low is "
                          "unknowable"),
             ("open tolerance", "how many verdicts were decided inside the "
@@ -769,7 +781,8 @@ def _packet_with_headline(title: str) -> dict[str, Any]:
             "sequence_unknown_rows": 0,
             "sequence_unknown_note": "0 of 1 rows have an unknown sequence",
             "decided_inside_the_open_tolerance_rows": 0,
-            "not_checked": "CRITERIA [Paper]'s fill_plausible is not computed here",
+            "not_checked": ("The SKIP condition in CRITERIA [Paper], whether "
+                            "the fill was plausible at all, is not computed here"),
             "picks_reason": None,
         },
         "movers": {

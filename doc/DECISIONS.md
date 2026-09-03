@@ -18,6 +18,35 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-03, thirteenth: a named replay shim, rather than stripping every underscore in sight
+
+Every leg name, list name, ranking key and catalyst class the report prints
+is now written in words at the source. That leaves one question: what a
+report built TODAY from a packet written this morning by the old code should
+do, and the same question every time an old packet is replayed.
+
+REJECTED, STRIP EVERY UNDERSCORE AT THE RENDER SITE. One line, no list to
+maintain, and it catches whatever the next old packet carries. It also
+destroys the citations. These same sentences quote CRITERIA on purpose, "the
+rank cap of 12 in CRITERIA.md [Scan] candidate_count" and "the 1,000 share
+floor in CRITERIA.md [Baseline] min_baseline_premarket_volume", and a reader
+who wants to know where a threshold lives can search the file for the key.
+Turning those into "candidate count" and "min baseline premarket volume"
+takes that away, and the suite caught it: the containment fixture builds its
+sentences through scan's own builder, and the blanket strip made the rendered
+copy differ from the sentence the section wrote.
+
+TAKEN, A NAMED LIST. `analyst._LEGACY_PROSE` carries the handful of sentences
+a pre 2026-09-03 packet spells with a field name in the middle of them, and
+`_LEGACY_NAMES` the six leg and list keys. It is a list that only ever
+shrinks: every entry is dead the day the last packet carrying it stops being
+replayed, and a new one can only be added by writing a field name into prose,
+which is the thing this change exists to stop.
+
+THE DISTINCTION IS THE POINT. A field name used as if it were English is the
+defect. A citation naming a key in a document a reader can open is a service,
+and it stays.
+
 ## 2026-09-02, twelfth: fewer tasks by multiplying triggers, not by a daemon
 
 The owner asked for fewer scheduled tasks. Two ways down from eleven.

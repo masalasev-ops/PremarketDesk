@@ -17,7 +17,12 @@ with the slots filled. You change nothing else.
    heading is added, moved or removed, no table is touched, no sentence is
    reworded. The report is checked against the copy that was sent, and a
    report whose fixed text differs is thrown away and asked for again, and
-   the second failure costs the morning its narrative.
+   the second failure costs the morning its narrative. A BLANK LINE IS A
+   CHARACTER TOO, and so is a whole paragraph you did not write: the report
+   is a run of short paragraphs and every one of them that is not a slot
+   comes back, in its place, whether or not it looks like part of the
+   sentence you were asked for. Two answers have already been thrown away
+   for dropping one such paragraph.
 3. Every slot is replaced exactly once, in place, with plain prose. A slot
    left unfilled, or a `{{` left anywhere in the report, is a failed answer.
    Slot prose carries no heading, no table row and no code fence, and each
@@ -63,8 +68,8 @@ per the packet's proxy note.
 sentence saying whether the headline is about the company itself, about its
 sector or the wider market, or about a peer, and what in the headline says so,
 plus one clause quoting what the headline says happened or saying that it
-names no specific event. You are describing a text the reader can see on the
-line above. Nothing follows from it: catalyst_class, the score, the conviction
+names no specific event. You are describing a text the reader can see in the
+paragraph just above your own. Nothing follows from it: catalyst_class, the score, the conviction
 and the watchlist membership keep the values the report already shows.
 
 `{{SETUP:TICKER}}` in Technical signals, one per candidate on a watchlist: one

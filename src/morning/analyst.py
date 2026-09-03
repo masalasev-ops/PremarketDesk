@@ -694,6 +694,99 @@ def _conviction(candidate: dict[str, Any]) -> str:
     return str(candidate.get("conviction"))
 
 
+# The evidence gap sentences a packet written BEFORE 2026-09-03 carries with
+# one of its own field names standing in the middle of them. All three are
+# fixed at the source in scan.py, so this is only what a REPLAY of an older
+# packet gets, and every one of them is dead the day the last such packet is.
+#
+# A named pair rather than a blanket underscore strip, because the same
+# sentences cite CRITERIA keys on purpose: "the rank cap of 12 in CRITERIA.md
+# [Scan] candidate_count" points a reader at a line they can search for, and
+# turning it into "candidate count" would cost them that. A field name used as
+# if it were English is the defect; a citation is not.
+_LEGACY_PROSE: tuple[tuple[str, str], ...] = (
+    ("fails require_fresh_price on both screens",
+     "fails the fresh price condition on both screens"),
+    ("it IS pm_capture_share, applied per symbol",
+     "it IS the capture share, applied per symbol"),
+    ("capture_correction in this packet names",
+     "the capture correction block of this packet names"),
+    ("return_stdev_20d is null", "the 20 day return standard deviation is null"),
+    ("carry a move_sigma", "carry a move sigma"),
+)
+
+# The leg and ranked list names, which an older packet spells with underscores
+# in the Notable movers sentences. Longest first, so the list names are taken
+# before the leg names they contain.
+_LEGACY_NAMES: tuple[str, ...] = (
+    "prior_session_by_market_cap", "prior_session_by_sigma",
+    "two_session_by_move", "premarket_by_sigma",
+    "prior_session", "two_session",
+)
+
+
+def _in_readers_words(text: str) -> str:
+    """One packet sentence with any pre 2026-09-03 field name taken out.
+
+    NAMED REPLACEMENTS, never a blanket underscore strip. The same sentences
+    cite CRITERIA keys on purpose, and "the rank cap of 12 in CRITERIA.md
+    [Scan] candidate_count" points a reader at a line they can search for.
+    """
+    for was, now in _LEGACY_PROSE:
+        text = text.replace(was, now)
+    for name in _LEGACY_NAMES:
+        text = text.replace(name, glossary.in_words(name))
+    return text
+
+
+def _catalyst_sentences(candidate: dict[str, Any], shown: int) -> list[str]:
+    """The catalyst state of one candidate, in English rather than in fields.
+
+    THREE THINGS, NAMED AS A READER WOULD ASK THEM. What kind of news this is
+    (catalyst_class), whether the feed carried any story tagged to the ticker
+    inside the window (catalyst_found, which is a THREE STATE and whose None
+    means the feed was never read at all), and how the class was arrived at
+    (catalyst_why). Until 2026-09-03 all three were printed under their field
+    names, "Catalyst class earnings, catalyst_found true. catalyst_why: on the
+    earnings calendar in the window", which is the packet's schema standing in
+    for a sentence.
+
+    THE COUNT COMES FROM news_in_window, WHICH IS WHERE IT LIVES. The old line
+    read headlines_in_window off the candidate, and that key is inside
+    trap_basis rather than on the candidate, so it was None on every candidate
+    ever written and the sentence saying how many stories were held back has
+    never once printed. CPB carried 5 headlines on 2026-09-03 and the report
+    showed 3 without saying so.
+
+    The class is rendered through glossary.catalyst_class, so m_and_a reaches
+    the page as merger or acquisition.
+    """
+    klass = candidate.get("catalyst_class")
+    lines = [f"Catalyst: {glossary.catalyst_class(klass) if klass else 'not classified'}."]
+    found = candidate.get("catalyst_found")
+    carried = candidate.get("news_in_window")
+    if found is None:
+        lines.append("News carrying this ticker in the window: not checked, "
+                     "because the news feed was never read this run.")
+    elif not found:
+        lines.append("News carrying this ticker in the window: none.")
+    elif isinstance(carried, int) and carried > shown:
+        lines.append(f"News carrying this ticker in the window: {carried} "
+                     f"stories, the {shown} newest shown below.")
+    elif isinstance(carried, int):
+        lines.append(f"News carrying this ticker in the window: {carried} "
+                     f"{'story' if carried == 1 else 'stories'}.")
+    else:
+        lines.append("News carrying this ticker in the window: found.")
+    why = _cell(candidate.get("catalyst_why"))
+    if why:
+        lines.append(f"How the class was decided: {why}"
+                     + ("" if why.endswith(".") else "."))
+    else:
+        lines.append("How the class was decided: not recorded.")
+    return lines
+
+
 # The two ways the narrative can fail to reach the page, worded as the
 # disclaimer says them. They are different failures and the reader has to be
 # able to tell them apart: unavailable means the CLI never answered, withheld
@@ -942,36 +1035,52 @@ def fallback_report(
     add("## Premarket gappers")
     add("")
     if slots:
-        # One block per candidate, the template's shape: the figures, the
-        # catalyst state in the packet's own words, every headline with its
-        # publisher and time, and under each headline the one sentence prompt
-        # rule 17 asks a model for, which is the slot. The evidence_missing
-        # line closes the block where the packet carries one.
+        # One block per candidate: the figures, the catalyst state, every
+        # headline with its publisher and time, and under each headline the
+        # one sentence prompt rule 17 asks a model for, which is the slot. The
+        # evidence_missing line closes the block where the packet carries one.
+        #
+        # EVERY PART IS ITS OWN PARAGRAPH. Markdown joins consecutive lines
+        # into one paragraph, so until 2026-09-03 a name with three headlines
+        # rendered as a single unbroken block of about a hundred and forty
+        # words: the figures, the catalyst, three quoted headlines and three
+        # explanations with nothing between them. The blank lines here are the
+        # whole of what splits them on the page, and the section is the one a
+        # reader actually reads rather than scans.
+        #
+        # AND IT IS WRITTEN IN ENGLISH, NOT IN FIELD NAMES. It used to print
+        # "catalyst_found true. catalyst_why: ...", which asks a reader to
+        # know the packet's schema before the sentence means anything.
         for c in candidates:
             quote = c.get("quote") or {}
-            found = c.get("catalyst_found")
-            state = ("catalyst_found true" if found else
-                     "catalyst_found false, a skip" if found is False else
-                     "catalyst status unknown, the news feed was never checked")
             add(f"**{_bare(c['symbol'])}, {_cell(quote.get('name')) or 'name not carried'}.** "
                 f"Gap {_f(c.get('gap_pct'))} percent, last {_f(c.get('price'))}, prior "
-                f"close {_f(c.get('prior_close'))}, market cap {_cap(quote.get('marketCap'))}. "
-                f"Catalyst class {c.get('catalyst_class') or 'null'}, {state}. "
-                f"catalyst_why: {_cell(c.get('catalyst_why')) or 'not recorded'}.")
-            heads = c.get("headlines") or []
-            in_window = c.get("headlines_in_window")
-            if heads:
-                if isinstance(in_window, int) and in_window > len(heads):
-                    add(f"{in_window} headlines in the window, the {len(heads)} newest shown.")
-                for number, head in enumerate(heads, start=1):
-                    when = _cell(head.get("published_at")) or "time not carried"
-                    add(f'Headline: "{_cell(head.get("title"))}" '
-                        f"({_cell(head.get('publisher')) or 'publisher unknown'}, {when})")
-                    add(slot(SLOT_HEADLINE, _bare(c["symbol"]), str(number)))
+                f"close {_f(c.get('prior_close'))}, market cap {_cap(quote.get('marketCap'))}.")
+            add("")
+            # WHAT IS NOT KNOWN COMES WITH THE FIGURES, not after the last
+            # headline. It is a caveat about the numbers on the line above, so
+            # this is where it reads; it also has to be here to SURVIVE. On
+            # the first run of the split layout it closed the block, alone
+            # between a filled slot and the next candidate's name, and the
+            # model dropped it for MEI on one attempt and for NTSK on the
+            # other, costing the narrative both times. A fixed paragraph
+            # inside a run of fixed paragraphs is copied; one marooned after a
+            # slot is read as part of what the model was writing.
             missing_text = (c.get("evidence_missing") or {}).get("text")
             if missing_text:
                 add(str(missing_text))
+                add("")
+            heads = c.get("headlines") or []
+            for sentence in _catalyst_sentences(c, len(heads)):
+                add(sentence)
             add("")
+            for number, head in enumerate(heads, start=1):
+                when = _cell(head.get("published_at")) or "time not carried"
+                add(f'Headline: "{_cell(head.get("title"))}" '
+                    f"({_cell(head.get('publisher')) or 'publisher unknown'}, {when})")
+                add("")
+                add(slot(SLOT_HEADLINE, _bare(c["symbol"]), str(number)))
+                add("")
     else:
         add("| Ticker | Name | Gap % | Price | Prior close | Mkt cap | Catalyst | Top headline |")
         add("|---|---|---|---|---|---|---|---|")
@@ -1107,7 +1216,10 @@ def fallback_report(
         # and the reader cannot get the second from the first without a clock
         # the report does not print. Only the premarket leg carries either.
         age = row.get("price_age_seconds")
-        add(f"| {_bare(row.get('symbol') or '')} | {_cell(row.get('leg'))} "
+        # The leg in words. It is a packet key, premarket or prior_session or
+        # two_session, and the Leg column printed the underscore straight to
+        # the reader until 2026-09-03.
+        add(f"| {_bare(row.get('symbol') or '')} | {_cell(glossary.in_words(row.get('leg')))} "
             f"| {_cell(row.get('as_of_session'))} | {_f(row.get('move_pct'))} "
             f"| {_f(row.get('move_sigma'), 2)} | {_cap(row.get('market_cap'))} "
             f"| {_cell(catalyst)} "
@@ -1146,7 +1258,7 @@ def fallback_report(
     add("")
     for leg, report in sorted((notable.get("legs") or {}).items()):
         if not report.get("available") and report.get("reason"):
-            add(f"The {leg} leg was lost: {report['reason']}")
+            add(f"The {glossary.in_words(leg)} leg was lost: {report['reason']}")
     # EVERY list, not only the short ones, and the sentence comes from the
     # packet rather than being assembled here. A list that returned nothing has
     # to say which nothing it is and how many it considered, and until
@@ -1156,14 +1268,20 @@ def fallback_report(
     for name, report in sorted((notable.get("list_reports") or {}).items()):
         text = (report or {}).get("text")
         if text:
-            add(str(text))
+            # Through the replay shim as well as at the source.
+            # scan._list_report_text builds this sentence in words since
+            # 2026-09-03, and a packet written before that carries the list
+            # key and the leg key with their underscores; this section is
+            # rendered from whatever packet it is handed, an old one being
+            # replayed included.
+            add(_in_readers_words(str(text)))
     examined = notable.get("universe_examined")
     counted = f"{examined:,}" if isinstance(examined, int) else "an unknown number of"
     add(f"The section examined {counted} universe symbols.")
     for leg, report in sorted((notable.get("legs") or {}).items()):
         looked = report.get("examined")
         looked_text = f"{looked:,}" if isinstance(looked, int) else "an unknown number"
-        add(f"The {leg} leg examined {looked_text} and selected "
+        add(f"The {glossary.in_words(leg)} leg examined {looked_text} and selected "
             f"{report.get('selected', 0)}.")
     add("")
     add("## Market trends")
@@ -1239,8 +1357,8 @@ def fallback_report(
             f"{check.get('within_one_percent')} within one percent{extra}"
             f"{'. STALE, ' + str(check.get('age_days')) + ' days old' if check.get('stale') else ''}"
             ". That gap is the INPUT to the premarket RVOL figures above, not "
-            "an error inside them: it is divided out per symbol as "
-            "pm_capture_share, so the numerator above is an estimate of "
+            "an error inside them: it is divided out per symbol as that "
+            "symbol's capture share, so the numerator above is an estimate of "
             "consolidated volume. What survives is the share's session to "
             "session dispersion, about 1.5 times against a level of about "
             "nine. The vendor side of the check reads: "
@@ -1468,8 +1586,9 @@ def fallback_report(
             f"its news, and those gaps are below the {min_gap:g} percent the "
             "question is asked above, or were never computed.")
     if unweighable:
-        add(f"Trap undecided for {', '.join(unweighable)}: trap_why on those "
-            "rows carries the reason, and undecided is not a verdict of safe.")
+        add(f"Trap undecided for {', '.join(unweighable)}: the packet carries "
+            "the reason on each of those rows, and undecided is not a verdict "
+            "of safe.")
 
     # The evidence roll's per symbol reasons, where the packet carries them:
     # the thin baselines and the thin bands, one line per symbol, because the
@@ -1507,7 +1626,8 @@ def fallback_report(
         for gap in gaps:
             # The scan writes exchange qualified symbols into its gap prose;
             # the report body uses bare tickers, rule 8.
-            add("- " + _EXCHANGE_SUFFIX_RE.sub(lambda m: m.group(1), _cell(gap)))
+            add("- " + _in_readers_words(
+                _EXCHANGE_SUFFIX_RE.sub(lambda m: m.group(1), _cell(gap))))
     else:
         add("Evidence gaps recorded by the scan: 0.")
     return open_lists_with_a_blank_line("\n".join(lines)) + "\n"

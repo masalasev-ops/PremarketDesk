@@ -237,20 +237,31 @@ published on 2026-08-18.}
 
 ## Premarket gappers
 
-{One block per candidate, ordered as in the packet. A block carries the
-bare ticker, company name, gap percent, last price, prior close and market
-cap. Then the
-catalyst story: the full headline titles from the packet with publisher and
-published time, the catalyst class Python assigned, and catalyst_why. A
-candidate with catalyst_found false is written as moving on no found catalyst,
-a skip per the rules. Never summarize a headline into something it does not
-say, and never add a headline the packet does not carry.
+{One block per candidate, ordered as in the packet. THE PARTS OF A BLOCK ARE
+ONE PARAGRAPH EACH, separated by a blank line. Markdown joins consecutive
+lines, and until 2026-09-03 a name with three headlines rendered as one
+unbroken block of about a hundred and forty words. The order is:
 
-THEN, WHERE THE CANDIDATE'S `evidence_missing.text` IS NOT EMPTY, QUOTE IT WORD
-FOR WORD as the last line of that block. It names the evidence that would have
-changed the reading of this name and was not available. Where it is empty,
-write nothing: a line saying nothing is missing, printed against seven of
-twelve names, is what teaches a reader to skip the five that carry something.
+1. The bare ticker and company name in bold, then gap percent, last price,
+   prior close and market cap.
+2. Where the candidate's `evidence_missing.text` IS NOT EMPTY, that sentence
+   WORD FOR WORD. It names the evidence that would have changed the reading of
+   this name and was not available, so it belongs beside the figures it
+   qualifies. Where it is empty, write nothing: a line saying nothing is
+   missing, printed against seven of twelve names, is what teaches a reader to
+   skip the five that carry something.
+3. The catalyst, as three statements and NOT AS FIELD NAMES. The class
+   (`catalyst_class`, spelled as a reader says it: m_and_a is a merger or
+   acquisition); what the news window carried (`catalyst_found` with
+   `news_in_window`, and its null is a third state, the feed was never read,
+   never a clean no); and how the class was decided (`catalyst_why`). A
+   candidate whose window carried nothing is a name moving on no found
+   catalyst, a skip per the rules. Printing the field names themselves asks a
+   reader to know packet.json before the sentence carries anything.
+4. Each headline in turn: the full title from the packet with its publisher
+   and published time as one paragraph, then the sentence about it as the
+   next. Never summarize a headline into something it does not say, and never
+   add a headline the packet does not carry.
 
 The disclaimer already names these as SETS, "3 of 12 carry a null RVOL", and a
 set tells a reader that somebody is short of evidence without telling them

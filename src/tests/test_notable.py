@@ -1315,7 +1315,11 @@ def claim_an_empty_list_says_which_empty_it_is(failures: list[str]) -> None:
                             f"{report.get('considered')!r} on a leg that "
                             "measured names. An empty list with no denominator "
                             "cannot be read.")
-        if "return_stdev_20d" not in str(report.get("reason") or ""):
+        # The column, named as a reader meets it. This asked for the literal
+        # return_stdev_20d until 2026-09-03, which is how a database column
+        # name came to be quoted into the report; what the claim is for is
+        # that the reason names WHICH quantity is null, and it still does.
+        if "20 day return standard deviation" not in str(report.get("reason") or ""):
             failures.append(f"the {name} list does not name the null column in "
                             f"its reason: {report.get('reason')!r}")
         leg = (block["legs"] or {}).get(report.get("leg")) or {}
@@ -2384,6 +2388,43 @@ def claim_the_market_cap_column_says_when_it_was_measured(
           "and the stamp is one fact about the file rather than a per row one")
 
 
+def claim_a_leg_name_reaches_the_reader_in_words(failures: list[str]) -> None:
+    """prior_session is a packet key. The page says prior session.
+
+    The leg names are snake case because Python indexes on them, and three
+    surfaces printed them straight to a reader until 2026-09-03: the Leg
+    column of the table, the section's own accounting ("The two_session leg
+    examined 2,750 and selected 5") and every ranked list sentence ("The
+    prior_session_by_market_cap list is ranked ... on the prior_session leg").
+    A report is not a dump of the packet.
+
+    The words themselves stay the packet's own, so a reader who does open
+    packet.json still finds the leg the sentence came from. Only the
+    underscore goes, through glossary.in_words, which is the one place that
+    happens.
+    """
+    _write_closes()
+    block, _packet, _rows = _run()
+    text = analyst.fallback_report(
+        {"session_date": SESSION, "candidates": [], "notable_movers": block},
+        "the narrative pass was stubbed out by this claim")
+    for leaked in ("prior_session", "two_session"):
+        line = next((r for r in text.splitlines() if leaked in r), None)
+        if line is not None:
+            failures.append(f"the report prints the packet key {leaked!r} at a "
+                            f"reader: {line.strip()[:120]!r}")
+    wanted = ["| prior session |"]
+    for leg in ("prior session", "two session", "premarket"):
+        if leg.replace(" ", "_") in (block.get("legs") or {}):
+            wanted.append(f"The {leg} leg examined")
+    for phrase in wanted:
+        if phrase not in text:
+            failures.append(f"the report never says {phrase!r}, so the leg "
+                            "lost its name rather than its underscore")
+    print(f"  leg in words {len(wanted)} statement(s) about a leg reach the "
+          "reader as words, and no packet key does")
+
+
 def claim_a_name_off_the_watchlist_is_marked_and_not_hidden(
         failures: list[str]) -> None:
     """A watchlist name appears here anyway, and the row says so.
@@ -2456,6 +2497,7 @@ CLAIMS = (
     claim_the_market_cap_column_says_when_it_was_measured,
     claim_the_sections_own_words_pass_the_quantifier_guard,
     claim_a_row_says_what_the_instrument_is_or_why_it_cannot,
+    claim_a_leg_name_reaches_the_reader_in_words,
 )
 
 

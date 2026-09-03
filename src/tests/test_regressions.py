@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and four claims, a count read off
+and the two pages. It now carries two hundred and five claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -3024,6 +3024,81 @@ def claim_a_refusal_budget_is_per_incident(failures: list[str]) -> None:
         failures.append(f"the fixture never reached a second refusal: {connects}")
     print("  refusals     a refusal budget is spent per incident and a good "
           "connection resets it")
+
+
+def claim_a_gapper_block_is_split_and_says_no_field_names(
+        failures: list[str]) -> None:
+    """The section a reader actually reads, in paragraphs and in English.
+
+    TWO DEFECTS, ONE BLOCK, both reported off the rendered page on 2026-09-03.
+
+    IT WAS ONE PARAGRAPH. Markdown joins consecutive lines, so the figures,
+    the catalyst, three quoted headlines and the three sentences under them
+    came out as a single unbroken block of about a hundred and forty words.
+    Every part of the block now stands as its own paragraph, and the check is
+    that a blank line separates the quoted headline from the sentence about
+    it: that pair is where the wall was densest.
+
+    IT SPOKE IN FIELD NAMES. "Catalyst class earnings, catalyst_found true.
+    catalyst_why: on the earnings calendar in the window" asks a reader to
+    know packet.json before the sentence carries anything. The three facts
+    are still all published, under the questions a reader would ask.
+
+    AND THE HELD BACK COUNT PRINTS AT LAST. The old line read
+    headlines_in_window off the candidate; that key lives inside trap_basis,
+    so it was None on every candidate ever written and the sentence saying how
+    many stories were kept back has never once appeared. CPB carried 5 and the
+    report showed 3 in silence.
+    """
+    from morning import analyst
+
+    packet = _slots_packet()
+    arx = packet["candidates"][0]
+    arx["news_in_window"] = 5
+    bbb = packet["candidates"][1]
+    bbb["catalyst_found"] = None
+    bbb["catalyst_class"] = "m_and_a"
+    bbb["catalyst_why"] = "the news feed was never read"
+    skeleton = analyst.render_skeleton(packet)
+    lines = skeleton.splitlines()
+
+    for leaked in ("catalyst_found", "catalyst_why", "catalyst_class",
+                   "m_and_a", "news_in_window"):
+        hit = next((line for line in lines if leaked in line), None)
+        if hit is not None:
+            failures.append(f"the gappers block prints the field name "
+                            f"{leaked!r} at a reader: {hit.strip()[:120]!r}")
+
+    for wanted in (
+            "Catalyst: earnings.",
+            "News carrying this ticker in the window: 5 stories, the 2 newest "
+            "shown below.",
+            "How the class was decided: tagged EARNINGS.",
+            "Catalyst: merger or acquisition.",
+            "News carrying this ticker in the window: not checked, because the "
+            "news feed was never read this run."):
+        if wanted not in skeleton:
+            failures.append(f"the gappers block never says {wanted!r}")
+
+    # The pair that was densest: the quoted headline and the sentence under
+    # it. A blank line between them is the whole of what makes two paragraphs.
+    quoted = [index for index, line in enumerate(lines)
+              if line.startswith('Headline: "')]
+    if not quoted:
+        failures.append("the skeleton quoted no headline, so this claim "
+                        "checked nothing")
+    for index in quoted:
+        before = lines[index - 1] if index else ""
+        after = lines[index + 1] if index + 1 < len(lines) else ""
+        if before.strip():
+            failures.append(f"a quoted headline runs on from the line above "
+                            f"it: {before.strip()[:80]!r}")
+        if after.strip():
+            failures.append(f"a quoted headline runs into the line below it, "
+                            f"so the two are one paragraph: {after.strip()[:80]!r}")
+    print(f"  gapper block {len(quoted)} quoted headline(s) stand as their own "
+          "paragraph, the catalyst is three questions in English, and the "
+          "held back count prints")
 
 
 def claim_seven_tasks_carry_every_trigger(failures: list[str]) -> None:
@@ -16522,6 +16597,8 @@ def main() -> int:
     run_claim(failures, claim_the_stats_sidecar_carries_the_handover, failures)
     run_claim(failures, claim_a_refusal_budget_is_per_incident, failures)
     run_claim(failures, claim_seven_tasks_carry_every_trigger, failures)
+    run_claim(failures, claim_a_gapper_block_is_split_and_says_no_field_names,
+              failures)
 
     if failures:
         for failure in failures:

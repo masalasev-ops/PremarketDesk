@@ -54,6 +54,43 @@ def bare_ticker(symbol: object) -> str:
     return str(symbol or "").split(".")[0]
 
 
+# The classes CRITERIA [Score catalyst class] names, in the words a reader
+# uses. Only the ones an underscore or an acronym would mangle are listed; the
+# rest fall through to in_words, which is why "earnings" and "guidance" are
+# absent rather than repeated here.
+_CLASS_WORDS: dict[str, str] = {
+    "m_and_a": "merger or acquisition",
+    "fda": "FDA decision",
+    "analyst_action": "analyst action",
+    "index_inclusion": "index inclusion",
+}
+
+
+def in_words(value: object) -> str:
+    """An internal name as reader words: prior_session becomes prior session.
+
+    THE ONE PLACE an underscore is taken out of a name a reader sees. Legs,
+    lists and catalyst classes are written in snake case because Python reads
+    them, and until 2026-09-03 several reached the page that way: the Notable
+    movers table printed prior_session in its Leg column, the section's own
+    accounting printed "The two_session leg examined", and a catalyst class
+    printed as analyst_action. A report is not a dump of the packet, and a
+    reader who has never opened packet.json cannot be expected to translate.
+
+    ONLY THE UNDERSCORES GO. The words themselves stay the packet's own, so a
+    reader who does open the packet still finds the field the sentence came
+    from. A value with no underscore is returned unchanged, and so is an empty
+    one, which is why this is safe to call on anything a cell might hold.
+    """
+    return str(value or "").replace("_", " ")
+
+
+def catalyst_class(value: object) -> str:
+    """One catalyst class in reader words, m_and_a as merger or acquisition."""
+    text = str(value or "").strip()
+    return _CLASS_WORDS.get(text.lower(), in_words(text))
+
+
 # term -> one or two sentences a reader with no finance background can follow.
 # Ordered by how early a reader meets the term, not alphabetically, because
 # the glossary is read top to bottom the first time and searched after that.

@@ -15,6 +15,71 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-03, fifty second: the gappers section is split into paragraphs, and the report stops speaking in field names
+
+The owner read the 08:45 report of 2026-09-03 and said two things about the
+Premarket gappers section: it is too dense and has to be split, and the field
+names in it are not something a report should show. Both are right and both
+were ours.
+
+IT WAS ONE PARAGRAPH. Markdown joins consecutive lines, and the block wrote
+the figures, the catalyst, three quoted headlines and the three sentences
+under them as consecutive lines. CPB came out as a hundred and forty word
+wall. Every part of a block is now its own paragraph, and the shape is in
+REPORT_TEMPLATE.md as the section's spec rather than as an accident of how
+`add()` was called.
+
+IT SPOKE IN FIELD NAMES. "Catalyst class earnings, catalyst_found true.
+catalyst_why: on the earnings calendar in the window" asks a reader to know
+packet.json before the sentence carries anything. The same three facts are
+now three questions in English: what kind of news this is, what the news
+window carried, and how the class was decided. `catalyst_found` null still
+reads as a third state, the feed was never read, because that is what it is.
+
+AND THE SAME DEFECT WAS EVERYWHERE ELSE THE PACKET IS QUOTED. The Notable
+movers table printed `prior_session` in its Leg column; the section's own
+accounting printed "The two_session leg examined"; every ranked list sentence
+printed "The prior_session_by_market_cap list ... on the prior_session leg";
+a lost leg reason named `third_session_available`; an uncomputable list named
+`move_sigma` and `return_stdev_20d`; the evidence gaps named
+`require_fresh_price`, `pm_capture_share` and `capture_correction`; and the
+midday pass named `entry_ref`, `stop_ref`, `entry_ref_true`, `stop_ref_true`,
+`fill_plausible` and `gapped_through`. All of them are fixed at the source.
+`glossary.in_words` is the one place an underscore comes out of a name a
+reader sees, and `glossary.catalyst_class` spells m_and_a as a merger or
+acquisition.
+
+WHAT IS KEPT is a CRITERIA citation. "The rank cap of 12 in CRITERIA.md
+[Scan] candidate_count" names a line a reader can search for, and turning it
+into "candidate count" would cost them that. A field name used as if it were
+English is the defect; a citation is not. That is why the replay shim in
+analyst.py is a named list of sentences rather than a blanket underscore
+strip: today's packet was written this morning by the old code and is
+rendered by the new.
+
+THE HELD BACK COUNT PRINTS FOR THE FIRST TIME. The old block read
+`headlines_in_window` off the candidate to say how many stories the window
+carried; that key lives inside `trap_basis`, so it was None on every
+candidate ever written and the sentence never once appeared. CPB carried 5
+headlines on 2026-09-03 and the report showed 3 in silence. It reads
+`news_in_window` now, which is where the number is.
+
+ONE THING THE SPLIT COST, AND WHAT IT TAUGHT. On the first regenerated run
+the model dropped the "What is not known about it" line for MEI on one
+attempt and for NTSK on the other, and the narrative was withheld twice: that
+line had become a lone fixed paragraph between a filled slot and the next
+candidate's name, and a model copying a document loses one of those. It is
+now the second paragraph of the block, beside the figures it qualifies, where
+it sits inside a run of fixed text. Rule 2 of prompt_slots.md says outright
+that a blank line is a character and that a paragraph it did not write comes
+back in its place. The regeneration then passed on attempt 1.
+
+The report of 2026-09-03 was regenerated from its own packet on the new code,
+status ok, containment 54 ticker claims across 5 columns. The 12:00 midday
+report of the same day still carries the old wording in its levels footnote,
+because that sentence is in the midday packet written at 12:01; from
+2026-09-04 it is written in words.
+
 ## 2026-09-02, fifty first: seven tasks carry every trigger, and the .bat reads the clock
 
 The owner said eleven scheduled tasks had become a nightmare to manage and

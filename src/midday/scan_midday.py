@@ -308,9 +308,13 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
         "stop_state_reason": None,
         "decided_inside_the_open_tolerance": False,
         "open_tolerance_reason": None,
-        "levels_are": ("entry_ref and stop_ref as the morning published them, "
-                       "not the entry_ref_true and stop_ref_true the night "
-                       "corrects them to. See CRITERIA [Midday]."),
+        # In words, not in field names. This sentence is quoted into the
+        # midday report and a reader has no reason to know the packet's
+        # schema; the two pairs are named by what they are instead. See
+        # CHANGELOG 2026-09-03 second.
+        "levels_are": ("the entry and stop as the morning published them, not "
+                       "the corrected entry and stop the night measures from "
+                       "the full consolidated tape. See CRITERIA [Midday]."),
     }
     # Three states, and until 2026-08-31 this was the one null in the packet
     # with no reason beside it. A reader could not tell a name the vendor
@@ -379,9 +383,9 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
             f"the open was {margin:+.2f} percent from the entry, inside the "
             f"{OPEN_TOLERANCE_PCT:g} percent tolerance in CRITERIA [Midday] "
             "open_tolerance_pct. The open read here is the first consolidated "
-            "print and not the opening auction, so this row could "
-            f"read {TRIGGERED} rather than {GAPPED_THROUGH} against the "
-            "official open, or the reverse")
+            "print and not the opening auction, so this row could read "
+            "triggered rather than gapped through against the official open, "
+            "or the reverse")
 
     fill = out["fill"]
     out["now_vs_fill_pct"] = _pct(last, fill)
@@ -1020,7 +1024,8 @@ def build_packet(day: str | None = None,
                 "before or after the entry. Extending CRITERIA [Collector] "
                 "stop_time past the open is what would answer it"),
             "not_checked": (
-                "CRITERIA [Paper]'s SKIP condition, fill_plausible, is computed "
+                "The SKIP condition in CRITERIA [Paper], whether the fill was "
+                "plausible at all, is computed "
                 "by the night from Alpaca band volume and does not exist at "
                 "midday. These grades do not ask whether the level was "
                 "transactable"),

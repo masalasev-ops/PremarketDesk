@@ -1110,8 +1110,8 @@ def flag_stale_prices(
         packet.gap(
             f"{len(stale)} candidate(s) carry a STALE premarket price, collected "
             "but older than [Price age] allows at the scan clock. Each is "
-            "published with its last print and its age, and fails "
-            "require_fresh_price on both screens rather than being dropped: "
+            "published with its last print and its age, and fails the fresh "
+            "price condition on both screens rather than being dropped: "
             + ", ".join(f"{d['symbol']} ({d['price_age_seconds']:,.0f}s)"
                         for d in stale)
         )
@@ -1620,8 +1620,8 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
     direction = check.get("direction") or "unknown"
     if direction in ("under", "over"):
         consequence = (
-            "That gap is what the capture correction divides out: it IS "
-            "pm_capture_share, applied per symbol, so it is the input to every "
+            "That gap is what the capture correction divides out: it IS the "
+            "capture share, applied per symbol, so it is the input to every "
             "RVOL and float rotation here rather than an error left inside "
             "them. What survives is the share's session to session dispersion, "
             "about 1.5 times against a level of about nine, so a ratio here is "
@@ -1736,8 +1736,8 @@ def rvol_only_day_failures(candidates: list[dict[str, Any]], packet: Packet) -> 
             + ", ".join(measured)
             + ". Their RVOL already carries the capture correction, so these "
             "are names the corrected numerator still could not lift over the "
-            "floor, NOT names the feed shortfall cost. capture_correction in "
-            "this packet names the ones the correction did carry."
+            "floor, NOT names the feed shortfall cost. The capture correction "
+            "block of this packet names the ones the correction did carry."
         )
     if unmeasured:
         packet.gap(
@@ -4523,18 +4523,24 @@ def move_sigma(move_pct: float | None,
         # and the wording says so.
         covered = _as_float(stats_row.get("sessions_used"))
         if covered is None:
-            return None, ("return_stdev_20d is null and this row records no "
-                          "session count, so it cannot say whether the column "
-                          "was never computed or the history is too short")
+            # THE COLUMN IN WORDS. These three reasons are quoted into the
+            # report through the ranked lists, and a reader met the database
+            # column name return_stdev_20d in the middle of them until
+            # 2026-09-03. What it holds is a 20 day standard deviation of
+            # daily returns, which is what it is called here.
+            return None, ("the 20 day return standard deviation is null and "
+                          "this row records no session count, so it cannot say "
+                          "whether the column was never computed or the "
+                          "history is too short")
         if covered < NOTABLE_MIN_SESSIONS_FOR_SIGMA:
-            return None, (f"return_stdev_20d is null and this row covers "
-                          f"{covered:,.0f} sessions, fewer than the "
-                          f"{NOTABLE_MIN_SESSIONS_FOR_SIGMA} the denominator "
-                          "needs")
-        return None, (f"return_stdev_20d is null on a row covering "
-                      f"{covered:,.0f} sessions, which is enough for it, so the "
-                      "column was written before it was computed. The Sunday "
-                      "21:00 universe rebuild fills it.")
+            return None, (f"the 20 day return standard deviation is null and "
+                          f"this row covers {covered:,.0f} sessions, fewer "
+                          f"than the {NOTABLE_MIN_SESSIONS_FOR_SIGMA} the "
+                          "denominator needs")
+        return None, (f"the 20 day return standard deviation is null on a row "
+                      f"covering {covered:,.0f} sessions, which is enough for "
+                      "it, so the column was written before it was computed. "
+                      "The Sunday 21:00 universe rebuild fills it.")
     if stdev < NOTABLE_MIN_RETURN_STDEV_PCT:
         return None, (f"daily return stdev {stdev:.4f} percent is below "
                       f"{NOTABLE_MIN_RETURN_STDEV_PCT} in CRITERIA.md [Notable] "
@@ -4930,9 +4936,14 @@ def _list_report_text(name: str, report: dict[str, Any]) -> str:
     the same shape as a list that could not be computed, so a reader comparing
     four lines is comparing four of the same thing.
     """
-    text = (f"The {name} list is {report['state']}: {report['selected']} "
-            f"selected of {report['qualified']} qualified of "
-            f"{report['considered']} considered on the {report['leg']} leg.")
+    # BOTH NAMES IN WORDS. The list key and the leg key are snake case because
+    # Python indexes on them, and this sentence is quoted into the report
+    # verbatim: it read "The prior_session_by_market_cap list is ranked ... on
+    # the prior_session leg" in front of a reader until 2026-09-03.
+    text = (f"The {glossary.in_words(name)} list is {report['state']}: "
+            f"{report['selected']} selected of {report['qualified']} qualified "
+            f"of {report['considered']} considered on the "
+            f"{glossary.in_words(report['leg'])} leg.")
     reason = str(report.get("reason") or "").strip()
     if reason:
         said = f"{reason[:1].upper()}{reason[1:]}"
@@ -5278,7 +5289,8 @@ def notable_movers(
                 reason = (
                     f"the sidecar asked the vendor for {sessions.get(key)} as "
                     f"{key} and the rows came back stamped {mismatched[key]}, so "
-                    f"{key} was refused on every row. The {leg} leg measures from "
+                    f"{key} was refused on every row. The "
+                    f"{glossary.in_words(leg)} leg measures from "
                     "it, so this leg has no far end rather than no movers. "
                     "Publishing it would date one session's close with another "
                     "session's label, which is what the leg labels exist to "
@@ -5287,12 +5299,13 @@ def notable_movers(
                 packet.gap(f"notable movers: {reason}")
             elif leg == "two_session" and never_bought:
                 reason = ("the third session was never bought: discover's third "
-                          "bulk call did not answer, so third_session_available "
-                          "is false and c3 is null on every row. This leg has no "
-                          "baseline rather than no movers.")
+                          "bulk call did not answer, so the third session is "
+                          "marked unavailable and c3 is null on every row. This "
+                          "leg has no baseline rather than no movers.")
                 present = False
             else:
-                reason = f"0 rows carried both of the closes the {leg} leg needs"
+                reason = ("0 rows carried both of the closes the "
+                          f"{glossary.in_words(leg)} leg needs")
             block["legs"][leg] = _leg_report(
                 bool(legs[leg]), reason, per_leg.get(leg), 0, present)
 
@@ -5455,39 +5468,45 @@ def notable_movers(
         qualified = len(populations[name])
         selected = len(picks[name])
         key = _LIST_RANKING_KEY[name]
+        # The leg and the ranking key are dict keys in this function and words
+        # in every sentence it writes. The report quotes these reasons
+        # verbatim, so a reader met "0 of 2753 on the prior_session leg carry
+        # move_sigma" until 2026-09-03. See glossary.in_words.
+        leg_words = glossary.in_words(leg)
+        key_words = glossary.in_words(key)
 
         if not leg_report.get("available"):
-            lost = leg_report.get("reason") or f"the {leg} leg is unavailable"
+            lost = leg_report.get("reason") or f"the {leg_words} leg is unavailable"
             if leg_report.get("input_present"):
                 state = LIST_NOTHING_TO_RANK
-                reason = (f"the {leg} leg's input was read and carried 0 rows "
-                          f"this list could rank: {lost}")
+                reason = (f"the {leg_words} leg's input was read and carried 0 "
+                          f"rows this list could rank: {lost}")
             else:
                 state = LIST_UNCOMPUTABLE
-                reason = (f"the {leg} leg's input is missing, so this list "
-                          f"could not be computed at all: {lost}")
+                reason = (f"the {leg_words} leg's input is missing, so this "
+                          f"list could not be computed at all: {lost}")
         elif not cleared[name]:
             # Reachable only for a list that HAS a floor, which is list 2
             # alone. The other three rank whatever the leg measured, so an
             # empty cleared set means an empty leg, and the branch above has
             # already taken it.
             state = LIST_BELOW_THE_FLOOR
-            reason = (f"0 of {considered} on the {leg} leg cleared this list's "
-                      f"floor, {_LIST_FLOOR_TEXT[name]}. The leg was measured "
-                      "and nothing in it reached that line.")
+            reason = (f"0 of {considered} on the {leg_words} leg cleared this "
+                      f"list's floor, {_LIST_FLOOR_TEXT[name]}. The leg was "
+                      "measured and nothing in it reached that line.")
         elif qualified == 0:
             state = LIST_UNCOMPUTABLE
-            reason = (f"0 of {considered} on the {leg} leg carry {key}, which "
-                      f"is the key this list ranks on, so it could not be "
-                      "computed.")
+            reason = (f"0 of {considered} on the {leg_words} leg carry "
+                      f"{key_words}, which is the key this list ranks on, so "
+                      "it could not be computed.")
             absence = _key_absence(name, legs[leg], block)
             if absence:
                 reason = f"{reason} {absence}"
         elif selected < NOTABLE_LIST_SIZE:
             state = LIST_RANKED
-            reason = (f"{qualified} of {considered} on the {leg} leg qualified "
-                      f"for this list, fewer than the {NOTABLE_LIST_SIZE} it "
-                      "holds")
+            reason = (f"{qualified} of {considered} on the {leg_words} leg "
+                      f"qualified for this list, fewer than the "
+                      f"{NOTABLE_LIST_SIZE} it holds")
         else:
             state = LIST_RANKED
             reason = None

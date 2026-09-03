@@ -363,7 +363,11 @@ def _list_reports() -> dict[str, dict[str, Any]]:
             "considered": 2753, "qualified": 41, "selected": 5},
         "prior_session_by_market_cap": {
             "state": scan.LIST_BELOW_THE_FLOOR,
-            "reason": ("0 of 2753 on the prior_session leg cleared this list's "
+            # THE REASONS ARE IN WORDS, as scan writes them since 2026-09-03:
+            # no leg name, no ranking key and no database column reaches a
+            # reader with its underscore on. A literal here that still carried
+            # one would be this fixture asserting the defect.
+            "reason": ("0 of 2753 on the prior session leg cleared this list's "
                        "floor, a move of at least 1 percent, which is "
                        "CRITERIA.md [Notable] min_abs_gap_pct, with a market cap "
                        "on file. The leg was measured and nothing in it reached "
@@ -371,15 +375,16 @@ def _list_reports() -> dict[str, dict[str, Any]]:
             "considered": 2753, "qualified": 0, "selected": 0},
         "two_session_by_move": {
             "state": scan.LIST_NOTHING_TO_RANK,
-            "reason": ("the two_session leg's input was read and carried 0 rows "
+            "reason": ("the two session leg's input was read and carried 0 rows "
                        "this list could rank: 0 rows carried both of the closes "
-                       "the two_session leg needs"),
+                       "the two session leg needs"),
             "considered": 0, "qualified": 0, "selected": 0},
         "premarket_by_sigma": {
             "state": scan.LIST_UNCOMPUTABLE,
-            "reason": ("0 of 39 on the premarket leg carry a move_sigma, which "
+            "reason": ("0 of 39 on the premarket leg carry a move sigma, which "
                        "is the key this list ranks on, so it could not be "
-                       "computed. 39 of 39 report: return_stdev_20d is null on a "
+                       "computed. 39 of 39 report: the 20 day return standard "
+                       "deviation is null on a "
                        "row covering 250 sessions, which is enough for it, so "
                        "the column was written before it was computed. The "
                        "Sunday 21:00 universe rebuild fills it."),
