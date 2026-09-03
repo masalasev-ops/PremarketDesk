@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and five claims, a count read off
+and the two pages. It now carries two hundred and six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -3071,8 +3071,7 @@ def claim_a_gapper_block_is_split_and_says_no_field_names(
 
     for wanted in (
             "Catalyst: earnings.",
-            "News carrying this ticker in the window: 5 stories, the 2 newest "
-            "shown below.",
+            "News carrying this ticker in the window: 5 stories, 2 shown below.",
             "How the class was decided: tagged EARNINGS.",
             "Catalyst: merger or acquisition.",
             "News carrying this ticker in the window: not checked, because the "
@@ -3099,6 +3098,100 @@ def claim_a_gapper_block_is_split_and_says_no_field_names(
     print(f"  gapper block {len(quoted)} quoted headline(s) stand as their own "
           "paragraph, the catalyst is three questions in English, and the "
           "held back count prints")
+
+
+def claim_a_headline_says_why_it_is_under_this_ticker(
+        failures: list[str]) -> None:
+    """A market wrap under a company name has to say what it is doing there.
+
+    On 2026-09-03 the report showed "Stock Market Today: Dow Rises As Treasury
+    Yields Fall; Broadcom Falls On Earnings" as one of SNOW's three headlines,
+    and the owner asked what it had to do with SNOW. Nothing. The news
+    provider filed it under SNOW, _scope_articles judged it not about the name
+    on its TREASURIES macro tag, and classify_catalyst refused to read its
+    tags. Three facts, all in the packet, none on the page.
+
+    TWO HALVES, AND THIS CLAIM HOLDS BOTH.
+
+    THE CUT. news_keep is a display cap and the cut used to be the three
+    NEWEST, so a wrap the feed happened to file under a ticker took a slot
+    from a story about the company. SNOW carried 30 articles and spent one of
+    its three on the wrap. The cut now takes the articles the scope test
+    passed first, so a company story cannot be displaced by one the class
+    already refused to read.
+
+    THE MARK. A set aside article still shows where there is room, because it
+    is what the feed returned and a name whose whole window is wraps has to be
+    able to say so. It carries the packet's own article_scope.why under it,
+    and an article the scope test passed carries nothing: a note printed
+    against the ordinary case is a note nobody reads on the case that matters.
+    """
+    from morning import analyst
+    from morning import scan
+
+    class Sink:
+        def gap(self, note: str) -> None:
+            pass
+
+    now = ettime.now_et()
+
+    def article(minutes: int, title: str, tags: list[str]) -> dict[str, Any]:
+        return {"date": (now - dt.timedelta(minutes=minutes)).isoformat(),
+                "title": title, "link": f"https://example.test/{minutes}",
+                "sentiment": {"polarity": 0.1}, "tags": list(tags),
+                "symbols": []}
+
+    # Three wraps, all newer than the one story about the company. Each is set
+    # aside on a macro tag, which is the SNOW case rather than the wide
+    # roundup case, so this exercises the branch that fired on the morning
+    # the owner read.
+    wraps = [article(10, "Stock Market Today: Dow Rises As Yields Fall",
+                     ["EARNINGS", "TREASURIES"]),
+             article(20, "Stocks slip as rates back up", ["RATES", "TECH"]),
+             article(30, "Inflation print steadies the tape", ["INFLATION"])]
+    own = article(90, "Aeries beats and raises", ["EARNINGS", "GUIDANCE"])
+
+    class Api:
+        def news(self, symbol, start=None, end=None):
+            return [dict(row) for row in (wraps + [own])], None
+
+    candidates = [{"symbol": "ARX.US"}]
+    scan.attach_catalysts(Api(), candidates, Sink())
+    kept = candidates[0].get("headlines") or []
+    titles = [h.get("title") for h in kept]
+    if not titles or titles[0] != own["title"]:
+        failures.append(
+            "the display cut did not take the story about the company first: "
+            f"{titles}. A wrap the class refused to read took a slot from it.")
+    if own["title"] not in titles:
+        failures.append("the one article about the company is not displayed "
+                        f"at all: {titles}")
+
+    # And on the page, with the reason and the provenance.
+    packet = _slots_packet()
+    packet["candidates"] = [{**packet["candidates"][0], "headlines": kept,
+                             "news_in_window": len(wraps) + 1}]
+    skeleton = analyst.render_skeleton(packet)
+    if "the stories the news provider filed under that ticker" not in skeleton:
+        failures.append("the section does not say where its headlines came "
+                        "from, which is the question that was asked of it")
+    marks = [line for line in skeleton.splitlines() if line.startswith("Not about ")]
+    if not marks:
+        failures.append("a set aside article is displayed with no mark, so a "
+                        "reader is left to work out why a market wrap is "
+                        "under a company")
+    for mark in marks:
+        if "macro tag" not in mark:
+            failures.append(f"a mark does not carry the packet's own reason: {mark!r}")
+        if "filed it under ARX" not in mark:
+            failures.append(f"a mark does not say who filed the story: {mark!r}")
+    if len(marks) != len([h for h in kept if not scan._about_this_name(h)]):
+        failures.append(f"{len(marks)} mark(s) for "
+                        f"{len([h for h in kept if not scan._about_this_name(h)])} "
+                        "set aside article(s): the mark is on the wrong rows")
+    print(f"  headline why {len(marks)} set aside headline(s) say who filed "
+          "them and why the class refused them, and the story about the "
+          "company takes the first display slot")
 
 
 def claim_seven_tasks_carry_every_trigger(failures: list[str]) -> None:
@@ -6558,7 +6651,10 @@ def claim_the_sharing_count_names_the_set_it_was_taken_over(
                         f"{scope.get('returned_for_candidates')!r} candidates, "
                         "not the 3 the feed returned it for")
     why = str(scope.get("why"))
-    if f"{len(answered)} candidate(s) whose news was checked" not in why:
+    # Written as a sentence since 2026-09-03, not as "candidate(s)": this
+    # reason is quoted onto the report page under the headline it sets aside.
+    plural = "candidate" if len(answered) == 1 else "candidates"
+    if f"{len(answered)} {plural} whose news was checked" not in why:
         failures.append(f"the scope does not name the set it counted over: {why!r}")
     if f"{len(refused)} candidate(s) had no news call answered" not in why:
         failures.append(f"the scope does not say the sharing count is a floor on a "
@@ -16598,6 +16694,8 @@ def main() -> int:
     run_claim(failures, claim_a_refusal_budget_is_per_incident, failures)
     run_claim(failures, claim_seven_tasks_carry_every_trigger, failures)
     run_claim(failures, claim_a_gapper_block_is_split_and_says_no_field_names,
+              failures)
+    run_claim(failures, claim_a_headline_says_why_it_is_under_this_ticker,
               failures)
 
     if failures:

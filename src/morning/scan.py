@@ -2260,6 +2260,25 @@ def _article_key(headline: dict[str, Any]) -> str:
     return f"title:{title}" if title else f"row:{id(headline)}"
 
 
+def _plural(count: int, word: str) -> str:
+    """word or words, for a sentence a reader sees rather than a log line.
+
+    "1 macro tag(s)" is how a count reads when nobody expected it on a page.
+    Only the regular s, because every word this is called on takes one.
+    """
+    return word if count == 1 else word + "s"
+
+
+def _about_this_name(headline: dict[str, Any]) -> bool:
+    """Did _scope_articles judge this article to be about the candidate.
+
+    A headline carrying NO scope at all reads as about the name, on the same
+    precedent classify_catalyst follows: a packet written before
+    _scope_articles existed must still rescore and still render.
+    """
+    return bool((headline.get("article_scope") or {}).get("about_this_name", True))
+
+
 def _scope_articles(
     fetched: dict[str, list[dict[str, Any]]], candidate_count: int
 ) -> None:
@@ -2380,18 +2399,28 @@ def _scope_articles(
             if wide_feed:
                 reasons.append(
                     f"the feed returned it for {shared} of the {checked} "
-                    f"candidate(s) whose news was checked, above {max_sharing}, "
-                    "so its tags are not about any one of them")
+                    f"{_plural(checked, 'candidate')} whose news was checked, "
+                    f"above {max_sharing}, so its tags are not about any one "
+                    "of them")
             if macro:
+                # The tags named, singular or plural, and not "1 macro
+                # tag(s)". This sentence is quoted onto the report page under
+                # the headline it sets aside, so it is read by somebody who
+                # has never seen the packet.
                 reasons.append(
-                    f"it carries {len(macro)} macro tag(s), {', '.join(macro)}, "
-                    "which are about the session rather than about any company")
+                    ("it carries the macro tag " if len(macro) == 1
+                     else f"it carries {len(macro)} macro tags, ")
+                    + ", ".join(macro)
+                    + (", which is " if len(macro) == 1 else ", which are ")
+                    + "about the session rather than about any company")
             if reasons:
                 why = ("not about this name: " + "; and ".join(reasons)
                        + (floor if wide_feed else ""))
             else:
-                why = (f"about this name: {tags} tag(s), returned for {shared} of "
-                       f"the {checked} candidate(s) whose news was checked{floor}")
+                why = (f"about this name: {tags} {_plural(tags, 'tag')}, "
+                       f"returned for {shared} of the {checked} "
+                       f"{_plural(checked, 'candidate')} whose news was "
+                       f"checked{floor}")
             article["article_scope"] = {
                 "tag_count": tags,
                 "returned_for_candidates": shared,
@@ -2522,7 +2551,22 @@ def attach_catalysts(
         counts["source"] = ("every headline the feed returned inside the window, "
                             "not the news_keep displayed beside it")
         candidate["headline_polarity"] = counts
-        candidate["headlines"] = recent[:keep]
+        # STORIES ABOUT THE COMPANY TAKE THE DISPLAY SLOTS FIRST, newest
+        # within each group. The cut was the three NEWEST, and a market wrap
+        # the feed happened to file under a ticker took a slot from a story
+        # about the company: SNOW carried 30 articles on 2026-09-03 and one of
+        # its three was "Stock Market Today: Dow Rises As Treasury Yields
+        # Fall", which _scope_articles had already judged not about this name
+        # and classify_catalyst had already refused to read. Showing a reader
+        # an article the packet set aside, ahead of one it did not, is the
+        # display disagreeing with the classification.
+        #
+        # A set aside article still shows where there is room, and it is
+        # MARKED where it does: it is what the feed returned, and a name whose
+        # whole window is roundups has to be able to say so.
+        about_this_name = [row for row in recent if _about_this_name(row)]
+        set_aside = [row for row in recent if not _about_this_name(row)]
+        candidate["headlines"] = (about_this_name + set_aside)[:keep]
         # THE WHOLE WINDOW, TITLES ONLY, FOR THE EXPLANATION AND NOTHING ELSE.
         # news_keep is 3 and MSTR carried 14 articles on 2026-09-01, so the
         # displayed three are a thin basis for saying what moved a name. This
@@ -2540,9 +2584,12 @@ def attach_catalysts(
         candidate["news_in_window"] = len(recent)
         candidate["headlines_note"] = (
             f"{len(recent)} headline(s) carried the symbol tag in the window and "
-            f"the {len(recent[:keep])} newest are kept here, a display cap from "
-            "CRITERIA.md [Scan] news_keep. The trap balance is decided over all "
-            "of them; the catalyst class is read from the ones kept.")
+            f"{len(candidate['headlines'])} are kept here, a display cap from "
+            "CRITERIA.md [Scan] news_keep. The kept ones are the newest, with "
+            f"the {len(about_this_name)} article(s) about this company taken "
+            f"before the {len(set_aside)} the scope test set aside. The trap "
+            "balance is decided over all of them; the catalyst class is read "
+            "from the ones kept.")
 
 
 def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:

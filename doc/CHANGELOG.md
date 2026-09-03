@@ -15,6 +15,42 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-03, fifty third: a headline says who filed it, and a market wrap stops taking a display slot
+
+The owner read the regenerated report and asked what "Stock Market Today: Dow
+Rises As Treasury Yields Fall; Broadcom Falls On Earnings" had to do with
+SNOW, and said the report does not say. It does not, and the answer was
+already in the packet three times over: the news provider FILED that article
+under SNOW, `_scope_articles` had judged it not about the name on its
+TREASURIES macro tag, and `classify_catalyst` had refused to read its tags.
+Three facts, none of them on the page.
+
+THE CUT WAS THE THREE NEWEST, which is how the wrap got there. news_keep is a
+display cap and the display took `recent[:keep]`, so an article the class had
+already refused could take a slot from a story about the company. SNOW
+carried 30 articles that morning and spent one of its three on the wrap. The
+cut now takes the articles the scope test passed first, newest within each
+group, and a set aside one fills what is left. A name whose whole window is
+wraps still shows them, because that is what the feed returned and it is a
+finding.
+
+THE SECTION SAYS WHERE ITS HEADLINES COME FROM, once, in a lead in under the
+heading. And a set aside story is marked on the line under it with that
+article's own `article_scope.why` and the name of who filed it, so the reader
+meets the caveat with the story rather than after it. An article the scope
+test passed carries no such line.
+
+THE RENDERER GUARANTEES THE ORDER IT CLAIMS rather than trusting the packet,
+so a report replayed from an older packet, whose three kept articles were
+simply the three newest, still puts the company stories first. A sentence on
+the page has to be true of the page.
+
+AND THE REASON READS AS A SENTENCE. It said "it carries 1 macro tag(s),
+TREASURIES, which are about the session", which nobody had ever had to read
+because it had never been on a page. That, and the "N candidate(s)" beside
+it, are written singular or plural at the source now, with the older spelling
+repaired on a replay.
+
 ## 2026-09-03, fifty second: the gappers section is split into paragraphs, and the report stops speaking in field names
 
 The owner read the 08:45 report of 2026-09-03 and said two things about the

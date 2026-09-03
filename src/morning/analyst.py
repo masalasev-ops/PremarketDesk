@@ -739,6 +739,56 @@ def _in_readers_words(text: str) -> str:
     return text
 
 
+_NOT_ABOUT_PREFIX = "not about this name: "
+
+# A pre 2026-09-03 packet wrote this reason as "it carries 1 macro tag(s),
+# TREASURIES, which are about the session", which was never on a page before
+# and is on one now. scan writes it as a sentence since; this repairs the
+# older spelling on a replay, and is dead with the last such packet.
+_LEGACY_ONE_MACRO_RE = re.compile(
+    r"it carries 1 macro tag\(s\), ([^,]+), which are about")
+_LEGACY_MANY_MACRO_RE = re.compile(r"it carries (\d+) macro tag\(s\),")
+_LEGACY_COUNT_S_RE = re.compile(r"\b(\d+) (candidate|tag|headline|article)\(s\)")
+
+
+def _set_aside_note(headline: dict[str, Any], ticker: str) -> str:
+    """Why a story the feed filed under this ticker is not about the company.
+
+    ANSWERS "WHY IS THIS HERE". On 2026-09-03 the report showed "Stock Market
+    Today: Dow Rises As Treasury Yields Fall; Broadcom Falls On Earnings"
+    under SNOW, and the owner asked what it had to do with SNOW. Nothing: the
+    news provider filed it under SNOW, scan._scope_articles judged it not
+    about the name and classify_catalyst refused to read its tags. All three
+    of those facts were in the packet and none of them was on the page, so
+    the reader was left to work out why a market wrap was under a company.
+
+    The reason comes from the packet's own article_scope.why, so the sentence
+    on the page and the field a reader can audit are one text. An article the
+    scope test passed gets nothing: a note printed against the ordinary case
+    is a note nobody reads on the case that matters.
+    """
+    scope = headline.get("article_scope") or {}
+    if not scope or scope.get("about_this_name", True):
+        return ""
+    why = str(scope.get("why") or "").strip()
+    if why.startswith(_NOT_ABOUT_PREFIX):
+        why = why[len(_NOT_ABOUT_PREFIX):]
+    why = _LEGACY_ONE_MACRO_RE.sub(
+        lambda m: f"it carries the macro tag {m.group(1)}, which is about", why)
+    why = _LEGACY_MANY_MACRO_RE.sub(lambda m: f"it carries {m.group(1)} macro tags,", why)
+    why = _LEGACY_COUNT_S_RE.sub(
+        lambda m: f"{m.group(1)} {m.group(2)}"
+        + ("" if m.group(1) == "1" else "s"), why)
+    if not why:
+        why = "the scope test judged it to be about something wider"
+    # The provenance is stated ONCE, in the lead in under the heading, and the
+    # tail here is one clause rather than a repeat of it: this note lands
+    # under seven headlines on an ordinary morning, and a paragraph of
+    # boilerplate seven times is a paragraph nobody reads the seventh time.
+    return (f"Not about {ticker}: {why}. The news provider filed it under "
+            f"{ticker}; it did not decide the catalyst class.")
+
+
 def _catalyst_sentences(candidate: dict[str, Any], shown: int) -> list[str]:
     """The catalyst state of one candidate, in English rather than in fields.
 
@@ -771,8 +821,12 @@ def _catalyst_sentences(candidate: dict[str, Any], shown: int) -> list[str]:
     elif not found:
         lines.append("News carrying this ticker in the window: none.")
     elif isinstance(carried, int) and carried > shown:
+        # NOT "the newest". Since 2026-09-03 the display cut takes the
+        # articles the scope test judged to be about the company before the
+        # rest, so the shown ones are the newest of those first. Saying
+        # newest would be a sentence the packet does not support.
         lines.append(f"News carrying this ticker in the window: {carried} "
-                     f"stories, the {shown} newest shown below.")
+                     f"stories, {shown} shown below.")
     elif isinstance(carried, int):
         lines.append(f"News carrying this ticker in the window: {carried} "
                      f"{'story' if carried == 1 else 'stories'}.")
@@ -1034,6 +1088,21 @@ def fallback_report(
     add("")
     add("## Premarket gappers")
     add("")
+    if slots and candidates:
+        # WHERE THE HEADLINES COME FROM, said once. A reader looking at a
+        # market wrap under a single ticker has no way to know why it is
+        # there, and on 2026-09-03 the owner asked exactly that of "Stock
+        # Market Today: Dow Rises As Treasury Yields Fall" under SNOW. The
+        # answer is that the news provider filed it under SNOW and the report
+        # prints what the provider filed, which is a fact about the provider
+        # and belongs on the page rather than in the reader's head.
+        add("The headlines under a ticker are the stories the news provider "
+            "filed under that ticker inside the news window. They are the "
+            "newest it filed, with the ones about the company itself taken "
+            "first. A story the provider files under a ticker is not always "
+            "about that company, and the line under such a story says so: "
+            "those were set aside when the catalyst class was decided.")
+        add("")
     if slots:
         # One block per candidate: the figures, the catalyst state, every
         # headline with its publisher and time, and under each headline the
@@ -1070,7 +1139,15 @@ def fallback_report(
             if missing_text:
                 add(str(missing_text))
                 add("")
-            heads = c.get("headlines") or []
+            # The order the lead in above CLAIMS, guaranteed here rather than
+            # trusted from the packet. scan cuts the display list the same way
+            # since 2026-09-03, so this is a no op on a packet written since;
+            # on an older one, whose three kept articles were simply the three
+            # newest, it still puts the stories about the company first. A
+            # sentence on the page has to be true of the page.
+            heads = sorted(c.get("headlines") or [],
+                           key=lambda h: not (h.get("article_scope") or {})
+                           .get("about_this_name", True))
             for sentence in _catalyst_sentences(c, len(heads)):
                 add(sentence)
             add("")
@@ -1078,6 +1155,12 @@ def fallback_report(
                 when = _cell(head.get("published_at")) or "time not carried"
                 add(f'Headline: "{_cell(head.get("title"))}" '
                     f"({_cell(head.get('publisher')) or 'publisher unknown'}, {when})")
+                aside = _set_aside_note(head, _bare(c["symbol"]))
+                if aside:
+                    # In the SAME paragraph as the headline it is about, so a
+                    # reader meets the caveat with the story rather than after
+                    # the sentence a model wrote about it.
+                    add(aside)
                 add("")
                 add(slot(SLOT_HEADLINE, _bare(c["symbol"]), str(number)))
                 add("")

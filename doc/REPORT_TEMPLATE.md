@@ -263,6 +263,21 @@ unbroken block of about a hundred and forty words. The order is:
    next. Never summarize a headline into something it does not say, and never
    add a headline the packet does not carry.
 
+WHERE A HEADLINE COMES FROM IS SAID ONCE, in a lead in under the heading: the
+headlines under a ticker are the stories the news provider FILED under that
+ticker, newest first, with the ones about the company itself taken first. A
+reader meeting a market wrap under a single company otherwise has no way to
+know why it is there, which is what the owner asked on 2026-09-03 of "Stock
+Market Today: Dow Rises As Treasury Yields Fall" under SNOW.
+
+AND A STORY THE SCOPE TEST SET ASIDE IS MARKED, on the line under it, with
+that article's own `article_scope.why` and the name of who filed it. Those
+articles are shown, because they are what the feed returned and a name whose
+whole window is wraps has to be able to say so, but they did not decide the
+catalyst class and the page has to say that where the story is. An article
+the scope test passed carries no such line: a note against the ordinary case
+is a note nobody reads on the case that matters.
+
 The disclaimer already names these as SETS, "3 of 12 carry a null RVOL", and a
 set tells a reader that somebody is short of evidence without telling them
 which name in front of them they know least about. This is the same facts,
