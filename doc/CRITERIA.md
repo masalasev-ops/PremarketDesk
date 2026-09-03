@@ -2677,8 +2677,8 @@ job_log_stale_after_s         = 2200       # no write to a job's dated log for t
 pass_interval_min             = 30         # register_tasks.ps1: the monitor task repeats on this interval
 first_pass                    = 07:25      # register_tasks.ps1: the weekday monitor trigger, and what its repetition counts from
 last_pass                     = 09:25      # first_pass plus the two hour repetition duration in register_tasks.ps1
-night_pass                    = 22:45      # register_tasks.ps1: monitor-night, one firing with no repetition
-midday_first_pass             = 12:25      # register_tasks.ps1: monitor-midday, and what its repetition counts from. The first slot
+night_pass                    = 22:45      # register_tasks.ps1: the monitor task's night trigger, one firing with no repetition
+midday_first_pass             = 12:25      # register_tasks.ps1: the monitor task's midday trigger, and what its repetition counts from. The first slot
                                            # on the existing :25 and :55 grid at or after midday_due, so there is one fact about when
                                            # the watchdog fires rather than two.
 midday_last_pass              = 13:25      # midday_first_pass plus the one hour repetition duration in register_tasks.ps1, so the
@@ -2742,13 +2742,14 @@ the 08:55 pass and as dead at 09:25, still inside rerun_chain_until." That
 inference needs a LATER pass to exist, and for the two jobs the gate guards
 there is none. register_tasks.ps1 fires the weekday monitor at first_pass and
 repeats it every pass_interval_min through last_pass, which is 07:25, 07:55,
-08:25, 08:55 and 09:25, fires monitor-midday at midday_first_pass and repeats
+08:25, 08:55 and 09:25, fires the same task's midday trigger at
+midday_first_pass and repeats
 it through midday_last_pass, which is 12:25, 12:55 and 13:25, and fires
-monitor-night once at night_pass. chain_due
+its night trigger once at night_pass. chain_due
 is 09:00, so the 08:55 pass reads NOT DUE, exactly as the [Analyst] timeout
 note already says, and the chain is judged by ONE pass inside
 [chain_due, rerun_chain_until]: 09:25. The nightly is judged by one pass too,
-monitor-night at 22:45, and nothing after it revisits that verdict. The next
+the night pass at 22:45, and nothing after it revisits that verdict. The next
 morning's 07:25 is before nightly_due and prints NOT DUE, by the following
 22:45 the dated log path has rolled, and job_status.overdue cannot surface it
 either because backfill, outcomes and pool_recall each carry a one session
@@ -2781,8 +2782,8 @@ nightly duplicates the backfill. For a SCHEDULED job the path is rare, because
 Task Scheduler settles it with Status Running or 267009; the warm log is the
 only evidence for a hand run or for a rerun the watchdog launched with Popen,
 neither of which Scheduler can see. The nightly band is bounded further by the
-07:00 nightly-catchup, which runs the backfill and the outcome fill again
-regardless.
+nightly's 07:00 catch-up firing, which runs the backfill and the outcome fill
+again regardless.
 
 The same schedule values decide whether the collector may be HELD. The hold
 waits one pass rather than starting a collector on a watchlist discover is in

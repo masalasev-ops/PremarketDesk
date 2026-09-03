@@ -1,16 +1,27 @@
 @echo off
-rem PremarketDesk 22:15 nightly job: true premarket backfill for today's
-rem picks, the definitive collector volume verification, then the outcome
-rem fill for every pick old enough to have outcomes.
+rem PremarketDesk nightly job, ONE scheduled task with three triggers since
+rem 2026-09-02: 22:15 on weekdays runs the whole night, 07:00 on weekdays runs
+rem the vendor-lag half only, and Sunday 21:00 rebuilds the weekly universe.
+rem Which of the three this firing is comes from the clock, not from an
+rem argument, because Task Scheduler gives a task one action and the three
+rem used to be three tasks (nightly, nightly-catchup, universe) that were
+rem three places for one schedule to drift.
 rem
-rem Called with the argument "catchup" it runs the vendor-lag half only, which
-rem is the backfill and the outcome fill, and skips pool recall and the archive
-rem rebuild. The 07:00 registration passes it. Until 2026-08-20 that firing ran
-rem the whole job, and pool_recall measures the session it is invoked ON, so
-rem every weekday at 07:00 it asked the vendor for a session that had not
-rem opened, got an empty payload, and wrote gapped 0, addressable 0, recall 0.0
-rem over the real measurement the 22:15 pass had taken. The evening pass is the
-rem one with a closed session to measure; the morning pass has nothing to add.
+rem   full      22:15 weekdays: true premarket backfill for today's picks, the
+rem             definitive collector volume verification, the outcome fill,
+rem             truth, the paper ledger, pool recall, the prune, the weekly
+rem             page and the archive rebuild.
+rem   catchup   07:00 weekdays: the backfill and the outcome fill only. Until
+rem             2026-08-20 that firing ran the whole job, and pool_recall
+rem             measures the session it is invoked ON, so at 07:00 it asked
+rem             for a session that had not opened and wrote recall 0.0 over
+rem             the evening's real measurement.
+rem   universe  Sunday 21:00: the weekly discovery universe and the gap
+rem             propensity sweep, under PMD_JOB universe and its own log, so
+rem             every reader of those records sees what it always saw.
+rem
+rem A hand run may pass the mode as its argument (full, catchup, universe)
+rem and skip the clock; that is the only reason the argument still exists.
 setlocal
 cd /d "%~dp0.."
 set PY=.venv\Scripts\python.exe
@@ -19,17 +30,25 @@ rem so scripts are run with -m rather than by path. PYTHONPATH is what puts
 rem src/ on sys.path; running a file by path would put its own package
 rem directory there instead and every `from core import config` would fail.
 set PYTHONPATH=%CD%\src
-rem Every step this job runs records its outcome under this name in
-rem data\job-status.jsonl. See CRITERIA.md [job status].
-set PMD_JOB=nightly
-rem PMD_JOB stays "nightly" for both firings. They are two passes of one job,
-rem and monitor_jobs.JOB_STATUS_NAMES maps the nightly to that one name: a
-rem second name here would mean the catch-up's step records were never read,
-rem which is the silent mismatch that table exists to prevent.
 set MODE=%~1
+if "%MODE%"=="" (
+    for /f "usebackq delims=" %%m in (`%PY% -c "from core import ettime; n=ettime.now_et(); print('universe' if n.weekday()==6 else ('catchup' if n.hour<12 else 'full'))"`) do set MODE=%%m
+)
+if "%MODE%"=="" set MODE=full
 for /f "usebackq delims=" %%d in (`%PY% -c "from core import ettime; print(ettime.today_str())"`) do set TODAY=%%d
 if "%TODAY%"=="" set TODAY=undated
 if not exist logs mkdir logs
+
+if /i "%MODE%"=="universe" goto universe
+
+rem Every step this job runs records its outcome under this name in
+rem data\job-status.jsonl. See CRITERIA.md [job status].
+set PMD_JOB=nightly
+rem PMD_JOB stays "nightly" for the full and the catch-up firings. They are
+rem two passes of one job, and monitor_jobs.JOB_STATUS_NAMES maps the nightly
+rem to that one name: a second name here would mean the catch-up's step
+rem records were never read, which is the silent mismatch that table exists
+rem to prevent.
 set LOG=logs\nightly-%TODAY%.log
 
 %PY% -m ops.market_today >> "%LOG%" 2>&1
@@ -125,4 +144,30 @@ echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.build_archive >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
+exit /b %RC%
+
+:universe
+rem The Sunday firing. No trading day guard: Sunday is closed by definition
+rem and the guard would stand the rebuild down. Every later script refuses to
+rem run when universe.json is more than [Universe] max_age_days stale, so this
+rem is the firing that keeps the week alive. Until 2026-09-02 this was
+rem job_universe.bat under its own task; the log name and PMD_JOB are kept so
+rem the watchdog, the job trail and the archive read exactly what they did.
+set PMD_JOB=universe
+set LOG=logs\universe-%TODAY%.log
+
+echo ===== universe started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m selection.universe >> "%LOG%" 2>&1
+set RC=%ERRORLEVEL%
+echo ===== universe finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
+if %RC% neq 0 exit /b %RC%
+
+rem Gap propensity rides the universe schedule so it costs nothing at 07:15.
+rem About one counted call per universe name, measured at 0.15 seconds each,
+rem so roughly 2,745 calls and seven minutes once a week. It runs after the
+rem universe because it reads the membership the rebuild just wrote.
+echo ===== gap stats started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m selection.gap_stats >> "%LOG%" 2>&1
+set RC=%ERRORLEVEL%
+echo ===== gap stats finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

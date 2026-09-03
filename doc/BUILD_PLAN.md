@@ -6,9 +6,12 @@ rewritten after the full review on 2026-08-20, when items 5a and 6i were
 corrected in place. The notable movers section
 was specified in full under "What remains" as Layer 4 on 2026-08-17. The build history below was written on
 2026-08-14, after the first live morning and the five commits that followed
-it. All sixteen checkpoints are built, verified, and committed, and the eleven
-Task Scheduler tasks are registered [corrected 2026-09-02: was "the nine Task
-Scheduler jobs"; tasks/register_tasks.ps1 registers eleven]. The system is armed but
+it. All sixteen checkpoints are built, verified, and committed, and the seven
+Task Scheduler tasks are registered [corrected 2026-09-02 evening: was "the
+eleven Task Scheduler tasks"; that evening a task became one per job carrying
+every trigger its job has, and tasks/register_tasks.ps1 registers seven]
+[corrected 2026-09-02: was "the nine Task
+Scheduler jobs"; tasks/register_tasks.ps1 registered eleven]. The system is armed but
 gated: it runs every weekday morning, produces a report, and refuses to email
 until a human reviews one real morning and deletes data/UNVERIFIED.
 
@@ -155,14 +158,22 @@ at the root and is gitignored along with .env.
   2026-08-21 is what that costs when it is not done
   [corrected 2026-09-02: this put every payload under doc/research; the
   directory listing is the authority and the split above is read off it]
-- tasks/: ten job .bat files, register_tasks.ps1, README.md. Eight of them
-  register as eleven scheduled tasks: job_nightly runs twice, at
-  22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on THREE
-  triggers, a repeating weekday one from 07:25, monitor-midday from 12:25 and
-  monitor-night once at 22:45. job_midday joined them on
-  2026-08-31 at 12:00. Two further .bat files, job_probe_capture.bat and
+- tasks/: nine job .bat files, register_tasks.ps1, README.md. Seven of them
+  register as seven scheduled tasks, one per job, each carrying every trigger
+  its job has, with the .bat telling the firings apart by the clock:
+  job_nightly on THREE triggers, 22:15 and 07:00 on weekdays (the 07:00 one
+  is the catch-up) and Sunday 21:00 (the weekly universe rebuild, which was
+  job_universe.bat under its own task until 2026-09-02), and job_monitor on
+  THREE triggers, a repeating weekday one from 07:25, a repeating one from
+  12:25 and once at 22:45. job_midday joined them on
+  2026-08-31 at 12:00. [corrected 2026-09-02 evening: was "ten job .bat
+  files", "Eight of them register as eleven scheduled tasks", "again at 07:00
+  as nightly-catchup", "monitor-midday from 12:25 and monitor-night once at
+  22:45"; those four names were the same three .bat files registered again,
+  and were retired that evening with job_universe.bat.] Two further .bat
+  files, job_probe_capture.bat and
   job_probe_socket_cap.bat,
-  sit here and are not among those eleven, both of them one offs armed a
+  sit here and are not among those seven, both of them one offs armed a
   morning at a time and both meant to be deleted once their question is
   answered. A
   plain run of the script registers neither of them, because a probe that is
@@ -170,7 +181,8 @@ at the root and is gitignored along with .env.
   refreshed, and `-Unregister` removes both if they are there, and the
   retired socket cost task's name with them. [corrected 2026-09-02: was
   "Three further .bat files" and "removes all three"; job_probe_socket_cost.bat
-  was deleted on 2026-09-01 and ten .bat files stand.]
+  was deleted on 2026-09-01 and ten .bat files stood, nine since
+  job_universe.bat went the next evening.]
   [corrected 2026-08-31: was "register as ten scheduled tasks", "not among
   those ten", "both meant to be deleted" of three files, and "registers
   neither". monitor-midday was added on 2026-08-31 and takes the count to
@@ -275,7 +287,8 @@ at the root and is gitignored along with .env.
   rest of site/
 - site/PremarketDesk.html: the single file report archive, rebuilt from
   runs/ at the end of every morning chain and at the end of the 22:15 nightly.
-  The 07:00 nightly-catchup firing passes "catchup" and skips the rebuild along
+  The nightly's 07:00 catch-up firing, which the .bat recognises from the
+  clock, skips the rebuild along
   with pool recall
   (build_archive.py, embed_sessions knob in CRITERIA [archive]). Opens by
   double clicking, no server, no network; the newest sessions are inlined,
@@ -312,8 +325,9 @@ at the root and is gitignored along with .env.
   as a next day batch: at 22:40 on 2026-08-13 the whole day was still empty
   (regular session included) while 2026-08-12 was complete. The backfill
   sweeps up to catchup_days prior sessions whose true premarket columns are
-  still null, and the same job_nightly.bat is also scheduled at 07:00 as
-  nightly-catchup, so yesterday's fill and volume verification complete
+  still null, and the nightly task also fires job_nightly.bat at 07:00, the
+  catch-up firing it recognises from the clock, so yesterday's fill and
+  volume verification complete
   before the new morning's collection is trusted. Never fill a day with
   another day's bars; unfilled stays null with the sweep retrying.
 - The claude CLI lives at C:\Users\udaya\AppData\Roaming\npm\. The .cmd shim
@@ -582,11 +596,14 @@ weekday math. Proven idempotent: a seeded synthetic pick filled correctly
 and a second run left the table hash unchanged.
 
 CP15 scheduling: tasks/ holds five .bat jobs
-[superseded, see Repository layout above: eight job .bat files register as
-eleven tasks today, the additions since being job_monitor.bat, on three
+[superseded, see Repository layout above: seven job .bat files register as
+seven tasks today, one per job carrying every trigger the job has, the
+additions since being job_monitor.bat, on three
 triggers, job_meter_sampler.bat and job_midday.bat, and the universe job moved
-from Sunday 20:00 to 20:30 on 2026-08-16 and to 21:00 on 2026-08-17;
-corrected 2026-09-02: was "seven job .bat files register as nine tasks"], each cd's to the project root,
+from Sunday 20:00 to 20:30 on 2026-08-16 and to 21:00 on 2026-08-17, then
+folded into job_nightly.bat's Sunday trigger on 2026-09-02;
+corrected 2026-09-02 evening: was "eight job .bat files register as eleven
+tasks", and earlier that day "seven job .bat files register as nine tasks"], each cd's to the project root,
 stamps its log date with the project's own ET clock, and appends to
 logs/<job>-YYYY-MM-DD.log. The 08:45 chain (scan, analyst, render, gate
 table, deliver) ran end to end from the bat with rc=0 at every step.

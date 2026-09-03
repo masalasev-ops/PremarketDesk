@@ -225,22 +225,24 @@ tbody tr:hover{background:var(--ground)}
 <header class="mast">
   <div class="eyebrow">doc / architecture</div>
   <h1>PremarketDesk</h1>
-  <p class="sub">There is no server, no queue, and no service. PremarketDesk is eight Windows Task Scheduler
-  job scripts on one machine, registered as eleven tasks: the nightly runs twice (22:15, and again at
-  07:00 as nightly-catchup) and the watchdog runs three times (07:25, repeating every 30 minutes for
-  two hours; 12:25, repeating every 30 minutes for one hour; and once at 22:45). Six of the scripts
-  wake on their clock time, read the files the earlier jobs left behind, and leave files for the
-  next: discover, the collector, the morning chain, the 12:00 midday pass, the nightly and the Sunday
-  universe rebuild. The seventh is the watchdog, which reads the others'
+  <p class="sub">There is no server, no queue, and no service. PremarketDesk is seven Windows Task Scheduler
+  job scripts on one machine, registered as seven tasks, one per job, and a task carries every
+  trigger its job has: the nightly fires three times (22:15 on weekdays for the whole night, 07:00 on
+  weekdays as the catch-up, and Sunday 21:00 for the weekly universe rebuild) and the watchdog three
+  times (07:25, repeating every 30 minutes for two hours; 12:25, repeating every 30 minutes for one
+  hour; and once at 22:45), with each .bat telling its firings apart by the clock. Five of the
+  scripts wake on their clock time, read the files the earlier jobs left behind, and leave files for
+  the next: discover, the collector, the morning chain, the 12:00 midday pass, and the nightly, whose
+  Sunday firing is the universe rebuild. The sixth is the watchdog, which reads the others'
   dated logs and Task Scheduler's own record, then relaunches the .bat of whatever is safe to rerun.
-  The eighth is the quota meter sampler, which is not a step at all: it takes one reading of the
+  The seventh is the quota meter sampler, which is not a step at all: it takes one reading of the
   shared vendor counter every thirty minutes of every day, weekends included, because the job trail
   can say which step spent what and cannot say when, and the overnight silence between 22:45 and
   07:00 is exactly where a sibling project draining the shared key would hide.
   The two counts on the line below are read off <code>register_tasks.ps1</code>, the one file
   that decides them, rather than remembered. The schedule is the architecture.</p>
   <div class="meta">
-    <span>69 components</span><span>8 job scripts, 11 tasks</span><span>1 data vendor</span><span>2 model calls per day</span>
+    <span>69 components</span><span>7 job scripts, 7 tasks</span><span>1 data vendor</span><span>2 model calls per day</span>
   </div>
 </header>
 
@@ -302,8 +304,9 @@ tbody tr:hover{background:var(--ground)}
   another. What passes between them is files on disk, which is why a dead job shows up downstream as
   a missing file with a stated reason rather than as a crash.</p>
   <p>The one exception is the watchdog (<code>tasks/job_monitor.bat</code>, registered as monitor,
-  which runs every 30 minutes for two hours from 07:25, as monitor-midday every 30 minutes for one
-  hour from 12:25, and as monitor-night at 22:45). It reads Task
+  one task with three triggers: every 30 minutes for two hours from 07:25, every 30 minutes for one
+  hour from 12:25, and once at 22:45, with the pass decided from the clock in
+  <code>ops/monitor_jobs.py</code>). It reads Task
   Scheduler's own record for each job alongside that job's dated log, and relaunches the job's .bat
   when the job fired and died, when it never fired at all because the machine was asleep, when no
   collector is alive inside the collector window, or when <code>universe.json</code> has gone past
@@ -533,12 +536,12 @@ tbody tr:hover{background:var(--ground)}
     <thead><tr><th>ID</th><th>Component</th><th>Layer</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
     <tbody>
       <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46, C48, C67</td></tr>
-      <tr><td class="id">C02</td><td class="nm">job_universe.bat</td><td><span class="lay sched">Scheduler</span></td><td>Sun 21:00</td><td>none</td><td>C12, C40, C34</td></tr>
+      <tr><td class="id">C02</td><td class="nm">job_nightly.bat, Sunday firing</td><td><span class="lay sched">Scheduler</span></td><td>Sun 21:00, the third trigger of the nightly task (C06). The .bat reads a Sunday clock as universe mode and runs under PMD_JOB universe with its own log, exactly as job_universe.bat did under its own task until 2026-09-02</td><td>none</td><td>C12, C40, C34</td></tr>
       <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 03:55 and 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
       <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 04:00</td><td>none</td><td>C15, C34</td></tr>
       <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
       <tr><td class="id">C67</td><td class="nm">job_midday.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 12:00</td><td>none</td><td>C50, C68, C69, C34</td></tr>
-      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 22:15 and 07:00. The 07:00 firing is the catch-up and runs C62, C20 and C21 only</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C63, C61, C53, C34</td></tr>
+      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>One task, three triggers, told apart by the clock inside the .bat: weekdays 22:15 (the full night), weekdays 07:00 (the catch-up, which runs C62, C20 and C21 only) and Sunday 21:00 (the universe rebuild, C02)</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C63, C61, C53, C34</td></tr>
       <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, 12:25 every 30m for 1h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
       <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, and C34. Never C67, which it watches and reports on only</td></tr>
       <tr><td class="id">C48</td><td class="nm">job_meter_sampler.bat</td><td><span class="lay sched">Scheduler</span></td><td>Every day 00:00, every 30m for 24h</td><td>none</td><td>C49, C34</td></tr>
@@ -1393,8 +1396,10 @@ tbody tr:hover{background:var(--ground)}
     <span style="color:var(--ink-3)">(C23-C25)</span></dd>
 
     <dt>tasks\</dt>
-    <dd>ten .bat files in all. Eight are the scheduled jobs, and register_tasks.ps1 registers
-    those eight as eleven tasks; beside them sit that script and the scheduling notes. The other
+    <dd>nine .bat files in all. Seven are the scheduled jobs, and register_tasks.ps1 registers
+    those seven as seven tasks, one per job, each carrying every trigger its job has (the nightly's
+    Sunday 21:00 trigger is the universe rebuild that was job_universe.bat under its own task until
+    2026-09-02); beside them sit that script and the scheduling notes. The other
     two .bat files are deliberately absent from the schedule, both one off probes
     armed a day at a time: job_probe_socket_cap, the instrument for the collector volume question,
     armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, a clock that has fallen

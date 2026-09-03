@@ -50,16 +50,12 @@ All times are US Eastern, which the machine is expected to keep locally.
 
 | Time | Job | What it does |
 | --- | --- | --- |
-| Sun 21:00 | universe | Weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, one counted call per name, measured at 2,745 calls and 421 seconds on the 2026-08-13 universe. That propensity is what discovery ranks the pool by inside each tier. 21:00 and not 20:00: 20:00 ET is the instant of the 00:00 UTC quota reset in daylight time, so the largest job in the schedule billed to whichever quota day it happened to land on |
-| 07:00 | nightly-catchup | The nightly's vendor lag half, the same .bat called with the argument "catchup": guard, calendar refresh, backup, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Everything after the outcome fill is skipped, because those steps measure a session that at 07:00 has not opened. pool_recall is the one that made the case: it measures the session it is invoked on, and until 2026-08-20 this firing wrote recall 0.0 over the evening's real measurement |
 | 03:55 and 07:15 | discover | Builds today's candidate pool from four priors (earnings between the prior close and this open, overnight news, prior session movers, recent runners), ranks it, subscribes the collector to the top of it, warms the volume baseline. Twice: 03:55 gives the 04:00 collector a pool to open on, 07:15 is the one the morning screens, over a news window that reaches the hours most earnings land in |
 | 04:00 to 09:25 | collector | Websocket trades to one minute bars on disk, one file per day. Starts on the provisional pool the 03:55 discover wrote and moves onto the 07:15 pool at 07:20, keeping the tape of every name on both. See the two phase note in CRITERIA |
-| 07:25, every 30 min to 09:25 | monitor | The watchdog: checks each job fired and finished, reruns what is safe |
+| 07:25 every 30 min to 09:25; 12:25, 12:55, 13:25; 22:45 | monitor | The watchdog, one task with three triggers: checks each job fired and finished, reruns what is safe. The morning trigger covers the collector, discover and the chain. The three midday passes watch the midday job, and there are three and not one because `job_log_stale_after_s` is 2,200 seconds: a midday that hung after writing its log at 12:00 is still warm at 12:25 and cannot be told from a live one, and is cold by 12:55. The midday job is the one job the watchdog reports and never reruns: the 12:00 sweep spends about 2,900 credits on the shared key, and a relaunch would replace the packet it may already have written. The 22:45 pass is over the nightly. Which pass a firing is comes from the clock, decided in `ops/monitor_jobs.py` from CRITERIA [Monitor] |
 | 08:45 | morning chain | scan, analyst, render, verify, deliver, archive, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
 | 12:00 | midday | The two questions the morning cannot answer, because at 08:45 the session had not opened: what every one of today's picks did against the levels the morning published, and what else moved that the morning never named. Then a second report, rendered straight from the packet. No model and no narrative pass, because midday asks closed questions: a pick triggered or it did not. 12:00 and not another hour because us-quote-delayed's regular hours behaviour is what was measured, and it never writes to picks or paper_trades, which are records of what an earlier pass claimed |
-| 12:25, 12:55, 13:25 | monitor-midday | The watchdog over the midday job. Three passes and not one, because `job_log_stale_after_s` is 2,200 seconds: a midday that hung after writing its log at 12:00 is still warm at 12:25 and cannot be told from a live one, and is cold by 12:55. The midday job is the one job the watchdog reports and never reruns: the 12:00 sweep spends about 2,900 credits on the shared key, and a relaunch would replace the packet it may already have written |
-| 22:15 | nightly | Eleven steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the six artifacts that cannot be rebuilt (the collector's capture, its stats and subscriptions sidecars, the packet, and the report in markdown and HTML) plus a dated snapshot of the quantifier flag log, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; the paper ledger, which books one written rule against the levels that measurement wrote; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each |
-| 22:45 | monitor-night | The watchdog once more, over the nightly |
+| 22:15; 07:00; Sun 21:00 | nightly | One task with three triggers, and the .bat reads the clock to tell them apart (a hand run may pass `full`, `catchup` or `universe` instead). 22:15 on weekdays is the full night, eleven steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the six artifacts that cannot be rebuilt (the collector's capture, its stats and subscriptions sidecars, the packet, and the report in markdown and HTML) plus a dated snapshot of the quantifier flag log, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; the paper ledger, which books one written rule against the levels that measurement wrote; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each. 07:00 on weekdays is the catch-up, the vendor lag half: guard, calendar refresh, backup, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Everything after the outcome fill is skipped, because those steps measure a session that at 07:00 has not opened. pool_recall is the one that made the case: it measures the session it is invoked on, and until 2026-08-20 this firing wrote recall 0.0 over the evening's real measurement. Sunday 21:00 is the weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, one counted call per name, measured at 2,745 calls and 421 seconds on the 2026-08-13 universe, run under `PMD_JOB` universe and writing `logs/universe-<date>.log` exactly as the retired `job_universe.bat` did. That propensity is what discovery ranks the pool by inside each tier. 21:00 and not 20:00: 20:00 ET is the instant of the 00:00 UTC quota reset in daylight time, so the largest job in the schedule billed to whichever quota day it happened to land on; and not 20:30, because the vendor's counter rolled 30 to 32 minutes late on 2026-08-16 |
 | Every 30 min, all day, every day | meter-sampler | One reading of the shared EODHD quota counter into `logs/meter-<quota day>.log`, 48 a day, weekends included. Not a pipeline step: an instrument. The job trail says which step spent what and cannot say when, and nothing at all runs between 22:45 and 07:00, which is exactly where a sibling project draining the shared key would hide |
 
 ```mermaid
@@ -100,10 +96,10 @@ Every weekday job first runs `src/ops/market_today.py`, a trading day guard buil
 on the cached EODHD exchange calendar. It exits 3 on a weekend or an official
 holiday and the calling `.bat` logs one line and stops cleanly, so the tasks
 stay registered plain Monday to Friday and holidays take care of themselves.
-Two jobs run no guard. The Sunday universe rebuild does not, because that guard
-counts Sunday as a non trading day, so wiring it in would skip the weekly
-rebuild every week, and the rebuild is what keeps the following week alive. The
-meter sampler does not either, because the counter it reads is shared with
+Two firings run no guard. The nightly's Sunday 21:00 universe rebuild does not,
+because that guard counts Sunday as a non trading day, so wiring it in would
+skip the weekly rebuild every week, and the rebuild is what keeps the following
+week alive. The meter sampler does not either, because the counter it reads is shared with
 everything else using the token and rolls at midnight UTC, so a day this market
 is closed is exactly a day a drain would otherwise go unrecorded.
 
@@ -567,7 +563,7 @@ Tomorrow morning, ACME's skip is one row inside the counts in section 10.
 
 ### What the scope is today, plainly
 
-**The machine is complete and runs.** Eleven scheduled tasks, every weekday since
+**The machine is complete and runs.** Seven scheduled tasks [corrected 2026-09-02: was eleven; the same seven jobs, each task now carrying every trigger its job has], every weekday since
 2026-08-13, with a watchdog over them and a job trail under them. The midday
 pass is the newest and joined on 2026-08-31.
 
@@ -655,8 +651,8 @@ would have been.
    ```
 
 5. **Build the first universe, and the gap statistics that rank it.** Normally
-   the Sunday job's work, and it is both halves: `job_universe.bat` runs the
-   rebuild and then the propensity sweep over every name in it. Discovery ranks
+   the Sunday firing of `job_nightly.bat`, and it is both halves: that firing
+   runs the rebuild and then the propensity sweep over every name in it. Discovery ranks
    the pool inside each tier by `gap_propensity`, so a universe with no gap
    statistics behind it leaves discover with nothing to order by, and
    `[Discovery] min_ranked_fraction_to_subscribe` makes it write no watchlist
@@ -676,7 +672,12 @@ would have been.
    ```
 
    They appear in the Task Scheduler GUI under Task Scheduler Library >
-   PremarketDesk. `-Unregister` removes them all. Do not register these by
+   PremarketDesk, seven tasks, one per job, each carrying every trigger its job
+   has. A plain run also removes the four names the schedule carried until
+   2026-09-02 (nightly-catchup, universe, monitor-midday, monitor-night), whose
+   triggers now live on the nightly and monitor tasks, so a machine registered
+   from an older copy of the script ends up matching the current one rather
+   than firing the nightly twice at 22:15. `-Unregister` removes them all. Do not register these by
    hand with `schtasks /Create`; its string quoting silently stores a spaced
    path unquoted and the task dies at fire time with 0x80070002. The script
    uses the PowerShell ScheduledTasks module, which stores the path

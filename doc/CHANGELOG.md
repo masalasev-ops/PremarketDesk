@@ -15,6 +15,55 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, fifty first: seven tasks carry every trigger, and the .bat reads the clock
+
+The owner said eleven scheduled tasks had become a nightmare to manage and
+asked for fewer. Eleven was the cost of giving every clock its own task,
+and Task Scheduler never needed that: a task carries as many triggers as
+its job has, each with its own days and repetition, and discover had
+already run that way since the forty third.
+
+WHAT CHANGED IS THE COUNT, NOT THE CLOCKS. Nothing fires at a different
+time. nightly carries 07:00 weekdays (the catch-up), 22:15 weekdays (the
+whole night) and Sunday 21:00 (the universe rebuild and the gap propensity
+sweep). monitor carries 07:25 every thirty minutes for two hours, 12:25
+every thirty minutes for one hour, and 22:45 once. discover, collector,
+morning-chain, midday and meter-sampler are as they were. nightly-catchup,
+universe, monitor-midday and monitor-night are retired, and
+tasks/register_tasks.ps1 unregisters those four names on every plain run,
+so a machine registered from an older copy of the script ends up matching
+$jobs rather than firing the nightly twice at 22:15.
+
+THE .BAT READS THE CLOCK. A task has one action however many triggers it
+has, so job_nightly.bat no longer takes "catchup" from the registration.
+It asks the ET clock: Sunday is the universe mode, before noon is the
+catch-up, otherwise the full night. The universe mode runs under PMD_JOB
+universe and writes logs/universe-<date>.log exactly as job_universe.bat
+did, so the watchdog's universe check, the job trail and the archive read
+what they always read; job_universe.bat is deleted. A hand run may still
+pass the mode by name, which is the only reason the argument survives,
+and the watchdog's universe rerun passes "universe" for that reason.
+
+THE RECONCILIATION COMPARES TRIGGERS. script_jobs parses the Triggers
+array of each job, and registered_tasks folds schtasks' one row per
+trigger into a set of (start, repeat every, repeat for) triples per task;
+the two sets are compared whole. A row schtasks renders in a form this
+cannot read marks the task NOT CHECKED rather than agreeing on the rows
+that did parse. The register script's $jobs is parsed by scanning from
+each Name to the next, with comment lines dropped, because the entries
+nest hashtables and the old single regex stopped at the first inner brace.
+
+Registered at 23:0x on 2026-09-02 with no task running, after the 22:15
+nightly and the 22:45 watchdog had finished on the new code (every step
+rc=0, schedule OK). reconcile_schedule reads seven against seven with no
+difference, and the next firings are discover 03:55, collector 04:00,
+nightly 07:00.
+
+Claim: claim_seven_tasks_carry_every_trigger holds the seven names, the
+nightly's three firings, the monitor's three against CRITERIA [Monitor],
+the collector, chain and midday against their clocks, the retired list,
+no job carrying an argument, and the Sunday mode inside job_nightly.bat.
+
 ## 2026-09-02, fiftieth: the analyst and the midday pass answer the standing review
 
 Eleven findings from the whole tree review, all in the narrative pass, its

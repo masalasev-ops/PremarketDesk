@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and three claims, a count read off
+and the two pages. It now carries two hundred and four claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -3026,6 +3026,80 @@ def claim_a_refusal_budget_is_per_incident(failures: list[str]) -> None:
           "connection resets it")
 
 
+def claim_seven_tasks_carry_every_trigger(failures: list[str]) -> None:
+    """The schedule is seven tasks, and every clock CRITERIA names is on one of them.
+
+    Eleven tasks were the same seven .bat files registered under other names
+    for their second and third firings: nightly-catchup, universe,
+    monitor-midday and monitor-night. Since 2026-09-02 a task carries every
+    trigger its job has and the .bat reads the clock. This holds the shape:
+    the seven names, the nightly's three firings including the Sunday
+    universe rebuild, the monitor's three, the retired names listed for
+    removal, and no job carrying an argument, because a task has one action.
+    """
+    from core import config, criteria
+    from ops import monitor_jobs
+
+    crit = criteria.load()
+    spec, error = monitor_jobs.script_jobs()
+    if error:
+        failures.append(f"the register script could not be read: {error}")
+        return
+    wanted = {"discover", "collector", "morning-chain", "midday", "nightly",
+              "monitor", "meter-sampler"}
+    if set(spec) != wanted:
+        failures.append(f"the script registers {sorted(spec)}, wanted {sorted(wanted)}")
+        return
+
+    def minutes(section: str, key: str) -> int:
+        return monitor_jobs._minutes(crit.clock(section, key))
+
+    nightly = spec["nightly"]["triggers"]
+    if len(nightly) != 3 or {t[0] for t in nightly} != {7 * 60, 22 * 60 + 15, 21 * 60}:
+        failures.append(f"the nightly does not carry 07:00, 22:15 and Sunday 21:00: "
+                        f"{sorted(nightly)}")
+    monitor = spec["monitor"]["triggers"]
+    expected_monitor = {
+        (minutes("monitor", "first_pass"),
+         crit.integer("monitor", "pass_interval_min"),
+         minutes("monitor", "last_pass") - minutes("monitor", "first_pass")),
+        (minutes("monitor", "midday_first_pass"),
+         crit.integer("monitor", "pass_interval_min"),
+         minutes("monitor", "midday_last_pass") - minutes("monitor", "midday_first_pass")),
+        (minutes("monitor", "night_pass"), 0, 0),
+    }
+    if monitor != expected_monitor:
+        failures.append(f"the monitor's triggers {sorted(monitor)} do not match "
+                        f"CRITERIA [Monitor] {sorted(expected_monitor)}")
+    if spec["collector"]["triggers"] != {(minutes("collector", "start_time"), 0, 0)}:
+        failures.append(f"the collector does not start at [Collector] start_time: "
+                        f"{sorted(spec['collector']['triggers'])}")
+    if spec["morning-chain"]["triggers"] != {(minutes("scan", "run_time"), 0, 0)}:
+        failures.append("the morning chain does not start at [Scan] run_time")
+    if spec["midday"]["triggers"] != {(minutes("midday", "run_time"), 0, 0)}:
+        failures.append("the midday job does not start at [Midday] run_time")
+
+    text = (config.PROJECT_ROOT / "tasks" / "register_tasks.ps1").read_text(encoding="utf-8")
+    declared = re.search(r"\$retired\s*=\s*@\(([^)]*)\)", text)
+    retired_list = declared.group(1) if declared else ""
+    for retired in ("nightly-catchup", "universe", "monitor-midday", "monitor-night"):
+        if f'"{retired}"' not in retired_list:
+            failures.append(f"{retired} is not in the script's $retired list, so a "
+                            "machine registered from the old script keeps it")
+    if re.search(r"^\s*@\{\s*Name[^\n]*Args\s*=", text, re.MULTILINE):
+        failures.append("a job still carries an argument; the .bat reads the clock")
+    if (config.PROJECT_ROOT / "tasks" / "job_universe.bat").exists():
+        failures.append("job_universe.bat still exists beside the nightly's Sunday mode")
+    nightly_bat = (config.PROJECT_ROOT / "tasks" / "job_nightly.bat").read_text(encoding="utf-8")
+    for needle in ("selection.universe", "selection.gap_stats", ":universe",
+                   "weekday()==6", "PMD_JOB=universe"):
+        if needle not in nightly_bat:
+            failures.append(f"job_nightly.bat lacks {needle!r}, so the Sunday firing "
+                            "would not rebuild the universe under its own name")
+    print("  seven tasks  the schedule is seven tasks carrying every CRITERIA clock, "
+          "the retired names are removed, and the nightly's Sunday mode is the universe")
+
+
 def claim_the_bucket_roll_is_complete_and_signed(failures: list[str]) -> None:
     """Every scored name is in the roll, and each carries its direction.
 
@@ -5525,8 +5599,8 @@ def claim_a_hold_needs_a_pass_that_can_act(failures: list[str]) -> None:
 
     # The schedule the hold reasons about, read from CRITERIA rather than
     # assumed: register_tasks.ps1 fires the monitor at first_pass and repeats
-    # it every pass_interval_min through last_pass, monitor-midday from
-    # midday_first_pass through midday_last_pass, and monitor-night once.
+    # it every pass_interval_min through last_pass, its midday trigger from
+    # midday_first_pass through midday_last_pass, and its night trigger once.
     #
     # The midday firings were added on 2026-08-31 and they move this grid
     # without moving the property below it: the pass after 09:25 is 12:25
@@ -5622,7 +5696,7 @@ def claim_the_last_pass_counts_what_it_cannot_resolve(failures: list[str]) -> No
     verdict of "ask again later" in the two places where nobody asks again. The
     chain gets ONE pass inside [chain_due, rerun_chain_until], 09:25, because
     chain_due is 09:00 and the monitor's firings are 07:25 through 09:25. The
-    nightly gets one too, monitor-night at 22:45, and by the next one the dated
+    nightly gets one too, the monitor's 22:45 firing, and by the next one the dated
     log path has rolled. So the pass with no successor inside the window
     reports UNRESOLVED and counts the job as a problem, which is what puts it
     in the exit code and in front of a reader.
@@ -11931,19 +12005,17 @@ def claim_the_watchdog_reads_every_job_that_writes_a_log(failures: list[str]) ->
         return
 
     watched = {entry[1] for entry in monitor_jobs.JOBS.values()}
-    # Two jobs stamp PMD_JOB and are correctly absent, each for its own
-    # reason. Named here rather than inferred, so adding a third is a
-    # deliberate act with a sentence attached to it.
+    # One job stamps PMD_JOB and is correctly absent. Named here rather than
+    # inferred, so adding a second is a deliberate act with a sentence
+    # attached to it. The Sunday universe rebuild used to be a second entry,
+    # job_universe.bat; since 2026-09-02 it is a mode inside job_nightly.bat,
+    # which IS watched, and the rebuild itself is still judged by AGE against
+    # [Monitor] universe_rerun_after_days off universe.json's own timestamp,
+    # which survives a week of dated logs rolling over.
     exempt = {
         "job_monitor.bat": "the watchdog cannot watch itself. Its own health "
                            "is Task Scheduler's Last Result column and the "
                            "job status record its run wrapper writes",
-        "job_universe.bat": "checked by AGE rather than by log. The Sunday "
-                            "rebuild is judged against [Monitor] "
-                            "universe_rerun_after_days off universe.json's "
-                            "own timestamp, which survives a week of dated "
-                            "logs rolling over, and it IS rerun on a weekday "
-                            "when the Sunday build was missed",
     }
     missing = []
     for bat in sorted(tasks.glob("job_*.bat")):
@@ -16449,6 +16521,7 @@ def main() -> int:
     run_claim(failures, claim_a_provisional_only_name_is_still_priced, failures)
     run_claim(failures, claim_the_stats_sidecar_carries_the_handover, failures)
     run_claim(failures, claim_a_refusal_budget_is_per_incident, failures)
+    run_claim(failures, claim_seven_tasks_carry_every_trigger, failures)
 
     if failures:
         for failure in failures:

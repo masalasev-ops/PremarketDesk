@@ -8,7 +8,7 @@ rem Fires every thirty minutes, all day, every day, and takes ONE reading per
 rem firing. Forty eight calls a day against a shared hundred thousand.
 rem
 rem The job trail answers "which step spent what". This answers "when", which
-rem the job trail cannot: eleven tasks sit in two short windows with nothing at
+rem the job trail cannot: seven tasks sit in two short windows with nothing at
 rem all between the 22:45 monitor and the 07:00 catch-up, and that overnight
 rem silence is where a sibling project draining the shared key is invisible.
 rem

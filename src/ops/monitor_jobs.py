@@ -76,8 +76,8 @@ JOBS = {
     "nightly": ("\\PremarketDesk\\nightly", "job_nightly.bat", "nightly",
                 r"===== archive finished rc=0"),
     # The 12:00 pass. Added 2026-08-31, having run since that morning watched
-    # by nothing: the weekday monitor stops at last_pass and monitor-night is
-    # at 22:45, so a midday failure was first named by job_status.overdue in
+    # by nothing: the weekday monitor stops at last_pass and its night firing
+    # is at 22:45, so a midday failure was first named by job_status.overdue in
     # the NEXT morning's packet, about eighteen hours later, and never rerun.
     # The marker is the LAST step job_midday.bat writes, the render, because a
     # scan that succeeded and a render that failed is still a failed job.
@@ -493,10 +493,11 @@ def _next_pass_minute(now_m: int) -> int | None:
     values, because a schedule literal in this module is exactly as unowned as
     a threshold literal would be. The weekday monitor starts at first_pass and
     repeats every pass_interval_min through last_pass, which is 07:25, 07:55,
-    08:25, 08:55 and 09:25; monitor-midday starts at midday_first_pass and
+    08:25, 08:55 and 09:25; its midday trigger starts at midday_first_pass and
     repeats on the same interval through midday_last_pass, which is 12:25,
-    12:55 and 13:25; and monitor-night is one firing at night_pass with no
-    repetition after it.
+    12:55 and 13:25; and its night trigger is one firing at night_pass with no
+    repetition after it. Three triggers on one task since 2026-09-02; they
+    were three tasks before.
 
     [corrected 2026-09-01: the paragraph above named only the morning grid and
     ran straight from 09:25 to night_pass. It went on saying that after the
@@ -592,8 +593,8 @@ def _job_alive(job: str, now: dt.datetime,
 
     The trigger is a late machine wake. Every task carries
     -StartWhenAvailable, and two of them catching up within 0.15 seconds of
-    each other is already on record: monitor 08:21:18.56 and nightly-catchup
-    08:21:18.71 on 2026-08-19. Sleep through 08:45, wake at 09:05, and
+    each other is already on record: monitor 08:21:18.56 and the nightly's
+    07:00 catch-up firing 08:21:18.71 on 2026-08-19. Sleep through 08:45, wake at 09:05, and
     Scheduler fires the missed chain and the missed monitor together. At
     09:05 chain_due has passed, rerun_chain_until has not, the log is fifteen
     seconds old, and a second job_morning_chain.bat starts: two scans write
@@ -738,7 +739,8 @@ def _rewriting_the_watchlist_is_free(day: str, now_m: int) -> tuple[bool, str]:
 #
 # It exists because this is the SECOND gap that has lived in that blind spot.
 # The first was -WakeToRun, set in the script and absent from the live tasks.
-# The second was monitor-midday, in the $jobs array since 2026-08-31 and never
+# The second was the midday watchdog task (monitor-midday, a task of its own
+# until 2026-09-02), in the $jobs array since 2026-08-31 and never
 # registered, so the three pass midday window existed in ops/monitor_jobs.py,
 # in CRITERIA [Monitor], in both architecture pages and in a claim, and never
 # fired once. Both were found by hand, months apart, by someone happening to
@@ -751,17 +753,11 @@ def _rewriting_the_watchlist_is_free(day: str, now_m: int) -> tuple[bool, str]:
 
 REGISTER_SCRIPT = config.PROJECT_ROOT / "tasks" / "register_tasks.ps1"
 
-# One $jobs entry. Start is required; the repetition pair is optional and is
-# absent for the tasks that fire once.
-_JOBS_ENTRY = re.compile(
-    r'@\{\s*Name\s*=\s*"(?P<name>[^"]+)"(?P<rest>[^}]*)\}')
+# One $jobs entry opens with its Name; its Triggers follow, one hashtable
+# each, and every trigger has a Start. The repetition pair is optional and is
+# absent for the triggers that fire once.
+_JOB_NAME = re.compile(r'Name\s*=\s*"(?P<name>[^"]+)"')
 _FIELD_START = re.compile(r'(?<![A-Za-z])Start\s*=\s*"(?P<value>\d{1,2}:\d{2})"')
-# A second weekly trigger on the same task, discover's 03:55 pass. schtasks
-# emits one CSV row per trigger, so both sides are compared as SETS of start
-# minutes: the first reconciliation kept the last row per task and compared
-# it against Start alone, and from the evening discover gained its second
-# trigger every pass reported a false DIFFERS.
-_FIELD_EXTRA_START = re.compile(r'ExtraStart\s*=\s*"(?P<value>\d{1,2}:\d{2})"')
 _FIELD_REPEAT_MIN = re.compile(r'RepeatMin\s*=\s*(?P<value>\d+)')
 _FIELD_REPEAT_HOURS = re.compile(r'RepeatHours\s*=\s*(?P<value>\d+)')
 
@@ -798,34 +794,61 @@ def _clock_minutes(text: str | None) -> int | None:
 
 
 def script_jobs() -> tuple[dict[str, dict[str, Any]], str | None]:
-    """The $jobs array as the script declares it, or a reason it is unknown."""
+    """The $jobs array as the script declares it, or a reason it is unknown.
+
+    Since 2026-09-02 a job is a Name and a Triggers array, each trigger its
+    own Days, Start and optional RepeatMin and RepeatHours, and seven tasks
+    carry what eleven did. So the unit of comparison is the TRIGGER: each job
+    maps to a set of (start minute, repeat every, repeat for) triples, which
+    is exactly what schtasks reports one CSV row per trigger. The first
+    reconciliation compared one Start per task and, from the evening discover
+    gained its second trigger, reported a false DIFFERS on every pass.
+
+    Parsed by scanning rather than by one regex, because the entries nest
+    hashtables and a `[^}]*` capture stops at the first inner brace.
+    """
     if not REGISTER_SCRIPT.is_file():
         return {}, f"{REGISTER_SCRIPT} is not on disk"
     try:
         text = REGISTER_SCRIPT.read_text(encoding="utf-8")
     except OSError as exc:
         return {}, f"{REGISTER_SCRIPT} could not be read: {exc}"
+    begin = text.find("$jobs = @(")
+    end = text.find("\n)", begin) if begin >= 0 else -1
+    if begin < 0 or end < 0:
+        return {}, (f"no $jobs array found in {REGISTER_SCRIPT.name}, so the "
+                    "specification could not be read")
+    body = text[begin:end]
+    names = list(_JOB_NAME.finditer(body))
     out: dict[str, dict[str, Any]] = {}
-    for entry in _JOBS_ENTRY.finditer(text):
-        rest = entry.group("rest")
-        start = _FIELD_START.search(rest)
-        if not start:
-            # A one off probe block, not a $jobs entry. Those are deliberately
-            # outside the array so a plain run cannot resurrect them.
+    for index, found in enumerate(names):
+        block_end = names[index + 1].start() if index + 1 < len(names) else len(body)
+        block = body[found.end():block_end]
+        # Comment lines are not specification. A "# ... Start = ..." in the
+        # reasoning beside a job must not become a trigger.
+        block = "\n".join(line for line in block.splitlines()
+                          if not line.lstrip().startswith("#"))
+        triggers: set[tuple[int, int, int]] = set()
+        for piece in block.split("@{")[1:]:
+            start = _FIELD_START.search(piece)
+            if not start:
+                continue
+            hour, _, minute = start.group("value").partition(":")
+            repeat_min = _FIELD_REPEAT_MIN.search(piece)
+            repeat_hours = _FIELD_REPEAT_HOURS.search(piece)
+            triggers.add((int(hour) * 60 + int(minute),
+                          int(repeat_min.group("value")) if repeat_min else 0,
+                          int(repeat_hours.group("value")) * 60 if repeat_hours else 0))
+        if not triggers:
             continue
-        hour, _, minute = start.group("value").partition(":")
-        starts = {int(hour) * 60 + int(minute)}
-        for extra in _FIELD_EXTRA_START.finditer(rest):
-            extra_hour, _, extra_minute = extra.group("value").partition(":")
-            starts.add(int(extra_hour) * 60 + int(extra_minute))
-        repeat_min = _FIELD_REPEAT_MIN.search(rest)
-        repeat_hours = _FIELD_REPEAT_HOURS.search(rest)
-        out[entry.group("name")] = {
-            "start_minute": int(hour) * 60 + int(minute),
-            "start_minutes": starts,
-            "start_text": start.group("value"),
-            "repeat_every_minutes": int(repeat_min.group("value")) if repeat_min else 0,
-            "repeat_for_minutes": int(repeat_hours.group("value")) * 60 if repeat_hours else 0,
+        first = min(triggers)
+        out[found.group("name")] = {
+            "triggers": triggers,
+            "start_minutes": {t[0] for t in triggers},
+            "start_minute": first[0],
+            "start_text": f"{first[0] // 60:02d}:{first[0] % 60:02d}",
+            "repeat_every_minutes": first[1],
+            "repeat_for_minutes": first[2],
         }
     if not out:
         return {}, (f"no $jobs entries parsed out of {REGISTER_SCRIPT.name}, so "
@@ -857,22 +880,22 @@ def registered_tasks() -> tuple[dict[str, dict[str, Any]], str | None]:
             continue
         short = name[len(TASK_FOLDER):]
         start_minute = _clock_minutes(row.get("Start Time"))
-        if short in out:
-            # A second trigger row of the same task. Its start joins the set;
-            # the repetition fields stay those of the first row, which is the
-            # trigger the script's RepeatMin and RepeatHours describe.
-            if start_minute is not None:
-                out[short]["start_minutes"].add(start_minute)
-            else:
-                out[short]["start_minute"] = None
-            continue
-        out[short] = {
+        every = _duration_minutes(row.get("Repeat: Every"))
+        for_minutes = _duration_minutes(row.get("Repeat: Until: Duration"))
+        entry = out.setdefault(short, {
+            "triggers": set(), "start_minutes": set(), "unreadable_rows": 0,
             "start_minute": start_minute,
-            "start_minutes": {start_minute} if start_minute is not None else set(),
             "start_text": (row.get("Start Time") or "").strip(),
-            "repeat_every_minutes": _duration_minutes(row.get("Repeat: Every")),
-            "repeat_for_minutes": _duration_minutes(row.get("Repeat: Until: Duration")),
-        }
+            "repeat_every_minutes": every, "repeat_for_minutes": for_minutes,
+        })
+        # One row per trigger. A row this cannot read is counted rather than
+        # dropped, so the task is reported NOT CHECKED instead of agreeing on
+        # the rows that did parse.
+        if start_minute is None or every is None or for_minutes is None:
+            entry["unreadable_rows"] += 1
+            continue
+        entry["triggers"].add((start_minute, every, for_minutes))
+        entry["start_minutes"].add(start_minute)
     if not out:
         return {}, (f"schtasks returned no task under {TASK_FOLDER}, which is "
                     "either an empty folder or a query this could not read. "
@@ -914,25 +937,24 @@ def reconcile_schedule() -> dict[str, Any]:
                 f"discover: $jobs starts it at {sorted(spec['discover']['start_minutes'])} "
                 f"minute(s) and CRITERIA [Discovery] run_time and "
                 f"provisional_run_time say {sorted(wanted)}")
+    def _say(triggers: set[tuple[int, int, int]]) -> str:
+        return ", ".join(
+            f"{start // 60:02d}:{start % 60:02d}"
+            + (f" every {every}m for {for_minutes}m" if every else "")
+            for start, every, for_minutes in sorted(triggers))
+
     for name in sorted(set(spec) & set(live)):
         want, got = spec[name], live[name]
-        fields = ("start_minute", "repeat_every_minutes", "repeat_for_minutes")
-        if any(got[field] is None for field in fields):
+        if got.get("unreadable_rows"):
             unreadable.append(
-                f"{name}: schtasks gave a start of {got['start_text']!r} and a "
-                "repetition this could not parse, so it is NOT being reported "
-                "as agreeing")
+                f"{name}: schtasks gave {got['unreadable_rows']} trigger row(s) "
+                f"this could not parse (first start {got['start_text']!r}), so "
+                "it is NOT being reported as agreeing")
             continue
-        if want["start_minutes"] != got["start_minutes"]:
+        if want["triggers"] != got["triggers"]:
             differs.append(
-                f"{name}: starts at {sorted(got['start_minutes'])} minute(s) on "
-                f"the machine and {sorted(want['start_minutes'])} in $jobs")
-        for field, label in (("repeat_every_minutes", "repeat every"),
-                             ("repeat_for_minutes", "repeat for")):
-            if want[field] != got[field]:
-                differs.append(
-                    f"{name}: {label} is {got[field]} minute(s) on the machine "
-                    f"and {want[field]} in $jobs")
+                f"{name}: triggers are [{_say(got['triggers'])}] on the machine "
+                f"and [{_say(want['triggers'])}] in $jobs")
     return {"checked": True, "reason": None, "missing": missing,
             "extra": extra, "differs": differs, "unreadable": unreadable,
             "spec_count": len(spec), "live_count": len(live)}
@@ -1026,7 +1048,10 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                 report("universe", "RERUNNING",
                        f"universe.json is {age_days:.1f} days old" if age_days is not None
                        else "universe.json is missing or unreadable")
-                launch_bat("job_universe.bat", dry_run)
+                # The universe rebuild is the nightly .bat's Sunday mode
+                # since 2026-09-02; a hand launch names the mode, because
+                # the clock would read a weekday as the full night.
+                launch_bat("job_nightly.bat", dry_run, ("universe",))
                 if not dry_run:
                     _record_rerun(day, "universe")
                 actions += 1
@@ -1071,7 +1096,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
                 detail = f"{detail}, and {exited}"
             # The settled flag is not consulted for discover, and the chain and
             # the nightly below explain why it is for them: every monitor pass
-            # from discover_due onwards evaluates discover, monitor-night's
+            # from discover_due onwards evaluates discover, the monitor's
             # 22:45 firing included, so a provisional RUNNING here is always
             # read again while the log path is still today's.
             alive, _settled = _job_alive("discover", now, task)
@@ -1368,8 +1393,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
         # "has not finished yet" from "did not finish".
         fired_ok = fired and task.get("last_result") == "0"
         alive, settled = _job_alive("nightly", now, task)
-        # monitor-night is a SINGLE firing at nightly_due, so unlike the
-        # morning there is no next pass to defer to. The morning's own passes
+        # The monitor's night trigger is a SINGLE firing at nightly_due, so
+        # unlike the morning there is no next pass to defer to. The morning's own passes
         # cannot serve as one either: 07:25 is before nightly_due and prints
         # NOT DUE, and by the next 22:45 the dated log path has rolled.
         revisited = next_pass is not None and next_pass >= nightly_due
@@ -1391,7 +1416,7 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             problems += 1
             report("nightly", "UNRESOLVED", f"{alive}, which is the same "
                    "reading for a nightly still working as for one that died "
-                   "just before this pass, and monitor-night fires once so "
+                   "just before this pass, and the night trigger fires once so "
                    "nothing revisits it. Not rerun: a second nightly on top of "
                    "a live one duplicates the backfill. The 07:00 catch-up run "
                    "fills the backfill and the outcomes again either way, so "
@@ -1462,8 +1487,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             for name in schedule["missing"]:
                 report("schedule", "MISSING",
                        f"{name} is in $jobs and NOT registered, so it never "
-                       "fires. monitor-midday sat like this from 2026-08-31 "
-                       "to 2026-09-01")
+                       "fires. The midday watchdog task sat like this from "
+                       "2026-08-31 to 2026-09-01")
                 problems += 1
             for name in schedule["extra"]:
                 report("schedule", "UNKNOWN",

@@ -44,6 +44,18 @@ param([switch]$Unregister, [string]$Probe, [string]$Capture, [string]$SocketCost
 
 $root = Split-Path -Parent $PSScriptRoot
 $weekdays = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+$everyday = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+# SEVEN TASKS, NOT ELEVEN. Since 2026-09-02 a task carries every trigger its
+# job has, each with its own days and repetition, and the .bat tells the
+# firings apart by the clock. The four tasks this retired (nightly-catchup,
+# universe, monitor-midday, monitor-night) were the same three .bat files
+# registered again under other names, which was four more places for one
+# schedule to drift and a folder nobody could read at a glance. $retired
+# below is unregistered on every plain run so the folder matches $jobs.
+#
+# Each job: Name, Bat, Triggers, optional LimitHours. Each trigger: Days,
+# Start, optional RepeatMin and RepeatHours. ops/monitor_jobs.py parses this
+# array and compares it, trigger by trigger, against what schtasks reports.
 $jobs = @(
     # Discover runs TWICE, and the collector starts before the second one.
     # From 2026-09-02 the socket opens at 04:00, because measuring 2026-08-29
@@ -56,82 +68,89 @@ $jobs = @(
     # moves onto the second pool when it appears. See the two phase note in
     # CRITERIA.
     #
-    # ExtraStart, not a second job: one task with two triggers, so there is
-    # one place where discover's schedule lives and the pair cannot drift.
-    @{ Name = "discover";      Bat = "job_discover.bat";      Days = $weekdays;    Start = "07:15"; ExtraStart = "03:55" },
+    # One task with two triggers, so there is one place where discover's
+    # schedule lives and the pair cannot drift.
+    @{ Name = "discover";      Bat = "job_discover.bat";      Triggers = @(
+        @{ Days = $weekdays; Start = "03:55" },
+        @{ Days = $weekdays; Start = "07:15" }) },
     # Six hours, not the default four. 04:00 to 09:25 is five and a half, and
     # a four hour limit would have Task Scheduler kill the collector at 08:00,
     # forty five minutes before the scan reads its tape, on a job whose data
     # cannot be fetched afterwards from any vendor on this plan.
-    @{ Name = "collector";     Bat = "job_collector.bat";     Days = $weekdays;    Start = "04:00"; LimitHours = 6 },
-    @{ Name = "morning-chain"; Bat = "job_morning_chain.bat"; Days = $weekdays;    Start = "08:45" },
+    @{ Name = "collector";     Bat = "job_collector.bat";     LimitHours = 6; Triggers = @(
+        @{ Days = $weekdays; Start = "04:00" }) },
+    @{ Name = "morning-chain"; Bat = "job_morning_chain.bat"; Triggers = @(
+        @{ Days = $weekdays; Start = "08:45" }) },
     # 12:00, and the hour is the point. us-quote-delayed's REGULAR hours
     # behaviour is what was measured, its premarket behaviour is untested, and
     # its previousClosePrice rolls at an hour nobody has pinned down, which is
     # why the midday pass takes its denominator from a bulk day asked for by
     # date instead. See CRITERIA [Midday].
-    @{ Name = "midday";        Bat = "job_midday.bat";        Days = $weekdays;    Start = "12:00" },
-    @{ Name = "nightly";       Bat = "job_nightly.bat";       Days = $weekdays;    Start = "22:15" },
-    # The vendor publishes intraday overnight more often than by 22:15, so the
-    # same idempotent nightly runs again before the market day: it fills
-    # yesterday via the catch-up sweep and completes the volume verification
-    # before the new morning's collection is trusted.
+    @{ Name = "midday";        Bat = "job_midday.bat";        Triggers = @(
+        @{ Days = $weekdays; Start = "12:00" }) },
+    # THREE FIRINGS OF ONE .BAT, told apart by the clock inside it.
     #
-    # It passes "catchup", which runs the backfill and the outcome fill and
-    # stops there. Without it this firing also ran pool_recall, which measures
-    # the session it is invoked on, so at 07:00 it asked for a session that had
-    # not opened and overwrote the previous evening's real recall figures with
-    # zeros. See job_nightly.bat.
-    @{ Name = "nightly-catchup"; Bat = "job_nightly.bat";      Days = $weekdays;    Start = "07:00"; Args = "catchup" },
-    # 21:00, and the two earlier values are worth keeping in view because each
-    # was wrong for a different reason.
+    # 22:15 on weekdays is the whole night. 07:00 on weekdays is the catch-up:
+    # the vendor publishes intraday overnight more often than by 22:15, so the
+    # same idempotent job runs again before the market day, fills yesterday
+    # via the catch-up sweep, and completes the volume verification before the
+    # new morning's collection is trusted. It runs the backfill and the outcome
+    # fill and stops there: until 2026-08-20 that firing also ran pool_recall,
+    # which measures the session it is invoked on, so at 07:00 it asked for a
+    # session that had not opened and overwrote the previous evening's real
+    # recall figures with zeros.
     #
-    # 20:00 was the exact instant of the 00:00 UTC reset (20:00 ET in daylight
-    # time, 19:00 in standard), so which quota day the largest job in the
-    # schedule billed to was a coin toss.
+    # Sunday 21:00 rebuilds the weekly universe, and the two earlier values of
+    # that clock are worth keeping in view because each was wrong for a
+    # different reason. 20:00 was the exact instant of the 00:00 UTC reset
+    # (20:00 ET in daylight time, 19:00 in standard), so which quota day the
+    # largest job in the schedule billed to was a coin toss. 20:30 assumed the
+    # vendor's counter rolls ON the hour. It does not: the 2026-08-16 run read
+    # 99,671 used with 329 remaining at 20:30:01 and 4,944 at 20:31:49, so the
+    # roll landed 30 to 32 minutes AFTER 00:00 UTC, and a job carrying
+    # discover's refuse floor would have stood down on a budget about to be
+    # full. 21:00 gives roughly double the one lag actually observed, and the
+    # meter trail records apiRequestsDate on every reading so a roll is visible
+    # rather than inferred.
+    @{ Name = "nightly";       Bat = "job_nightly.bat";       Triggers = @(
+        @{ Days = $weekdays;   Start = "07:00" },
+        @{ Days = $weekdays;   Start = "22:15" },
+        @{ Days = @("Sunday"); Start = "21:00" }) },
+    # THE WATCHDOG, three triggers: through the morning window every thirty
+    # minutes from 07:25 to 09:25, three times over the midday job, once after
+    # the nightly. The passes themselves are decided by the clock in
+    # ops/monitor_jobs.py from CRITERIA [Monitor].
     #
-    # 20:30 assumed the vendor's counter rolls ON the hour. It does not. The
-    # 2026-08-16 run read 99,671 used with 329 remaining at 20:30:01 and 4,944
-    # at 20:31:49, so the roll landed 30 to 32 minutes AFTER 00:00 UTC. The job
-    # spent its first minute reading a counter that was 329 short of exhausted,
-    # and a job carrying discover's refuse floor would have stood down on a
-    # budget that was in fact about to be full.
-    #
-    # 21:00 gives roughly double the one lag actually observed. The lag is a
-    # vendor behaviour nothing here controls, so the meter trail records
-    # apiRequestsDate on every reading and a roll is visible rather than
-    # inferred.
-    @{ Name = "universe";      Bat = "job_universe.bat";      Days = @("Sunday");  Start = "21:00" },
-    # The watchdog: repeats through the morning window, three times over the
-    # midday job, once after the nightly.
-    @{ Name = "monitor";       Bat = "job_monitor.bat";       Days = $weekdays;    Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
-    # 12:25, 12:55 and 13:25, from CRITERIA [Monitor] midday_first_pass and
-    # midday_last_pass. Added 2026-08-31, when the 12:00 job had been running
-    # watched by nothing: the morning trigger stops at 09:25 and monitor-night
-    # is at 22:45, so a midday failure was first named by the NEXT morning's
-    # report, about eighteen hours later.
-    #
-    # MORE THAN ONE PASS IS ARITHMETIC. [Monitor] job_log_stale_after_s is
-    # 2200, so a midday that hung after writing its log at 12:00 is still warm
-    # at 12:25 and cannot be told from a live job. A single pass could only
-    # ever report UNRESOLVED on that state; by 12:55 the log is 3,300 seconds
-    # cold and the verdict is decidable. The third is margin for Task
-    # Scheduler's repetition endpoint, which is INCLUSIVE: verified by
-    # logs\monitor-2026-09-01.log and -02.log, which carry the 09:25 firing
-    # of the morning trigger and the 13:25 firing of this one.
-    #
-    # The midday job is NOT rerun by these passes. See the branch in
-    # ops/monitor_jobs.py: the sweep spends about 2,902 credits on the shared
-    # key and a relaunch would replace the packet it may already have written.
-    @{ Name = "monitor-midday"; Bat = "job_monitor.bat";      Days = $weekdays;    Start = "12:25"; RepeatMin = 30; RepeatHours = 1 },
-    @{ Name = "monitor-night"; Bat = "job_monitor.bat";       Days = $weekdays;    Start = "22:45" },
+    # 12:25, 12:55 and 13:25 were added 2026-08-31, when the 12:00 job had been
+    # running watched by nothing: the morning trigger stops at 09:25 and the
+    # night firing is 22:45, so a midday failure was first named by the NEXT
+    # morning's report, about eighteen hours later. MORE THAN ONE PASS IS
+    # ARITHMETIC: [Monitor] job_log_stale_after_s is 2200, so a midday that
+    # hung after writing its log at 12:00 is still warm at 12:25 and cannot be
+    # told from a live job; by 12:55 the log is 3,300 seconds cold and the
+    # verdict is decidable. The third is margin for Task Scheduler's
+    # repetition endpoint, which is INCLUSIVE: verified by
+    # logs\monitor-2026-09-01.log and -02.log, which carry the 09:25 firing of
+    # the morning trigger and the 13:25 firing of the midday one. The midday
+    # job is NOT rerun by these passes: the sweep spends about 2,902 credits on
+    # the shared key and a relaunch would replace the packet it may already
+    # have written.
+    @{ Name = "monitor";       Bat = "job_monitor.bat";       Triggers = @(
+        @{ Days = $weekdays; Start = "07:25"; RepeatMin = 30; RepeatHours = 2 },
+        @{ Days = $weekdays; Start = "12:25"; RepeatMin = 30; RepeatHours = 1 },
+        @{ Days = $weekdays; Start = "22:45" }) },
     # Every day including weekends, every thirty minutes, all twenty four
     # hours. Not a step: an instrument. The job trail says which step spent
     # what and cannot say when, because nothing runs between 22:45 and 07:00
     # and that overnight silence is exactly where a sibling draining the
     # shared key would hide. One call per firing, 48 a day.
-    @{ Name = "meter-sampler"; Bat = "job_meter_sampler.bat"; Days = @("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"); Start = "00:00"; RepeatMin = 30; RepeatHours = 24 }
+    @{ Name = "meter-sampler"; Bat = "job_meter_sampler.bat"; Triggers = @(
+        @{ Days = $everyday; Start = "00:00"; RepeatMin = 30; RepeatHours = 24 }) }
 )
+# Task names this schedule used to carry and no longer does. Removed on every
+# plain run and on -Unregister, so a machine registered from an older copy of
+# this script ends up matching $jobs rather than carrying both.
+$retired = @("nightly-catchup", "universe", "monitor-midday", "monitor-night")
 
 # The one off probe. NOT in $jobs, because everything in $jobs is registered
 # by every plain run of this script and this task is meant to be deleted the
@@ -353,36 +372,29 @@ foreach ($job in $jobs) {
         continue
     }
 
-    # -Argument is passed structurally like -Execute, so the spaced project
-    # path is not involved and the schtasks quoting trap does not apply here.
-    # Only nightly-catchup carries one today.
-    if ($job.Args) {
-        $action = New-ScheduledTaskAction -Execute $bat -Argument $job.Args -WorkingDirectory $root
-    } else {
-        $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
-    }
-    $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $job.Days -At $job.Start
-    if ($job.ExtraStart) {
-        # A second weekly trigger on the same task. Register-ScheduledTask
-        # takes an array of triggers, so the pair is registered together and a
-        # -Force rewrite replaces both rather than leaving one behind.
-        $trigger = @($trigger, (New-ScheduledTaskTrigger -Weekly -DaysOfWeek $job.Days -At $job.ExtraStart))
-    }
-    if ($job.RepeatMin -and $job.ExtraStart) {
-        # No job needs both today, and the assignment below would fail on an
-        # array of triggers rather than say why. Refusing here means the next
-        # person to want both reads this instead of debugging a type error.
-        Write-Output "FAILED    PremarketDesk\$($job.Name): RepeatMin and ExtraStart together are not supported"
-        continue
-    }
-    if ($job.RepeatMin) {
-        # Weekly triggers cannot take repetition parameters directly in this
-        # PowerShell version, so borrow the repetition block from a once
-        # trigger, which can.
-        $repeater = New-ScheduledTaskTrigger -Once -At $job.Start `
-            -RepetitionInterval (New-TimeSpan -Minutes $job.RepeatMin) `
-            -RepetitionDuration (New-TimeSpan -Hours $job.RepeatHours)
-        $trigger.Repetition = $repeater.Repetition
+    # No -Argument on any task since 2026-09-02: the one job that carried one
+    # (the catch-up's "catchup") reads the clock instead, because a task has
+    # one action however many triggers it has.
+    $action = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $root
+    # Every trigger the job has, registered together: Register-ScheduledTask
+    # takes an array, so a -Force rewrite replaces the whole set rather than
+    # leaving one behind. Weekly triggers cannot take repetition parameters
+    # directly in this PowerShell version, so each repeating one borrows the
+    # repetition block from a once trigger, which can.
+    $triggers = @()
+    $said = @()
+    foreach ($t in $job.Triggers) {
+        $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek $t.Days -At $t.Start
+        $repeat = ""
+        if ($t.RepeatMin) {
+            $repeater = New-ScheduledTaskTrigger -Once -At $t.Start `
+                -RepetitionInterval (New-TimeSpan -Minutes $t.RepeatMin) `
+                -RepetitionDuration (New-TimeSpan -Hours $t.RepeatHours)
+            $trigger.Repetition = $repeater.Repetition
+            $repeat = " every $($t.RepeatMin)m for $($t.RepeatHours)h"
+        }
+        $triggers += $trigger
+        $said += "$($t.Start) ($($t.Days -join ','))$repeat"
     }
     $limitHours = 4
     if ($job.LimitHours) { $limitHours = $job.LimitHours }
@@ -391,12 +403,23 @@ foreach ($job in $jobs) {
 
     try {
         Register-ScheduledTask -TaskName $job.Name -TaskPath $taskPath `
-            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
-        $repeat = ""
-        if ($job.RepeatMin) { $repeat = ", repeating every $($job.RepeatMin)m for $($job.RepeatHours)h" }
-        Write-Output "registered PremarketDesk\$($job.Name) at $($job.Start) ($($job.Days -join ','))$repeat"
+            -Action $action -Trigger $triggers -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Write-Output "registered PremarketDesk\$($job.Name) at $($said -join '; ')"
     } catch {
         Write-Output "FAILED    PremarketDesk\$($job.Name): $($_.Exception.Message)"
+    }
+}
+
+# The retired names, on every run. A plain run that registered seven tasks
+# beside four leftovers would fire the nightly twice at 22:15 and the
+# watchdog twice at 22:45, and the reconciliation would report the folder as
+# carrying tasks the script does not know.
+foreach ($name in $retired) {
+    try {
+        Unregister-ScheduledTask -TaskName $name -TaskPath "\PremarketDesk\" -Confirm:$false -ErrorAction Stop
+        Write-Output "removed   PremarketDesk\$name (retired 2026-09-02, its triggers live on another task now)"
+    } catch {
+        # Not found is the ordinary state once it has been removed once.
     }
 }
 

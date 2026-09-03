@@ -18,6 +18,35 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, twelfth: fewer tasks by multiplying triggers, not by a daemon
+
+The owner asked for fewer scheduled tasks. Two ways down from eleven.
+
+REJECTED FOR NOW, ONE DAEMON. A single process started before 04:00 that
+runs every step at its clock gets to one task, and IMPROVEMENT_PLAN 4.10
+already holds it as the single job entrypoint. It makes one process the
+thing that has to survive a whole day, and the watchdog would be watching
+itself: the reason the monitor is a separate task is that Task Scheduler
+restarts it whatever state the thing it watches is in. Not before the two
+phase collector has a few clean mornings behind it, and possibly not then.
+
+TAKEN, ONE TASK PER .BAT WITH EVERY TRIGGER ON IT. Seven tasks, one per
+scheduled .bat, each carrying its firings with their own days and
+repetition. The .bat tells the firings apart by the clock, which is the
+one new mechanism: a task has one action, so the argument the catch-up
+used to receive from the registration had to come from somewhere else,
+and the ET clock is the only thing the three firings differ by. The
+watchdog keeps a separate task to restart, the reconciliation keeps a
+specification to compare the machine against, and it now compares
+trigger by trigger, which is stricter than what it replaced.
+
+The Sunday universe rebuild joining the nightly's task was the one choice
+inside this that could have gone the other way. It stays a separate .bat
+mode with its own PMD_JOB and log name rather than becoming nightly
+steps, because everything that reads the universe build reads it under
+that name, and a Sunday firing of a weekday job would otherwise be stood
+down by the trading day guard.
+
 ## 2026-09-02, eleventh: a stale print stays in the report and fails a screen line, rather than the limit widening or the drop staying
 
 CHANGELOG forty seventh records that [Price age] was removing 36
