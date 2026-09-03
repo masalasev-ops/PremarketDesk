@@ -442,14 +442,51 @@ STATE_SKIPPED = "skipped"
 STATE_BOOKED = "booked"
 STATE_UNSIZED = "triggered and not booked"
 STATE_NEVER = "never triggered"
+# The trade was sized and entered, and the session's minutes ran out before a
+# readable close. paper_ledger.record_so_far has counted this apart from the
+# sizing refusals since it named EXIT_OPEN_AT_END; until 2026-09-02 this copy
+# had four states and folded it into STATE_UNSIZED, so the first such row made
+# the two counts disagree and how_did_the_score_do printed that its split no
+# longer matched the ledger's, on a page whose point is the rate beside it.
+STATE_OPEN_AT_END = "entered and still open at the session's end"
 
 # What the trigger rate counts, and what it divides by. The denominator is the
 # rows the rule was actually APPLIED to. A skipped row and a row the ledger has
 # not reached were never checked, and a row that was checked and did not fire
 # is a different fact: folding the three together would publish a never checked
-# result as a negative one.
-TRIGGER_FIRED = (STATE_BOOKED, STATE_UNSIZED)
+# result as a negative one. An open at end row FIRED: it entered, which is
+# what the trigger rate measures, whatever became of the position after.
+TRIGGER_FIRED = (STATE_BOOKED, STATE_UNSIZED, STATE_OPEN_AT_END)
 TRIGGER_EVALUATED = TRIGGER_FIRED + (STATE_NEVER,)
+
+
+def gap_band_labels() -> dict[str, str]:
+    """CRITERIA [Score gap]'s bands as {band result: label}, smallest gap first.
+
+    The score watch groups by the absolute gap, and the only bands that mean
+    anything on a page about the score are the ones the score awards points
+    at. Read off _CRIT.bands rather than written here, so a moved edge in the
+    file moves the grouping. The label is built from the rule and the edge
+    above it: "> 8" reads "above 8 percent", ">= 4" under it reads "4 to 8
+    percent", and the else line reads "below 4 percent".
+    """
+    bands = _CRIT.bands("score_gap")
+    labelled: list[tuple[str, str]] = []
+    upper: float | None = None
+    for band in bands:
+        if band.rule is None:
+            label = (f"below {upper:g} percent" if upper is not None
+                     else "any gap")
+        elif upper is None:
+            label = (f"above {band.rule.value:g} percent"
+                     if band.rule.op == ">"
+                     else f"{band.rule.value:g} percent and up")
+        else:
+            label = f"{band.rule.value:g} to {upper:g} percent"
+        labelled.append((band.result, label))
+        if band.rule is not None:
+            upper = band.rule.value
+    return dict(reversed(labelled))
 
 
 def _trigger_state(row: dict[str, Any]) -> str:
@@ -462,11 +499,12 @@ def _trigger_state(row: dict[str, Any]) -> str:
     record_so_far reads and compares the counts on every rendering, so a
     divergence appears on the page rather than quietly moving a rate.
 
-    FIVE STATES AND NOT FOUR, because a join can miss. A pick the ledger has
+    SIX STATES AND NOT FIVE, because a join can miss. A pick the ledger has
     not reached carries no row at all, and that is not a pick whose trigger
     did not fire: the rule was never applied to it. Told apart on rule_version,
     which paper_trades declares NOT NULL, rather than on booked, so an absent
-    row and a row carrying a null flag cannot read the same.
+    row and a row carrying a null flag cannot read the same. The ledger's own
+    five are the other five, EXIT_OPEN_AT_END included.
     """
     from night import paper_ledger
 
@@ -478,6 +516,10 @@ def _trigger_state(row: dict[str, Any]) -> str:
         return STATE_SKIPPED
     if row.get("booked"):
         return STATE_BOOKED
+    # Before the unsized test, exactly as record_so_far excludes it from
+    # `unsized`: this row was sized and entered, so it is not a sizing refusal.
+    if row.get("exit_reason") == paper_ledger.EXIT_OPEN_AT_END:
+        return STATE_OPEN_AT_END
     # POSITIVELY, by an exit_reason that is present and is not EXIT_NEVER,
     # which is record_so_far's predicate and its stated reason: a booked=0 row
     # may legitimately carry a null exit_reason, and reading that null as a
@@ -758,14 +800,16 @@ def how_did_the_score_do() -> dict[str, Any]:
     # would surface here as a disagreement, which is where it should surface.
     ledger = paper_ledger.record_so_far(primary_rule)
     counted: dict[str, int] = {
-        STATE_BOOKED: 0, STATE_SKIPPED: 0, STATE_NEVER: 0, STATE_UNSIZED: 0}
+        STATE_BOOKED: 0, STATE_SKIPPED: 0, STATE_NEVER: 0, STATE_UNSIZED: 0,
+        STATE_OPEN_AT_END: 0}
     for row in ledger_rows:
         state = _trigger_state(row)
         counted[state] = counted.get(state, 0) + 1
     expected = {STATE_BOOKED: ledger["booked"]["rows"],
                 STATE_SKIPPED: ledger["skipped"]["rows"],
                 STATE_NEVER: ledger["never_triggered"]["rows"],
-                STATE_UNSIZED: ledger["triggered_but_unsized"]["rows"]}
+                STATE_UNSIZED: ledger["triggered_but_unsized"]["rows"],
+                STATE_OPEN_AT_END: ledger["open_at_session_end"]["rows"]}
     disagreements = [
         f"{state}: this page counts {counted.get(state, 0)}, "
         f"paper_ledger.record_so_far counts {count}"
@@ -792,16 +836,18 @@ def how_did_the_score_do() -> dict[str, Any]:
     # pick already carried. The gap band is on the ABSOLUTE gap, in the bands
     # SCORE_INVERSION.md's range confound names; the direction split is
     # scan.score_roll's, zero counted as up and a null gap its own group.
+    # The bands are CRITERIA [Score gap]'s own, read through gap_band_labels
+    # below, so the page groups by the edges the score actually awards points
+    # at. Until 2026-09-02 they were 5 and 8 written here, against the 4 and 8
+    # in the file, so the "5 to 8 percent" row was pooling names the score
+    # had put in two different bands.
+    band_labels = gap_band_labels()
+
     def _gap_band(row: dict[str, Any]) -> str:
         gap = row.get("gap_pct")
         if gap is None:
             return "gap not computed"
-        size = abs(float(gap))
-        if size < 5:
-            return "3 to 5 percent"
-        if size < 8:
-            return "5 to 8 percent"
-        return "8 percent and up"
+        return band_labels[_CRIT.band_result("score_gap", abs(float(gap)))]
 
     def _direction(row: dict[str, Any]) -> str:
         gap = row.get("gap_pct")
@@ -821,7 +867,7 @@ def how_did_the_score_do() -> dict[str, Any]:
     groupings: list[dict[str, Any]] = []
     for title, keyer, order in (
             ("By gap size, absolute", _gap_band,
-             ("3 to 5 percent", "5 to 8 percent", "8 percent and up", "gap not computed")),
+             (*band_labels.values(), "gap not computed")),
             ("By gap direction", _direction, ("gapped up", "gapped down", "gap not computed")),
             ("By catalyst class", _catalyst, None),
             ("By the day screen's verdict", _verdict,
@@ -1202,8 +1248,13 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
                 "socket volume and there is no estimate to score.</div></div>")
         win = trust["window_share"]
         if win["median"] is not None:
-            add(f"<div class=card><div class=lab>What the 07:20 start sees of "
-                f"the 04:00 tape</div><div class=big>{_n(win['median'], 4)}"
+            # The collector's window is per session, 07:20 before 2026-09-03
+            # and 04:00 from then, and these rows span both, so the label
+            # names neither clock. The tape's own start is [Baseline]
+            # session_start.
+            add(f"<div class=card><div class=lab>What the collector's own window "
+                f"sees of the {_CRIT.clock_text('baseline', 'session_start')} tape"
+                f"</div><div class=big>{_n(win['median'], 4)}"
                 f"</div><div class=note>Range {_n(win['low'], 4)} to "
                 f"{_n(win['high'], 4)} over {_n(win['rows'])} row(s) across "
                 f"{_n(win['sessions'])} session(s), which is fewer than the "
@@ -1299,7 +1350,12 @@ def render(days: list[str], ran: dict, trust: dict, published: dict,
     closest = cost["closest"]
     if closest:
         margin = closest["remaining"] - cost["degrade_below"]
-        klass = "bad" if margin <= 0 else ("warn" if margin < 5000 else "good")
+        # warn while the margin above the degrade floor is itself smaller
+        # than that floor, which is [Quota] degrade_below_remaining read once
+        # into cost["degrade_below"]. It was the literal 5000 here until
+        # 2026-09-02, a second copy of the key that would not have moved.
+        klass = ("bad" if margin <= 0
+                 else ("warn" if margin < cost["degrade_below"] else "good"))
         add(f"<div class=card><div class=lab>Closest any morning came to the "
             f"preflight floor</div>"
             f"<div class='big {klass}'>{_n(margin)}</div>"

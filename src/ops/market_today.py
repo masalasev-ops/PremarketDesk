@@ -260,6 +260,32 @@ def decide(details: dict[str, Any] | None,
     return True, f"{date} is a regular trading day"
 
 
+def early_close(date: dt.date,
+                details: dict[str, Any] | None = None) -> tuple[bool | None, str]:
+    """(closes_early, reason), where None means there is no calendar to say.
+
+    The same ExchangeEarlyCloseDays rows decide() reads to word its reason,
+    exposed as an answer because the midday pass pro rates today's volume to
+    the session that has elapsed and needs to know when the session ENDS. On
+    the day after Thanksgiving the exchange closes at 13:00, and a pro rate
+    against 16:00 there calls every name's pace two thirds of what it is.
+
+    details is injectable so a test can hand in a calendar; production passes
+    nothing and reads the cached one the way is_trading_day does.
+    """
+    if details is None:
+        details = get_details(_CRIT.integer("calendar", "refresh_after_days"))
+    if details is None:
+        return None, CALENDAR_UNKNOWN_REASON
+    early = details.get("ExchangeEarlyCloseDays") or {}
+    early_rows = early.values() if isinstance(early, dict) else early
+    for row in early_rows:
+        if isinstance(row, dict) and str(row.get("Date")) == date.isoformat():
+            return True, (f"{date} is an early close "
+                          f"({row.get('Holiday') or 'early close'})")
+    return False, f"{date} is not on the exchange's early close list"
+
+
 def is_trading_day(date: dt.date) -> tuple[bool, str]:
     """(trades_today, reason). Unknowable counts as open, see the module doc.
 

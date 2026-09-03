@@ -116,8 +116,9 @@ $jobs = @(
     # at 12:25 and cannot be told from a live job. A single pass could only
     # ever report UNRESOLVED on that state; by 12:55 the log is 3,300 seconds
     # cold and the verdict is decidable. The third is margin for Task
-    # Scheduler's repetition endpoint, which the morning trigger's five
-    # firings imply is inclusive and which nothing here has verified.
+    # Scheduler's repetition endpoint, which is INCLUSIVE: verified by
+    # logs\monitor-2026-09-01.log and -02.log, which carry the 09:25 firing
+    # of the morning trigger and the 13:25 firing of this one.
     #
     # The midday job is NOT rerun by these passes. See the branch in
     # ops/monitor_jobs.py: the sweep spends about 2,902 credits on the shared
@@ -137,14 +138,22 @@ $jobs = @(
 # moment it has answered doc/research/COLLECTOR_VOLUME.md. A plain run must
 # never resurrect it.
 #
-# 06:30 is derived, not chosen. job_probe_socket_cap.bat runs 4 cycles of two
+# 06:30 was derived, not chosen. job_probe_socket_cap.bat runs 4 cycles of two
 # arms at 120s with 90s to settle, which is 28 minutes, and the probe adds a
-# 60s buffer before checking itself against CRITERIA [Collector] start_time,
-# 07:20. It refuses any run that would still be holding socket slots when the
-# collector wants them, because the fifty symbol pool is account wide. 06:30
-# finishes at 06:59 and leaves 21 minutes of slack, and the execution time
-# limit below is set so Task Scheduler's own kill also lands before 07:20 if
-# the probe hangs rather than exits.
+# 60s buffer before checking itself against the collector's window in
+# CRITERIA. It refuses any run that would still be holding socket slots when
+# the collector wants them, because the fifty symbol pool is account wide.
+# Against the 07:20 start the collector had when this was written, 06:30
+# finished at 06:59 with 21 minutes of slack, and the execution time limit
+# below was set so Task Scheduler's own kill also landed before 07:20 if the
+# probe hung rather than exited.
+#
+# SINCE 2026-09-02 THIS CLOCK IS INSIDE THE COLLECTOR'S WINDOW. [Collector]
+# start_time is 04:00, so a task armed at 06:30 fires, the probe reads the
+# window, prints its refusal and exits without measuring anything. The arm is
+# kept as a record and $probeStart has to move past the 09:25 stop, which is
+# the regular hours tape the cap half of the question needs anyway, before
+# -Probe is useful again.
 $probeName = "probe-socket-cap"
 $probeStart = "06:30"
 if ($Probe) {

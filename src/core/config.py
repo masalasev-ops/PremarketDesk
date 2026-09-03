@@ -19,8 +19,21 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# The one environment variable this project refuses to touch.
-FORBIDDEN_KEYS = frozenset({"ANTHROPIC_API_KEY"})
+# The environment variables this project refuses to touch: never read, dropped
+# from .env with a line on stderr, and scrubbed out of the claude CLI's
+# environment before the narrative pass starts. Until 2026-09-02 this held the
+# API key alone, and the scrub analyst.py promised was one key wide: an auth
+# token, a base URL pointing the CLI at another endpoint, a model override, or
+# a Bedrock or Vertex switch in the shell would each have changed what answers
+# the call, or what pays for it, with nothing here noticing.
+FORBIDDEN_KEYS = frozenset({
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL",
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_VERTEX",
+})
 
 # This file lives at src/core/config.py, so the project root is two levels up
 # from the directory holding it. Getting this wrong relocates every writable
@@ -143,7 +156,8 @@ def load_env(path: Path | None = None, refresh: bool = False) -> dict[str, str]:
         print(
             f"config: ignoring {key} found in {target.name}. "
             "This project authenticates the narrative pass through the claude CLI "
-            "subscription and must not carry an API key.",
+            "subscription and must not carry an API key, an auth token, an "
+            "endpoint, a model override or a cloud switch for it.",
             file=sys.stderr,
         )
 
@@ -309,6 +323,12 @@ def email_from() -> str:
 
 
 CA_BUNDLE_PATH = DATA_DIR / "ca-bundle.pem"
+# How the merged bundle's write is retried, on deliver.WRITE_ATTEMPTS's
+# precedent: a mechanical count of tries against an antivirus hold, not a
+# threshold anything screens on, which is why it lives here and not in
+# CRITERIA.
+CA_BUNDLE_WRITE_ATTEMPTS = 3
+CA_BUNDLE_WRITE_RETRY_S = 1.0
 
 # Windows security suites terminate TLS and re-sign it with their own root,
 # which certifi has never heard of. Norton drops its root here and points
@@ -406,7 +426,13 @@ def ca_bundle() -> str | bool:
     # cannot import selection. It can import core.
     from core import files
 
-    files.write_text_atomically(CA_BUNDLE_PATH, "\n".join(merged))
+    # Retried the way deliver and monitor_jobs retry their own writes: every
+    # recorded first write denial on this machine is the antivirus holding
+    # the file for a moment, and it clears on the retry. With attempts=1 a
+    # denied write here raised out of every job's TLS setup at once.
+    files.write_text_atomically(CA_BUNDLE_PATH, "\n".join(merged),
+                                attempts=CA_BUNDLE_WRITE_ATTEMPTS,
+                                retry_s=CA_BUNDLE_WRITE_RETRY_S)
     return str(CA_BUNDLE_PATH)
 
 

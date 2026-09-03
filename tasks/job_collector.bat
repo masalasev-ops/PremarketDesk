@@ -1,5 +1,5 @@
 @echo off
-rem PremarketDesk 07:20 collector job. Runs the trades websocket until the
+rem PremarketDesk 04:00 collector job. Runs the trades websocket until the
 rem CRITERIA.md stop time, 09:25 ET, writing one minute bars for the context
 rem tickers plus the watchlist rows discover marked subscribed, in the order
 rem discover ranked them. This process is the only source of premarket price.
@@ -39,7 +39,11 @@ if /i "%MODE%"=="stale-watchlist-ok" (
     echo ===== stale-watchlist-ok passed by the watchdog %DATE% %TIME% ===== >> "%LOG%"
     %PY% -m collect.collect_premarket --stale-watchlist-ok >> "%LOG%" 2>&1
 ) else (
-    %PY% -m collect.collect_premarket >> "%LOG%" 2>&1
+    rem --wait-for-watchlist: the 04:00 start may read the file the 03:55
+    rem discover is still writing, or wake to both tasks at once after a
+    rem sleep. Before the 07:20 handover the run then waits for today's file
+    rem rather than refusing, because no watchdog pass runs before 07:25.
+    %PY% -m collect.collect_premarket --wait-for-watchlist >> "%LOG%" 2>&1
 )
 set RC=%ERRORLEVEL%
 echo ===== collector finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"

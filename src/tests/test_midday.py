@@ -894,10 +894,43 @@ def claim_relative_volume_is_measured_against_the_session_so_far(
         failures.append("the close is not a whole session")
     if scan_midday.session_elapsed(ettime.at(day, 18, 0)) != 1.0:
         failures.append("after the close reads as more than a whole session")
-    before = scan_midday.session_elapsed(ettime.at(day, 6, 0))
-    if not 0 < before < 0.01:
-        failures.append(f"before the open reads {before!r}, which must be small "
-                        "and above zero so nothing divides by nothing")
+    # Before the open there is NO elapsed session, and until 2026-09-02 this
+    # clamped to one minute of 390, which would have multiplied every
+    # day_rvol by 390 on a run before 09:30. It is refused with a reason now.
+    grace = criteria.load().integer("midday", "min_minutes_after_open")
+    for hour, minute in ((6, 0), (9, 29), (9, 30 + grace - 1)):
+        try:
+            early = scan_midday.session_elapsed(ettime.at(day, hour, minute))
+        except scan_midday.SessionNotOpen as exc:
+            if "refused" not in str(exc) or "opens at 09:30" not in str(exc):
+                failures.append(f"the refusal at {hour:02d}:{minute:02d} does not say "
+                                f"what it refused or when the session opens: {exc}")
+        else:
+            failures.append(f"{hour:02d}:{minute:02d} read {early!r} of the session "
+                            "instead of being refused as before the open")
+    try:
+        first = scan_midday.session_elapsed(ettime.at(day, 9, 30 + grace))
+    except scan_midday.SessionNotOpen as exc:
+        failures.append(f"{grace} minutes after the open was refused: {exc}")
+    else:
+        if not 0 < first < 0.02:
+            failures.append(f"{grace} minutes in reads {first!r}")
+    # An early close day divides by the session that day actually has. The
+    # calendar is handed in, so this reads no cache and makes no call.
+    calendar = {"ExchangeEarlyCloseDays": {
+        "0": {"Date": "2026-11-27", "Holiday": "Day after Thanksgiving"}}}
+    half_day = dt.date(2026, 11, 27)
+    close, reason = scan_midday.session_close(half_day, calendar)
+    if close != criteria.load().clock("midday", "early_close") or "early close" not in reason:
+        failures.append(f"the day after Thanksgiving closes at {close}, {reason!r}")
+    regular, _reason = scan_midday.session_close(day, calendar)
+    if regular != criteria.load().clock("paper", "session_close"):
+        failures.append(f"an ordinary day closes at {regular}")
+    half_noon = scan_midday.session_elapsed(ettime.at(half_day, 12, 0), close)
+    if not (0.71 < half_noon < 0.72):
+        failures.append(f"12:00 on a 13:00 close reads {half_noon:.4f}, wanted 150 of 210")
+    if scan_midday.session_elapsed(ettime.at(half_day, 13, 0), close) != 1.0:
+        failures.append("13:00 on an early close day is not a whole session")
 
     # Trading at exactly its average pace: 38.46 percent of a day's average
     # volume, 38.46 percent of the way through the session. Pace is 1.0, so a
@@ -930,7 +963,78 @@ def claim_relative_volume_is_measured_against_the_session_so_far(
     if not (0.38 < (got.get("FAST.US") or {}).get("session_elapsed", 0) < 0.39):
         failures.append("the row does not carry the elapsed fraction it was divided by")
     print("  pace         relative volume divides by the average pro rated to the "
-          "elapsed session, and the raw ratio is kept beside it")
+          "elapsed session, an early close day by its own session, the raw ratio "
+          "is kept beside it, and a run before the open is refused")
+
+
+class _BulkApi:
+    """An api whose bulk day answers with the rows it was built with."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self.rows = rows
+
+    def eod_bulk_last_day(self, exchange: str, day: Any = None):
+        from core import eodhd
+
+        return eodhd.ApiResult(self.rows, None)
+
+
+def claim_a_wrong_date_row_is_dropped_and_not_the_whole_payload(
+        failures: list[str]) -> None:
+    """One row carrying another session's date is dropped, counted and named;
+    the payload is refused only past CRITERIA [Midday] max_wrong_date_row_share.
+
+    Until 2026-09-02 ONE wrong row raised PriorClosesUnusable and the 12:00
+    pass refused to run, after the quota preflight had already cleared the
+    sweep. A vendor payload of eleven thousand rows with one stale row in it
+    is not a payload for another session, and the name behind that row is
+    refused as unpriced rather than measured against a wrong close.
+    """
+    limit = criteria.load().number("midday", "max_wrong_date_row_share")
+
+    def row(code: str, date: str) -> dict[str, Any]:
+        return {"code": code, "date": date, "close": 10.0}
+
+    good = [row(f"G{i}", "2026-09-01") for i in range(400)]
+    one_bad = good + [row("STALE", "2026-08-31")]
+    closes, record = scan_midday.prior_closes(_BulkApi(one_bad), "2026-09-01")
+    if len(closes) != 400 or "STALE.US" in closes:
+        failures.append(f"{len(closes)} closes kept from 400 good rows and one wrong one")
+    if record.get("wrong_date_rows") != 1 or record.get("rows") != 401:
+        failures.append(f"the payload record does not count the dropped row: {record}")
+    if record.get("wrong_date_examples") != ["STALE.US"]:
+        failures.append(f"the dropped row is not named: {record.get('wrong_date_examples')}")
+    if not (0 < record.get("wrong_date_share", 0) <= limit):
+        failures.append(f"the share {record.get('wrong_date_share')} is not under {limit}")
+
+    too_many = good + [row(f"B{i}", "2026-08-31") for i in range(int(400 * limit) + 5)]
+    try:
+        scan_midday.prior_closes(_BulkApi(too_many), "2026-09-01")
+    except scan_midday.PriorClosesUnusable as exc:
+        if "max_wrong_date_row_share" not in str(exc):
+            failures.append(f"the refusal does not name the share it refused on: {exc}")
+    else:
+        failures.append("a payload over the wrong date share was accepted")
+    print("  bulk rows    one wrong date row is dropped, counted and named, and the "
+          f"payload is refused only past a {limit:.0%} share")
+
+
+def claim_a_refused_movers_list_says_so_on_the_page(failures: list[str]) -> None:
+    """A packet whose movers were not measured renders the reason where the
+    list would be, and prints no tally that was never counted."""
+    packet = _packet_with_headline("A headline")
+    packet["movers"] = dict(packet["movers"], rows=[],
+                            tally={"quoted": 2_751, "admitted": 0},
+                            refused_reason="the run clock reads 09:12 ET and the "
+                                           "session opens at 09:30, so the movers "
+                                           "list is refused")
+    text = render_midday.to_markdown(packet)
+    if "This list was not measured: the run clock reads 09:12 ET" not in text:
+        failures.append("the refused movers list does not carry its reason")
+    if "Of 2,751 universe names quoted:" in text or "cleared everything" in text:
+        failures.append("a tally that was never counted was printed")
+    print("  refused list a movers list refused before the open says why, where the "
+          "list would be")
 
 
 CLAIMS = [
@@ -954,6 +1058,8 @@ CLAIMS = [
     claim_the_report_states_its_limits_on_every_edition,
     claim_no_report_prints_an_exchange_qualified_ticker,
     claim_relative_volume_is_measured_against_the_session_so_far,
+    claim_a_wrong_date_row_is_dropped_and_not_the_whole_payload,
+    claim_a_refused_movers_list_says_so_on_the_page,
 ]
 
 

@@ -1,11 +1,14 @@
 # PremarketDesk build plan and session handoff
 
-Last updated: 2026-08-20, when "What remains" was rewritten after the full
-review and items 5a and 6i were corrected in place. The notable movers section
+Last updated: 2026-09-02, when the counts and clocks below were re-read
+against the tree after the two phase collector landed. "What remains" was
+rewritten after the full review on 2026-08-20, when items 5a and 6i were
+corrected in place. The notable movers section
 was specified in full under "What remains" as Layer 4 on 2026-08-17. The build history below was written on
 2026-08-14, after the first live morning and the five commits that followed
-it. All sixteen checkpoints are built, verified, and committed, and the nine
-Task Scheduler jobs are registered. The system is armed but
+it. All sixteen checkpoints are built, verified, and committed, and the eleven
+Task Scheduler tasks are registered [corrected 2026-09-02: was "the nine Task
+Scheduler jobs"; tasks/register_tasks.ps1 registers eleven]. The system is armed but
 gated: it runs every weekday morning, produces a report, and refuses to email
 until a human reviews one real morning and deletes data/UNVERIFIED.
 
@@ -23,7 +26,13 @@ brain, no merge step, no yfinance, no Anthropic API key anywhere.
 
 ## Hard rules, none negotiable
 
-1. EODHD is the only data source. No yfinance, no second vendor.
+1. EODHD is the only vendor in the published path. No yfinance, and no second
+   vendor anywhere the morning reads. Two nightly steps read Alpaca after the
+   session is over, night/true_volume.py for the truth columns and
+   night/paper_ledger.py for the one minute bars the ledger books against,
+   and both write beside the morning's values and never over them; see
+   CRITERIA [Truth]. [corrected 2026-09-02: was "EODHD is the only data
+   source. No yfinance, no second vendor."]
 2. The narrative pass is the claude CLI (`claude -p --output-format json`) as
    a subprocess. Never the Anthropic Python SDK. Never read or set
    ANTHROPIC_API_KEY. config.py actively refuses that variable and strips it
@@ -57,9 +66,10 @@ at src/core/config.py and resolves the project root two levels up. Everything a 
 at the root and is gitignored along with .env.
 
 - src/ is split into packages by role, and src/ itself is the import root:
-  - core/    config, criteria, ettime, store, eodhd, artifacts, and since
-             2026-09-02 numbers (the one reading of a vendor number), files
-             (the one atomic writer) and page (the one HTML shell every
+  - core/    config, criteria, ettime, store, eodhd, artifacts, glossary (the
+             one place a plain English word for a column is written down), and
+             since 2026-09-02 numbers (the one reading of a vendor number),
+             files (the one atomic writer) and page (the one HTML shell every
              renderer wraps its body in). Infrastructure every other package
              rests on; nothing here knows what a gapper is.
   - ops/     job_status, market_today, monitor_jobs, meter_sampler,
@@ -71,25 +81,40 @@ at the root and is gitignored along with .env.
              decided before the open.
   - collect/ collect_premarket, baseline. Today's tape, and the volume
              baseline its RVOL is measured against.
-  - morning/ scan, vintage, analyst, render_report, verify_morning, deliver.
-             The 08:45 chain in order.
+  - morning/ scan, vintage, analyst, gap_reasons, render_report,
+             verify_morning, deliver. The 08:45 chain in order, with
+             gap_reasons the explanation pass the analyst calls for the "Why
+             these gapped" section.
   - midday/  scan_midday, render_midday. The 12:00 pass, which answers the two
              questions the 08:45 report cannot because the session it is about
              has not opened yet: what today's picks did against the levels the
              morning published, and what else moved that the morning never
              named. No model and no narrative pass, because midday asks closed
              questions. It writes to nothing the morning owns.
-  - night/   backfill_premarket, fill_outcomes, true_volume, pool_recall,
-             prune_data, weekly_page, build_archive. What runs once the vendor
-             has published the full day. true_volume is the only module in the
-             tree that talks to Alpaca in production: see CRITERIA [Truth].
+  - night/   backup_evidence, backfill_premarket, fill_outcomes, true_volume,
+             paper_ledger, pool_recall, prune_data, weekly_page, build_archive,
+             in the order the nightly runs them. What runs once the vendor
+             has published the full day. true_volume and paper_ledger are the
+             two modules in the tree that talk to Alpaca in production, both
+             after the close and neither able to reach a report: see CRITERIA
+             [Truth]. [corrected 2026-09-02: was "true_volume is the only
+             module in the tree that talks to Alpaca in production", and the
+             list omitted backup_evidence and paper_ledger.]
   - research/ backtest_pool, float_cache, float_rotation_study,
-             counterfactual_watchlist, measure_capture_rate, sweep_capture_rate,
-             addressable_sweep, vwap_gappers, probe_live_v1, probe_alpaca_live,
-             probe_socket_cap, the three measure_ scripts.
-             [corrected 2026-08-28: was "the two measure_ scripts".
-             measure_baseline_floor.py joined measure_bulk_cost.py and
-             measure_socket_cost.py, and it is the instrument behind the
+             counterfactual_watchlist, cutoff_0830, replay_session (the live
+             screen run over a finished session from Alpaca bars),
+             addressable_sweep, vwap_gappers, the four probe_ scripts
+             (probe_live_v1, probe_alpaca_live, probe_socket_cap,
+             probe_capture_live), the four measure_ scripts
+             (measure_baseline_floor, measure_bulk_cost, measure_capture_rate,
+             measure_socket_cost) and the two sweep_ scripts
+             (sweep_baseline_floor, sweep_capture_rate): eighteen modules,
+             counted off the directory.
+             [corrected 2026-09-02: was "the three measure_ scripts" and
+             omitted cutoff_0830, replay_session, sweep_baseline_floor and
+             probe_capture_live.] [corrected 2026-08-28: was "the two measure_
+             scripts". measure_baseline_floor.py joined measure_bulk_cost.py
+             and measure_socket_cost.py, and it is the instrument behind the
              measurement in CRITERIA's denominator floor note.]
              Instruments, not pipeline. Nothing downstream reads their output.
   - probe_alpaca.py sits at the TOP of src/, not under research/, and is the
@@ -110,29 +135,42 @@ at the root and is gitignored along with .env.
              for a SCHEDULED step; deleting it stops the nightly truth pass.
              The entry above is the correct one.]
 - doc/: this file, CHANGELOG.md, DECISIONS.md, CRITERIA.md,
-  REPORT_TEMPLATE.md, prompt_analyst.md, the two architecture pages,
+  IMPROVEMENT_PLAN.md (the 2026-09-02 review as work packages),
+  REPORT_TEMPLATE.md, prompt_analyst.md, prompt_slots.md (what the model is
+  piped under CRITERIA [Analyst] mode = slots), the two architecture pages,
   ALPACA_PROBE.md (generated by src/probe_alpaca.py), sample_report.html, and
   research/ holding the written up studies this file cites: COLLECTOR_VOLUME.md,
-  SCORE_INVERSION.md, COUNTERFACTUAL_WATCHLIST.md and its dated payload,
-  capture_rate_study-2026-09-01.json,
-  VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, the five float rotation study
-  payloads DECISIONS.md quotes, and baseline_floor_study-2026-08-28.json,
-  the 241 name payload behind CRITERIA's denominator floor measurement.
+  SCORE_INVERSION.md, COUNTERFACTUAL_WATCHLIST.md, VWAP_GAPPERS.md,
+  TEMPLATE_DERIVATIONS.md, BASELINE_FLOOR.md, CAPTURE_RATE.md and
+  FLOAT_ROTATION_FITS.md, eight write ups, beside collector-capture.json and
+  two of the five float rotation study payloads, 2026-08-16 and 2026-08-17.
+  The larger payloads live under data/research/, which is gitignored with the
+  rest of data/: capture_rate_study-2026-09-01.json,
+  counterfactual_watchlist-2026-09-01.json, the other three float rotation
+  study payloads (2026-08-20, 2026-08-21 and the 2026-08-31 floor sweep), and
+  baseline_floor_study-2026-08-28.json, the 241 name payload behind
+  CRITERIA's denominator floor measurement.
   That last one carries the raw per session volumes and not only the
   derived table, so the study reruns offline: the 109.9 MB deleted on
   2026-08-21 is what that costs when it is not done
+  [corrected 2026-09-02: this put every payload under doc/research; the
+  directory listing is the authority and the split above is read off it]
 - tasks/: ten job .bat files, register_tasks.ps1, README.md. Eight of them
   register as eleven scheduled tasks: job_nightly runs twice, at
   22:15 and again at 07:00 as nightly-catchup, and job_monitor runs on THREE
   triggers, a repeating weekday one from 07:25, monitor-midday from 12:25 and
   monitor-night once at 22:45. job_midday joined them on
-  2026-08-31 at 12:00. Three further .bat files
-  sit here and are not among those eleven, all of them one offs armed a
-  morning at a time and all three meant to be deleted once their question is
+  2026-08-31 at 12:00. Two further .bat files, job_probe_capture.bat and
+  job_probe_socket_cap.bat,
+  sit here and are not among those eleven, both of them one offs armed a
+  morning at a time and both meant to be deleted once their question is
   answered. A
-  plain run of the script registers none of them, because a probe that is
+  plain run of the script registers neither of them, because a probe that is
   meant to be deleted must not come back every time the schedule is
-  refreshed, and `-Unregister` removes all three if they are there.
+  refreshed, and `-Unregister` removes both if they are there, and the
+  retired socket cost task's name with them. [corrected 2026-09-02: was
+  "Three further .bat files" and "removes all three"; job_probe_socket_cost.bat
+  was deleted on 2026-09-01 and ten .bat files stand.]
   [corrected 2026-08-31: was "register as ten scheduled tasks", "not among
   those ten", "both meant to be deleted" of three files, and "registers
   neither". monitor-midday was added on 2026-08-31 and takes the count to
@@ -140,10 +178,14 @@ at the root and is gitignored along with .env.
   2026-08-31 and which -Unregister did not remove until the same day.]
   job_probe_socket_cap is the instrument for the open collector volume
   question, armed by `register_tasks.ps1 -Probe YYYY-MM-DD` at 06:30. It ran
-  on 2026-08-21 and its task was removed the same day. The .bat and the module
+  on 2026-08-21 and its task was removed the same day. Since 2026-09-02 that
+  06:30 arm no longer works: the collector holds the socket from 04:00 to
+  09:25, and research/probe_socket_cap.py reads that window from CRITERIA and
+  refuses to run inside it, so a task armed at 06:30 would fire and stand
+  down. The .bat and the module
   stay: the census half of its answer landed and the cap half did not, and
   re-running it on a regular hours tape after 09:25 is the one thing that would
-  settle either.
+  settle either, and the one clock the arm would now need.
   job_probe_capture is the Alpaca live capture test, armed by
   `register_tasks.ps1 -Capture YYYY-MM-DD` at 08:45, which is [Scan] run_time
   and not a chosen number: the question is what the free tier serves at the
@@ -214,7 +256,12 @@ at the root and is gitignored along with .env.
 - runs/YYYY-MM-DD/: packet.json, premarket_snapshot.jsonl, report.md,
   report.html, analyst_usage.json, midday_packet.json, report_midday.md and
   report_midday.html from the 12:00 pass, and once the nightly job has run,
-  verify_intraday.json and pool_recall.json
+  verify_intraday.json and pool_recall.json. Three more appear only on the
+  mornings that earn them: report.slots-rejected-N.md, the model answer the
+  slots check refused, kept beside the report; packet_degraded.json, written
+  when a quota thinned rerun would otherwise have replaced a fuller packet;
+  and premarket_snapshot.superseded.jsonl, the earlier snapshot a rerun of the
+  scan set aside rather than overwrote
 - site/Weekly.html: one page saying whether the week worked, rendered by
   night/weekly_page.py at the end of the 22:15 nightly. Five sections: did it
   run, is the data trustworthy, what did it publish, what did it cost, and
@@ -283,7 +330,9 @@ at the root and is gitignored along with .env.
   on 2026-08-13: 65.3, 70.1, 67.0, 77.6, 65.8 seconds, num_turns 1 every
   time, ~31k tokens, about 17 cents equivalent. Effort moved to medium on
   2026-08-14 after the comparison recorded under the reinstated review items
-  below, and five medium runs measured 97.4, 86.5, 97.7, 91.1 and 92.4
+  below [and back to low on 2026-09-02 with the move to slots mode, where the
+  model fills marked slots rather than writing the page; CRITERIA [Analyst]
+  effort carries the measurements], and five medium runs measured 97.4, 86.5, 97.7, 91.1 and 92.4
   seconds, so timeout_s is 537, derived on 2026-08-20 as three times the
   slowest morning THEN on record, 178.9 seconds of CLI time on 2026-08-19.
   The 2026-08-20 morning has since run 226.1 seconds of CLI time inside a
@@ -338,19 +387,28 @@ at the root and is gitignored along with .env.
   38 symbol subscribe frames, and reconnects are NOT metered. A 20 minute
   collector-only run (10 connections, 9 reconnects) and a second with 3
   forced drops (13 connections, 12 reconnects) both moved the vendor counter
-  by exactly zero. The /user reads themselves did not register either. Still
-  owed: the per message cost on a heavy live tape, measurable any weekday by
-  running measure_socket_cost.py inside 04:00 to 07:15 before the jobs wake.
+  by exactly zero. The /user reads themselves did not register either. The
+  per message cost on a heavy live tape was the one number still owed, and it
+  was measured on 2026-09-01 at ZERO across 21,306 messages on a regular hours
+  tape (DECISIONS.md 2026-09-01 eighth). [corrected 2026-09-02: this said the
+  cost was "still owed, measurable any weekday by running
+  measure_socket_cost.py inside 04:00 to 07:15 before the jobs wake". It is
+  paid, and that idle window no longer exists: the collector has held the
+  socket from 04:00 since 2026-09-02.]
 - Measured 2026-08-13 at 23:05 ET with measure_bulk_cost.py: ONE bulk live
   OHLCV request (real-time/AAPL.US?ex=US) moved the vendor counter by
   exactly 100 for 18,341 returned rows, in one HTTP attempt, after a 45
   second quiet watch showed zero meter drift. A flat per request rate, not
   per symbol. Verdict against the 1,000 line: NOT crossed. That measurement
   was of the bulk live call, which no scheduled job makes any more. The
-  day's bulk calls are now end of day: three at 07:15, two for discover's
-  prior session movers and one for the third close the briefing's two session
-  leg needs, and two at 22:15 for the pool recall, at a measured 100 credits
-  each, so about 500 a day on the shared 100,000. [corrected 2026-08-20: was
+  day's bulk calls are now end of day: three on each of discover's two passes,
+  at 03:55 and 07:15, two for the prior session movers and one for the third
+  close the briefing's two session leg needs, so six from discover; one at
+  12:00 for the midday pass's prior session denominator; and two at 22:15 for
+  the pool recall, at a measured 100 credits each, so about 900 a day on the
+  shared 100,000. [corrected 2026-09-02: was "three at 07:15 ... and two at
+  22:15 ... about 500 a day"; discover gained its 03:55 pass on 2026-09-02 and
+  the midday pass its bulk day on 2026-08-31.] [corrected 2026-08-20: was
   "two at 07:15 ... about 392 a day". discover.py makes three
   eod_bulk_last_day calls and the 2026-08-20 call report counted three; 392
   was ledger arithmetic CRITERIA.md corrected away from on 2026-08-17, and it
@@ -524,10 +582,11 @@ weekday math. Proven idempotent: a seeded synthetic pick filled correctly
 and a second run left the table hash unchanged.
 
 CP15 scheduling: tasks/ holds five .bat jobs
-[superseded, see Repository layout above: seven job .bat files register as
-nine tasks today, the two additions being job_monitor.bat and
-job_meter_sampler.bat, and the universe job moved from Sunday 20:00 to 20:30
-on 2026-08-16 and to 21:00 on 2026-08-17], each cd's to the project root,
+[superseded, see Repository layout above: eight job .bat files register as
+eleven tasks today, the additions since being job_monitor.bat, on three
+triggers, job_meter_sampler.bat and job_midday.bat, and the universe job moved
+from Sunday 20:00 to 20:30 on 2026-08-16 and to 21:00 on 2026-08-17;
+corrected 2026-09-02: was "seven job .bat files register as nine tasks"], each cd's to the project root,
 stamps its log date with the project's own ET clock, and appends to
 logs/<job>-YYYY-MM-DD.log. The 08:45 chain (scan, analyst, render, gate
 table, deliver) ran end to end from the bat with rc=0 at every step.
@@ -637,7 +696,9 @@ reconstruct it from the numbered items below:
      four [Notable] CRITERIA keys are now read. scan.notable_movers assembles
      it, the packet carries notable_movers, REPORT_TEMPLATE.md has the section,
      prompt_analyst.md has rule 15, fallback_report emits it too, and
-     tests/test_notable.py holds twenty six claims wired into run_tests.SUITE.
+     tests/test_notable.py holds twenty eight claims wired into run_tests.SUITE.
+     [corrected 2026-09-02: was twenty six; CLAIMS holds twenty eight entries
+     today.]
      [corrected 2026-08-22: this said thirteen, which was the count on the day
      the section shipped and had not moved since. It was twenty four before
      today's two were added. The number is CLAIMS at the foot of that file and

@@ -230,7 +230,8 @@ def addressable_target(
         },
         "market_cap_sensitivity": sensitivity,
         "conditions_applied": list(_ADDRESSABLE_CONDITIONS),
-        "conditions_excluded": ["premarket_rvol", "require_above_prior_high"],
+        "conditions_excluded": ["premarket_rvol", "require_above_prior_high",
+                                "require_fresh_price"],
     }
 
 
@@ -402,8 +403,9 @@ def measure(
             "addressable": (
                 "universe names that gapped past the discovery gap floor AND "
                 "satisfy every non-premarket day_setup condition, which is "
-                "price and market_cap. premarket_rvol and "
-                "require_above_prior_high are excluded because they need a "
+                "price and market_cap. premarket_rvol, "
+                "require_above_prior_high and require_fresh_price are excluded "
+                "because they need a "
                 "premarket print that a name never subscribed to cannot have, "
                 "so this is an upper bound on what the day screen could publish"
             ),
@@ -443,6 +445,12 @@ def watchlist_the_morning_read(session_date: str) -> tuple[str | None, str | Non
                       "watchlist_generated_at, so the pool it read cannot be "
                       "identified")
     return str(stamp), None
+
+
+def _any_row_carries_a_code(rows: Any) -> bool:
+    """Whether at least one bulk row names its symbol under `code`."""
+    return any(isinstance(row, dict) and str(row.get("code") or "").strip()
+               for row in rows or [])
 
 
 class NotMeasurable(RuntimeError):
@@ -540,9 +548,25 @@ def build(session_date: str | None = None, write: bool = True,
             f"the bulk end of day for {today.isoformat()} came back with no rows, "
             "so there is nothing to measure, and a payload of zeros would be "
             "published as a morning that caught none of what gapped." + catchup)
+    if not _any_row_carries_a_code(today_rows):
+        # The same rule again, one level down in the shape. A payload of rows
+        # none of which names a symbol would leave actual_gappers with nothing
+        # to key on and publish the same zero recall as an empty array, with
+        # no reason recorded anywhere in the file.
+        raise NotMeasurable(
+            f"the bulk end of day for {today.isoformat()} came back with "
+            f"{len(today_rows)} row(s) and not one carries a code, so no name "
+            "can be matched against the pool and a payload of zeros would be "
+            "published as a morning that caught none of what gapped.")
     prior_rows, error = api.eod_bulk_last_day("US", day=prior)
     if error:
         raise RuntimeError(f"the prior session bulk end of day failed: {error}")
+    if prior_rows and not _any_row_carries_a_code(prior_rows):
+        raise NotMeasurable(
+            f"the prior session bulk end of day for {prior.isoformat()} came "
+            f"back with {len(prior_rows)} row(s) and not one carries a code, so "
+            "no prior close can be keyed to a name and every gap would be "
+            "measured against nothing.")
     if not prior_rows:
         # The same rule one call down. Every gap below is measured against a
         # prior close taken from this payload, so an empty one produces zero

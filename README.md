@@ -58,7 +58,7 @@ All times are US Eastern, which the machine is expected to keep locally.
 | 08:45 | morning chain | scan, analyst, render, verify, deliver, archive, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
 | 12:00 | midday | The two questions the morning cannot answer, because at 08:45 the session had not opened: what every one of today's picks did against the levels the morning published, and what else moved that the morning never named. Then a second report, rendered straight from the packet. No model and no narrative pass, because midday asks closed questions: a pick triggered or it did not. 12:00 and not another hour because us-quote-delayed's regular hours behaviour is what was measured, and it never writes to picks or paper_trades, which are records of what an earlier pass claimed |
 | 12:25, 12:55, 13:25 | monitor-midday | The watchdog over the midday job. Three passes and not one, because `job_log_stale_after_s` is 2,200 seconds: a midday that hung after writing its log at 12:00 is still warm at 12:25 and cannot be told from a live one, and is cold by 12:55. The midday job is the one job the watchdog reports and never reruns: the 12:00 sweep spends about 2,900 credits on the shared key, and a relaunch would replace the packet it may already have written |
-| 22:15 | nightly | Ten steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the two artifacts that cannot be rebuilt, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each |
+| 22:15 | nightly | Eleven steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the six artifacts that cannot be rebuilt (the collector's capture, its stats and subscriptions sidecars, the packet, and the report in markdown and HTML) plus a dated snapshot of the quantifier flag log, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; the paper ledger, which books one written rule against the levels that measurement wrote; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each |
 | 22:45 | monitor-night | The watchdog once more, over the nightly |
 | Every 30 min, all day, every day | meter-sampler | One reading of the shared EODHD quota counter into `logs/meter-<quota day>.log`, 48 a day, weekends included. Not a pipeline step: an instrument. The job trail says which step spent what and cannot say when, and nothing at all runs between 22:45 and 07:00, which is exactly where a sibling project draining the shared key would hide |
 
@@ -246,41 +246,73 @@ this data. See the last part of this section.
 
 This is the section that says what the evidence is worth, and it is built by
 quoting sentences the packet already resolved rather than by the model judging
-anything. Six kinds of line appear here:
+anything. The lines are written by `analyst.py` from the packet, in this order,
+and a line whose list is empty is either printed with its zero or replaced by
+the one sentence that says everything was complete:
 
 ```
-Catalyst absent: 3 of 12 candidates were read for news and came back with
-nothing. BOLT, CRUX, DELTA.
+Moving on no found catalyst, a skip: BOLT, CRUX, DELTA.
 
-Catalyst unknown: 1 of 12. ECHO, because the news call returned an error and
-was not retried inside the window.
+Catalyst status is unknown for ECHO: the news feed was never checked this
+run, so no catalyst judgment exists for them.
 
-Premarket RVOL unverifiable: 2 of 12. CRUX and FOXO have fewer than ten
-baseline sessions, so no median exists to divide into.
+Premarket path partial or absent, treat any level as partial: GRID.
 
-Premarket window starts late: 1 of 12. GRID, whose first collector bar is
-07:48 rather than 04:00, so its premarket high describes 102 minutes of a
-330 minute session.
+Traps: 0 of 12 candidates gap up against the balance of their own headlines.
 
-Premarket path evidence absent: 0 of 12.
+The trap question was not asked of 7 of 12 candidates: a trap is a gap up
+contradicted by its news, and those gaps are below the 3 percent the
+question is asked above, or were never computed.
 
-Premarket high may not be a transactable price: 2 of 12. ACME and BOLT. The
-collector saw very little trade near the level being published as that name's
-reference. This test is a warning and its silence is not an approval.
+Trap undecided for FOXO: trap_why on those rows carries the reason, and
+undecided is not a verdict of safe.
+
+2 of 12 candidates carry a premarket RVOL built on a THIN denominator: at or
+above the 1,000 share floor and below 10,000 shares, measured 2026-08-28 as
+where 15 to 30 percent of a name's own ordinary premarket sessions reach the
+top RVOL band by construction, against 5 percent above 100,000. These ratios
+are published, screened on and scored like the rest: CRUX, FOXO.
+- CRUX: its denominator is a 4,120 share median, at or above the 1,000 share
+  floor and below 10,000, where 15 to 30 percent of a name's own ordinary
+  sessions reach the top RVOL band by construction against 5 percent above
+  100,000
+- FOXO: its denominator is a 8,890 share median, at or above the 1,000 share
+  floor and below 10,000, where 15 to 30 percent of a name's own ordinary
+  sessions reach the top RVOL band by construction against 5 percent above
+  100,000
+
+2 of 12 candidates traded so little near their own premarket high that the
+level may be a print rather than a price anyone could transact at. This is a
+WARNING and its silence is not an approval: measured over 54 past rows it
+missed 4 of the 10 levels the nightly check went on to call untradeable:
+ACME, BOLT.
+
+Cleared selection and dropped before pricing, the collector having no bars
+for them: HALO (subscribed, no bars recorded).
+
+Evidence gaps recorded by the scan, 3 in total:
+- ...
 ```
 
+The first three lines are the skips. When no name is on any of them the block
+opens instead with "Catalyst found and premarket evidence complete for 12 of
+12 candidates." The trap line names the names whose `trap` field is true, or
+prints its zero. The two count led sentences are the evidence roll's thin
+baseline and thin band lines, quoted from the packet with one reason per name
+under each. The dropped line and the gap list appear when the packet carries
+them; a morning with no gaps prints "Evidence gaps recorded by the scan: 0."
 Four things about that block are worth knowing.
 
 **A `0 of 12` line is printed as readily as one that names somebody.** An absent
 line would be indistinguishable from a section the model forgot.
 
-**The last line is the fill warning and it fires in one direction only.** A name
-it does NOT mention has not passed anything. Measured over the 54 past rows
-where the night reached a verdict at all, this check caught 6 of the 10 levels
-it went on to call untradeable and flagged 6 of the 44 that were fine. Four in
-ten untradeable levels get past it. The population is 66 rows; the other 12 are
-the ones the night could not judge either, and they are counted apart rather
-than folded in.
+**The thin band line is the fill warning and it fires in one direction only.**
+A name it does NOT mention has not passed anything. Measured over the 54 past
+rows where the night reached a verdict at all, this check caught 6 of the 10
+levels it went on to call untradeable and flagged 6 of the 44 that were fine.
+Four in ten untradeable levels get past it. The population is 66 rows; the
+other 12 are the ones the night could not judge either, and they are counted
+apart rather than folded in.
 The report is forbidden from ever writing that a level looks liquid, should
 fill, or anything of that shape, because the definitive answer is computed that
 night from a complete tape and is not available at 08:45.
@@ -500,7 +532,8 @@ records. A name discovery did not subscribe cannot be priced at 08:45 no matter
 what it does.
 
 08:45. The scan prices all 34 from the collector file, measures each gap against
-the prior session close, and keeps the top 12. It enriches those 12, computes
+the prior session close, and keeps the top 12, gaps up first and then gaps down
+by size, because both screens are long in practice. It enriches those 12, computes
 RVOL against the cached baseline, reads catalysts, computes the eligibility
 booleans and the score. It writes `packet.json` and 12 picks rows.
 
@@ -534,7 +567,7 @@ Tomorrow morning, ACME's skip is one row inside the counts in section 10.
 
 ### What the scope is today, plainly
 
-**The machine is complete and runs.** Ten scheduled tasks, every weekday since
+**The machine is complete and runs.** Eleven scheduled tasks, every weekday since
 2026-08-13, with a watchdog over them and a job trail under them. The midday
 pass is the newest and joined on 2026-08-31.
 
@@ -671,7 +704,7 @@ destination is not in the tree at all, and is the last row for that reason:
 
 | Path | What |
 | --- | --- |
-| `data/premarketdesk.db` | SQLite (WAL): the picks table, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; the premarket volume baseline; and gap_stats, one row per (ticker, as_of) |
+| `data/premarketdesk.db` | SQLite (WAL): the picks table, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; the premarket volume baseline; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; and paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined |
 | `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
 | `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
@@ -679,7 +712,7 @@ destination is not in the tree at all, and is the last row for that reason:
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
 | `site/PremarketDesk.html` | The whole report history as one self contained file, newest sessions embedded, older ones linked. Opens from disk, no server, no network |
 | `site/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own |
-| `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the only two artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, and the frozen 08:45 packet a morning was judged on. See `doc/CRITERIA.md [Backup]` |
+| `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the six artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, its stats and subscriptions sidecars, the frozen 08:45 packet a morning was judged on, and the report in markdown and HTML, because the same input does not produce the same words twice. A dated snapshot of `data/quantifier-flags.jsonl` sits beside them. See `doc/CRITERIA.md [Backup]` |
 
 ## Configuration reference
 
@@ -770,20 +803,25 @@ Other documents:
 
 ## When things go wrong
 
-- **A morning with the title "numbers only, narrative withheld" is the
-  fallback, and its disclaimer says why.** Three things reach it: the CLI
-  failed or timed out on both runs; the quantifier guard refused the model's
-  prose on both attempts, in which case the flag is in
-  `data/quantifier-flags.jsonl` and `ops.quantifier_flags` is how you judge
-  it; or, under slots mode, the model altered the report outside its slots or
-  left one unfilled on both attempts, in which case the rejected answers are
-  beside the report as `report.slots-rejected-N.md`. Read `analyst_usage.json`
-  for `status`, `mode` and `slots_filled` before debugging anything else.
+- **A morning titled "numbers only, narrative unavailable" or "numbers only,
+  narrative withheld" is the fallback, and its disclaimer says why.** The two
+  titles name two different causes. "Narrative unavailable" means the CLI
+  failed or timed out on both runs. "Narrative withheld" means an answer came
+  back and was refused: the quantifier guard refused the model's prose on both
+  attempts, in which case the flag is in `data/quantifier-flags.jsonl` and
+  `ops.quantifier_flags` is how you judge it; or, under slots mode, the model
+  altered the report outside its slots or left one unfilled on both attempts,
+  in which case the rejected answers are beside the report as
+  `report.slots-rejected-N.md`. Read `analyst_usage.json` for `status`, `mode`
+  and `slots_filled` before debugging anything else.
 
 - **The watchdog usually acts first.** `src/ops/monitor_jobs.py` reruns anything
   idempotent at most once per day, restarts a dead collector only while the
   premarket window is open and no collector is alive, and never reruns
-  discovery after the collector starts. Its reasoning is in
+  discovery while a subscription list exists that the collector will not read
+  again. Since the collector rereads the watchlist until its 09:25 stop time,
+  a discovery rerun is free all morning; it is refused only once the socket
+  has closed on a pool it will never revisit. Its reasoning is in
   `logs\monitor-YYYY-MM-DD.log`.
 - **Antivirus TLS interception** (Norton and similar re-sign HTTPS with
   their own root): `src/core/config.py` detects the local root and widens the

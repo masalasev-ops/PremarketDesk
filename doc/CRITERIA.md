@@ -87,16 +87,21 @@ records null RVOL with the reason when the cache is cold.
 The redesign line is the cost of one bulk call at which the day's bulk calls
 would dominate the shared account and force a design change. Nothing in the
 pipeline calls the bulk live endpoint any more, so the day's bulk calls are all
-end of day: three at 07:15, two for discover's prior session movers source and
-one for the universe closes sidecar discover writes for the notable movers
-section, and two at 22:15 for the nightly pool recall, at a measured 100
-credits each
+end of day: three on each of discover's two passes, at 03:55 and 07:15, two
+for the prior session movers source and one for the universe closes sidecar
+discover writes for the notable movers section, so six from discover; one at
+12:00 for the midday pass's prior session denominator; and two at 22:15 for
+the nightly pool recall, at a measured 100 credits each
 [corrected 2026-08-17: was "98 counted calls each, about 392 a day". The
 ledger counts calls and the meter bills credits, and the meter says a flat
-100, reconciled exactly on two universe rebuilds], about 500 a day against a
-shared 100,000. [corrected 2026-08-20: was "two at 07:15" and "about 400 a
-day". write_universe_closes has bought a third bulk day since 2026-08-18 and
-every discover log since counts three eod-bulk-last-day calls.] The weekly universe rebuild buys
+100, reconciled exactly on two universe rebuilds], about 900 a day against a
+shared 100,000. [corrected 2026-09-02: was "three at 07:15 ... and two at
+22:15 ... about 500 a day". discover has run twice since 2026-09-02 and makes
+the same three calls on each pass, and the midday pass has bought its own
+bulk day since 2026-08-31.] [corrected 2026-08-20: was "two at 07:15" and
+"about 400 a day". write_universe_closes has bought a third bulk day since
+2026-08-18 and every discover log since counts three eod-bulk-last-day
+calls.] The weekly universe rebuild buys
 lookback_sessions more of the same call in one Sunday run.
 measure_bulk_cost.py still judges its verdict against this number using the
 bulk live endpoint, because that is the call whose price would force the
@@ -170,8 +175,9 @@ through the measurement re-pin that endpoint at zero for a third time.
 intraday-1m is the correction. Nothing had ever priced it, and a reader
 counting http calls would have costed it at one. It is FIVE, so the two
 scheduled steps that use it cost five times what a call count suggests: the
-07:15 baseline warm makes one call per stale subscribed ticker, up to 42, which
-is about 210 credits and not 42, and the nightly verify_against_intraday makes
+baseline warm, which runs after each of discover's two passes at 03:55 and
+07:15, makes one call per stale subscribed ticker on each pass, up to 42, which
+is about 210 credits per pass and not 42, and the nightly verify_against_intraday makes
 one per collected symbol, about 50, which is about 250 and not 50. Neither is
 gated on a number sized off the old reading, so nothing was actually undersized
 and nothing is being fixed here. What changes is that the next gate to be
@@ -300,6 +306,29 @@ max_price_age_seconds         = 900        # SEED, not measured. Fifteen minutes
                                            # supports it yet. Widen it if real
                                            # mornings show liquid names being cut.
 
+### The stale print note
+
+Until 2026-09-02 a print older than the limit REMOVED the candidate from the
+packet, and the packet listed it under dropped_stale_price with no price and
+no gap. Real mornings showed exactly what the seed's own comment warned of:
+the socket carries about a tenth of the consolidated tape, so a liquid name
+goes fifteen minutes without a print routinely, and 36 candidates were cut
+over ten archived sessions, most of them tier 1 and 2 earnings and news
+names. GIII, tier 1, down 9.8 percent at its last print on 2026-09-02, was
+cut on 6 bars and appeared nowhere in that morning's report, because the
+notable movers leg applies the same floor. BILI and LI, both liquid, were
+cut on 2026-09-01 at 2,047 and 1,267 seconds.
+
+The age is real and the price is real; what a stale print cannot do is set
+a level. So the candidate now STAYS, carries price_stale and its age, is
+ranked and published on the gap it last showed, and fails
+require_fresh_price on both screens. The packet lists the flagged names
+under stale_price with their price and age. The notable movers leg still
+leaves a stale print off its premarket leg, because that leg publishes a
+move as of the scan clock and says how many it left off. The limit is
+unchanged and still a seed; the change is what happens on the far side of
+it.
+
 ## Day setup
 
 Applies to the intraday gap and go screen. A candidate is day_eligible only
@@ -317,6 +346,7 @@ price                         = > 3        # dollars, latest premarket print
 market_cap                    = > 1B
 premarket_rvol                = > 1.5      # the CONSOLIDATED premarket volume estimate divided by the cached baseline median. Was the collector's socket volume until 2026-08-21; see the capture rate note
 require_above_prior_high      = true       # latest premarket print above prior regular session high
+require_fresh_price           = true       # the latest print is no older than [Price age] max_price_age_seconds at the scan clock. Added 2026-09-02: a stale print used to remove the name from the report; it now fails this line and stays. See the stale print note under [Price age]
 
 ## Swing setup
 
@@ -333,6 +363,7 @@ market_cap                    = >= 800M
 require_open_above_prior_high = true       # premarket price above prior regular session high
 require_open_above_200sma     = true       # premarket price above twoHundredDayAveragePrice
 require_catalyst              = true       # catalyst_found must be true
+require_fresh_price           = true       # as on the day setup: a print older than [Price age] max_price_age_seconds fails this line rather than removing the name
 
 ## Universe
 
@@ -418,8 +449,11 @@ refuse the build with nothing saying why.
 To admit NYSE ARCA or NYSE MKT, add them to the key. That is the whole change,
 and it is here rather than in the code because that is what this file is for.
 
-The current universe.json predates this and still carries all three names. It
-is rebuilt on the Sunday 21:00 pass.
+The universe.json built on 2026-08-30 carries none of the three names: the key
+was applied on that Sunday's rebuild and PHYS, PSLV and VZLA are gone from the
+2,751 name file. [corrected 2026-09-02: this said the current file "predates
+this and still carries all three names", which was true of the 2026-08-23
+build and had been false since the next Sunday.]
 
 ### The closes retention note
 
@@ -475,6 +509,7 @@ has one for the whole universe. See the pool note below and DECISIONS.md.
 price                         = > 3        # applied by the 08:45 scan, not here, matches the day setup price floor
 gap_pct                       = > 3        # applied by the 08:45 scan to the measured gap, matches the day setup gap floor
 run_time                      = 07:15
+provisional_run_time          = 03:55      # the first pass, whose pool the collector opens on at [Collector] start_time. tasks/register_tasks.ps1 ExtraStart must match; the code reads nothing from it but the reconciliation compares the machine against the script
 max_subscribed_candidates     = 42         # seed: the collector's 50 subscription cap less the 8 context tickers
 within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
 within_tier_fallback          = atr_pct_20d      # for names propensity cannot score: it needs 100 sessions, this needs 20
@@ -526,7 +561,7 @@ session is light.
 prior_session_move_pct        = 5          # seed, not validated: absolute close to close percent that makes a name a continuation candidate
 prior_session_dollar_multiple = 3          # seed, not validated: prior session dollar volume this many times its 20 day average counts as unusual
 recent_runner_lookback        = 10         # seed, not validated: sessions of picks history a recent runner can come from
-recent_runner_decay           = 0.85       # seed, not validated: per session weight decay, so 3 days ago outranks 3 weeks ago
+recent_runner_decay           = 0.85       # seed, not validated: per session weight decay, recorded on the row as pool_evidence.runners.weight. It ORDERS NOTHING: every tier, tier 5 included, is ordered by within_tier_key, and until 2026-09-02 this line claimed 3 days ago outranks 3 weeks ago, which the code never did
 news_window_start             = 16:00      # prior day ET, the close after which overnight news starts counting
 news_fresh_hours              = 6          # seed: news newer than this is tier 2, older but inside the window is tier 3
 news_sweep_page_size          = 1000       # rows per news call
@@ -538,7 +573,7 @@ Selection is now a prior assembled from information that exists before the
 open, not a reading of today's tape. Four sources, unioned, deduplicated, and
 intersected with universe.json:
 
-  earnings before open today, from the calendar API
+  earnings from the prior close to this open, from the calendar API: before open today, after close the prior session, and rows in that window the vendor left untimed
   overnight news, from a symbol-less news sweep over the window above
   prior session movers, from two bulk end of day calls
   recent runners, from the picks table
@@ -656,6 +691,7 @@ nightly pass is what will eventually replace the assumption with a measurement.
 
 tier = earnings_before_open : 1
 tier = earnings_after_close : 1          # added 2026-09-02, see the after close note below
+tier = earnings_timing_unknown : 1       # added 2026-09-02 evening: a calendar row dated today or the prior session whose before_after_market is null. 6 of 127 rows in the packets on disk (NPK, NB, TGS, SA, ANAB); until then such a row got no tier at all. Same prior, less precision, and the precision is recorded on the row
 tier = news_fresh : 2
 tier = news_stale : 3
 tier = prior_session_mover : 4
@@ -771,7 +807,9 @@ rows before and after are not comparable; the score watch restarts here, on
 the same terms as any other change to what is being scored.
 
 start_time                    = 04:00      # [corrected 2026-09-02: was 07:20. See the two phase note below: the RVOL numerator started here while its denominator accumulated from 04:00, and the published entry reference sat a median 1.19 percent from the true premarket high because of it]
-resubscribe_time              = 07:20      # ET. The handover: the run rereads the watchlist and moves onto the pool discover wrote at 07:15. See the two phase note
+two_phase_first_session       = 2026-09-03 # the first session the 04:00 start ran. A session before this is measured against start_time_before_two_phase whatever its sidecar says, because those sidecars carry no window_open_at and their subscribed_at is the LAST rewrite of the day, a watchdog restart on 2026-08-19 and 2026-08-24
+start_time_before_two_phase   = 07:20      # the clock every session before two_phase_first_session ran under. Read by window_open_hhmm for those sessions and nothing else; never move it
+resubscribe_time              = 07:20      # ET. The handover: the run rereads the watchlist and moves onto the pool discover wrote at 07:15. See the two phase note. A run that starts after this, a watchdog restart, rereads from its own start, so a rerun of discover lands whenever it happens
 stop_time                     = 09:25
 context_symbols               = SPY, QQQ, IWM, DIA, TLT, USO, UUP, VIXY
 max_subscriptions             = 50         # hard socket cap including the 8 context tickers, so 42 candidate slots. Overflow comes off the tail of discover's ranked list, the collector does not reorder
@@ -782,9 +820,9 @@ poll_interval_s               = 60         # only used by the --poll fallback
 auth_wait_s                   = 10         # see the handshake note below
 late_trade_grace_s            = 45         # see the late trade note below
 subscription_retry_wait_s     = 60         # measured 2026-08-19: a dropped connection's 50 slots were still held 1s later and free within 105s
-max_subscription_retries      = 4          # four waits is four minutes, against a window that is now five and a half hours long
+max_subscription_retries      = 4          # per INCIDENT: the count resets on every successful connection since 2026-09-02. Four waits is four minutes against a window that is now five and a half hours long; until the reset every reconnect of the morning spent one, and the fifth ordinary drop of a day would have been fatal
 pool_reload_check_s           = 30         # SEED. How often, after resubscribe_time, the run rereads the watchlist looking for a new generated_at. A file stat and a small JSON parse, against a socket that is idle between messages
-max_pool_reloads              = 3          # SEED. The handover, plus room for two watchdog reruns of a failed discover. A cap because each one closes and reopens the socket, and a watchlist rewritten in a loop must not turn into a collector that reconnects in a loop
+max_pool_reloads              = 3          # SEED. The handover, plus room for the one watchdog rerun [Monitor] max_reruns_per_job_per_day allows and one hand rerun. A cap on RESUBSCRIBES, not on rereads: the run rereads every pool_reload_check_s until stop_time and resubscribes only when generated_at changed. A cap because each resubscribe closes and reopens the socket, and a watchlist rewritten in a loop must not turn into a collector that reconnects in a loop
 verify_warmup_minutes         = 25         # see the verification note below
 verify_window_minutes         = 15
 volume_check_agreement_pct    = 1.0        # SEED, not measured. How close either reading has to sit to the vendor to count as agreement. See the volume check note
@@ -981,9 +1019,13 @@ reached no reader, and the morning report described premarket RVOL as a lower
 bound while naming only the smaller of the two reasons it is one.
 
 The two reasons are different in kind. The WINDOW reason is arithmetic and
-needs no measurement: the numerator starts at [Collector] start_time and the
-denominator at [Baseline] session_start, so the ratio is bounded below by
-construction. The FEED reason is empirical and is exactly what this file
+needs no measurement, and since 2026-09-02 it is per name rather than per
+morning: the numerator starts where that name's collector window opened,
+which window_open_at records, and the denominator at [Baseline]
+session_start. A name subscribed at the 04:00 start has a numerator and a
+denominator over the same clock and is not bounded; a name that joined at the
+07:20 handover has a numerator over the shorter window, so its ratio is
+bounded below by construction. The FEED reason is empirical and is exactly what this file
 measures: the numerator comes from the collector socket and the denominator
 from the vendor intraday endpoint, so whatever those two disagree by passes
 straight into the ratio. On the four sessions measured before this key existed
@@ -1260,8 +1302,12 @@ one slot. See [Score premarket float rotation] for the bands and DECISIONS.md
 2026-08-16 for how they were set.
 
 The numerator is the collector's premarket volume, the same field RVOL uses,
-so the same lower bound applies: the collector starts at 07:20 and the true
-premarket opens at 04:00, so the rotation understates the full session. It can
+so the same lower bound applies, and it is per name: the collector window is
+per session and per name, read from the subscription sidecar and recorded as
+window_open_at, and it opened at 07:20 for every session before 2026-09-03.
+Since then a name on the 03:55 pool is heard from the 04:00 session open and a
+name that joined at the 07:20 handover is not, so where the window opened
+after 04:00 the rotation understates the full session. It can
 therefore withhold a candidate from a band, never smuggle one into it.
 
 The denominator is sharesFloat from us-quote-delayed, the same response the
@@ -1294,7 +1340,10 @@ one minute intraday bars, which are published a few hours behind live. The
 premarket window opens at the baseline session start and closes at market
 open. The gap report compares the morning's live collector high against the
 true high over recent sessions, which is the standing measurement of how much
-premarket the 07:20 collector start actually misses.
+premarket the collector's window actually misses. That window is per session
+and per name, read from the subscription sidecar: 07:20 for every session
+before 2026-09-03, and since then 04:00 for a name on the 03:55 pool and the
+07:20 handover for a name that joined on the 07:15 pool.
 
 market_open                   = 09:30
 gap_report_sessions           = 20
@@ -1539,7 +1588,7 @@ recorded. Guessing the window is the one thing this pass must not do.
 
 ### The two ratios this writes note
 
-capture_observed = pm_volume / true_volume_socket_window. What the socket
+The first, capture_observed, is pm_volume / true_volume_socket_window. What the socket
 ACTUALLY carried of the consolidated tape over THE MINUTES IT WAS LISTENING TO,
 per symbol per session. This is the quantity [Collector] premarket_capture_rate
 asserts as 0.1172 for every name, and after baseline_sessions of it that key can
@@ -1556,7 +1605,7 @@ wrong one, and it is the correction the whole day screen's volume floor rests
 on. collector_window_share is the other half, true_volume_socket_window over
 pm_volume_true, and is the measurement of the late start.]
 
-estimate_error = pm_volume_estimated / pm_volume_true. How well the MORNING'S
+The second, estimate_error, is pm_volume_estimated / pm_volume_true. How well the MORNING'S
 correction did, where 1.0 is exactly right, above 1.0 overstated and below 1.0
 understated. It is a different question from the first and it is the one that
 says whether the shipped screen admitted the right names.
@@ -1660,7 +1709,8 @@ reference level. The header of this file applies.
 
 The 08:45 gathering pass that writes packet.json.
 
-candidate_count               = 12         # top N by the absolute gap measured from the collector against the pool's prior close
+candidate_count               = 12         # top N by the gap measured from the collector against the pool's prior close, gaps up first. See the rank direction note
+rank_up_gaps_first            = true       # added 2026-09-02, see the rank direction note. false restores the direction blind cut
 news_lookback_hours           = 24
 news_keep                     = 3
 economic_country              = US
@@ -1670,6 +1720,35 @@ run_time                      = 08:45
 rvol_cutoff_snap_minutes      = 10         # see the cutoff snap note below
 min_bars_for_full_window      = 10         # seed: below this many collected minutes the premarket window is called THIN, not merely partial. See the thin window note
 prior_close_disagreement_pct  = 0.5        # seed: percent between the two vendor prior closes above which the packet says so. See the two prior closes note
+
+### The rank direction note
+
+Until 2026-09-02 candidate_count kept the top names by the ABSOLUTE gap the
+collector measured, so a gap down and a gap up of the same size were the same
+thing to it. Both screens beneath it are long in practice: [Day setup]
+require_above_prior_high and [Swing setup] require_open_above_prior_high
+cannot pass for a name printing below its prior close. So every slot the cut
+gave a gap down was a slot spent on a name that could not be eligible, and on
+a red morning those slots were taken from names that could.
+
+2026-08-27 is the case, read from that packet's candidate_provenance.ranking.
+Nineteen subscribed names cleared the floors and twelve were kept, four of
+them gaps down of 5.0 to 8.1 percent, every one of which then failed
+require_above_prior_high. The seven cut by the cap were ALL gaps up: CRWV
++4.18, AAOI +4.08, STM +4.07, MRVL +3.66, IREN +3.59, NVTS +3.39 and ASST
++3.26. The report published four names that could not be eligible and
+withheld four that could have been. 2026-09-01 shows the other face: all
+twelve kept were gaps down on a morning SPY was off 0.66 percent, and the day
+screen's tally read require_above_prior_high 12 of 12.
+
+With rank_up_gaps_first true the cut keeps gaps up first, largest first, and
+fills what remains with gaps down by size. The floors are unchanged, the cap
+is unchanged, and a gap down still reaches the report whenever there is room,
+which on most mornings there is: of the seven sessions on disk only
+2026-08-27 and 2026-09-01 filled the cap. The packet records kept_up and
+kept_down beside the cap so a reader can see the split. Set it false only for
+a study that wants both directions cut on size alone. The cap of 12 is
+unchanged and still a seed.
 
 ### The thin window note
 
@@ -1830,6 +1909,9 @@ list_size                     = 15         # how many ranked movers reach the re
 news_lookups                  = 10         # how many of those get a news call, 5 credits each by [Quota costs], trivial against the sweep that found them
 headlines_per_mover           = 3          # how many of a mover's stories are RENDERED. The packet keeps every one the lookup returned; this only bounds what a reader is asked to read, and the feed tags generic market roundups to most large movers
 rank_by                       = move       # move or rvol. Which of the two floors above orders the list once both are cleared
+early_close                   = 13:00      # ET. The regular session end on an exchange early close day, the day after Thanksgiving and Christmas Eve among them, read off the calendar's ExchangeEarlyCloseDays that ops.market_today already keeps. The pace pro rate below divides by the session that day actually has; until 2026-09-02 it divided by [Paper] session_close on every day, which on a 13:00 day would have called a normal noon pace 0.53 of a session that ends at one
+min_minutes_after_open        = 5          # SEED. A run earlier than [Backfill] market_open plus this many minutes REFUSES the movers list with a written reason, and grades the carry through rows as usual. Until 2026-09-02 a run before the open clamped the elapsed session to one minute of 390 and multiplied every day_rvol by 390, which would have admitted the whole universe. Five minutes because the first consolidated print lands inside the first, and a pace measured over one minute is a pace measured over one print
+max_wrong_date_row_share      = 0.01       # SEED, fraction of the bulk payload's rows. A row in eod-bulk-last-day carrying a date other than the one asked for is DROPPED on its own and counted into the packet; the whole payload is refused, and the 12:00 pass with it, only when more than this share of the rows are wrong. Until 2026-09-02 ONE wrong row refused the whole pass, after the quota preflight had already cleared the sweep it was about to waste. One percent: a payload where one name in a hundred is a different session is a vendor fault worth refusing over, and one row in 11,000 is not
 
 ### The pace note, added 2026-09-02
 
@@ -1847,7 +1929,12 @@ not finding anything, and it was not.
 
 day_rvol is now `volume / (averageVolume * elapsed)` where elapsed is the
 fraction of the regular session traded, from [Backfill] market_open to [Paper]
-session_close, clamped into (0, 1]. It reads as a multiple of normal PACE,
+session_close, or to early_close above on a day the exchange calendar lists as
+one, capped at 1 after the close. Before market_open plus
+min_minutes_after_open there is no session to pro rate against and the movers
+list is refused with the reason written where the list would be; until
+2026-09-02 that case clamped to one minute of 390 and would have multiplied
+every ratio by 390. It reads as a multiple of normal PACE,
 which is what the line above always claimed. The packet carries day_rvol_raw
 beside it so an edition from before this change is still comparable, and
 session_elapsed so the arithmetic can be redone by hand.
@@ -1988,7 +2075,9 @@ timeout_s                     = 1007       # 3x the slowest morning on record, 3
                                            # [corrected 2026-08-20: was 293, "3x the slowest of five measured opus
                                            # medium runs on 2026-08-14: 97.4, 86.5, 97.7, 91.1, 92.4 seconds". The
                                            # rule did not change, the evidence under it did.]
-max_attempts                  = 2          # total CLI runs the narrative may spend in one morning, including the first, counting retries on a CLI failure AND the quantifier regeneration together. Enforced by analyst.RunBudget since 2026-09-02; before that each of the two calls retried this many times on its own, four runs at worst, and the arithmetic below never allowed for it. The gap explanation pass is a separate, short call and is outside this count.
+gap_reasons_timeout_s         = 60         # SEED. The gap explanation pass, a second and separate CLI call, gets this long and not timeout_s. 3x the call as measured, about 20s on 2026-09-01 and 2026-09-02, which is the same rule timeout_s runs on. Until 2026-09-02 it ran under timeout_s, 1,007s, outside the run budget, and the timeout note below had never counted it: two narrative timeouts and then a hung explanation ended at 09:35:40, past the 09:25 watchdog pass, on a note that said 09:18:53. See the timeout note.
+max_attempts                  = 2          # total CLI runs the narrative may spend in one morning, including the first, counting retries on a CLI failure AND the quantifier regeneration together. Enforced by analyst.RunBudget since 2026-09-02; before that each of the two calls retried this many times on its own, four runs at worst, and the arithmetic below never allowed for it. The gap explanation pass is a separate, short call and is outside this count; it is bounded by gap_reasons_timeout_s above and is skipped, with the reason written into its section, on a morning where the narrative spent every run in this budget and at least one of them ran to the timeout.
+mood_max_words                = 10         # SEED. The MOOD slot is ONE line of at most this many words. prompt_slots.md asks for two to six; the slack is deliberate, because this rule exists to catch a paragraph written into the title, which shipped silently until 2026-09-02, and not to edit a phrase, and a quantifier claim written into the title must still reach the quantifier guard, which reads a slot only after its shape passes. See the slots note.
 quantifier_regenerations      = 1          # flagged narratives thrown away and asked for again before the plain table takes over
 quantifier_guard              = enforcing  # warn: log and print flags, deliver the narrative anyway. enforcing: regenerate, then fall back. See the note below for the three things that had to be true, and were, on 2026-08-28.
                                            # [corrected 2026-08-28: was warn, from 2026-08-18. The three conditions below
@@ -2002,7 +2091,7 @@ prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2,
 The mode has been slots since 2026-09-02, and this paragraph does not open
 with the key name and an equals sign, because a column zero line shaped like
 `key = value` under a `##` heading IS a parameter to the parser. It opened
-`mode = slots since 2026-09-02. Under it...` when it was written, which the
+with the word mode, an equals sign and "slots since 2026-09-02. Under it..." when it was written, which the
 parser read as a second [Analyst] mode whose value was that whole sentence,
 and the accessor takes the last pair, so report_mode() saw an unrecognised
 value and fell back to freeform. Slots mode therefore never ran: the
@@ -2014,7 +2103,7 @@ one section is a defect rather than a silent override.
 Under slots the narrative pass does not write the
 report. analyst.fallback_report, the same function that has always written
 the plain table on a morning the model failed, writes the whole report with
-slots=True, leaving marked slots for five kinds of prose: the mood phrase in
+its slots argument true, leaving marked slots for five kinds of prose: the mood phrase in
 the title, the market tone at the top of Summary, one sentence under each
 quoted headline in Premarket gappers saying who it is about, one write up per
 day or swing eligible candidate in Technical signals closing with the
@@ -2026,11 +2115,20 @@ fixed text that ships is Python's, the model's copy is used only to locate the
 slot texts, a rewrapped line is forgiven, a deleted or reworded fixed segment
 is a violation answered by one regeneration and then the plain report, and a
 slot left empty, carrying a heading, a table row or a leftover marker, or a
-write up without the invalidation lead in, is a violation by name. The
+write up without the invalidation lead in, is a violation by name. Each slot
+has a SHAPE as well, added 2026-09-02 because the slot text is everything
+between two fixed segments and a paragraph the model added after a slot was
+shipping inside it: MOOD is one line of at most mood_max_words words,
+HEADLINE and RATES are one paragraph with no blank line, and SETUP ENDS on
+the invalidation line rather than merely containing it. A violation names the
+slot and the rule. A skeleton whose brace pairs outnumber its readable
+markers, a hyphenated ticker being the case that produced one, is refused
+before the model is asked and the plain report says so. The
 quantifier guard reads the slot texts in the narration loop and the finished
 page in the final pass, where a hit in Python's own sentences is logged as
 annotated and said on the disclaimer rather than costing a narrative the
-model did not write.
+model did not write, and a hit the explanation pass wrote withdraws that
+section, in slots mode as in freeform.
 
 Measured on hand runs of archived packets, model opus, first attempt clean
 in every case:
@@ -2135,13 +2233,26 @@ verify, deliver and archive are about two seconds together. So the worst case is
   at 537:  two attempts exhaust at 09:03:13, 27 minutes before the open
   at 1007: two attempts exhaust at 09:18:53, 11 minutes before the open
 
+[corrected 2026-09-02: the sum above left out a third CLI run. The gap
+explanation pass is its own subprocess, and it ran under timeout_s, the full
+1,007 seconds, after the narrative had spent both of its runs, so the chain's
+true worst case was 08:45:00 plus 19s plus THREE times 1,007, ending 09:35:40,
+past the 09:25 watchdog pass that the paragraph below says even the worst case
+clears. Nothing took that path; no explanation call has run longer than about
+twenty seconds. It now runs under gap_reasons_timeout_s, 60 seconds, and is
+skipped outright on a morning where the narrative spent every run and one of
+them timed out. The worst case is therefore 19s plus max_attempts times
+timeout_s plus gap_reasons_timeout_s: at 1007 and 60, 09:19:53, ten minutes
+before the open and five before the 09:25 pass.]
+
 All three clear the open, and all three clear the watchdog: [monitor] chain_due
 is 09:00 but the watchdog only fires on its half hours, so the 08:55 pass reads
 NOT DUE and the next is 09:25, by which time even the worst case has finished.
 Nothing downstream of the chain has a deadline between those two numbers.
 
-At 1007 the margin against the 09:25 pass is six minutes rather than
-twenty-two, and that is the number to watch if this rises again. The margin
+At 1007 the margin against the 09:25 pass is five minutes rather than
+twenty-two [corrected 2026-09-02: was six, before the explanation pass was
+counted], and that is the number to watch if this rises again. The margin
 against the OPEN is eleven minutes and is not the binding one: a report that
 lands at 09:19 is still a premarket report, where a chain still running at
 09:25 is one the watchdog has to reason about.
@@ -2287,7 +2398,10 @@ it hoped. The one trade: a first call that needed both of its runs to get an
 answer has no run left for a regeneration, and a flag on that answer goes
 straight to the plain table with the disclaimer saying why. The gap
 explanation pass is a further short call outside the budget, about twenty
-seconds measured, and is not in this arithmetic.]
+seconds measured, and is not in this arithmetic. [corrected 2026-09-02, later
+the same day: it has to be, because it ran under timeout_s and its worst case
+was a third 1,007 seconds. It now runs under gap_reasons_timeout_s and the
+timeout note above carries it.]]
 
 The cost of a false positive is one regeneration, and the narrative is lost
 only when the SECOND answer flags too. A false positive is cheap to clear:
@@ -2374,18 +2488,25 @@ refresh_after_days            = 7
 
 ## Backup
 
-A copy of the four artifacts that cannot be rebuilt, taken by the nightly and
-read by nothing. night/backup_evidence.py.
+A copy of the six artifacts that cannot be rebuilt, plus a dated snapshot of
+the quantifier flag log, taken by the nightly and read by nothing.
+night/backup_evidence.py.
 
-[corrected 2026-09-01: this said TWO and named two, while _ARTIFACTS has copied
-four since the collector's two sidecars joined it. This page is the authority
-the others were echoing, so the count travelled from here into both architecture
-pages, a docstring in morning/scan.py and the module's own headline. Those were
-corrected first and this was not, which is backwards.]
+[corrected 2026-09-02: this said FOUR and named four. _ARTIFACTS holds six:
+report.md and report.html joined on 2026-09-01, because the same input does
+not produce the same words twice, so a lost report is lost for good. The flag
+log is snapshotted beside them and separately, because it legitimately grows
+and comparing it against an older snapshot would report a disagreement every
+night.] [corrected 2026-09-01: this said TWO and named two, while _ARTIFACTS
+has copied four since the collector's two sidecars joined it. This page is the
+authority the others were echoing, so the count travelled from here into both
+architecture pages, a docstring in morning/scan.py and the module's own
+headline. Those were corrected first and this was not, which is backwards.]
 
-**Why only four.** Everything else in this system has a route back. The universe
-rebuilds weekly. The closes re-fetch. Reports render from packets. The database
-refuses test code through store.guard_live_database. Four things have no route:
+**Why only six.** Everything else in this system has a route back. The universe
+rebuilds weekly. The closes re-fetch. Packets are frozen and the tables render
+from them. The database
+refuses test code through store.guard_live_database. Six things have no route:
 
   data/premarket/<date>.jsonl   the collector's socket capture, a recording of
                                 a tape that no longer exists
@@ -2400,14 +2521,17 @@ refuses test code through store.guard_live_database. Four things have no route:
                                 this the ONLY evidence of what was listened to,
                                 because the watchlist beside it can be rewritten
                                 after the socket has already read it
+  runs/<date>/report.md         the report as the morning wrote it. The same
+  runs/<date>/report.html       packet does not produce the same prose twice,
+                                so a report cannot be re-rendered into itself
 
-All four live under gitignored directories, and on 2026-08-21 at 15:46 a sweep
+All six live under gitignored directories, and on 2026-08-21 at 15:46 a sweep
 that invoked every claim directly wrote fixture data over 29 files, including
 258 fixture bars over roughly 3,200 real ones and 762 bytes over a 125 KB
 packet. That session is gone, and runs/2026-08-21/packet.json is still that 762
 byte stub today: one candidate where picks holds twelve, and `stub` where a
 commit belongs. build_archive refuses to present it as a morning. A list that
-grows past these four without remaking the argument above is a backup of
+grows past these six without remaking the argument above is a backup of
 everything, which is a weaker promise that nobody checks.
 
 root                          = %LOCALAPPDATA%\PremarketDesk\evidence   # expanded through the environment. OUTSIDE the working tree on purpose: a copy inside the directory that gets deleted is not a copy
@@ -2514,15 +2638,20 @@ log for the final step marker, reads the job-status record every step inside
 that job wrote, and reruns what is safe to rerun. Safe means
 idempotent: the morning chain and the nightly can always be rerun, the
 collector may only be restarted when no collector is alive (two live
-collectors would write duplicate minutes), discover is rerun whenever it did
-not finish and the collector has not yet written its subscription list, at
-any hour, because that file is the only thing a rewritten watchlist could
-desync and the clock was only ever a proxy for it, and the universe is
+collectors would write duplicate minutes), discover is rerun whenever its
+last run did not finish and a rewrite of the watchlist is free, and a rewrite
+is free in two cases: no subscription list has been written today, so nothing
+is listening and there is nothing to desync, or the collector is still
+rereading the watchlist, which it does from resubscribe_time until
+[Collector] stop_time, so a rewrite is picked up rather than desynced. The
+subscription list is the only thing a rewritten watchlist could desync and the
+clock was only ever a proxy for it; since the collector rereads until 09:25 a
+rerun is free all morning, and the universe is
 rebuilt on a weekday only when the Sunday build was missed. Each job gets at most
 max_reruns_per_job_per_day so a hard failure cannot loop.
 
 discover_due                  = 07:25      # discover plus baseline warm should be done by here
-chain_due                     = 09:00      # a healthy chain is done by about 08:52; the worst case runs to 09:18:53, see the [Analyst] timeout note
+chain_due                     = 09:00      # a healthy chain is done by about 08:52; the worst case runs to 09:19:53, see the [Analyst] timeout note [corrected 2026-09-02: was 09:18:53, before the gap explanation pass had a clock of its own]
                                            # [corrected 2026-08-29: the worst case read 09:03 against a 537s timeout_s.
                                            # 09:00 is unchanged and still correct: the only pass inside
                                            # [chain_due, rerun_chain_until] is 09:25, and the worst case now finishes six
@@ -2897,12 +3026,12 @@ would be dead configuration, so the two are one line.
 sizing = v1 : notional                     # the same dollar POSITION on every trade
 sizing = v2 : risk                         # the same dollar RISK on every trade
 
-account_notional              = 100000     # SEED, DOLLARS. The notional both sizings are expressed against, so a booked P&L can be read as a return on something rather than as a number
+account_notional              = 100000     # SEED, DOLLARS. The notional both sizings are expressed against, so a booked P&L can be read as a return on something rather than as a number. A documentation constant: no module under src/ reads it, and the two keys below state the sizes it explains as absolute dollars
 position_notional             = 10000      # SEED. v1's fixed position, 10 percent of the account. Also the base [Truth] min_fill_band_notional derives from
 risk_notional                 = 750        # SEED. v2's fixed dollar risk, 0.75 percent of the account. CALIBRATED, and the calibration matters: see the v2 note below
 max_position_notional         = 25000      # SEED. v2's cap, 25 percent of the account. Without it a two percent stop buys a 37,500 dollar position and the sizing rule quietly becomes a leverage rule
 session_close                 = 16:00      # ET. The regular session end the hold-to-close exit uses. The open comes from [Backfill] market_open, which is the same fact and is not restated here
-max_band_participation        = 0.04       # SEED. The largest share of [Truth] fill_band_volume's notional that one position may be. See the note below
+max_band_participation        = 0.04       # SEED. The largest share of [Truth] fill_band_volume's notional that one position may be. A documentation constant: no module under src/ reads it, and its only reader is the coupling claim in tests/test_regressions.py, which derives [Truth] min_fill_band_notional from it and position_notional. See the note below
 
 ### Rule v2, pre-registered 2026-08-29
 
@@ -3010,7 +3139,10 @@ from the collector's own bars, because the definitive one cannot be.
 **Why the morning cannot just run the real check.** Alpaca serves its sip feed
 for a session that is OVER and refuses it with HTTP 403 for one that is
 running, which is why [Truth] is a nightly pass. So at 08:45 the only evidence
-available is the socket sample the collector has been accumulating since 07:20.
+available is the socket sample the collector has been accumulating since that
+name's window opened: 04:00 for a name on the 03:55 pool, the 07:20 handover
+for a name that joined on the 07:15 pool, and 07:20 for every session before
+2026-09-03.
 
 **IT IS A WARNING AND IT IS NEVER AN APPROVAL**, and the asymmetry is the whole
 design. A low number here means the collector saw very little trade at the

@@ -79,22 +79,62 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import sqlite3
 import statistics
 from typing import Any
 
 import probe_alpaca
 
+from collect import baseline as baseline_rules
 from core import criteria
 from core import ettime
 from core import store
 from morning import scan
 from night import true_volume
 from research import backtest_pool
+from selection import universe
 
 _CRIT = criteria.load()
 
 SOURCE = "reconstructed"
 PREMARKET_DIR = backtest_pool.CACHE_DIR / "premarket"
+
+
+def metrics_before(day: str) -> tuple[dict[str, dict[str, Any]], str, str | None]:
+    """(ranking metrics, the gap_stats as_of they came from, the universe vintage).
+
+    THE AS_OF IS STRICTLY BEFORE THE REPLAYED SESSION, which is what
+    backtest_pool.load_metrics documents and what a bare load_metrics() does
+    not do: it reads the newest complete window, whose propensity was computed
+    partly from the session being replayed, so every key derived from it
+    carried a look ahead advantage into the pool this replay claims the
+    morning would have had. The newest as_of on disk before the day is used,
+    and a day with none before it is refused rather than served the future.
+
+    The universe carries no vintage per name, so its market caps are whatever
+    the last weekly rebuild wrote; generated_at is returned so the payload
+    can say which one, rather than leaving a reader to assume the caps were
+    the day's.
+    """
+    with store.session() as connection:
+        try:
+            row = connection.execute(
+                "SELECT MAX(as_of) AS as_of FROM gap_stats WHERE as_of < ?",
+                (day,)).fetchone()
+        except sqlite3.OperationalError as exc:
+            raise RuntimeError(
+                f"gap_stats cannot be read ({exc}), so no ranking metrics dated "
+                f"before {day} exist and the pool cannot be replayed without "
+                "a look ahead") from exc
+    as_of = row["as_of"] if row else None
+    if not as_of:
+        raise RuntimeError(
+            f"no gap_stats as_of on disk is dated before {day}, so the pool "
+            "cannot be ranked without a look ahead; build one with "
+            "selection.gap_stats for an earlier as_of first")
+    vintage = universe.load_universe(require_fresh=False).get("generated_at")
+    return backtest_pool.load_metrics(as_of), str(as_of), (
+        str(vintage) if vintage else None)
 
 
 def ensure_dirs() -> None:
@@ -125,7 +165,12 @@ def subscribed_symbols(day: str, metrics: dict[str, dict[str, Any]]) -> list[str
     ranked = backtest_pool.order_pool(
         pool, metrics, backtest_pool.ORDERINGS["SHIPPED"])
     cap = _CRIT.integer("discovery", "max_subscribed_candidates")
-    capped = backtest_pool.apply_cap(ranked, cap)
+    # The tier floor production runs, not apply_cap's default of zero. With
+    # zero the cut is strict priority, which discover.apply_slots's own
+    # docstring records never gave tiers 3 or 4 a slot in 60 sessions, so the
+    # replay was subscribing a pool the morning would not have had.
+    capped = backtest_pool.apply_cap(
+        ranked, cap, _CRIT.integer("discovery", "min_slots_per_tier"))
     return [row["symbol"] for row in capped if row["subscribed"]]
 
 
@@ -144,7 +189,7 @@ def fetch(day: str, force: bool = False,
         return {"session_date": day, "skipped": "already cached",
                 "path": str(path)}
 
-    metrics = backtest_pool.load_metrics()
+    metrics, metrics_as_of, universe_vintage = metrics_before(day)
     symbols = subscribed_symbols(day, metrics)
     if not symbols:
         return {"session_date": day, "skipped": "the pool subscribed nobody"}
@@ -193,7 +238,10 @@ def fetch(day: str, force: bool = False,
                 typical = (top + bottom + close) / 3.0
             if typical is not None:
                 price_volume += typical * size
-        volumes = [v for v in (baselines.get(code) or []) if v > 0]
+        # Zeros KEPT, as collect/baseline.py keeps them: a session the tape
+        # traded on and this name did not is a premarket volume of zero, and
+        # dropping it was a second definition of the denominator.
+        volumes = list(baselines.get(code) or [])
         rows[by_code[code]] = {
             "bars": len(ordered),
             "volume": volume,
@@ -213,6 +261,10 @@ def fetch(day: str, force: bool = False,
         "cutoff_hhmm": cutoff,
         "feed": _CRIT.text("truth", "feed"),
         "baseline_sessions_walked": sessions_used,
+        # What ranked the pool, so the cache says which propensity window and
+        # which universe rebuild the subscription list rests on.
+        "metrics_as_of": metrics_as_of,
+        "universe_generated_at": universe_vintage,
         "symbols": rows,
     }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True),
@@ -240,11 +292,14 @@ def build_candidates(day: str) -> tuple[list[dict[str, Any]], list[str]]:
     """
     tape = json.loads(cache_path(day).read_text(encoding="utf-8"))
     inputs, _outcome = backtest_pool.load_session(day)
-    metrics = backtest_pool.load_metrics()
+    metrics, metrics_as_of, universe_vintage = metrics_before(day)
     prior_bars = backtest_pool._eod_cache(inputs["prior_session"])
     prior_closes = inputs.get("prior_closes") or {}
 
-    notes: list[str] = []
+    notes: list[str] = [
+        f"ranking metrics are gap_stats as of {metrics_as_of}, the newest "
+        f"window before {day}; market caps are the universe generated at "
+        f"{universe_vintage or 'an unrecorded time'}, not the day's own"]
     out: list[dict[str, Any]] = []
     for symbol, row in sorted(tape["symbols"].items()):
         bars = int(row.get("bars") or 0)
@@ -263,7 +318,17 @@ def build_candidates(day: str) -> tuple[list[dict[str, Any]], list[str]]:
         prior_close = _as_float(prior_closes.get(symbol))
         gap = (((price - prior_close) / prior_close * 100.0)
                if (price is not None and prior_close) else None)
-        rvol = (volume / baseline) if (baseline and baseline > 0) else None
+        # THE MORNING'S OWN FLOORS on the denominator. The live scan asks
+        # baseline.usable_for_rvol, which refuses a baseline resting on fewer
+        # than [Baseline] min_sessions_for_rvol sessions or a median under
+        # min_baseline_premarket_volume shares, and nulls pm_rvol with the
+        # reason. Until 2026-09-02 this divided by any positive median, so a
+        # replayed name could clear a screen off a denominator the morning
+        # would have refused to divide by.
+        baseline_row = {"sessions_used": int(row.get("baseline_sessions") or 0),
+                        "median_volume": baseline}
+        usable, why_not = baseline_rules.usable_for_rvol(baseline_row)
+        rvol = (volume / baseline) if usable else None
 
         candidate = {
             "symbol": symbol,
@@ -275,6 +340,7 @@ def build_candidates(day: str) -> tuple[list[dict[str, Any]], list[str]]:
             "pm_vwap": vwap,
             "pm_volume": volume,
             "pm_rvol": rvol,
+            "pm_rvol_reason": None if usable else why_not,
             "pm_bars": bars,
             "baseline_median": baseline,
             "baseline_sessions": int(row.get("baseline_sessions") or 0),

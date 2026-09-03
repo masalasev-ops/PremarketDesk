@@ -1,5 +1,5 @@
 @echo off
-rem PremarketDesk 08:45 morning chain: scan, analyst, render, deliver.
+rem PremarketDesk 08:45 morning chain: scan, analyst, render, verify, deliver, archive.
 rem Stops on the first failure, so a bad packet never reaches the model and a
 rem bad report never reaches email. deliver.py itself refuses to send while
 rem the data\UNVERIFIED gate marker exists or while email keys are unset.

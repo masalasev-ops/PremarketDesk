@@ -358,13 +358,29 @@ def claim_eight(failures: list[str]) -> None:
         failures.append(f"the 07:22 print measured {candidates[1]['price_age_seconds']}s, "
                         f"which does not exceed the {limit}s limit; the fixture is wrong")
 
-    kept, dropped = scan.drop_stale_prices(candidates, scan.Packet())
-    if [c["symbol"] for c in kept] != ["FRESH.US"]:
-        failures.append(f"kept {[c['symbol'] for c in kept]}, expected the 08:44 print only")
-    if [d["symbol"] for d in dropped] != ["STALE.US"]:
-        failures.append(f"dropped {[d['symbol'] for d in dropped]}, expected the 07:22 print")
-    elif "vintage" not in dropped[0]["reason"]:
+    # Since 2026-09-02 a stale print FLAGS the candidate rather than removing
+    # it: the name stays, carries price_stale and its age, and fails
+    # require_fresh_price on both screens. See CRITERIA [Price age].
+    kept, stale = scan.flag_stale_prices(candidates, scan.Packet())
+    if [c["symbol"] for c in kept] != ["FRESH.US", "STALE.US"]:
+        failures.append(f"kept {[c['symbol'] for c in kept]}, expected both names to stay")
+    if [d["symbol"] for d in stale] != ["STALE.US"]:
+        failures.append(f"flagged {[d['symbol'] for d in stale]}, expected the 07:22 print")
+    elif "vintage" not in stale[0]["reason"]:
         failures.append("the stale reason does not explain why vintage passes it")
+    elif stale[0].get("price") != 20.0:
+        failures.append("the stale row does not carry the price it was flagged at")
+    if candidates[0].get("price_stale") is not False or candidates[1].get("price_stale") is not True:
+        failures.append(f"price_stale is not set on both rows: "
+                        f"{[c.get('price_stale') for c in candidates]}")
+    scan.evaluate_eligibility(candidates[1])
+    if "require_fresh_price" not in (candidates[1].get("day_failed_conditions") or []):
+        failures.append("a stale print does not fail require_fresh_price on the day screen")
+    if "require_fresh_price" not in (candidates[1].get("swing_failed_conditions") or []):
+        failures.append("a stale print does not fail require_fresh_price on the swing screen")
+    scan.evaluate_eligibility(candidates[0])
+    if "require_fresh_price" in (candidates[0].get("day_failed_conditions") or []):
+        failures.append("a fresh print fails require_fresh_price")
 
     # And the observed window, from the real frozen snapshot.
     _packet, bars = _load()
@@ -373,7 +389,7 @@ def claim_eight(failures: list[str]) -> None:
                 "scheduled_start_et", "scheduled_stop_et"):
         if window.get(key) is None:
             failures.append(f"the observed window has no {key}")
-    print(f"  claim 8 kept the 08:44 print, dropped the 07:22 one at "
+    print(f"  claim 8 kept the 08:44 print, flagged the 07:22 one stale at "
           f"{candidates[1]['price_age_seconds']:,.0f}s; observed window "
           f"{str(window['first_bar_et'])[11:16]} to {str(window['last_bar_et'])[11:16]}, "
           f"{window['minutes_since_last_bar']:.0f}m of silence at the scan clock")
@@ -453,20 +469,33 @@ def claim_nine(failures: list[str]) -> None:
     # goes next, and a flag that ignored the clocks would be the real defect:
     # the whole point of the column is that a reader can tell an understated
     # ratio from a measured one.
+    # Per NAME since 2026-09-02 evening: the clock that matters is the one
+    # this name's subscription opened at, from the sidecar's subscribed_since
+    # map, falling back to the session's own window_open_hhmm, which for a
+    # session before [Collector] two_phase_first_session is 07:20 whatever
+    # the knob says today.
+    from collect import collect_premarket as _collect
     from core import criteria as _criteria
 
     _crit = _criteria.load()
-    collector_open = _crit.clock_text("collector", "start_time")
+    collector_open = (_collect.subscribed_since_hhmm(candidate["symbol"])
+                      or _collect.window_open_hhmm()
+                      or _crit.clock_text("collector", "start_time"))
     premarket_open = _crit.clock_text("baseline", "session_start")
     wanted = collector_open > premarket_open
-    got = bool((candidate["pm_float_rotation_basis"] or {}).get("is_lower_bound"))
+    basis = candidate["pm_float_rotation_basis"] or {}
+    got = bool(basis.get("is_lower_bound"))
     if got != wanted:
         failures.append(
-            f"float rotation reads is_lower_bound {got} with the collector "
-            f"starting {collector_open} and the premarket opening "
+            f"float rotation reads is_lower_bound {got} with this name "
+            f"subscribed from {collector_open} and the premarket opening "
             f"{premarket_open}; it is a lower bound only while the first is "
             "after the second")
-    basis_window = (candidate["pm_float_rotation_basis"] or {}).get("numerator_source") or ""
+    if basis.get("subscribed_from") != collector_open:
+        failures.append(f"the basis does not record the clock the subscription "
+                        f"opened at: {basis.get('subscribed_from')!r} against "
+                        f"{collector_open}")
+    basis_window = basis.get("numerator_source") or ""
     if collector_open not in basis_window:
         failures.append(f"the basis does not name the window it counted from: "
                         f"{basis_window!r}")

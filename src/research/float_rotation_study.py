@@ -129,6 +129,18 @@ def _utc(day: str, section: str, key: str) -> str:
     return when.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _at_or_past(stamp: str, end: str) -> bool:
+    """Whether a bar stamp sits at or after the window end. Unparseable is False."""
+    try:
+        opened = dt.datetime.fromisoformat(stamp)
+        limit = dt.datetime.fromisoformat(end)
+    except ValueError:
+        return False
+    if opened.tzinfo is None or limit.tzinfo is None:
+        return False
+    return opened >= limit
+
+
 def volume_between(probe: Any, start: str, end: str, codes: list[str]) -> tuple[dict[str, float], bool]:
     """Shares traded per symbol between two UTC stamps. (volumes, complete)."""
     volumes: dict[str, float] = {}
@@ -150,6 +162,12 @@ def volume_between(probe: Any, start: str, end: str, codes: list[str]) -> tuple[
                 break
             for symbol, bars in ((payload.get("bars") or {}).items()):
                 for bar in bars or []:
+                    # END EXCLUSIVE, as night/true_volume.fetch_bars is since
+                    # 2026-09-02: the vendor's `end` is inclusive and a bar
+                    # is stamped at its open, so the cutoff minute's own bar
+                    # came back and the morning never sees it.
+                    if _at_or_past(str(bar.get("t") or ""), end):
+                        continue
                     volumes[symbol] = volumes.get(symbol, 0.0) + float(bar.get("v") or 0)
             token = payload.get("next_page_token")
             if not token or pages >= 400:
@@ -383,12 +401,19 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
     for index, (prior, today) in enumerate(pairs):
         # The baseline window, for every universe name, so the rolling history
         # is there when a name first becomes a gapper.
+        base_start = _utc(today, "baseline", "session_start")
+        num_start = _utc(today, "collector", "start_time")
         base_vol, base_ok = volume_between(
-            probe, _utc(today, "baseline", "session_start"),
-            _utc(today, "scan", "run_time"), all_codes)
-        num_vol, num_ok = volume_between(
-            probe, _utc(today, "collector", "start_time"),
-            _utc(today, "scan", "run_time"), all_codes)
+            probe, base_start, _utc(today, "scan", "run_time"), all_codes)
+        if num_start == base_start:
+            # ONE window, fetched once. [Collector] start_time has equalled
+            # [Baseline] session_start since 2026-09-02, and two fetches of the
+            # same minutes for every universe name doubled the request count
+            # of every session to produce the same dict twice.
+            num_vol, num_ok = base_vol, base_ok
+        else:
+            num_vol, num_ok = volume_between(
+                probe, num_start, _utc(today, "scan", "run_time"), all_codes)
         if not (base_ok and num_ok):
             print(f"{today}: sweep incomplete, session skipped")
             continue
@@ -721,6 +746,16 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         "windows": {
             "numerator": f"{_CRIT.clock_text('collector', 'start_time')} to "
                          f"{_CRIT.clock_text('scan', 'run_time')} ET",
+            # THE NUMERATOR REGIME, stated so a reader of two payloads can
+            # tell a 07:20 numerator study from a 04:00 one without opening
+            # CRITERIA at the commit each ran at.
+            "numerator_regime": {
+                "numerator_starts": _CRIT.clock_text("collector", "start_time"),
+                "baseline_starts": _CRIT.clock_text("baseline", "session_start"),
+                "one_fetch_serves_both": (
+                    _CRIT.clock("collector", "start_time")
+                    == _CRIT.clock("baseline", "session_start")),
+            },
             "rvol_denominator": f"{_CRIT.clock_text('baseline', 'session_start')} to "
                                 f"{_CRIT.clock_text('scan', 'run_time')} ET, "
                                 f"median of {lookback} prior sessions",

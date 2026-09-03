@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries one hundred and sixty seven claims, a count read off
+and the two pages. It now carries two hundred and three claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -2604,6 +2604,428 @@ def claim_a_truncated_name_is_not_a_rejected_one(failures: list[str]) -> None:
           "short morning stays silent")
 
 
+def claim_a_gap_down_does_not_take_a_gap_up_slot(failures: list[str]) -> None:
+    """The rank cut keeps gaps up before gaps down, whatever their size.
+
+    2026-08-27: nineteen subscribed names cleared the floors, the cap kept
+    twelve by absolute gap, four of them gaps down of 5 to 8 percent that then
+    failed require_above_prior_high as every gap down must, and the seven it
+    cut were all gaps up, CRWV +4.18 through ASST +3.26. Both screens are long
+    in practice, so a slot given to a gap down is a slot that cannot produce
+    an eligible name. CRITERIA [Scan] rank_up_gaps_first is what changed, and
+    this holds the shipped value to true and the ordering to what the note
+    says: gaps up first in descending order, then gaps down by size.
+    """
+    from core import criteria
+    from morning import scan
+
+    if not criteria.load().flag("scan", "rank_up_gaps_first"):
+        failures.append("CRITERIA [Scan] rank_up_gaps_first is not true on disk")
+
+    class Sink:
+        def __init__(self) -> None:
+            self.gaps: list[str] = []
+
+        def gap(self, note: str) -> None:
+            self.gaps.append(note)
+
+    def row(symbol: str, gap_pct: float) -> dict[str, Any]:
+        return {"symbol": symbol, "price": 50.0,
+                "pool_prior_close": 50.0 / (1 + gap_pct / 100.0)}
+
+    # 2026-08-27's shape: big gaps down outnumber and outsize the gaps up.
+    rows = ([row(f"D{i:02d}.US", -(8.0 - i * 0.4)) for i in range(10)]
+            + [row(f"U{i:02d}.US", 4.2 - i * 0.2) for i in range(5)])
+    sink = Sink()
+    kept, stats = scan.rank_by_measured_gap(rows, sink, 12)
+    symbols = [c["symbol"] for c in kept]
+    if symbols[:5] != [f"U{i:02d}.US" for i in range(5)]:
+        failures.append(f"the five gaps up are not kept first: {symbols}")
+    if symbols[5:] != [f"D{i:02d}.US" for i in range(7)]:
+        failures.append(f"the gaps down do not fill the rest by size: {symbols}")
+    if stats.get("kept_up") != 5 or stats.get("kept_down") != 7:
+        failures.append(f"kept_up and kept_down do not record the split: {stats}")
+    if stats.get("rank_up_gaps_first") is not True:
+        failures.append(f"the ranking does not record which rule it ran: {stats}")
+    if "gaps up first" not in (stats.get("ranked_on") or ""):
+        failures.append(f"ranked_on does not say the direction rule: {stats.get('ranked_on')}")
+    cut = [c["symbol"] for c in stats["capped_out_symbols"]]
+    if cut != ["D07.US", "D08.US", "D09.US"]:
+        failures.append(f"the cap cut the wrong names: {cut}")
+
+    # The empty ranking carries the same keys, so a reader comparing a quiet
+    # morning against a real one sees zeros and not absences.
+    empty = scan._empty_ranking()
+    for key in ("rank_up_gaps_first", "kept_up", "kept_down"):
+        if key not in empty:
+            failures.append(f"_empty_ranking lacks {key}")
+    print("  rank order  gaps up are kept before gaps down, the split is recorded, "
+          "and the empty ranking carries the same keys")
+
+
+def claim_the_watchdog_judges_the_last_run(failures: list[str]) -> None:
+    """log_verdict answers for the LAST run in a dated log, not the whole file.
+
+    Both discover passes append to logs/discover-<day>.log. Until 2026-09-02
+    the verdict was a search over the whole file, so the 03:55 pass's finish
+    marker answered for a 07:15 pass that had died and the rerun CRITERIA
+    [Monitor] promises for exactly that morning was unreachable.
+    """
+    from core import config
+    from ops import monitor_jobs
+
+    good = ("===== discover started Thu 09/03/2026  3:55:01.10 =====\n"
+            "discover: wrote data/watchlist.json\n"
+            "===== discover finished rc=0 Thu 09/03/2026  3:55:52.00 =====\n"
+            "===== baseline warm started Thu 09/03/2026  3:55:52.10 =====\n"
+            "===== baseline warm finished rc=0 Thu 09/03/2026  3:56:30.00 =====\n")
+    dead = ("===== discover started Thu 09/03/2026  7:15:01.10 =====\n"
+            "Traceback (most recent call last):\n"
+            "===== discover finished rc=1 Thu 09/03/2026  7:15:40.00 =====\n")
+    tail = monitor_jobs._last_run_text(good + dead)
+    if "3:55" in tail or "rc=1" not in tail:
+        failures.append(f"_last_run_text did not isolate the 07:15 pass: {tail!r}")
+    if monitor_jobs._last_run_text(good) != good:
+        failures.append("a single run is not returned whole")
+    if monitor_jobs._last_run_text("nothing yet") != "nothing yet":
+        failures.append("a log with no boundary is not returned whole")
+
+    day = "2026-09-03"
+    with conftest_activate():
+        config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        path = config.LOGS_DIR / f"discover-{day}.log"
+        marker = monitor_jobs.JOBS["discover"][3]
+        path.write_text(good, encoding="utf-8")
+        if monitor_jobs.log_verdict("discover", marker, day) != "finished":
+            failures.append("a clean 03:55 pass alone does not read finished")
+        path.write_text(good + dead, encoding="utf-8")
+        verdict = monitor_jobs.log_verdict("discover", marker, day)
+        if verdict != "started_not_finished":
+            failures.append(f"a dead 07:15 pass after a clean 03:55 pass reads "
+                            f"{verdict!r}; the rerun gate never opens on that")
+        path.write_text(good + dead + good, encoding="utf-8")
+        if monitor_jobs.log_verdict("discover", marker, day) != "finished":
+            failures.append("a watchdog rerun that finished does not read finished")
+    print("  last run     the verdict is the last run's, so a dead 07:15 pass "
+          "behind a clean 03:55 pass is seen")
+
+
+def claim_a_rewrite_is_free_while_the_collector_rereads(failures: list[str]) -> None:
+    """The discover rerun gate is open at every pass inside the collector window.
+
+    The first two phase gate closed at 07:22 by treating a check interval
+    times a resubscribe cap as a duration; the first pass is 07:25, so with a
+    sidecar present it answered False at every pass of every morning. The
+    collector rereads until its stop time, and so does a restarted one.
+    """
+    from collect import collect_premarket
+    from ops import monitor_jobs
+
+    day = "2026-09-03"
+    with conftest_activate():
+        path = collect_premarket.subscriptions_path(day)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"symbols": ["AAA.US"]}', encoding="utf-8")
+        for hhmm in ("04:30", "07:25", "07:55", "08:55", "09:20"):
+            minute = int(hhmm[:2]) * 60 + int(hhmm[3:])
+            free, _why = monitor_jobs._rewriting_the_watchlist_is_free(day, minute)
+            if not free:
+                failures.append(f"a rewrite at {hhmm} with a sidecar present is "
+                                "refused, so a failed 07:15 pass is never rerun")
+        free, _why = monitor_jobs._rewriting_the_watchlist_is_free(day, 9 * 60 + 30)
+        if free:
+            failures.append("a rewrite after the collector stop reads free")
+    print("  rerun gate   a watchlist rewrite is free at every pass while the "
+          "collector rereads, and not after it stops")
+
+
+def claim_the_reconciliation_reads_every_trigger(failures: list[str]) -> None:
+    """A task with two triggers is compared as a set of starts on both sides.
+
+    schtasks emits one CSV row per trigger. The first reconciliation kept the
+    last row and compared it to the script's Start alone, so from the evening
+    discover gained its 03:55 trigger every pass reported a false DIFFERS.
+    """
+    from core import criteria
+    from ops import monitor_jobs
+
+    spec, error = monitor_jobs.script_jobs()
+    if error:
+        failures.append(f"the register script could not be read: {error}")
+        return
+    crit = criteria.load()
+    wanted = {monitor_jobs._minutes(crit.clock("discovery", "run_time")),
+              monitor_jobs._minutes(crit.clock("discovery", "provisional_run_time"))}
+    if spec.get("discover", {}).get("start_minutes") != wanted:
+        failures.append(f"script_jobs reads discover's starts as "
+                        f"{spec.get('discover', {}).get('start_minutes')}, "
+                        f"CRITERIA says {sorted(wanted)}")
+
+    # The machine side, as two rows for one task, compared as a set.
+    real = monitor_jobs.registered_tasks
+
+    def _two_rows():
+        live = {}
+        for name, entry in spec.items():
+            live[name] = dict(entry, start_minutes=set(entry["start_minutes"]))
+        return live, None
+
+    monitor_jobs.registered_tasks = _two_rows
+    try:
+        result = monitor_jobs.reconcile_schedule()
+    finally:
+        monitor_jobs.registered_tasks = real
+    if not result.get("checked") or result.get("differs") or result.get("missing"):
+        failures.append(f"a machine matching the script reports {result}")
+    print("  triggers     both discover triggers reconcile as one set and a "
+          "matching machine reports no difference")
+
+
+def claim_a_replayed_print_on_connect_is_tagged(failures: list[str]) -> None:
+    """The first print per symbol on a connection, stamped before the connect, is replay.
+
+    The vendor replays one last trade per symbol on every subscribe with its
+    original stamp. Inside a window that opens at 04:00 those replays fell
+    inside the window and the late trade grace, and were folded into open
+    bars a second time on every reconnect and at the handover.
+    """
+    from collect import collect_premarket
+
+    import time as _time
+
+    with conftest_activate():
+        builder = collect_premarket.BarBuilder(
+            collect_premarket.bar_path(), source="ws", window=(0.0, 4e9))
+        # An hour ago, so the replayed minute is long closed and settles as a
+        # tagged row; the connect second itself is floored, so a stamp in
+        # the same second is a real print.
+        connect_at = float(int(_time.time())) - 3600
+        builder.new_connection(connect_at)
+        # Stamped before the connect: replay. Then a real print in the
+        # connect second, then another, then a second early stamp for the
+        # first symbol, which is a late trade of a minute nothing was
+        # listening to and not a replay any more.
+        builder.add_trade("AAA.US", 10.0, 100.0, connect_at - 300, False, None)
+        builder.add_trade("AAA.US", 10.5, 50.0, connect_at, False, None)
+        builder.add_trade("BBB.US", 20.0, 70.0, connect_at + 6, False, None)
+        if builder.replayed_on_connect != 1 or builder.replayed_on_connect_volume != 100.0:
+            failures.append(f"the early first print was not tagged replay: "
+                            f"{builder.replayed_on_connect} / "
+                            f"{builder.replayed_on_connect_volume}")
+        folded = sum(bar["v"] for bar in builder.open_bars.values())
+        if folded != 120.0:
+            failures.append(f"open bars hold {folded} shares, wanted the two live prints")
+        if not builder.replay_bars:
+            failures.append("the replayed print was not kept as a tagged replay row")
+        # A new connection resets the per symbol memory.
+        builder.new_connection(connect_at + 600)
+        builder.add_trade("AAA.US", 10.6, 30.0, connect_at + 599, False, None)
+        if builder.replayed_on_connect != 2:
+            failures.append("the replay on the second connection was not tagged")
+
+        # A replay of a minute STILL OPEN is counted and not written: a
+        # settled replay row marks its minute written and every real print
+        # for it is then refused as late. Reconnect now, replay a print from
+        # twenty seconds ago, then the real prints of the same minute.
+        fresh = collect_premarket.BarBuilder(
+            collect_premarket.bar_path(), source="ws", window=(0.0, 4e9))
+        now = float(int(_time.time()))
+        fresh.new_connection(now)
+        fresh.add_trade("CCC.US", 5.0, 10.0, now - 20, False, None)
+        fresh.add_trade("CCC.US", 5.1, 40.0, now, False, None)
+        fresh.add_trade("CCC.US", 5.2, 60.0, now + 1, False, None)
+        if fresh.replayed_on_connect != 1 or fresh.replayed_on_connect_unwritten != 1:
+            failures.append("a replay of an open minute was not counted as unwritten: "
+                            f"{fresh.replayed_on_connect} / "
+                            f"{fresh.replayed_on_connect_unwritten}")
+        if fresh.replay_bars:
+            failures.append("a replay of an open minute was queued as a replay row, "
+                            "which would mark the minute written")
+        live = sum(bar["v"] for bar in fresh.open_bars.values())
+        if live != 100.0 or fresh.late_trades:
+            failures.append(f"the real prints of the open minute were not folded: "
+                            f"{live} shares, {fresh.late_trades} late")
+    print("  replay       one early first print per symbol per connection is "
+          "tagged replay and kept out of the bars")
+
+
+def claim_the_sidecar_remembers_every_subscription(failures: list[str]) -> None:
+    """subscribed_since survives the handover's rewrite, first stamp wins.
+
+    The handover rewrites the sidecar's symbols; a provisional name it dropped
+    still has three hours of tape on disk and this map is the only record it
+    was asked for. The scan reads it to price such names and to say per name
+    whether the RVOL numerator covers the baseline's window; the nightly reads
+    it to measure capture over the minutes the socket listened to each name.
+    """
+    from collect import collect_premarket
+    from core import ettime
+
+    day = ettime.today_str()
+    with conftest_activate():
+        path = collect_premarket.subscriptions_path(day)
+        path.unlink(missing_ok=True)
+        collect_premarket.write_subscriptions(["SPY.US", "AAA.US", "BBB.US"], [])
+        first = collect_premarket.read_subscriptions(day) or {}
+        collect_premarket.write_subscriptions(["SPY.US", "AAA.US", "CCC.US"], [])
+        second = collect_premarket.read_subscriptions(day) or {}
+        since = second.get("subscribed_since") or {}
+        if set(since) != {"SPY.US", "AAA.US", "BBB.US", "CCC.US"}:
+            failures.append(f"the dropped name left the map: {sorted(since)}")
+        if since.get("AAA.US") != (first.get("subscribed_since") or {}).get("AAA.US"):
+            failures.append("a name on both lists lost its first stamp at the rewrite")
+        if second.get("window_open_at") != first.get("window_open_at"):
+            failures.append("window_open_at did not survive the rewrite")
+        if set(second.get("symbols") or []) != {"SPY.US", "AAA.US", "CCC.US"}:
+            failures.append("the current list is not the second subscription")
+        if collect_premarket.subscribed_since(day) != since:
+            failures.append("subscribed_since() does not read the map back")
+        if collect_premarket.subscribed_since_hhmm("BBB.US", day) is None:
+            failures.append("subscribed_since_hhmm cannot read a dropped name's clock")
+        if collect_premarket.subscribed_since_hhmm("ZZZ.US", day) is not None:
+            failures.append("an unknown symbol reads a clock")
+        # Sessions before the two phase change are measured against the
+        # clock they ran under, whatever their sidecar says.
+        if collect_premarket.window_open_hhmm("2026-08-19") != "07:20":
+            failures.append(f"a pre change session reads "
+                            f"{collect_premarket.window_open_hhmm('2026-08-19')!r}, "
+                            "not the 07:20 it ran under")
+    print("  sidecar      subscribed_since keeps every name the day asked for, "
+          "first stamp wins, and old sessions read 07:20")
+
+
+def claim_a_provisional_only_name_is_still_priced(failures: list[str]) -> None:
+    """A name the handover dropped, with a tape on disk, reaches the candidates.
+
+    It carries pool_phase provisional_only and the provenance counts it. A
+    name marked unsubscribed that the socket never asked for does not.
+    """
+    from morning import scan
+
+    watchlist = {"generated_at": "2026-09-03T07:15:04-04:00", "symbols": [
+        {"symbol": "AAA.US", "subscribed": True, "pool_tier": 1, "pool_rank": 1},
+        {"symbol": "BBB.US", "subscribed": False, "pool_tier": 2, "pool_rank": 60},
+        {"symbol": "CCC.US", "subscribed": False, "pool_tier": 3, "pool_rank": 300},
+    ]}
+    since = {"SPY.US": "2026-09-03T04:00:01-04:00",
+             "AAA.US": "2026-09-03T04:00:01-04:00",
+             "BBB.US": "2026-09-03T04:00:01-04:00"}
+    candidates, provenance = scan.pool_candidates(watchlist, scan.Packet(), since)
+    phases = {c["symbol"]: c.get("pool_phase") for c in candidates}
+    if phases != {"AAA.US": "subscribed", "BBB.US": "provisional_only"}:
+        failures.append(f"the candidates and phases are {phases}")
+    if provenance.get("provisional_only") != 1 or \
+            provenance.get("provisional_only_symbols") != ["BBB.US"]:
+        failures.append(f"the provenance does not count the provisional name: {provenance}")
+    if "07:20" in (provenance.get("membership") or "") and "04:00" not in provenance["membership"]:
+        failures.append("membership still describes a single 07:20 subscription")
+    # Without the map, the old behaviour: subscribed rows only.
+    plain, _ = scan.pool_candidates(watchlist, scan.Packet())
+    if [c["symbol"] for c in plain] != ["AAA.US"]:
+        failures.append("without a sidecar map an unsubscribed row was admitted")
+    print("  phase one    a provisional pool name the handover dropped is priced "
+          "and labelled, and an unasked name is not")
+
+
+def claim_the_stats_sidecar_carries_the_handover(failures: list[str]) -> None:
+    """planned_resubscribes and pool_reload_error reach the sidecar and the aggregate."""
+    from collect import collect_premarket
+
+    day = "2026-09-03"
+    with conftest_activate():
+        path = collect_premarket.stats_path(day)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"connections": 2, "reconnects": 0, "resubscriptions": 2,
+                        "messages": 10, "planned_resubscribes": 1,
+                        "pool_reload_error": None}) + "\n"
+            + json.dumps({"connections": 1, "reconnects": 0, "resubscriptions": 1,
+                          "messages": 3, "planned_resubscribes": 0,
+                          "pool_reload_error": "OSError: gone"}) + "\n"
+            + json.dumps({"connections": 1, "messages": 1}) + "\n",
+            encoding="utf-8")
+        totals = collect_premarket.read_run_stats(day) or {}
+    if totals.get("planned_resubscribes") != 1:
+        failures.append(f"planned_resubscribes aggregated to "
+                        f"{totals.get('planned_resubscribes')!r}, wanted 1")
+    if totals.get("pool_reload_errors") != ["OSError: gone"]:
+        failures.append(f"pool_reload_errors is {totals.get('pool_reload_errors')!r}")
+    if totals.get("runs") != 3:
+        failures.append(f"runs counted {totals.get('runs')}")
+    print("  handover rec the stats sidecar's handover fields aggregate, and a "
+          "run that predates them folds into nothing")
+
+
+def claim_a_refusal_budget_is_per_incident(failures: list[str]) -> None:
+    """A successful connection resets the subscription refusal count.
+
+    CRITERIA's four waits describe one dropped connection. Until 2026-09-02
+    the count never reset, so every reconnect of a five and a half hour
+    window spent one and the fifth ordinary drop of the day was fatal.
+    """
+    import datetime as dt
+
+    from collect import collect_premarket
+    from core import ettime
+
+    outcomes = ["ok", "refused", "ok", "refused", "ok", "refused", "ok"]
+    connects: list[str] = []
+
+    class _Socket:
+        def __init__(self, symbols):
+            self.sent = 0
+
+        def recv(self):
+            import websocket
+
+            self.sent += 1
+            if self.sent > 1:
+                raise websocket.WebSocketConnectionClosedException("dropped")
+            return json.dumps({"s": "AAA", "p": 10.0, "v": 5,
+                               "t": ettime.epoch_ms(ettime.now_et()),
+                               "dp": False, "ms": "extended-hours"})
+
+        def close(self):
+            pass
+
+    def _connect(symbols):
+        outcome = outcomes.pop(0) if outcomes else "ok"
+        connects.append(outcome)
+        if outcome == "refused":
+            raise collect_premarket.SubscriptionRefused("refused for the test")
+        return _Socket(symbols)
+
+    saved = (collect_premarket._connect, collect_premarket.SUBSCRIPTION_RETRY_WAIT_S,
+             collect_premarket.BACKOFF_START_S, collect_premarket.BACKOFF_MAX_S,
+             collect_premarket.MAX_SUBSCRIPTION_RETRIES)
+    collect_premarket._connect = _connect
+    collect_premarket.SUBSCRIPTION_RETRY_WAIT_S = 0.0
+    collect_premarket.BACKOFF_START_S = 0.01
+    collect_premarket.BACKOFF_MAX_S = 0.01
+    collect_premarket.MAX_SUBSCRIPTION_RETRIES = 1
+    try:
+        with conftest_activate():
+            builder = collect_premarket.BarBuilder(
+                collect_premarket.bar_path(), source="ws", window=(0.0, 4e9))
+            stop = ettime.now_et() + dt.timedelta(seconds=3)
+            with contextlib.redirect_stdout(io.StringIO()):
+                stats = collect_premarket.run_websocket(["AAA.US"], stop, builder)
+    except collect_premarket.SubscriptionRefused:
+        failures.append("three refusals on three separate incidents were fatal "
+                        f"under a budget of one per incident: {connects}")
+        stats = {}
+    finally:
+        (collect_premarket._connect, collect_premarket.SUBSCRIPTION_RETRY_WAIT_S,
+         collect_premarket.BACKOFF_START_S, collect_premarket.BACKOFF_MAX_S,
+         collect_premarket.MAX_SUBSCRIPTION_RETRIES) = saved
+    if stats and stats.get("subscription_refusals") not in (0, 1):
+        failures.append(f"the refusal count did not reset: {stats}")
+    if connects.count("refused") < 2:
+        failures.append(f"the fixture never reached a second refusal: {connects}")
+    print("  refusals     a refusal budget is spent per incident and a good "
+          "connection resets it")
+
+
 def claim_the_bucket_roll_is_complete_and_signed(failures: list[str]) -> None:
     """Every scored name is in the roll, and each carries its direction.
 
@@ -4229,18 +4651,28 @@ def claim_a_previous_session_watchlist_reruns_discover(failures: list[str]) -> N
                 "discover, so it reads the watchlist being replaced")
 
         # Once the collector has written its subscription list there is
-        # something to desync, and the pass says so rather than rewriting.
+        # something to desync. Until 2026-09-02 the pass said so and did not
+        # rewrite. The collector now rereads the watchlist until its stop
+        # time, every run, so a rewrite inside the window is picked up rather
+        # than desynced and the rerun goes ahead; only past the stop is a
+        # rewrite refused.
         subscriptions.write_text(json.dumps({"symbols": []}), encoding="utf-8")
         (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
         now = ettime.now_et().replace(hour=8, minute=25, second=0, microsecond=0)
         launched, printed = one_pass(now, asleep)
+        if "job_discover.bat" not in launched:
+            failures.append("discover was not rerun at 08:25 with a subscription "
+                            "list present, although the collector rereads the "
+                            f"watchlist until its stop; the pass printed {printed!r}")
+        if "picked up" not in printed:
+            failures.append("the pass rewrote the watchlist without saying the "
+                            f"collector will pick it up: {printed!r}")
+        (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
+        now = ettime.now_et().replace(hour=9, minute=30, second=0, microsecond=0)
+        launched, printed = one_pass(now, asleep)
         if "job_discover.bat" in launched:
-            failures.append("discover was rerun after the collector had written "
-                            "its subscription list, which desyncs the watchlist "
-                            "from what is actually being listened to")
-        if "desync" not in printed:
-            failures.append("the pass declined to rewrite the watchlist without "
-                            f"saying why: {printed!r}")
+            failures.append("discover was rerun after the collector stop, when "
+                            "nothing will reread the watchlist")
 
         # A watchlist that IS today's is not a reason to rewrite it.
         subscriptions.unlink(missing_ok=True)
@@ -6262,9 +6694,13 @@ def claim_the_watchlist_comment_matches_what_the_watchdog_does(
         subscriptions = collect_premarket.subscriptions_path(day)
         if subscriptions.exists():
             subscriptions.unlink()
-        # Late, well past every reload the collector will do, so only the
-        # absence of the file can open the gate here.
-        late = 9 * 60 + 20
+        # Past the collector's stop, so nothing will reread the file and only
+        # its absence can open the gate here. Until 2026-09-02 this used
+        # 09:20 on the belief that the reread window closed at 07:22; the
+        # collector rereads until [Collector] stop_time.
+        from core import criteria as _criteria
+
+        late = monitor_jobs._minutes(_criteria.load().clock("collector", "stop_time")) + 5
         if not monitor_jobs._rewriting_the_watchlist_is_free(day, late)[0]:
             failures.append("the watchdog thinks the collector has subscribed with "
                             "no subscription list on disk, so the rerun it gates "
@@ -11649,6 +12085,66 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         168: "one hundred and sixty eight",
         169: "one hundred and sixty nine",
         170: "one hundred and seventy",
+        171: "one hundred and seventy one",
+        172: "one hundred and seventy two",
+        173: "one hundred and seventy three",
+        174: "one hundred and seventy four",
+        175: "one hundred and seventy five",
+        176: "one hundred and seventy six",
+        177: "one hundred and seventy seven",
+        178: "one hundred and seventy eight",
+        179: "one hundred and seventy nine",
+        180: "one hundred and eighty",
+        181: "one hundred and eighty one",
+        182: "one hundred and eighty two",
+        183: "one hundred and eighty three",
+        184: "one hundred and eighty four",
+        185: "one hundred and eighty five",
+        186: "one hundred and eighty six",
+        187: "one hundred and eighty seven",
+        188: "one hundred and eighty eight",
+        189: "one hundred and eighty nine",
+        190: "one hundred and ninety",
+        191: "one hundred and ninety one",
+        192: "one hundred and ninety two",
+        193: "one hundred and ninety three",
+        194: "one hundred and ninety four",
+        195: "one hundred and ninety five",
+        196: "one hundred and ninety six",
+        197: "one hundred and ninety seven",
+        198: "one hundred and ninety eight",
+        199: "one hundred and ninety nine",
+        200: "two hundred",
+        201: "two hundred and one",
+        202: "two hundred and two",
+        203: "two hundred and three",
+        204: "two hundred and four",
+        205: "two hundred and five",
+        206: "two hundred and six",
+        207: "two hundred and seven",
+        208: "two hundred and eight",
+        209: "two hundred and nine",
+        210: "two hundred and ten",
+        211: "two hundred and eleven",
+        212: "two hundred and twelve",
+        213: "two hundred and thirteen",
+        214: "two hundred and fourteen",
+        215: "two hundred and fifteen",
+        216: "two hundred and sixteen",
+        217: "two hundred and seventeen",
+        218: "two hundred and eighteen",
+        219: "two hundred and nineteen",
+        220: "two hundred and twenty",
+        221: "two hundred and twenty one",
+        222: "two hundred and twenty two",
+        223: "two hundred and twenty three",
+        224: "two hundred and twenty four",
+        225: "two hundred and twenty five",
+        226: "two hundred and twenty six",
+        227: "two hundred and twenty seven",
+        228: "two hundred and twenty eight",
+        229: "two hundred and twenty nine",
+        230: "two hundred and thirty",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -13999,7 +14495,7 @@ def claim_one_reading_of_a_number(failures: list[str]) -> None:
     from selection import discover, gap_stats, universe
 
     table = [(None, None), ("", None), ("NA", None), ("nan", None), (float("nan"), None),
-             (float("inf"), None), ("abc", None), ([], None), (True, 1.0), ("3.5", 3.5),
+             (float("inf"), None), ("abc", None), ([], None), (True, None), ("3.5", 3.5),
              (" 2 ", 2.0), (7, 7.0), ("1,000", None)]
     for given, expected in table:
         got = numbers.as_float(given)
@@ -14263,6 +14759,488 @@ def claim_the_analyst_mode_on_disk_is_the_mode_that_runs(failures: list[str]) ->
     print(f"  analyst mode CRITERIA says {mode!r} and that is the mode the morning runs")
 
 
+def _run_slots_morning(session: str, answers: list, explain: Any = None,
+                       skeleton_patch: Any = None) -> dict[str, Any]:
+    """write_report in slots mode, enforcing, with the model and the
+    explanation pass stubbed. Call inside conftest_activate().
+
+    answers are callables taking the skeleton and returning the model's
+    answer, one per CLI call, the last reused. explain, when given, stands
+    in for gap_reasons.explain; skeleton_patch, when given, rewrites the
+    rendered skeleton before the model sees it.
+    """
+    from morning import analyst
+    from morning import gap_reasons
+
+    run_directory = config.run_dir(session)
+    run_directory.mkdir(parents=True, exist_ok=True)
+    packet_path = run_directory / "packet.json"
+    packet = dict(_slots_packet(), session_date=session,
+                  generated_at=f"{session}T08:45:00-05:00")
+    packet_path.write_text(json.dumps(packet), encoding="utf-8")
+    calls: list = []
+    explain_calls: list[int] = []
+
+    def stub(packet_text, correction=None):
+        calls.append(correction)
+        behave = answers[min(len(calls) - 1, len(answers) - 1)]
+        text = behave(analyst._skeleton)
+        return text, {"output_tokens": 1, "total_cost_usd": 0.01, "num_turns": 1}, None, "ok"
+
+    def explain_stub(candidates):
+        explain_calls.append(len(candidates))
+        if explain is not None:
+            return explain(candidates)
+        return {}, None, "stubbed by the suite"
+
+    real = (analyst.invoke_claude, analyst.guard_mode, analyst.report_mode,
+            gap_reasons.explain, analyst.render_skeleton)
+    analyst.invoke_claude = stub
+    analyst.guard_mode = lambda: analyst.GUARD_ENFORCING
+    analyst.report_mode = lambda: analyst.MODE_SLOTS
+    gap_reasons.explain = explain_stub
+    if skeleton_patch is not None:
+        real_render = real[4]
+        analyst.render_skeleton = lambda packet: skeleton_patch(real_render(packet))
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = analyst.write_report(packet_path)
+    finally:
+        (analyst.invoke_claude, analyst.guard_mode, analyst.report_mode,
+         gap_reasons.explain, analyst.render_skeleton) = real
+    return {"code": code, "calls": calls, "explain_calls": explain_calls,
+            "text": (run_directory / "report.md").read_text(encoding="utf-8"),
+            "usage": json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))}
+
+
+def claim_the_explanation_pass_has_its_own_clock(failures: list[str]) -> None:
+    """The gap explanation call runs under [Analyst] gap_reasons_timeout_s, the
+    chain's worst case counts it and still clears the open, and a morning
+    whose narrative spent every run and lost one to the clock skips it aloud.
+
+    The pass ran under timeout_s, 1,007 seconds, outside the RunBudget, so
+    two narrative timeouts and a hung explanation ended at 09:35:40 against a
+    timeout note that said 09:18:53 and "a third run is not reachable". And
+    the document it piped named no company: it read candidate.name, which
+    the packet has never carried, instead of candidate.quote.name.
+    """
+    from morning import analyst
+    from morning import gap_reasons
+
+    crit = criteria_module()
+    own = crit.integer("analyst", "gap_reasons_timeout_s")
+    narrative = crit.integer("analyst", "timeout_s")
+    if own >= narrative:
+        failures.append(f"gap_reasons_timeout_s is {own}, not shorter than timeout_s {narrative}")
+    open_h, open_m = crit.clock("backfill", "market_open")
+    worst = (8 * 3600 + 45 * 60 + 19
+             + crit.integer("analyst", "max_attempts") * narrative + own)
+    if worst >= open_h * 3600 + open_m * 60:
+        failures.append(f"the chain's worst case with the explanation counted ends "
+                        f"{worst - 8 * 3600 - 45 * 60} seconds after 08:45, past the open")
+
+    candidates = [{"symbol": "ARX.US", "gap_pct": 5.0, "quote": {"name": "Aeries"},
+                   "headlines": [{"title": "Aeries beats"}]}]
+    real = analyst._budget
+    try:
+        spent = analyst.RunBudget(2)
+        spent.spend()
+        spent.spend()
+        spent.timed_out()
+        analyst._budget = spent
+        records, _usage, error = gap_reasons.explain(candidates)
+        if records or "not started" not in str(error):
+            failures.append(f"a budget spent with a timeout did not skip the explanation: {error!r}")
+        clean = analyst.RunBudget(2)
+        clean.spend()
+        clean.spend()
+        analyst._budget = clean
+        _records, _usage, error = gap_reasons.explain(candidates)
+        if "not started" in str(error) or "loaded" not in str(error):
+            failures.append("a budget spent on two answered runs skipped the explanation, "
+                            f"which costs the section for no clock reason: {error!r}")
+    finally:
+        analyst._budget = real
+    document, _allowed = gap_reasons.build_document(candidates)
+    if "ARX (Aeries)" not in document:
+        failures.append("the piped document does not name the company from quote.name")
+    print(f"  explanation  its own {own}s timeout, counted in a worst case that clears "
+          "the open, skipped aloud after a clock spent morning, and names the company")
+
+
+def claim_a_slot_keeps_its_shape(failures: list[str]) -> None:
+    """MOOD is one line of few words, HEADLINE and RATES one paragraph, SETUP
+    ends on its invalidation line, and each violation names the slot.
+
+    The slot text is everything between two fixed segments, so a paragraph
+    the model wrote after its mood phrase or under a setup was the slot's
+    text and shipped inside it. SETUP was checked with `in`, so a paragraph
+    after the invalidation line passed.
+    """
+    from morning import analyst
+
+    limit = criteria_module().integer("analyst", "mood_max_words")
+    with conftest_activate():
+        skeleton = analyst.render_skeleton(_slots_packet())
+    good = _fill_skeleton(skeleton)
+    assembled, _texts, violations = analyst.check_slots(skeleton, good)
+    if assembled is None:
+        failures.append(f"the well shaped answer was refused: {violations}")
+
+    def refused(answer: str, slot: str, rule: str, what: str) -> None:
+        assembled, _texts, violations = analyst.check_slots(skeleton, answer)
+        if assembled is not None or not any(slot in v and rule in v for v in violations):
+            failures.append(f"{what} was not refused naming {slot} and {rule!r}: {violations}")
+
+    refused(good.replace("Prose for MOOD.", "Prose for MOOD.\nA second title line."),
+            "MOOD", "one line", "a two line mood")
+    refused(good.replace("Prose for MOOD.", " ".join(["word"] * (limit + 1))),
+            "MOOD", "words", f"a {limit + 1} word mood")
+    refused(good.replace("Prose for HEADLINE ARX 1.",
+                         "Prose for HEADLINE ARX 1.\n\nA second paragraph."),
+            "HEADLINE", "paragraph", "a two paragraph headline reading")
+    refused(good.replace("Prose for RATES.", "Prose for RATES.\n\nA second paragraph."),
+            "RATES", "paragraph", "a two paragraph rates sentence")
+    closing = f"{analyst.INVALIDATION_MARKER} a break back under the premarket low."
+    refused(good.replace(closing, closing + "\nAnd a paragraph written after it."),
+            "SETUP", "END", "a setup with prose after its invalidation line")
+    print("  slot shape   a mood on two lines or too many words, a second paragraph "
+          "under a headline or the rates, and prose after the invalidation line "
+          "are refused by slot and rule")
+
+
+def claim_a_hyphenated_ticker_is_a_slot(failures: list[str]) -> None:
+    """`{{SETUP:BRK-B}}` is a marker, and a skeleton carrying a brace pair the
+    marker class cannot read is refused before the model is asked.
+
+    The marker class had no hyphen, so a hyphenated ticker's marker was fixed
+    text: filled, the fit reported the fixed text as altered; left, it
+    shipped literally. The count of `{{` against readable markers is what
+    catches the next character the class is missing.
+    """
+    from morning import analyst
+
+    markers = analyst.markers_in("# t {{MOOD}}\n**BRK-B.** {{SETUP:BRK-B}}\n{{HEADLINE:BRK-B:2}}")
+    if markers != ["{{MOOD}}", "{{SETUP:BRK-B}}", "{{HEADLINE:BRK-B:2}}"]:
+        failures.append(f"a hyphenated ticker's markers read {markers}")
+    with conftest_activate():
+        result = _run_slots_morning(
+            "2026-01-15", [_fill_skeleton],
+            skeleton_patch=lambda s: s.replace("{{MOOD}}", "{{mood}}"))
+    if result["calls"]:
+        failures.append(f"the model was asked {len(result['calls'])} time(s) to fill an "
+                        "unreadable skeleton")
+    usage = result["usage"]
+    if result["code"] != 0 or usage.get("status") != "skeleton" or not usage.get("fallback"):
+        failures.append(f"an unreadable skeleton did not fall back with status skeleton: "
+                        f"code {result['code']}, {usage.get('status')!r}")
+    if "brace pair" not in str(usage.get("error_message")) or "{{" in result["text"]:
+        failures.append("the fallback does not say why, or a marker reached the page: "
+                        f"{usage.get('error_message')!r}")
+    print("  hyphen slot  BRK-B is a marker, and a skeleton with an unreadable brace "
+          "pair is refused before the model is asked")
+
+
+def claim_the_cli_environment_is_scrubbed_of_every_override(failures: list[str]) -> None:
+    """Every key that could change what answers the claude CLI call, or what
+    pays for it, is refused by config, dropped from .env and scrubbed from
+    the subprocess environment.
+
+    FORBIDDEN_KEYS held the API key alone while analyst's docstring promised
+    a scrub: an auth token, a base URL, a model override or a Bedrock or
+    Vertex switch in the shell would each have passed through.
+    """
+    from morning import analyst
+
+    keys = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+            "ANTHROPIC_MODEL", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX")
+    missing = [key for key in keys if key not in config.FORBIDDEN_KEYS]
+    if missing:
+        failures.append(f"config.FORBIDDEN_KEYS does not cover {missing}")
+    saved = {key: os.environ.get(key) for key in keys}
+    try:
+        for key in keys:
+            os.environ[key] = "suite-value"
+        leaked = [key for key in keys if key in analyst._scrubbed_env()]
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    if leaked:
+        failures.append(f"{leaked} reach the claude CLI's environment")
+    env_file = pathlib.Path(tempfile.mkdtemp(prefix="premarketdesk-env-")) / ".env"
+    env_file.write_text("EODHD_API_TOKEN=abc\n" + "".join(f"{key}=x\n" for key in keys),
+                        encoding="utf-8")
+    with contextlib.redirect_stderr(io.StringIO()):
+        parsed = config.load_env(path=env_file)
+    kept = [key for key in keys if key in parsed]
+    if kept or parsed.get("EODHD_API_TOKEN") != "abc":
+        failures.append(f"the .env parser kept {kept} or lost the token: {parsed}")
+    readable = []
+    for key in keys:
+        try:
+            config.get(key)
+        except config.ConfigError:
+            continue
+        readable.append(key)
+    if readable:
+        failures.append(f"config.get reads {readable}")
+    print(f"  cli scrub    {len(keys)} keys are refused by config, dropped from .env "
+          "and absent from the CLI's environment")
+
+
+def claim_the_explanation_cannot_open_a_heading(failures: list[str]) -> None:
+    """A model's `why` or a cited headline with a newline and a `#` or a `|`
+    reaches the section as one line with its pipes escaped."""
+    from morning import gap_reasons
+
+    records = {"ARX": {"why": "It beat.\n# Not a heading\n| a | b |",
+                       "headline": "Aeries | beats\n## nope",
+                       "state": "explained", "reason": None}}
+    lines = gap_reasons.section(records)
+    body = lines[1:]
+    if any(line.lstrip().startswith(("#", "|")) for line in body):
+        failures.append(f"model text opened a heading or a table row: {body}")
+    joined = "\n".join(lines)
+    if "\\|" not in joined or "Aeries \\| beats ## nope" not in joined:
+        failures.append(f"pipes in the cited headline are not escaped: {joined!r}")
+    print("  flat reasons the explanation and its cited headline are one line each "
+          "with pipes escaped, so neither can open a heading or a row")
+
+
+def claim_a_collapsed_table_takes_its_legends(failures: list[str]) -> None:
+    """When the page drops a watchlist table whose only row is `none`, the
+    column legend and the band definition written under it go with it, and
+    under a real table both stay."""
+    from core import glossary
+    from morning import analyst
+    from morning import render_report
+
+    packet = {"criteria_summary": {"score_buckets": ["green: >= 7", "red: else"]},
+              "score_roll": {"unscored": []}}
+    header = ("| Ticker | Gap % | Price | Conviction |\n"
+              "| --- | --- | --- | --- |\n")
+    empty = ("## Swing watchlist\n\n" + header + "| none | | | |\n\n"
+             "The swing screen produced nothing today.\n")
+    filled = ("## Day watchlist\n\n" + header + "| ACME | +14.2 | 18.44 | green |\n\n"
+              "One name cleared.\n")
+    for text, expect in ((empty, False), (filled, True)):
+        annotated = glossary.annotate_tables(analyst.annotate_score_bands(text, packet))
+        if glossary.LEGEND_PREFIX not in annotated or glossary.BAND_LEGEND_PREFIX not in annotated:
+            failures.append("the markdown lacks a legend this claim needs to see removed")
+            return
+        html = render_report.to_html(annotated)
+        has_legend = glossary.LEGEND_PREFIX.strip() in html
+        has_bands = glossary.BAND_LEGEND_PREFIX in html
+        if (has_legend, has_bands) != (expect, expect):
+            failures.append(f"a {'real' if expect else 'none only'} table rendered with "
+                            f"legend {has_legend} and bands {has_bands}, expected {expect}")
+        if expect and "<table" not in html:
+            failures.append("the real table was collapsed")
+        if not expect and "produced nothing today" not in html:
+            failures.append("collapsing the legends took the sentence beneath them")
+    print("  legends      a collapsed none only table takes its column legend and "
+          "band definition with it, and a real table keeps both")
+
+
+def claim_an_empty_success_is_a_failed_attempt(failures: list[str]) -> None:
+    """A subtype success answer with nothing in it is retried from the run
+    budget, and the withheld reason counts the attempts it judged.
+
+    An empty success returned as a success and write_report broke out of its
+    loop with the budget's second run unspent. quantifier_reason said "on
+    both attempts" when the budget had allowed one.
+    """
+    import subprocess as _subprocess
+
+    from morning import analyst
+    from morning import gap_reasons
+
+    hit = [{"quantifier": "no", "set_word": "candidate", "text": "No candidate cleared.",
+            "line": 3}]
+    if "only attempt" not in analyst.quantifier_reason(hit, [1], 1):
+        failures.append("one judged answer is not said to be the only attempt")
+    if "both attempts" not in analyst.quantifier_reason(hit, [1], 2):
+        failures.append("two judged answers are not said to be both attempts")
+
+    tables = (conftest.watchlist_table(
+        "day watchlist",
+        ["| ARX | 43.02 | 19.00 | 2.0 | 19.51 | 19.10 | 19.51 | 18.90 | 7.0 | green |"])
+        + "\n" + conftest.watchlist_table("swing watchlist"))
+    clean = ("# PremarketDesk test\n\nNothing here is advice, the screen thresholds "
+             "are unvalidated seed values.\n\nDay eligible 1 of 1.\n\n" + tables)
+    session = "2026-01-16"
+    packet = {
+        "session_date": session, "generated_at": session + "T08:45:00-05:00",
+        "candidates": [{
+            "symbol": "ARX.US", "conviction": "green", "day_eligible": True,
+            "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02, "price": 19.0,
+            "prior_close": 13.3, "pm_high": 19.51, "pm_vwap": 19.1,
+            "pm_low": 18.9, "entry_ref": 19.51, "stop_ref": 18.9,
+            "catalyst_found": True, "catalyst_class": "earnings",
+            "collector_covered": True, "quote": {"name": "Aeries"}}],
+        "market_snapshot": [], "job_health": {"overdue": [], "line": None},
+    }
+    calls: list[int] = []
+
+    def fake_run(command, **kwargs):
+        calls.append(1)
+        payload = {"subtype": "success", "is_error": False,
+                   "result": "" if len(calls) == 1 else clean,
+                   "usage": {"output_tokens": 1}, "total_cost_usd": 0.01,
+                   "duration_ms": 1, "num_turns": 1, "session_id": "s"}
+        return _subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+    real = (analyst.subprocess.run, analyst.resolve_cli, analyst.guard_mode,
+            gap_reasons.explain, analyst.report_mode)
+    with conftest_activate():
+        run_directory = config.run_dir(session)
+        run_directory.mkdir(parents=True, exist_ok=True)
+        packet_path = run_directory / "packet.json"
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
+        analyst.subprocess.run = fake_run
+        analyst.resolve_cli = lambda: "claude"
+        analyst.guard_mode = lambda: analyst.GUARD_ENFORCING
+        analyst.report_mode = lambda: analyst.MODE_FREEFORM
+        gap_reasons.explain = lambda candidates: ({}, None, "stubbed by the suite")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = analyst.write_report(packet_path)
+        finally:
+            (analyst.subprocess.run, analyst.resolve_cli, analyst.guard_mode,
+             gap_reasons.explain, analyst.report_mode) = real
+        usage = json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))
+    if len(calls) != 2 or usage.get("status") != "ok" or code != 0:
+        failures.append(f"an empty success cost {len(calls)} run(s) and shipped with status "
+                        f"{usage.get('status')!r}, code {code}; expected a retry and the narrative")
+    print("  empty answer a success with nothing in it is retried from the budget, and "
+          "the withheld reason counts its attempts")
+
+
+def claim_an_undeliverable_report_spends_nothing_more(failures: list[str]) -> None:
+    """A report the loop's containment check refused is written for inspection
+    with its real status, and no explanation call or annotation is spent on it.
+
+    The status was recorded as ok on a morning that exited 2, and the
+    explanation CLI call and every annotation ran on a page nobody may read.
+    """
+    from morning import analyst
+    from morning import gap_reasons
+
+    tables = (conftest.watchlist_table(
+        "day watchlist",
+        ["| ARX | 43.02 | 19.00 | 2.0 | 19.51 | 19.10 | 19.51 | 18.90 | 7.0 | green |"])
+        + "\n" + conftest.watchlist_table("swing watchlist"))
+    invented = ("# PremarketDesk test\n\nNothing here is advice, the screen thresholds "
+                "are unvalidated seed values.\n\nZZZT gapped as well this morning.\n\n"
+                + tables)
+    session = "2026-01-19"
+    packet = {
+        "session_date": session, "generated_at": session + "T08:45:00-05:00",
+        "candidates": [{
+            "symbol": "ARX.US", "conviction": "green", "day_eligible": True,
+            "score": 7.0, "pm_rvol": 2.0, "gap_pct": 43.02, "price": 19.0,
+            "prior_close": 13.3, "pm_high": 19.51, "pm_vwap": 19.1,
+            "pm_low": 18.9, "entry_ref": 19.51, "stop_ref": 18.9,
+            "catalyst_found": True, "catalyst_class": "earnings",
+            "collector_covered": True, "quote": {"name": "Aeries"}}],
+        "market_snapshot": [], "job_health": {"overdue": [], "line": None},
+    }
+    explain_calls: list[int] = []
+
+    def explain_stub(candidates):
+        explain_calls.append(1)
+        return {}, None, "stubbed by the suite"
+
+    real = (analyst.invoke_claude, analyst.guard_mode, gap_reasons.explain,
+            analyst.report_mode)
+    with conftest_activate():
+        config.UNIVERSE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        config.UNIVERSE_PATH.write_text(json.dumps({"symbols": [
+            {"symbol": "ARX.US"}, {"symbol": "ZZZT.US"}]}), encoding="utf-8")
+        run_directory = config.run_dir(session)
+        run_directory.mkdir(parents=True, exist_ok=True)
+        packet_path = run_directory / "packet.json"
+        packet_path.write_text(json.dumps(packet), encoding="utf-8")
+        analyst.invoke_claude = lambda packet_text, correction=None: (
+            invented, {"output_tokens": 1, "num_turns": 1}, None, "ok")
+        analyst.guard_mode = lambda: analyst.GUARD_ENFORCING
+        analyst.report_mode = lambda: analyst.MODE_FREEFORM
+        gap_reasons.explain = explain_stub
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = analyst.write_report(packet_path)
+        finally:
+            (analyst.invoke_claude, analyst.guard_mode, gap_reasons.explain,
+             analyst.report_mode) = real
+        text = (run_directory / "report.md").read_text(encoding="utf-8")
+        usage = json.loads((run_directory / "analyst_usage.json").read_text(encoding="utf-8"))
+    if code != 2:
+        failures.append(f"an invented ticker exited {code}, not 2")
+    if usage.get("status") != "invented_ticker":
+        failures.append(f"the usage record says status {usage.get('status')!r} on a report "
+                        "that invented a ticker")
+    if explain_calls:
+        failures.append("the explanation call was spent on an undeliverable report")
+    if "not run" not in str(usage.get("gap_reasons_error")):
+        failures.append("the usage record does not say the explanation was not run")
+    if gap_reasons.HEADING in text or analyst.GLANCE_MARKER in text:
+        failures.append("annotations were spliced into an undeliverable report")
+    if "ZZZT" not in (usage.get("containment") or {}).get("invented", []):
+        failures.append(f"the usage record does not name the invented ticker: "
+                        f"{usage.get('containment')}")
+    print("  undeliverable a report that invented a ticker is written with status "
+          "invented_ticker, exits 2, and costs no explanation call or annotation")
+
+
+def claim_a_late_hit_from_the_explanation_withdraws_it(failures: list[str]) -> None:
+    """In slots mode, enforcing, a quantifier the explanation pass wrote costs
+    the explanation, not a disclaimer blaming Python, and a flag raised on a
+    slot is logged with the slot's name rather than a line of nothing.
+
+    The slots branch of the final pass attributed every late hit to text
+    Python wrote and shipped the model's explanation with a disclaimer
+    saying so. And the loop scanned the slot texts joined together, so the
+    line it logged was a line of that string and of nothing on disk.
+    """
+    from morning import analyst
+    from ops import quantifier_flags
+
+    loud = {"ARX": {"why": "every one of these candidates gapped on earnings this morning",
+                    "headline": "Aeries beats", "state": "explained", "reason": None}}
+    flagged_mood = lambda skeleton: _fill_skeleton(skeleton).replace(  # noqa: E731
+        "Prose for MOOD.", "every candidate gapped up")
+    with conftest_activate():
+        before = len(quantifier_flags.load_flags())
+        withdrawn = _run_slots_morning("2026-01-20", [_fill_skeleton],
+                                       explain=lambda candidates: (loud, {}, None))
+        rescued = _run_slots_morning("2026-01-21", [flagged_mood, _fill_skeleton])
+        flags = quantifier_flags.load_flags()[before:]
+    text = withdrawn["text"]
+    if withdrawn["code"] != 0 or withdrawn["usage"].get("status") != "ok":
+        failures.append(f"the narrated morning did not ship: {withdrawn['usage'].get('status')!r}")
+    if "every one of these candidates" in text:
+        failures.append("a quantifier the explanation pass wrote reached the page")
+    if analyst.WITHHELD_EXPLANATION not in text:
+        failures.append("the withdrawn explanation does not say why it is missing")
+    if "in text Python wrote" in text:
+        failures.append("the explanation's claim was blamed on Python")
+    if not withdrawn["usage"].get("gap_reasons_withheld"):
+        failures.append("the usage record does not say the explanation was withheld")
+    if rescued["usage"].get("status") != "ok" or len(rescued["calls"]) != 2:
+        failures.append("a flagged mood was not regenerated into a shipped narrative: "
+                        f"{rescued['usage'].get('status')!r}, {len(rescued['calls'])} call(s)")
+    mood_flags = [flag for flag in flags if flag.get("session") == "2026-01-21"]
+    if not mood_flags:
+        failures.append("the flagged mood was not logged")
+    elif any(flag.get("slot") != "MOOD" or flag.get("line") is not None for flag in mood_flags):
+        failures.append(f"a slot flag does not name its slot with no line: {mood_flags}")
+    print("  late hits    a quantifier the explanation wrote withdraws the explanation "
+          "in slots mode, and a flag on a slot is logged by slot name")
+
+
 def criteria_module():
     from core import criteria
 
@@ -14476,8 +15454,13 @@ def claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for(failures: list[st
             failures.append(f"the score watch has no grouping {wanted!r}: {titles}")
     bands = {g["group"]: g for grouping in score["groupings"]
              if grouping["title"] == "By gap size, absolute" for g in grouping["groups"]}
-    if set(bands) != {"3 to 5 percent", "5 to 8 percent", "8 percent and up"}:
-        failures.append(f"the gap bands are {sorted(bands)}")
+    # The bands are CRITERIA [Score gap]'s since 2026-09-02, so the expected
+    # set is read off the file for the fixture's four gaps rather than written.
+    labels = weekly_page.gap_band_labels()
+    wanted_bands = {labels[weekly_page._CRIT.band_result("score_gap", abs(gap))]
+                    for gap in (4.0, -6.0, 9.0, 3.5)}
+    if set(bands) != wanted_bands:
+        failures.append(f"the gap bands are {sorted(bands)}, the file's give {sorted(wanted_bands)}")
     for grouping in score["groupings"]:
         for group in grouping["groups"]:
             for key in ("own_session", "broke", "pnl", "mfe", "mae", "trigger"):
@@ -14501,6 +15484,757 @@ def claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for(failures: list[st
             failures.append(f"the rendered score watch lacks {needle!r}")
     print("  groupings    the record is grouped by gap band, direction, catalyst class and "
           "verdict, with the own session and D+1 break columns withheld like the rest")
+
+
+# ------------------------------------------ the 2026-09-02 night and core read
+
+def claim_the_backfill_writes_the_split_it_computed(failures: list[str]) -> None:
+    """The phase 3 UPDATE writes all five collector window columns, and the
+    catch-up refills a row holding a true high and no split.
+
+    _true_path has returned pm_high_collector_window and its four siblings
+    since 2026-08-28. The UPDATE wrote the four full window columns and
+    dropped the five, so _gap_report never found a row carrying the split the
+    pass had computed and printed every night that the halves could not be
+    separated. The catch-up now also selects rows with a true high and a null
+    pm_collector_window, inside the same [Backfill] catchup_days limit, with
+    the unfilled days taking that limit first.
+    """
+    from core import store
+    from night import backfill_premarket as backfill
+
+    day = "2026-03-04"
+
+    def bar(hour: int, minute: int, high: float, low: float, close: float) -> dict:
+        when = dt.datetime(2026, 3, 4, hour, minute, tzinfo=ettime.ET)
+        return {"timestamp": ettime.epoch_s(when), "high": high, "low": low,
+                "close": close, "volume": 100.0}
+
+    bars = [bar(5, 0, 99.0, 90.0, 95.0), bar(8, 0, 50.0, 40.0, 45.0),
+            bar(9, 0, 60.0, 1.0, 30.0)]
+
+    class _Api:
+        def intraday(self, symbol, start, end, interval):
+            return bars, None
+
+    with conftest_activate():
+        from collect import collect_premarket
+
+        sidecar = collect_premarket.subscriptions_path(day)
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps({
+            "window_open_at": f"{day}T07:20:01-05:00", "symbols": ["AAA.US"]}),
+            encoding="utf-8")
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": day, "ticker": "AAA.US", "source": "live", "pm_high": 45.0})
+            # Filled before the split was written: a true high, no window.
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": "2026-03-03", "ticker": "BBB.US", "source": "live",
+                "pm_high": 10.0, "pm_high_true": 11.0})
+            # Never filled at all.
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": "2026-03-02", "ticker": "CCC.US", "source": "live",
+                "pm_high": 10.0})
+            connection.commit()
+        original = backfill.eodhd.client
+        backfill.eodhd.client = lambda: _Api()
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                backfill.backfill(day, overwrite=True)
+        finally:
+            backfill.eodhd.client = original
+        with store.session() as connection:
+            row = dict(connection.execute(
+                "SELECT * FROM picks WHERE date=? AND ticker='AAA.US'", (day,)).fetchone())
+        one = backfill._catchup_dates("2026-03-05", 1)
+        both = backfill._catchup_dates("2026-03-05", 5)
+
+    expected = {"pm_high_true": 99.0, "pm_high_collector_window": 50.0,
+                "pm_low_collector_window": 40.0, "pm_collector_window_bars": 1,
+                "pm_collector_window": "07:20-08:45"}
+    for key, want in expected.items():
+        if row.get(key) != want:
+            failures.append(f"after backfill, picks.{key} is {row.get(key)!r} and the "
+                            f"three bar fixture gives {want!r}")
+    if row.get("pm_vwap_collector_window") is None:
+        failures.append("the backfill wrote no pm_vwap_collector_window")
+    if one != ["2026-03-02"]:
+        failures.append(f"with room for one day the catch-up chose {one}; the day "
+                        "with no true high at all comes first")
+    if both != ["2026-03-02", "2026-03-03"]:
+        failures.append(f"the catch-up chose {both}; it must also reach the day "
+                        "holding a true high and no collector window split")
+    print("  split kept   the backfill writes the collector window split it computed, "
+          "and the catch-up refills the rows that lack one")
+
+
+def claim_the_score_watch_counts_an_open_at_end_row_as_the_ledger_does(
+        failures: list[str]) -> None:
+    """A row that entered and was still open at the session's end is its own
+    state on the weekly page, inside the fired set, and the page's split agrees
+    with paper_ledger.record_so_far on it.
+
+    weekly_page._trigger_state is a second copy of the ledger's predicates and
+    had four states to the ledger's five, so the first EXIT_OPEN_AT_END row
+    counted as unsized here and as open_at_session_end there, and the page
+    printed that its split no longer matched the ledger's.
+    """
+    from core import store
+    from night import paper_ledger, weekly_page
+
+    version = sorted(paper_ledger.rule_versions())[0]
+    state = weekly_page._trigger_state({
+        "ledger_rule": version, "booked": 0, "skip_reason": None,
+        "exit_reason": paper_ledger.EXIT_OPEN_AT_END})
+    if state != weekly_page.STATE_OPEN_AT_END:
+        failures.append(f"an open at end row reads as {state!r}")
+    if weekly_page.STATE_OPEN_AT_END not in weekly_page.TRIGGER_FIRED:
+        failures.append("an open at end row entered, so it fired, and it is not "
+                        "in TRIGGER_FIRED")
+
+    with conftest_activate():
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            connection.execute("DELETE FROM paper_trades")
+            store.upsert(connection, "picks", ["date", "ticker"], {
+                "date": "2026-03-02", "ticker": "OPEN.US", "source": "live",
+                "conviction": "green", "score": 8.0,
+                "mfe_pct_true": 5.0, "mae_pct_true": -1.0})
+            store.upsert(connection, "paper_trades", ["date", "ticker", "rule_version"], {
+                "date": "2026-03-02", "ticker": "OPEN.US", "rule_version": version,
+                "booked": 0, "exit_reason": paper_ledger.EXIT_OPEN_AT_END})
+            connection.commit()
+        with contextlib.redirect_stdout(io.StringIO()):
+            score = weekly_page.how_did_the_score_do()
+    if score.get("ledger_disagreements"):
+        failures.append("the score watch disagrees with the ledger over an open at "
+                        f"end row: {score['ledger_disagreements']}")
+    print("  open at end  the score watch counts a still open row as the ledger does, "
+          "and the two splits agree")
+
+
+def claim_the_true_baseline_keeps_the_zero_sessions(failures: list[str]) -> None:
+    """true_volume.prior_sessions appends a volume for EVERY symbol on every
+    session any symbol had a bar, zero where the symbol printed nothing.
+
+    collect/baseline.py keeps a genuine zero premarket session as a real
+    observation. The true baseline appended only the sessions a symbol had its
+    own bars on, so pm_rvol_true divided by a median over a thin name's busy
+    days alone, and the two ratios were two definitions under one name.
+    """
+    from night import true_volume
+
+    class _Probe:
+        request_count = 0
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, params):
+            self.calls += 1
+            bars = {"AAA": [{"t": "2026-01-01T09:00:00Z", "v": 100, "h": 1, "l": 1, "c": 1}]}
+            if self.calls == 1:
+                bars["BBB"] = [{"t": "2026-01-01T09:00:00Z", "v": 7, "h": 1, "l": 1, "c": 1}]
+            return 200, {"bars": bars, "next_page_token": None}, None
+
+    per_symbol, used = true_volume.prior_sessions(
+        _Probe(), ["AAA", "BBB"], dt.date(2026, 3, 4), "08:45")
+    wanted = true_volume._CRIT.integer("truth", "baseline_sessions")
+    if len(used) != wanted:
+        failures.append(f"the walk used {len(used)} sessions against {wanted} wanted")
+    if len(per_symbol["BBB"]) != len(used):
+        failures.append(f"BBB carries {len(per_symbol['BBB'])} baseline volumes over "
+                        f"{len(used)} sessions; a session it printed nothing on is a zero")
+    if per_symbol["BBB"][:1] != [7.0] or any(v != 0.0 for v in per_symbol["BBB"][1:]):
+        failures.append(f"BBB's baseline reads {per_symbol['BBB']}, not one 7 and zeros")
+    print("  zero kept    the true baseline keeps a zero premarket session the way "
+          "the morning's does")
+
+
+def claim_a_window_excludes_its_cutoff_bar(failures: list[str]) -> None:
+    """A bar stamped AT the window's end is not in the window.
+
+    Alpaca treats `end` as inclusive and stamps a bar at its open, so a window
+    to 08:45 came back carrying the 08:45 bar, the minute after the cutoff the
+    morning's accumulator never sees. fetch_bars drops it for every caller,
+    and float_rotation_study's own fetch applies the same test.
+    """
+    import importlib
+
+    from night import true_volume
+
+    study = importlib.import_module("research.float_rotation_study")
+    day = dt.date(2026, 3, 4)
+    start, end = true_volume._window(day, "08:45")
+
+    def stamp(when: dt.datetime) -> str:
+        return when.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    inside, at_end = stamp(end - dt.timedelta(minutes=1)), stamp(end)
+
+    class _Probe:
+        request_count = 0
+
+        def get(self, params):
+            return 200, {"bars": {"AAA": [{"t": inside, "v": 1}, {"t": at_end, "v": 1}]},
+                         "next_page_token": None}, None
+
+    bars, error = true_volume.fetch_bars(_Probe(), ["AAA"], start, end)
+    if error:
+        failures.append(f"fetch_bars refused a two bar fixture: {error}")
+    elif [b["t"] for b in bars["AAA"]] != [inside]:
+        failures.append(f"fetch_bars kept {[b['t'] for b in bars['AAA']]}; the bar "
+                        f"stamped at the end {at_end} is outside the window")
+    if not study._at_or_past(at_end, stamp(end)) or study._at_or_past(inside, stamp(end)):
+        failures.append("float_rotation_study._at_or_past does not draw the end "
+                        "where fetch_bars draws it")
+    print("  end excluded a bar stamped at the cutoff minute is outside every "
+          "window built on the tape")
+
+
+def claim_an_intraday_object_is_refused_not_iterated(failures: list[str]) -> None:
+    """eodhd.intraday refuses a payload that is not a list the way eod does,
+    and pool_recall refuses a bulk payload in which no row carries a code.
+
+    A 200 carrying a JSON object was handed to backfill_premarket as rows and
+    iterated, so its keys were read as bars and the nightly raised on the first
+    row.get. A bulk payload of rows with no code would have keyed nothing and
+    published a zero recall with no reason on disk.
+    """
+    from core import eodhd
+    from night import pool_recall
+
+    client = object.__new__(eodhd.EodhdClient)
+    when = dt.datetime(2026, 3, 4, 4, 0, tzinfo=ettime.ET)
+    for payload, wants_rows in (({"message": "no data"}, False),
+                                ([{"timestamp": 1, "close": 1.0}], True)):
+        client._request = lambda *a, _p=payload, **k: eodhd.ApiResult(_p, None)
+        rows, error = client.intraday("AAA.US", when, when)
+        if wants_rows and (error or rows != payload):
+            failures.append(f"intraday refused a list payload: {error}")
+        if not wants_rows and (rows is not None or not error or "not a list" not in error):
+            failures.append(f"intraday handed an object payload on as rows: {rows!r}, {error!r}")
+    if pool_recall._any_row_carries_a_code([{"close": 1.0}, {"code": ""}]):
+        failures.append("pool_recall reads a bulk payload with no code as measurable")
+    if not pool_recall._any_row_carries_a_code([{"close": 1.0}, {"code": "AAA"}]):
+        failures.append("pool_recall refuses a bulk payload that does carry a code")
+    source = (config.PROJECT_ROOT / "src" / "night" / "pool_recall.py").read_text(encoding="utf-8")
+    if source.count("_any_row_carries_a_code(") < 3:
+        failures.append("pool_recall.build does not test both bulk payloads for a code")
+    print("  shape held   an intraday object and a codeless bulk payload are refused "
+          "with a reason, never iterated")
+
+
+def claim_a_bool_is_not_a_number(failures: list[str]) -> None:
+    """core.numbers.as_float(False) is None, not 0.0.
+
+    bool is a subclass of int, so float(False) is 0.0 and a vendor field that
+    came back as false read as a measured zero in the one function that exists
+    to keep an absence from reading as a number.
+    """
+    from core import numbers
+
+    for value in (True, False):
+        if numbers.as_float(value) is not None:
+            failures.append(f"as_float({value!r}) is {numbers.as_float(value)!r}")
+        if numbers.as_int(value) is not None:
+            failures.append(f"as_int({value!r}) is {numbers.as_int(value)!r}")
+    if numbers.as_float(0) != 0.0:
+        failures.append("as_float(0) is no longer 0.0, so an integer zero is being refused")
+    print("  bool is none a boolean is not a number, so false is not a zero")
+
+
+def claim_the_ca_bundle_write_is_retried(failures: list[str]) -> None:
+    """config.ca_bundle writes the merged bundle with retries, like deliver
+    and monitor_jobs write theirs.
+
+    With attempts=1 a single antivirus hold on the file raised out of every
+    job's TLS setup. Read off the source rather than driven, because the
+    function's preconditions are a Norton root on disk.
+    """
+    import ast
+
+    source = (config.PROJECT_ROOT / "src" / "core" / "config.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    found = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "ca_bundle":
+            for call in ast.walk(node):
+                if (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                        and call.func.attr == "write_text_atomically"):
+                    found = {k.arg: ast.unparse(k.value) for k in call.keywords}
+    if found is None:
+        failures.append("config.ca_bundle no longer writes through files.write_text_atomically")
+        return
+    if found.get("attempts") != "CA_BUNDLE_WRITE_ATTEMPTS" or found.get("retry_s") != "CA_BUNDLE_WRITE_RETRY_S":
+        failures.append(f"ca_bundle's write carries {found}; it must pass the two module constants")
+    if config.CA_BUNDLE_WRITE_ATTEMPTS < 3 or config.CA_BUNDLE_WRITE_RETRY_S <= 0:
+        failures.append(f"the bundle write retries {config.CA_BUNDLE_WRITE_ATTEMPTS} times "
+                        f"with {config.CA_BUNDLE_WRITE_RETRY_S}s between; deliver's precedent "
+                        "is several tries with a pause")
+    print("  bundle retry the merged CA bundle is written with the retries the other "
+          "writers get")
+
+
+def claim_the_prune_record_carries_both_facts(failures: list[str]) -> None:
+    """prune_data declares one produced count carrying the files and the bytes.
+
+    job_status.produced records the last call before exit, so two calls
+    recorded bytes and never the file count, which is the number that answers
+    whether the step did anything.
+    """
+    from night import prune_data
+    from ops import job_status
+
+    with conftest_activate():
+        with contextlib.redirect_stdout(io.StringIO()):
+            prune_data.main(["--dry-run"])
+        label, count = job_status._produced["label"], job_status._produced["count"]
+    if not label or "files pruned" not in label or "bytes freed" not in label:
+        failures.append(f"the prune record's label is {label!r}; it must carry both facts")
+    if not isinstance(count, int):
+        failures.append(f"the prune record's count is {count!r}, not the file count")
+    print("  one record   the prune step records its file count once, with the bytes "
+          "beside it")
+
+
+def claim_the_truth_report_names_the_window_it_measured(failures: list[str]) -> None:
+    """true_volume.report prints the collector window the pass measured, from
+    the result, rather than a remembered 07:20.
+
+    Three sentences said 07:20 after the collector had moved to 04:00, and
+    measure() now carries collector_window on its result so the printout
+    reads the clock it actually used.
+    """
+    from night import true_volume
+
+    row = {"ticker": "AAA.US", "_socket": 10.0, "_estimated": 20.0,
+           "pm_volume_true": 100.0, "true_volume_socket_window": 50.0,
+           "capture_observed": 0.2, "collector_window_share": 0.5,
+           "estimate_error": 0.2, "pm_rvol_true": 1.5, "truth_reason": None,
+           "_entry_ref": None, "entry_ref_true": None, "_stop_ref": None,
+           "stop_ref_true": None, "fill_plausible": true_volume.FILL_PLAUSIBLE,
+           "fill_plausible_reason": None, "refs_true_reason": None}
+    result = {"skipped": None, "day": "2026-03-04", "rows": [row], "window": "04:00-08:45",
+              "collector_window": "07:20-08:45", "sessions_used": ["2026-03-03"],
+              "requests": 2}
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        true_volume.report(result)
+    text = out.getvalue()
+    if "TRUE 07:20" not in text or "own 07:20-08:45 window" not in text \
+            or "07:20 start" not in text:
+        failures.append("the report does not name the 07:20 collector window the "
+                        f"result carries:\n{text}")
+    result["collector_window"] = "04:00-08:45"
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        true_volume.report(result)
+    if "07:20" in out.getvalue():
+        failures.append("the report prints 07:20 for a session whose collector "
+                        "window opened at 04:00")
+    print("  clock read   the truth report names the collector window it measured, "
+          "not a remembered one")
+
+
+def claim_a_pick_day_the_vendor_never_serves_is_refused_once(failures: list[str]) -> None:
+    """fill_pick_day stamps pick_day_refused_reason when the vendor's history
+    has no bar for the pick date, and never selects the row again; a vendor
+    ERROR is not stamped, because the vendor may answer tomorrow.
+
+    The select was on pick_day_close IS NULL alone, which is also what a row
+    the vendor has no bar for looks like, so it cost one end of day call every
+    night forever. The day5_refused_reason precedent.
+    """
+    from core import store
+    from night import fill_outcomes
+
+    class _Api:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def eod(self, ticker, start=None, end=None, period="d"):
+            self.calls.append(ticker)
+            if ticker == "DOWN.US":
+                return None, "vendor unreachable"
+            return [], None
+
+    api = _Api()
+    with conftest_activate():
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            for ticker in ("NOBAR.US", "DOWN.US"):
+                store.upsert(connection, "picks", ["date", "ticker"], {
+                    "date": "2026-03-02", "ticker": ticker, "source": "live",
+                    "next_day_close": 10.0})
+            connection.commit()
+        original = fill_outcomes.eodhd.client
+        fill_outcomes.eodhd.client = lambda: api
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                fill_outcomes.fill_pick_day()
+                first = list(api.calls)
+                fill_outcomes.fill_pick_day()
+        finally:
+            fill_outcomes.eodhd.client = original
+        with store.session() as connection:
+            rows = {r["ticker"]: dict(r) for r in connection.execute(
+                "SELECT ticker, pick_day_refused_reason FROM picks")}
+    if sorted(first) != ["DOWN.US", "NOBAR.US"]:
+        failures.append(f"the first pass asked for {first}")
+    if not rows["NOBAR.US"]["pick_day_refused_reason"]:
+        failures.append("a pick date the vendor serves no bar for was left null with no reason")
+    if rows["DOWN.US"]["pick_day_refused_reason"]:
+        failures.append("a vendor error was stamped as a refusal, so the row will never be asked again")
+    if api.calls[len(first):] != ["DOWN.US"]:
+        failures.append(f"the second pass asked for {api.calls[len(first):]}; the refused "
+                        "row must not be re-selected and the errored one must")
+    print("  refused once a pick date with no vendor bar is stamped once and never "
+          "re-fetched")
+
+
+def claim_the_replay_applies_the_morning_baseline_floors(failures: list[str]) -> None:
+    """replay_session nulls pm_rvol, with the reason, wherever the morning's
+    baseline.usable_for_rvol would refuse the denominator.
+
+    The replay divided by any positive median, so a name could clear the day
+    screen off a baseline of three sessions or a hundred shares, which the
+    live scan refuses under [Baseline] min_sessions_for_rvol and
+    min_baseline_premarket_volume.
+    """
+    from collect import baseline as baseline_rules
+    from research import backtest_pool, replay_session
+
+    min_sessions = baseline_rules.MIN_SESSIONS_FOR_RVOL
+    floor = baseline_rules.MIN_BASELINE_VOLUME
+
+    def symbol(median: float, sessions: int) -> dict:
+        return {"bars": 5, "volume": 5000.0, "high": 2.0, "low": 1.0, "last_close": 1.5,
+                "last_bar_at": "", "price_volume": 7500.0,
+                "baseline_median": median, "baseline_sessions": sessions}
+
+    tape = {"symbols": {"THIN.US": symbol(floor * 10, min_sessions - 1),
+                        "TINY.US": symbol(floor / 2, min_sessions),
+                        "GOOD.US": symbol(floor * 10, min_sessions)}}
+    saved = (replay_session.cache_path, replay_session.metrics_before,
+             backtest_pool.load_session, backtest_pool._eod_cache)
+    with conftest_activate() as sandbox:
+        path = pathlib.Path(sandbox) / "replay_tape.json"
+        path.write_text(json.dumps(tape), encoding="utf-8")
+        replay_session.cache_path = lambda _day: path
+        replay_session.metrics_before = lambda _day: ({}, "2026-02-27", None)
+        backtest_pool.load_session = lambda _day: (
+            {"prior_session": "2026-03-03",
+             "prior_closes": {s: 1.0 for s in tape["symbols"]}}, None)
+        backtest_pool._eod_cache = lambda _day: {}
+        try:
+            candidates, _notes = replay_session.build_candidates("2026-03-04")
+        finally:
+            (replay_session.cache_path, replay_session.metrics_before,
+             backtest_pool.load_session, backtest_pool._eod_cache) = saved
+    by = {c["symbol"]: c for c in candidates}
+    if by["THIN.US"]["pm_rvol"] is not None or "sessions" not in str(by["THIN.US"].get("pm_rvol_reason")):
+        failures.append(f"a {min_sessions - 1} session baseline carried an RVOL: {by['THIN.US']}")
+    if by["TINY.US"]["pm_rvol"] is not None or "floor" not in str(by["TINY.US"].get("pm_rvol_reason")):
+        failures.append(f"a {floor / 2:g} share median carried an RVOL: {by['TINY.US']}")
+    if by["GOOD.US"]["pm_rvol"] != 5000.0 / (floor * 10) or by["GOOD.US"].get("pm_rvol_reason"):
+        failures.append(f"a usable baseline was refused: {by['GOOD.US']}")
+    print("  replay floor the replay refuses the denominators the morning refuses, "
+          "with the morning's reason")
+
+
+def claim_the_replay_ranks_the_pool_as_the_morning_would(failures: list[str]) -> None:
+    """replay_session hands apply_cap the [Discovery] min_slots_per_tier floor
+    and ranks on gap_stats dated strictly before the replayed session.
+
+    With apply_cap's default floor of zero the cut was strict priority, which
+    never gave tiers 3 or 4 a slot; with load_metrics() bare the propensity
+    was computed partly from the session being replayed.
+    """
+    import ast
+
+    from research import replay_session
+
+    source = (config.PROJECT_ROOT / "src" / "research" / "replay_session.py"
+              ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    floors = [ast.unparse(node.args[2]) for node in ast.walk(tree)
+              if isinstance(node, ast.Call) and ast.unparse(node.func).endswith("apply_cap")
+              and len(node.args) >= 3]
+    if not floors or any("min_slots_per_tier" not in text for text in floors):
+        failures.append(f"apply_cap is called with the tier floors {floors}; production's "
+                        "is [Discovery] min_slots_per_tier")
+    if "backtest_pool.load_metrics()" in source:
+        failures.append("replay_session still calls load_metrics with no as_of")
+    for name in ("fetch", "build_candidates"):
+        body = next(ast.unparse(n) for n in tree.body
+                    if isinstance(n, ast.FunctionDef) and n.name == name)
+        if "metrics_before(" not in body:
+            failures.append(f"replay_session.{name} does not rank through metrics_before")
+    if '"metrics_as_of"' not in source or '"universe_generated_at"' not in source:
+        failures.append("the tape cache does not record the metrics as_of and the universe vintage")
+    with conftest_activate():
+        try:
+            replay_session.metrics_before("1990-01-01")
+        except RuntimeError as exc:
+            if "look ahead" not in str(exc):
+                failures.append(f"a day with no earlier as_of was refused for another reason: {exc}")
+        else:
+            failures.append("a day with no gap_stats as_of before it was served metrics anyway")
+    print("  no look ahead the replay ranks with production's tier floor on stats "
+          "dated before the session")
+
+
+def claim_the_cutoff_study_derives_its_clocks(failures: list[str]) -> None:
+    """cutoff_0830's two cutoffs are [Scan] run_time and that clock less
+    [Truth] documented_lag_minutes, and it opens the database without init.
+
+    Both were literals, so a moved run time or a corrected lag would have had
+    the study measuring a cutoff the morning no longer ran at; and a research
+    module was running store.init's UPDATE against the live picks table.
+    """
+    from core import criteria
+    from research import cutoff_0830
+
+    crit = criteria.load()
+    run_time = crit.clock_text("scan", "run_time")
+    lag = crit.integer("truth", "documented_lag_minutes")
+    hour, minute = crit.clock("scan", "run_time")
+    servable = f"{(hour * 60 + minute - lag) // 60:02d}:{(hour * 60 + minute - lag) % 60:02d}"
+    if cutoff_0830.PRODUCTION_CUTOFF != run_time:
+        failures.append(f"PRODUCTION_CUTOFF is {cutoff_0830.PRODUCTION_CUTOFF}, run_time is {run_time}")
+    if cutoff_0830.SERVABLE_CUTOFF != servable:
+        failures.append(f"SERVABLE_CUTOFF is {cutoff_0830.SERVABLE_CUTOFF}; run_time less "
+                        f"the documented lag is {servable}")
+    source = (config.PROJECT_ROOT / "src" / "research" / "cutoff_0830.py").read_text(encoding="utf-8")
+    # A CALL, at the head of a statement; the comment explaining its absence
+    # names the function and must not trip this.
+    if re.search(r"^\s*store\.init\(", source, re.MULTILINE):
+        failures.append("cutoff_0830 still calls store.init against the live database")
+    print("  clocks read  the cutoff study derives both cutoffs from CRITERIA and reads "
+          "the database without migrating it")
+
+
+def claim_the_float_study_fetches_one_window_when_the_starts_agree(failures: list[str]) -> None:
+    """float_rotation_study fetches the numerator window once when [Collector]
+    start_time equals [Baseline] session_start, and names the regime.
+
+    Both have been 04:00 since 2026-09-02, and two fetches of the same minutes
+    for every universe name doubled every session's request count to build
+    the same dict twice.
+    """
+    import ast
+
+    source = (config.PROJECT_ROOT / "src" / "research" / "float_rotation_study.py"
+              ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    run = next((ast.unparse(n) for n in tree.body
+                if isinstance(n, ast.FunctionDef) and n.name == "run"), "")
+    if "if num_start == base_start:" not in run:
+        failures.append("run() does not skip the numerator fetch when the starts agree")
+    if run.count("volume_between(") != 2:
+        failures.append(f"run() calls volume_between {run.count('volume_between(')} times; "
+                        "one baseline fetch and one conditional numerator fetch")
+    if '"numerator_regime"' not in source or '"one_fetch_serves_both"' not in source:
+        failures.append("the payload does not state the numerator regime")
+    print("  one fetch    the float study fetches the shared window once and says "
+          "which regime it measured")
+
+
+def claim_the_window_half_is_computed_before_the_numerator(failures: list[str]) -> None:
+    """counterfactual_watchlist computes the window factor from
+    collector_window_share alone, before the numerator lookup can return,
+    reads each row's collector window from its session, and slices on it.
+
+    The block sat below the pre-correction early return, so the one slice
+    with no readable numerator lost the one factor that does not need one;
+    and every archived row was described with today's [Collector] start_time.
+    """
+    from research import counterfactual_watchlist as cw
+
+    row = {"pm_rvol": 2.0, "pm_rvol_true": 5.0, "pm_volume_estimated": None,
+           "pm_volume": None, "collector_window_share": 0.4,
+           "true_volume_socket_window": None, "true_baseline_median": None,
+           "truth_reason": None}
+    out = cw.decompose(row, "07:20")
+    if out["window_factor"] != 2.5:
+        failures.append(f"a pre-correction row's window factor is {out['window_factor']!r}")
+    if out["feed_factor"] is not None or not out["reasons"].get("published_numerator"):
+        failures.append("the feed factor was computed with no numerator to divide, or "
+                        f"the missing numerator carries no reason: {out['reasons']}")
+    opened, source = cw.window_open_for(
+        "2026-03-04", {"collector_window_observed": {"scheduled_start_et": "07:20"}})
+    if opened != "07:20" or "packet" not in source:
+        failures.append(f"the packet's own window reads as {opened!r} from {source!r}")
+    records = [{"date": "2026-03-04", "ticker": "A", "collector_window_open": "07:20",
+                "raw": {"pm_volume_estimated": None}, "decomposition": out}]
+    report = cw.substitution_report(records)
+    if "collector_started_0720" not in report:
+        failures.append(f"the report does not slice on the collector window: {sorted(report)}")
+    if report["pre_capture_correction"]["factors"]["window_factor"]["median"] != 2.5:
+        failures.append("the pre-correction slice publishes no window factor")
+    print("  window first the window half is computed for every row that has a "
+          "share, under the window its own session ran")
+
+
+def claim_the_sweep_median_is_the_median(failures: list[str]) -> None:
+    """sweep_capture_rate.quantile at 0.5 is statistics.median, and candidates
+    C and D are labelled in sample.
+
+    Nearest rank with round() gave the lower middle on an even count, so the
+    ladder's 0.5 rung disagreed with the median printed beside it.
+    """
+    import ast
+    import statistics
+
+    from research import sweep_capture_rate as sweep
+
+    for values in ([1.0, 2.0, 3.0, 4.0], [0.1, 0.4, 0.9], [2.0, 9.0]):
+        if sweep.quantile(values, 0.5) != statistics.median(values):
+            failures.append(f"quantile({values}, 0.5) is {sweep.quantile(values, 0.5)}, "
+                            f"median is {statistics.median(values)}")
+    source = (config.PROJECT_ROOT / "src" / "research" / "sweep_capture_rate.py"
+              ).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for name in ("candidate_c", "candidate_d"):
+        body = next(ast.unparse(n) for n in tree.body
+                    if isinstance(n, ast.FunctionDef) and n.name == name)
+        if "'in_sample': True" not in body:
+            failures.append(f"{name} does not label its screen counts in sample")
+    print("  median is    the sweep's 0.5 quantile is the median beside it, and C "
+          "and D say they are in sample")
+
+
+def claim_the_score_watch_groups_by_the_score_gap_bands(failures: list[str]) -> None:
+    """The weekly page's gap bands are CRITERIA [Score gap]'s, and its quota
+    margin colour reads [Quota] degrade_below_remaining rather than 5000.
+
+    The bands were 5 and 8 written into the page against 4 and 8 in the file,
+    so one row pooled names the score had put in two bands.
+    """
+    from core import store
+    from night import weekly_page
+
+    labels = weekly_page.gap_band_labels()
+    bands = weekly_page._CRIT.bands("score_gap")
+    if set(labels) != {band.result for band in bands}:
+        failures.append(f"gap_band_labels covers {sorted(labels)}; the file's bands give "
+                        f"{sorted(band.result for band in bands)}")
+    edge = next(band.rule.value for band in bands if band.rule is not None
+                and band.rule.op == ">=")
+    with conftest_activate():
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            connection.execute("DELETE FROM paper_trades")
+            for index, gap in enumerate((edge, edge - 0.5)):
+                store.upsert(connection, "picks", ["date", "ticker"], {
+                    "date": "2026-03-02", "ticker": f"G{index}.US", "source": "live",
+                    "conviction": "yellow", "score": 5.0, "gap_pct": gap,
+                    "mfe_pct_true": 1.0, "mae_pct_true": -1.0})
+            connection.commit()
+        with contextlib.redirect_stdout(io.StringIO()):
+            score = weekly_page.how_did_the_score_do()
+    grouped = {g["group"] for grouping in score["groupings"]
+               if grouping["title"] == "By gap size, absolute" for g in grouping["groups"]}
+    if len(grouped) != 2:
+        failures.append(f"gaps of {edge} and {edge - 0.5} landed in {grouped}; the score "
+                        "puts them in two bands")
+    source = (config.PROJECT_ROOT / "src" / "night" / "weekly_page.py").read_text(encoding="utf-8")
+    if re.search(r"margin\s*<\s*\d", source):
+        failures.append("weekly_page still colours the quota margin against a literal")
+    print("  score bands  the score watch groups by the gap bands the score awards "
+          "points at")
+
+
+def claim_the_socket_window_is_per_name(failures: list[str]) -> None:
+    """true_volume opens each name's socket window at the minute that name was
+    subscribed, read from the sidecar's subscribed_since, then
+    picks.pm_window_start, then the session's window, then the knob, and
+    fetches one socket window per distinct open holding only that group.
+
+    The two phase collector subscribes proxies at 04:00 and the pool after
+    the 07:15 discover, so one socket window for every name divided what a
+    late name captured by tape it was never subscribed for.
+    """
+    from core import store
+    from night import true_volume
+
+    day = "2026-09-08"
+
+    class Fake:
+        def __init__(self, by_window):
+            self.by_window = by_window
+            self.asked: list[tuple[str, str, str]] = []
+            self.request_count = 0
+
+        def get(self, params):
+            self.request_count += 1
+            key = (params["start"][11:16], params["end"][11:16])
+            self.asked.append((*key, params["symbols"]))
+            bars = self.by_window.get(key, {})
+            return 200, {"bars": {s: [{"v": v}] for s, v in bars.items()
+                                  if s in params["symbols"].split(",")}}, 0.0
+
+    with conftest_activate():
+        from collect import collect_premarket
+
+        sidecar = collect_premarket.subscriptions_path(day)
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps({
+            "window_open_at": f"{day}T04:00:02-04:00",
+            "subscribed_since": {"AAA.US": f"{day}T07:20:05-04:00"},
+            "symbols": ["AAA.US", "BBB.US", "CCC.US"]}), encoding="utf-8")
+        got = (true_volume.socket_open_hhmm("AAA.US", day, f"{day}T07:31:00-04:00"),
+               true_volume.socket_open_hhmm("BBB.US", day, f"{day}T07:31:00-04:00"),
+               true_volume.socket_open_hhmm("CCC.US", day, None))
+        if got != ("07:20", "07:31", "04:00"):
+            failures.append(f"the open chain reads {got}; the sidecar's subscribed_since "
+                            "comes first, then pm_window_start, then the session's window")
+
+        with store.session() as connection:
+            store.init(connection)
+            connection.execute("DELETE FROM picks")
+            for ticker, socket_volume in (("AAA.US", 1000.0), ("CCC.US", 250.0)):
+                store.upsert(connection, "picks", ["date", "ticker"], {
+                    "date": day, "ticker": ticker, "source": "live",
+                    "pm_volume": socket_volume, "pm_volume_estimated": socket_volume * 8})
+            connection.commit()
+        run_dir = config.run_dir(day)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps({
+            "session_date": day, "rvol_cutoff_hhmm": "08:45",
+            "candidates": [{"symbol": "AAA.US", "quote": {}},
+                           {"symbol": "CCC.US", "quote": {}}]}), encoding="utf-8")
+        probe = Fake({
+            ("04:00", "08:45"): {"AAA": 10000.0, "CCC": 1000.0},
+            ("07:20", "08:45"): {"AAA": 4000.0, "CCC": 700.0},
+        })
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = true_volume.measure(day, probe=probe)
+    rows = {row["ticker"]: row for row in result["rows"]}
+    socket_requests = {(start, symbols) for start, end, symbols in probe.asked
+                       if (start, end) in (("04:00", "08:45"), ("07:20", "08:45"))}
+    if ("07:20", "AAA") not in socket_requests:
+        failures.append(f"AAA, subscribed at 07:20, was not fetched from 07:20 alone: "
+                        f"{sorted(socket_requests)}")
+    if any(start == "07:20" and "CCC" in symbols for start, symbols in socket_requests):
+        failures.append("CCC, on the socket from 04:00, was fetched inside AAA's 07:20 window")
+    if rows["AAA.US"]["capture_observed"] != 0.25:
+        failures.append(f"AAA captured {rows['AAA.US']['capture_observed']}; 1,000 of the "
+                        "4,000 that traded from its 07:20 subscription is a quarter")
+    if rows["CCC.US"]["capture_observed"] != 0.25:
+        failures.append(f"CCC captured {rows['CCC.US']['capture_observed']}; 250 of the "
+                        "1,000 that traded from its 04:00 subscription is a quarter")
+    if result.get("collector_window") != "04:00/07:20-08:45":
+        failures.append(f"the result names the socket windows as {result.get('collector_window')!r}")
+    print("  per name     each name's socket window opens when that name was "
+          "subscribed, one fetch per distinct open")
 
 
 def conftest_activate():
@@ -14675,10 +16409,46 @@ def main() -> int:
     run_claim(failures, claim_a_sidecar_touch_is_not_a_write, failures)
     run_claim(failures, claim_the_schema_owns_every_picks_column_once, failures)
     run_claim(failures, claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for, failures)
+    run_claim(failures, claim_the_backfill_writes_the_split_it_computed, failures)
+    run_claim(failures, claim_the_score_watch_counts_an_open_at_end_row_as_the_ledger_does, failures)
+    run_claim(failures, claim_the_true_baseline_keeps_the_zero_sessions, failures)
+    run_claim(failures, claim_a_window_excludes_its_cutoff_bar, failures)
+    run_claim(failures, claim_an_intraday_object_is_refused_not_iterated, failures)
+    run_claim(failures, claim_a_bool_is_not_a_number, failures)
+    run_claim(failures, claim_the_ca_bundle_write_is_retried, failures)
+    run_claim(failures, claim_the_prune_record_carries_both_facts, failures)
+    run_claim(failures, claim_the_truth_report_names_the_window_it_measured, failures)
+    run_claim(failures, claim_a_pick_day_the_vendor_never_serves_is_refused_once, failures)
+    run_claim(failures, claim_the_replay_applies_the_morning_baseline_floors, failures)
+    run_claim(failures, claim_the_replay_ranks_the_pool_as_the_morning_would, failures)
+    run_claim(failures, claim_the_cutoff_study_derives_its_clocks, failures)
+    run_claim(failures, claim_the_float_study_fetches_one_window_when_the_starts_agree, failures)
+    run_claim(failures, claim_the_window_half_is_computed_before_the_numerator, failures)
+    run_claim(failures, claim_the_sweep_median_is_the_median, failures)
+    run_claim(failures, claim_the_score_watch_groups_by_the_score_gap_bands, failures)
+    run_claim(failures, claim_the_socket_window_is_per_name, failures)
     run_claim(failures, claim_the_collector_hands_over_to_the_real_pool, failures)
     run_claim(failures, claim_the_analyst_mode_on_disk_is_the_mode_that_runs, failures)
+    run_claim(failures, claim_the_explanation_pass_has_its_own_clock, failures)
+    run_claim(failures, claim_a_slot_keeps_its_shape, failures)
+    run_claim(failures, claim_a_hyphenated_ticker_is_a_slot, failures)
+    run_claim(failures, claim_the_cli_environment_is_scrubbed_of_every_override, failures)
+    run_claim(failures, claim_the_explanation_cannot_open_a_heading, failures)
+    run_claim(failures, claim_a_collapsed_table_takes_its_legends, failures)
+    run_claim(failures, claim_an_empty_success_is_a_failed_attempt, failures)
+    run_claim(failures, claim_an_undeliverable_report_spends_nothing_more, failures)
+    run_claim(failures, claim_a_late_hit_from_the_explanation_withdraws_it, failures)
     run_claim(failures, claim_a_list_opens_its_own_block, failures)
     run_claim(failures, claim_the_emailed_copy_carries_no_custom_property, failures)
+    run_claim(failures, claim_a_gap_down_does_not_take_a_gap_up_slot, failures)
+    run_claim(failures, claim_the_watchdog_judges_the_last_run, failures)
+    run_claim(failures, claim_a_rewrite_is_free_while_the_collector_rereads, failures)
+    run_claim(failures, claim_the_reconciliation_reads_every_trigger, failures)
+    run_claim(failures, claim_a_replayed_print_on_connect_is_tagged, failures)
+    run_claim(failures, claim_the_sidecar_remembers_every_subscription, failures)
+    run_claim(failures, claim_a_provisional_only_name_is_still_priced, failures)
+    run_claim(failures, claim_the_stats_sidecar_carries_the_handover, failures)
+    run_claim(failures, claim_a_refusal_budget_is_per_incident, failures)
 
     if failures:
         for failure in failures:

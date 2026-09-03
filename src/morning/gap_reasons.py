@@ -100,10 +100,16 @@ def _rows(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     or candidate.get("headlines") or [])
         titles = [str(a.get("title") or "").strip()
                   for a in articles if str(a.get("title") or "").strip()]
+        # The packet carries the company name at quote.name, and nowhere
+        # else. Until 2026-09-02 this read two top level keys the packet has
+        # never had, so every gapper went to the model as "name not recorded"
+        # while its name sat one level down.
+        quote = candidate.get("quote") if isinstance(candidate.get("quote"), dict) else {}
         out.append({
             "ticker": symbol.split(".", 1)[0],
             "symbol": symbol,
-            "name": candidate.get("name") or candidate.get("instrument_name"),
+            "name": (quote.get("name") or candidate.get("name")
+                     or candidate.get("instrument_name")),
             "gap_pct": candidate.get("gap_pct"),
             "titles": titles[:MAX_HEADLINES],
         })
@@ -216,6 +222,24 @@ def explain(candidates: list[dict[str, Any]]
     from core import store
     from morning import analyst
 
+    # THE CLOCK. This is a third CLI run on a morning that may already have
+    # spent two, and until 2026-09-02 it ran under [Analyst] timeout_s with
+    # nothing in the budget counting it: two narrative timeouts and then a
+    # hung explanation ended at 09:35:40, past the 09:25 watchdog pass, on a
+    # timeout note that promised 09:18:53. So it runs under its own, short
+    # timeout below, and it does not run at all on the morning whose
+    # narrative spent every run in its budget and lost one of them to the
+    # clock. That morning has the least clock left, and this section is the
+    # cheapest thing to skip on it. The reason is written where the section
+    # would be. Asked before the hermetic guard so the suite can see it.
+    budget = analyst._budget
+    if budget is not None and budget.exhausted_by_the_clock:
+        return {}, {}, (
+            f"the narrative pass spent every one of its {budget.total} CLI "
+            f"run(s) and {budget.timeouts} of them ran to the timeout, so the "
+            "explanation pass was not started rather than added to a morning "
+            "already at the edge of its clock")
+
     # NO SUBPROCESS WHILE TEST CODE IS LOADED. The suite stubs
     # analyst.invoke_claude and knew nothing about this second call, so the
     # first claim to reach write_report would have shelled out to the real CLI
@@ -234,7 +258,8 @@ def explain(candidates: list[dict[str, Any]]
         return {}, {}, "there are no candidates to explain"
 
     model = _CRIT.text("analyst", "model")
-    timeout_s = _CRIT.integer("analyst", "timeout_s")
+    # Its own timeout, not the narrative's. See the clock note above.
+    timeout_s = _CRIT.integer("analyst", "gap_reasons_timeout_s")
     try:
         command = [
             analyst.resolve_cli(), "-p", "--model", model,
@@ -280,6 +305,20 @@ def explain(candidates: list[dict[str, Any]]
 HEADING = "Why these gapped"
 
 
+def _flat(value: Any) -> str:
+    """Model or feed text as one line of prose that cannot become markup.
+
+    The explanation and the cited headline are inserted into a markdown
+    document, and until 2026-09-02 they went in raw: a newline followed by
+    `#` or `|` in either would have opened a heading or a table row in the
+    middle of the section. Same treatment as the renderers' _cell, one line
+    and pipes escaped, because a headline is third party text and the model's
+    sentence is not this file's either.
+    """
+    text = str(value if value is not None else "")
+    return " ".join(text.replace("|", "\\|").split())
+
+
 def section(records: dict[str, dict[str, Any]], error: str | None = None,
             level: str = "###") -> list[str]:
     """The markdown, ready to insert under the gappers table."""
@@ -297,10 +336,10 @@ def section(records: dict[str, dict[str, Any]], error: str | None = None,
     for ticker in sorted(records):
         record = records[ticker]
         if record.get("why"):
-            line = f"**{ticker}.** {record['why']}"
+            line = f"**{ticker}.** {_flat(record['why'])}"
             if record.get("headline"):
-                line += f" (Headline: {record['headline']})"
+                line += f" (Headline: {_flat(record['headline'])})"
         else:
-            line = f"**{ticker}.** Not explained here: {record.get('reason')}."
+            line = f"**{ticker}.** Not explained here: {_flat(record.get('reason'))}."
         out += [line, ""]
     return out

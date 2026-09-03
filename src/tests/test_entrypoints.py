@@ -1421,7 +1421,7 @@ def claim_scan_survives_an_empty_pool(failures: list[str]) -> None:
             if payload.get("candidates"):
                 failures.append(f"an {label} watchlist produced "
                                 f"{len(payload['candidates'])} candidates")
-            for key in ("dropped_no_coverage", "dropped_stale_price"):
+            for key in ("dropped_no_coverage", "stale_price"):
                 if payload.get(key) != []:
                     failures.append(f"an {label} watchlist left {key} as "
                                     f"{payload.get(key)!r}, expected an empty list")

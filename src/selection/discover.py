@@ -1,7 +1,8 @@
-"""Morning discovery pass. Runs at 07:15 ET and builds the candidate pool.
+"""Morning discovery pass. Runs at 03:55 and 07:15 ET and builds the candidate pool.
 
-This pass decides one thing: which names the collector should be listening to
-from 07:20. Everything downstream is limited by that choice, because the
+This pass decides one thing: which names the collector should be listening to,
+from 04:00 on the 03:55 pass's provisional pool and from the 07:20 handover on
+the 07:15 pass's. Everything downstream is limited by that choice, because the
 collector is the only source of today's premarket tape and it can only tell you
 about names it subscribed to.
 
@@ -27,7 +28,8 @@ knowable before the open:
   recent runners               names that have been in play lately
 
 The four are unioned, deduplicated, intersected with universe.json, ranked by
-tier and then by 20 day average dollar volume, and cut at the subscription cap.
+tier and then by the [Discovery] within_tier_key, gap propensity, with each
+populated tier given min_slots_per_tier first, and cut at the subscription cap.
 The names below the cut are written out too, marked not_subscribed, so the cut
 is auditable rather than invisible.
 
@@ -128,21 +130,34 @@ def earnings_reporters(
         if symbol not in universe_symbols:
             continue
         timing = str(row.get("before_after_market") or "").strip()
-        report_date = str(row.get("report_date") or "").strip()
+        report_date = str(row.get("report_date") or row.get("date") or "").strip()
+        in_window = report_date == today.isoformat() or (
+            prior_session is not None and report_date == prior_session.isoformat())
         if timing.lower() == "beforemarket" and report_date == today.isoformat():
             tier_key = "earnings_before_open"
         elif (timing.lower() == "aftermarket" and prior_session is not None
               and report_date == prior_session.isoformat()):
             tier_key = "earnings_after_close"
+        elif not timing and in_window:
+            # The vendor sends a null timing on about one row in twenty
+            # (6 of 127 calendar rows in the packets on disk, NPK, NB, TGS, SA
+            # and ANAB among them). Until 2026-09-02 such a row got no tier at
+            # all and reached the pool only through the news sweep. It is the
+            # same prior with less precision, not a weaker one, and the
+            # precision is recorded so the report can say so.
+            tier_key = "earnings_timing_unknown"
         else:
             continue
         # A name on both rows is the same catalyst twice; today's row is the
-        # one the morning is about, so it is not overwritten by the older one.
-        if symbol in names and names[symbol]["tier_key"] == "earnings_before_open":
+        # one the morning is about, so it is not overwritten by the older one,
+        # and a known timing is not overwritten by an unknown one.
+        rank = {"earnings_before_open": 0, "earnings_after_close": 1,
+                "earnings_timing_unknown": 2}
+        if symbol in names and rank[names[symbol]["tier_key"]] <= rank[tier_key]:
             continue
         names[symbol] = {
             "tier_key": tier_key,
-            "timing": timing,
+            "timing": timing or "unknown",
             "timing_precision": TIMING_PRECISION,
             "report_date": row.get("report_date"),
             "estimate": row.get("estimate"),
@@ -228,9 +243,15 @@ def overnight_news(
     items_seen = 0
     pages = 0
     truncated = False
+    # The vendor filters from and to on UTC dates. An ET instant after 20:00
+    # carries the next UTC date, so the ET date would exclude everything
+    # published between 20:00 and midnight ET on the window's last day. It
+    # cannot bite a 03:55 or 07:15 run; it bites a hand run in the evening.
+    utc = dt.timezone.utc
     for page in range(max_pages):
         rows, error = api.news_feed(
-            since.date(), until.date(), limit=page_size, offset=page * page_size
+            since.astimezone(utc).date(), until.astimezone(utc).date(),
+            limit=page_size, offset=page * page_size
         )
         if error:
             if page == 0:
@@ -750,11 +771,22 @@ def rank_value(symbol: str, metrics: dict[str, dict[str, Any]]) -> tuple[int, fl
     above every genuinely quiet name. See the null note in CRITERIA.md.
 
     Band 0 is the primary key. Band 1 is the fallback, for names the primary
-    structurally cannot score: gap propensity needs 100 sessions, and newly
-    listed names are over-represented among hard gappers, so ranking them last
-    cuts the population most worth watching. SECZ gapped 25.6 percent on
-    2026-08-13 with a null propensity. The fallback needs only 20 sessions.
-    Band 2 is neither, which is recorded by the caller rather than left silent.
+    structurally cannot score: gap propensity needs 100 sessions, the fallback
+    needs only 20. Band 2 is neither, which is recorded by the caller rather
+    than left silent.
+
+    What the bands do NOT do, stated because an earlier version of this
+    docstring claimed otherwise: band 1 does not interleave with band 0. A
+    name with a fallback value sorts below every name with a propensity,
+    including a propensity of 0.004, which is what CRITERIA's null note says
+    ("nulls last within their tier") and is what happened on 2026-09-02, when
+    the four null propensity tier 2 names sat at ranks 251 to 254 of a tier
+    ending at 254. Newly listed names are over-represented among hard
+    gappers (SECZ gapped 25.6 percent on 2026-08-13 with a null propensity;
+    MAIR +11.4 on 2026-08-25 had 93 sessions), so ranking them last cuts a
+    population worth watching. Interleaving would need the fallback converted
+    to a propensity equivalent, which is unmeasured and left open in
+    IMPROVEMENT_PLAN.md rather than guessed here.
     """
     row = metrics.get(symbol) or {}
     value = row.get(_CRIT.text("discovery", "within_tier_key"))
@@ -1015,7 +1047,7 @@ def build(write: bool = True) -> dict[str, Any]:
             "universe_names_with_a_key": scored,
             "universe_names_without": len(metrics) - scored,
             "basis": (
-                "measured over 60 sessions by src/backtest_pool.py, see the "
+                "measured over 60 sessions by src/research/backtest_pool.py, see the "
                 "ordering note in CRITERIA.md"
             ),
         },
@@ -1066,8 +1098,8 @@ def build(write: bool = True) -> dict[str, Any]:
         # on a truncated watchlist wrote none, so the 07:25 pass rebuilds the
         # file and holds the collector for one pass rather than starting it on
         # the version it is replacing. The repair is real and it is still not
-        # the plan: it costs the first half hour of a window that runs 07:20 to
-        # 09:25 and cannot be collected later, so the atomic write below is
+        # the plan: it costs a slice of a window that runs 04:00 to 09:25 and
+        # cannot be collected later, so the atomic write below is
         # what keeps the morning from needing any of it.
         universe.write_atomically(payload, config.WATCHLIST_PATH)
         print(f"discover: wrote {config.WATCHLIST_PATH}")

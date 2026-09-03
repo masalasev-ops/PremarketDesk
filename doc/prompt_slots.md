@@ -20,7 +20,12 @@ with the slots filled. You change nothing else.
    the second failure costs the morning its narrative.
 3. Every slot is replaced exactly once, in place, with plain prose. A slot
    left unfilled, or a `{{` left anywhere in the report, is a failed answer.
-   Slot prose carries no heading, no table row and no code fence.
+   Slot prose carries no heading, no table row and no code fence, and each
+   slot has a shape that is checked: MOOD is one line of a few words,
+   HEADLINE and RATES are one paragraph with no blank line inside, and SETUP
+   ends on its invalidation line with nothing after it. Prose written after
+   a slot and before the next fixed line counts as the slot's text and fails
+   its shape.
 4. Use bare tickers: ARX, not ARX.US. Mention no ticker that is not in the
    packet. Do not write ordinary words in capitals for emphasis.
 5. Do not assert a quantifier over the candidate set. These two lists are

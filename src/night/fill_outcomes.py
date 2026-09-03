@@ -164,41 +164,61 @@ def fill_pick_day() -> int:
     work only for rows whose outcomes were filled before 2026-09-02, and after
     one run it finds nothing. Never overwrites: a row with a pick_day_close is
     not selected.
+
+    A ROW THE VENDOR ANSWERS WITH NO BAR IS STAMPED, on the day5_refused_reason
+    precedent. The select is on a null close, and a null close is also what a
+    row looks like when the vendor's end of day history simply has no bar for
+    the pick date, so such a row came back every night and cost one call each
+    time to be told the same thing. A vendor ERROR is not stamped: that is the
+    vendor being unreachable tonight, not the vendor having no bar, and the
+    row should be asked again. An operator who believes a refusal was wrong
+    clears pick_day_refused_reason and the row is picked up on the next run.
     """
     api = eodhd.client()
     with store.session() as connection:
         store.init(connection)
         rows = [dict(r) for r in connection.execute(
             "SELECT date, ticker FROM picks WHERE source='live' "
-            "AND pick_day_close IS NULL AND next_day_close IS NOT NULL "
+            "AND pick_day_close IS NULL AND pick_day_refused_reason IS NULL "
+            "AND next_day_close IS NOT NULL "
             "ORDER BY date, ticker")]
     if not rows:
         print("outcomes: every live pick with an outcome carries its own session's "
               "open and close, nothing to backfill")
         return 0
     writes: list[tuple[dict[str, Any], str, str]] = []
-    unavailable = 0
+    unavailable = refused = 0
     for row in rows:
         day = ettime.parse_date(row["date"])
         bars, error = api.eod(row["ticker"], start=day, end=day)
-        bar = next((b for b in (bars or []) if str(b.get("date")) == row["date"]), None)
-        if error or bar is None:
+        if error:
             print(f"outcomes: {row['ticker']} {row['date']} pick day bar unavailable: "
-                  f"{error or 'no row for the date'}")
+                  f"{error}")
             unavailable += 1
             continue
-        columns = _pick_day_columns(bar)
-        if columns:
-            writes.append((columns, row["date"], row["ticker"]))
+        bar = next((b for b in (bars or []) if str(b.get("date")) == row["date"]), None)
+        columns = _pick_day_columns(bar) if bar is not None else {}
+        if not columns:
+            reason = (f"the vendor's end of day history carries no bar dated "
+                      f"{row['date']} for this name"
+                      if bar is None else
+                      f"the vendor's end of day bar dated {row['date']} carries "
+                      "no readable open, high, low or close")
+            print(f"outcomes: {row['ticker']} {row['date']} pick day refused: {reason}")
+            writes.append(({"pick_day_refused_reason": reason}, row["date"], row["ticker"]))
+            refused += 1
+            continue
+        writes.append((columns, row["date"], row["ticker"]))
     with store.session() as connection:
         for columns, date, ticker in writes:
             assignments = ", ".join(f"{column}=?" for column in columns)
             connection.execute(f"UPDATE picks SET {assignments} WHERE date=? AND ticker=?",
                                [*columns.values(), date, ticker])
         connection.commit()
-    print(f"outcomes: {len(writes)} pick(s) given their own session's open and close, "
-          f"{unavailable} unavailable")
-    return len(writes)
+    print(f"outcomes: {len(writes) - refused} pick(s) given their own session's "
+          f"open and close, {unavailable} unavailable tonight, {refused} refused "
+          "and recorded in pick_day_refused_reason so they are not re-selected")
+    return len(writes) - refused
 
 
 def fill(day_limit: str | None = None) -> int:

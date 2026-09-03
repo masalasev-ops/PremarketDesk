@@ -99,10 +99,16 @@ guard. So the majority of the gain is measured against arithmetic retired on
 2026-08-21, and the four names that are about today's screen sit on three
 sessions.
 
-The window and feed halves cannot be computed at all for the pre-correction
-slice: those rows carry neither `pm_volume_estimated` nor `pm_volume`, so the
-numerator the morning divided cannot be read back. That is recorded as null with
-the reason on every one of the twelve rows, not as a zero.
+The feed half cannot be computed for the pre-correction slice: those rows carry
+neither `pm_volume_estimated` nor `pm_volume`, so the numerator the morning
+divided cannot be read back. That is recorded as null with the reason on every
+one of the twelve rows, not as a zero. The window half CAN be, because it needs
+only `collector_window_share`, and since 2026-09-02 it is computed before the
+numerator lookup and published for that slice too [corrected 2026-09-02: this
+said both halves were uncomputable, which was the code returning early rather
+than a property of the rows]. Every record now also carries
+`collector_window_open`, the clock that session's collector actually opened at,
+and the report slices on it beside the capture correction split.
 
 ### 3. The sample is SESSIONS, not rows
 

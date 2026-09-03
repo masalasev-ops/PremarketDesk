@@ -20,6 +20,7 @@ import markdown
 from core import artifacts
 from core import config
 from core import ettime
+from core import glossary
 from core import page
 from ops import job_status
 
@@ -140,7 +141,10 @@ class _DressTables(markdown.treeprocessors.Treeprocessor):
     A watchlist table whose only body row reads `none` in its first cell is
     removed, sentence and all it was: the sentence beneath it already says the
     screen produced nothing, and the markdown keeps the table because the
-    containment guard reads the markdown, not this page.
+    containment guard reads the markdown, not this page. The column legend
+    and the conviction band definition that analyst and glossary write under
+    it go with it, because until 2026-09-02 they stayed, a "Reading the
+    columns" line under no columns and a band definition under no bands.
     """
 
     def run(self, root):
@@ -150,12 +154,12 @@ class _DressTables(markdown.treeprocessors.Treeprocessor):
                 if table.tag != "table":
                     continue
                 if self._is_none_only(table):
-                    tail = table.tail or ""
-                    parent.remove(table)
-                    if index > 0:
-                        parent[index - 1].tail = (parent[index - 1].tail or "") + tail
-                    else:
-                        parent.text = (parent.text or "") + tail
+                    self._remove_keeping_tail(parent, index)
+                    # The legends sit at the same index now that the table
+                    # is gone. Walking DOWN the parent, those paragraphs were
+                    # visited already and nothing below index shifts.
+                    while index < len(parent) and self._is_table_legend(parent[index]):
+                        self._remove_keeping_tail(parent, index)
                     continue
                 self._dress(table)
                 wrapper = etree.Element("div")
@@ -181,6 +185,23 @@ class _DressTables(markdown.treeprocessors.Treeprocessor):
                     yield section.tag, row
             elif section.tag == "tr":
                 yield "tbody", section
+
+    @staticmethod
+    def _remove_keeping_tail(parent, index) -> None:
+        element = parent[index]
+        tail = element.tail or ""
+        parent.remove(element)
+        if index > 0:
+            parent[index - 1].tail = (parent[index - 1].tail or "") + tail
+        else:
+            parent.text = (parent.text or "") + tail
+
+    @staticmethod
+    def _is_table_legend(element) -> bool:
+        if element.tag != "p":
+            return False
+        text = "".join(element.itertext()).strip()
+        return text.startswith((glossary.LEGEND_PREFIX, glossary.BAND_LEGEND_PREFIX))
 
     def _is_none_only(self, table) -> bool:
         body_rows = [row for where, row in self._rows(table) if where == "tbody"]

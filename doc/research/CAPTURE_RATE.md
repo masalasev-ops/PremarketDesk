@@ -15,7 +15,10 @@ The shipped `[Collector] premarket_capture_rate` is **0.1172**.
 
 **The residual the divisor cannot reach.** Median `collector_window_share` over the
 same guarded set is **0.4074**. That is the share of the tape inside the collector's
-own 07:20 to 09:25 window, and it is a scheduling number rather than a feed number.
+own window to the 08:45 cutoff, and it is a scheduling number rather than a feed number.
+Every session in this study predates 2026-09-03, so that window opened at 07:20 for
+all of them; since then it is per session and per name, read from the subscription
+sidecar, and 04:00 for a name on the 03:55 pool.
 A divisor corrects what the feed misses while listening; it cannot correct what was
 never listened to. See DECISIONS.md for which half each proposed remedy reaches.
 

@@ -216,8 +216,35 @@ def _log_path(prefix: str, day: str) -> Path:
     return config.LOGS_DIR / f"{prefix}-{day}.log"
 
 
+def _last_run_text(text: str) -> str:
+    """The part of a dated log written by its LAST run.
+
+    A dated log carries every run of the day: discover's 03:55 and 07:15
+    passes, the nightly's 07:00 catch-up and 22:15 pass, a collector and each
+    watchdog restart of it. Until 2026-09-02 log_verdict searched the whole
+    file, so the 03:55 pass's "baseline warm finished rc=0" answered for a
+    07:15 pass that had died, and the rerun that CRITERIA [Monitor] promises
+    for exactly that morning was unreachable.
+
+    A run begins where the job's FIRST step starts. The first step is the one
+    whose "started" boundary appears first in the file, and the last time
+    that step started is where the last run begins. A log with no boundary
+    at all, the closed day marker or the first seconds of a job, is returned
+    whole.
+    """
+    starts = [m for m in _STEP_MARKER_RE.finditer(text) if m.group("rc") is None]
+    if not starts:
+        return text
+    first_step = starts[0].group("step")
+    opener = [m for m in starts if m.group("step") == first_step][-1]
+    return text[opener.start():]
+
+
 def log_verdict(prefix: str, marker: str, day: str) -> str:
-    """finished | skipped_closed | started_not_finished | no_log"""
+    """finished | skipped_closed | started_not_finished | no_log
+
+    Judged on the LAST run in the log, see _last_run_text.
+    """
     path = _log_path(prefix, day)
     if not path.exists():
         return "no_log"
@@ -225,9 +252,10 @@ def log_verdict(prefix: str, marker: str, day: str) -> str:
         text = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return "no_log"
-    if re.search(marker, text):
+    last_run = _last_run_text(text)
+    if re.search(marker, last_run):
         return "finished"
-    if "market closed today" in text:
+    if "market closed today" in last_run:
         return "skipped_closed"
     return "started_not_finished"
 
@@ -507,16 +535,17 @@ def _collector_alive(now: dt.datetime) -> bool:
     if task.get("exists") and task.get("status", "").lower() == "running":
         return True
     stale_after = _CRIT.integer("monitor", "collector_stale_after_s")
-    for path in (
-        config.PREMARKET_DIR / f"{now.date().isoformat()}.jsonl",
-        config.PREMARKET_DIR / f"{now.date().isoformat()}-stats.jsonl",
-    ):
-        if path.exists():
-            age = now.timestamp() - path.stat().st_mtime
-            # The lower bound guards the --at simulation and clock skew: a
-            # file from this evening must not look alive at a simulated 08:00.
-            if -60 <= age <= stale_after:
-                return True
+    # The bar file only. The stats sidecar is appended when a run EXITS, so
+    # its mtime is a death certificate and not a heartbeat: a collector that
+    # died at 07:24 after five refused resubscribes left a stats line fifty
+    # seconds old at the 07:25 pass and read as RUNNING until 07:55.
+    path = config.PREMARKET_DIR / f"{now.date().isoformat()}.jsonl"
+    if path.exists():
+        age = now.timestamp() - path.stat().st_mtime
+        # The lower bound guards the --at simulation and clock skew: a
+        # file from this evening must not look alive at a simulated 08:00.
+        if -60 <= age <= stale_after:
+            return True
     return False
 
 
@@ -671,13 +700,18 @@ def _rewriting_the_watchlist_is_free(day: str, now_m: int) -> tuple[bool, str]:
 
     OR THE COLLECTOR WILL READ IT AGAIN. The run is two phase now: it starts
     at 04:00 on the provisional pool and rereads data/watchlist.json every
-    [Collector] pool_reload_check_s from resubscribe_time, resubscribing
-    whenever the generated_at changes, up to max_pool_reloads times. A rewrite
-    inside that window is not a desync, it is the mechanism. Before
-    resubscribe_time a rewrite is free because the handover has not happened;
-    the deliberate five minute gap between resubscribe_time and [Monitor]
-    discover_due is what gives a watchdog rerun of a failed 07:15 pass
-    somewhere to land.
+    [Collector] pool_reload_check_s from resubscribe_time UNTIL STOP_TIME,
+    resubscribing whenever the generated_at changes, at most max_pool_reloads
+    times. A restarted run rereads from its own start. A rewrite anywhere
+    inside the window is therefore not a desync, it is the mechanism.
+
+    The first version of this treated pool_reload_check_s times
+    max_pool_reloads as a DURATION, ninety seconds, and closed the free
+    window at 07:22, three minutes before the first monitor pass. Executed
+    against the live tree it answered False at every pass time of the day,
+    so the watchdog rerun the two phase design exists to land was refused on
+    every morning it could have been needed. The collector's cap is on
+    resubscribes, not on rereads.
 
     Returns (free, why) so the caller can say which of the two it was.
     """
@@ -686,14 +720,11 @@ def _rewriting_the_watchlist_is_free(day: str, now_m: int) -> tuple[bool, str]:
     if not collect_premarket.subscriptions_path(day).is_file():
         return True, ("No subscription list has been written today, so nothing "
                       "is listening to the watchlist and a rewrite desyncs nothing")
-    reload_end = (_minutes(_CRIT.clock("collector", "resubscribe_time"))
-                  + int(_CRIT.number("collector", "pool_reload_check_s")
-                        * _CRIT.integer("collector", "max_pool_reloads") / 60) + 1)
     stop = _minutes(_CRIT.clock("collector", "stop_time"))
-    if now_m < min(reload_end, stop):
-        return True, ("the collector is listening but rereads the watchlist "
-                      "after its resubscribe time, so a rewrite now is picked "
-                      "up rather than desynced")
+    if now_m < stop:
+        return True, ("the collector is listening and rereads the watchlist "
+                      "until its stop time, so a rewrite now is picked up "
+                      "rather than desynced")
     return False, ""
 
 
@@ -724,7 +755,13 @@ REGISTER_SCRIPT = config.PROJECT_ROOT / "tasks" / "register_tasks.ps1"
 # absent for the tasks that fire once.
 _JOBS_ENTRY = re.compile(
     r'@\{\s*Name\s*=\s*"(?P<name>[^"]+)"(?P<rest>[^}]*)\}')
-_FIELD_START = re.compile(r'Start\s*=\s*"(?P<value>\d{1,2}:\d{2})"')
+_FIELD_START = re.compile(r'(?<![A-Za-z])Start\s*=\s*"(?P<value>\d{1,2}:\d{2})"')
+# A second weekly trigger on the same task, discover's 03:55 pass. schtasks
+# emits one CSV row per trigger, so both sides are compared as SETS of start
+# minutes: the first reconciliation kept the last row per task and compared
+# it against Start alone, and from the evening discover gained its second
+# trigger every pass reported a false DIFFERS.
+_FIELD_EXTRA_START = re.compile(r'ExtraStart\s*=\s*"(?P<value>\d{1,2}:\d{2})"')
 _FIELD_REPEAT_MIN = re.compile(r'RepeatMin\s*=\s*(?P<value>\d+)')
 _FIELD_REPEAT_HOURS = re.compile(r'RepeatHours\s*=\s*(?P<value>\d+)')
 
@@ -777,10 +814,15 @@ def script_jobs() -> tuple[dict[str, dict[str, Any]], str | None]:
             # outside the array so a plain run cannot resurrect them.
             continue
         hour, _, minute = start.group("value").partition(":")
+        starts = {int(hour) * 60 + int(minute)}
+        for extra in _FIELD_EXTRA_START.finditer(rest):
+            extra_hour, _, extra_minute = extra.group("value").partition(":")
+            starts.add(int(extra_hour) * 60 + int(extra_minute))
         repeat_min = _FIELD_REPEAT_MIN.search(rest)
         repeat_hours = _FIELD_REPEAT_HOURS.search(rest)
         out[entry.group("name")] = {
             "start_minute": int(hour) * 60 + int(minute),
+            "start_minutes": starts,
             "start_text": start.group("value"),
             "repeat_every_minutes": int(repeat_min.group("value")) if repeat_min else 0,
             "repeat_for_minutes": int(repeat_hours.group("value")) * 60 if repeat_hours else 0,
@@ -813,8 +855,20 @@ def registered_tasks() -> tuple[dict[str, dict[str, Any]], str | None]:
         name = (row.get("TaskName") or "").strip()
         if not name.startswith(TASK_FOLDER):
             continue
-        out[name[len(TASK_FOLDER):]] = {
-            "start_minute": _clock_minutes(row.get("Start Time")),
+        short = name[len(TASK_FOLDER):]
+        start_minute = _clock_minutes(row.get("Start Time"))
+        if short in out:
+            # A second trigger row of the same task. Its start joins the set;
+            # the repetition fields stay those of the first row, which is the
+            # trigger the script's RepeatMin and RepeatHours describe.
+            if start_minute is not None:
+                out[short]["start_minutes"].add(start_minute)
+            else:
+                out[short]["start_minute"] = None
+            continue
+        out[short] = {
+            "start_minute": start_minute,
+            "start_minutes": {start_minute} if start_minute is not None else set(),
             "start_text": (row.get("Start Time") or "").strip(),
             "repeat_every_minutes": _duration_minutes(row.get("Repeat: Every")),
             "repeat_for_minutes": _duration_minutes(row.get("Repeat: Until: Duration")),
@@ -845,6 +899,21 @@ def reconcile_schedule() -> dict[str, Any]:
     extra = sorted(set(live) - set(spec))
     differs: list[str] = []
     unreadable: list[str] = []
+    # The script is the specification of the machine, and CRITERIA is the
+    # specification of the script: its clocks are where the triggers are
+    # supposed to come from. discover's two passes are the one task with two
+    # triggers, so they are checked against the two [Discovery] clocks here,
+    # or a script edited to one clock would reconcile perfectly against a
+    # machine registered from it while both disagreed with the file that
+    # every other reader of the schedule trusts.
+    if "discover" in spec:
+        wanted = {_minutes(_CRIT.clock("discovery", "run_time")),
+                  _minutes(_CRIT.clock("discovery", "provisional_run_time"))}
+        if spec["discover"]["start_minutes"] != wanted:
+            differs.append(
+                f"discover: $jobs starts it at {sorted(spec['discover']['start_minutes'])} "
+                f"minute(s) and CRITERIA [Discovery] run_time and "
+                f"provisional_run_time say {sorted(wanted)}")
     for name in sorted(set(spec) & set(live)):
         want, got = spec[name], live[name]
         fields = ("start_minute", "repeat_every_minutes", "repeat_for_minutes")
@@ -854,8 +923,11 @@ def reconcile_schedule() -> dict[str, Any]:
                 "repetition this could not parse, so it is NOT being reported "
                 "as agreeing")
             continue
-        for field, label in (("start_minute", "start"),
-                             ("repeat_every_minutes", "repeat every"),
+        if want["start_minutes"] != got["start_minutes"]:
+            differs.append(
+                f"{name}: starts at {sorted(got['start_minutes'])} minute(s) on "
+                f"the machine and {sorted(want['start_minutes'])} in $jobs")
+        for field, label in (("repeat_every_minutes", "repeat every"),
                              ("repeat_for_minutes", "repeat for")):
             if want[field] != got[field]:
                 differs.append(
@@ -1085,15 +1157,14 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             report("collector", "RUNNING", "bar file moving or task running")
         elif discover_relaunched and hold_is_answerable:
             # Held rather than started, and only in the pass that just
-            # relaunched discover. The collector reads the watchlist once, at
-            # subscribe time, and nothing re-reads it afterwards, so a
-            # collector started in these few seconds subscribes to whichever
-            # version of the file won the race and is stuck with it for the
-            # whole window. That is how the both-missed morning used to end up
-            # listening to the previous session's names. The next pass is
-            # thirty minutes away against a window that runs 07:20 to 09:25,
-            # so waiting costs a quarter of the window where the wrong names
-            # would cost all of it.
+            # relaunched discover. A collector started in these few seconds
+            # reads whichever version of the file won the race, and although
+            # it rereads until the stop it would refuse a file that is not
+            # today's and exit rather than wait past the handover. That is how
+            # the both-missed morning used to end up listening to the previous
+            # session's names. The next pass is thirty minutes away against a
+            # window that runs 04:00 to 09:25, so waiting costs a slice of the
+            # window where the wrong names would cost all of it.
             problems += 1
             report("collector", "HELD", "no live collector, and discover was "
                    "relaunched in this pass, so the watchlist on disk is the "

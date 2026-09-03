@@ -534,7 +534,7 @@ class EodhdClient:
         interval: str = "1m",
     ) -> ApiResult:
         """One minute bars. Timestamps come back as UTC unix seconds."""
-        return self._request(
+        result = self._request(
             f"intraday/{symbol}",
             params={
                 "interval": interval,
@@ -543,6 +543,19 @@ class EodhdClient:
             },
             endpoint=f"intraday-{interval}",
         )
+        if not result.ok:
+            return result
+        # The same shape test eod() applies. A 200 carrying a JSON object, which
+        # is what the vendor returns for an error it did not think worth a
+        # status code, was handed to backfill_premarket as rows and iterated
+        # as such, so its keys were read as bars and the whole nightly raised
+        # on the first row.get. Refused here with a reason, on the eod precedent.
+        rows = result.data
+        if isinstance(rows, dict):
+            rows = [rows] if "timestamp" in rows else None
+        if not isinstance(rows, list):
+            return ApiResult(None, f"intraday {symbol} failed: payload was not a list")
+        return ApiResult(rows, None)
 
     def eod(
         self,

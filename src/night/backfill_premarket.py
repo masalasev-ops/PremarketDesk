@@ -1,18 +1,22 @@
 """Nightly true premarket backfill, run after 22:00 ET.
 
 The morning's pm_high, pm_low and pm_vwap describe what the collector saw
-from its 07:20 start. The true premarket session runs from 04:00, and EODHD's
-one minute intraday bars cover all of it, published a few hours behind live.
-So every evening this job writes pm_high_true, pm_low_true and pm_vwap_true
-into the day's picks, next to the morning values, never over them.
+from the minute its socket window opened. That window is PER SESSION and is
+read from the subscription sidecar, never from today's knob: 07:20 for every
+session before 2026-09-03 and 04:00 from then, when the collector became two
+phase. The true premarket session runs from 04:00, and EODHD's one minute
+intraday bars cover all of it, published a few hours behind live. So every
+evening this job writes pm_high_true, pm_low_true and pm_vwap_true into the
+day's picks, next to the morning values, never over them.
 
 The two sets of columns are the point, and until 2026-08-28 this paragraph
 claimed more for them than they hold. Their difference was called "the standing
 measurement of what a 07:20 collector start misses". It is not: it conflates
 THREE causes and cannot separate them.
 
-  1. The collector's late start, 04:00 to 07:20, which is the one this
-     sentence named.
+  1. The collector's late start, the minutes between 04:00 and the session's
+     own window open, which is the one this sentence named and which is
+     04:00 to 07:20 on every session the examples below were measured on.
   2. A feed disagreement INSIDE the shared window, where the vendor's bars and
      the trades socket disagree over minutes both of them saw.
   3. The window END. The true window ran to [backfill] market_open, 09:30,
@@ -270,8 +274,9 @@ def _gap_report(connection, sessions: int) -> None:
     if not split:
         print(f"backfill: 0 of {len(gaps)} of those rows carry "
               "pm_high_collector_window, so the feed and window halves of that "
-              "gap cannot be separated yet. Rows written before 2026-08-28 have "
-              "no such column and are not refilled by this pass.")
+              "gap cannot be separated yet. The catch-up refills rows that "
+              "carry a true high and no collector window, up to [Backfill] "
+              "catchup_days sessions a night.")
         return
     feed = [(r["pm_high_collector_window"] - r["pm_high"]) / r["pm_high"] * 100.0
             for r in split]
@@ -495,16 +500,31 @@ def backfill(day: str, overwrite: bool = False) -> int:
     now_stamp = ettime.stamp(ettime.now_et())
     with store.session() as connection:
         for pick, true_row, disagree in fetched:
+            # ALL NINE measured columns, not the first four. _true_path has
+            # returned the collector window split since 2026-08-28 and until
+            # 2026-09-02 this UPDATE wrote only the full window columns, so
+            # _gap_report found no row carrying pm_high_collector_window and
+            # printed that the split could not be separated, every night, for
+            # a split the pass had computed and dropped on the floor.
             connection.execute(
                 """
                 UPDATE picks SET pm_high_true=?, pm_low_true=?, pm_vwap_true=?,
-                    pm_true_bars=?, pm_source_disagreement=?, backfilled_at=?
+                    pm_true_bars=?, pm_source_disagreement=?, backfilled_at=?,
+                    pm_high_collector_window=?, pm_low_collector_window=?,
+                    pm_vwap_collector_window=?, pm_collector_window_bars=?,
+                    pm_collector_window=?
                 WHERE date=? AND ticker=?
                 """,
                 (
                     true_row["pm_high_true"], true_row["pm_low_true"],
                     true_row["pm_vwap_true"], true_row["pm_true_bars"],
-                    disagree, now_stamp, day, pick["ticker"],
+                    disagree, now_stamp,
+                    true_row["pm_high_collector_window"],
+                    true_row["pm_low_collector_window"],
+                    true_row["pm_vwap_collector_window"],
+                    true_row["pm_collector_window_bars"],
+                    true_row["pm_collector_window"],
+                    day, pick["ticker"],
                 ),
             )
             filled += 1
@@ -525,6 +545,18 @@ def _catchup_dates(before_day: str, limit: int) -> list[str]:
     The vendor sometimes publishes intraday later than the nightly runs, and
     a day the nightly could not fill must not stay unfilled forever just
     because the calendar moved on.
+
+    SECOND, and only inside the same limit, days whose rows carry a true high
+    and no collector window split. Until 2026-09-02 the phase 3 UPDATE wrote
+    the full window columns and dropped the five collector window columns
+    _true_path had already computed, so every backfilled row on disk has the
+    total gap and not its halves. Selected on pm_collector_window, the TEXT
+    column the pass always writes, rather than on pm_high_collector_window,
+    which is legitimately null when the collector window carried no bar and
+    would re-select such a row forever. Unfilled days take the limit first,
+    because a missing high is a missing outcome and a missing split is a
+    missing decomposition of one, and the vendor cost stays at most `limit`
+    days a night either way.
     """
     with store.session() as connection:
         store.init(connection)
@@ -533,7 +565,17 @@ def _catchup_dates(before_day: str, limit: int) -> list[str]:
             "AND source='live' ORDER BY date DESC LIMIT ?",
             (before_day, limit),
         ).fetchall()
-    return [row["date"] for row in rows]
+        days = [row["date"] for row in rows]
+        room = limit - len(days)
+        if room > 0:
+            unsplit = connection.execute(
+                "SELECT DISTINCT date FROM picks WHERE date < ? "
+                "AND pm_high_true IS NOT NULL AND pm_collector_window IS NULL "
+                "AND source='live' ORDER BY date DESC LIMIT ?",
+                (before_day, room),
+            ).fetchall()
+            days.extend(row["date"] for row in unsplit if row["date"] not in days)
+    return days
 
 
 # The exit codes that mean this step did its job. Declared at module level so
@@ -560,7 +602,8 @@ def main(argv: list[str] | None = None) -> int:
         catchup_days = _CRIT.integer("backfill", "catchup_days")
         filled = _catchup_dates(args.date, catchup_days)
         for day in filled:
-            print(f"backfill: catching up {day}, its true premarket columns are still null")
+            print(f"backfill: catching up {day}, its true premarket columns are "
+                  "still null or carry no collector window split")
             backfill(day, overwrite=args.overwrite)
         # And separately, sessions that were collected and never measured. A day
         # with no picks rows is invisible to the sweep above and still has a bar

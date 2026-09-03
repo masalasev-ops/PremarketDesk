@@ -168,10 +168,29 @@ def describe(values: list[tuple[str, float]], unit: str = "row") -> dict[str, An
 
 
 def quantile(values: list[float], share: float) -> float:
-    """The value a `share` of the population sits at or below, nearest rank."""
+    """The value a `share` of the population sits at or below.
+
+    The 0.5 quantile IS statistics.median, the same function describe()
+    prints beside it. Nearest rank with round() gave a different number on
+    an even count, the lower middle rather than the mean of the two, so the
+    ladder's 0.5 rung and the median above it disagreed on the same rows
+    until 2026-09-02. The other rungs stay nearest rank, which is the reading
+    the ladder's docstring promises.
+    """
     ordered = sorted(values)
+    if share == 0.5:
+        return float(statistics.median(ordered))
     index = min(max(int(round(share * len(ordered))) - 1, 0), len(ordered) - 1)
     return ordered[index]
+
+
+# Candidates C and D fit a rate on the guarded rows and then screen THE SAME
+# ROWS with it, so every admitted count under them is in sample. Named on the
+# payload rather than left for a reader to infer from the fit_rows count.
+IN_SAMPLE_NOTE = ("the rate is fitted on the guarded rows and the screen "
+                  "counts below are taken over those same rows, so the "
+                  "admitted counts are in sample and read as the fit "
+                  "describing itself, not as a forecast")
 
 
 def quantile_of(values: list[float], target: float) -> float:
@@ -554,6 +573,8 @@ def candidate_c(rows: list[dict[str, Any]], bands: int) -> dict[str, Any]:
                          [s for _v, s, _d, _t in keyed])
     result: dict[str, Any] = {
         "candidate": "C, banded by liquidity on avg_volume_20d",
+        "in_sample": True,
+        "in_sample_note": IN_SAMPLE_NOTE,
         "bands": out,
         "rows_without_a_liquidity_key": missing,
         "direction": finding,
@@ -615,6 +636,8 @@ def candidate_d(rows: list[dict[str, Any]],
     shipped_screen = both_arms(rows, lambda _row: SHIPPED_RATE)
     return {
         "candidate": "D, the distribution",
+        "in_sample": True,
+        "in_sample_note": IN_SAMPLE_NOTE,
         "rows": len(per_row),
         "sessions": sessions,
         "symbols": len(per_symbol),

@@ -201,7 +201,16 @@ def collector_coverage(
             if symbol in replay_only
         },
         "dropped_to_fit_cap": subscriptions.get("dropped_to_fit_cap") or [],
-        "unsubscribed_with_bars": sorted(with_bars - set(requested)),
+        # A name with bars that the CURRENT list does not carry is one of two
+        # things: a provisional pool name the handover dropped, which the
+        # sidecar's subscribed_since still names, or a name nobody asked for.
+        # Until 2026-09-02 both read as the second.
+        "unsubscribed_with_bars": sorted(
+            s for s in with_bars - set(requested)
+            if s not in (subscriptions.get("subscribed_since") or {})),
+        "handover_dropped_with_bars": sorted(
+            s for s in with_bars - set(requested)
+            if s in (subscriptions.get("subscribed_since") or {})),
         "peak_trades_per_minute": _peak_trades_per_minute(bars_by_symbol),
         "late_trades": None,
         "late_trades_reason": (
@@ -229,13 +238,20 @@ def observed_collector_window(
     whole file to the scan clock, so a socket that dropped at 08:10 reads as
     35 rather than as a slightly short window.
     """
-    minutes = [
-        int(bar["minute_epoch"])
-        for bars in bars_by_symbol.values()
-        for bar in bars
-        if bar.get("minute_epoch") is not None
-    ]
-    scheduled_start = _CRIT.clock_text("collector", "start_time")
+    minutes: list[int] = []
+    for bars in bars_by_symbol.values():
+        for bar in bars:
+            try:
+                minutes.append(int(bar["minute_epoch"]))
+            except (KeyError, TypeError, ValueError):
+                # One malformed line must cost one bar, not the packet.
+                continue
+    # The window this SESSION's socket opened, from the subscription sidecar,
+    # and the knob only when the sidecar is silent: the knob moved from 07:20
+    # to 04:00 on 2026-09-02 and a packet re-read for an older session, or a
+    # morning whose socket opened late, must be judged against its own window.
+    scheduled_start = (collect_premarket.window_open_hhmm(now.date().isoformat())
+                       or _CRIT.clock_text("collector", "start_time"))
     scheduled_stop = _CRIT.clock_text("collector", "stop_time")
 
     # Replay is reported BESIDE the window, never inside it. The observed
@@ -274,7 +290,7 @@ def observed_collector_window(
         "last_bar_et": ettime.stamp(last),
         "started_late_minutes": round(
             (first - ettime.at_hm(now.date(),
-                                  _CRIT.clock("collector", "start_time"))
+                                  (int(scheduled_start[:2]), int(scheduled_start[3:5])))
              ).total_seconds() / 60.0, 1),
         "minutes_since_last_bar": round((now - last).total_seconds() / 60.0, 1),
     }
@@ -386,13 +402,15 @@ def market_snapshot(
 # ------------------------------------------------------- 2. final candidates
 
 def pool_candidates(
-    watchlist: dict[str, Any], packet: Packet
+    watchlist: dict[str, Any], packet: Packet,
+    subscribed_since: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """The names the collector was subscribed to, carrying their pool provenance.
 
     Membership is no longer rebuilt here. It cannot be: the collector is the
     only source of today's premarket tape and it only has bars for what
-    discover subscribed to at 07:20, so a name discovered at 08:45 could not be
+    discover subscribed it to, from 04:00 and from the 07:20 handover, so a
+    name discovered at 08:45 could not be
     priced anyway. What this pass does instead is RANK, on the gap actually
     measured from the collector, which is done further down once there is a
     price to measure.
@@ -406,11 +424,26 @@ def pool_candidates(
     """
     rows = [r for r in watchlist.get("symbols", []) if r.get("symbol")]
     subscribed = [r for r in rows if r.get("subscribed", True)]
+    # PHASE ONE ONLY. The collector opened at 04:00 on the 03:55 provisional
+    # pool and moved onto this watchlist at the handover; a name the
+    # provisional pool subscribed and this pool did not has a tape from 04:00
+    # to 07:20 on disk and a subscribed flag of false here. Until 2026-09-02
+    # it was never priced, ranked or gapped, and collector_coverage listed it
+    # as unsubscribed_with_bars, which is false. The subscription sidecar's
+    # subscribed_since map is the record that it was asked for.
+    opened = subscribed_since or {}
+    provisional_only = [
+        r for r in rows
+        if not r.get("subscribed", True)
+        and str(r["symbol"]).upper() in opened
+    ]
 
     candidates: list[dict[str, Any]] = []
-    for row in subscribed:
+    for row in subscribed + provisional_only:
         candidates.append({
             "symbol": str(row["symbol"]).upper(),
+            "pool_phase": ("provisional_only" if row in provisional_only
+                           else "subscribed"),
             "pool_source": row.get("pool_source") or [],
             "pool_tier": row.get("pool_tier"),
             "pool_tier_reason": row.get("pool_tier_reason"),
@@ -423,9 +456,15 @@ def pool_candidates(
         })
 
     provenance = {
-        "membership": "the names discover subscribed the collector to at 07:20",
+        "membership": ("the names discover subscribed the collector to, from "
+                       "04:00 on the provisional pool and from the 07:20 "
+                       "handover on this one, plus any provisional name the "
+                       "handover dropped that still has its tape"),
         "pool_size": len(rows),
         "subscribed": len(subscribed),
+        "provisional_only": len(provisional_only),
+        "provisional_only_symbols": [c["symbol"] for c in candidates
+                                     if c["pool_phase"] == "provisional_only"],
         "not_subscribed": len(rows) - len(subscribed),
         "watchlist_generated_at": watchlist.get("generated_at"),
         "selection_method": watchlist.get("selection_method"),
@@ -500,6 +539,9 @@ def _empty_ranking() -> dict[str, Any]:
         "floors": {"price": price_rule.describe(),
                    "gap_pct_absolute": gap_rule.describe()},
         "ranked_on": "the premarket gap measured from the collector, not the pool tier",
+        "rank_up_gaps_first": _CRIT.flag("scan", "rank_up_gaps_first"),
+        "kept_up": 0,
+        "kept_down": 0,
         "not_ranked_reason": (
             "no subscribed name reached the ranking, so nothing was ordered and "
             "every count here is a measured zero rather than an absence"
@@ -541,7 +583,29 @@ def rank_by_measured_gap(
             continue
         ranked.append(candidate)
 
-    ranked.sort(key=lambda r: abs(r["provisional_gap_pct"]), reverse=True)
+    up_first = _CRIT.flag("scan", "rank_up_gaps_first")
+    if up_first:
+        # Gaps up first, largest first, then gaps down by size. Both screens
+        # are long in practice (require_above_prior_high and
+        # require_open_above_prior_high cannot pass below the prior close), so
+        # a gap down holding a slot ahead of a gap up is a slot spent on a name
+        # that cannot be eligible. 2026-08-27: four gaps down of 5 to 8
+        # percent were kept and CRWV, AAOI, STM and MRVL, up 3.7 to 4.2, were
+        # cut. See CRITERIA.md [Scan], the rank direction note.
+        ranked.sort(key=lambda r: (r["provisional_gap_pct"] < 0,
+                                   -abs(r["provisional_gap_pct"])))
+        ranked_on = (
+            "the premarket gap measured from the collector, not the pool tier: "
+            "gaps up first in descending order, then gaps down by size, per "
+            "CRITERIA.md [Scan] rank_up_gaps_first"
+        )
+    else:
+        ranked.sort(key=lambda r: abs(r["provisional_gap_pct"]), reverse=True)
+        ranked_on = (
+            "the premarket gap measured from the collector, not the pool tier: "
+            "the absolute gap, direction blind, per CRITERIA.md [Scan] "
+            "rank_up_gaps_first = false"
+        )
     kept = ranked[:keep]
     # Named, not merely subtracted. "18 cleared the floors and 12 were kept" is
     # arithmetic a reader can do and an explanation they cannot: the six that
@@ -582,10 +646,15 @@ def rank_by_measured_gap(
         "capped_out": len(capped_out),
         "capped_out_symbols": capped_out,
         "floors": {"price": price_rule.describe(), "gap_pct_absolute": gap_rule.describe()},
-        "ranked_on": "the premarket gap measured from the collector, not the pool tier",
+        "ranked_on": ranked_on,
+        "rank_up_gaps_first": up_first,
+        "kept_up": sum(1 for c in kept if c["provisional_gap_pct"] >= 0),
+        "kept_down": sum(1 for c in kept if c["provisional_gap_pct"] < 0),
     }
     print(f"scan: {len(ranked)} of {len(candidates)} subscribed names cleared the "
-          f"floors on their measured gap, keeping the top {len(kept)}")
+          f"floors on their measured gap, keeping the top {len(kept)}"
+          f" ({stats['kept_up']} up, {stats['kept_down']} down"
+          f"{', gaps up ranked first' if up_first else ', direction blind'})")
     return kept, stats
 
 
@@ -779,6 +848,12 @@ def attach_premarket_path(
     """
     watchlist_symbols = set(discover.subscribed_symbols(watchlist))
     collector_start = _CRIT.clock_text("collector", "start_time")
+    # What each name's window is judged AGAINST is the moment the socket asked
+    # for it, not the knob: a name added at the 07:20 handover with a first
+    # bar at 07:21 is not late, and a name subscribed at 04:00 whose first bar
+    # is at 07:00 is not late either, it was quiet. See the two phase note.
+    opened = collect_premarket.subscribed_since()
+    window_open = collect_premarket.window_open_hhmm() or collector_start
 
     if not bars_by_symbol:
         packet.gap(
@@ -837,8 +912,10 @@ def attach_premarket_path(
 
         volume = sum(float(b.get("v") or 0) for b in bars)
         price_volume = sum(float(b.get("pv") or 0) for b in bars)
-        candidate["pm_high"] = round(max(float(b["h"]) for b in bars), 4)
-        candidate["pm_low"] = round(min(float(b["l"]) for b in bars), 4)
+        highs = [float(b["h"]) for b in bars if b.get("h") is not None]
+        lows = [float(b["l"]) for b in bars if b.get("l") is not None]
+        candidate["pm_high"] = round(max(highs), 4) if highs else None
+        candidate["pm_low"] = round(min(lows), 4) if lows else None
         candidate["pm_vwap"] = round(price_volume / volume, 4) if volume else None
         candidate["pm_volume_collected"] = volume
         candidate["pm_window_start"] = ettime.stamp(
@@ -891,12 +968,16 @@ def attach_premarket_path(
         # a reader could not see the two disagree without knowing CRITERIA by
         # heart. On 2026-08-19 the collector was an hour late and every field
         # describing the window still quoted 07:20.
-        candidate["pm_window_intended_start"] = collector_start
+        listened_from = _subscription_open_hhmm(
+            opened.get(candidate["symbol"]), window_open)
+        candidate["pm_window_intended_start"] = listened_from
+        candidate["pm_window_subscribed_from"] = listened_from
         candidate["pm_window_start_source"] = (
-            "the first minute this candidate actually has a bar for, not the "
+            "the first minute this candidate actually has a bar for, judged "
+            "against the minute the socket subscribed to it, not the "
             "configured collector start"
         )
-        candidate["pm_window_starts_late"] = window_start_hhmm > collector_start
+        candidate["pm_window_starts_late"] = window_start_hhmm > listened_from
         # Independent of the flag above and a different fact. A window that
         # opened on time can still hold four minutes of prints, and a window
         # that opened twenty minutes late can hold fifty. Until 2026-08-20 both
@@ -946,6 +1027,21 @@ def price_from_collector(
         candidate["pm_volume"] = candidate.get("pm_volume_collected")
 
 
+def _subscription_open_hhmm(stamp: Any, fallback: str) -> str:
+    """The ET clock a subscription opened, from its sidecar stamp, or the fallback.
+
+    The fallback is the session's window_open_at, which is right for every
+    name on a session whose sidecar predates the per symbol map, because such
+    a socket subscribed once, at its start.
+    """
+    if not stamp:
+        return fallback
+    try:
+        return ettime.hhmm(dt.datetime.fromisoformat(str(stamp)))
+    except (TypeError, ValueError):
+        return fallback
+
+
 def _price_age_seconds(price_at: Any, now: dt.datetime) -> float | None:
     if not price_at:
         return None
@@ -958,51 +1054,68 @@ def _price_age_seconds(price_at: Any, now: dt.datetime) -> float | None:
     return round((now - when).total_seconds(), 1)
 
 
-def drop_stale_prices(
+def flag_stale_prices(
     candidates: list[dict[str, Any]], packet: Packet
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Drop candidates whose last print is older than the scan can stand behind.
+    """Flag candidates whose last print is older than the scan can stand behind.
 
     Counted separately from dropped_no_coverage because the two are different
-    failures with different fixes. No coverage means the collector never heard
+    facts with different fixes. No coverage means the collector never heard
     the name and the answer is a subscription slot. A stale price means the
-    collector heard it and then stopped, and the answer is to find out why the
-    socket went quiet.
+    collector heard it and then went quiet, and on a socket carrying about a
+    tenth of the tape a liquid name goes quiet for fifteen minutes routinely.
 
     The vintage gate cannot catch this: a print from 07:22 is genuinely from
     today's premarket window and passes every check it makes. This is the case
-    a collector killed at 08:10 produces, and until now the packet published
-    those prices as current.
+    a collector killed at 08:10 produces, and until 2026-08-19 the packet
+    published those prices as current.
+
+    FLAGGED, NOT DROPPED, since 2026-09-02. The drop removed 36 candidates
+    over ten archived sessions, most of them tier 1 and 2 earnings and news
+    names: GIII, down 9.8 percent at its last print, appeared nowhere in the
+    2026-09-02 report. The price and its age are both real; what a stale
+    print cannot do is set a level. So the candidate stays, carries
+    price_stale and price_stale_reason, is ranked and published on the gap it
+    last showed, and fails require_fresh_price on both screens. Every
+    candidate gets the flag, false included, so a reader can tell "checked
+    and fresh" from "never checked".
     """
     limit = _CRIT.number("price_age", "max_price_age_seconds")
-    kept: list[dict[str, Any]] = []
-    dropped: list[dict[str, Any]] = []
+    stale: list[dict[str, Any]] = []
     for candidate in candidates:
         age = candidate.get("price_age_seconds")
-        if age is not None and age > limit:
-            dropped.append({
+        candidate["price_stale"] = bool(age is not None and age > limit)
+        candidate["price_stale_reason"] = None
+        if candidate["price_stale"]:
+            candidate["price_stale_reason"] = (
+                f"the last collector print is {age:,.0f}s old at the scan "
+                f"clock, past the {limit:,.0f}s limit in "
+                f"{config.CRITERIA_PATH.name} [price age]. It is inside "
+                "today's premarket window, so the vintage check passes, "
+                "but it is not this morning's price, so it fails "
+                "require_fresh_price on both screens and is published "
+                "with its age.")
+            stale.append({
                 "symbol": candidate["symbol"],
-                "reason": (f"the last collector print is {age:,.0f}s old at the scan "
-                           f"clock, past the {limit:,.0f}s limit in "
-                           f"{config.CRITERIA_PATH.name} [price age]. It is inside "
-                           "today's premarket window, so the vintage check passes, "
-                           "but it is not this morning's price."),
+                "reason": candidate["price_stale_reason"],
+                "price": candidate.get("price"),
                 "price_age_seconds": age,
                 "price_time": candidate.get("price_time"),
                 "pool_tier": candidate.get("pool_tier"),
                 "pool_source": candidate.get("pool_source") or [],
+                "pool_phase": candidate.get("pool_phase"),
             })
-            continue
-        kept.append(candidate)
 
-    if dropped:
+    if stale:
         packet.gap(
-            f"{len(dropped)} candidate(s) dropped for a stale premarket price, "
-            "collected but too old to publish as this morning's: "
+            f"{len(stale)} candidate(s) carry a STALE premarket price, collected "
+            "but older than [Price age] allows at the scan clock. Each is "
+            "published with its last print and its age, and fails "
+            "require_fresh_price on both screens rather than being dropped: "
             + ", ".join(f"{d['symbol']} ({d['price_age_seconds']:,.0f}s)"
-                        for d in dropped)
+                        for d in stale)
         )
-    return kept, dropped
+    return candidates, stale
 
 
 def attach_gap(candidates: list[dict[str, Any]]) -> None:
@@ -1104,19 +1217,31 @@ def attach_premarket_rvol(
     estimate is derived from the observation and a measured ratio, and no value
     is substituted from another source.
 
-    One asymmetry is recorded rather than hidden. The baseline accumulates from
-    CRITERIA [baseline] session_start, 04:00, while the collector starts at
-    07:20, so the numerator covers a shorter window than the denominator and
-    the ratio is a LOWER BOUND. That direction is the safe one: it can only
-    understate relative volume, so it can only withhold a candidate from a
-    screen, never smuggle one in. Closing the gap needs a second baseline keyed
-    to the collector window; see DECISIONS.md 2026-08-14.
+    One asymmetry is recorded rather than hidden, per name. The baseline
+    accumulates from CRITERIA [baseline] session_start, 04:00. A name the
+    socket subscribed to at 04:00 has a numerator covering that window; a
+    name added at the 07:20 handover does not, and its ratio is a LOWER
+    BOUND. That direction is the safe one: it can only understate relative
+    volume, so it can only withhold a candidate from a screen, never smuggle
+    one in. Which of the two a name is comes from the subscription sidecar's
+    per symbol map, not from the [Collector] start_time knob; until
+    2026-09-02 the knob decided and every name read alike. See DECISIONS.md
+    2026-08-14 and 2026-09-02 ninth.
     """
     numerator_window = _CRIT.clock_text("collector", "start_time")
     denominator_window = _CRIT.clock_text("baseline", "session_start")
+    # Per NAME since 2026-09-02. The socket opens at 04:00 on the provisional
+    # pool and adds names at the 07:20 handover, so whether the numerator
+    # covers the denominator's window is a fact about each subscription, not
+    # about the knob: reading the knob made every name read "not a lower
+    # bound" from 2026-09-03 while the handover names still were.
+    opened = collect_premarket.subscribed_since()
+    window_open = collect_premarket.window_open_hhmm() or numerator_window
     with store.session() as connection:
         store.init(connection)
         for candidate in candidates:
+            subscribed_from = _subscription_open_hhmm(
+                opened.get(candidate["symbol"]), window_open)
             candidate["pm_rvol"] = None
             candidate["pm_rvol_reason"] = None
             candidate["baseline"] = None
@@ -1180,16 +1305,17 @@ def attach_premarket_rvol(
                 # own first bar, not the hour the collector was scheduled for.
                 # Quoting the schedule here asserted a 07:20 numerator on a
                 # morning whose windows began at 08:14 and later.
+                "subscribed_from": subscribed_from,
                 "numerator_source": (
                     f"collector, from {candidate.get('pm_window_start') or 'an unrecorded start'}"
-                    f" (scheduled {numerator_window} ET)"
+                    f" (subscribed from {subscribed_from} ET, scheduled {numerator_window} ET)"
                 ),
                 "denominator": row["median_volume"],
                 "denominator_source": (
                     f"baseline median, accumulated from {denominator_window} ET "
                     f"to the {cutoff} cutoff over {row['sessions_used']} sessions"
                 ),
-                "is_lower_bound": numerator_window > denominator_window,
+                "is_lower_bound": subscribed_from > denominator_window,
             }
 
     _gap_for_lower_bound_rvol(candidates, packet, numerator_window,
@@ -1396,15 +1522,22 @@ def _gap_for_lower_bound_rvol(
     feed, which is a property of the collector rather than of any candidate and
     is reported whether or not a single RVOL survived the morning.
     """
-    bounded = [c["symbol"] for c in candidates
+    # Per candidate since 2026-09-02, because the window is per name now: a
+    # name subscribed at 04:00 has a numerator covering the denominator's
+    # window and a name added at the 07:20 handover does not. Reading the
+    # knob made every name read "not a lower bound" from 2026-09-03 while
+    # the handover names still were.
+    bounded = [(c["symbol"], (c.get("pm_rvol_basis") or {}).get("subscribed_from")
+                or numerator_window)
+               for c in candidates
                if (c.get("pm_rvol_basis") or {}).get("is_lower_bound")]
     if bounded:
         packet.gap(
             "premarket RVOL understates for these candidates and must be called a "
-            "lower bound wherever it is discussed: the numerator covers the "
-            f"collector window from {numerator_window} ET while the denominator is "
-            f"a baseline accumulated from {denominator_window} ET: "
-            + ", ".join(bounded)
+            "lower bound wherever it is discussed: the numerator covers only the "
+            "minutes the socket was subscribed to the name while the denominator "
+            f"is a baseline accumulated from {denominator_window} ET: "
+            + ", ".join(f"{symbol} from {since} ET" for symbol, since in bounded)
         )
 
 
@@ -1844,9 +1977,10 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
     be: the bands below were fitted on Alpaca volume, which is consolidated, so
     a socket numerator would be scored against edges measured on a tape nine
     times larger. The window lower bound still applies and is flagged the same
-    way: the collector starts at 07:20 and the premarket opens at 04:00, so
-    this understates rotation over the full session. That direction is the safe
-    one, as it can only hold a candidate down a band, never lift it up one.
+    way, per name: a name the socket subscribed to after the premarket opened
+    at 04:00, which is every name added at the 07:20 handover, understates
+    rotation over the full session. That direction is the safe one, as it can
+    only hold a candidate down a band, never lift it up one.
     What is NOT a lower bound any more is the feed gap, which the capture
     correction divides out before this function sees the number.
 
@@ -1872,6 +2006,9 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
     """
     numerator_window = _CRIT.clock_text("collector", "start_time")
     true_open = _CRIT.clock_text("baseline", "session_start")
+    # Per name, as for RVOL: see attach_premarket_rvol.
+    opened = collect_premarket.subscribed_since()
+    window_open = collect_premarket.window_open_hhmm() or numerator_window
     min_float = _CRIT.number("float_rotation", "min_shares_float")
     min_ratio = _CRIT.number("float_rotation", "min_float_to_shares_outstanding")
     max_ratio = _CRIT.number("float_rotation", "max_float_to_shares_outstanding")
@@ -2067,14 +2204,21 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
             "numerator_socket_shares": pm_volume,
             "capture_share": candidate.get("pm_capture_share"),
             "capture_basis": candidate.get("pm_capture_basis"),
-            "numerator_source": f"collector, from {numerator_window} ET",
+            "subscribed_from": _subscription_open_hhmm(
+                opened.get(candidate["symbol"]), window_open),
+            "numerator_source": (
+                "collector, from "
+                f"{_subscription_open_hhmm(opened.get(candidate['symbol']), window_open)}"
+                f" ET (scheduled {numerator_window} ET)"),
             "denominator": share_float,
             "denominator_source": "sharesFloat from the delayed quote",
             "shares_outstanding": outstanding if outstanding_usable else None,
             "shares_outstanding_source": outstanding_source,
-            # True for the same reason RVOL's is: the collector starts after
-            # the premarket does, so the numerator is short of the full window.
-            "is_lower_bound": numerator_window > true_open,
+            # True for the same reason RVOL's is: the socket was subscribed
+            # to this name after the premarket opened, so the numerator is
+            # short of the full window.
+            "is_lower_bound": _subscription_open_hhmm(
+                opened.get(candidate["symbol"]), window_open) > true_open,
         }
 
     if quote_never_fetched:
@@ -2680,9 +2824,14 @@ def earnings(
         "candidates_checked": None, "tomorrow_checked": None}
 
     if symbols:
-        rows, error = api.earnings_calendar(
-            today - dt.timedelta(days=1), end, symbols=symbols
-        )
+        # The previous TRADING session, not the previous calendar day: on a
+        # Monday the day before is Sunday, so a Friday after close reporter
+        # was not on the calendar the class is read from, lost the three
+        # points [Score catalyst class] gives earnings, and could not reach
+        # the swing list through require_catalyst. Same after any holiday.
+        from morning import vintage
+        start = vintage.previous_trading_session(today) or today - dt.timedelta(days=1)
+        rows, error = api.earnings_calendar(start, end, symbols=symbols)
         out["candidates_checked"] = not error
         if error:
             out["candidates_error"] = str(error)
@@ -2923,9 +3072,11 @@ def attach_evidence_missing(candidates: list[dict[str, Any]]) -> dict[str, Any]:
 
     THE SUPPRESSION IS THE POINT OF THIS FUNCTION and it was learned by looking
     at the output. Measured on 2026-09-01, TWELVE OF TWELVE candidates carried
-    rvol_lower_bound, because it is structural rather than incidental: the
-    numerator covers 07:20 onward and the denominator accumulates from 04:00,
-    so on a normal morning it is true of the whole list. A per name line saying
+    rvol_lower_bound, because under the 07:20 start it was structural rather
+    than incidental: the numerator covered 07:20 onward and the denominator
+    accumulated from 04:00, so it was true of the whole list. From 2026-09-03
+    it is true of the names added at the 07:20 handover and not of the names
+    subscribed at 04:00, which is still a shared cause. A per name line saying
     the same sentence twelve times drowns the two causes that actually differ,
     which on that morning were MMED's missing baseline and four partial
     windows, and teaches a reader to skip the section that carries them.
@@ -3054,6 +3205,15 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
         day.append(("price",
                     f"price {price} fails {_CRIT.rule('day_setup', 'price').describe()}",
                     price is not None))
+    if _CRIT.flag("day_setup", "require_fresh_price") and candidate.get("price_stale"):
+        # A level cannot be set from a print the market has moved on from.
+        # The name stays in the report with its gap and its age; it is only
+        # the screens that need a current price. See [Price age].
+        day.append(("require_fresh_price",
+                    f"the last collector print is "
+                    f"{candidate.get('price_age_seconds') or 0:,.0f}s old at the "
+                    "scan clock, past [Price age] max_price_age_seconds",
+                    True))
     if not _CRIT.rule("day_setup", "market_cap").test(market_cap):
         day.append(("market_cap",
                     f"market_cap {market_cap} fails "
@@ -3086,6 +3246,12 @@ def evaluate_eligibility(candidate: dict[str, Any]) -> None:
         swing.append(("price",
                       f"price {price} fails {_CRIT.rule('swing_setup', 'price').describe()}",
                       price is not None))
+    if _CRIT.flag("swing_setup", "require_fresh_price") and candidate.get("price_stale"):
+        swing.append(("require_fresh_price",
+                      f"the last collector print is "
+                      f"{candidate.get('price_age_seconds') or 0:,.0f}s old at the "
+                      "scan clock, past [Price age] max_price_age_seconds",
+                      True))
     if not _CRIT.rule("swing_setup", "market_cap").test(market_cap):
         swing.append(("market_cap",
                       f"market_cap {market_cap} fails "
@@ -3525,8 +3691,8 @@ _MISSING_CAUSES: tuple[tuple[str, str, Any], ...] = (
      "null rather than low",
      lambda c: True),
     ("rvol_lower_bound",
-     "its relative volume understates as a lower bound, because the numerator "
-     "covers a shorter window than the denominator",
+     "its relative volume understates as a lower bound, because the socket was "
+     "subscribed to it for only part of the window the denominator covers",
      lambda c: c.get("pm_rvol") is not None),
     ("window_partial",
      "its premarket window opened late, so its premarket high, low and average "
@@ -3566,10 +3732,11 @@ def evidence_missing(candidate: dict[str, Any]) -> list[str]:
     rows is noise that teaches a reader to skip the twelfth.
 
     A STALE PRICE IS DELIBERATELY ABSENT FROM THE LIST and its absence is a
-    decision. [Price age] max_price_age_seconds is a hard cut, so a candidate
-    whose last collector print is older than it has already left for
-    dropped_stale_price and cannot reach this function. A cause that cannot
-    fire is a line that reads as coverage and gives none.
+    decision. A candidate whose last collector print is older than [Price
+    age] max_price_age_seconds carries price_stale and fails
+    require_fresh_price on both screens, so its staleness is already in the
+    failed conditions a reader sees; repeating it here would count one fact
+    twice.
     """
     basis = candidate.get("pm_rvol_basis") or {}
     causes: list[str] = []
@@ -5544,7 +5711,8 @@ def build_packet() -> dict[str, Any]:
         snapshot = []
     else:
         snapshot = market_snapshot(api, packet, bars_by_symbol)
-    candidates, provenance = pool_candidates(watchlist, packet)
+    candidates, provenance = pool_candidates(
+        watchlist, packet, collect_premarket.subscribed_since(session_date))
     # After pool_candidates, because that one asks whether the file is today's
     # and this one asks whether the collector was ever started on it. They are
     # different failures and 2026-08-24 was the second.
@@ -5584,7 +5752,7 @@ def build_packet() -> dict[str, Any]:
         candidates, dropped = drop_uncovered(candidates, packet)
         # After the coverage cut, because a name with no bars at all has no age
         # to judge and belongs in dropped_no_coverage rather than here.
-        candidates, dropped_stale = drop_stale_prices(candidates, packet)
+        candidates, dropped_stale = flag_stale_prices(candidates, packet)
 
         # Ranking needs a prior close per name. The pool normally carries one
         # out of discover's bulk read at no extra cost. A watchlist written
@@ -5796,6 +5964,12 @@ def build_packet() -> dict[str, Any]:
             "connections": (run_stats or {}).get("connections"),
             "reconnects": (run_stats or {}).get("reconnects"),
             "resubscriptions": (run_stats or {}).get("resubscriptions"),
+            # The handover. None until a run has written its stats line,
+            # which is at 09:25, so at 08:45 these describe a run that ended
+            # early, and the subscription sidecar is what says whether the
+            # handover happened this morning.
+            "planned_resubscribes": (run_stats or {}).get("planned_resubscribes"),
+            "pool_reload_errors": (run_stats or {}).get("pool_reload_errors"),
             "messages": (run_stats or {}).get("messages"),
             # The last hop of the path the collector's declaration comment
             # argues for. Non fatal status frames are kept by the run loop,
@@ -5832,6 +6006,12 @@ def build_packet() -> dict[str, Any]:
             _CRIT.clock_text("collector", "start_time"),
             _CRIT.clock_text("collector", "stop_time"),
         ],
+        # The window this session's socket actually opened, from the sidecar.
+        # Differs from the configured start on a late start, a watchdog
+        # restart that lost the first sidecar, and every session before the
+        # 04:00 change. Null when no sidecar was written.
+        "collector_window_opened": collect_premarket.window_open_hhmm(session_date),
+        "collector_subscribed_since": collect_premarket.subscribed_since(session_date),
         "watchlist_generated_at": watchlist.get("generated_at"),
         "market_snapshot": snapshot,
         "candidate_provenance": provenance,
@@ -5840,10 +6020,11 @@ def build_packet() -> dict[str, Any]:
         # collector coverage, so they had no premarket price and were dropped
         # rather than published at a stale one.
         "dropped_no_coverage": dropped,
-        # Collected but too old to publish as this morning's price. Separate
-        # from the list above because the fixes differ: a subscription slot
-        # versus a collector that stopped listening.
-        "dropped_stale_price": dropped_stale,
+        # Collected but too old to stand behind as this morning's price.
+        # Separate from the list above because the fixes differ: a
+        # subscription slot versus a socket that went quiet. These names are
+        # STILL in candidates, flagged price_stale, since 2026-09-02.
+        "stale_price": dropped_stale,
         "economic": events,
         "earnings": earnings_block,
         "criteria_summary": {

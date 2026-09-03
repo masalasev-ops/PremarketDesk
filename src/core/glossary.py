@@ -219,6 +219,13 @@ HEADING = "What the words on this page mean"
 # legend it already wrote without matching on the whole sentence.
 LEGEND_PREFIX = "Reading the columns: "
 
+# How the conviction band definition opens, written by analyst._bucket_legend
+# under the first table carrying a Conviction column. Named here beside the
+# column legend because the renderer removes both with the table they sit
+# under when that table is the `none` row and nothing else: a legend for
+# columns the page no longer shows is a paragraph explaining nothing.
+BAND_LEGEND_PREFIX = "Conviction is a band on the score"
+
 INTRO = (
     "This section explains the words used above, in ordinary language and with "
     "no finance background assumed. Nothing here is advice, and the thresholds "

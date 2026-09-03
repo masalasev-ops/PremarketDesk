@@ -1,5 +1,5 @@
 @echo off
-rem PremarketDesk quota meter sampler. NOT one of the sixteen scheduled steps
+rem PremarketDesk quota meter sampler. NOT one of the twenty five scheduled steps
 rem and NOT part of any chain: it is an instrument, it writes no job status
 rem record, and CRITERIA.md [job status steps] must not gain an entry for it,
 rem because the watchdog would then expect it and report it overdue.
@@ -8,7 +8,7 @@ rem Fires every thirty minutes, all day, every day, and takes ONE reading per
 rem firing. Forty eight calls a day against a shared hundred thousand.
 rem
 rem The job trail answers "which step spent what". This answers "when", which
-rem the job trail cannot: nine jobs sit in two short windows with nothing at
+rem the job trail cannot: eleven tasks sit in two short windows with nothing at
 rem all between the 22:45 monitor and the 07:00 catch-up, and that overnight
 rem silence is where a sibling project draining the shared key is invisible.
 rem

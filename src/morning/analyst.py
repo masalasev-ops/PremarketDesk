@@ -11,8 +11,10 @@ the one failure this system exists to prevent.
 
 The transport is the claude CLI as a subprocess, authenticated through the
 logged in subscription. Never the Anthropic SDK, never an API key. The
-subprocess environment is scrubbed of ANTHROPIC_API_KEY so a stray shell
-variable cannot change what pays for the call.
+subprocess environment is scrubbed of every key in config.FORBIDDEN_KEYS, the
+API key, the auth token, the base URL, the model override and the Bedrock and
+Vertex switches, so a stray shell variable cannot change what answers the call
+or what pays for it.
 """
 
 from __future__ import annotations
@@ -125,7 +127,14 @@ SLOT_HEADLINE = "HEADLINE"
 SLOT_SETUP = "SETUP"
 SLOT_RATES = "RATES"
 
-_MARKER_RE = re.compile(r"\{\{([A-Z]+)((?::[A-Z0-9.]+)*)\}\}")
+# The argument class carries a hyphen because tickers do: BRK-B is a universe
+# symbol, and until 2026-09-02 `{{SETUP:BRK-B}}` matched nothing here, so the
+# skeleton's own marker was fixed text. Filled, it was reported as an altered
+# segment; left, it shipped literally. write_report now also counts the brace
+# pairs against the markers it can read and refuses the skeleton when they
+# differ, so the next character this class is missing costs the narrative and
+# says so rather than reaching a reader.
+_MARKER_RE = re.compile(r"\{\{([A-Z]+)((?::[A-Z0-9.\-]+)*)\}\}")
 
 
 def slot(name: str, *args: str) -> str:
@@ -172,6 +181,17 @@ def check_slots(skeleton: str, received: str) -> tuple[str | None, dict[str, str
     else. A segment that cannot be found is a violation, and so is a slot
     filled with nothing, with a heading, with a table row, with a leftover
     marker, or a SETUP slot missing the invalidation lead in.
+
+    EACH SLOT HAS A SHAPE, and the shape is what catches prose written
+    outside a slot but before the next fixed segment. The slot text is
+    everything between the two fixed segments around it, so a paragraph the
+    model added after its mood phrase, or under a setup after the
+    invalidation line, was the slot's text and shipped inside it with nothing
+    said. MOOD is one line of at most CRITERIA mood_max_words words; HEADLINE
+    and RATES are one paragraph, no blank line; SETUP ENDS on the
+    invalidation line, checked on its last non-empty line and not by
+    containment in the whole text. A violation names the slot and the rule
+    it broke.
 
     On violations the assembled report is None and the caller regenerates
     with the list, or falls back when the budget is spent.
@@ -229,9 +249,9 @@ def check_slots(skeleton: str, received: str) -> tuple[str | None, dict[str, str
             violations.append(f"{label} carries a heading, a table row or a fence, "
                               "which slot prose may not")
             continue
-        if marker.startswith("{{" + SLOT_SETUP) and INVALIDATION_MARKER not in text:
-            violations.append(f"{label} does not close with the line beginning "
-                              f"{INVALIDATION_MARKER!r}")
+        shape = _slot_shape_violation(marker, label, text)
+        if shape:
+            violations.append(shape)
             continue
         slot_texts[marker] = text
 
@@ -241,6 +261,43 @@ def check_slots(skeleton: str, received: str) -> tuple[str | None, dict[str, str
     for marker, text in slot_texts.items():
         assembled = assembled.replace(marker, text, 1)
     return assembled, slot_texts, []
+
+
+def _slot_shape_violation(marker: str, label: str, text: str) -> str | None:
+    """The shape rule a filled slot breaks, named with the slot, or None.
+
+    The rules are per slot kind and are the whole of what tells a slot's
+    prose from a paragraph the model appended after it. See check_slots.
+    """
+    name = marker[2:].split(":", 1)[0].rstrip("}")
+    lines = [line for line in text.splitlines() if line.strip()]
+    has_blank_line = any(not line.strip() for line in text.strip().splitlines())
+    if name == SLOT_MOOD:
+        limit = _CRIT.integer("analyst", "mood_max_words")
+        words = len(text.split())
+        if len(lines) != 1 or words > limit:
+            return (f"{label} must be one line of at most {limit} words and is "
+                    f"{len(lines)} line(s) of {words} words; the title line "
+                    "carries the mood phrase and nothing else")
+        return None
+    if name in (SLOT_HEADLINE, SLOT_RATES):
+        if has_blank_line:
+            return (f"{label} must be one paragraph and carries a blank line, so "
+                    "a second paragraph was written where one sentence was asked "
+                    "for")
+        return None
+    if name == SLOT_SETUP:
+        # The LAST line, not the text. The invalidation sentence closes the
+        # write up, so a line after it is prose the model wrote past the
+        # slot, and `in text` accepted it.
+        if INVALIDATION_MARKER not in lines[-1]:
+            if any(INVALIDATION_MARKER in line for line in lines):
+                return (f"{label} must END on the line carrying "
+                        f"{INVALIDATION_MARKER!r} and carries text after it")
+            return (f"{label} does not close with the line beginning "
+                    f"{INVALIDATION_MARKER!r}")
+        return None
+    return None
 
 
 def slot_correction(violations: list[str]) -> str:
@@ -424,13 +481,25 @@ class RunBudget:
     def __init__(self, total: int) -> None:
         self.total = total
         self.spent = 0
+        # How many of the spent runs ran to timeout_s. The gap explanation
+        # pass reads this: a morning whose narrative spent every run and lost
+        # one of them to the clock is the morning with the least clock left,
+        # and the explanation is the cheapest thing to skip on it.
+        self.timeouts = 0
 
     @property
     def remaining(self) -> int:
         return max(self.total - self.spent, 0)
 
+    @property
+    def exhausted_by_the_clock(self) -> bool:
+        return self.remaining < 1 and self.timeouts > 0
+
     def spend(self) -> None:
         self.spent += 1
+
+    def timed_out(self) -> None:
+        self.timeouts += 1
 
 
 _budget: RunBudget | None = None
@@ -497,6 +566,8 @@ def invoke_claude(
         except subprocess.TimeoutExpired:
             last_error = f"claude CLI timed out after {timeout_s}s"
             last_kind = "timeout"
+            if _budget is not None:
+                _budget.timed_out()
             print(f"analyst: {last_error}")
             continue
         except OSError as exc:
@@ -556,7 +627,19 @@ def invoke_claude(
             "session_id": payload.get("session_id"),
             "attempt": attempt,
         }
-        return _trim_to_report(str(payload.get("result") or "")), record, None, "ok"
+        text = _trim_to_report(str(payload.get("result") or ""))
+        if not text.strip():
+            # subtype success and nothing in it. Until 2026-09-02 this
+            # returned as a success and write_report broke out of its loop
+            # with "the model returned an empty report", leaving whatever
+            # runs the budget still held unspent on a morning that had an
+            # answer coming for the price of one more call. It is a failed
+            # attempt like a non zero exit and is retried like one.
+            last_error = "claude CLI reported success with an empty result"
+            last_kind = "failed"
+            print(f"analyst: {last_error}")
+            continue
+        return text, record, None, "ok"
 
     return None, {}, last_error or "claude CLI failed for an unrecorded reason", last_kind
 
@@ -1678,7 +1761,12 @@ def record_quantifier_flags(
                     "recorded_at": ettime.stamp(ettime.now_et()),
                     "session": session,
                     "report": report_name,
-                    "line": hit["line"],
+                    # The line of the report the hit is on, or null with the
+                    # slot named beside it: in slots mode the loop scans the
+                    # slot texts and a line of those is a line of nothing on
+                    # disk. See _name_slots.
+                    "line": hit.get("line"),
+                    "slot": hit.get("slot"),
                     "quantifier": hit["quantifier"],
                     "set_word": hit["set_word"],
                     "sentence": hit["text"],
@@ -1867,7 +1955,9 @@ def _print_quantifier_flags(
               f"of {attempts}. The report asserts a quantifier over the candidate "
               "set, which no reader can check against the report in front of them:")
     for hit, flag_id in zip(hits, ids or [None] * len(hits)):
-        print(f"  flag {flag_id} line {hit['line']}: matched "
+        where = (f"slot {hit['slot']}" if hit.get("slot")
+                 else f"line {hit.get('line')}")
+        print(f"  flag {flag_id} {where}: matched "
               f"{hit['quantifier']!r} near {hit['set_word']!r}")
         print(f"      {hit['text']}")
     # Local, because ops.quantifier_flags imports this module and a
@@ -1929,15 +2019,28 @@ def quantifier_correction(hits: list[dict[str, Any]]) -> str:
 _QUOTE_LIMIT = 240
 
 
-def quantifier_reason(hits: list[dict[str, Any]], ids: list[int]) -> str:
+def quantifier_reason(hits: list[dict[str, Any]], ids: list[int],
+                      attempts: int | None = None) -> str:
     """Why the narrative was withheld, in the words the disclaimer will carry.
 
     The sentence itself, not a count of sentences. A reader who is told the
     narrative was withheld and not told what for has been handed a mystery
     instead of a report, and the person best placed to say the guard was
     wrong is the one reading the morning it fired.
+
+    attempts is how many answers the guard judged. Until 2026-09-02 the line
+    read "on both attempts" whatever the count, and a morning whose budget
+    allowed only one answer told the reader two had been refused.
     """
     first = hits[0]
+    if attempts is None:
+        when = "on every attempt"
+    elif attempts == 1:
+        when = "on its only attempt"
+    elif attempts == 2:
+        when = "on both attempts"
+    else:
+        when = f"on all {attempts} attempts"
     sentence = first["text"]
     if len(sentence) > _QUOTE_LIMIT:
         sentence = sentence[:_QUOTE_LIMIT].rstrip() + "..."
@@ -1950,8 +2053,8 @@ def quantifier_reason(hits: list[dict[str, Any]], ids: list[int]) -> str:
     # command belongs on the console and in analyst_usage.json, where the
     # operator is, and write_report prints it there.
     return (
-        f"the model asserted a quantifier over the candidate set on both "
-        f"attempts, matching {first['quantifier']!r} near {first['set_word']!r}{plural} "
+        f"the model asserted a quantifier over the candidate set {when}, "
+        f"matching {first['quantifier']!r} near {first['set_word']!r}{plural} "
         f'in "{sentence}" ({where})'
     )
 
@@ -2390,7 +2493,7 @@ def _bucket_legend(packet: dict[str, Any]) -> str | None:
         return None
     unscored = ((packet.get("score_roll") or {}).get("unscored") or [])
     return (
-        "Conviction is a band on the score and the band is its whole "
+        glossary.BAND_LEGEND_PREFIX + " and the band is its whole "
         "definition, first match wins: " + ", ".join(bands) + ", on a total "
         "that runs 0 to 10. A null score is unscored rather than red, because "
         "at least one component input was never observed, and unscored rows "
@@ -2454,8 +2557,11 @@ def annotate_gap_reasons(report_text: str, records, error) -> str:
     about this function specifically. It is not like every other annotation
     here: it is the ONLY one whose words a model writes, and being after the
     guard meant nothing checked them. It now runs inside _annotate_body and the
-    final pass in write_report reads it, so a quantified claim here does cost
-    this section, which is the point.]
+    final pass in write_report reads it, so a quantified claim here costs this
+    section when the guard is enforcing, in slots mode as in freeform, and is
+    said on the disclaimer when the guard is in warn mode. Until 2026-09-02
+    the slots branch of that pass attributed every late hit to Python and
+    published the explanation with a disclaimer saying so.]
     """
     if gap_reasons.HEADING in report_text:
         return report_text
@@ -2719,19 +2825,62 @@ def _late_hits(report_text: str,
     reason the register exists. Same quantifier, same matched word, and one
     sentence inside the other is one fault.
     """
+    return _hits_not_in(quantifier_violations(report_text), already)
+
+
+def _hits_not_in(hits: list[dict[str, Any]],
+                 already: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The hits that match nothing in already, by _late_hits' containment rule."""
     def parts(hit: dict[str, Any]) -> tuple[str, str, str]:
         return (" ".join(str(hit.get("text") or "").split()),
                 str(hit.get("quantifier") or ""), str(hit.get("set_word") or ""))
 
     seen = [parts(hit) for hit in already]
-    late: list[dict[str, Any]] = []
-    for hit in quantifier_violations(report_text):
+    out: list[dict[str, Any]] = []
+    for hit in hits:
         text, quantifier, word = parts(hit)
         if any(quantifier == q and word == w and (text in t or t in text)
                for t, q, w in seen):
             continue
-        late.append(hit)
-    return late
+        out.append(hit)
+    return out
+
+
+def _name_slots(hits: list[dict[str, Any]],
+                slot_texts: dict[str, str]) -> list[dict[str, Any]]:
+    """Each hit carrying the slot it was found in, and no line number.
+
+    In slots mode the loop scans the slot texts joined together, so the line
+    number a hit carries is a line of that joined string and of nothing on
+    disk. Until 2026-09-02 that number was logged as the flag's line, where
+    a reviewer opening the report to judge it found something else there.
+    The slot name is what the hit means; the line is dropped rather than
+    left to mislead.
+    """
+    out: list[dict[str, Any]] = []
+    for hit in hits:
+        text = " ".join(str(hit.get("text") or "").split())
+        named = dict(hit)
+        named["line"] = None
+        named["slot"] = next(
+            (marker.strip("{}") for marker, slot_text in slot_texts.items()
+             if text and text in " ".join(slot_text.split())), None)
+        out.append(named)
+    return out
+
+
+def _write_for_inspection(report_path: Path, usage_path: Path, text: str,
+                          usage: dict[str, Any]) -> None:
+    """A report that failed containment in the loop, written and never shipped.
+
+    Nothing is spliced into it: not the explanation pass, which is a CLI
+    call, and not an annotation, because the chain stops on the exit code
+    this precedes and nobody reads an annotated version of a report that
+    invented a ticker. Until 2026-09-02 the explanation call and every
+    annotation were spent on it anyway.
+    """
+    report_path.write_text(text, encoding="utf-8")
+    usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def write_report(packet_path: Path, overwrite: bool = False) -> int:
@@ -2809,6 +2958,28 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     warned_ids: list[int] = []
     slot_violations: list[str] = []
     final_slot_texts: dict[str, str] = {}
+    # Set when the loop's containment check refused the answer. The report
+    # is written for inspection and the step exits 2; nothing is spliced
+    # into it and no further CLI call is spent on it.
+    undeliverable: str | None = None
+    contained: tuple[list[str], list[str], dict[str, Any]] | None = None
+
+    if _skeleton is not None:
+        # Every `{{` in the skeleton must be a marker this module can read
+        # back. One it cannot, a `{{SETUP:BRK-B}}` before the marker class
+        # allowed a hyphen, was fixed text to check_slots: filled, the fit
+        # reported the fixed text as altered; left, it shipped literally.
+        # Refused here, before the model is asked, on the fallback path with
+        # the reason on the disclaimer.
+        unreadable = _skeleton.count("{{") - len(markers_in(_skeleton))
+        if unreadable:
+            attempts = 0
+            kind = "skeleton"
+            reason = (f"the skeleton carries {unreadable} brace pair(s) that are "
+                      "not readable slot markers, so a marker would have shipped "
+                      "as text or been reported as altered fixed text; the model "
+                      "was not asked")
+            print(f"analyst: {reason}")
 
     for attempt in range(1, attempts + 1):
         text, usage, error, kind = invoke_claude(packet_text, correction)
@@ -2858,6 +3029,8 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
         invented, _missing, coverage = check_report(text, packet_text)
         if invented or coverage["structure_failed"]:
             report_text = text
+            undeliverable = "invented_ticker" if invented else "structure_failed"
+            contained = (invented, _missing, coverage)
             break
 
         # In slots mode the guard reads what the MODEL wrote, the slot texts,
@@ -2866,8 +3039,12 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
         # violation is recorded as annotated and said on the disclaimer rather
         # than costing a narrative the model did not write. The first slots
         # hand run lost its narrative to a scan written gap sentence.
-        hits = quantifier_violations(
-            "\n".join(final_slot_texts.values()) if _skeleton is not None else text)
+        if _skeleton is not None:
+            hits = _name_slots(
+                quantifier_violations("\n".join(final_slot_texts.values())),
+                final_slot_texts)
+        else:
+            hits = quantifier_violations(text)
         if not hits:
             report_text = text
             break
@@ -2908,7 +3085,7 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             continue
         kind = "quantifier"
         cause = CAUSE_WITHHELD
-        reason = quantifier_reason(hits, ids)
+        reason = quantifier_reason(hits, ids, attempt)
         if attempt < attempts:
             reason += (f"; a regeneration was not attempted because the "
                        f"morning's budget of {_budget.total} CLI run(s) was "
@@ -2924,11 +3101,12 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
         # budget failure rather than the quantifier withholding it was.
         break
 
-    # The budget is this morning's and nothing after the loop spends it. Left
-    # set, a hand call to invoke_claude in the same process, which the suite
-    # makes, would be refused with a message about a morning that is over.
-    # The skeleton likewise: a later hand call composes the freeform document.
-    _budget = None
+    # The skeleton is this morning's and nothing after the loop fills it.
+    # Left set, a later hand call to invoke_claude in the same process, which
+    # the suite makes, would compose the slots document. The budget is
+    # cleared a little further down, after the explanation pass has READ it:
+    # nothing after the loop spends it, but gap_reasons.explain declines to
+    # start when the narrative spent every run and lost one to the clock.
     _skeleton = None
 
     if report_text is None:
@@ -2951,7 +3129,10 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
             "quantifier_flags": flags_raised or None,
         }
     else:
-        usage["status"] = "ok"
+        # The real status. Until 2026-09-02 a report the loop's containment
+        # check had refused was recorded as ok in analyst_usage.json, on a
+        # morning whose step exited 2 and delivered nothing.
+        usage["status"] = undeliverable or "ok"
         usage["fallback"] = False
         if warned:
             usage["quantifier_flags"] = flags_raised
@@ -2967,13 +3148,43 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     if slot_violations:
         usage["slot_violations"] = slot_violations
 
+    if undeliverable is not None and contained is not None:
+        # Written for inspection and nothing more. The chain stops on the 2
+        # this returns, so the explanation call and the annotations below
+        # would be spent on a page nobody is allowed to read.
+        _budget = None
+        invented, missing, coverage = contained
+        usage["generated_at"] = ettime.stamp(ettime.now_et())
+        usage["packet"] = str(packet_path)
+        usage["containment"] = {**coverage, "invented": invented,
+                                "candidates_missing_from_report": missing}
+        usage["gap_reasons_error"] = (
+            "not run: the report failed containment in the narrative loop and "
+            "is not delivered, so no explanation call was spent on it")
+        usage_path, _usage_spared = artifacts.resolve(
+            run_directory / "analyst_usage.json", allow_overwrite, what="analyst")
+        _write_for_inspection(report_path, usage_path, report_text, usage)
+        if invented:
+            print("analyst: FAILED the containment check. These tickers are "
+                  "presented as tickers, exist in the universe, and are nowhere "
+                  "in the packet: " + ", ".join(invented))
+        else:
+            print("analyst: FAILED the containment check on structure. "
+                  + coverage["structure_reason"])
+        print(f"analyst: the report was written to {report_path} for inspection "
+              "but must not be delivered.")
+        return 2
+
     # WHY EACH NAME MOVED, in plain language and grounded in that name's own
     # headlines. A second CLI call, deliberately separate from the narrative:
     # it runs whether or not the narrative survived, because the fallback
     # morning needs the explanation at least as much as a narrated one does,
-    # and its failure costs this section and nothing else.
+    # and its failure costs this section and nothing else. The one morning it
+    # does not run is the one that spent every narrative run and lost one to
+    # the clock; explain reads the budget and says so in its section.
     reason_records, reason_usage, reason_error = gap_reasons.explain(
         packet.get("candidates") or [])
+    _budget = None
     if reason_usage:
         usage["gap_reasons"] = reason_usage
     if reason_error:
@@ -3044,35 +3255,40 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
         for hit in late:
             print(f"analyst:   line {hit.get('line')}: {hit.get('text')}")
         if enforcing and mode == MODE_SLOTS:
-            # In slots mode the slot texts were already judged clean, so a late
-            # hit is in text Python or the scan wrote: the skeleton's quoted
-            # gap sentences, most often. Withdrawing the model's explanation
-            # would repair nothing and cost the reader a section. The claim is
-            # said on the disclaimer, the flag is logged as annotated for the
-            # word list review, and the sentence to fix is in scan.py.
-            report_text = _append_to_disclaimer(
-                report_text,
-                f"a final check found {len(late)} quantified claim(s) about the "
-                "candidate set in text Python wrote, not in the model's prose; "
-                "they are logged for the word list review and published as written")
+            # In slots mode the slot texts were already judged clean, so a
+            # late hit is in one of two places, and until 2026-09-02 this
+            # branch called both the first. A hit that is ALSO in the body
+            # built without the model's explanation is in text Python or the
+            # scan wrote, the skeleton's quoted gap sentences most often:
+            # withdrawing the explanation would repair nothing, so the claim
+            # is said on the disclaimer, logged as annotated for the word
+            # list review, and the sentence to fix is in scan.py. A hit that
+            # is NOT in that body came from the explanation, the one section
+            # a model wrote, and takes the same repair freeform takes below.
+            from_model = _hits_not_in(late, quantifier_violations(without_model))
+            fixed = [hit for hit in late if hit not in from_model]
+            if from_model:
+                print(f"analyst: {len(from_model)} of the late claim(s) are in the "
+                      "explanation pass's prose; the section is withdrawn")
+                usage["gap_reasons_withheld"] = True
+                report_text = without_model
+            if fixed:
+                report_text = _append_to_disclaimer(
+                    report_text,
+                    f"a final check found {len(fixed)} quantified claim(s) about "
+                    "the candidate set in text Python wrote, not in the model's "
+                    "prose; they are logged for the word list review and "
+                    "published as written")
         elif enforcing:
             # The comparison body IS the repair. It is this report without the
             # model written section, and the section states why it is missing
             # rather than vanishing, on the same argument annotate_gap_reasons
-            # already makes about a dropped paragraph.
+            # already makes about a dropped paragraph. Nothing can remain
+            # after it: every late hit here was, by construction, absent from
+            # this body, and a check that it cleared was comparing the body
+            # against itself until 2026-09-02.
+            usage["gap_reasons_withheld"] = True
             report_text = without_model
-            still = _late_hits(report_text, quantifier_violations(without_model))
-            if still:
-                # Nothing left to withdraw. Said out loud rather than shipped
-                # quietly, because at this point the violation is in this
-                # module's own text and the suite is supposed to have caught it.
-                print("analyst: WITHDRAWING THE EXPLANATION DID NOT CLEAR THE "
-                      f"FINAL PASS; {len(still)} claim(s) remain and they are "
-                      "in text this file wrote")
-                report_text = _append_to_disclaimer(
-                    report_text,
-                    f"a final check found {len(still)} quantified claim(s) "
-                    "about the candidate set that were not validated")
         else:
             report_text = _append_to_disclaimer(
                 report_text,

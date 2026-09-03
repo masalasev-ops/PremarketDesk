@@ -49,6 +49,7 @@ from core import eodhd
 from core import ettime
 from core import store
 from ops import job_status
+from ops import market_today
 
 _CRIT = criteria.load()
 
@@ -110,8 +111,16 @@ class PriorClosesUnusable(RuntimeError):
     """The prior session's closes could not be fetched, or are the wrong day."""
 
 
-def prior_closes(api: eodhd.EodhdClient, expect_prior: str) -> dict[str, float]:
-    """Every US close for one NAMED session, in one call.
+def prior_closes(api: eodhd.EodhdClient, expect_prior: str
+                 ) -> tuple[dict[str, float], dict[str, Any]]:
+    """Every US close for one NAMED session, in one call, and the payload's record.
+
+    A ROW CARRYING ANOTHER DATE IS DROPPED ON ITS OWN, counted, and the whole
+    payload is refused only past CRITERIA [Midday] max_wrong_date_row_share.
+    Until 2026-09-02 one such row refused the whole pass, after the quota
+    preflight had already cleared the 2,751 credit sweep the pass was about to
+    spend nothing on. The record travels in the packet so a reader can see
+    how many rows were dropped and against what share.
 
     100 credits flat by [Quota costs] eod-bulk-last-day, and it covers the whole
     exchange rather than the universe, so the 359 names us-quote-delayed
@@ -132,25 +141,48 @@ def prior_closes(api: eodhd.EodhdClient, expect_prior: str) -> dict[str, float]:
             "publish rather than something to publish against a worse "
             "denominator")
     closes: dict[str, float] = {}
+    rows = 0
     wrong_date = 0
+    dropped: list[str] = []
     for row in result.data or []:
         code = str(row.get("code") or "").strip().upper()
         close = _f(row.get("close"))
         if not code or close is None:
             continue
+        rows += 1
         if str(row.get("date") or "").strip() != expect_prior:
             wrong_date += 1
+            if len(dropped) < UNPRICED_EXAMPLES:
+                dropped.append(f"{code}.US")
             continue
         closes[f"{code}.US"] = close
-    if wrong_date:
+    share = (wrong_date / rows) if rows else 0.0
+    limit = _CRIT.number("midday", "max_wrong_date_row_share")
+    if share > limit:
         raise PriorClosesUnusable(
-            f"{wrong_date:,} of the bulk rows for {expect_prior} carry a "
-            "different date, so the payload is not the session it was asked "
-            "for and no row from it may be used as a denominator")
+            f"{wrong_date:,} of the {rows:,} bulk rows for {expect_prior} carry "
+            f"a different date, {share:.2%} of the payload against a "
+            f"[Midday] max_wrong_date_row_share of {limit:.2%}, so the payload "
+            "is not the session it was asked for and no row from it may be "
+            "used as a denominator")
     if not closes:
         raise PriorClosesUnusable(
             f"the bulk payload for {expect_prior} carried no usable closes")
-    return closes
+    record = {
+        "rows": rows,
+        "wrong_date_rows": wrong_date,
+        "wrong_date_share": round(share, 6),
+        "max_wrong_date_row_share": limit,
+        "wrong_date_examples": dropped,
+        "wrong_date_note": (
+            f"{wrong_date:,} row(s) of the bulk payload carried a date other "
+            f"than {expect_prior} and were dropped on their own, so the names "
+            "they belong to have no denominator and are refused as unpriced "
+            "rather than measured against another session's close"
+            if wrong_date else
+            f"every row of the bulk payload carried {expect_prior}"),
+    }
+    return closes, record
 
 
 # A float, or None. A blank string is not a zero. The shared reading, see
@@ -399,7 +431,33 @@ def grade(pick: dict[str, Any], quote: dict[str, Any]) -> dict[str, Any]:
 UNPRICED_EXAMPLES = 12
 
 
-def session_elapsed(now: dt.datetime) -> float:
+class SessionNotOpen(RuntimeError):
+    """The run clock is before the open plus the grace, so nothing has elapsed."""
+
+
+def session_close(day: dt.date,
+                  details: dict[str, Any] | None = None) -> tuple[tuple[int, int], str]:
+    """((hour, minute), reason): when today's regular session ends.
+
+    From the exchange calendar's early close list, which ops.market_today
+    already reads for the trading day decision. On the day after Thanksgiving
+    the session ends at CRITERIA [Midday] early_close, 13:00, and a pro rate
+    against 16:00 there calls every name's pace 0.53 of what it is. A calendar
+    that cannot answer is said so and the regular close is assumed, which is
+    the same failure direction is_trading_day takes.
+
+    details is injectable for the suite; production reads the cached calendar.
+    """
+    early, reason = market_today.early_close(day, details)
+    if early:
+        return _CRIT.clock("midday", "early_close"), reason
+    if early is None:
+        reason = f"{reason}, so the regular close is assumed"
+    return _CRIT.clock("paper", "session_close"), reason
+
+
+def session_elapsed(now: dt.datetime,
+                    close: tuple[int, int] | None = None) -> float:
     """How much of the regular session has been traded, as a fraction of one.
 
     THE VOLUME FLOOR NEEDS THIS AND DID NOT HAVE IT UNTIL 2026-09-02. The
@@ -411,16 +469,30 @@ def session_elapsed(now: dt.datetime) -> float:
     moved 5 percent or more on 2026-09-02, and the owner, watching the same
     market, could see it was not finding anything.
 
-    Clamped into (0, 1]. Before the open there is no elapsed session and the
-    ratio would divide by nothing; after the close the day is whole and the
-    raw ratio is already right.
+    close is the session end as (hour, minute), from session_close on a real
+    run so an early close day divides by the session it has; left out, the
+    regular [Paper] session_close. After the close the day is whole and the
+    raw ratio is already right, so the fraction is capped at 1.
+
+    BEFORE THE OPEN PLUS [Midday] min_minutes_after_open THIS RAISES. Until
+    2026-09-02 it clamped to one minute of 390 instead, and a run before the
+    open would have multiplied every day_rvol by 390 and admitted the whole
+    universe; the caller refuses the movers list with the reason instead.
     """
     open_h, open_m = _CRIT.clock("backfill", "market_open")
-    close_h, close_m = _CRIT.clock("paper", "session_close")
+    close_h, close_m = close or _CRIT.clock("paper", "session_close")
     start = (open_h * 60) + open_m
     end = (close_h * 60) + close_m
     minute = (now.hour * 60) + now.minute
-    return min(1.0, max((minute - start) / (end - start), 1.0 / (end - start)))
+    grace = _CRIT.integer("midday", "min_minutes_after_open")
+    if minute < start + grace:
+        raise SessionNotOpen(
+            f"the run clock reads {now.hour:02d}:{now.minute:02d} ET and the "
+            f"session opens at {open_h:02d}:{open_m:02d}, so there is no elapsed "
+            f"session to pro rate volume against until {grace} minutes after "
+            "the open; the movers list is refused rather than measured against "
+            "a pace of one print")
+    return min(1.0, (minute - start) / (end - start))
 
 
 # The intraday volume curve is U shaped: heavy at the open, thin over lunch,
@@ -832,7 +904,7 @@ def build_packet(day: str | None = None,
 
     api = eodhd.client()
     expect_prior = prior_session(api, today)
-    closes = prior_closes(api, expect_prior)
+    closes, closes_record = prior_closes(api, expect_prior)
 
     quote_result = api.quote_delayed(symbols)
     raw = quote_result.data or {}
@@ -867,8 +939,21 @@ def build_packet(day: str | None = None,
                 "vendor did not answer for, not a quote missing a field")
         carry.append(grade(pick, quote))
 
-    movers, tally = rank_movers(quotes, named, subscribed, pooled,
-                                session_elapsed(now))
+    # The session this run is inside: its close from the calendar, its
+    # elapsed fraction from the clock, or a written refusal when the clock
+    # is before the open and there is nothing to pro rate against.
+    close, close_reason = session_close(today)
+    movers_refused: str | None = None
+    try:
+        elapsed: float | None = session_elapsed(now, close)
+    except SessionNotOpen as exc:
+        elapsed = None
+        movers_refused = str(exc)
+    if elapsed is None:
+        movers, tally = [], {"quoted": len(quotes), "admitted": 0,
+                             "not_measured": movers_refused}
+    else:
+        movers, tally = rank_movers(quotes, named, subscribed, pooled, elapsed)
     movers = movers[:LIST_SIZE]
     news_calls = attach_news(api, movers, today)
 
@@ -884,6 +969,7 @@ def build_packet(day: str | None = None,
         "configured_run_time": _CRIT.text("midday", "run_time"),
         "prior_session": expect_prior,
         "prior_closes_returned": len(closes),
+        "prior_closes_payload": closes_record,
         "build": config.build_identifier(),
         "quota_preflight": preflight,
         "price_source": {
@@ -960,7 +1046,12 @@ def build_packet(day: str | None = None,
                 "min_day_rvol": _CRIT.rule("midday", "min_day_rvol").describe(),
                 "min_price": _CRIT.rule("midday", "min_price").describe(),
             },
-            "session_elapsed": round(session_elapsed(now), 4),
+            "session_elapsed": round(elapsed, 4) if elapsed is not None else None,
+            "session_close": f"{close[0]:02d}:{close[1]:02d}",
+            "session_close_reason": close_reason,
+            # Null when the list was measured; the written reason when the run
+            # clock was before the open plus the grace and it was not.
+            "refused_reason": movers_refused,
             "day_rvol_note": PACE_NOTE,
         },
         "morning_context": context,

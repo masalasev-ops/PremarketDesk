@@ -243,7 +243,30 @@ def drift_between(stored: dict[str, Any], replayed: dict[str, Any]) -> dict[str,
     return {"fields": fields, "components": components}
 
 
-def decompose(row: dict[str, Any]) -> dict[str, Any]:
+def window_open_for(day: str, packet: dict[str, Any] | None) -> tuple[str, str]:
+    """(the ET clock the collector's window opened on this session, its source).
+
+    THE ROW'S OWN WINDOW, never today's knob. [Collector] start_time moved
+    from 07:20 to 04:00 on 2026-09-02 and every archived row was measured
+    under 07:20, so reading the knob would describe every one of them as a
+    numerator that started when the session did. The packet's
+    collector_window_observed records the start the morning was scheduled
+    for; the collector's own sidecar records when it opened; the knob is
+    the answer only for a session that left neither, and the source says so.
+    """
+    from collect import collect_premarket
+
+    observed = ((packet or {}).get("collector_window_observed") or {})
+    scheduled = observed.get("scheduled_start_et")
+    if scheduled:
+        return str(scheduled), "packet collector_window_observed.scheduled_start_et"
+    recorded = collect_premarket.window_open_hhmm(day)
+    if recorded:
+        return recorded, "collector subscriptions sidecar window_open_at"
+    return COLLECTOR_START, "[Collector] start_time as it stands today, no record for the session"
+
+
+def decompose(row: dict[str, Any], window_open: str | None = None) -> dict[str, Any]:
     """Split pm_rvol_true / pm_rvol into the window, the feed and the baseline.
 
     THE SUBSTITUTION SWAPS A WINDOW, NOT ONLY A TAPE, and the two halves have
@@ -295,6 +318,22 @@ def decompose(row: dict[str, Any]) -> dict[str, Any]:
     else:
         out["total_ratio"] = row["pm_rvol_true"] / row["pm_rvol"]
 
+    # SECOND, and still before the numerator lookup, for the same reason as
+    # the total ratio above it: the window factor needs collector_window_share
+    # and nothing else, and it sat below the early return until 2026-09-02,
+    # so the pre-correction slice, which is exactly the slice with no readable
+    # numerator, published its window half as null with a reason about the
+    # numerator, which it does not need.
+    share = row["collector_window_share"]
+    opened = window_open or COLLECTOR_START
+    if share in (None, 0):
+        out["reasons"]["window_factor"] = (
+            "collector_window_share is null or zero, so how much of the "
+            f"{BASELINE_START} to cutoff volume sat inside the collector's "
+            f"{opened} start is not measured for this row")
+    else:
+        out["window_factor"] = 1.0 / share
+
     if row["pm_volume_estimated"] is not None:
         numerator, column = row["pm_volume_estimated"], "pm_volume_estimated"
     elif row["pm_volume"] is not None:
@@ -317,15 +356,6 @@ def decompose(row: dict[str, Any]) -> dict[str, Any]:
             "cannot be recovered from it")
     else:
         out["published_baseline_median"] = numerator / row["pm_rvol"]
-
-    share = row["collector_window_share"]
-    if share in (None, 0):
-        out["reasons"]["window_factor"] = (
-            "collector_window_share is null or zero, so how much of the "
-            f"{BASELINE_START} to cutoff volume sat inside the collector's "
-            f"{COLLECTOR_START} start is not measured for this row")
-    else:
-        out["window_factor"] = 1.0 / share
 
     socket_window = row["true_volume_socket_window"]
     if socket_window is None:
@@ -385,17 +415,21 @@ def build_rows(picks: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
             continue
 
         candidates = {c["symbol"]: c for c in packet["candidates"]}
+        window_open, window_source = window_open_for(day, packet)
         sessions.append({
             "date": day, "resolved": True, "refusal_reason": None,
             "picks_rows": len(rows), "packet_candidates": len(candidates),
             "run_time_et": packet.get("run_time_et"),
             "rvol_cutoff_hhmm": packet.get("rvol_cutoff_hhmm"),
+            "collector_window_open": window_open,
+            "collector_window_source": window_source,
         })
         for row in rows:
             record: dict[str, Any] = {
                 "date": day, "ticker": row["ticker"],
+                "collector_window_open": window_open,
                 "raw": {k: row[k] for k in PICKS_COLUMNS},
-                "decomposition": decompose(row),
+                "decomposition": decompose(row, window_open),
             }
             candidate = candidates.get(row["ticker"])
             if candidate is None:
@@ -603,18 +637,39 @@ def substitution_report(records: list[dict[str, Any]]) -> dict[str, Any]:
     replayable = [r for r in records if r["decomposition"] is not None]
     pre = [r for r in replayable if r["raw"]["pm_volume_estimated"] is None]
     post = [r for r in replayable if r["raw"]["pm_volume_estimated"] is not None]
+    # THE WINDOW REGIME IS A SECOND SPLIT, beside the capture correction one
+    # and not instead of it. Each row carries the clock its collector opened
+    # at, read per session by window_open_for, and rows measured under
+    # different starts are different numerators: pooling a 07:20 row with a
+    # 04:00 one publishes a window factor that describes neither.
+    opens = sorted({r["collector_window_open"] for r in replayable
+                    if r.get("collector_window_open")})
+    by_window = {
+        f"collector_started_{opened.replace(':', '')}": slice_of(
+            [r for r in replayable if r.get("collector_window_open") == opened],
+            f"collector window opened at {opened}",
+            f"rows whose session's collector opened at {opened}, from the packet "
+            "or the collector's sidecar, so the published numerator on every "
+            f"row here starts at {opened}")
+        for opened in opens}
     return {
         "premarket_capture_rate_in_force": CAPTURE_RATE,
         "window_definition": {
-            "published_numerator_starts": COLLECTOR_START,
+            "published_numerator_starts": (
+                "per row: collector_window_open on each record, the clock that "
+                "session's collector opened at, split out below"),
+            "collector_start_time_today": COLLECTOR_START,
             "published_denominator_starts": BASELINE_START,
             "true_numerator_starts": BASELINE_START,
             "true_denominator_starts": BASELINE_START,
-            "note": ("the published ratio divides a "
-                     f"{COLLECTOR_START} to cutoff numerator by a "
+            "note": ("the published ratio divides a numerator starting at the "
+                     "row's own collector window open by a "
                      f"{BASELINE_START} to cutoff baseline, so it is bounded "
                      "below by construction and the window half of the gap is "
-                     "arithmetic rather than a numerator the night contradicts"),
+                     "arithmetic rather than a numerator the night contradicts. "
+                     "The window half needs only collector_window_share, so it "
+                     "is computed for the pre-correction slice too; the feed "
+                     "half needs a published numerator and is not"),
         },
         "all_replayable": slice_of(replayable, "all replayable rows",
                                    "every row whose session survived the run time guard"),
@@ -626,6 +681,7 @@ def substitution_report(records: list[dict[str, Any]]) -> dict[str, Any]:
             post, "pm_volume_estimated is present",
             "published under the shipped capture correction, which is the screen "
             "that runs today"),
+        **by_window,
     }
 
 

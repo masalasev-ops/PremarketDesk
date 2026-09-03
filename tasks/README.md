@@ -39,11 +39,11 @@ reason it was noticed is that a test happened to read it.
 
 | Job | Time (ET, machine local) | Days | What it runs |
 | --- | --- | --- | --- |
-| job_discover.bat | 07:15 | Mon to Fri | discover.py builds and ranks the candidate pool, then baseline.py warms the RVOL cache for the subscribed names only, not the whole pool |
-| job_collector.bat | 04:00 | Mon to Fri | collect_premarket.py, runs to the 09:25 stop time. Since 2026-08-24 it REFUSES a watchlist that was not written today and exits non zero, rather than subscribing to the context tickers alone and looking healthy while it does. It takes one optional argument, `stale-watchlist-ok`, and only monitor_jobs passes it: past the last pass that could rerun discover inside the window, CRITERIA decides possibly wrong names beat no tape, and the flag is how that branch says it knows. See CRITERIA.md [Monitor], the stale watchlist note |
+| job_discover.bat | 03:55 and 07:15 | Mon to Fri | one task with two triggers. discover.py builds and ranks the candidate pool, then baseline.py warms the RVOL cache for the subscribed names only, not the whole pool, on each pass. The 03:55 pass writes the provisional pool the 04:00 collector opens on; the 07:15 pass is the one the morning screens, and the collector moves onto it at the 07:20 handover |
+| job_collector.bat | 04:00 | Mon to Fri | collect_premarket.py, runs to the 09:25 stop time on the 03:55 pool, rereading the watchlist from 07:20 and resubscribing when a new pool appears. A watchlist that is not today's is not subscribed to: since 2026-09-02 the run WAITS for today's file until the 07:20 handover, checking on the handover's own cadence, and refuses and exits non zero only if nothing has arrived by then, rather than subscribing to the context tickers alone and looking healthy while it does. Until 2026-09-02 it refused at once. The wait is asked for with `--wait-for-watchlist`, which this .bat passes and a hand run does not, so nothing run by hand can sit in it. It takes one optional argument, `stale-watchlist-ok`, and only monitor_jobs passes it: past the last pass that could rerun discover inside the window, CRITERIA decides possibly wrong names beat no tape, and the flag is how that branch says it knows. See CRITERIA.md [Monitor], the stale watchlist note |
 | job_morning_chain.bat | 08:45 | Mon to Fri | scan.py, analyst.py, render_report.py, verify_morning.py, deliver.py, build_archive.py, stopping on the first failure. verify_morning.py is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver.py |
-| job_nightly.bat | 22:15 | Mon to Fri | TEN steps, in this order, and the list is closed: market_today.py as the trading day guard, market_today.py --refresh to renew the cached exchange calendar so the 08:45 chain never has to fetch it, backup_evidence.py to copy the two artifacts that cannot be rebuilt to somewhere outside the tree, backfill_premarket.py, fill_outcomes.py, true_volume.py to measure what premarket volume actually was from Alpaca's full SIP tape, pool_recall.py to measure what the morning's pool missed against every universe name that actually gapped, prune_data.py which is the only scheduled step in this project that DELETES anything and deletes only what its whitelist names, weekly_page.py, then build_archive.py so a broken morning still gets archived that evening. The refresh never fails the chain: a stale calendar is survivable, a failed refresh leaves yesterday's holiday list in place, and the morning records that it is stale. [corrected 2026-08-22: this listed five of the steps and named neither the backup nor the deletion, which are the two a reader most needs to know are happening] [corrected 2026-08-24: said NINE over a list of ten, which is what the .bat actually invokes; the trading day guard was being counted as free] |
-| job_nightly.bat (again, as nightly-catchup) | 07:00 | Mon to Fri | the same .bat called with the argument "catchup", which runs the vendor lag half only: the trading day guard, the calendar refresh, backup_evidence.py, backfill_premarket.py and fill_outcomes.py, then stops. The five it skips are true_volume.py, pool_recall.py, prune_data.py, weekly_page.py and build_archive.py. The vendor usually publishes intraday overnight, so this fills yesterday via the catch-up sweep and finishes the volume verification before the new morning's collection is trusted. pool_recall.py and build_archive.py are skipped, because pool_recall measures the session it is invoked ON: until 2026-08-20 this firing asked for a session that had not opened and wrote gapped 0, addressable 0, recall 0.0 over the real measurement the 22:15 pass had taken |
+| job_nightly.bat | 22:15 | Mon to Fri | ELEVEN steps, in this order, and the list is closed: market_today.py as the trading day guard, market_today.py --refresh to renew the cached exchange calendar so the 08:45 chain never has to fetch it, backup_evidence.py to copy the six artifacts that cannot be rebuilt (the collector's capture, its stats and subscriptions sidecars, the packet, and the report in markdown and HTML) plus a dated snapshot of the quantifier flag log to somewhere outside the tree, backfill_premarket.py, fill_outcomes.py, true_volume.py to measure what premarket volume actually was from Alpaca's full SIP tape, paper_ledger.py to book the one written [Paper] rule against the levels that step just measured, pool_recall.py to measure what the morning's pool missed against every universe name that actually gapped, prune_data.py which is the only scheduled step in this project that DELETES anything and deletes only what its whitelist names, weekly_page.py, then build_archive.py so a broken morning still gets archived that evening. The refresh never fails the chain: a stale calendar is survivable, a failed refresh leaves yesterday's holiday list in place, and the morning records that it is stale. [corrected 2026-09-02: said TEN and omitted paper_ledger.py, which the .bat has run after true_volume.py since 2026-08-29, and said the backup copies two artifacts where _ARTIFACTS holds six] [corrected 2026-08-22: this listed five of the steps and named neither the backup nor the deletion, which are the two a reader most needs to know are happening] [corrected 2026-08-24: said NINE over a list of ten, which is what the .bat actually invokes; the trading day guard was being counted as free] |
+| job_nightly.bat (again, as nightly-catchup) | 07:00 | Mon to Fri | the same .bat called with the argument "catchup", which runs the vendor lag half only: the trading day guard, the calendar refresh, backup_evidence.py, backfill_premarket.py and fill_outcomes.py, then stops. The six it skips are true_volume.py, paper_ledger.py, pool_recall.py, prune_data.py, weekly_page.py and build_archive.py. The vendor usually publishes intraday overnight, so this fills yesterday via the catch-up sweep and finishes the volume verification before the new morning's collection is trusted. pool_recall.py and build_archive.py are skipped, because pool_recall measures the session it is invoked ON: until 2026-08-20 this firing asked for a session that had not opened and wrote gapped 0, addressable 0, recall 0.0 over the real measurement the 22:15 pass had taken |
 | job_midday.bat | 12:00 | Mon to Fri | scan_midday.py then render_midday.py. Grades every live picks row against the levels the morning published, and sweeps the whole universe for names that moved today and were never named at 08:45. No model runs: the report is rendered from the packet, because midday asks closed questions. The hour is chosen, not convenient: us-quote-delayed's REGULAR hours behaviour is what was measured and its premarket behaviour is untested. It costs about 2,900 credits a session, almost all of it the per symbol universe sweep, and the preflight refuses rather than truncating because half a universe is not a market wide scan. See CRITERIA.md [Midday] |
 | job_universe.bat | 21:00 | Sunday | universe.py weekly rebuild, then gap_stats.py over every name in it. The gap statistics step is the larger of the two, one counted call per universe name, measured at 2,745 calls and 421 seconds on 2026-08-13 when the universe held that many, and it produces the gap propensity discover ranks the pool by. Not 20:00: that was the exact instant of the 00:00 UTC quota reset, so which quota day the largest job in the schedule billed to was a coin toss. Not 20:30 either: the vendor's counter rolled 30 to 32 minutes late on 2026-08-16 |
 | job_monitor.bat | 07:25, repeating every 30 min until 09:25; 12:25, 12:55 and 13:25; and once at 22:45 | Mon to Fri | monitor_jobs.py, the watchdog: checks that each job fired and finished, reruns what is safe. The midday passes were added 2026-08-31, when the 12:00 job had been running watched by nothing: the morning trigger stops at 09:25 and monitor-night is at 22:45, so a midday failure was first named by the NEXT morning's report about eighteen hours later. Three passes and not one, because CRITERIA [Monitor] job_log_stale_after_s is 2,200 seconds and a midday that hung after writing its log at 12:00 is still warm at 12:25. midday is the one job the watchdog reports and never reruns: the sweep spends about 2,900 credits on the shared key and a relaunch would replace the packet it may already have written |
@@ -53,8 +53,11 @@ reason it was noticed is that a test happened to read it.
 
     powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
 
-Remove them all again with `-Unregister`, which also removes all three one
-off probes if they are armed. The times come from the clocks in `doc\CRITERIA.md`. If a
+Remove them all again with `-Unregister`, which also removes the one off probe
+tasks if they are armed. The times come from the clocks in `doc\CRITERIA.md`,
+including [Discovery] provisional_run_time = 03:55 for discover's first
+trigger, and monitor_jobs checks the register script's `$jobs` starts against
+those clocks on every pass. If a
 clock there changes, change the register script to match and re-register.
 
 In the Task Scheduler GUI the jobs live in their own folder: Task Scheduler
@@ -95,8 +98,11 @@ were registered, the tree does not refresh itself.
 - The watchdog's rerun policy lives in CRITERIA.md [monitor]. In short: the
   morning chain and the nightly are idempotent and get rerun automatically
   (at most once per day each), a dead collector is restarted only while its
-  window is open and no collector is alive, discover is rerun until the
-  collector has written its subscription list and never after, and a missed
+  window is open and no collector is alive, discover is rerun whenever its
+  last run did not finish and a rewrite of the watchlist is free, which it is
+  while no subscription list has been written today and, once one has, while
+  the collector is still rereading the watchlist, until its 09:25 stop time,
+  so all morning, and a missed
   Sunday universe build is caught
   on a later weekday morning rather than the next one: the rerun triggers on
   universe.json's age against CRITERIA [monitor] universe_rerun_after_days,
@@ -110,13 +116,16 @@ were registered, the tree does not refresh itself.
 
 ## One off probes
 
-Three .bat files in this folder are NOT scheduled steps. Each answers a single
+Two .bat files in this folder, job_probe_socket_cap.bat and
+job_probe_capture.bat, are NOT scheduled steps, and a third described below
+has been deleted. Each answers a single
 open question against a live session and is meant to be deleted once it is
-answered. None sets PMD_JOB, none writes a status record, and none
+answered. Neither sets PMD_JOB, neither writes a status record, and neither
 appears in CRITERIA.md [job status steps], because a step that is meant to stop
-existing does not belong in a list of steps the watchdog expects. None is in
+existing does not belong in a list of steps the watchdog expects. Neither is in
 the $jobs array, so a plain run of register_tasks.ps1 never resurrects one;
-each has its own dated flag, and `-Unregister` removes all three.
+each has its own dated flag, and `-Unregister` removes both, and the retired
+socket cost task's name with them if it is still registered.
 
 - `job_probe_socket_cost.bat`, added 2026-08-31, RUN on 2026-09-01 and DELETED
   the same day with its task, which is what its own header said to do once the
@@ -164,14 +173,23 @@ each has its own dated flag, and `-Unregister` removes all three.
       powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1 -Probe 2026-08-21
 
   That registers exactly one task, `\PremarketDesk\probe-socket-cap`, with one
-  trigger at 06:30 on the date given, and touches nothing else. 06:30 is
+  trigger at 06:30 on the date given, and touches nothing else. 06:30 was
   derived, not chosen: four cycles of two arms at 120s with 90s to settle is
-  28 minutes, the probe adds a 60s buffer before checking itself against
-  CRITERIA [Collector] start_time, and 06:30 finishes at 06:59 with 21 minutes
-  of slack. The task's execution time limit is 45 minutes so that Task
-  Scheduler's own kill also lands before 07:20 if the probe hangs rather than
-  exits. It wakes the machine, because the 2026-08-19 run was lost to a power
+  28 minutes, the probe adds a 60s buffer before checking itself against the
+  collector's window in CRITERIA, and 06:30 finished at 06:59 with 21 minutes
+  of slack against the 07:20 start the collector had when the arm was
+  written. The task's execution time limit is 45 minutes so that Task
+  Scheduler's own kill also landed before 07:20 if the probe hung rather than
+  exited. It wakes the machine, because the 2026-08-19 run was lost to a power
   outage at 06:20.
+
+  SINCE 2026-09-02 THAT ARM DOES NOT WORK. The collector's window is 04:00 to
+  09:25, so 06:30 falls inside it, and research/probe_socket_cap.py reads
+  [Collector] start_time and stop_time and refuses any run that would overlap
+  them: a task armed at 06:30 fires, prints the refusal and exits. The only
+  clock the probe will now accept is after 09:25, which is the regular hours
+  tape the cap half of its question needs anyway; `$probeStart` in
+  register_tasks.ps1 has to move before the arm is useful again.
 
   A plain run of register_tasks.ps1 never registers it. Everything in the $jobs
   array comes back on every refresh of the schedule, and this task is meant to

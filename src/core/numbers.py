@@ -20,9 +20,15 @@ _NOT_A_NUMBER_WORDS = frozenset({"", "NA", "N/A", "nan", "NaN", "null", "None"})
 
 
 def as_float(value: Any) -> float | None:
-    """A finite float, or None. Never raises."""
+    """A finite float, or None. Never raises.
+
+    A bool is None, not 0.0 or 1.0. bool is a subclass of int, so float(False)
+    is 0.0 and a vendor field that came back as false, which is how some of
+    them say "not available", read as a measured zero until 2026-09-02, in
+    the one function that exists to stop an absence reading as a number.
+    """
     if value is None or isinstance(value, bool):
-        return None if value is None else float(value)
+        return None
     if isinstance(value, str):
         text = value.strip()
         if text in _NOT_A_NUMBER_WORDS:

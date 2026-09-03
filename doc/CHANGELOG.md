@@ -15,6 +15,480 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-02, fiftieth: the analyst and the midday pass answer the standing review
+
+Eleven findings from the whole tree review, all in the narrative pass, its
+explanation call, the page and the 12:00 pass. Each is a case of the code
+doing less than the document beside it said, and each is fixed with the
+document corrected in the same pass.
+
+THE EXPLANATION PASS HAD NO CLOCK OF ITS OWN. gap_reasons.explain ran the
+claude CLI under [Analyst] timeout_s, 1,007 seconds, outside the RunBudget
+that holds the narrative to two runs, and analyst.write_report called it
+unconditionally. So the chain's true worst case was 08:45:00 plus 19 seconds
+plus THREE runs of 1,007, ending 09:35:40, past the 09:25 watchdog pass, while
+the timeout note computed 09:18:53 and said a third run was not reachable.
+Nothing took that path: the call measures about 20 seconds. It now runs under
+[Analyst] gap_reasons_timeout_s, 60, the same three times the slowest
+measurement rule timeout_s runs on, and it is not started at all on a morning
+whose narrative spent every run and lost one of them to the timeout, with the
+reason written where the section would be. RunBudget counts its timeouts to
+say so. The worst case is 09:19:53 and the note says so, with the margin
+against the 09:25 pass corrected from six minutes to five. The rule is
+narrower than "skip when the budget is spent" on purpose: a first answer
+flagged and a regeneration accepted spends both runs at about 08:50, and
+withholding the explanation there would cost the reader a section on exactly
+the mornings the guard worked.
+
+The same function never named a company. It read candidate.name and
+candidate.instrument_name, neither of which the packet has ever carried, so
+every gapper went to the model as "name not recorded" while the name sat at
+candidate.quote.name. And its output went into the markdown raw: a newline
+followed by `#` or `|` in a model's sentence or a cited headline would have
+opened a heading or a table row inside the section. Both are flattened to one
+line with pipes escaped, as the renderers' _cell already does.
+
+THE FINAL GUARD PASS BLAMED PYTHON FOR EVERYTHING. In slots mode, enforcing,
+the pass over the finished body attributed every late quantifier hit to text
+Python wrote, on the argument that the slot texts had already been judged
+clean, and shipped the model written explanation with a disclaimer saying so.
+The explanation is the one section a model writes and the only one the
+narrative loop never sees. Late hits are now split by whether they also occur
+in the body built without the explanation: those that do are Python's or the
+scan's and take the disclaimer as before; those that do not came from the
+explanation and withdraw it, the same repair freeform takes. The `still` check
+under the freeform repair compared without_model against itself and could not
+fire; it is gone. annotate_gap_reasons' docstring said a quantified claim
+"does cost this section", which was true of one mode.
+
+THE SLOTS HAD NO SHAPE. check_slots took everything between two fixed segments
+as the slot's text, so a paragraph the model wrote after its mood phrase or
+under a setup shipped inside the slot with nothing said, and SETUP was checked
+for the invalidation lead in with `in`, which a paragraph after it passed.
+MOOD is now one line of at most [Analyst] mood_max_words, 10; HEADLINE and
+RATES are one paragraph; SETUP ends on the line carrying the lead in. Each
+violation names the slot and the rule, and prompt_slots.md tells the model.
+The marker class also had no hyphen, so `{{SETUP:BRK-B}}` was fixed text:
+filled, the fit reported the fixed text altered; left, it shipped literally.
+The class takes a hyphen, and write_report counts the skeleton's brace pairs
+against the markers it can read and refuses the skeleton on the fallback path,
+with the reason on the disclaimer, before the model is asked.
+
+THE SCRUB WAS ONE KEY WIDE. config.FORBIDDEN_KEYS held ANTHROPIC_API_KEY
+alone while analyst's docstring promised the subprocess environment was
+scrubbed. ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, ANTHROPIC_MODEL,
+CLAUDE_CODE_USE_BEDROCK and CLAUDE_CODE_USE_VERTEX would each have changed
+what answered the call or what paid for it. All six are refused by config.get,
+dropped from .env with the stderr line reworded, and absent from the CLI's
+environment.
+
+Four smaller ones in analyst. A `subtype: success` answer with an empty result
+returned as a success and the loop broke out with the budget's second run
+unspent; it is a failed attempt and is retried. quantifier_reason said "on
+both attempts" whatever the count and now counts the answers it judged. A
+report the loop's containment check refused was recorded in analyst_usage.json
+as status ok on a morning that exited 2, and the explanation CLI call and every
+annotation were spent on it first; it is written for inspection with status
+invented_ticker or structure_failed and nothing more is spent. And in slots
+mode the flag log recorded hit["line"] over the slot texts joined together, a
+line of nothing on disk; the record carries the slot name and a null line.
+
+THE PAGE KEPT LEGENDS UNDER NOTHING. The renderer removes a watchlist table
+whose only row is `none`, and left the "Reading the columns" line and the
+conviction band definition standing under it. Both go with the table, found
+by the prefixes glossary now names for both, and both stay under a real table.
+
+THE MIDDAY CLOCK. session_elapsed read a fixed 16:00 close, so on the day
+after Thanksgiving it would have called a normal noon pace 0.53 of a session
+that ends at one, and before the open it clamped to one minute of 390, which
+would have multiplied every day_rvol by 390 and admitted the universe. The
+close now comes from the exchange calendar's early close list through
+ops.market_today.early_close, [Midday] early_close 13:00 on such a day, and a
+run before [Backfill] market_open plus [Midday] min_minutes_after_open, 5,
+refuses the movers list with the reason where the list would be and grades
+the picks as usual. And prior_closes refused the whole 12:00 pass over ONE
+bulk row carrying another date, after the preflight had cleared the sweep;
+wrong date rows are dropped on their own, counted and named in the packet
+under prior_closes_payload, and the payload is refused only past [Midday]
+max_wrong_date_row_share, 0.01.
+
+Claims: claim_the_explanation_pass_has_its_own_clock,
+claim_a_slot_keeps_its_shape, claim_a_hyphenated_ticker_is_a_slot,
+claim_the_cli_environment_is_scrubbed_of_every_override,
+claim_the_explanation_cannot_open_a_heading,
+claim_a_collapsed_table_takes_its_legends,
+claim_an_empty_success_is_a_failed_attempt,
+claim_an_undeliverable_report_spends_nothing_more,
+claim_a_late_hit_from_the_explanation_withdraws_it, and in test_midday
+claim_relative_volume_is_measured_against_the_session_so_far rewritten to
+assert the refusal it used to assert the clamp for,
+claim_a_wrong_date_row_is_dropped_and_not_the_whole_payload and
+claim_a_refused_movers_list_says_so_on_the_page. Suite green, criteria
+--check 0 defects.
+
+## 2026-09-02, forty ninth: the night and the research modules catch up with what they measure
+
+A verified review of the night jobs, the core and the research modules found
+nineteen things that were computed and then dropped, read from a knob the
+session never ran under, gated on a literal, or spent a vendor call a night
+to be refused again. Each is fixed here and each carries a claim.
+
+THE BACKFILL DROPPED THE SPLIT IT COMPUTED. backfill_premarket._true_path
+has returned pm_high_collector_window and its four siblings since
+2026-08-28, and the phase 3 UPDATE wrote the four full window columns and
+none of the five, so every backfilled row on disk holds the total gap and
+not its halves, and _gap_report printed every night that the feed and window
+halves could not be separated. The UPDATE writes all nine now, and the
+catch-up also refills rows carrying a true high and no pm_collector_window,
+inside the same [Backfill] catchup_days limit, unfilled days first.
+
+THE WEEKLY PAGE HAD FOUR STATES TO THE LEDGER'S FIVE. paper_ledger counts an
+EXIT_OPEN_AT_END row apart from a sizing refusal; weekly_page._trigger_state
+folded it into "triggered and not booked", so the first such row made the
+page print that its split no longer matched the ledger's. STATE_OPEN_AT_END
+exists, sits inside TRIGGER_FIRED because the trade entered, and is compared
+against the ledger's open_at_session_end count on every rendering. The same
+page grouped by gap bands of 5 and 8 written into it against the 4 and 8 in
+CRITERIA [Score gap], so one row pooled names the score had put in two
+bands; gap_band_labels now reads the bands off the file. And its quota
+margin card coloured against a literal 5000, a second copy of [Quota]
+degrade_below_remaining that would not have moved; it reads the key.
+
+TWO DEFINITIONS OF THE BASELINE, ONE NAME. collect/baseline.py keeps a
+genuine zero premarket session for pm_rvol's denominator; the true baseline
+in true_volume.prior_sessions appended only the sessions a symbol had its
+own bars on, so pm_rvol_true divided a thin name's volume by a median over
+its busy days alone. Every symbol now gets a value on every session any
+symbol had a bar, zero where it printed nothing, and replay_session keeps
+the same zeros. Alongside it, every window built on the tape was one bar
+too wide: Alpaca treats `end` as inclusive and stamps a bar at its open, so
+a window to 08:45 carried the 08:45 bar the morning's accumulator never
+sees. fetch_bars drops a bar stamped at or past the end for every caller,
+and float_rotation_study's own fetch applies the same test.
+
+THE SOCKET WINDOW IS PER NAME. The two phase collector subscribes the
+03:55 provisional pool at 04:00 and the 07:15 pool at the 07:20 handover, so from 2026-09-03
+one socket window for every name understated capture_observed for the late
+names by dividing what they captured by tape they were never subscribed
+for. true_volume.socket_open_hhmm reads each name's open from the sidecar's
+subscribed_since, then picks.pm_window_start, then the session's
+window_open_at, then the knob, and the names are fetched in groups sharing
+an open: one request on every session before the change, two from then.
+The printout names the windows it measured, "04:00/07:15-08:45" on a two
+phase morning, instead of the 07:20 three of its sentences remembered, and
+the fold spread is printed whenever it exists rather than past a 2.0 that
+was a threshold this file does not own.
+
+FOUR REFUSALS THAT WERE NOT. eodhd.intraday handed a 200 JSON object on as
+rows, so backfill iterated its keys as bars and raised; it refuses a non
+list the way eod does. pool_recall would have published a zero recall for a
+bulk payload in which no row carries a code; it raises NotMeasurable.
+core.numbers.as_float(False) returned 0.0 because bool is int; a bool is
+None. And fill_outcomes.fill_pick_day selected on a null pick_day_close,
+which is also what a row the vendor has no bar for looks like, so such a
+row cost one end of day call a night forever; picks gains
+pick_day_refused_reason on the day5_refused_reason precedent, stamped once
+when the vendor answers with no bar and never for a vendor error.
+
+TWO SMALLER ONES. config.ca_bundle wrote the merged bundle with one
+attempt, so an antivirus hold raised out of every job's TLS setup; it
+retries like deliver and monitor_jobs do. prune_data called
+job_status.produced twice and only the second was recorded, so the record
+carried bytes and never the file count; one call carries both.
+
+THE RESEARCH MODULES. replay_session divided by any positive median where
+the live scan asks baseline.usable_for_rvol, so a replayed name could clear
+the screen off three sessions or a hundred shares; it builds the row that
+function reads and nulls pm_rvol with the morning's reason. It handed
+apply_cap a tier floor of zero, strict priority, against production's
+[Discovery] min_slots_per_tier, and ranked on the newest gap_stats window,
+which was computed partly from the session being replayed; metrics_before
+takes the newest as_of strictly before the day, refuses a day with none, and
+the tape cache and the notes record that as_of and the universe's
+generated_at. cutoff_0830 held 08:45 and 08:30 as literals and ran
+store.init against the live table from a research module; both clocks
+derive from [Scan] run_time and [Truth] documented_lag_minutes and the read
+is read only. float_rotation_study fetched the numerator and baseline
+windows separately with both starts at 04:00, doubling every session's
+requests; one fetch serves both when the starts agree and the payload
+states the regime. counterfactual_watchlist computed the window factor
+below the numerator early return, so the pre-correction slice lost the one
+factor that needs no numerator, and described every archived row with
+today's [Collector] start_time; the window factor comes first, each row
+carries the clock its own collector opened at, and the report slices on it.
+sweep_capture_rate's 0.5 quantile was nearest rank and disagreed with the
+median printed beside it; it is the median, and candidates C and D say they
+are in sample.
+
+Two research notes corrected in place: COUNTERFACTUAL_WATCHLIST.md said
+both halves were uncomputable for the pre-correction slice when it was the
+code returning early, and CAPTURE_RATE.md's collector window now ends at
+the 08:45 cutoff rather than 09:25.
+
+Claims: claim_the_backfill_writes_the_split_it_computed,
+claim_the_score_watch_counts_an_open_at_end_row_as_the_ledger_does,
+claim_the_true_baseline_keeps_the_zero_sessions,
+claim_a_window_excludes_its_cutoff_bar,
+claim_an_intraday_object_is_refused_not_iterated,
+claim_a_bool_is_not_a_number, claim_the_ca_bundle_write_is_retried,
+claim_the_prune_record_carries_both_facts,
+claim_the_truth_report_names_the_window_it_measured,
+claim_a_pick_day_the_vendor_never_serves_is_refused_once,
+claim_the_replay_applies_the_morning_baseline_floors,
+claim_the_replay_ranks_the_pool_as_the_morning_would,
+claim_the_cutoff_study_derives_its_clocks,
+claim_the_float_study_fetches_one_window_when_the_starts_agree,
+claim_the_window_half_is_computed_before_the_numerator,
+claim_the_sweep_median_is_the_median,
+claim_the_score_watch_groups_by_the_score_gap_bands,
+claim_the_socket_window_is_per_name. claim_one_reading_of_a_number's table
+now expects None for True, and the score watch grouping claim reads its
+expected bands off CRITERIA. criteria --check 0 defects.
+
+## 2026-09-02, forty eighth: discover tiers the untimed calendar row, and asks the feed in its own dates
+
+A whole tree review, the same one as the forty fifth to forty seventh. Three
+defects in selection/discover.py and a docstring that claimed the opposite
+of what the code does.
+
+THE UNTIMED ROW. The earnings source kept a BeforeMarket row dated today and
+an AfterMarket row dated the prior session, and dropped everything else. The
+vendor leaves before_after_market null on about one row in twenty: 6 of the
+127 calendar rows in the packets on disk, NPK, NB, TGS, SA and ANAB among
+them. Such a name reached the pool only through the news sweep, at tier 2
+or 3. It is the same prior with less precision, so [Pool tiers] gains
+earnings_timing_unknown at tier 1 for a null timing dated inside the
+window, the row records timing "unknown", and a known timing is never
+overwritten by an unknown one. The source also reads the vendor's `date`
+when `report_date` is absent, which is what scan.earnings already did.
+
+THE FEED'S DATES. overnight_news asked the feed for the ET dates of its
+window. The vendor filters from and to on UTC dates, so a run after 20:00
+ET asked for the wrong last day and lost everything published between
+20:00 and midnight. It cannot bite the 03:55 or 07:15 pass; it bit every
+evening hand run, which is how the sweep is measured. The window's
+instants are converted to UTC before their dates are taken.
+
+THE DOCSTRING. rank_value's said the fallback band existed so that newly
+listed names would not rank last, and quoted SECZ. The code ranks the
+fallback band below every measured propensity, which is what CRITERIA's
+null note says and what happened on 2026-09-02: the four null propensity
+tier 2 names sat at ranks 251 to 254 of a tier ending at 254. The docstring
+now says what the code does and why interleaving is left unmeasured. The
+recent_runner_decay comment in CRITERIA claimed the weight orders tier 5;
+it is recorded on the row and orders nothing, and the comment says so. The
+module docstring said one pass at 07:15 and a within tier key of dollar
+volume; both were two changes stale. The path written into every watchlist's
+ranking record pointed at src/backtest_pool.py, which is
+src/research/backtest_pool.py.
+
+Claims: test_pool.claim_two_and_three gains the untimed row, inside and
+outside the window, and the precedence of a known timing.
+
+## 2026-09-02, forty seventh: a stale print is flagged and screened, not dropped, and the window is per name
+
+The scan half of the review. Four defects, two of them live from
+2026-09-03 and two that had been costing candidates since 2026-08-19.
+
+THE STALE DROP. [Price age] max_price_age_seconds removed any candidate
+whose last collector print was older than 900 seconds at the scan clock,
+and the packet listed it with no price and no gap. The seed's own comment
+said to widen it if liquid names were cut. They were: 36 candidates over
+ten archived sessions, most of them tier 1 and 2 earnings and news names.
+GIII, tier 1, down 9.8 percent at its last print on 2026-09-02, was cut on
+six bars and appeared nowhere in the report, because the notable movers
+leg applies the same floor. BILI and LI, both liquid, went on 2026-09-01 at
+2,047 and 1,267 seconds. On a socket carrying a tenth of the tape a quiet
+quarter hour is ordinary, not evidence the socket died.
+
+The price and its age are both facts; what a stale print cannot do is set
+a level. So flag_stale_prices replaces drop_stale_prices: the candidate
+stays, carries price_stale and price_stale_reason, is ranked and published
+on the gap it last showed, and fails a new [Day setup] and [Swing setup]
+line, require_fresh_price, on both screens. The packet's dropped_stale_price
+became stale_price and carries the price. The notable movers leg still
+leaves a stale print off its premarket leg, because that leg publishes a
+move as of the scan clock, and it says how many it left.
+
+THE WINDOW IS PER NAME. From 2026-09-03 the socket subscribes to the
+provisional pool at 04:00 and adds names at the 07:20 handover. Whether the
+RVOL numerator covers the baseline's 04:00 window is therefore a fact about
+each subscription, and the scan read it off the [Collector] start_time knob,
+which now says 04:00 for everyone: is_lower_bound would have read false for
+a name added at 07:20 whose numerator was short by three hours and twenty
+minutes, and the rvol_lower_bound gap would have gone silent. The sidecar
+now carries subscribed_since, a per symbol map of the first moment the
+socket asked for the name that survives the handover's rewrite, and the
+scan reads it for is_lower_bound, for pm_window_starts_late, for the RVOL
+and float rotation numerator sources, and for the lower bound gap, which
+names each bounded candidate with the clock its subscription opened.
+
+THE SCAN NEVER READ window_open_at. collector_window_configured,
+scheduled_start_et and started_late_minutes all read the knob, so a packet
+for a session whose socket opened late, or a session before the change,
+asserted a 04:00 window. observed_collector_window reads
+collect_premarket.window_open_hhmm first, and the packet carries
+collector_window_opened and collector_subscribed_since beside the
+configured pair.
+
+PHASE ONE NAMES. A name the 03:55 pool subscribed and the 07:15 pool
+dropped has a tape from 04:00 to 07:20 on disk and a subscribed flag of
+false on the watchlist the scan reads, so it was never priced, and
+collector_coverage listed it as unsubscribed_with_bars, which is false.
+pool_candidates now admits such a name from the subscribed_since map with
+pool_phase provisional_only, the provenance counts and names them, and
+coverage lists them as handover_dropped_with_bars. Their last print is at
+or before 07:20, so they arrive flagged stale and fail require_fresh_price,
+which is the right answer: a name that gapped ten percent at 05:00 and was
+outranked at 07:15 is now in the report with its gap and its age rather
+than nowhere.
+
+Smaller: the earnings catalyst window starts at the previous trading
+session rather than the previous calendar day, so a Friday after close
+reporter is class earnings on Monday; attach_premarket_path no longer
+raises on a bar with a null high or low; observed_collector_window no
+longer raises on a malformed minute_epoch; collector_snapshot names
+planned_resubscribes and pool_reload_errors; the membership sentence, the
+rvol_lower_bound cause and two docstrings stop describing a single 07:20
+subscription.
+
+Claims: test_repricing claim 8 asserts the flag, the price on the stale
+row and the screen failure; claim_a_provisional_only_name_is_still_priced;
+claim_the_sidecar_remembers_every_subscription. test_entrypoints reads the
+renamed key. pool_recall excludes require_fresh_price from the addressable
+funnel with the two other conditions that need a premarket print.
+
+## 2026-09-02, forty sixth: the two phase collector, nine defects fixed before its first morning
+
+The forty third entry shipped the two phase collector at 14:38 and the
+review that evening read it end to end before its 04:00 first run. Nine
+things were wrong, and the first four would have made the design's own
+promise false on the first morning it was needed.
+
+1. THE WATCHDOG COULD NOT RERUN A FAILED 07:15 PASS. log_verdict searched
+   the WHOLE dated log for the finish marker, and both discover passes
+   append to logs/discover-<day>.log, so the 03:55 pass's "baseline warm
+   finished rc=0" answered for a 07:15 pass that had died. The rerun sits
+   in the else of that verdict and was unreachable. It now judges the last
+   run in the log: the text from the last time the job's first step
+   started. Collector restarts and the nightly's two passes read the same
+   way.
+2. THE FREE WINDOW CLOSED AT 07:22. _rewriting_the_watchlist_is_free
+   treated pool_reload_check_s times max_pool_reloads as a duration, ninety
+   seconds, and the first pass is 07:25; executed against the live tree it
+   answered False at every pass time. The collector rereads until
+   stop_time and the cap is on resubscribes, so a rewrite is free until the
+   stop. A watchdog restart after the handover now rereads from its own
+   start, so that is true of a restarted run too.
+3. EVERY PASS WOULD HAVE REPORTED THE SCHEDULE AS DIFFERS. schtasks emits
+   one row per trigger; discover has two; the reconciliation kept the last
+   row (03:55) and compared it to Start (07:15). Both sides are sets of
+   starts now, ExtraStart is parsed, and the discover set is also checked
+   against [Discovery] run_time and the new provisional_run_time.
+4. THE COLLECTOR REFUSED AT 04:00 IF THE 03:55 FILE WAS LATE, and no
+   watchdog pass exists before 07:25, so a slow vendor morning or a machine
+   waking to both tasks at once cost three and a half hours of tape. Before
+   the handover the run now waits for today's file, checking on the
+   handover's cadence, and refuses only if it has not arrived by
+   resubscribe_time. The wait is asked for by job_collector.bat with
+   --wait-for-watchlist, so a hand run, and the suite, never sit in it:
+   a suite run at 05:00 against a stale fixture would otherwise have
+   waited until 07:20.
+5. planned_resubscribes and pool_reload_error never reached the stats
+   sidecar, so a morning that stayed on the provisional pool left one log
+   line. Recorded, aggregated, and named in the packet.
+6. The subscription refusal budget was per morning: never reset after a
+   good connection, so every reconnect of a five and a half hour window
+   spent one of four and the fifth ordinary drop was fatal. Reset on every
+   successful connection, which is what CRITERIA described.
+7. The watchdog read the stats sidecar's mtime as proof of life; it is
+   written when a run EXITS. A collector that died at 07:24 read RUNNING at
+   07:25. The bar file alone decides now.
+8. An empty 07:15 pool, every source not fetched, would have moved the
+   socket from the provisional pool to the eight context tickers, because
+   select_symbols never returns an empty list. The handover stays put when
+   the new list is no longer than the context.
+9. The vendor's one replayed trade per symbol per subscribe, stamped with
+   its original time, fell inside a window that opens at 04:00 and inside
+   the late trade grace, and was folded into open bars a second time on
+   every reconnect and at the handover. The first print per symbol on each
+   connection whose stamp precedes the connect second is tagged replay and
+   counted as replayed_on_connect. One care in it: a replay row settles at
+   once and marks its minute written, after which the minute's real prints
+   are refused as late, so a replay of a minute still open is counted as
+   replayed_on_connect_unwritten and not written, and the minute stays
+   free for the tape.
+
+And the sidecar. write_subscriptions now writes atomically and carries
+subscribed_since, a per symbol map of the first moment the socket asked
+for each name, first stamp wins, surviving the handover's rewrite the way
+window_open_at does. window_open_hhmm answers every session before
+[Collector] two_phase_first_session from start_time_before_two_phase,
+07:20, whatever its sidecar says: those sidecars carry no window_open_at
+and their subscribed_at is the last rewrite of the day, 08:37 on
+2026-08-19, and a session with no sidecar was falling back to a knob that
+now reads 04:00.
+
+Two seeds moved in meaning without moving in value: max_subscription_retries
+is per incident and says so, and max_pool_reloads caps resubscribes rather
+than rereads and says so.
+
+Claims: claim_the_watchdog_judges_the_last_run,
+claim_a_rewrite_is_free_while_the_collector_rereads,
+claim_the_reconciliation_reads_every_trigger,
+claim_a_replayed_print_on_connect_is_tagged,
+claim_the_sidecar_remembers_every_subscription,
+claim_the_stats_sidecar_carries_the_handover,
+claim_a_refusal_budget_is_per_incident. The 04:00 wait and the empty pool
+guard are exercised by the first live morning and not by the suite, and
+the log says which branch ran.
+
+## 2026-09-02, forty fifth: the rank cut keeps gaps up before gaps down
+
+The owner's standing complaint is that the report misses big gaps up of good
+companies. A whole tree review traced where they go, and one of the places
+is the 08:45 rank cut, which was cutting them on purpose.
+
+rank_by_measured_gap ordered the subscribed names by the ABSOLUTE gap and
+kept candidate_count of them. Both screens below it are long in practice:
+[Day setup] require_above_prior_high and [Swing setup]
+require_open_above_prior_high cannot pass for a name printing below its prior
+close. So a gap down holding one of the twelve slots was a slot spent on a
+name that could not be eligible, and on a red morning those slots came out of
+the names that could.
+
+MEASURED from the packets on disk. 2026-08-27: nineteen subscribed names
+cleared the floors, twelve were kept by absolute gap, four of them gaps down
+of 5.0 to 8.1 percent (HMY, DLTR, BBY, CSIQ) that all failed
+require_above_prior_high, and the seven the cap cut were ALL gaps up: CRWV
++4.18, AAOI +4.08, STM +4.07, MRVL +3.66, IREN +3.59, NVTS +3.39, ASST +3.26.
+STM and MRVL went on to open up 3.1 and 3.4 percent. 2026-09-01: SPY off
+0.66 percent at 08:43, all twelve kept were gaps down, and the day tally read
+require_above_prior_high 12 of 12. Of the seven sessions with a ranking on
+disk, those two and 2026-08-20 filled the cap.
+
+CRITERIA [Scan] gains rank_up_gaps_first, true. The cut now keeps gaps up
+first, largest first, and fills what remains with gaps down by size. Floors
+and cap are unchanged, and a gap down still reaches the report whenever there
+is room. The ranking record carries kept_up, kept_down and the rule it ran
+under in ranked_on, and _empty_ranking carries the same keys at zero. false
+restores the direction blind cut for anyone studying both directions.
+
+Replayed over 2026-08-27, the rule keeps CRWV, AAOI, STM and MRVL and cuts
+HMY, DLTR, BBY and CSIQ, none of which was eligible for anything. On
+2026-09-01 it changes nothing, because nothing subscribed gapped up past the
+floor at 08:45: MDT, the one subscribed name that opened up past 3 percent,
+printed +2.32 at 08:45 and was below the floor, not cut.
+
+Three stale sentences went with it. README's worked example and the
+architecture page said the top 12 by measured gap; collect_premarket's module
+docstring said the watchlist takes its slots in order of absolute gap, which
+has not been true since discover began ranking by tier on 2026-08-14.
+
+Claim: claim_a_gap_down_does_not_take_a_gap_up_slot, holding the shipped
+value to true and the ordering to the note. Suite green, criteria --check 0
+defects.
+
 ## 2026-09-02, forty fourth: the two explainer pages catch up with the collector
 
 The forty third entry changed the schedule and updated README, BUILD_PLAN and

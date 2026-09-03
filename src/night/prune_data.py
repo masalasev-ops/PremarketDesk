@@ -168,8 +168,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     result = prune(dry_run=args.dry_run)
     report(result)
-    job_status.produced("files pruned", len(result["removed"]))
-    job_status.produced("bytes freed", result["freed"])
+    # ONE call. job_status.produced records the last call before exit and
+    # nothing else, so the second of two calls here silently replaced the
+    # first and the record carried bytes and never the file count, which is
+    # the number that answers "did this step do anything". Both facts in
+    # one: the count is the files and the label carries the bytes.
+    job_status.produced(f"files pruned, {result['freed']} bytes freed",
+                        len(result["removed"]))
     return 0
 
 

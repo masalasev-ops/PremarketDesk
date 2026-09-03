@@ -1024,6 +1024,178 @@ A fifth item, the disposition of `data/UNVERIFIED`, stood here until
 
 ---
 
+## Tier 6: what the 2026-09-02 evening review left open
+
+Added 2026-09-02 evening, after a second whole tree review in six areas
+(selection, collector and watchdog, scan, analyst and midday, nightly and
+core, research and documentation). Everything that review found and could
+fix the same evening is fixed and recorded in CHANGELOG forty fifth to
+fiftieth. What follows is what it found and deliberately did NOT change,
+because each is a threshold, a design, or a measurement the project's rules
+say must be measured before it moves. Numbers are from runs/*/pool_recall.json
+and runs/*/packet.json over the seven sessions 2026-08-24 to 2026-09-01
+unless a line says otherwise.
+
+The one page version, for the owner's standing complaint that the report
+misses big gaps up of good companies. Of 46 universe names that opened up 8
+percent or more in those seven sessions: 8 were subscribed (7 of them tier 1
+earnings with news), 21 were in the pool and cut by the 42 slot cap, 17
+were never in the pool. Of the 21 cut, at least 7 are after close reporters
+that the earnings_after_close tier now lifts (OKTA, ESTC, GAP, VEEV, CRM,
+CRWD, QFIN), 9 were tier 3 by the six hour freshness split (6.2), and the
+rest sorted by gap propensity below the cut (6.1). Of the 17 never in the
+pool, the four priors cannot see them at 07:15 and no premarket price
+source exists for the universe on this plan: the delayed quote's ethPrice
+was re-measured 2026-09-02 at 19:53 ET reading 16:28 for NVDA, three and a
+half hours stale, so DECISIONS 2026-08-22 stands. The scan side is fixed:
+the rank cut keeps gaps up first (forty fifth) and a stale print no longer
+removes a name (forty seventh).
+
+### 6.1 Measure the tier floors and the propensity ordering on size weighted recall
+
+`min_slots_per_tier = 4` was measured on a +0.0017 mean recall margin for
+gaps above 3 percent with no size weighting, before earnings_after_close
+existed, and with tier 5 absent from the replay (the cache carries no
+runners source, so the floor was measured across four tiers while shipped
+mornings run five, 38 slots for tiers 1 to 4 rather than 42). Across the
+seven live sessions the 28 floored slots in tiers 3, 4 and 5 subscribed 7,
+10 and 9 names that gapped past 3 percent and none that gapped 8 or more;
+the tier 2 cut region held 12 that did. Large caps sort to the bottom of
+tier 2 by construction: OKTA propensity 0.056 (universe rank 679), VEEV
+0.036 (1054).
+
+Do: re-run src/research/backtest_pool.py with the after close tier, with
+recall measured at 8 percent as well as 3, sweeping min_slots_per_tier over
+0, 2 and 4, and with tier 2 ordered by news item count then propensity
+(the cache holds `items` per news name). Four repairs to the replay first,
+all found by the review: snapshot avg_dollar_volume_20d and market_cap per
+name into inputs.json at fetch time and read them in load_metrics, because
+the evaluate stage reads today's universe.json and the ordering note's
+figures cannot be regenerated (re-run today gives 0.1171 against the
+recorded 0.1164); cache adjusted_close and refuse corporate actions the way
+pool_recall does; add a `--refresh-earnings` that replaces only
+inputs["earnings"] so the after close re-measurement changes one input;
+count the heavy and light split on earnings_before_open only. Then move
+CRITERIA or leave it, with the table in the ordering note. Do not change
+the floor or the key before this runs.
+
+### 6.2 The six hour freshness split puts after close corporate news in tier 3
+
+`news_fresh_hours = 6` makes "fresh" mean published after 01:15 ET, so the
+16:00 to 20:00 window where earnings and guidance land is news_stale, tier
+3, four floored slots against 235 to 556 names. On 2026-09-02 the 16:00
+hour was the largest bucket, 82 names, all tier 3, 30 of them with an
+earnings worded newest title. CRITERIA's own ordering note has tier 3
+converting at 0.40 against tier 2's 0.37. At 03:55 the boundary is 21:55,
+so the provisional pool carries the same skew and the 04:00 to 07:20 tape
+is lost for exactly these names.
+
+Do: in the replay cache, compare the shipped split against one tier for
+everything since the prior close, and against a split by window position
+rather than age. The after close tier already lifts the reporters; this is
+about the non reporter names with real evening news (SOLS, SMMT, OOMA,
+NTNX, WEN, HLF, BNTX in the seven sessions).
+
+### 6.3 There is no discovery pass after 07:15
+
+17 of 46 big gappers were never in the pool. Which prior would have caught
+them is unknowable from the artifacts because pool_recall writes
+sources_that_would_have_caught_it as never computed; nothing retains the
+four source lists past the run. Two cheap things and one decision. Cheap:
+discover writes its four source name lists into the watchlist (they are
+small) so the nightly can answer the question; and the provisional pool is
+retained as data/watchlist-provisional.json so pool_recall can report
+provisional_held and dropped_at_handover, which today it scores as
+"missed". Decision: an 08:15 pass. The collector rereads until its stop,
+so a third pass lands mechanically; it costs 306 credits and a shorter
+news window, and it would catch catalysts landing 07:15 to 08:15. Measure
+what it would have caught from the news feed's timestamps before arming
+it.
+
+### 6.4 Tier 5 spends four slots on names already published
+
+recent_runners reads picks WHERE source='live', which holds only the
+twelve or fewer published names per day, so the four floored tier 5 slots
+go to names the report already carried. ASST was subscribed as a runner
+and left unpublished in five of seven sessions. The recent_runner_decay
+weight is computed, recorded and orders nothing (CRITERIA now says so).
+Measure tier 5's conversion in the replay (6.1 adds the source) and either
+give it a real population (the subscribed set, or names that cleared the
+floors) or drop its floor.
+
+### 6.5 The day screen has no rotation alternative when the baseline is degenerate
+
+Across ten archived sessions, 31 gap up candidates, 5 day eligible, 24
+blocked on premarket_rvol alone, 4 of those never measured because the
+baseline median sat under the 1,000 share floor: DG (+5.88, 27 billion)
+on a 928 share median, DLTR 281, BBY 941 on 2026-08-27, DAKT (+6.97) on 18
+shares on 2026-09-02. Those are not illiquid names; the vendor's intraday
+premarket volume is near empty for them. CRITERIA [Baseline] already
+records that the day screen "has NO rotation alternative". Build it: when
+pm_rvol is null for a degenerate baseline and float rotation is measured,
+let [Day setup] accept the rotation band the score already uses, as a
+CRITERIA line, and surface day_failed unmeasured names as "not screened"
+rather than as failures. The 20 measured and low cases were the window
+mismatch and are addressed from 2026-09-03 except for handover names.
+
+### 6.6 The 08:45 gap is not the open gap
+
+Six of the eight subscribed 2026-09-01 names that gapped past 3 percent at
+the open and were not published sat between -1.4 and -2.9 percent at
+08:45 (ARM, ASST, NBIS, NIO, OPEN, MDT) and crossed the floor only at the
+open. The rank floor and the screen floor are the same number applied to
+different quantities. A lower ranking floor with the day screen floor kept
+where it is would put them in the briefing; measure what the packets say
+first (every packet carries below_floor and the snapshot).
+
+### 6.7 Three scan failure modes left as designed, named
+
+A candidate whose prior EOD row the vendor has not published makes the
+vintage gate raise and the whole morning exits with no packet
+(attach_daily_history takes completed[-1]); the blast radius is one symbol
+to the whole report and the design intent is "no degrade path". A split
+with today as the ex date mis-gaps by the ratio and clears every floor;
+the nightly refuses it, the scan does not, and
+prior_close_disagreement_pct only gaps. market_snapshot's collector path
+takes completed[-1] as the prior close with no session check. Each is a
+CRITERIA decision about how loud a single bad row should be.
+
+### 6.8 The watchdog is blind from 04:00 to 07:25
+
+No monitor pass exists between the collector's start and 07:25. The
+collector now waits for today's file until the handover, which covers the
+file race, and not a socket that never authenticates or a run that exits
+on refusals at 04:10. Owner decision, because it registers tasks: monitor
+firings at 04:05 and hourly to 07:25, with the collector's single rerun
+budget in mind (an early restart on a stale file burns it). The -Probe arm
+at 06:30 in tasks/register_tasks.ps1 now falls inside the collector window
+and probe_socket_cap refuses inside it; re-time it or retire it.
+
+### 6.9 Smaller items with a measured cost, unfixed
+
+- backup_evidence never holds a power cut morning: an open collector row
+  is refused and after catchup_sessions the session leaves the window
+  uncopied unless someone runs --date.
+- In slots mode a containment failure (a peer's ticker in a headline
+  slot) still exits 2 and costs the chain, where the offending text is one
+  located slot the guard could blank; and subprocess timeouts on Windows
+  can block on a grandchild's inherited pipe, so the 1,007 second bound
+  rests on the CLI not spawning one.
+- universe.py: min_sessions equals lookback_sessions, so one missing bar
+  excludes a name for the week; gap_stats counts a split session as a gap
+  where pool_recall refuses it.
+- CRITERIA prose lines that the parser reads as keys inside [Analyst]
+  (about lines 2004, 2005 and 2017: a backticked `key`, `mode`, and
+  `slots=True`); none shadows a scalar read, and check()'s unread question
+  is blind to a new prose key in any section that has one literal read.
+  Make the unread report per key.
+- The after close measurement (26 gappers, 23 in pool, 2 subscribed) is
+  quoted in CHANGELOG thirty eighth and DECISIONS seventh and is not on
+  disk; write the crossing as data/research/after_close_reporters-<date>.json
+  the next time it is run.
+
+---
+
 ## Suggested order and what it buys
 
 | Order | Packages | Buys |

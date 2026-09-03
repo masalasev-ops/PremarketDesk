@@ -893,17 +893,19 @@ def claim_a_stale_collector_print_is_not_a_notable_move(
         failures: list[str]) -> None:
     """The section holds the same price age floor the candidate path holds.
 
-    scan.drop_stale_prices removes a candidate whose last collector print is
+    scan.flag_stale_prices marks a candidate whose last collector print is
     older than [Price age] max_price_age_seconds, and its docstring says why the
     vintage gate cannot do this job: a print from 07:22 is genuinely inside
     today's premarket window and passes every check vintage makes, and it is
     still not this morning's price at 08:45. That is what a collector killed at
-    08:10 leaves behind.
+    08:10 leaves behind. Since 2026-09-02 the candidate path keeps such a name
+    and fails it on require_fresh_price; this leg publishes a MOVE as of the
+    scan clock, so it still leaves the name off and says how many it left.
 
     The premarket leg reads bars_by_symbol directly rather than the candidate
     list, on purpose, because every subscribed name is eligible for it. So it
-    reached straight past drop_stale_prices and published as notable premarket
-    moves the very prices the scan had already rejected two hundred lines
+    reached straight past the stale check and published as notable premarket
+    moves the very prices the scan had already flagged two hundred lines
     earlier, on the same morning, off the same bars. One rule, one clock, both
     readers.
 

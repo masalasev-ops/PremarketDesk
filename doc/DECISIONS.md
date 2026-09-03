@@ -18,6 +18,74 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-02, eleventh: a stale print stays in the report and fails a screen line, rather than the limit widening or the drop staying
+
+CHANGELOG forty seventh records that [Price age] was removing 36
+candidates in ten sessions, mostly the earnings and news names the pool
+exists to find. Three answers were on the table.
+
+REJECTED, WIDEN THE LIMIT. The seed's own comment invites it, and 1,800
+seconds would have halved the drops. But no number is right: the socket
+carries about a tenth of the tape, so the gap between prints on a liquid
+name is a property of the feed's sampling and not of the name's liquidity,
+and every limit cuts a different set of real gappers for the same
+non-reason. The 900 seconds stays, because as a definition of "fresh
+enough to set a level" it is as good as any, and the change is what
+happens on the far side of it.
+
+REJECTED, KEEP THE DROP AND GATE IT ON DENSITY. Drop only a name that had
+been printing regularly and then stopped, which is the socket dying rather
+than sampling. That is a second seed, unmeasured, deciding whether a name
+exists in the report, and it still removes the price and the gap from the
+reader's sight on the mornings it fires. A dropped name is the one failure
+the reader cannot see.
+
+TAKEN, FLAG AND SCREEN. The age is a fact and so is the price; a stale
+print cannot set a level, and the two screens are what set levels. So the
+name stays, ranked on the gap it last showed, carrying its age, and fails
+require_fresh_price on both screens. The reader sees the gap, the age and
+the reason it is on no watchlist, which is the disclosure the fourth hard
+rule asks for. The notable movers leg keeps leaving stale prints off,
+because a move "as of 08:45" measured from a 07:22 print is not that, and
+the count of names left off is published beside the leg.
+
+## 2026-09-02, tenth: gaps up rank first, rather than gaps down leaving the report or the cap rising
+
+CHANGELOG forty fifth records that the rank cut was spending slots on gaps
+down that no screen could pass. Three ways to stop that were on the table.
+
+REJECTED, DROP GAPS DOWN FROM THE CANDIDATES. The screens are long in
+practice, so why carry a name that cannot be eligible. Because the report is
+not only the two watchlists: a gap down is a fact about the morning, its
+catalyst is read and printed, the score is direction blind by design and its
+inversion is under study on both directions, and the record grouped by
+direction in the weekly page needs down rows to say anything. Removing them
+would also change the picks table's population mid study, which the score
+watch forbids without restarting.
+
+REJECTED, RAISE candidate_count. Twelve is a seed, and nineteen cleared the
+floors on 2026-08-27. But every kept name costs three REST calls and a share
+of the analyst's attention, the cap has filled on three of seven mornings,
+and raising it keeps the ordering that put HMY ahead of MRVL. A bigger cap
+with a wrong order is a bigger wrong order.
+
+TAKEN, ORDER BY DIRECTION THEN SIZE. Gaps up first, largest first, then gaps
+down by size. On a green morning nothing changes. On a mixed morning the gaps
+down that still fit are the largest, which are the ones worth a sentence. On
+a red morning with fewer than twelve gaps up, every gap up is kept and the
+largest gaps down fill the rest, which is exactly the 2026-08-27 case. The
+knob is a CRITERIA flag rather than a hard change, so a study of both
+directions can turn it off, and the packet records which rule ran.
+
+What this does NOT fix. The cut orders what the socket heard. A name
+discover never subscribed is not in this list at any gap, and that is where
+most of the missing gaps up are: measured over the seven sessions with a
+recall file, of 66 universe names that opened up 5 percent or more, 29 were
+never in the pool, 29 were in the pool and cut by the 42 slot cap, 7 were
+published and 1 was subscribed and fell to a screen. This entry moves names
+inside the third group. The first two are the pool's problem, and the after
+close tier of the seventh entry is the first answer to the second.
+
 ## 2026-09-02, ninth: the collector starts at 04:00, and the pool arrives in two phases rather than early
 
 The owner asked why the collector had not been moved to 04:00, which is

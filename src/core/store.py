@@ -511,6 +511,13 @@ OUTCOME_COLUMNS = (
     ("pick_day_high", "REAL"),
     ("pick_day_low", "REAL"),
     ("pick_day_close", "REAL"),
+    # Why the pick's own session is null, on the day5_refused_reason
+    # precedent. fill_pick_day selects on pick_day_close IS NULL, and a row
+    # whose pick date bar the vendor's history simply never serves came back
+    # every night and spent one end of day call to be told so again. NULL
+    # here with a NULL close means the backfill has not reached the row; a
+    # reason means it reached it and the vendor had no bar for that date.
+    ("pick_day_refused_reason", "TEXT"),
 )
 
 TRUE_COLUMNS = (

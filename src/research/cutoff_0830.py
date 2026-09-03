@@ -78,16 +78,31 @@ from core import criteria
 
 _CRIT = criteria.load()
 
-PRODUCTION_CUTOFF = "08:45"
-SERVABLE_CUTOFF = "08:30"
-PATH_STEM = "cutoff-0830"
-
-
-# --------------------------------------------------------------- session pick
 
 def _minutes(hhmm: str) -> int:
     hour, _, minute = hhmm.partition(":")
     return int(hour) * 60 + int(minute)
+
+
+def _hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+# DERIVED, not written. The production cutoff is [Scan] run_time, the clock
+# the packets were screened at, and the servable one is that clock less the
+# vendor's [Truth] documented_lag_minutes, which is the whole premise of the
+# study: a feed fifteen minutes behind can serve a window ending fifteen
+# minutes earlier. Both were literals here until 2026-09-02, so a moved run
+# time or a corrected lag would have left this file measuring a cutoff the
+# morning no longer ran at, against packets that would then fail the
+# reproduction check for a reason that had nothing to do with the question.
+PRODUCTION_CUTOFF = _CRIT.clock_text("scan", "run_time")
+SERVABLE_CUTOFF = _hhmm(_minutes(PRODUCTION_CUTOFF)
+                        - _CRIT.integer("truth", "documented_lag_minutes"))
+PATH_STEM = "cutoff-0830"
+
+
+# --------------------------------------------------------------- session pick
 
 
 def sessions() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -296,7 +311,11 @@ def tape_scale() -> dict[str, Any]:
 
     per_name: list[dict[str, Any]] = []
     with store.session() as connection:
-        store.init(connection)
+        # store.init() is deliberately NOT called, on counterfactual_watchlist
+        # and measure_capture_rate's precedent: it runs the schema script and
+        # an UPDATE against picks, and nothing in research may write to that
+        # table. A column this SELECT names that does not exist is a loud
+        # failure, which is the right answer from a research tool.
         rows = connection.execute(
             # A study of what the SOCKET saw against what was true, so it
             # is about sessions the socket ran on. A reconstructed row carries

@@ -1,4 +1,4 @@
-"""Premarket collector. Streams from 07:20 to 09:25 ET and builds the price path.
+"""Premarket collector. Streams from 04:00 to 09:25 ET and builds the price path.
 
 This file is the only source of today's premarket price path. Nothing else in
 this project is allowed to infer a premarket high, low or VWAP from a quote
@@ -22,8 +22,9 @@ after a run and records the delta as a measured fact.
 Symbol budget. The feed allows 50 concurrent subscriptions. The eight context
 symbols are never dropped, because a premarket price path with no idea what
 the index futures did is a price path you cannot read. The watchlist takes the
-remaining slots in order of absolute gap, and anything that does not fit is
-logged by name and gap so the omission is on the record.
+remaining slots in the order discover ranked it, tier first and the within
+tier key inside a tier, and anything that does not fit is logged by name so
+the omission is on the record.
 """
 
 from __future__ import annotations
@@ -111,21 +112,64 @@ def write_subscriptions(symbols: list[str], dropped: list[dict[str, Any]]) -> Pa
     path.parent.mkdir(parents=True, exist_ok=True)
     now = ettime.stamp(ettime.now_et())
     window_open_at = now
+    # Per symbol, the first moment this day's socket asked for it. Survives
+    # every rewrite the way window_open_at does, first stamp wins, and a name
+    # the handover dropped keeps its entry: the day's tape for it is on disk
+    # and this is the only record that it was ever asked for. Read by the
+    # scan to find phase one names and to say per name whether the RVOL
+    # numerator covers the baseline's window, and by the nightly to measure
+    # capture over the minutes the socket was listening to THAT name.
+    subscribed_since: dict[str, str] = {}
     try:
         existing = json.loads(path.read_text(encoding="utf-8"))
         window_open_at = str(existing.get("window_open_at") or
                              existing.get("subscribed_at") or now)
+        carried = existing.get("subscribed_since")
+        if isinstance(carried, dict):
+            subscribed_since = {str(k): str(v) for k, v in carried.items()}
     except (OSError, ValueError, TypeError):
         pass
-    path.write_text(json.dumps({
+    for symbol in symbols:
+        subscribed_since.setdefault(str(symbol), now)
+    from core import files
+    files.write_json_atomically(path, {
         "subscribed_at": now,
         "window_open_at": window_open_at,
+        "subscribed_since": dict(sorted(subscribed_since.items())),
         "requested_count": len(symbols),
         "socket_cap": MAX_SUBSCRIPTIONS,
         "symbols": sorted(symbols),
         "dropped_to_fit_cap": [row.get("symbol") for row in dropped],
-    }, indent=2, sort_keys=True), encoding="utf-8")
+    }, indent=2, sort_keys=True)
     return path
+
+
+def subscribed_since(day: str | None = None) -> dict[str, str]:
+    """Symbol to the ET stamp its subscription first opened on a day.
+
+    Empty when no sidecar exists or it predates the field, which every
+    session before 2026-09-03 does. A caller that finds a symbol missing here
+    falls back to window_open_hhmm, which is right for those sessions
+    because the socket then subscribed once, at its start.
+    """
+    record = read_subscriptions(day)
+    if not record:
+        return {}
+    carried = record.get("subscribed_since")
+    if not isinstance(carried, dict):
+        return {}
+    return {str(k): str(v) for k, v in carried.items()}
+
+
+def subscribed_since_hhmm(symbol: str, day: str | None = None) -> str | None:
+    """The ET clock time one symbol's subscription opened, or None."""
+    stamp = subscribed_since(day).get(symbol)
+    if not stamp:
+        return None
+    try:
+        return ettime.hhmm(dt.datetime.fromisoformat(stamp))
+    except (TypeError, ValueError):
+        return None
 
 
 def window_open_hhmm(day: str | None = None) -> str | None:
@@ -133,10 +177,23 @@ def window_open_hhmm(day: str | None = None) -> str | None:
 
     Read from the subscription sidecar rather than from [Collector]
     start_time, so a session is measured against the window it actually had
-    rather than against the one configured today. None when no sidecar exists,
-    which the caller reads as "fall back to the knob" because for a session
-    with no record the knob is the best available answer.
+    rather than against the one configured today.
+
+    Sessions before the two phase change are the trap. Their sidecars carry
+    no window_open_at, and subscribed_at is the LAST rewrite of the day: on
+    2026-08-19 that is 08:37, a watchdog restart, over a socket that had
+    listened since 07:20. And a session with no sidecar at all used to fall
+    back to the knob, which now reads 04:00 for mornings that ran under
+    07:20. So a session dated before [Collector] two_phase_first_session is
+    answered from start_time_before_two_phase, the clock those mornings
+    actually ran under, whatever its sidecar says. None only for a session
+    from the two phase era that left no sidecar, which the caller reads as
+    "fall back to the knob".
     """
+    session = day or ettime.today_str()
+    first_two_phase = _CRIT.text("collector", "two_phase_first_session")
+    if session < first_two_phase:
+        return _CRIT.clock_text("collector", "start_time_before_two_phase")
     record = read_subscriptions(day)
     if not record:
         return None
@@ -199,7 +256,8 @@ def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
     # run carries a number, then the sum of the runs that carried one.
     totals: dict[str, Any] = {"runs": 0, "connections": None, "reconnects": None,
                               "resubscriptions": None, "messages": None,
-                              "status_frames": None}
+                              "status_frames": None, "planned_resubscribes": None,
+                              "pool_reload_errors": []}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
@@ -209,7 +267,12 @@ def read_run_stats(day: str | None = None) -> dict[str, Any] | None:
         except ValueError:
             continue
         totals["runs"] += 1
-        for key in ("connections", "reconnects", "resubscriptions", "messages"):
+        # A handover error is a sentence, not a count: kept whole, one per
+        # run that recorded one, so the packet can print what went wrong.
+        if row.get("pool_reload_error"):
+            totals["pool_reload_errors"].append(str(row["pool_reload_error"]))
+        for key in ("connections", "reconnects", "resubscriptions", "messages",
+                    "planned_resubscribes"):
             if row.get(key) is None:
                 continue
             try:
@@ -330,7 +393,36 @@ class BarBuilder:
         # does not understand, which is a different fact from a quiet tape and
         # from a dropped connection.
         self.unparseable_trades = 0
+        # The vendor replays one last trade per symbol on every subscribe,
+        # stamped with its ORIGINAL time. The window guard in add_trade
+        # catches the ones stamped before the window opened; with a window
+        # that opens at 04:00 and a handover at 07:20, most replays are
+        # stamped inside it and inside the late trade grace, and were being
+        # folded into open bars a second time, one duplicated print per
+        # symbol per connection, invisible in every counter. So the first
+        # message per symbol on each connection whose stamp precedes the
+        # instant the connection was asked for is a replay by construction:
+        # nothing was listening when it printed.
+        self.connected_at: float | None = None
+        self.seen_this_connection: set[str] = set()
+        self.replayed_on_connect = 0
+        self.replayed_on_connect_volume = 0.0
+        # Of those, the ones for a minute still open, counted and not written
+        # so the minute stays free for its real prints. See add_trade.
+        self.replayed_on_connect_unwritten = 0
         self._load_existing()
+
+    def new_connection(self, connect_started_epoch_s: float) -> None:
+        """Mark the instant a connection was asked for, for the replay guard.
+
+        Floored to its second. Trade stamps arrive as whole seconds, so a
+        real print in the same second the connection was asked for carries a
+        stamp up to a second below the instant, and would read as replay
+        against an unfloored clock. A replayed trade is minutes or hours
+        old; one second of slack costs nothing.
+        """
+        self.connected_at = float(int(connect_started_epoch_s))
+        self.seen_this_connection = set()
 
     def _terminate_torn_tail(self, handle: Any) -> None:
         """Close an unterminated final line before appending after it.
@@ -419,6 +511,27 @@ class BarBuilder:
             # has to ask for them by name.
             self._add_replay(symbol, price, volume, epoch_s, market_status)
             return
+
+        # The in-window replay, see __init__. Checked after the window guard
+        # so an out of window replay keeps counting where it always did.
+        if self.connected_at is not None and symbol not in self.seen_this_connection:
+            self.seen_this_connection.add(symbol)
+            if epoch_s < self.connected_at:
+                self.replayed_on_connect += 1
+                self.replayed_on_connect_volume += volume
+                # A replay row settles at once and marks its minute written,
+                # after which every real print for that minute is refused as
+                # late. That is harmless for a minute that is over and fatal
+                # for one still open: a reconnect at 08:10:45 replaying the
+                # 08:10:20 print would have thrown away the rest of 08:10.
+                # So a replay of an open minute is counted and not written.
+                still_open = (minute_floor(epoch_s) + BAR_SECONDS + LATE_TRADE_GRACE_S
+                              > time.time())
+                if still_open:
+                    self.replayed_on_connect_unwritten += 1
+                    return
+                self._add_replay(symbol, price, volume, epoch_s, market_status)
+                return
 
         self.total_volume += volume
         key = (symbol, minute_floor(epoch_s))
@@ -836,7 +949,8 @@ def run_websocket(
     socket missing trades inside minutes it listened to. Ten to one on the
     median. The levels the report prints were wrong, not just the ratio.
 
-    reload is called at most once and its failure is never fatal. A morning
+    reload is called every POOL_RELOAD_CHECK_S from reload_at until the stop,
+    resubscribing at most MAX_POOL_RELOADS times, and its failure is never fatal. A morning
     listening to the provisional pool is a morning with a tape; a morning that
     died at 07:20 reaching for a better one is not, and the tape cannot be
     fetched later.
@@ -866,10 +980,18 @@ def run_websocket(
     while ettime.now_et() < stop_at:
         socket = None
         try:
+            connect_started = time.time()
             socket = _connect(current)
             connections += 1
             print(f"collector: connected, subscribed to {len(current)} symbols")
             backoff = BACKOFF_START_S
+            # A refusal budget is per incident, not per morning. CRITERIA's
+            # four waits describe what one dropped connection may cost; until
+            # 2026-09-02 the count never reset, so every reconnect of a five
+            # and a half hour window spent one of the four and the fifth
+            # ordinary drop of the day was fatal.
+            refusals = 0
+            builder.new_connection(connect_started)
 
             while ettime.now_et() < stop_at:
                 # The handover, checked on a stamp rather than once on a clock.
@@ -945,7 +1067,7 @@ def run_websocket(
         except SubscriptionRefused as exc:
             # Almost always this run's own slots, still held by the connection
             # that dropped a second ago. Waiting gets them back; dying does
-            # not. Four waits cost four minutes of a two hour window, and the
+            # not. Four waits cost four minutes of a five and a half hour window, and the
             # alternative already cost a whole morning once. If the slots
             # really do belong to somebody else, the retries run out and this
             # raises exactly as it used to.
@@ -1583,6 +1705,7 @@ OK_CODES = (0,)
 # .bat cannot import it, so a claim reads the file and asserts the third
 # agrees.
 STALE_WATCHLIST_ARG = "stale-watchlist-ok"
+WAIT_FOR_WATCHLIST_ARG = "wait-for-watchlist"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1625,6 +1748,14 @@ def main(argv: list[str] | None = None) -> int:
                              "branch, past the last pass that could rerun discover "
                              "inside the collector window. See CRITERIA [Monitor], "
                              "the stale watchlist note. Not for hand runs.")
+    parser.add_argument("--" + WAIT_FOR_WATCHLIST_ARG, action="store_true",
+                        help="Before resubscribe_time, wait for today's watchlist "
+                             "rather than refusing one that is not today's, "
+                             "checking every pool_reload_check_s. Passed by "
+                             "job_collector.bat, whose 04:00 start can read the "
+                             "file the 03:55 pass is still writing. A hand run "
+                             "never waits, so a suite run at 05:00 cannot sit "
+                             "here until 07:20.")
     args = parser.parse_args(argv)
 
     # REBOUND, not passed down. bar_path, stats_path and subscriptions_path
@@ -1710,6 +1841,37 @@ def main(argv: list[str] | None = None) -> int:
         generated_on = None
 
     today = ettime.today_et()
+    two_phase_run = not (args.verify or args.poll or args.minutes is not None)
+    if (generated_on != today and two_phase_run and args.wait_for_watchlist
+            and not args.stale_watchlist_ok):
+        # The 04:00 start reads a file the 03:55 pass is still writing on a
+        # slow vendor morning, and a machine that slept through 03:55 catches
+        # both tasks up in the same second on wake. Until 2026-09-02 that
+        # was a refusal, and the first watchdog pass that could repair it is
+        # 07:25, three and a half hours of tape away. So before the handover
+        # this run WAITS for today's file, checking on the handover's own
+        # cadence, and refuses only if the file has not arrived by
+        # resubscribe_time. A morning listening late is a morning with a
+        # tape; a morning that refused at 04:00 is not.
+        handover = ettime.at_hm(today, _CRIT.clock("collector", "resubscribe_time"))
+        waited = 0
+        while generated_on != today and ettime.now_et() < handover:
+            if waited == 0:
+                print(f"collector: the watchlist on disk is not today's "
+                      f"(generated_at {generated_at!r}). Waiting for today's "
+                      f"provisional pool, checking every {POOL_RELOAD_CHECK_S:.0f}s "
+                      f"until {ettime.hhmm(handover)} ET before refusing.")
+            time.sleep(POOL_RELOAD_CHECK_S)
+            waited += 1
+            watchlist = discover.load_watchlist()
+            generated_at = watchlist.get("generated_at")
+            try:
+                generated_on = ettime.parse_date(str(generated_at))
+            except (TypeError, ValueError):
+                generated_on = None
+        if waited and generated_on == today:
+            print(f"collector: today's watchlist arrived after {waited} check(s), "
+                  f"generated_at {generated_at}")
     if generated_on != today:
         said = generated_on.isoformat() if generated_on else "no date this can read"
         if not args.stale_watchlist_ok:
@@ -1827,10 +1989,18 @@ def main(argv: list[str] | None = None) -> int:
     reload_at = None
     if not (args.verify or args.poll or args.minutes is not None):
         reload_at = ettime.at_hm(now.date(), _CRIT.clock("collector", "resubscribe_time"))
-        if reload_at <= now or reload_at >= stop_at:
-            # A run that started after the handover, which is every watchdog
-            # restart and every hand run, already read the final watchlist.
+        if reload_at >= stop_at:
             reload_at = None
+        elif reload_at <= now:
+            # A run that started after the handover, which is every watchdog
+            # restart, already read the final watchlist. It still rereads,
+            # from now: the watchdog may rerun a failed discover after this
+            # restart, and [Monitor] treats a rewrite as free for the whole
+            # window on the strength of the collector picking it up. A run
+            # that stopped rereading at the handover would make that false.
+            reload_at = now
+            print("collector: started after the handover, rereading the "
+                  "watchlist from now until the stop")
         else:
             print(f"collector: two phase run, listening on the pool this "
                   f"watchlist names and rereading it at "
@@ -1866,9 +2036,16 @@ def main(argv: list[str] | None = None) -> int:
                   "run stays on the pool it started with")
             return None
         wanted, dropped_now = select_symbols(fresh)
-        if not wanted:
-            print("collector: the new watchlist names nothing to subscribe to, "
-                  "so this run stays on the pool it started with")
+        context_count = len(_CRIT.text_list("collector", "context_symbols"))
+        if len(wanted) <= context_count:
+            # select_symbols always returns the context tickers, so "names
+            # nothing" is a list no longer than them. A 07:15 pass whose
+            # every source came back not fetched writes a watchlist with zero
+            # subscribed rows and exits 0; moving onto it would drop the
+            # provisional pool for eight ETFs.
+            print("collector: the new watchlist names nothing beyond the "
+                  f"{context_count} context tickers to subscribe to, so this "
+                  "run stays on the pool it started with")
             return None
         subscribed_stamp = stamp
         write_subscriptions(wanted, dropped_now)
@@ -1961,6 +2138,16 @@ def main(argv: list[str] | None = None) -> int:
             # run_websocket.
             "status_frames": stats.get("status_frames"),
             "status_frames_seen": stats.get("status_frames_seen"),
+            # The two phase facts. Until 2026-09-02 these reached the run
+            # stats in memory and the test, and never the sidecar, so a
+            # morning that quietly stayed on the provisional pool left one log
+            # line and no record the scan or the nightly could read.
+            "planned_resubscribes": stats.get("planned_resubscribes"),
+            "pool_reload_error": stats.get("pool_reload_error"),
+            "subscription_refusals": stats.get("subscription_refusals"),
+            "replayed_on_connect": builder.replayed_on_connect,
+            "replayed_on_connect_volume": builder.replayed_on_connect_volume,
+            "replayed_on_connect_unwritten": builder.replayed_on_connect_unwritten,
             "trades_folded": builder.trades_seen,
             "minutes_written": builder.rows_written,
             # Refused for carrying a timestamp outside this run's window. The

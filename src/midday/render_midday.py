@@ -220,6 +220,14 @@ def movers_section(packet: dict[str, Any]) -> list[str]:
     rows = movers["rows"]
     tally = movers["tally"]
     out = ["## What else moved, that the morning never named", ""]
+    if movers.get("refused_reason"):
+        # Not measured, and said so where the list would be. A run before the
+        # open has no elapsed session to pro rate volume against, and until
+        # 2026-09-02 the pass measured against one minute of 390 instead.
+        out += [f"This list was not measured: {_cell(movers['refused_reason'])}. "
+                f"{tally.get('quoted', 0):,} names were quoted and the picks "
+                "above were graded as usual.", ""]
+        return out
     if not rows:
         out += [f"Nothing cleared all three floors: {movers['floors']['min_move_pct']} "
                 f"move, {movers['floors']['min_day_rvol']} relative volume and "

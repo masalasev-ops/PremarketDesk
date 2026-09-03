@@ -130,10 +130,19 @@ def claim_two_and_three(failures: list[str]) -> None:
             {"code": "CCC", "before_after_market": "AfterMarket", "report_date": "2026-08-14"},
             {"code": "DDD", "before_after_market": "BeforeMarket", "report_date": "2026-08-13"},
             {"code": "ZZZ", "before_after_market": "AfterMarket", "report_date": "2026-08-13"},
-        ]), {"AAA.US", "BBB.US", "CCC.US", "DDD.US"}, today, prior_session=prior)
-    if set(wide["names"]) != {"AAA.US", "BBB.US"}:
+            # The vendor leaves about one row in twenty untimed. Dated inside
+            # the window it is the same prior with less precision and gets
+            # tier 1 with the precision recorded; dated outside it, nothing.
+            {"code": "EEE", "before_after_market": None, "report_date": "2026-08-14"},
+            {"code": "FFF", "before_after_market": None, "report_date": "2026-08-12"},
+            # A known timing is not overwritten by an unknown one.
+            {"code": "AAA", "before_after_market": None, "report_date": "2026-08-13"},
+        ]), {"AAA.US", "BBB.US", "CCC.US", "DDD.US", "EEE.US", "FFF.US"}, today,
+        prior_session=prior)
+    if set(wide["names"]) != {"AAA.US", "BBB.US", "EEE.US"}:
         failures.append(f"earnings_reporters kept {sorted(wide['names'])}, "
-                        "wanted the before open name and the prior day after close name")
+                        "wanted the before open name, the prior day after close "
+                        "name and the untimed name inside the window")
     else:
         if wide["names"]["AAA.US"]["tier_key"] != "earnings_before_open":
             failures.append("a before open reporter is not keyed earnings_before_open")
@@ -141,6 +150,11 @@ def claim_two_and_three(failures: list[str]) -> None:
             failures.append("a prior day after close reporter is not keyed earnings_after_close")
         if wide["names"]["BBB.US"].get("actual") != -0.03:
             failures.append("the after close reporter's published actual was not carried")
+        if wide["names"]["EEE.US"]["tier_key"] != "earnings_timing_unknown":
+            failures.append("an untimed reporter inside the window is not keyed "
+                            "earnings_timing_unknown")
+        if wide["names"]["EEE.US"].get("timing") != "unknown":
+            failures.append("an untimed reporter does not record its timing as unknown")
     if wide.get("window") != ["2026-08-13", "2026-08-14"]:
         failures.append(f"the calendar window read was {wide.get('window')!r}, "
                         "not the prior session to today")

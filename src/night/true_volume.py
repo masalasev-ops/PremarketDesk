@@ -183,9 +183,31 @@ def fetch_bars(probe: probe_alpaca.Probe, symbols: list[str],
     # this is already sorted. Sorted again anyway because paper_ledger reads
     # the sequence as the record of what happened first, and an out of order
     # bar there would book a stop before the entry that preceded it.
+    #
+    # END EXCLUSIVE, in this one place for every caller. Alpaca treats `end`
+    # as inclusive and stamps a bar at its open, so a window ending at the
+    # 08:45 cutoff came back carrying the 08:45 bar, the minute AFTER the
+    # cutoff, which the morning's own accumulator never sees. Every window
+    # this module and the research modules build through it was one bar too
+    # wide until 2026-09-02, in the direction that reads as the socket missing
+    # more of the tape. A bar whose stamp does not parse is kept: the filter
+    # exists to drop a bar known to sit past the end, not to guess.
     for symbol in out:
         out[symbol].sort(key=lambda row: str(row.get("t") or ""))
+        out[symbol] = [row for row in out[symbol]
+                       if not _at_or_past(row, end)]
     return out, None
+
+
+def _at_or_past(row: dict[str, Any], end: dt.datetime) -> bool:
+    """Whether a bar's open stamp is at or after `end`. Unparseable is False."""
+    try:
+        opened = dt.datetime.fromisoformat(str(row.get("t") or ""))
+    except ValueError:
+        return False
+    if opened.tzinfo is None:
+        return False
+    return opened >= end
 
 
 def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
@@ -245,6 +267,30 @@ def fetch_window(probe: probe_alpaca.Probe, symbols: list[str],
     return out, error
 
 
+def socket_open_hhmm(ticker: str, day: str, window_start: str | None) -> str:
+    """The ET clock this name's socket subscription opened on a session.
+
+    Per NAME since the two phase collector, read in the order the record is
+    trusted: the sidecar's subscribed_since, which survives the handover
+    rewrite; then picks.pm_window_start, the first bar the morning saw for
+    the name; then the sidecar's window_open_at for the whole session; then
+    the knob, which is right only for a session that left no record at all.
+    """
+    from collect import collect_premarket
+
+    recorded = collect_premarket.subscribed_since_hhmm(ticker, day)
+    if recorded:
+        return recorded
+    if window_start and len(str(window_start)) >= 16:
+        text = str(window_start)[11:16]
+        if len(text) == 5 and text[2] == ":" and text.replace(":", "").isdigit():
+            return text
+    recorded = collect_premarket.window_open_hhmm(day)
+    if recorded:
+        return recorded
+    return _CRIT.clock_text("collector", "start_time")
+
+
 def prior_sessions(probe: probe_alpaca.Probe, symbols: list[str], day: dt.date,
                    cutoff_hhmm: str) -> tuple[dict[str, list[float]], list[str]]:
     """The same window on the prior trading sessions, walking back day by day.
@@ -281,9 +327,16 @@ def prior_sessions(probe: probe_alpaca.Probe, symbols: list[str], day: dt.date,
         if not any(row["bars"] for row in found.values()):
             continue
         used.append(session.isoformat())
+        # EVERY symbol, on every session any symbol had a bar. A session with
+        # a bar for anyone was a trading day, and a name that printed nothing
+        # before the cutoff that day had a premarket volume of zero, which is
+        # a real observation. collect/baseline.py keeps exactly that zero for
+        # pm_rvol's denominator; until 2026-09-02 this appended only the
+        # sessions the symbol itself had bars on, so pm_rvol_true divided by a
+        # median over a thinner name's busy days alone and the two ratios were
+        # two definitions wearing one name.
         for symbol, row in found.items():
-            if row["bars"]:
-                per_symbol[symbol].append(row["volume"])
+            per_symbol[symbol].append(row["volume"] if row["bars"] else 0.0)
     return per_symbol, used
 
 
@@ -749,7 +802,8 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     with store.session() as connection:
         store.init(connection)
         rows = connection.execute(
-            "SELECT ticker, pm_volume, pm_volume_estimated, entry_ref, stop_ref "
+            "SELECT ticker, pm_volume, pm_volume_estimated, entry_ref, stop_ref, "
+            "pm_window_start "
             "FROM picks WHERE date=? AND source='live' ORDER BY ticker", (day,),
         ).fetchall()
     tickers = [row["ticker"] for row in rows]
@@ -772,10 +826,29 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
     # the FULL window's own level, and the socket window and the twenty
     # baseline sessions are summed rather than looked through.
     observed, error = fetch_window(probe, symbols, start, end, keep_minutes=True)
-    socket_start, socket_end = _window(session_day, cutoff,
-                                       ("collector", "start_time"))
-    on_socket, socket_error = fetch_window(probe, symbols, socket_start,
-                                           socket_end)
+    # The socket window is PER NAME. The two phase collector subscribes its
+    # proxies at 04:00 and the real pool after the 07:15 discover, so on
+    # every session since 2026-09-03 one window for all names understated
+    # capture_observed for the late names by dividing what they captured by
+    # tape they were never subscribed for. Each name's open comes from
+    # socket_open_hhmm, and the names are fetched in groups sharing an open:
+    # one request per distinct open, which is one on every session before
+    # the two phase change and two from then.
+    socket_opens: dict[str, str] = {}
+    for row in rows:
+        socket_opens[bare[row["ticker"]]] = socket_open_hhmm(
+            row["ticker"], day, row["pm_window_start"])
+    on_socket: dict[str, dict[str, Any]] = {}
+    socket_errors: dict[str, str] = {}
+    for opened in sorted(set(socket_opens.values())):
+        group = sorted(symbol for symbol, text in socket_opens.items() if text == opened)
+        open_h, open_m = (int(part) for part in opened.split(":"))
+        found, group_error = fetch_window(
+            probe, group, ettime.at_hm(session_day, (open_h, open_m)), end)
+        if group_error:
+            socket_errors.update({symbol: group_error for symbol in group})
+        else:
+            on_socket.update(found)
     history, sessions_used = prior_sessions(probe, symbols, session_day, cutoff)
 
     min_bars = _CRIT.integer("truth", "min_true_bars")
@@ -888,6 +961,7 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
         # measured on common minutes. collector_window_share is the other
         # shortfall, the one this project has called a lower bound in prose
         # since 2026-08-14 without ever measuring it.
+        socket_error = socket_errors.get(bare[ticker])
         in_socket_window = (on_socket.get(bare[ticker]) or {}) if not socket_error else {}
         socket_true = in_socket_window.get("volume") if in_socket_window.get("bars") else None
         record["true_volume_socket_window"] = (
@@ -904,6 +978,9 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
                 in_socket_window, stop_field)
         record["capture_observed"] = _ratio(record["_socket"], socket_true)
         record["estimate_error"] = _ratio(record["_estimated"], true_volume)
+        # Carried for the printout, never written: picks has no column for
+        # a per name socket window and true_window already names the full one.
+        record["_socket_window"] = f"{socket_opens[bare[ticker]]}-{cutoff}"
         if socket_error and not record["truth_reason"]:
             record["truth_reason"] = (
                 f"the collector window could not be fetched ({socket_error}), "
@@ -918,6 +995,14 @@ def measure(day: str, dry_run: bool = False, probe: Any = None,
 
     return {"day": day, "rows": out, "skipped": None, "cutoff": cutoff,
             "window": window_text, "sessions_used": sessions_used,
+            # The socket windows on THIS session, per name from the record, so
+            # the printout names the clocks it measured rather than one it
+            # remembers. 07:20 was written into three sentences of report()
+            # until 2026-09-02, after the collector had moved to 04:00. Two
+            # opens on one session, the proxies' and the pool's, read
+            # "04:00/07:15-08:45".
+            "collector_window": (
+                "/".join(sorted(set(socket_opens.values()))) + f"-{cutoff}"),
             "requests": probe.request_count, "dry_run": dry_run}
 
 
@@ -991,12 +1076,15 @@ def report(result: dict[str, Any]) -> None:
     measured = [r for r in rows if r["pm_volume_true"] is not None]
     shares = [r["capture_observed"] for r in rows
               if r["capture_observed"] is not None]
+    full_open = str(result["window"]).split("-")[0]
+    socket_window = str(result.get("collector_window") or "")
+    socket_open = socket_window.split("-")[0] or "socket"
     print(f"truth: {result['day']} over {result['window']}, "
           f"{len(measured)} of {len(rows)} live rows measured against "
           f"{len(result['sessions_used'])} prior sessions, "
           f"{result['requests']} alpaca requests, no EODHD quota")
     print(f"  {'ticker':<10} {'socket':>12} {'estimated':>13} "
-          f"{'TRUE 04:00':>14} {'TRUE 07:20':>13} {'captured':>9} "
+          f"{'TRUE ' + full_open:>14} {'TRUE ' + socket_open:>13} {'captured':>9} "
           f"{'window':>8} {'est err':>8} {'rvol_true':>10}")
     for record in rows:
         print(f"  {record['ticker']:<10} "
@@ -1017,10 +1105,15 @@ def report(result: dict[str, Any]) -> None:
         print(f"truth: capture_observed ran {low:.4f} to {high:.4f}, median "
               f"{statistics.median(shares):.4f}, against the single {shipped} "
               "the morning divided every name by. Both sides of that "
-              "comparison are the collector's own 07:20 window")
-        if high and low and high / low >= 2.0:
+              f"comparison are the collector's own {socket_window or 'socket'} "
+              "window")
+        # The spread is printed whenever it exists rather than past a fold
+        # that used to be written here as 2.0. Which fold a single divisor
+        # can carry is a threshold and this file owns none; the number itself
+        # is arithmetic and the reader can hold it against any fold they like.
+        if high and low:
             print(f"truth: that is a {high / low:.1f} fold spread within one "
-                  "session, which is what a single divisor cannot carry")
+                  "session, which a single divisor has to carry")
         outside = [s for s in shares if s > shipped] or []
         print(f"truth: {len(shares) - len(outside)} of {len(shares)} symbols "
               f"captured LESS than the shipped {shipped}, so the morning "
@@ -1054,9 +1147,9 @@ def report(result: dict[str, Any]) -> None:
     windows = sorted(r["collector_window_share"] for r in rows
                      if r["collector_window_share"] is not None)
     if windows:
-        print(f"truth: the collector's 07:20 start saw a median "
-              f"{statistics.median(windows):.4f} of the 04:00 premarket tape, "
-              f"range {windows[0]:.4f} to {windows[-1]:.4f}. That is the OTHER "
+        print(f"truth: the collector's {socket_open} start saw a median "
+              f"{statistics.median(windows):.4f} of the {full_open} premarket "
+              f"tape, range {windows[0]:.4f} to {windows[-1]:.4f}. That is the OTHER "
               "lower bound, the one called arithmetic since 2026-08-14 and "
               "never measured until now")
 
@@ -1084,8 +1177,9 @@ def reference_gap_report() -> None:
                inside the minutes the socket was listening to. This is the
                only one of the three that is a statement about the FEED.
       window   (entry_ref_true - entry_ref_collector_window) / that, the part
-               that comes from the collector starting at 07:20 rather than
-               04:00. A start time question, not a feed question.
+               that comes from the collector starting later than the session
+               did, 07:20 against 04:00 before 2026-09-03. A start time
+               question, not a feed question.
 
     Reported in both directions and never as a correction. The sampled columns
     stay exactly as the morning wrote them.
@@ -1128,7 +1222,7 @@ def reference_gap_report() -> None:
                   / r["entry_ref_collector_window"] * 100.0 for r in split]
         print(f"  of which sampling, inside the socket's own minutes: "
               f"{_spread(sampling)}")
-        print(f"  of which the 04:00 to 07:20 start:                 "
+        print(f"  of which the minutes before the socket's own window opened: "
               f"{_spread(window)}")
     print("  A positive entry gap means the true premarket high ran ABOVE the "
           "level the collector saw, which is the direction mfe_pct is "
