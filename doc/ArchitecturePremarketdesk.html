@@ -242,7 +242,7 @@ tbody tr:hover{background:var(--ground)}
   The two counts on the line below are read off <code>register_tasks.ps1</code>, the one file
   that decides them, rather than remembered. The schedule is the architecture.</p>
   <div class="meta">
-    <span>69 components</span><span>7 job scripts, 7 tasks</span><span>1 data vendor</span><span>2 model calls per day</span>
+    <span>70 components</span><span>7 job scripts, 7 tasks</span><span>1 data vendor</span><span>2 model calls per day</span>
   </div>
 </header>
 
@@ -420,9 +420,9 @@ tbody tr:hover{background:var(--ground)}
 
       <div class="t"><b>08:46</b>to 08:49</div>
       <div class="c morn">
-        <h5>Render, send, and rebuild the archive</h5>
+        <h5>Render, send, and rebuild the desk</h5>
         <p>Markdown to a single HTML file, then out by email. While the unverified marker file exists,
-        sending is refused no matter what keys are configured. The chain's last step is the archive
+        sending is refused no matter what keys are configured. The chain's last step is the desk
         rebuild, so the published file at site/PremarketDesk.html carries this morning before the
         open. A deliver that fails stops the chain and skips it; the evening rebuild catches the day
         anyway, because every build is a full rebuild from what is on disk.</p>
@@ -497,10 +497,12 @@ tbody tr:hover{background:var(--ground)}
         levels and the fill verdict. C60 books the paper rule, and it comes after C59 rather than
         before because every level it books against is written by C59. C42 measures what the morning's
         pool missed, C63 deletes the one file class its whitelist names, C61 renders the weekly page from what the
-        steps above have just written, and C53 rebuilds the archive last. Only C20 and C21 can stop
+        steps above have just written, and C53 rebuilds the desk last. C67 runs one step BEFORE C63,
+        because the prune refuses to drop a session's duplicate snapshot until that session's bars
+        are frozen. Only C20 and C21 can stop
         the chain. Every step after them is a record, nothing downstream reads it, and a bad
-        measurement must not cost the archive its rebuild.</p>
-        <div class="ids">C06 fires C50, C62, C20, C21, C59, C60, C42, C63, C61, C53 &rarr; writes C31,
+        measurement must not cost the desk its rebuild.</p>
+        <div class="ids">C06 fires C50, C62, C20, C21, C59, C60, C42, C67, C63, C61, C53 &rarr; writes C31,
         C64, C65</div>
       </div>
     </div>
@@ -576,7 +578,8 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
       <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C26, C27, C35</td><td>C32</td></tr>
-      <tr><td class="id">C53</td><td class="nm">build_archive.py</td><td><span class="lay night">Night</span></td><td>22:15, and as the morning chain's last step</td><td>C29, C32</td><td>C54</td></tr>
+      <tr><td class="id">C53</td><td class="nm">desk/render.py</td><td><span class="lay night">Night</span></td><td>22:15, and as the last step of the morning and midday chains</td><td>C29, C32</td><td>C54</td></tr>
+      <tr><td class="id">C67</td><td class="nm">desk/compact.py</td><td><span class="lay night">Night</span></td><td>22:15, between C42 and C63</td><td>C32</td><td>C32</td></tr>
       <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td><span class="lay night">Night</span></td><td>22:15, after C21</td><td>C31, C32, C66</td><td>C31</td></tr>
       <tr><td class="id">C60</td><td class="nm">paper_ledger.py</td><td><span class="lay night">Night</span></td><td>22:15, after C59</td><td>C23, C31, C66</td><td>C64</td></tr>
       <tr><td class="id">C61</td><td class="nm">weekly_page.py</td><td><span class="lay night">Night</span></td><td>22:15, after every step that writes</td><td>C29, C31, C32, C34, C56, C57, C64</td><td>C65</td></tr>
@@ -600,7 +603,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C64</td><td class="nm">db: paper_trades table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>Rewritten by C16 on a vintage violation, deleted by hand</td></tr>
-      <tr><td class="id">C54</td><td class="nm">site/PremarketDesk.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C54</td><td class="nm">site/PremarketDesk.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>The desk since 2026-09-04, when build_archive was retired and C53 took its filename</td></tr>
       <tr><td class="id">C65</td><td class="nm">site/Weekly.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C56</td><td class="nm">data/job-status.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C57</td><td class="nm">data/quantifier-flags.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
@@ -1172,8 +1175,8 @@ tbody tr:hover{background:var(--ground)}
   <p> The gate marker has two writers,
   <code>verify_morning.py</code> by hand and <code>vintage.py</code> from inside the scan, and one
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two of the columns are for
-  stores that sit outside the relay: the published archive (C54), whose single writer is
-  build_archive at the end of both the morning chain and the nightly, and the job trail (C56), which
+  stores that sit outside the relay: the desk (C54), whose single writer is
+  desk/render at the end of the morning chain, the midday chain and the nightly, and the job trail (C56), which
   every scheduled step appends one line to as it exits. Five stores are deliberately not columned
   here, because nothing in the morning path touches any of them. The gap_stats table (C41) is
   written weekly by C40 and read at 07:15 by C13. The quantifier flag log (C57) is written by the
@@ -1214,7 +1217,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C62</td><td class="nm">backup_evidence.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C63</td><td class="nm">prune_data.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td class="r">R</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
-      <tr><td class="id">C53</td><td class="nm">build_archive.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="w">W</td><td class="w">W</td><td class="w">W</td></tr>
+      <tr><td class="id">C53</td><td class="nm">desk/render.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="dash">&middot;</td><td class="w">W</td><td class="w">W</td><td class="w">W</td></tr>
       <tr><td class="id">C50</td><td class="nm">market_today.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
       <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td class="dash">&middot;</td><td class="dash">&middot;</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="r">R</td><td class="rw">RW</td><td class="w">W</td><td class="dash">&middot;</td><td class="w">W</td></tr>
     </tbody>
@@ -1368,7 +1371,10 @@ tbody tr:hover{background:var(--ground)}
     deliver),
     <b>midday</b> (scan_midday, render_midday),
     <b>night</b> (backup_evidence, backfill_premarket, fill_outcomes, true_volume, paper_ledger,
-    pool_recall, prune_data, weekly_page, build_archive, in the order the nightly runs them),
+    pool_recall, prune_data, weekly_page, in the order the nightly runs them, with
+    <b>desk</b> (compact, assets, render) running compact between pool_recall and prune and
+    render last of all; build_archive was the last of the night package until 2026-09-04, when
+    the owner retired it and desk/render took its filename),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
     vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session which runs the live screen
     over a trading day that is long finished, four probe_ scripts, four measure_ scripts
@@ -1437,9 +1443,11 @@ tbody tr:hover{background:var(--ground)}
     rather than replacing it) <span style="color:var(--ink-3)">(C29, C32)</span></dd>
 
     <dt>site\</dt>
-    <dd>PremarketDesk.html, the single file report archive: the newest sessions inlined whole, older
-    ones linking out to their own runs\&lt;date&gt;\report.html. Rebuilt whole after every morning
-    chain and every nightly run, so running the build twice is the same as running it once. Beside it
+    <dd>PremarketDesk.html, the desk: every session on file in one document on eight hash routes,
+    each session's payload inlined gzipped and base64 encoded and inflated in the page. Rebuilt whole
+    after every morning chain, every midday chain and every nightly run, so running the build twice
+    is the same as running it once. It was build_archive's single file report archive until
+    2026-09-04. Beside it
     Weekly.html, written by C61 from what is already on disk and read by nobody: it says whether the
     week ran, whether it is trustworthy, what it published and what it cost, and it
     carries the score watch, which groups filled outcomes by conviction bucket and by each score

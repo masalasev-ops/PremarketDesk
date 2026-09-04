@@ -95,14 +95,19 @@ at the root and is gitignored along with .env.
              named. No model and no narrative pass, because midday asks closed
              questions. It writes to nothing the morning owns.
   - night/   backup_evidence, backfill_premarket, fill_outcomes, true_volume,
-             paper_ledger, pool_recall, prune_data, weekly_page, build_archive,
-             in the order the nightly runs them. What runs once the vendor
+             paper_ledger, pool_recall, prune_data, weekly_page, in the order
+             the nightly runs them, with desk/compact between pool_recall and
+             prune and desk/render last [corrected 2026-09-04: was
+             build_archive, retired that morning]. What runs once the vendor
              has published the full day. true_volume and paper_ledger are the
              two modules in the tree that talk to Alpaca in production, both
              after the close and neither able to reach a report: see CRITERIA
              [Truth]. [corrected 2026-09-02: was "true_volume is the only
              module in the tree that talks to Alpaca in production", and the
              list omitted backup_evidence and paper_ledger.]
+  - desk/    compact, assets, render. The one document below, rebuilt at the
+             end of all three chains; compact freezes each session to
+             runs/<date>/desk.json.gz, which prune_data reads. Spec: SCREENS.
   - research/ backtest_pool, float_cache, float_rotation_study,
              counterfactual_watchlist, cutoff_0830, replay_session (the live
              screen run over a finished session from Alpaca bars),
@@ -285,16 +290,11 @@ at the root and is gitignored along with .env.
   shipped as a fifth and README.md already said five.]
   No vendor call, no new table, no measurement of its own. Gitignored with the
   rest of site/
-- site/PremarketDesk.html: the single file report archive, rebuilt from
-  runs/ at the end of every morning chain and at the end of the 22:15 nightly.
-  The nightly's 07:00 catch-up firing, which the .bat recognises from the
-  clock, skips the rebuild along
-  with pool recall
-  (build_archive.py, embed_sessions knob in CRITERIA [archive]). Opens by
-  double clicking, no server, no network; the newest sessions are inlined,
-  older ones link out to their runs/<date>/report.html; the URL hash picks a
-  day, j and k or the arrows step between days. Full rebuild every time,
-  idempotent by construction; gitignored like the other generated output
+- site/PremarketDesk.html: THE DESK since 2026-09-04, when build_archive was
+  retired and desk/render took its filename. Every session in one document on
+  eight hash routes, each inlined gzipped and inflated in the page. Rebuilt
+  whole at the end of all three chains, not by the 07:00 catch-up
+  (desk/render.py, inline_sessions in CRITERIA [Screens]); gitignored
 
 ## Environment facts a new session must know
 

@@ -8,7 +8,7 @@ data/backtest/ deleted outright on the ground that it is refetchable.
 
 [BUILT 2026-09-04, steps 1, 3, 4 and the mechanism of 5. What runs tonight is
 night/prune_data.sweep_runs, wired into the nightly after desk.compact and
-before the archive. It freed 4.46 MB the first time it ran, taking runs/ from
+before the desk rebuild. It freed 4.46 MB the first time it ran, taking runs/ from
 11 MB to 5.6 MB, by dropping ten proven duplicate snapshots. Step 2, having
 scan stop writing the duplicate at all, is NOT built and is the one item left.
 See CHANGELOG 2026-09-04 sixtieth.]
@@ -100,10 +100,12 @@ worth that capability.
   data/premarket/*.jsonl   gzipped at three months, never deleted. 310 MB a
                            year becomes 41 MB and the capture rate stays re
                            measurable over every session ever recorded
-  report.md, report.html   what a human actually saw. build_archive rebuilds
-                           site/ FROM these, so pruning them shortens the
-                           archive silently, which is prune_data's own
-                           stated reason for leaving runs/ alone
+  report.md, report.html   what a human actually saw. desk/compact inlines
+                           the desk's Report screen FROM these, so pruning
+                           them empties that screen silently, which is
+                           prune_data's own stated reason for leaving runs/
+                           alone. They are gzipped past hot_sessions and
+                           never deleted at any age
   packet.json              compressed forever, 32 KB a session
   picks, paper_trades      database rows, not files, already small
 
@@ -112,7 +114,8 @@ worth that capability.
 This is the question that shaped the tiers, so it gets its own answer.
 
 The desk inlines its data at build time, because Chrome blocks fetch on
-file:// and build_archive found that before this file existed. The question is
+file:// and build_archive found that before this file existed, in the page
+whose filename the desk took later the same day. The question is
 whether every session can be inlined, and the measurement says yes with room
 to spare.
 
@@ -125,7 +128,8 @@ to spare.
   252 sessions, a year         4.8 MB
   504 sessions, two years      9.5 MB
 
-So EVERY session the project has ever run fits in one site/Desk.html for
+So EVERY session the project has ever run fits in one site/PremarketDesk.html
+for
 years, and `#/session/2026-08-21/morning` resolves without a server, without
 a fetch and without a second file. The page inflates the payload with
 DecompressionStream, which is native in Chrome and Edge and needs no library.
@@ -301,7 +305,9 @@ the name of a key.
   cap question, and test_backtest claim 4 is silently skipping until then.
   The command and its cost are recorded above.
 
-  Whether site/PremarketDesk.html and site/Weekly.html keep being written once
-  the desk carries every session. They are 440 KB together and rebuilt from
-  runs/, so they cost nothing to keep and nothing to drop. SCREENS.md carries
-  the same question from the other side.
+  ANSWERED 2026-09-04, for half of it: site/PremarketDesk.html WAS the
+  archive, the owner retired that page the same afternoon and the desk took
+  its filename, so the question is now only about site/Weekly.html. It is
+  45 KB, rebuilt from runs/ and the database by the nightly, and it answers
+  one question the desk's Record screen does not: what the week cost.
+  Kept for now. SCREENS.md carries the same question from the other side.

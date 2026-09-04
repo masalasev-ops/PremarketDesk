@@ -88,7 +88,7 @@ echo ===== outcomes finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 if %RC% neq 0 exit /b %RC%
 
 if /i "%MODE%"=="catchup" (
-    echo ===== catchup mode, pool recall and archive skipped %DATE% %TIME% ===== >> "%LOG%"
+    echo ===== catchup mode, pool recall and the desk skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
 

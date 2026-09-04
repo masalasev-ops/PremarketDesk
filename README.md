@@ -53,9 +53,9 @@ All times are US Eastern, which the machine is expected to keep locally.
 | 03:55 and 07:15 | discover | Builds today's candidate pool from four priors (earnings between the prior close and this open, overnight news, prior session movers, recent runners), ranks it, subscribes the collector to the top of it, warms the volume baseline. Twice: 03:55 gives the 04:00 collector a pool to open on, 07:15 is the one the morning screens, over a news window that reaches the hours most earnings land in |
 | 04:00 to 09:25 | collector | Websocket trades to one minute bars on disk, one file per day. Starts on the provisional pool the 03:55 discover wrote and moves onto the 07:15 pool at 07:20, keeping the tape of every name on both. See the two phase note in CRITERIA |
 | 07:25 every 30 min to 09:25; 12:25, 12:55, 13:25; 22:45 | monitor | The watchdog, one task with three triggers: checks each job fired and finished, reruns what is safe. The morning trigger covers the collector, discover and the chain. The three midday passes watch the midday job, and there are three and not one because `job_log_stale_after_s` is 2,200 seconds: a midday that hung after writing its log at 12:00 is still warm at 12:25 and cannot be told from a live one, and is cold by 12:55. The midday job is the one job the watchdog reports and never reruns: the 12:00 sweep spends about 2,900 credits on the shared key, and a relaunch would replace the packet it may already have written. The 22:45 pass is over the nightly. Which pass a firing is comes from the clock, decided in `ops/monitor_jobs.py` from CRITERIA [Monitor] |
-| 08:45 | morning chain | scan, analyst, render, verify, deliver, archive, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
+| 08:45 | morning chain | scan, analyst, render, verify, deliver, desk, stopping at the first failure. verify is the exception: it prints the gate table for a human and never stops the chain, because the gate is enforced by deliver |
 | 12:00 | midday | The two questions the morning cannot answer, because at 08:45 the session had not opened: what every one of today's picks did against the levels the morning published, and what else moved that the morning never named. Then a second report, rendered straight from the packet. No model and no narrative pass, because midday asks closed questions: a pick triggered or it did not. 12:00 and not another hour because us-quote-delayed's regular hours behaviour is what was measured, and it never writes to picks or paper_trades, which are records of what an earlier pass claimed |
-| 22:15; 07:00; Sun 21:00 | nightly | One task with three triggers, and the .bat reads the clock to tell them apart (a hand run may pass `full`, `catchup` or `universe` instead). 22:15 on weekdays is the full night, eleven steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the six artifacts that cannot be rebuilt (the collector's capture, its stats and subscriptions sidecars, the packet, and the report in markdown and HTML) plus a dated snapshot of the quantifier flag log, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; the paper ledger, which books one written rule against the levels that measurement wrote; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the archive rebuild, so a morning that failed after the scan is still archived the same evening. `tasks/README.md` carries the same list with the reasoning under each. 07:00 on weekdays is the catch-up, the vendor lag half: guard, calendar refresh, backup, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Everything after the outcome fill is skipped, because those steps measure a session that at 07:00 has not opened. pool_recall is the one that made the case: it measures the session it is invoked on, and until 2026-08-20 this firing wrote recall 0.0 over the evening's real measurement. Sunday 21:00 is the weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, one counted call per name, measured at 2,745 calls and 421 seconds on the 2026-08-13 universe, run under `PMD_JOB` universe and writing `logs/universe-<date>.log` exactly as the retired `job_universe.bat` did. That propensity is what discovery ranks the pool by inside each tier. 21:00 and not 20:00: 20:00 ET is the instant of the 00:00 UTC quota reset in daylight time, so the largest job in the schedule billed to whichever quota day it happened to land on; and not 20:30, because the vendor's counter rolled 30 to 32 minutes late on 2026-08-16 |
+| 22:15; 07:00; Sun 21:00 | nightly | One task with three triggers, and the .bat reads the clock to tell them apart (a hand run may pass `full`, `catchup` or `universe` instead). 22:15 on weekdays is the full night, eleven steps, in this order and the list is closed: the trading day guard; a calendar refresh so the 08:45 chain never fetches it; the backup of the six artifacts that cannot be rebuilt (the collector's capture, its stats and subscriptions sidecars, the packet, and the report in markdown and HTML) plus a dated snapshot of the quantifier flag log, to a root outside the working tree; the true premarket backfill; the trade outcome fill; the Alpaca SIP measurement of what premarket volume actually was; the paper ledger, which books one written rule against the levels that measurement wrote; what the morning's pool missed, into `runs/YYYY-MM-DD/pool_recall.json`; the prune, which is the only scheduled step in the project that deletes anything and deletes only what its whitelist names; the weekly page; then the desk rebuild, so a morning that failed after the scan still reaches a screen the same evening. `tasks/README.md` carries the same list with the reasoning under each. 07:00 on weekdays is the catch-up, the vendor lag half: guard, calendar refresh, backup, backfill, outcomes, then stop. The vendor usually publishes yesterday's intraday overnight, so this fills anything the 22:15 run could not. Everything after the outcome fill is skipped, because those steps measure a session that at 07:00 has not opened. pool_recall is the one that made the case: it measures the session it is invoked on, and until 2026-08-20 this firing wrote recall 0.0 over the evening's real measurement. Sunday 21:00 is the weekly rebuild of the discovery universe, then the gap propensity sweep over every name in it, one counted call per name, measured at 2,745 calls and 421 seconds on the 2026-08-13 universe, run under `PMD_JOB` universe and writing `logs/universe-<date>.log` exactly as the retired `job_universe.bat` did. That propensity is what discovery ranks the pool by inside each tier. 21:00 and not 20:00: 20:00 ET is the instant of the 00:00 UTC quota reset in daylight time, so the largest job in the schedule billed to whichever quota day it happened to land on; and not 20:30, because the vendor's counter rolled 30 to 32 minutes late on 2026-08-16 |
 | Every 30 min, all day, every day | meter-sampler | One reading of the shared EODHD quota counter into `logs/meter-<quota day>.log`, 48 a day, weekends included. Not a pipeline step: an instrument. The job trail says which step spent what and cannot say when, and nothing at all runs between 22:45 and 07:00, which is exactly where a sibling project draining the shared key would hide |
 
 ```mermaid
@@ -70,7 +70,7 @@ flowchart LR
     X -->|yes| A[analyst.py<br>claude CLI, one completion]
     A --> R[render_report.py<br>HTML report]
     R --> V[deliver.py<br>email, gated]
-    R --> W[build_archive.py<br>single file archive]
+    R --> W[desk/render.py<br>the desk, one document]
     S -. picks .-> B[(SQLite)]
     N[backfill_premarket.py<br>+ fill_outcomes.py<br>EODHD intraday] --> B
     T[true_volume.py<br>Alpaca SIP tape] --> B
@@ -122,19 +122,30 @@ repository, and this section keeps that rule. The one place real figures appear
 is the paper ledger's aggregate counts, which are already in
 `doc/CHANGELOG.md`, and they are labelled where they are used.
 
-### The three things it produces
+### The four things it produces
 
-The system produces exactly three documents. Everything else on disk is
+The system produces exactly four documents. Everything else on disk is
 evidence behind them.
 
-| | The morning report | The midday report | The weekly page |
-| --- | --- | --- | --- |
-| File | `runs/YYYY-MM-DD/report.html`, and every past one in `site/PremarketDesk.html` | `runs/YYYY-MM-DD/report_midday.html` | `site/Weekly.html` |
-| Written | 08:46 to 08:49 each weekday | 12:00 each weekday | Every night at 22:15 |
-| Covers | This morning only, except one section | Today's session so far | A rolling trailing 7 days |
-| Answers | Which names gapped, on what, and what the evidence behind each is worth | What this morning's picks actually did, and what else moved that the morning never named | Did the machine run, is its data trustworthy, what did it publish, what did it cost, and is the score ordering anything |
-| Read it | Before 09:30, ideally around 08:50 | Any time after 12:00 | Whenever. Nothing in it is time critical |
-| Written by | Python, from the packet, with a handful of prose slots filled by the claude CLI | Nothing. It is rendered | Nothing. It is rendered |
+| | The morning report | The midday report | The desk | The weekly page |
+| --- | --- | --- | --- | --- |
+| File | `runs/YYYY-MM-DD/report.html` | `runs/YYYY-MM-DD/report_midday.html` | `site/PremarketDesk.html` | `site/Weekly.html` |
+| Written | 08:46 to 08:49 each weekday | 12:00 each weekday | At the end of the morning chain, the midday chain and the nightly | Every night at 22:15 |
+| Covers | This morning only, except one section | Today's session so far | Every session on file | A rolling trailing 7 days |
+| Answers | Which names gapped, on what, and what the evidence behind each is worth | What this morning's picks actually did, and what else moved that the morning never named | The same questions, drawn rather than described, plus what the record says across sessions and whether the machine was right | Did the machine run, is its data trustworthy, what did it publish, what did it cost, and is the score ordering anything |
+| Read it | Before 09:30, ideally around 08:50 | Any time after 12:00 | Whenever, and it is the way to read a past morning | Whenever. Nothing in it is time critical |
+| Written by | Python, from the packet, with a handful of prose slots filled by the claude CLI | Nothing. It is rendered | Nothing. It is rendered | Nothing. It is rendered |
+
+The desk is one HTML document with eight screens on hash routes: Morning,
+Midday, the written Report, Session, Sessions, Record, Name and Health. No
+framework, no library, no build step and no network. Every session it carries
+is compacted by `desk/compact.py`, gzipped and base64 encoded into the file,
+and inflated in the page, because Chrome blocks `fetch` on `file://`. It reads
+and renders and measures nothing of its own, so a wrong figure on a screen is
+a wrong figure in that morning's packet. It replaced `build_archive.py` and
+took its filename on 2026-09-04, and it carries the written reports for that
+reason: the page it replaced existed to read old mornings' prose. See
+`doc/SCREENS.md`.
 
 The morning report is the only one a model touches, and since 2026-09-02 it
 does not write it. Python writes the whole report from the packet, every
@@ -162,8 +173,9 @@ once.
 
 `data/UNVERIFIED` is on disk, so `deliver.py` refuses to send regardless of what
 keys are configured. No email has ever gone out from this system. Until you
-delete that file you read the report by opening `site/PremarketDesk.html` from
-disk, which needs no server and no network.
+delete that file you read the report by opening `runs/YYYY-MM-DD/report.html`
+or the desk at `site/PremarketDesk.html` from disk, either of which needs no
+server and no network.
 
 Every morning's page opens with an at a glance paragraph, written by Python
 from the packet and placed above the disclaimer: the eligibility counts, the
@@ -171,9 +183,10 @@ gap direction split, the strongest scored names with their direction, the
 entry and stop of each day eligible name, the top failed day condition on an
 empty morning, and the four index proxies. Each `runs/YYYY-MM-DD/report.html`
 ends with links to the previous session, that day's midday report once the
-12:00 pass has written it, the archive and the weekly page. Those links are
-paths on this machine, so the emailed copy has them stripped, and the archive
-carries each day's midday report under its morning report.
+12:00 pass has written it, that session's route on the desk and the weekly
+page. Those links are paths on this machine, so the emailed copy has them
+stripped, and the desk carries each day's midday report beside its morning
+report.
 
 That gate is deliberate and it is the one thing in the project a person has to
 clear by hand. Deleting it is a statement that you have taken one live morning's
@@ -543,7 +556,7 @@ names a ticker the packet does not carry, and the quantifier guard reads the
 slot prose.
 
 08:49. `deliver.py` refuses because `data/UNVERIFIED` exists, and says so.
-`build_archive.py` rebuilds `site/PremarketDesk.html` with this morning in it.
+`desk/render.py` rebuilds `site/PremarketDesk.html` with this morning in it.
 
 You open it at 08:50 and read Skips and traps first. It says the premarket high
 of ACME may not be a transactable price. ACME is the top row of the day
@@ -711,7 +724,8 @@ destination is not in the tree at all, and is the last row for that reason:
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
-| `site/PremarketDesk.html` | The whole report history as one self contained file, newest sessions embedded, older ones linked. Opens from disk, no server, no network |
+| `site/PremarketDesk.html` | The desk: every session on file in one self contained document, eight screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended |
+| `runs/YYYY-MM-DD/desk.json.gz` | That session's compacted payload, frozen by `desk/compact.py` in the nightly. It is what the desk inlines, and the file `prune_data.py` requires before it will drop the duplicate premarket snapshot, because the run copy is the only exact record of the tape the morning saw |
 | `site/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own |
 | `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the six artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, its stats and subscriptions sidecars, the frozen 08:45 packet a morning was judged on, and the report in markdown and HTML, because the same input does not produce the same words twice. A dated snapshot of `data/quantifier-flags.jsonl` sits beside them. See `doc/CRITERIA.md [Backup]` |
 
@@ -719,7 +733,8 @@ destination is not in the tree at all, and is the last row for that reason:
 
 `doc/CRITERIA.md` is the single place every tunable number lives: scoring
 weights, gap and RVOL thresholds, session clocks, the analyst model and its
-measured timeout, watchdog rerun policy, archive depth. Each value carries
+measured timeout, watchdog rerun policy, how many sessions the desk inlines.
+Each value carries
 its reasoning in prose next to it. Edit it and the next run picks it up; get
 a key wrong and the strict reader fails loudly rather than defaulting.
 
@@ -742,6 +757,9 @@ Other documents:
   [Analyst] mode` is `freeform`. `doc/prompt_slots.md` is what is piped under
   `slots`, the setting since 2026-09-02, and `doc/IMPROVEMENT_PLAN.md` is the
   2026-09-02 review written as work packages, with each tier's status.
+- `doc/SCREENS.md` is the specification of the desk's screens, with a BUILT
+  note recording where what shipped differs from it, and `doc/RETENTION.md`
+  is what is kept, for how long, and what may never be deleted.
 - `doc/ALPACA_PROBE.md` is what the Alpaca free plan was measured to serve and
   to refuse, which is what puts the truth pass at night rather than in the
   morning. `doc/research/` holds the other measurement write ups and the raw
@@ -838,7 +856,7 @@ Other documents:
   several sessions after. A day is only ever filled with its own data.
 - **A failed morning is visible, not silent.** The chain stops at the first
   nonzero exit, the report falls back rather than fabricates, and the
-  evening archive rebuild still captures whatever the day produced.
+  evening desk rebuild still captures whatever the day produced.
 
 ## Disclaimer
 

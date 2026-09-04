@@ -2,7 +2,7 @@
 
 Held here the way core/page.py holds REPORT_CSS: one string with one user, so
 there is no asset directory to keep in step with a renderer and nothing to
-resolve at runtime. render.py inlines both into site/Desk.html.
+resolve at runtime. render.py inlines both into site/PremarketDesk.html.
 
 THE TOKENS ARE page.TOKENS_CSS AND NOT A SECOND SET. The desk imports them
 rather than restating them, so the conviction green, yellow and red on a
@@ -410,7 +410,7 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 DECK_JS = r"""
 /* premarketdesk desk application.
 
-   One document, seven screens, hash routes. No framework, no library, no
+   One document, eight screens, hash routes. No framework, no library, no
    build step and no network: every session is inlined at render time,
    gzipped and base64 encoded, and inflated in the page on first view.
 
@@ -879,7 +879,7 @@ DECK_JS = r"""
   function tapeHTML(tape) {
     if (!tape || !tape.length) return "";
     return '<div class="tape">' + tape.map(function (t) {
-      var arrow = t.pct > 0 ? "▲" : t.pct < 0 ? "▼" : "–";
+      var arrow = t.pct > 0 ? "▲" : t.pct < 0 ? "▼" : "";
       return '<div class="tick"><div class="lbl">' +
         esc(TAPE_NAME[t.label] || String(t.label || "").toUpperCase()) + "</div>" +
         '<div class="val num">' + n2(t.last, t.last > 100 ? 2 : 3) + "</div>" +
@@ -922,7 +922,8 @@ DECK_JS = r"""
       fact("MARKET CAP", big(c.mcap)) +
       fact("20D DOLLAR VOL", big(c.adv)) +
       fact("NEWS IN WINDOW", (c.news == null ? NIL : c.news) + " <small>stories</small>") +
-      fact("POOL RANK", "#" + c.rank + " <small>" + esc(c.tier_why || "") + "</small>") +
+      fact("POOL RANK", (c.rank == null ? NIL : "#" + c.rank) +
+        " <small>" + esc(c.tier_why || "") + "</small>") +
       earn + "</div>";
 
     var heads = (c.headlines || []).map(function (h) {
@@ -1672,8 +1673,21 @@ DECK_JS = r"""
     var rows = INDEX.sessions;
     var months = monthsOnFile();
     var maxGap = CAL_MAX * 1.1;
-    var listHTML =
-      '<div class="card pad scroll"><table><thead><tr><th>Session</th>' +
+    // CRITERIA [Screens] sessions_page_size, which was passed into the page
+    // from the first build and read by nothing: the list rendered every row.
+    // Four sessions hid it. At the inline_sessions ceiling of 400 it is four
+    // hundred rows under a calendar the reader came for.
+    var PAGE = KNOBS.sessions_page_size || 0;
+    function listHTML(limit) {
+      var shown = limit ? rows.slice(0, limit) : rows;
+      return listTable(shown) + (rows.length > shown.length
+        ? '<div class="filters noprint" style="margin-top:11px">' +
+          '<button class="chip" type="button" data-more="1">Show all ' +
+          rows.length + " sessions</button></div>"
+        : "");
+    }
+    function listTable(rows) {
+      return '<div class="card pad scroll"><table><thead><tr><th>Session</th>' +
       '<th style="text-align:right">Cand</th><th style="text-align:right">Day</th>' +
       '<th style="text-align:right">Swing</th><th>Conviction</th><th>Largest gap</th>' +
       '<th></th><th style="text-align:right">Triggered</th><th>Packet</th>' +
@@ -1696,6 +1710,7 @@ DECK_JS = r"""
           (r.packet_bytes == null ? NIL
             : big(r.packet_bytes) + (r.packet_compressed ? " gz" : "")) + "</td></tr>";
       }).join("") + "</tbody></table></div>";
+    }
     var calHTML = '<div class="calwrap">' + months.map(function (ym) {
       return calMonth(ym, null, false); }).join("") + "</div>" + calKey();
 
@@ -1721,6 +1736,7 @@ DECK_JS = r"""
     var view = $("ses-view");
     wireCal(view, function (date) { location.hash = "#/session/" + date; });
     view.addEventListener("click", function (e) {
+      if (e.target.closest("[data-more]")) { view.innerHTML = listHTML(0); return; }
       var tr = e.target.closest("tr[data-date]");
       if (tr) location.hash = "#/session/" + tr.dataset.date;
     });
@@ -1730,7 +1746,7 @@ DECK_JS = r"""
       var which = b.dataset.view;
       Array.prototype.forEach.call(root.querySelectorAll("button[data-view]"),
         function (o) { o.setAttribute("aria-pressed", String(o === b)); });
-      view.innerHTML = which === "cal" ? calHTML : listHTML;
+      view.innerHTML = which === "cal" ? calHTML : listHTML(PAGE);
       view.dataset.sel = "";
       $("ses-note").textContent = NOTE[which];
     });
@@ -1780,8 +1796,9 @@ DECK_JS = r"""
     html += '<div id="record-detail"></div>';
     root.innerHTML = html;
     if (newest) {
+      var mine = EPOCH;
       loadSession(newest.date).then(function (p) {
-        if (p) $("record-detail").innerHTML = recordSection(p);
+        if (p && !stale(mine)) $("record-detail").innerHTML = recordSection(p);
       });
     }
   }
@@ -1791,9 +1808,11 @@ DECK_JS = r"""
       "</span></h2><span class=\"note\">reading every session on file</span></div>" +
       '<div id="name-body" class="card pad empty">Reading…</div></section>';
     var dates = INDEX.sessions.map(function (r) { return r.date; });
+    var mine = EPOCH;
     Promise.all(dates.map(function (d) {
       return loadSession(d).catch(function () { return null; });
     })).then(function (all) {
+      if (stale(mine)) return;
       var hits = [];
       all.forEach(function (p) {
         if (!p) return;
@@ -1848,7 +1867,9 @@ DECK_JS = r"""
   function screenHealth(date, root) {
     root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
       esc(date) + " ...</div>";
+    var mine = EPOCH;
     loadSession(date).then(function (p) {
+      if (stale(mine)) return;
       if (!p) {
         root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
           esc(date) + " is not inlined in this document.</div>";
@@ -1946,11 +1967,23 @@ DECK_JS = r"""
 
   var TIMER = null;
 
+  // The same argument as TIMER, for the other thing a screen leaves behind.
+  // Four screens draw from a promise: the session inflates, and only then is
+  // there anything to render. A reader who moves on inside that window used
+  // to get the OLD route's screen drawn over the new one, stamp and all,
+  // under a hash that says something else, or a TypeError from writing into
+  // a node the new screen had already replaced. Every render takes a number
+  // and a resolution that is not the current one draws nothing.
+  var EPOCH = 0;
+  function stale(mine) { return mine !== EPOCH; }
+
   function render() {
     // A screen that started a clock owns it until the route changes. Left
     // running, a countdown keeps writing into a node the next screen has
     // already replaced.
     if (TIMER) { clearInterval(TIMER); TIMER = null; }
+    EPOCH += 1;
+    var mine = EPOCH;
     var route = parse();
     var root = $("screen");
     setNav(route);
@@ -1963,6 +1996,7 @@ DECK_JS = r"""
     root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
       esc(route.date) + "…</div>";
     loadSession(route.date).then(function (p) {
+      if (stale(mine)) return;
       if (!p) {
         root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
           esc(route.date) + " is not inlined in this document.</div>";
@@ -1976,6 +2010,7 @@ DECK_JS = r"""
       else screenMorning(p, root);
       window.scrollTo(0, 0);
     }).catch(function (err) {
+      if (stale(mine)) return;
       root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
         esc(err.message) + "</div>";
     });

@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and seven claims, a count read off
+and the two pages. It now carries two hundred and eight claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -4791,7 +4791,12 @@ def claim_a_live_job_is_not_rerun_on_top_of_itself(failures: list[str]) -> None:
             "nightly": config.LOGS_DIR / f"nightly-{day}.log",
         }
         logs["chain"].write_text("===== scan started =====\n", encoding="utf-8")
-        logs["nightly"].write_text("===== archive finished rc=0 =====\n",
+        # The nightly's last step, read out of the table rather than named
+        # here: it was the archive until 2026-09-04 and is the desk since,
+        # and a fixture that hardcodes one goes stale when the end moves.
+        last = monitor_jobs.JOBS["nightly"][3].split("===== ")[1]
+        last = last.split(" finished")[0]
+        logs["nightly"].write_text(f"===== {last} finished rc=0 =====\n",
                                    encoding="utf-8")
 
         running = {"exists": True, "status": "Running",
@@ -12211,6 +12216,13 @@ def claim_the_watchdog_reads_every_job_that_writes_a_log(failures: list[str]) ->
     checks: the two lists are maintained by hand in different files and nothing
     compared them.
 
+    IT ALSO CHECKS THE MARKER, since 2026-09-04, when the same two files went
+    out of step the other way. Retiring build_archive changed the last step of
+    the morning chain and of the nightly from the archive to the desk, and this
+    table still waited for "===== archive finished rc=0". A job that finished
+    cleanly would have read started_not_finished and been relaunched. Naming a
+    .bat that exists is not the same claim as waiting for a line it writes.
+
     Read off the .bat files rather than from a list here, so the next scheduled
     job is covered the day it is written. A .bat that sets PMD_JOB and writes a
     dated log is a job the watchdog can read; one that deliberately does neither,
@@ -12268,11 +12280,29 @@ def claim_the_watchdog_reads_every_job_that_writes_a_log(failures: list[str]) ->
 
     # And the other direction: a JOBS entry naming a .bat that no longer exists
     # would make the watchdog report a job that cannot run.
-    for key, (_task, bat, _prefix, _marker) in monitor_jobs.JOBS.items():
+    for key, (_task, bat, _prefix, marker) in monitor_jobs.JOBS.items():
         if not (tasks / bat).is_file():
             failures.append(f"monitor_jobs.JOBS['{key}'] names {bat}, which is "
                             "not in tasks/, so the watchdog is checking a job "
                             "that cannot fire")
+        else:
+            # THE MARKER IS THE OTHER HALF OF THE PAIR AND IT WENT WRONG ON
+            # 2026-09-04. Retiring build_archive rewrote the .bat files and
+            # left this table naming a step nothing writes any more, so the
+            # chain and the nightly would both have read started_not_finished
+            # after finishing cleanly and been relaunched at the 09:25 and
+            # 22:45 passes. Checking that the entry NAMES a .bat says nothing
+            # about whether that .bat ever writes the line being searched for.
+            step = re.sub(r"^=+ ", "", marker)
+            step = re.sub(r" finished rc=.*$", "", step)
+            body = (tasks / bat).read_text(encoding="utf-8", errors="replace")
+            if not re.search(r"^echo ===== " + re.escape(step) + r" finished rc=",
+                             body, re.MULTILINE):
+                failures.append(
+                    f"monitor_jobs.JOBS['{key}'] waits for the marker "
+                    f"{marker!r}, and {bat} never writes a finished line for "
+                    f"step {step!r}, so a clean run of that job reads as "
+                    "started_not_finished and gets relaunched")
         if key not in monitor_jobs.JOB_STATUS_NAMES:
             failures.append(
                 f"monitor_jobs.JOBS['{key}'] has no JOB_STATUS_NAMES entry, so "
@@ -12281,7 +12311,7 @@ def claim_the_watchdog_reads_every_job_that_writes_a_log(failures: list[str]) ->
 
     print(f"  watched      every one of the {len(monitor_jobs.JOBS)} scheduled "
           "jobs that stamps PMD_JOB is in the watchdog's list, and every entry "
-          "names a .bat that exists")
+          "names a .bat that exists and writes the marker it waits for")
 
 
 def claim_the_suite_can_count_itself(failures: list[str]) -> None:
@@ -14350,6 +14380,89 @@ def claim_the_archive_carries_the_midday_report(failures: list[str]) -> None:
                         "so the desk would print its source at the reader")
     print("  reports      a session carries its midday report beside the morning's, "
           "and a session without one carries None rather than a neighbour's")
+
+
+def claim_a_frozen_tape_survives_the_prune(failures: list[str]) -> None:
+    """A session whose snapshot has gone keeps the bars its freeze took.
+
+    THE INTERLOCK ONLY HELD FOR ONE NIGHT. prune_data will not drop a run
+    copy until desk.json.gz exists for that session, so the exact bars are
+    frozen before the duplicate goes. But desk/compact recompacts EVERY known
+    session on every run, and the morning chain, the midday chain and the
+    nightly each run it, so the next build rebuilt those bars by clipping the
+    collector file and wrote the reconstruction over the freeze. Measured on
+    2026-09-04: seven of that session's twelve names gain the 08:44 bar under
+    the clip, and all three earlier sessions on disk had already flipped from
+    run_snapshot to collector_clipped hours after the prune that allowed it.
+
+    Both directions are checked. A session that never had a freeze must still
+    fall back to the clip, labelled as one, because the fallback is what keeps
+    a restored run directory drawing a tape at all.
+    """
+    from desk import compact
+
+    date = "2026-01-20"
+    window_start = f"{date}T07:20:00-05:00"
+    window_end = f"{date}T08:44:00-05:00"
+
+    def _fixture(with_run_copy: bool) -> None:
+        run_dir = config.run_dir(date)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps({
+            "session_date": date, "run_time_et": "08:45",
+            "candidates": [{"symbol": "ARX.US", "pm_window_start": window_start,
+                            "pm_window_end": window_end}]}), encoding="utf-8")
+        config.PREMARKET_DIR.mkdir(parents=True, exist_ok=True)
+        rows = [{"symbol": "ARX.US", "minute_et": f"{date}T08:4{n}:00-05:00",
+                 "c": 10.0 + n, "v": 100 * n} for n in (1, 2, 3, 4)]
+        (config.PREMARKET_DIR / f"{date}.jsonl").write_text(
+            "\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+        snapshot = run_dir / "premarket_snapshot.jsonl"
+        if with_run_copy:
+            # The point in time cut: the 08:44 minute was still open when scan
+            # copied the file, so the run copy stops one bar short.
+            snapshot.write_text(
+                "\n".join(json.dumps(r) for r in rows[:3]) + "\n", encoding="utf-8")
+        elif snapshot.is_file():
+            snapshot.unlink()
+
+    def _read(payload: dict[str, Any]) -> tuple[str | None, int]:
+        rows = (payload.get("candidates") or [{}])[0].get("bars") or []
+        return payload.get("bars_source"), len(rows)
+
+    with conftest_activate():
+        with contextlib.redirect_stdout(io.StringIO()):
+            _fixture(with_run_copy=True)
+            first = compact.compact_session(date) or {}
+            compact.freeze(date, first)
+            # What the nightly does next: prune drops the proven duplicate.
+            _fixture(with_run_copy=False)
+            after = compact.compact_session(date) or {}
+        source_first, bars_first = _read(first)
+        source_after, bars_after = _read(after)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            compact.frozen_path(date).unlink(missing_ok=True)
+            (config.run_dir(date) / "desk.json").unlink(missing_ok=True)
+            never = compact.compact_session(date) or {}
+        source_never, bars_never = _read(never)
+
+    if (source_first, bars_first) != ("run_snapshot", 3):
+        failures.append(f"the run copy did not produce a run_snapshot payload of "
+                        f"3 bars, it produced {source_first} of {bars_first}")
+    if (source_after, bars_after) != ("run_snapshot", 3):
+        failures.append(
+            f"after the prune the payload came back {source_after} of {bars_after} "
+            "bars rather than the frozen run_snapshot of 3, so a recompaction "
+            "wrote a reconstruction over the tape the morning actually saw")
+    if (source_never, bars_never) != ("collector_clipped", 4):
+        failures.append(
+            f"with no freeze to carry, the fallback came back {source_never} of "
+            f"{bars_never} bars rather than a labelled collector_clipped of 4, so "
+            "a restored run directory would draw no tape at all")
+    print("  frozen tape  a session whose run copy the prune removed keeps the "
+          "bars its freeze took, and one that never had a freeze still falls "
+          "back to the labelled clip")
 
 
 def _slots_packet() -> dict[str, Any]:
@@ -16713,6 +16826,7 @@ def main() -> int:
     run_claim(failures, claim_the_page_opens_at_a_glance, failures)
     run_claim(failures, claim_the_morning_page_links_to_its_siblings, failures)
     run_claim(failures, claim_the_archive_carries_the_midday_report, failures)
+    run_claim(failures, claim_a_frozen_tape_survives_the_prune, failures)
     run_claim(failures, claim_the_skeleton_opens_a_slot_for_each_prose_field, failures)
     run_claim(failures, claim_a_slots_answer_is_fitted_back_onto_the_skeleton, failures)
     run_claim(failures, claim_the_projection_keeps_what_the_template_names, failures)

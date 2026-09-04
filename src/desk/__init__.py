@@ -1,4 +1,4 @@
-"""The desk: one document at site/Desk.html carrying every session.
+"""The desk: one document at site/PremarketDesk.html carrying every session.
 
 Three modules, in the order they run:
 

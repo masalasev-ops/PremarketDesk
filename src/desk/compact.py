@@ -43,12 +43,6 @@ from morning import render_report
 
 _CRIT = criteria.load()
 
-# Kept from a headline. The packet carries the full article scope prose and a
-# four way sentiment breakdown; a screen draws the polarity and says who filed
-# it, so that is what travels.
-_HEADLINE_KEYS = ("title", "published_at", "publisher")
-
-
 def _sym(symbol: str | None) -> str:
     """SNOW.US to SNOW. Bare tickers everywhere a reader sees one."""
     return (symbol or "").split(".")[0]
@@ -125,6 +119,43 @@ def _bars_for(session_date: str,
     for rows in bars.values():
         rows.sort(key=lambda r: r["t"])
     return dict(bars)
+
+
+def _frozen_run_bars(session_date: str,
+                     symbols: list[str]) -> dict[str, list[dict[str, Any]]] | None:
+    """The exact bars an earlier freeze took from the run copy, or None.
+
+    WITHOUT THIS THE INTERLOCK ONLY HOLDS FOR ONE NIGHT. prune_data will not
+    drop a session's duplicate snapshot until desk.json.gz exists, so the
+    bars are frozen before the run copy goes. But this module recompacts
+    EVERY known session on every run, and the morning chain, the midday
+    chain and the nightly all run it, so the next build after the prune
+    rebuilt those bars from the collector file and wrote the reconstruction
+    over the freeze. Measured on 2026-09-04 over that session's twelve
+    names: seven gained the 08:44 bar, which is the minute that was still
+    open when the snapshot was written. All three run sessions on disk had
+    already flipped from run_snapshot to collector_clipped by the time it
+    was found, hours after the prune that made it possible.
+
+    So the frozen bars are carried forward and nothing else is: the report
+    prose, the midday rows and every figure the packet holds are rebuilt as
+    before, and only the tape, which cannot be reproduced, is kept. None
+    when there is no freeze, when the freeze was itself a reconstruction,
+    or when it does not cover this session's whole candidate list, because
+    a half carried tape is a third source and this file already has two.
+    """
+    previous = load_frozen(session_date)
+    if not previous or previous.get("bars_source") != "run_snapshot":
+        return None
+    by_symbol = {c.get("sym"): (c.get("bars") or [])
+                 for c in (previous.get("candidates") or [])}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for symbol in symbols:
+        rows = by_symbol.get(_sym(symbol))
+        if rows is None:
+            return None
+        out[symbol] = rows
+    return out
 
 
 def _headlines(candidate: dict[str, Any]) -> list[dict[str, Any]]:
@@ -246,7 +277,17 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
     }
     run_copy_present = files.resolve_maybe_gz(
         run_dir / "premarket_snapshot.jsonl") is not None
-    bars = _bars_for(session_date, windows)
+    # A freeze that already holds the exact rows is preferred to rebuilding
+    # them by clipping, and reading it is cheaper than reading the whole
+    # day's tape as well. See _frozen_run_bars.
+    kept = None if run_copy_present else _frozen_run_bars(
+        session_date, list(windows))
+    if kept is None:
+        bars = _bars_for(session_date, windows)
+        bars_source = "run_snapshot" if run_copy_present else "collector_clipped"
+    else:
+        bars = kept
+        bars_source = "run_snapshot"
 
     earnings = {
         _sym(row.get("symbol")): row
@@ -327,7 +368,7 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
         # Which tape the bars came from, so a screen never has to guess and a
         # reader of an old payload can tell an exact capture from a
         # reconstruction. See _bars_for.
-        "bars_source": "run_snapshot" if run_copy_present else "collector_clipped",
+        "bars_source": bars_source,
         "tape": [
             {"label": t.get("label"), "last": t.get("last"), "chg": t.get("change"),
              "pct": t.get("change_pct"), "stale": bool(t.get("prior_session_only")),

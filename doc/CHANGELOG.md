@@ -15,6 +15,87 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty fourth: a whole tree review, and two things the rename broke
+
+A review of the whole tree and every document in it, asked for the same
+afternoon the desk took the archive's filename. The suite was green and
+hermetic before it started and is green after. Two of the findings were faults
+the rename had introduced hours earlier and neither would have shown until a
+scheduled job ran.
+
+THE WATCHDOG WAS WAITING FOR A LINE NOTHING WRITES ANY MORE. monitor_jobs.JOBS
+carries a final step marker per job, and for the morning chain and the nightly
+it read `===== archive finished rc=0`. Retiring build_archive changed both
+.bat files to end on the desk and left that table behind. log_verdict returns
+started_not_finished when the marker is absent, so a chain that had finished
+cleanly at 08:49 would have been read at the 09:25 pass as one that died, and
+maybe_rerun would have relaunched it: a second scan racing the first on
+packet.json and a second claude CLI completion. The 22:45 pass would have done
+the same to the nightly, tonight. Both markers now name the desk.
+
+AND THEY NO LONGER ASK FOR rc=0, where the other three still do. The archive
+could stop both chains; the desk deliberately cannot, because a report that
+was delivered is not undone by a page that did not draw. A marker demanding
+rc=0 would have undone exactly that: a failed render would have cost a whole
+nightly or a whole morning chain. The marker answers "did the job reach its
+end" and steps_ok answers "did every step succeed", which is the division this
+module's own header sets out.
+
+WHAT LET IT THROUGH, and the more useful half.
+claim_the_watchdog_reads_every_job_that_writes_a_log already checked that every
+JOBS entry names a .bat that exists. Naming a .bat is not the same claim as
+waiting for a line it writes. The claim now extracts the step name from each
+marker and requires that .bat to echo a finished line for it, and it fails on
+the old table.
+
+THE FREEZE ONLY HELD FOR ONE NIGHT. prune_data will not drop a session's
+duplicate premarket snapshot until desk.json.gz exists for it, so the exact
+bars are frozen before the run copy goes. But desk/compact recompacts EVERY
+known session on every run, and all three chains run it, so the next build
+after the prune rebuilt those bars by clipping the collector file and wrote
+the reconstruction over the freeze. Measured on 2026-09-04 against that
+session's own run copy: seven of twelve names gain the 08:44 bar under the
+clip, the minute that was still open when scan took its copy. All three
+earlier sessions on disk had already flipped from run_snapshot to
+collector_clipped, hours after the prune that allowed it, and their run copies
+are gone, so those three keep the reconstruction and say so on the Health
+screen. compact now carries the frozen bars forward and nothing else: the
+report prose, the midday rows and every figure the packet holds are rebuilt as
+before, and only the tape, which cannot be reproduced, is kept.
+claim_a_frozen_tape_survives_the_prune holds both directions, because a
+session that never had a freeze must still fall back to the labelled clip.
+
+CRITERIA HAD A SECTION NOTHING READ. `python -m core.criteria --check` printed
+`unread [archive] embed_sessions`, which is the whole [Archive] section, left
+behind with the module that read it. The section is deleted and [Screens]
+carries a note saying what stood there and why inline_sessions is not the same
+quantity. And sessions_page_size, which [Screens] has described since the first
+build, was passed into the page and read by nothing: the Sessions list rendered
+every row. Four sessions on file hid it; four hundred is the ceiling
+inline_sessions sets. The list now renders that many with a control for the
+rest.
+
+THREE SMALLER ONES IN THE DESK. The tape row for a symbol that did not move
+printed an en dash, in the same signed column the NIL constant forty lines
+above exists to keep a dash out of; it prints nothing now. A missing pool rank
+printed "#null". And _HEADLINE_KEYS was a constant no caller read, under a
+comment describing a payload shape _headlines does not produce.
+
+THE DOCUMENTS. The rename reached the code and stopped there. README described
+three documents where there are four and never mentioned the desk; it named
+build_archive in the diagram, the schedule table, the worked example, the
+destinations table and the failure notes. tasks/README named build_archive.py
+as a live step in three rows. BUILD_PLAN listed it in the night package and
+described site/PremarketDesk.html as the archive with the retired knob beside
+it. Both architecture pages carried it as component C53 and in their package
+lists, and the day run arc said three steps can stop the nightly where two now
+can. RETENTION and SCREENS named site/Desk.html, which never existed under that
+name for more than an afternoon. All of it is corrected, the desk package is in
+both architecture pages and in BUILD_PLAN's layout, and SCREENS says once, at
+the top, that Desk.html in its specification means the file the desk actually
+writes. README also never listed SCREENS.md or RETENTION.md among the
+documents; it does now.
+
 ## 2026-09-04, sixty third: the archive page is retired and the desk takes its name
 
 The owner asked to delete site/PremarketDesk.html and rename the desk to it,

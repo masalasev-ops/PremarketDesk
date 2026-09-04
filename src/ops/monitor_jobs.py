@@ -71,10 +71,30 @@ JOBS = {
                  r"===== baseline warm finished rc=0"),
     "collector": ("\\PremarketDesk\\collector", "job_collector.bat", "collector",
                   r"===== collector finished rc=0"),
+    # The marker is the LAST step each .bat writes, which for both of these
+    # has been the desk since 2026-09-04. It was "archive finished rc=0"
+    # until then, and the retirement of build_archive that morning changed
+    # the .bat files and left this table behind: a chain and a nightly that
+    # both finished cleanly would have read started_not_finished at the
+    # 09:25 and 22:45 passes and been relaunched, at the cost of a second
+    # scan racing on packet.json and a second claude CLI completion. The
+    # claim below now checks each marker against the .bat that writes it.
+    #
+    # AND THESE TWO DO NOT ASK FOR rc=0, where the other three do. The
+    # archive could stop both chains and the desk deliberately cannot: the
+    # .bat says a report that was delivered is not undone by a page that did
+    # not draw. A marker demanding rc=0 would undo exactly that, relaunching
+    # a whole nightly, or a whole morning chain and its claude CLI
+    # completion, because an HTML file did not render. The marker answers
+    # "did the job reach its end", which it did; whether the desk step
+    # SUCCEEDED is the other half of the pair, and steps_ok reads it out of
+    # the job status record the step writes under CRITERIA [Job status
+    # steps] desk. Both checks are kept for the reason this module's header
+    # gives: neither replaces the other.
     "chain": ("\\PremarketDesk\\morning-chain", "job_morning_chain.bat", "morning-chain",
-              r"===== archive finished rc=0"),
+              r"===== desk finished rc="),
     "nightly": ("\\PremarketDesk\\nightly", "job_nightly.bat", "nightly",
-                r"===== archive finished rc=0"),
+                r"===== desk finished rc="),
     # The 12:00 pass. Added 2026-08-31, having run since that morning watched
     # by nothing: the weekday monitor stops at last_pass and its night firing
     # is at 22:45, so a midday failure was first named by job_status.overdue in

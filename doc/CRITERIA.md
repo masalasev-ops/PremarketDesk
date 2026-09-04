@@ -486,8 +486,8 @@ exists, as well as the only record of the 2026-08-14 over count. data/backtest/
 eod is the population the shipped float rotation edges were fitted on and a
 re-fit reads it. data/backtest/sessions is the replay behind the subscription
 cap recall table, which is an open purchasing decision. runs/ is what
-build_archive rebuilds site/ from, so pruning it would silently shorten the
-archive. None of those is a candidate, and a sweeper that decided by age alone
+desk/render rebuilds site/ from, so pruning it would silently shorten the
+desk. None of those is a candidate, and a sweeper that decided by age alone
 would have reached all four.
 
 The age is read from the FILENAME, never the mtime. The file describes the
@@ -2530,7 +2530,7 @@ that invoked every claim directly wrote fixture data over 29 files, including
 258 fixture bars over roughly 3,200 real ones and 762 bytes over a 125 KB
 packet. That session is gone, and runs/2026-08-21/packet.json is still that 762
 byte stub today: one candidate where picks holds twelve, and `stub` where a
-commit belongs. build_archive refuses to present it as a morning. A list that
+commit belongs. The desk labels it rather than presenting it as a morning. A list that
 grows past these six without remaking the argument above is a backup of
 everything, which is a weaker promise that nobody checks.
 
@@ -2616,7 +2616,7 @@ analyst                       = 1
 render                        = 1
 verify                        = 1
 deliver                       = 1
-desk                          = 1          # rebuilds site/PremarketDesk.html from runs/. Replaced the archive step on 2026-09-04, when build_archive was retired and the desk took its filename; it runs in the morning chain, the midday chain and the nightly, and never fails any of them
+desk                          = 1          # rebuilds site/PremarketDesk.html from runs/. Replaced the archive step on 2026-09-04, when build_archive was retired and the desk took its filename; it runs in the morning chain, the midday chain and the nightly, and never fails any of them. The nightly runs desk.compact one step before the prune as well, under this same name
 backfill                      = 1
 outcomes                      = 1
 pool_recall                   = 1
@@ -2867,17 +2867,6 @@ A flag raised this morning has not been ignored, so pending flags are named
 and not counted as a problem. Past flag_backlog_after_days the oldest one
 has survived a week of mornings, which is a backlog, and it joins the
 problem count so it shows up on a morning somebody is already reading.
-
-## Archive
-
-The single file report archive at site/PremarketDesk.html, rebuilt from
-runs/ at the end of every morning chain and every nightly run. Always a full
-rebuild, never an append, so it is idempotent by construction. The newest
-sessions are inlined in full; older ones stay in the rail but link out to
-their own runs/<date>/report.html so the file stays small and nothing is
-ever dropped.
-
-embed_sessions                = 120
 
 ## Scan snapshot
 
@@ -3713,14 +3702,23 @@ it has, there is not.
 
 ## Screens
 
-The desk, one document at site/Desk.html carrying every session, and the marks
-the screens are drawn from. The seven screens and the reasoning are in
-doc/SCREENS.md. Nothing here is a screen threshold in the sense the rest of
+The desk, one document at site/PremarketDesk.html carrying every session, and
+the marks the screens are drawn from. The eight screens and the reasoning are
+in doc/SCREENS.md. Nothing here is a screen threshold in the sense the rest of
 this file means: these are display bounds, and they are here because the rule
 is that no literal of this kind lives in Python.
 
-inline_sessions               = 400        # sessions inlined into site/Desk.html. A compacted session gzips to about 15KB and inlines as about 20KB of base64, so this is a ceiling and not a window: 400 sessions is about 8MB
+THIS SECTION REPLACED [Archive], which was deleted on 2026-09-04 along with
+the module that read it. That section described a page whose newest sessions
+were inlined and whose older ones linked out to runs/<date>/report.html. Its
+one key, an embed depth of 120 sessions, had had no reader since build_archive
+was retired that morning: `python -m core.criteria --check` printed it unread
+and that is how it was found. inline_sessions below is what took its place,
+and it is a different quantity, because the desk inlines every session it
+carries rather than the newest few.
+
+inline_sessions               = 400        # sessions inlined into site/PremarketDesk.html. A compacted session gzips to about 15KB and inlines as about 20KB of base64, so this is a ceiling and not a window: 400 sessions is about 8MB
 spine_scale_pct               = 26         # the fixed symmetric scale on the gap spine, in percent either side of the centre rule, so two mornings compare by eye
 path_min_bars                 = 2          # below this many minute bars the tape path degrades to a sentence naming the count, rather than a line drawn through one point
 ladder_label_gap_px           = 17         # minimum vertical space between two labels on the level ladder before they are pushed apart
-sessions_page_size            = 60         # rows the Sessions screen renders before it asks to show more
+sessions_page_size            = 60         # rows the Sessions screen's list renders before it offers to show the rest. Written here from the first build and honoured only from 2026-09-04: until then the page was handed the number and rendered every row anyway, which four sessions on file hid

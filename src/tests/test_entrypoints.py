@@ -1962,9 +1962,16 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
     Two cases, and both have to hold. A nightly whose pool_recall failed and
     whose archive succeeded is the exact shape that hid for a week: the task
     fired, the final marker is present, and the marker is the archive's. A
-    nightly killed before the archive writes no pool_recall record at all, so
+    nightly killed before its last step writes no pool_recall record at all, so
     the step check sees nothing wrong and the marker check is what catches it.
+
+    The last step was the archive until 2026-09-04 and is the desk since, so
+    the marker and the step name are read out of monitor_jobs.JOBS rather than
+    written here: a fixture that hardcodes one goes stale the next time the
+    end of the job moves, which is what happened to the table itself.
     """
+    import re
+
     from ops import monitor_jobs
 
     day = TODAY.isoformat()
@@ -1981,8 +1988,11 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
         })
 
     # Case one: every step finished, the marker is present, pool_recall failed.
-    log_path.write_text("===== archive finished rc=0 =====\n", encoding="utf-8")
-    for step in ("backfill", "outcomes", "archive"):
+    marker = monitor_jobs.JOBS["nightly"][3]
+    last_step = re.sub(r" finished rc=.*$", "", re.sub(r"^=+ ", "", marker))
+    log_path.write_text(f"===== {last_step} finished rc=0 =====\n",
+                        encoding="utf-8")
+    for step in ("backfill", "outcomes", last_step):
         record(step, job_status.STATUS_OK)
     record("pool_recall", job_status.STATUS_ERROR,
            "NameError: name 'floor' is not defined")
@@ -1994,7 +2004,7 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
     if not any("pool_recall" in line for line in broken):
         failures.append("the watchdog did not name pool_recall as a failed step "
                         f"in a nightly whose marker says finished: {broken}")
-    if any("archive" in line for line in broken):
+    if any(last_step in line for line in broken):
         failures.append(f"the watchdog named a step that succeeded: {broken}")
 
     # A rerun that succeeded clears it, because the last record is the state.
@@ -2003,11 +2013,12 @@ def claim_watchdog_reads_steps(failures: list[str]) -> None:
         failures.append("a step that was rerun successfully is still reported "
                         f"as failed: {monitor_jobs.failed_steps('nightly', day)[0]}")
 
-    # Case two: killed before the archive. No record for it, marker absent.
+    # Case two: killed before the last step. No record for it, marker absent.
     log_path.write_text("===== backfill finished rc=0 =====\n", encoding="utf-8")
     verdict = monitor_jobs.log_verdict("nightly", monitor_jobs.JOBS["nightly"][3], day)
     if verdict == "finished":
-        failures.append("a nightly killed before the archive was reported finished")
+        failures.append("a nightly killed before its last step was reported "
+                        "finished")
     if monitor_jobs.failed_steps("nightly", day)[0]:
         failures.append("the step check invented a failure for a job that simply "
                         "never got that far; that case belongs to the marker")

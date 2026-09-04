@@ -18,6 +18,59 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-04, fourteenth: the frozen tape wins over the rebuilt one, and the desk's marker stops demanding rc=0
+
+Two calls made while closing the review above, both of which could have gone
+the other way.
+
+THE FIRST. desk/compact recompacts every session on every run, which is what
+makes the desk a full rebuild and what let a pruned session's bars be quietly
+replaced by a reconstruction. Three ways out were open.
+
+REJECTED, STOP RECOMPACTING OLD SESSIONS. Compact only today and leave the
+rest frozen. It is the cheapest and it is wrong: everything else in a payload
+does keep changing. The midday pass writes rows into a morning that is already
+frozen, the report is rendered after the packet, and a change to what compact
+keeps has to reach every session or it reaches none. Freezing the whole
+payload to protect one field inside it trades a real property for a narrow one.
+
+REJECTED, LABEL IT AND MOVE ON. bars_source already says collector_clipped and
+the Health screen already reads it out in a sentence. Nothing is published
+wrong. But a screen that says "the shape is right, the last minute may not be
+the one the morning saw" is a caveat where an exact answer was on disk an hour
+earlier, and the interlock in prune_data exists precisely to keep that answer.
+A guard that holds for one night and then undoes itself is worse than no
+guard, because its docstring goes on promising.
+
+TAKEN, CARRY THE BARS AND REBUILD THE REST. The frozen tape is carried forward
+only when the previous freeze was itself taken from the run copy, only when it
+covers the whole candidate list, and only when the run copy is gone. Everything
+else in the payload is rebuilt as before. A half carried tape is refused
+outright rather than mixed, because this file already reconciles two sources of
+bars and a third would be one too many.
+
+THE SECOND. The morning chain and the nightly now end on a step that cannot
+fail them, which the archive could. The finish marker had always demanded
+rc=0.
+
+REJECTED, KEEP rc=0. It is what the other three jobs use and consistency is
+worth something. It also means a desk render that failed costs a full nightly
+rerun, or a full morning chain rerun and its claude CLI completion, over an
+HTML file. The .bat says in as many words that a report that was delivered is
+not undone by a page that did not draw, and this would have undone it.
+
+REJECTED, MOVE THE MARKER TO DELIVER. The last step that can fail the chain is
+a defensible marker and it answers a different question: it would report a
+chain that died in the desk step as finished, and never notice a chain that
+never reached the desk at all.
+
+TAKEN, ASK ONLY THAT THE STEP RAN. The marker answers "did the job reach its
+end". Whether the desk step succeeded is the job status record it writes under
+CRITERIA [Job status steps] desk, which steps_ok already reads on the finished
+path. monitor_jobs' own header says the two checks are complementary and that
+neither replaces the other; this is the first job where the difference has
+teeth.
+
 ## 2026-09-03, thirteenth: a named replay shim, rather than stripping every underscore in sight
 
 Every leg name, list name, ranking key and catalyst class the report prints

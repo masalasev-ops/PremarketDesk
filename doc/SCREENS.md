@@ -4,8 +4,14 @@ Written 2026-09-04. The screen design in this file was approved by the owner
 on 2026-09-04, from a working prototype built over runs/2026-09-03 and read in
 a browser before approval.
 
-[BUILT 2026-09-04, later the same day. All seven screens ship in src/desk/ and
-site/Desk.html carries every session. What actually landed differs from the
+[BUILT 2026-09-04, later the same day. All seven screens ship in src/desk/,
+an eighth was added that afternoon and is section 8 below, and
+site/PremarketDesk.html carries every session. THE FILENAME IN THIS FILE IS
+THE ONE IT WAS SPECIFIED UNDER, Desk.html, and it is left standing wherever
+the specification uses it: the owner retired build_archive that afternoon and
+the desk took site/PremarketDesk.html from it, which is recorded in section 8
+and in CHANGELOG 2026-09-04 sixty first. Read Desk.html below as that file.
+ What actually landed differs from the
 specification below in two places and both are recorded where they belong: the
 marks are drawn in the page from an inlined payload rather than by a
 core/charts.py returning SVG from Python, because the desk needed one payload

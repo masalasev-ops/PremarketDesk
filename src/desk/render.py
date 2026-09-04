@@ -1,7 +1,8 @@
-"""Write site/Desk.html: one document, seven screens, every session inlined.
+"""Write site/PremarketDesk.html: one document, eight screens, every session
+inlined.
 
 A FULL REBUILD FROM WHAT IS ON DISK, never an append, so running it twice is
-the same as running it once and deleting site/Desk.html costs nothing but the
+the same as running it once and deleting the file costs nothing but the
 next run. That is build_archive's property and it is the property that makes a
 generated page safe to keep.
 
@@ -170,13 +171,15 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
 """
 
 
-def render(limit: int | None = None) -> dict[str, Any]:
+def render(limit: int | None = None, compact_first: bool = True) -> dict[str, Any]:
     limit = limit if limit is not None else _CRIT.integer("screens", "inline_sessions")
     rows = index_rows()
-    if not rows:
+    if not rows and compact_first:
         # Nothing has been compacted, so compact everything first rather than
         # write an empty desk. A desk with no sessions is indistinguishable
-        # from a desk whose build half worked.
+        # from a desk whose build half worked. Not done when the caller has
+        # just compacted, or asked not to: main() would otherwise compact
+        # twice on an empty tree, and --no-compact would compact anyway.
         compact.main([])
         rows = index_rows()
     rows = rows[:limit]
@@ -216,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.no_compact:
         compact.main([])
-    result = render(limit=args.limit)
+    result = render(limit=args.limit, compact_first=False)
     print(f"desk: {result['sessions']} session(s) inlined, "
           f"{result['raw'] / 1048576:.2f} MB of payload became "
           f"{result['encoded'] / 1048576:.2f} MB encoded")
