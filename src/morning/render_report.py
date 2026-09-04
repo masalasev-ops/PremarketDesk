@@ -248,10 +248,11 @@ class _StripEmbedsExtension(markdown.Extension):
 def to_html(text: str) -> str:
     """Report markdown to a body fragment, with raw HTML neutralised.
 
-    THE one place markdown is rendered. build_archive embeds twelve mornings
-    into a single page and used to call markdown.markdown itself with this
-    module's extension list, so the two agreed on extensions and would not have
-    agreed on this. A renderer that escapes and an archive that does not is the
+    THE one place markdown is rendered. desk/compact inlines every session's
+    report into a single page and build_archive, which owned that page until
+    2026-09-04, used to call markdown.markdown itself with this module's
+    extension list, so the two agreed on extensions and would not have agreed
+    on this. A renderer that escapes and an archive that does not is the
     archive being the unescaped one, which is also the file that concatenates
     twelve reports into one document where a single unclosed tag reaches
     eleven other mornings.
@@ -295,7 +296,13 @@ def footer_links(report_path: Path) -> str:
         links.append("the midday report is written at 12:00 and is not here yet")
     site = runs_dir.parent / "site"
     if (site / "PremarketDesk.html").is_file():
-        links.append(f'<a href="../../site/PremarketDesk.html#{date}">the archive</a>')
+        # Same filename, different page and so a different fragment. The desk
+        # took site/PremarketDesk.html from build_archive on 2026-09-04 and it
+        # routes on a hash, so #<date> would land on the newest session rather
+        # than on this one.
+        links.append(
+            f'<a href="../../site/PremarketDesk.html#/session/{date}/morning">'
+            "the desk</a>")
     if (site / "Weekly.html").is_file():
         links.append('<a href="../../site/Weekly.html">the weekly page</a>')
     return (f'<div class="{LOCAL_ONLY_CLASS}"><p>Also on this machine: '

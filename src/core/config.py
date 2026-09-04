@@ -505,7 +505,7 @@ def run_dir(date_str: str) -> Path:
 def run_path(date_str: str) -> Path:
     """runs/YYYY-MM-DD, WITHOUT creating it. For a caller about to READ.
 
-    A directory under runs/ is evidence that a run happened. build_archive
+    A directory under runs/ is evidence that a run happened. The desk
     treats runs/ as the record, CRITERIA's closes retention note keeps runs/
     off the prunable whitelist because site/ is rebuilt from it, and a reader
     asking which mornings exist reads the directory listing. So a read that

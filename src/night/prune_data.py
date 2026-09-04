@@ -23,7 +23,7 @@ something, and this directory holds several only copies.
   data/backtest/sessions/  the replay behind the subscription cap recall
                            table, which is an open purchasing decision.
   logs/, site/             not under data/ and not this module's business.
-                           build_archive rebuilds site/ FROM runs/.
+                           desk/render rebuilds site/ FROM runs/.
 
 runs/ IS THIS MODULE'S BUSINESS SINCE 2026-09-04, and it is a second verb.
 [corrected 2026-09-04: this list said "runs/, logs/, site/ not under data/ and
@@ -31,9 +31,10 @@ not this module's business", which was true while nothing touched runs/ at
 all.] sweep_runs below COMPRESSES a run directory older than CRITERIA
 [Retention] hot_sessions and deletes exactly one thing, the duplicate
 premarket_snapshot.jsonl, under three interlocks. It never removes report.md
-or report.html at any age, only gzips them in place, so build_archive still
-finds every session it ever found: files.read_text_maybe_gz is what makes that
-true and build_archive reads through it.
+or report.html at any age, only gzips them in place, so the desk still finds
+every session it ever found: files.read_text_maybe_gz is what makes that true
+and desk/compact reads through it. [build_archive owned site/ until it was
+retired on 2026-09-04; desk/render took its filename and this obligation.]
 
 THE AGE COMES FROM THE FILENAME, NOT THE MTIME. universe-closes-2026-08-18.json
 describes the session of the 18th whoever copied it and whenever. An mtime rule

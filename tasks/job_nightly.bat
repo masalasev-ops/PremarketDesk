@@ -152,16 +152,10 @@ echo ===== weekly started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.weekly_page >> "%LOG%" 2>&1
 echo ===== weekly finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
-rem The archive also rebuilds here so a morning that failed after the scan
-rem still gets archived the same evening.
-echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
-%PY% -m night.build_archive >> "%LOG%" 2>&1
-set RC=%ERRORLEVEL%
-echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-if %RC% neq 0 exit /b %RC%
-
 rem The desk, rebuilt last so it inlines what every step above has just
-rem written, including tonight's outcomes and the compaction. Full rebuild
+rem written, including tonight's outcomes and the compaction. It also rebuilds
+rem here so a morning that failed after the scan still reaches a screen the
+rem same evening, which is what the retired archive step did. Full rebuild
 rem from disk, never an append. Never fails the chain.
 echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render --no-compact >> "%LOG%" 2>&1

@@ -126,7 +126,8 @@ section { margin-top: 34px; }
   background: var(--raised); }
 .spine-axis .t { position: absolute; top: 4px; transform: translateX(-50%);
   font-size: 10px; color: var(--muted); }
-.spine-row { display: grid; grid-template-columns: 4px 58px minmax(0,1fr) 1fr 70px 38px;
+.spine-row { display: grid;
+  grid-template-columns: 4px 58px minmax(0,1fr) minmax(0,124px) 1fr 70px 38px;
   align-items: center; gap: 9px; width: 100%; text-align: left; background: transparent;
   border: 0; border-top: 1px solid var(--line); padding: 0 13px 0 0; cursor: pointer;
   min-height: 37px; }
@@ -140,6 +141,20 @@ section { margin-top: 34px; }
 .spine-row .tk { font-weight: 600; font-size: 13px; padding-left: 9px; }
 .spine-row .nm { font-size: 12.5px; color: var(--muted); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
+/* The reason column. The class word is the answer at a glance and the row's
+   own tooltip carries the sentence; the selected name's deck carries the
+   headlines the class was read from. */
+.cat { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cchip { font-size: 10.5px; letter-spacing: 0.04em; text-transform: uppercase;
+  font-weight: 600; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 4px; padding: 1px 6px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.cchip.none { color: var(--muted); border-color: var(--line-strong);
+  font-weight: 500; letter-spacing: 0.02em; text-transform: none; }
+.cat .cn { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.cat .cn::after { content: " news"; }
+@media (max-width: 900px) { .cat { display: none; } }
+
 .plot { position: relative; height: 25px; }
 .plot .zero { position: absolute; top: 2px; bottom: 2px; width: 1px; background: var(--line-strong); }
 .plot .b { position: absolute; top: 7px; height: 11px; background: var(--r3); }
@@ -171,6 +186,10 @@ section { margin-top: 34px; }
 .pill.red { color: var(--bad); border-color: var(--bad); font-weight: 600; }
 .pill.on { color: var(--accent); border-color: var(--accent); background: var(--active);
   font-weight: 600; }
+.deck-why { padding: 11px 17px; border-bottom: 1px solid var(--line);
+  background: var(--raised); font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+.deck-why b { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); margin-right: 9px; }
 .deck-grid { display: grid; grid-template-columns: 320px minmax(0,1.15fr) minmax(0,1fr); }
 .deck-grid > div { padding: 15px 17px; border-right: 1px solid var(--line); min-width: 0; }
 .deck-grid > div:last-child { border-right: 0; }
@@ -630,16 +649,28 @@ DECK_JS = r"""
       return '<button class="spine-row" type="button" data-sym="' + esc(c.sym) + '"' +
         ' aria-current="' + (c.sym === selected) + '"' +
         ' title="' + esc(c.sym + " " + pct(c.gap) + ", score " + n2(c.score, 0) +
-          ", " + convWord(c.conv)) + '">' +
+          ", " + convWord(c.conv) +
+          (hasCatalyst(c) ? ". " + c.catalyst + ": " + (c.catalyst_why || "")
+            : ". " + (c.catalyst_why || "nothing explains this move"))) + '">' +
         '<span class="stripe ' + esc(c.conv || "unscored") + '"></span>' +
         '<span class="tk mono">' + esc(c.sym) + "</span>" +
         '<span class="nm">' + esc(c.name) + "</span>" +
+        '<span class="cat">' + (hasCatalyst(c)
+          ? '<span class="cchip">' + esc(c.catalyst) + "</span>"
+          : '<span class="cchip none">nothing found</span>') +
+        (c.news ? '<span class="cn">' + c.news + "</span>" : "") + "</span>" +
         '<span class="plot"><span class="zero" style="left:50%"></span>' + bar + "</span>" +
         '<span class="gapval num">' + pct(c.gap) + "</span>" +
         '<span class="scorebox num">' + n2(c.score, 0) + "</span></button>";
     }).join("");
     return axis + (rows ||
       '<div class="pad empty">No candidate matches that filter.</div>');
+  }
+
+  // The packet writes the string "none" for a name nothing explains, so a
+  // truth test on c.catalyst is not enough: it would print NONE as a class.
+  function hasCatalyst(c) {
+    return !!c.catalyst && c.catalyst !== "none";
   }
 
   /* 2. level ladder */
@@ -930,6 +961,15 @@ DECK_JS = r"""
       '<span class="sector">' + esc(c.sector || "sector not on file") + "</span>" +
       '<span class="right">' + badges +
       '<a class="pill" href="#/name/' + esc(c.sym) + '">Every appearance</a></span></div>' +
+      (hasCatalyst(c)
+        ? '<div class="deck-why"><b>Why it gapped</b> ' + esc(c.catalyst) + ", " +
+          esc(c.catalyst_why || "") + "." +
+          (c.news ? " " + c.news + " stor" + (c.news === 1 ? "y is" : "ies are") +
+            " quoted below." : " No story carried the name in the window.") + "</div>"
+        : '<div class="deck-why"><b>Why it gapped</b> Nothing explains it. ' +
+          esc(c.catalyst_why || "") + ", and it is on the list on its move and " +
+          "its volume alone. An unexplained gap is a finding and not a gap in " +
+          "the data.</div>") +
       '<div class="deck-grid">' +
       '<div><div class="panel-title">Levels</div>' + ladder(c) +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5">' +
@@ -954,6 +994,15 @@ DECK_JS = r"""
   /* ---------- screens ---------- */
   var state = { selected: null, filter: "all" };
 
+  function fixtureBanner(p) {
+    if (!p.fixture) return "";
+    return '<div class="card verdict" style="margin-top:18px">' +
+      '<div class="rule" style="background:var(--warn)"></div>' +
+      '<div class="vin"><div class="vt">This is not a morning that happened</div>' +
+      '<div class="vs">' + esc(p.fixture) + ". Every figure below is from that " +
+      "packet and none of it describes a market.</div></div></div>";
+  }
+
   function screenMorning(p, root) {
     var C = p.candidates;
     function passes(c) {
@@ -976,7 +1025,7 @@ DECK_JS = r"""
       ["swing", "Swing eligible"], ["green", "Green conviction"],
       ["up", "Gapped up"], ["down", "Gapped down"]];
 
-    var html = tapeHTML(p.tape) + kpisHTML([
+    var html = fixtureBanner(p) + tapeHTML(p.tape) + kpisHTML([
       { l: "Candidates kept", v: C.length,
         s: "of " + (rk.subscribed_considered || NIL) + " ranked, cap " + (rk.cap || NIL) },
       { l: "Day eligible", v: (tally.day || {}).eligible == null ? NIL : tally.day.eligible,
@@ -1337,6 +1386,44 @@ DECK_JS = r"""
     });
   }
 
+  /* The written report, inlined with its session. This screen IS the
+     retired site/PremarketDesk.html archive: that page existed to read old
+     mornings' prose across sessions, the desk took its filename on
+     2026-09-04, and a filename is not a reason to lose what the page did. */
+  function screenReport(p, root) {
+    var has = { morning: !!p.report, midday: !!p.report_midday };
+    if (!has.morning && !has.midday) {
+      root.innerHTML = '<section><div class="shead"><h2>The report</h2></div>' +
+        '<div class="card pad empty">No report was written for ' + esc(p.session) +
+        ". The morning stopped before the render step, which is a different " +
+        "thing from a morning that found nothing.</div></section>";
+      return;
+    }
+    var seg = (has.morning && has.midday)
+      ? '<div class="seg noprint" style="margin-left:auto">' +
+        '<button type="button" data-rep="morning" aria-pressed="true">Morning</button>' +
+        '<button type="button" data-rep="midday" aria-pressed="false">Midday</button>' +
+        "</div>"
+      : "";
+    var first = has.morning ? "morning" : "midday";
+    root.innerHTML = '<section><div class="shead"><h2>The report, as written</h2>' +
+      '<span class="note">' + esc(p.session) + "</span>" + seg + "</div>" +
+      '<p class="snote">The words that were delivered that morning, rendered from ' +
+      "the same markdown the email carried and styled by the same stylesheet, so " +
+      "this and the copy in your inbox are the same document.</p>" +
+      '<div class="card" id="rep-body"><div class="report">' +
+      (first === "morning" ? p.report : p.report_midday) + "</div></div></section>";
+    root.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-rep]");
+      if (!b) return;
+      Array.prototype.forEach.call(root.querySelectorAll("button[data-rep]"),
+        function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      $("rep-body").innerHTML = '<div class="report">' +
+        (b.dataset.rep === "morning" ? p.report : p.report_midday) + "</div>";
+      window.scrollTo(0, 0);
+    });
+  }
+
   function screenSession(p, root) {
     var d = p.session;
     var tally = p.tally || {};
@@ -1369,7 +1456,12 @@ DECK_JS = r"""
         : "not run") +
       "</div>" +
       '<div class="snote" style="margin:6px 0 0">What the open did to the levels the morning ' +
-      "printed, and what moved that it never named.</div></a></div></section>" +
+      "printed, and what moved that it never named.</div></a>" +
+      '<a class="card pad" style="text-decoration:none;display:block" href="#/session/' + esc(d) + '/report">' +
+      '<div class="panel-title">The report</div><div style="font-size:20px;font-weight:600">' +
+      (p.report ? "as written" : "not written") + "</div>" +
+      '<div class="snote" style="margin:6px 0 0">The words delivered that morning, and ' +
+      "the midday one where the 12:00 pass wrote it.</div></a></div></section>" +
       recordSection(p) + healthSection(p);
   }
 
@@ -1820,12 +1912,14 @@ DECK_JS = r"""
     if (parts[0] === "session") {
       return { screen: parts[2] || "session", date: parts[1] };
     }
+    if (parts[0] === "report") return { screen: "report", date: parts[1] || LAST };
     return { screen: "sessions" };
   }
 
   function setNav(route) {
     var map = { morning: "morning", midday: "midday", session: "sessions",
-      sessions: "sessions", record: "record", health: "health", name: "" };
+      sessions: "sessions", record: "record", health: "health", name: "",
+      report: "" };
     Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
       var key = a.dataset.nav;
       if (key === map[route.screen]) a.setAttribute("aria-current", "page");
@@ -1840,7 +1934,8 @@ DECK_JS = r"""
       if (link[a.dataset.nav]) a.href = link[a.dataset.nav];
     });
     var scoped = (route.screen === "morning" || route.screen === "midday" ||
-      route.screen === "session" || route.screen === "health");
+      route.screen === "session" || route.screen === "health" ||
+      route.screen === "report");
     $("picker-wrap").style.display = scoped ? "" : "none";
     if (route.date) $("session-btn-label").textContent = route.date;
     // The stamp names the session a screen is about. On Sessions, Record,
@@ -1876,6 +1971,7 @@ DECK_JS = r"""
       $("stamp-date").textContent = p.session;
       $("stamp-run").textContent = p.run_at || NIL;
       if (route.screen === "midday") screenMidday(p, root);
+      else if (route.screen === "report") screenReport(p, root);
       else if (route.screen === "session") screenSession(p, root);
       else screenMorning(p, root);
       window.scrollTo(0, 0);
@@ -1911,6 +2007,7 @@ DECK_JS = r"""
     location.hash = screen === "session" ? "#/session/" + date
       : screen === "health" ? "#/health/" + date
       : screen === "midday" ? "#/session/" + date + "/midday"
+      : screen === "report" ? "#/session/" + date + "/report"
       : "#/session/" + date + "/morning";
   });
   document.addEventListener("click", function (e) {

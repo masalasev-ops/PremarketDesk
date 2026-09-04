@@ -43,7 +43,12 @@ from ops import job_status
 
 _CRIT = criteria.load()
 
-DESK_FILE = "Desk.html"
+# The archive page's filename. build_archive owned site/PremarketDesk.html
+# until 2026-09-04, when the owner retired it: the desk answers the same
+# question better and two pages over one set of sessions is one page too many.
+# The desk carries the written reports for exactly that reason, so nothing the
+# old page did is lost with its name.
+DESK_FILE = "PremarketDesk.html"
 
 # The knobs the application reads. Passed in rather than restated in
 # JavaScript, so CRITERIA stays the one place a display bound is written down
@@ -184,7 +189,10 @@ def render(limit: int | None = None) -> dict[str, Any]:
         title="PremarketDesk", body=body(index, blobs),
         extra_css=assets.DECK_CSS,
         script=f"<script>{assets.DECK_JS}</script>",
-        include_report_css=False)
+        # REPORT_CSS comes along now that the desk carries the written
+        # reports. Safe beside DECK_CSS by construction: every one of its 46
+        # selectors is scoped under .report and none of them is bare.
+        include_report_css=True)
 
     config.SITE_DIR.mkdir(parents=True, exist_ok=True)
     destination = config.SITE_DIR / DESK_FILE

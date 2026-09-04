@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty third: the archive page is retired and the desk takes its name
+
+The owner asked to delete site/PremarketDesk.html and rename the desk to it,
+because two pages over one set of sessions is one page too many. That is a
+rename in the request and a retirement in the code, because build_archive
+rewrote that filename every night and would have fought the desk for it.
+
+WHAT THE OLD PAGE DID THAT THE DESK DID NOT. It carried every session's
+WRITTEN REPORT. The desk payload had no narrative in it at all, so a straight
+rename would have quietly dropped the only way to read an old morning's prose
+across sessions, and the published artifact cannot reach runs/<date>/report.html
+the way a local page can. So the desk took the job with the name:
+desk/compact.py inlines report.md and report_midday.md per session, rendered
+through render_report.to_html, and a new screen at #/session/<date>/report
+shows them with a toggle where both exist. REPORT_CSS ships with the desk now,
+which is safe beside DECK_CSS by construction: all 46 of its selectors are
+scoped under .report and not one is bare.
+
+THE FIXTURE GUARD MOVED RATHER THAN DIED. build_archive refused to publish a
+packet no scheduled run wrote as though it were a morning, labelling it in the
+rail instead of dropping it, because a session missing from the page reads as a
+day the market was shut. _fixture_reason is now desk/compact._fixture_reason,
+the payload carries the label, and every screen that draws a session draws the
+banner. Its claim is asserted on the payload rather than on rendered HTML,
+which is where the screens read it from.
+
+Three other claims moved with it and none was deleted: the one that says
+whatever concatenates mornings into one page must not carry its own markdown
+renderer now reads desk/compact; the one that says a session carries its own
+midday report and never a neighbour's now asserts on the payload; and the one
+that says every page shares core.page's shell now names the desk. The
+entrypoint claim kept the name archive and drives desk.render, because it is
+the same obligation.
+
+AND THE SUITE CAUGHT A DEFECT THAT WAS ALREADY THERE. CRITERIA [Job status
+steps] listed archive and did not list desk, so the desk step, wired into
+three chains on 2026-09-04, could never have been reported overdue by the
+watchdog. It is listed now. The check that found it exists because a step the
+scheduler runs and the monitor does not know about is invisible exactly when
+it stops working.
+
+THE SCREENS NOW SAY WHY A STOCK GAPPED. The owner asked whether they did, and
+the honest answer was that they did in one place: the third column of the
+selected name's deck, which is twelve clicks for twelve names. The gap spine
+grew a reason column, class and story count, with the sentence in the row
+tooltip; the deck grew a Why it gapped line under its head. A name the packet
+explains nothing for reads "nothing found" and never "none", which is how the
+packet spells it, because printing a field's sentinel at a reader is the thing
+the report prose rules exist to stop.
+
+One trap worth recording again: a Python patch script written as a bash
+heredoc turned every escaped newline inside a test fixture's string literal
+into a real newline and left the suite unable to parse. The note in memory
+said not to do this. It was right.
+
 ## 2026-09-04, sixty second: the record is cut at 2026-09-01
 
 The owner asked how to start this project again on another machine and how to

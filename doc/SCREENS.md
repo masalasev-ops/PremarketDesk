@@ -456,6 +456,36 @@ the watchdog. It is the least glamorous screen in this file and it is the one
 that would have shown, on the morning after the outage, that the catch up had
 subscribed the collector to proxies only while the watchdog read healthy.
 
+### 8. The report, as written
+
+[ADDED 2026-09-04. Route `#/session/<date>/report`. Not in the original seven,
+because when this file was written site/PremarketDesk.html was build_archive's
+page and that page's whole job was reading old mornings' prose. The owner
+retired it that afternoon and the desk took its filename, so the desk took its
+job: desk/compact inlines each session's report.md and report_midday.md,
+rendered through render_report.to_html and never markdown.markdown, and this
+screen shows them with a toggle where both exist. REPORT_CSS ships with the
+desk for it, which is safe beside DECK_CSS because all 46 of its selectors are
+scoped under .report. A session whose morning stopped before the render step
+carries None and the screen says so, which is a different fact from a morning
+that found nothing.]
+
+### The catalyst, and where it is answered
+
+[ADDED 2026-09-04, after the owner asked whether the screens say why a stock
+gapped. They did, and only in the third column of the SELECTED name's deck, so
+answering it for twelve names took twelve clicks. Two changes: the gap spine
+grew a reason column carrying the catalyst class and the story count, with the
+sentence in the row's own tooltip, so the question is answered for the whole
+list at a glance; and the deck grew a Why it gapped line under its head, above
+the three columns.
+
+A name the packet found nothing for reads "nothing found" and its deck says
+the move is unexplained by anything this project reads, which is itself a
+finding. It must never read "none", which is how the packet spells it: a
+screen that prints a field's sentinel at a reader is the report prose rule
+applied to a screen.]
+
 ## Routing and state
 
   Hash routes only. No server, no history API, no build step. `#/sessions`,

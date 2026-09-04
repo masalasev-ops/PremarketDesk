@@ -62,7 +62,7 @@ SCHEDULED = [
     ("render", "morning.render_report", []),
     ("verify", "morning.verify_morning", []),
     ("deliver", "morning.deliver", []),
-    ("archive", "night.build_archive", []),
+    ("desk", "desk.render", []),
     ("backup", "night.backup_evidence", ["--dry-run"]),
     ("backfill", "night.backfill_premarket", []),
     ("outcomes", "night.fill_outcomes", []),
@@ -1698,7 +1698,13 @@ def claim_deliver(failures: list[str]) -> None:
 
 
 def claim_archive(failures: list[str]) -> None:
-    outcome = _drive("archive", "night.build_archive", [])
+    """The desk entrypoint, which took build_archive's place on 2026-09-04.
+
+    Kept under the archive name because it is the same obligation: the step
+    that rebuilds site/PremarketDesk.html from what is on disk must exit
+    cleanly and record what it produced.
+    """
+    outcome = _drive("desk", "desk.render", [])
     _check(outcome, failures)
 
 

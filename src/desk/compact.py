@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import collections
 import json
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -38,6 +39,7 @@ from core import criteria
 from core import ettime
 from core import files
 from core import store
+from morning import render_report
 
 _CRIT = criteria.load()
 
@@ -160,6 +162,60 @@ def _midday_rows(midday: dict[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+# A resolved git commit, so a packet built by anything else can be told from
+# one built by a scheduled run. Moved here from build_archive on 2026-09-04
+# when that module was retired; the reasoning below is its reasoning.
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+
+
+def _fixture_reason(packet: dict[str, Any]) -> str | None:
+    """Why this packet was not written by a scheduled run, or None.
+
+    Matched on the SHAPE of the commit rather than on the string "stub",
+    because the next fixture to reach a run directory will not be spelled the
+    same and a guard that names one value only ever catches that one.
+
+    THE TWO SILENCES ARE NOT THE SAME AS A WRONG ANSWER. A packet with no
+    build key at all predates 2026-08-14, when the field was added; a build
+    dict whose commit is null is a run on a machine that could not resolve
+    HEAD, which config.build_identifier writes deliberately with a
+    commit_reason beside it. Neither says anything about whether a market was
+    involved, so neither is reported. Only a commit that is PRESENT and is not
+    a resolved HEAD is a statement no version of this code makes.
+
+    The desk LABELS such a session rather than dropping it, for the reason the
+    archive did: a session missing from the calendar reads as a day the market
+    was shut, and this payload is the record. One that quietly omits what went
+    wrong is the failure the guard exists to prevent.
+    """
+    build = packet.get("build")
+    if not isinstance(build, dict):
+        return None  # predates the field; the packet cannot be asked
+    commit = build.get("commit")
+    if commit is None:
+        return None  # a legitimate run on a machine that could not resolve HEAD
+    if not isinstance(commit, str) or not _COMMIT_RE.match(commit):
+        return f"its packet was built by {commit!r}, which is not a commit"
+    return None
+
+
+def _rendered(run_dir: Path, name: str) -> str | None:
+    """A session's written report as an HTML fragment, or None if it has none.
+
+    Reads through the gzip aware pair, so a warm session that prune_data has
+    compressed reads exactly like a hot one. A session whose morning failed
+    before the report was written is a supported state and returns None; the
+    screen says so rather than drawing an empty page.
+    """
+    if files.resolve_maybe_gz(run_dir / name) is None:
+        return None
+    try:
+        return render_report.to_html(files.read_text_maybe_gz(run_dir / name))
+    except (OSError, ValueError) as exc:
+        print(f"compact: {run_dir.name} {name} unreadable: {exc}")
+        return None
+
+
 def compact_session(session_date: str) -> dict[str, Any] | None:
     """The payload for one session, or None when that session has no packet.
 
@@ -249,6 +305,21 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
     mid_movers = (midday.get("movers") or {})
     payload = {
         "session": packet.get("session_date") or session_date,
+        # THE WRITTEN REPORT, rendered here and inlined with the session.
+        # site/PremarketDesk.html was build_archive's page until 2026-09-04
+        # and the one thing it carried that this payload did not was the
+        # prose. The desk took its name, so it takes its job: without these
+        # two keys the rename would have quietly dropped the only way to read
+        # an old morning's report across sessions, and the published artifact
+        # cannot reach runs/<date>/report.html the way a local page can.
+        # Rendered through render_report.to_html and never markdown.markdown,
+        # for the reason that function's docstring gives.
+        # None for a real morning. A sentence when the packet was not written
+        # by a scheduled run, so the screens can say so instead of drawing a
+        # fixture as a session that happened.
+        "fixture": _fixture_reason(packet),
+        "report": _rendered(run_dir, "report.md"),
+        "report_midday": _rendered(run_dir, "report_midday.md"),
         "run_at": packet.get("run_time_et"),
         "generated": packet.get("generated_at"),
         "api_calls": packet.get("api_calls"),

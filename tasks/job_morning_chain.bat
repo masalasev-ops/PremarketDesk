@@ -54,12 +54,6 @@ set RC=%ERRORLEVEL%
 echo ===== deliver finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 if %RC% neq 0 exit /b %RC%
 
-echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
-%PY% -m night.build_archive >> "%LOG%" 2>&1
-set RC=%ERRORLEVEL%
-echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-if %RC% neq 0 exit /b %RC%
-
 rem The desk, so this morning's screens are there before the open. It reads
 rem and renders: no vendor call and no measurement of its own. Never fails the
 rem chain, because a report that was delivered is not undone by a page that

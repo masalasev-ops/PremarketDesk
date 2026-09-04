@@ -694,31 +694,30 @@ def claim_an_interrupted_packet_write_leaves_no_half_packet(failures: list[str])
 
 
 def claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures: list[str]) -> None:
-    """A session whose packet no build wrote is carried, and is labelled.
+    """A packet no scheduled run wrote is carried and LABELLED, never dropped.
 
     On 2026-08-21 at 15:46 a sweep that invoked every claim directly wrote
     fixture data over that morning's packet, capture and report. The loss is
     recorded in three documents. What no document could do is stop
-    site/PremarketDesk.html rendering the fixture as the seventh session,
-    identical in the rail and in the pane to the six real ones: one candidate,
-    AAPL at 100.00, gap +3.1 percent, RVOL 1.8, score 6.0 green, none of it
-    measured from a market.
+    site/PremarketDesk.html rendering the fixture as a real session, identical
+    to the others: one candidate, AAPL at 100.00, gap +3.1 percent, RVOL 1.8,
+    score 6.0 green, none of it a market.
 
-    The packet already carried the tell. config.build_identifier writes a
-    resolved HEAD or null with a commit_reason, and never a third thing, so the
-    "stub" that fixture wrote is a value no version of this code produces.
-    Nothing read it.
+    Labelled rather than dropped. A session missing from the calendar reads as
+    a day the market was shut, and the payload is the record: one that quietly
+    omits what went wrong is the failure this guard exists to prevent.
 
-    Labelled rather than dropped. A session removed from the archive leaves a
-    gap in the rail that reads as a day the market was shut, and this file is
-    the record: one that quietly omits what went wrong is the failure it exists
-    to prevent.
+    THE TWO SILENCES ARE NOT A WRONG ANSWER, and the first draft of this got
+    that wrong and accused two real mornings. A packet with no build key
+    predates 2026-08-14 when the field was added; a build dict whose commit is
+    null is a run that could not resolve HEAD. Neither is reported.
 
-    The two silences are asserted alongside, because the first draft of this
-    guard reported them and accused 2026-08-13 and 2026-08-14, both real
-    mornings written before the build field existed.
+    build_archive owned this until 2026-09-04. The guard moved to
+    desk/compact._fixture_reason with the page's filename, and it is asserted
+    on the payload rather than on rendered HTML, which is where every screen
+    reads it from.
     """
-    from night import build_archive
+    from desk import compact
 
     packets = {
         "2026-08-21": {"build": {"commit": "stub", "dirty": False}},
@@ -728,54 +727,30 @@ def claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures: list[str
         "2026-08-19": {"build": {"commit": None, "dirty": None,
                                  "commit_reason": "could not resolve HEAD"}},
     }
-    expected_flagged = {"2026-08-21"}
+    accused = [d for d, pk in packets.items() if compact._fixture_reason(pk)]
+    if accused != ["2026-08-21"]:
+        failures.append(
+            f"the fixture guard labelled {accused}, expected only ['2026-08-21']: "
+            "a packet predating the build field and a run that could not resolve "
+            "HEAD say nothing about whether a market was involved")
+    reason = compact._fixture_reason(packets["2026-08-21"])
+    if not reason or "stub" not in reason:
+        failures.append("the label does not name what built the packet, so a "
+                        "reader cannot tell which fixture reached the tree")
 
-    for date, packet in packets.items():
-        reason = build_archive._fixture_reason(packet)
-        if (reason is not None) != (date in expected_flagged):
-            failures.append(
-                f"{date} with build {packet.get('build')!r} was "
-                f"{'flagged' if reason else 'passed'} and should have been "
-                f"{'flagged' if date in expected_flagged else 'passed'}"
-                + (f": {reason}" if reason else ""))
-
-    with conftest_activate() as _sandbox:
-        for date, packet in packets.items():
-            run = config.run_dir(date)
-            run.mkdir(parents=True, exist_ok=True)
-            body = dict(packet)
-            body["session_date"] = date
-            body["candidates"] = [{"symbol": "AAA.US", "conviction": "green"}]
-            (run / "packet.json").write_text(json.dumps(body), encoding="utf-8")
-            (run / "report.md").write_text(f"# Premarket, {date}\n\nbody\n",
-                                           encoding="utf-8")
-
-        printed = io.StringIO()
-        with contextlib.redirect_stdout(printed):
-            # Embed everything. The sandbox carries the real tree's run
-            # directories too, so a cap of len(packets) links the oldest of
-            # these out instead of embedding them and the section ids below
-            # would be missing for a reason that is not the one under test.
-            out = build_archive.build(1000)
-        page = out.read_text(encoding="utf-8")
-
-        if "2026-08-21 is not a morning" not in page:
-            failures.append("the archive rendered the destroyed session with no "
-                            "label; a reader cannot tell it from the real ones")
-        if page.count(">not a morning<") != 1:
-            failures.append(f"the rail marked {page.count('>not a morning<')} "
-                            "sessions, expected exactly 1")
-        if "1 not a morning" not in page:
-            failures.append("the archive subtitle did not count the labelled "
-                            "session, so the fact is only visible inside the "
-                            "day a reader happens to open")
-        for date in packets:
-            if f"day-{date}" not in page:
-                failures.append(f"{date} was dropped from the archive; a gap in "
-                                "the rail reads as a day the market was shut")
-        if "2026-08-21" not in printed.getvalue():
-            failures.append("the archive step said nothing in its log about "
-                            "carrying a session that is not a morning")
+    # And the payload carries it, because a guard nothing reads is not a guard.
+    with conftest_activate():
+        day = "2026-01-15"
+        run_dir = config.run_dir(day)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps({
+            "session_date": day, "run_time_et": "08:45", "candidates": [],
+            "build": {"commit": "stub", "dirty": False}}), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            payload = compact.compact_session(day) or {}
+    if not payload.get("fixture"):
+        failures.append("the payload carries no fixture label, so every screen "
+                        "would draw a packet no run wrote as a morning that happened")
     print("  not a morning a packet no build wrote is carried and labelled, and "
           "a packet written before the build field is not accused")
 
@@ -10515,19 +10490,22 @@ def claim_a_vendor_headline_cannot_write_markup(failures: list[str]) -> None:
                             "puts inside <title>, where a bare < ends the "
                             "element and the rest of the line becomes body")
 
-    # And the archive must not render markdown on its own.
-    archive = (config.PROJECT_ROOT / "src" / "night" / "build_archive.py"
-               ).read_bytes().decode("utf-8")
-    if "markdown.markdown(" in archive:
-        failures.append("build_archive calls markdown.markdown itself again. "
-                        "It concatenates twelve mornings into one page, so it "
+    # And whatever concatenates mornings into one page must not render
+    # markdown on its own. That was build_archive until 2026-09-04; it is
+    # desk/compact.py now, which inlines every session's report into
+    # site/PremarketDesk.html and inherits the risk with the job.
+    packer = (config.PROJECT_ROOT / "src" / "desk" / "compact.py"
+              ).read_bytes().decode("utf-8")
+    if "markdown.markdown(" in packer:
+        failures.append("desk/compact calls markdown.markdown itself. It "
+                        "inlines every session's report into one page, so it "
                         "is the last file that should have its own renderer.")
-    if "render_report.to_html" not in archive:
-        failures.append("build_archive does not render through "
+    if "render_report.to_html" not in packer:
+        failures.append("desk/compact does not render through "
                         "render_report.to_html")
 
     print("  markup       a hostile headline comes back as text, a comparison "
-          "and a blockquote do not, and the archive shares the one renderer")
+          "and a blockquote do not, and the desk shares the one renderer")
 
 
 def claim_the_true_premarket_gap_separates_the_feed_from_the_window(
@@ -14303,7 +14281,8 @@ def claim_the_morning_page_links_to_its_siblings(failures: list[str]) -> None:
         with_midday = render_report.render(report, overwrite=True).read_text(encoding="utf-8")
         subject = deliver.email_subject(today / "report.html", "2026-01-08")
 
-    for needle in ('href="../2026-01-07/report.html"', 'href="../../site/PremarketDesk.html#2026-01-08"',
+    for needle in ('href="../2026-01-07/report.html"',
+                   'href="../../site/PremarketDesk.html#/session/2026-01-08/morning"',
                    'href="../../site/Weekly.html"', f'class="{render_report.LOCAL_ONLY_CLASS}"'):
         if needle not in with_midday:
             failures.append(f"report.html lacks {needle}")
@@ -14324,39 +14303,53 @@ def claim_the_morning_page_links_to_its_siblings(failures: list[str]) -> None:
 
 
 def claim_the_archive_carries_the_midday_report(failures: list[str]) -> None:
-    """Each archived day carries its midday report under the morning's, or says
-    the pass has not run.
+    """Each session carries its midday report beside the morning's, or neither.
 
     build_archive read report.md alone, so report_midday.md was on disk for
-    every session since 2026-08-31 and in front of nobody. Through the same
-    renderer as the morning, for the same escaping reasons.
+    every session since 2026-08-31 and in front of nobody. That page was
+    retired on 2026-09-04 and desk/compact.py inherited the job: it inlines
+    both reports into the payload site/PremarketDesk.html carries, through the
+    same renderer as the morning, for the same escaping reasons.
+
+    A session with no midday report must come back None rather than borrowing
+    the previous session's, which is the failure the archive version caught.
     """
-    from night import build_archive
+    from desk import compact
+
+    def _fixture(date: str) -> None:
+        run_dir = config.run_dir(date)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps({
+            "session_date": date, "run_time_et": "08:45", "candidates": []}),
+            encoding="utf-8")
+        (run_dir / "report.md").write_text(
+            f"# Morning {date}\n\nNothing here is advice.\n", encoding="utf-8")
 
     with conftest_activate():
         for date in ("2026-01-12", "2026-01-13"):
-            run_dir = config.run_dir(date)
-            run_dir.mkdir(parents=True, exist_ok=True)
-            (run_dir / "report.md").write_text(f"# Morning {date}\n\nNothing here is advice.\n",
-                                                encoding="utf-8")
+            _fixture(date)
         (config.run_dir("2026-01-13") / "report_midday.md").write_text(
-            "# Midday, 2026-01-13\n\n## What the morning's picks did\n\nA midday sentence.\n",
-            encoding="utf-8")
-        # Embed every session the sandbox copied. The sandbox carries the live
-        # runs tree, so a fixed ten pushed the January fixtures out of the
-        # embedded set on the morning the tenth real report landed.
-        sessions = sum(1 for p in config.RUNS_DIR.iterdir() if p.is_dir())
+            "# Midday, 2026-01-13\n\n## What the morning's picks did\n\n"
+            "A midday sentence.\n", encoding="utf-8")
         with contextlib.redirect_stdout(io.StringIO()):
-            page = build_archive.build(embed_sessions=sessions + 2).read_text(encoding="utf-8")
+            with_it = compact.compact_session("2026-01-13") or {}
+            without = compact.compact_session("2026-01-12") or {}
 
-    with_it = page.split('id="day-2026-01-13"', 1)[1].split("</section>", 1)[0]
-    without = page.split('id="day-2026-01-12"', 1)[1].split("</section>", 1)[0]
-    if "A midday sentence." not in with_it or 'class="midday"' not in with_it:
-        failures.append("the archived day does not carry its midday report")
-    if "has not written a report" not in without or "A midday sentence." in without:
-        failures.append("a day without a midday report does not say so, or borrowed another day's")
-    print("  archive      a day carries its midday report under the morning's, and a "
-          "day without one says the pass has not run")
+    if "Morning 2026-01-13" not in (with_it.get("report") or ""):
+        failures.append("the payload does not carry that session's morning report")
+    if "A midday sentence." not in (with_it.get("report_midday") or ""):
+        failures.append("the payload does not carry that session's midday report")
+    if without.get("report_midday") is not None:
+        failures.append("a session with no midday report did not come back None, "
+                        "so a screen cannot tell a pass that did not run from one "
+                        "that found nothing")
+    if "A midday sentence." in (without.get("report_midday") or ""):
+        failures.append("a session borrowed another session's midday report")
+    if "<h1>" not in (with_it.get("report") or ""):
+        failures.append("the report was inlined as markdown rather than rendered, "
+                        "so the desk would print its source at the reader")
+    print("  reports      a session carries its midday report beside the morning's, "
+          "and a session without one carries None rather than a neighbour's")
 
 
 def _slots_packet() -> dict[str, Any]:
@@ -14664,24 +14657,26 @@ def claim_the_slots_prompt_holds_to_the_guard(failures: list[str]) -> None:
 
 
 def claim_every_page_shares_one_shell(failures: list[str]) -> None:
-    """The morning page, the midday page, the archive and the weekly page are
+    """The morning page, the midday page, the desk and the weekly page are
     one document skeleton from core/page.py, and no renderer writes its own.
 
     Four renderers wrote four unrelated documents: the weekly page had no
     doctype, no charset and no viewport and opened from disk in quirks mode;
-    the archive's `.day` rules were a hand copy of render_report's that had
-    drifted while its docstring claimed parity. Now one string, SHELL_MARK,
+    build_archive's `.day` rules were a hand copy of render_report's that had
+    drifted while its docstring claimed parity. build_archive was retired on
+    2026-09-04 and desk/render took both its filename and its place here. Now
+    one string, SHELL_MARK,
     is in every page, only page.py carries a doctype literal, and the three
     report shaped pages wrap their body in `.report` so REPORT_CSS applies to
     each the same way.
     """
     from core import page
+    from desk import render as desk_render
     from midday import render_midday
     from morning import render_report
-    from night import build_archive
     from night import weekly_page
 
-    for module in (render_report, render_midday, build_archive, weekly_page):
+    for module in (render_report, render_midday, desk_render, weekly_page):
         source = pathlib.Path(module.__file__).read_bytes().decode("utf-8")
         if "<!doctype" in source.lower():
             failures.append(f"{module.__name__} carries its own doctype literal instead "
@@ -14694,8 +14689,9 @@ def claim_every_page_shares_one_shell(failures: list[str]) -> None:
         morning = render_report.render(run_dir / "report.md", overwrite=True).read_text(encoding="utf-8")
         midday = render_midday.to_html("# Midday\n\n| A | B |\n| --- | --- |\n| x | 1.0 |\n", "t")
         with contextlib.redirect_stdout(io.StringIO()):
-            archive = build_archive.build(embed_sessions=5).read_text(encoding="utf-8")
-    pages = {"report.html": morning, "report_midday.html": midday, "PremarketDesk.html": archive}
+            desk = desk_render.render()["path"].read_text(encoding="utf-8")
+    pages = {"report.html": morning, "report_midday.html": midday,
+             "PremarketDesk.html": desk}
     for name, text in pages.items():
         lowered = text.lower()
         for needle in ("<!doctype html>", '<meta charset="utf-8">', 'name="viewport"',
@@ -14704,12 +14700,21 @@ def claim_every_page_shares_one_shell(failures: list[str]) -> None:
                 failures.append(f"{name} lacks {needle!r}")
         if name != "PremarketDesk.html" and 'class="report' not in text:
             failures.append(f"{name} does not wrap its body in .report")
-    if 'class="day report"' not in archive:
-        failures.append("an archived day is not classed report, so REPORT_CSS does not reach it")
-    if "@media (max-width: 720px)" not in archive or "@media print" not in archive:
-        failures.append("the archive has no phone or print layout")
-    print("  one shell    the morning, midday and archive pages share core.page's "
-          "skeleton and report rules, and no renderer carries a doctype of its own")
+    # The desk is not a report shaped page, but it INLINES report shaped
+    # bodies, so REPORT_CSS has to reach them or every session's written
+    # report renders as unstyled markup inside an otherwise designed page.
+    if '<div class="report">' not in desk:
+        failures.append("the desk inlines no report body, so the written reports "
+                        "the retired archive page carried are not on any screen")
+    if ".report {" not in desk:
+        failures.append("the desk carries no REPORT_CSS, so the reports it "
+                        "inlines render unstyled")
+    if "@media print" not in desk:
+        failures.append("the desk has no print layout, so Save as PDF is not a "
+                        "layout decision")
+    print("  one shell    the morning, midday, desk and weekly pages share "
+          "core.page's skeleton and report rules, and no renderer carries a "
+          "doctype of its own")
 
 
 def claim_the_weekly_page_is_a_whole_document(failures: list[str]) -> None:
