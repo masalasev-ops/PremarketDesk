@@ -15,6 +15,59 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, fifty eighth: retention gets a policy, and the run folder turns out to hold the tape twice
+
+The owner asked why runs/ grows every day, whether it could go into the
+database, how a random past day's screen would still open, and for a cleanup
+of data older than three months. doc/RETENTION.md is the answer to all four.
+Nothing in it is built and it deletes nothing today: the oldest thing on disk
+is dated 2026-08-13, so a three month rule first bites on 2026-11-11.
+
+MEASURED FIRST. runs/ is 9.9 MB over 14 sessions and data/ is 47 MB, so the
+folder the question was about is not where the space is; but neither has any
+retention at all and together they grow about 740 MB a year. The database is
+2.6 MB and holds 17,556 rows across five tables.
+
+THE FINDING. runs/<date>/premarket_snapshot.jsonl is a STRICT SUBSET of
+data/premarket/<date>.jsonl, tested over all eleven sessions carrying both:
+6,024,048 bytes, zero lines unique to the run copy, 100 percent duplicated.
+That is 61 percent of everything under runs/, and it is a second copy of the
+one file prune_data protects forever as not reproducible at any price. The
+copy is the derivable one and it goes first, once verify_intraday has agreed
+for its session, which needs no reader change at all.
+
+THE DATABASE ANSWER IS PARTLY. SQLite is right for the cross session summary,
+which is the pattern picks, gap_stats, baseline and paper_trades already
+follow, and which SCREENS.md's Sessions, Record and Name screens need anyway.
+It is wrong for the bulk, because SQLite does not compress: a 254,252 byte
+packet stored as a BLOB is still 254,252 bytes, and it stops being greppable,
+diffable and openable in an editor. gzip is the lever, measured at 12.5
+percent on the packet and 13.1 on the tape.
+
+FOUR TIERS: hot 30 sessions uncompressed, warm gzipped in place at about
+210 KB a session, cold at three months where the raw tape goes and the packet
+stays, and a never list. THE PACKET IS NEVER DELETED. Dropping it for cold
+sessions was proposed in conversation and withdrawn the same day, because the
+owner's next question was how to open a random past day's screen and the
+packet is what a screen is drawn from. Compressed it is 32 KB, which is not
+worth the capability.
+
+That question has its own measured answer. A compacted session gzips to
+14,856 bytes and inlines as 19,808 base64, so a year of sessions is 4.8 MB in
+one site/Desk.html and two years is 9.5 MB, inflated in the page by
+DecompressionStream with no library. Every session the project ever runs fits
+in one file, so SCREENS.md's inline_sessions is a ceiling and not a window,
+and its open question about file size is answered there.
+
+ONE DECISION IS LEFT WITH THE OWNER AND IS STATED WITH ITS COST. Taken at
+face value the three month rule deletes data/premarket/*.jsonl, which
+prune_data calls the only record of the 2026-08-14 over count. That ends the
+ability to re measure the capture rate, a shipped constant of 0.1172 that
+every RVOL on every report divides by, over anything older than three months.
+Gzipping those files instead turns 310 MB a year into 41 MB and keeps every
+capability. data/backtest/ at 27 MB is a separate decision and is not in
+scope: each half ends a study if it goes.
+
 ## 2026-09-04, fifty seventh: the screens are specified, and the report gets a second surface
 
 The owner asked for the project to grow a visual, dynamic interface in place

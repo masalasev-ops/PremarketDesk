@@ -89,6 +89,12 @@ archive and still opens instantly from disk. One hundred and twenty, which is
 what CRITERIA [Archive] embed_sessions is set to, is about 7.7MB, and that is
 the point at which this needs measuring rather than estimating.
 
+[measured 2026-09-04: the estimate above assumed the compacted session was
+inlined as plain text. Gzipped and base64 encoded it is 19,808 bytes, not
+63,913, so a year is 4.8MB and two years 9.5MB. The retention tiers and the
+per screen consequences are in doc/RETENTION.md, which this file's storage
+paragraphs defer to.]
+
 THE ESCAPE HATCH, IF IT IS EVER NEEDED, IS THE STANDARD LIBRARY. `python -m
 http.server` costs nothing, adds no dependency to requirements.txt, and turns
 fetch back on, at which point sessions load on demand and the ceiling goes
@@ -490,9 +496,12 @@ that file with the name of a key.
 
 ## Open questions
 
-  How large the inlined file actually gets at thirty sessions and at a
-  hundred and twenty. Estimated above from one compacted session; not
-  measured.
+  [answered 2026-09-04, see doc/RETENTION.md] How large the inlined file
+  actually gets. Measured: a compacted session gzips to 14,856 bytes and
+  inlines as 19,808 base64, so a year of sessions is 4.8MB and two years is
+  9.5MB, inflated in the page by DecompressionStream with no library. Every
+  session the project ever runs fits in one file, so inline_sessions is a
+  ceiling and not a window.
 
   Whether site/PremarketDesk.html and site/Weekly.html are deleted when
   Sessions and Record land, or kept until a month of desk use says the
