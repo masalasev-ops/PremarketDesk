@@ -731,6 +731,9 @@ Other documents:
 - `doc/BUILD_PLAN.md` records how the system was built and verified,
   checkpoint by checkpoint, including the environment traps that were
   actually hit. Paths in it refer to the original build machine.
+- `doc/MIGRATION.md` is what moving to another machine takes, what cannot be
+  fetched again once it is left behind, and the two ways to start the record
+  over. Written for a Windows to macOS move.
 - `doc/ArchitecturePremarketdesk.html` and `doc/Premarketdesk_ADayRunArc.html`
   are the architecture pages; open them in a browser.
 - `doc/REPORT_TEMPLATE.md` and `doc/prompt_analyst.md` are the report shape
