@@ -14479,6 +14479,17 @@ def claim_every_report_section_is_drawn_somewhere(failures: list[str]) -> None:
     output, because a section's screen may legitimately draw nothing on a
     morning that has nothing: the failure this catches is a section with no
     route to a screen at all.
+
+    A FUNCTION NAME IS NOT A SECTION, which the first version of this claim
+    treated as the same thing and the owner found by asking where Skips and
+    traps was. It mapped section 11 to healthChecks and passed, while the
+    screens drew ONE of the nine sentences the evidence roll writes and
+    carried none of the evidence gaps: measured on runs/2026-09-04, nine
+    sentences and eighteen gaps, of which band_thin alone was on a screen.
+    So section 11 is checked on its content: the roll and the gaps have to
+    reach the payload, and the drawing has to iterate the roll rather than
+    name the keys it knows, or the tenth sentence the scan writes is
+    invisible the same way the other eight were.
     """
     from desk import assets
     from desk import compact
@@ -14541,8 +14552,55 @@ def claim_every_report_section_is_drawn_somewhere(failures: list[str]) -> None:
         if assets.DECK_JS.count(f"{function}(") < 2:
             failures.append(f"{function} is defined and never called, so report "
                             f"section {section} is drawn by dead code")
+    # SECTION 11 ON ITS CONTENT, not on the name of a function.
+    roll = {"text": {"band_thin": "4 of 12 traded so little near their high",
+                     "thin_baseline": "2 of 12 carry a thin denominator",
+                     "a_sentence_written_next_year": "0 of 12 something new"},
+            "band_thin": [{"symbol": "ZED.US", "why": "363 dollars near it"}],
+            "thin_baseline": [], "a_sentence_written_next_year": []}
+    packet["evidence_roll"] = roll
+    packet["gaps_to_fill"] = ["15 candidate(s) carry a STALE premarket price"]
+    packet["candidates"][0]["trap"] = None
+    packet["candidates"][0]["trap_why"] = "too few scored headlines"
+    packet["candidates"][1]["trap"] = False
+
+    with conftest_activate():
+        run_dir = config.run_dir("2026-01-03")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        packet["session_date"] = "2026-01-03"
+        (run_dir / "packet.json").write_text(json.dumps(packet), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            eleven = compact.compact_session("2026-01-03") or {}
+
+    health = eleven.get("health") or {}
+    carried = set((health.get("evidence") or {}).get("text") or {})
+    if carried != set(roll["text"]):
+        failures.append("the payload does not carry every sentence the evidence "
+                        f"roll wrote, only {sorted(carried)}, so section 11 "
+                        "cannot be drawn from it")
+    if not health.get("gaps"):
+        failures.append("the payload carries no evidence gaps, which section 11 "
+                        "of the report lists in full")
+    if "Object.keys(text)" not in assets.DECK_JS:
+        failures.append("the evidence section names the roll keys it knows "
+                        "instead of iterating them, so the next sentence the "
+                        "scan writes is invisible the way eight of nine were")
+
+    # And the tri-states, which bool() flattened until 2026-09-04.
+    traps = [c.get("trap") for c in eleven.get("candidates") or []]
+    if None not in traps or False not in traps:
+        failures.append(
+            "the payload cannot tell a trap question that was asked and "
+            f"answered no from one that could not be answered: {traps!r}. A "
+            "null read as a false is a missing answer published as a "
+            "measured one")
+    if "c.trap == null" not in assets.DECK_JS:
+        failures.append("no screen draws the undecided trap state, so a name "
+                        "whose trap question could not be answered looks "
+                        "exactly like one that was asked and cleared")
     print("  every section  each of the eleven report sections has a screen "
-          "function, and the payload carries what sections 5 and 9 need")
+          "function, the payload carries what sections 5, 9 and 11 need, and "
+          "the trap tri-state survives")
 
 
 def claim_the_name_screen_opens_only_what_it_needs(failures: list[str]) -> None:

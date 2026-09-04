@@ -15,6 +15,46 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty eighth: Skips and traps was one ninth drawn, and a tri-state was being read as false
+
+The owner asked where Skips and traps was on the screens. README claimed it was
+drawn. Measured on runs/2026-09-04's own packet, it was not: the evidence roll
+wrote NINE sentences and the desk drew one of them, band_thin, on Health. The
+other eight, the thin denominator, the null RVOL, the lower bound, the late
+window, the absent coverage, the dropped names and both catalyst lines, were in
+the payload and on no screen. The eighteen evidence gaps the scan recorded were
+not compacted at all.
+
+AND A TRI-STATE WAS BEING FLATTENED. `trap` is True, False or None in the
+packet, deliberately, and the report says in as many words that undecided is
+not a verdict of safe. desk/compact wrote `bool(c.get("trap"))`. On that
+morning's packet trap was None on EIGHT of twelve candidates and False on four,
+so all twelve looked identical on a screen: eight names whose trap question
+could not be answered, drawn as eight names that were asked and cleared. That
+is the failure the 2026-08-22 twelve reader review found twenty three times and
+wrote down as its own conclusion, that two thirds of what it found was a
+missing answer read as a measured one, and every instance was somewhere the
+missing thing had a falsy value. catalyst_found, collector_covered and the
+premarket window flag were flattened the same way and are now carried as they
+are written.
+
+The Morning screen gains "What the evidence is worth", which is section 11:
+every sentence the roll wrote, quoted rather than rebuilt, each printed whether
+or not it names anybody, with the per name reasons under it and the evidence
+gaps beneath. The deck gains the third trap state and two badges the payload
+could already have supported, a partial premarket window and absent collector
+coverage.
+
+WHAT THE CLAIM GOT WRONG IS THE USEFUL PART, again. The claim written the same
+afternoon mapped each report section to a screen FUNCTION and asserted the
+function exists and is called. Section 11 mapped to healthChecks, which exists
+and is called, and drew one ninth of the section. A function name is not a
+section. It checks the content now: every sentence the roll writes has to reach
+the payload, the gaps have to reach it, the drawing has to ITERATE the roll
+rather than name the keys it knows, so the tenth sentence is drawn the day the
+scan writes it, and the trap tri-state has to survive compaction and be drawn.
+Both halves were run against the old behaviour and both fail on it.
+
 ## 2026-09-04, sixty seventh: the Report screen had no route from the screen the desk opens on
 
 The owner opened site/PremarketDesk.html and asked where the morning report

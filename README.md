@@ -195,11 +195,14 @@ emailed copy has them stripped: a path is not a URL.
 One order, and it starts on the desk. Open `site/PremarketDesk.html`; it opens
 on today's Morning screen.
 
-1. **The verdict at the foot, "Was the machine right".** Before anything the
-   morning concluded, find out what today's evidence is worth. Green means
-   every check came back clean; anything else is one click to Health, where
-   each check is a sentence. A name that cleared the volume floor only once the
-   capture correction was applied is named there and nowhere else.
+1. **"What the evidence is worth", and the verdict at the foot.** Before
+   anything the morning concluded, find out what its evidence is worth. That
+   section quotes every sentence the packet resolved about itself, one per
+   line whether or not it names anybody, with the per name reasons under it,
+   and the evidence gaps the scan recorded beneath. The verdict strip at the
+   foot is the summary of the same thing: green means every check came back
+   clean, anything else is one click to Health. A name that cleared the volume
+   floor only once the capture correction was applied is named on Health.
 2. **The stat strip, then "How the list was cut".** How many names were ranked,
    how many cleared the floors, how many were kept, and how many the rank cap
    cut. A morning where the cap cut six names is a different morning from one
@@ -447,7 +450,9 @@ figures in it mean is the section above.
 
 Section 7's per name write ups are the one thing in the whole system that
 exists only here. Everything else in this table is also drawn on the Morning,
-Record or Health screens.
+Record or Health screens, section 11 as "What the evidence is worth" on the
+Morning screen, which quotes the same nine sentences with the same per name
+reasons under them.
 
 ### The midday report, and the Midday screen
 

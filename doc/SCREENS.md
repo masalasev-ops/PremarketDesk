@@ -515,6 +515,28 @@ empty, or a table. The first two are different facts and the screen must not
 let them look alike, which is the same rule as the midday pass that never
 ran.]
 
+### 10. What the evidence is worth
+
+[ADDED 2026-09-04, after the owner asked where Skips and traps was. Section 11
+of the report is the one that says what the morning's evidence is worth, and it
+was one ninth drawn: the evidence roll writes nine sentences and only band_thin
+reached a screen, on Health, with the scan's eighteen evidence gaps carried
+nowhere at all. It is on the Morning screen now, above the composition block,
+because the reading order puts it first and a section read first cannot be
+three screens away.
+
+Every sentence is quoted as the packet wrote it and printed whether or not it
+names anybody, on the rule BUILD_PLAN 4.4 and 4.9 already settled: an absent
+line and a clean one look identical and only one of them is good news. The
+drawing ITERATES the roll rather than naming its keys, so a sentence the scan
+learns to write next year appears with no change here, which is the property
+that failed for the eight sentences nobody had thought to name.
+
+The deck gained the third trap state in the same pass. trap is true, false or
+null and the badge drew only the true case, so the eight names on that morning
+whose question could not be answered looked like the four that were asked and
+cleared.]
+
 ### The navigation, and a screen with no route into it
 
 [CORRECTED 2026-09-04. The navigation shipped as Morning, Midday, Sessions,

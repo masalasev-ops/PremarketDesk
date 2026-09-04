@@ -316,17 +316,28 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
                 for x in (c.get("score_components") or [])
             ],
             "catalyst": c.get("catalyst_class"), "catalyst_why": c.get("catalyst_why"),
+            # TRI-STATE, NOT A BOOLEAN, and it was written through bool()
+            # until 2026-09-04. catalyst_found is True, False or None, and
+            # trap likewise: None means the question could not be answered,
+            # which the report calls "not a verdict of safe". On that day's
+            # packet trap was None on eight of twelve candidates and False
+            # on four, and bool() made all twelve look alike. The falsy
+            # missing answer reading as a measured one is the failure the
+            # 2026-08-22 review found twenty three times.
+            "catalyst_found": c.get("catalyst_found"),
             "day": bool(c.get("day_eligible")), "swing": bool(c.get("swing_eligible")),
             "day_failed": c.get("day_failed_conditions") or [],
             "swing_failed": c.get("swing_failed_conditions") or [],
-            "trap": bool(c.get("trap")), "trap_why": c.get("trap_why"),
+            "trap": c.get("trap"), "trap_why": c.get("trap_why"),
             "pol": c.get("headline_polarity"), "news": c.get("news_in_window"),
             "headlines": _headlines(c),
             "mcap": quote.get("marketCap"), "adv": c.get("avg_dollar_volume_20d"),
             "float_rot": c.get("pm_float_rotation"), "band": c.get("pm_band_state"),
             "rank": c.get("pool_rank"), "tier_why": c.get("pool_tier_reason"),
             "measure": c.get("volume_measure_used"),
-            "covered": bool(c.get("collector_covered")),
+            "covered": c.get("collector_covered"),
+            "window_late": c.get("pm_window_starts_late"),
+            "rvol_lower_bound": (c.get("pm_rvol_basis") or {}).get("is_lower_bound"),
             "bars": bars.get(symbol, []),
             "earn": earnings.get(_sym(symbol)),
             "mid": mid_by_ticker.get(symbol),
@@ -416,6 +427,11 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             "window": packet.get("collector_window_observed") or {},
             "capture": packet.get("capture_correction") or {},
             "evidence": packet.get("evidence_roll") or {},
+            # Every gap the scan recorded, as the scan wrote it. The report
+            # lists these in full under Skips and traps and the desk could
+            # not, because they were never carried: 18 of them on the
+            # 2026-09-04 packet. They are strings the scan already phrased.
+            "gaps": packet.get("gaps_to_fill") or [],
         },
         "midday": None if not midday else {
             "generated": midday.get("generated_at"),

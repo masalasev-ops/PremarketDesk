@@ -961,8 +961,19 @@ DECK_JS = r"""
       '<span class="pill' + (c.swing ? " on" : "") + '" title="' +
       esc(c.swing ? "clears every swing condition" : "fails " + (c.swing_failed || []).join(", ")) +
       '">Swing ' + (c.swing ? "eligible" : "no") + "</span>" +
-      (c.trap ? '<span class="pill red">Trap flagged</span>' : "") +
-      (c.band && c.band !== "not flagged" ? '<span class="pill yellow">Thin at the level</span>' : "");
+      // THREE STATES, not two. trap is true, false or null, and null means
+      // the question could not be answered, which the report calls not a
+      // verdict of safe. Drawing only the true case made those names look
+      // exactly like the ones that were asked and cleared.
+      (c.trap === true ? '<span class="pill red">Trap flagged</span>'
+        : c.trap == null ? '<span class="pill" title="' +
+          esc(c.trap_why || "the trap question could not be answered for this name") +
+          '">Trap undecided</span>' : "") +
+      (c.band && c.band !== "not flagged" ? '<span class="pill yellow">Thin at the level</span>' : "") +
+      (c.window_late ? '<span class="pill yellow" title="its premarket window ' +
+        'opened late, so the path evidence is partial">Partial window</span>' : "") +
+      (c.covered === false ? '<span class="pill red" title="the collector ' +
+        'recorded no bars for this name">No collector coverage</span>' : "");
 
     return '<div class="deck"><div class="deck-head">' +
       '<span class="tk mono">' + esc(c.sym) + "</span>" +
@@ -1067,8 +1078,8 @@ DECK_JS = r"""
       '<div id="deck" class="interactive-deck"></div>' +
       '<div id="printdeck" class="printonly"></div></section>';
 
-    html += pipelineSection(p) + compositionSection(p) + notableSection(p) +
-      calendarSection(p) + comingUpSection(p);
+    html += pipelineSection(p) + evidenceSection(p) + compositionSection(p) +
+      notableSection(p) + calendarSection(p) + comingUpSection(p);
     root.innerHTML = html;
     // The notable movers table routes to the Name screen the way the
     // midday tables do; a mover is often a candidate on another session.
@@ -1187,6 +1198,69 @@ DECK_JS = r"""
         ? "Notable means " + c.definition + "."
         : "Names worth knowing report between these dates.") +
       " Tomorrow's setup, today.</p>" + body + "</section>";
+  }
+
+  /* Section 11 of the report, which had ONE of its nine sentences on a screen
+     until 2026-09-04: band_thin, on Health. Measured on that morning's packet
+     the roll wrote nine and carried 18 evidence gaps beside them, and README
+     had gone as far as saying the section was drawn.
+
+     The sentences are the packet's own, quoted rather than rebuilt, and every
+     one is printed whether or not it names anybody, because "0 of 12" and an
+     absent line are different facts and this is the section where that matters
+     most. Where the roll carries a reason per name, it is printed under its
+     sentence, which is what the report does with the same rows. */
+  var ROLL_ORDER = ["band_thin", "thin_baseline", "rvol_null", "rvol_lower_bound",
+    "window_starts_late", "coverage_absent", "dropped_no_coverage",
+    "catalyst_absent", "catalyst_unknown"];
+
+  function evidenceSection(p) {
+    var roll = (p.health || {}).evidence || {};
+    var text = roll.text || {};
+    var keys = ROLL_ORDER.filter(function (k) { return text[k]; });
+    Object.keys(text).forEach(function (k) {
+      if (keys.indexOf(k) < 0) keys.push(k);
+    });
+    var gaps = (p.health || {}).gaps || [];
+    if (!keys.length && !gaps.length) return "";
+
+    var lines = keys.map(function (k) {
+      var rows = roll[k];
+      var named = (Array.isArray(rows) ? rows : []).filter(function (r) {
+        return r && r.why;
+      });
+      // A line that names nobody is the good case and is printed the same way.
+      var count = Array.isArray(rows) ? rows.length : 0;
+      return '<div class="check"><div>' + chip(count ? "watch" : "ok") +
+        '</div><div><div class="s">' + esc(text[k]) + "</div>" +
+        (named.length
+          ? '<div style="margin-top:7px">' + named.map(function (r) {
+              return '<div class="reason"><span class="mono rk">' +
+                esc(bare(r.symbol)) + "</span><span>" + esc(r.why) + "</span></div>";
+            }).join("") + "</div>"
+          : "") + "</div></div>";
+    }).join("");
+
+    var gapBlock = gaps.length
+      ? '<div class="card pad" style="margin-top:13px">' +
+        '<div class="panel-title">' + gaps.length + " evidence gap" +
+        (gaps.length === 1 ? "" : "s") + " the scan recorded</div>" +
+        gaps.map(function (g) {
+          return '<div class="reason"><span class="mono rk">gap</span><span>' +
+            esc(g) + "</span></div>";
+        }).join("") + "</div>"
+      : '<div class="card pad empty" style="margin-top:13px">The scan recorded ' +
+        "no evidence gaps this morning.</div>";
+
+    return '<section><div class="shead"><h2>What the evidence is worth</h2>' +
+      '<span class="note">read this before the watchlists</span></div>' +
+      '<p class="snote">Every sentence the packet resolved about its own ' +
+      "evidence, quoted as it wrote them. A line that names nobody is printed " +
+      "as readily as one that does, because a missing line and a clean one look " +
+      "identical and only one of them is good news. None of this is a verdict: " +
+      "the fill warning in particular fires in one direction, so a name it does " +
+      "not mention has not passed anything.</p>" +
+      '<div class="card pad">' + lines + "</div>" + gapBlock + "</section>";
   }
 
   function pipelineSection(p) {
