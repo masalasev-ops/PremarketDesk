@@ -15,6 +15,43 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty ninth: README rebuilt from the code, not edited again
+
+Three attempts at this document had each appended to it: a desk chapter beside
+the report chapter, then a column pointing between them, then a reorganisation
+that kept the artifact by artifact frame. The owner's instruction was to build
+it from scratch by reading the screens and the code. That is what this is.
+
+READ FIRST, WRITE SECOND. The eight screens were enumerated out of
+desk/assets.py by pulling the h2 headings each screen function emits, so what
+this file says is on the Morning screen is what the Morning screen draws, in
+the order it draws it. The schedule was read off tasks/register_tasks.ps1
+rather than remembered. The eleven report sections were counted in
+REPORT_TEMPLATE.md. The database tables were listed from sqlite_master, which
+is how the sessions table turned out to be missing from "Where things land",
+having shipped that afternoon.
+
+THE STRUCTURE IS BY WHAT THE READER IS DOING. What it puts in front of you,
+four surfaces and what each is for. Then the desk, screen by screen, with what
+is actually on each. Then one reading order. Then "What the numbers mean, and
+what they are worth", which holds the entry and the stop, the RVOL estimate,
+unscored, the evidence roll, the trap tri-state and the ledger counts: those
+are PACKET FIELDS, not properties of a document, so each is written once and is
+true of every surface. The report's eleven sections follow as what they are, a
+way to find your way around that document, with the note that section 7's per
+name write ups are the only thing in the system that exists nowhere else.
+
+WHAT WAS CARRIED THROUGH UNCHANGED, and why. The schedule table, the worked
+example, the scope note, and everything from What you need to the disclaimer.
+Those are factual reference, they were checked against the tree, and rewording
+them would be churn that risks losing measured facts: the 2,745 call universe
+sweep, the 335.7 second slowest analyst run, the 0x80070002 quoting trap.
+
+929 lines to 899. Hard rule 4 gained a sentence, because the day's two worst
+defects were both instances of it: a boolean that could not be answered has a
+falsy value that reads as an answer. Hard rule 6 is new and was implicit
+everywhere, that nothing on a screen is computed by the page.
+
 ## 2026-09-04, sixty eighth: Skips and traps was one ninth drawn, and a tri-state was being read as false
 
 The owner asked where Skips and traps was on the screens. README claimed it was

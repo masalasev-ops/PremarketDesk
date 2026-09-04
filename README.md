@@ -2,13 +2,13 @@
 
 A single machine, single user premarket desk for US equities. Every weekday
 morning it builds a watchlist, listens to the live premarket tape, scores the
-candidates, has a language model write the narrative, and delivers one HTML
-report before the open. Every evening it goes back and checks itself against
-what the vendors published.
+candidates, and puts the morning in front of you two ways before the open: as
+eight screens you look at, and as one report you read. Every evening it goes
+back and checks itself against what the vendors published.
 
 The design has one brain and one voice: **Python decides, the model narrates.**
-Membership, scores, and conviction come from code reading explicit thresholds.
-The model only turns an already finished evidence packet into readable prose,
+Membership, scores and conviction come from code reading explicit thresholds.
+The model only fills marked prose slots in a report Python has already written,
 and a checker verifies the prose invented nothing.
 
 ## The hard rules
@@ -33,7 +33,9 @@ the design, not a config value.
    and `src/core/config.py` actively refuses to read or pass `ANTHROPIC_API_KEY`.
 4. **Missing evidence stays missing.** A field the pipeline could not get is
    null with a recorded reason. It is never filled from another day, another
-   source, or a guess.
+   source, or a guess. This is the rule most often broken by accident, because
+   a boolean that could not be answered has a falsy value that reads as an
+   answer: `trap` is true, false or null and null is not false.
 5. **Premarket high, low, VWAP and volume come from the project's own
    collector.** The socket carries a fraction of the consolidated tape, so the
    morning's premarket volume is an estimate: the socket's count divided by
@@ -43,6 +45,11 @@ the design, not a config value.
    the volume truth columns. All of it is written beside the morning's values,
    never over them, and `_true` is not a provenance: `truth_source` carries the
    vendor on every row. Their disagreement is itself a recorded measurement.
+6. **Nothing on a screen is computed by the page.** The desk reads and renders.
+   Every figure on it was written into that morning's packet by `scan.py` and
+   copied by `desk/compact.py`, so a wrong number on a screen is a wrong number
+   in the packet and the fix is upstream. The same is true of the report, the
+   midday pass and the weekly page: one measurement, four surfaces.
 
 ## A day in the life
 
@@ -110,67 +117,140 @@ once the question they were armed for has an answer in `doc/DECISIONS.md`. A
 plain run of the register script never resurrects them, and `-Unregister`
 removes all three. `tasks/README.md` says what each one measures.
 
-## What you actually see, and how to read it
+## What it puts in front of you
 
-Everything above says how the machine works. This says what lands in front of
-you, when, and what to do with it. Read this section before the setup one if
-what you want is to use the thing rather than install it.
-
-Every ticker and number in the worked examples below is INVENTED. `runs/` and
-`site/` are gitignored so that no real morning is ever committed to a public
-repository, and this section keeps that rule. The one place real figures appear
-is the paper ledger's aggregate counts, which are already in
-`doc/CHANGELOG.md`, and they are labelled where they are used.
-
-### The four surfaces
-
-Four things are produced and everything else on disk is evidence behind them.
-Two of them are documents, one is an application, one is a page about the week.
+Four surfaces, and every number on all four comes out of the same packet. They
+are not four answers to reconcile; they are one answer in four shapes, and the
+shapes are good at different things.
 
 | | The desk | The morning report | The midday report | The weekly page |
 | --- | --- | --- | --- | --- |
 | File | `site/PremarketDesk.html` | `runs/YYYY-MM-DD/report.html` | `runs/YYYY-MM-DD/report_midday.html` | `site/Weekly.html` |
-| Written | At the end of the morning chain, the midday chain and the nightly | 08:46 to 08:49 each weekday | 12:00 each weekday | Every night at 22:15 |
-| Covers | Every session on file | This morning only, except one section | Today's session so far | A rolling trailing 7 days |
-| It is for | Deciding. Which name is worth your next forty five minutes, and what the machine's own evidence for it is worth | Understanding. Why a name is on the list, what the setup is, and what would prove it wrong | The same for the session that has now happened, which the morning could not see | Whether the machine itself is working, over a week rather than a morning |
-| Read it | 08:50, and whenever you want a past morning back | 08:50, after the screens, for the names you are still weighing | Any time after 12:00 | Whenever. Nothing in it is time critical |
-| Written by | Nothing. It is rendered | Python, from the packet, with a handful of prose slots filled by the claude CLI | Nothing. It is rendered | Nothing. It is rendered |
+| Written | End of the morning chain, the midday chain and the nightly | 08:46 to 08:49 | 12:00 | 22:15 |
+| Covers | Every session on file | This morning, except one section | Today's session so far | A rolling trailing 7 days |
+| It answers | Which name is worth your next forty five minutes, and what the evidence behind it is worth | Why that name is on the list, what the setup is, and what would prove it wrong | What the open did to the levels the morning published | Whether the machine itself is working, over a week rather than a morning |
+| Written by | Nothing. It is rendered | Python, with a handful of prose slots filled by the claude CLI | Nothing. It is rendered | Nothing. It is rendered |
 
-**THE DESK AND THE MORNING REPORT ARE THE SAME MORNING, TWICE.** Every figure
-in the report is drawn on a screen and every figure on a screen came out of the
-same packet. They are not two answers to check against each other; they are one
-answer in two shapes, and the shapes are good at different things. A screen
-puts twelve names on one axis and a level, a tape and a score side by side, so
-you can see which one to look at. Prose can say what a setup is and what would
-prove it wrong, which no picture does. The report is also the only one an email
-can carry, so it is a complete document on its own and always was.
+A screen puts twelve names on one axis, and a level, a tape and a score side by
+side, so you can see which one to look at. Prose can say what a setup is and
+what would prove it wrong, which no picture does. The report is also the only
+one an email can carry, so it is a complete document on its own.
 
-The desk is one HTML file with eight screens on hash routes. No framework, no
-library, no build step and no network. Every session it carries is compacted by
-`desk/compact.py`, gzipped and base64 encoded into the file, and inflated in
-the page, because Chrome blocks `fetch` on `file://`. It replaced
-`build_archive.py` and took its filename on 2026-09-04, and it carries the
-written reports for that reason: the page it replaced existed to read old
-mornings' prose. `doc/SCREENS.md` is the specification.
+Every ticker and number in the examples below is INVENTED. `runs/` and `site/`
+are gitignored so no real morning is ever committed to a public repository. The
+one place real figures appear is the paper ledger's aggregate counts, which are
+labelled where they are used.
 
-The morning report is the only surface a model touches, and since 2026-09-02 it
-does not write it. Python writes the whole report from the packet, every table,
-count and quoted sentence, and leaves marked slots for the prose only a model
-can write: the mood phrase in the title, the market tone, one sentence under
-each quoted headline saying who it is about, one write up per name on a
-watchlist closing with the line that says what would prove it wrong, and one
-sentence on the rate picture. The model returns the report with the slots
-filled; the fixed text that ships is the copy Python wrote, the model's answer
-is used only to find what it wrote in the slots, and the containment and
-quantifier guards read that prose. Before 2026-09-02 the model wrote the whole
-page from a 68 KB instruction set, and at least 60 percent of what survived the
-guard was packet text copied under instruction. CRITERIA [Analyst] mode
-switches between the two. The midday report asks closed questions, a pick
-triggered or it did not, a name moved or it did not, so it is laid out directly
-from arithmetic with no narrative pass, no containment check and nothing that
-could hallucinate. The weekly page is not weekly in cadence, only in span: it
-is rebuilt from scratch every night and always covers the last seven days
-ending yesterday.
+### The desk
+
+One HTML file. No framework, no library, no build step, no network. Each
+session is compacted by `desk/compact.py`, gzipped and base64 encoded into the
+document, and inflated in the page, because Chrome blocks `fetch` on `file://`.
+Every screen is a hash route, so it can be linked, bookmarked and sent to
+another machine, and the browser's back button works.
+`#/session/2026-09-04/morning` is a whole address.
+
+The navigation carries six of the eight; Session and Name are reached from the
+screens that name them.
+
+**Morning** `#/session/<date>/morning`, and the desk opens here on today.
+Eight blocks, in this order:
+
+- the **tape strip**, nine index, volatility, rate, oil and dollar proxies
+- a **stat strip**: candidates kept, day eligible, swing eligible, green
+  conviction, and the largest gap with its catalyst
+- **the gap spine**, every candidate on one axis. Distance from the centre is
+  the premarket gap against the prior close, the side is direction, the stripe
+  and the word are conviction, and the reason column carries each name's
+  catalyst class and story count, so "why did this gap" is answered for the
+  whole list at once. Filters for day eligible, swing eligible, green, up, down
+- **the selected name**, which is the deck, below
+- **How the list was cut**, the funnel drawn stage by stage from the pool to
+  the names that cleared a screen, with each stage's share of its own
+  predecessor, and both screens broken down condition by condition
+- **What the evidence is worth**, which is the report's Skips and traps: every
+  sentence the packet resolved about its own evidence, quoted as written, each
+  printed whether or not it names anybody, with the per name reasons under it
+  and the evidence gaps the scan recorded beneath
+- **What kind of morning this is**, the list by sector, catalyst class and gap
+  direction, because concentration is what a list of names hides
+- **What else moved**, the names that are not candidates, ranked within one leg
+  at a time, each of the four ranked lists printing its own state and
+  denominator
+- **On the calendar** and **Coming up**, today's high importance releases and
+  who reports tomorrow
+
+**The deck** is the unit and it is what the spine loads. One name: the level
+ladder with prior close, prior high, premarket low, VWAP, last and premarket
+high on one price axis, the gap bracketed beside it; the premarket tape with
+its volume underneath and a crosshair; the score component by component with
+the points each earned; the evidence facts; the catalyst and every headline
+behind it with its polarity; and, once noon has run, what that name actually
+did. Its badges are the warnings: conviction and score, Day and Swing
+eligibility with the failed conditions in the tooltip, Trap flagged, Trap
+undecided, Thin at the level, Partial window, No collector coverage.
+
+**Midday** `#/session/<date>/midday`. What the open did to the levels the
+morning published, name by name, with the packet's own reason under each; what
+moved that the morning never named; and what the floors turned down. Before
+12:00 it counts down to the pass and shows the levels it is going to grade,
+because a screen that answers "not yet" and nothing else wastes the click.
+
+**Report** `#/session/<date>/report`. The words delivered that morning, and the
+midday one where the 12:00 pass wrote it, with a toggle where both exist. The
+same markdown the email carried under the same stylesheet.
+
+**Session** `#/session/<date>`. One session's shape: the tape, the counts, a
+card into each of the three above, what the record says, and the health
+verdict. Reached from the Sessions calendar.
+
+**Sessions** `#/sessions`. Every session on file. A calendar where each lifted
+day carries that morning's largest gap as a bar on one scale across every
+month, so two mornings compare by eye, and a faint day is a day the machine did
+not run rather than a quiet one. Or a list, newest first.
+
+**Record** `#/record`. Across every session: candidates a morning with the day
+eligible share inside each bar, the totals, and where the median pick ends up.
+
+**Name** `#/name/<ticker>`. Every session that ticker has appeared in, its gap,
+score, conviction, catalyst and what noon made of it, then its deck for each.
+Reached by clicking a ticker anywhere.
+
+**Health** `#/health/<date>`. Was the machine right that morning. Every check
+as a sentence with a verdict chip: the scheduled steps, the vendor budget, what
+the collector heard, the listening window it actually ran, the standing caveat
+that premarket volume is scaled rather than measured, which names cleared a
+floor only because of that scaling, and which tape the pictures were drawn
+from. The packet's own figures are folded underneath, because the working
+should be checkable and should not be the first thing read.
+
+### Reading a morning at 08:50
+
+1. **What the evidence is worth**, and the verdict at the foot. Before anything
+   the morning concluded, find out what its evidence is worth. Anything not
+   green is one click to Health.
+2. **The stat strip and How the list was cut.** A morning where the cap cut six
+   names is a different morning from one where it cut none.
+3. **The gap spine.** Which name to look at, with why it gapped already beside
+   it.
+4. **Its deck.** Levels, tape, score, headlines, warnings.
+5. **The report**, for the names you are still weighing. The per name write ups
+   are the one thing in the system that exists nowhere else: what the setup is,
+   and the line saying what would prove it wrong. Report in the navigation
+   opens it for the session you are on.
+
+The Record screen once, as context. It does not change between 08:50 and 09:30
+and it is not about any name in front of you.
+
+**If email is all you have**, the report alone is the whole morning, read in
+this order: Skips and traps, Summary, the two watchlists, the record. That is
+not the order it is written in, and that is deliberate: you find out what the
+evidence is worth before you read what it concluded.
+
+**What none of it can do.** Gap setups resolve inside the first fifteen minutes
+and you are reading this at 09:00. It replaces the hour of scanning between
+07:00 and 09:30. It is not a signal and the design does not allow it to become
+one.
 
 ### Nothing has been emailed, and why
 
@@ -178,102 +258,23 @@ ending yesterday.
 what keys are configured. No email has ever gone out from this system. Until
 you delete that file you read a morning by opening `site/PremarketDesk.html`,
 or `runs/YYYY-MM-DD/report.html` for that morning's report alone. Both open by
-double clicking and neither needs a server or a network.
+double clicking.
 
-That gate is deliberate and it is the one thing in the project a person has to
-clear by hand. Deleting it is a statement that you have taken one live
-morning's numbers, checked them against an independent source, and found them
-right. See `## When things go wrong` for what to check.
+That gate is the one thing in the project a person has to clear by hand.
+Deleting it is a statement that you have taken one live morning's numbers,
+checked them against an independent source, and found them right. See
+`## When things go wrong`.
 
-Each `runs/YYYY-MM-DD/report.html` ends with links to the previous session,
-that day's midday report once the 12:00 pass has written it, that session's
-route on the desk, and the weekly page. Those are paths on this machine, so the
-emailed copy has them stripped: a path is not a URL.
+Each `report.html` ends with links to the previous session, that day's midday
+report, that session's route on the desk and the weekly page. Those are paths
+on this machine, so the emailed copy has them stripped: a path is not a URL.
 
-### Reading a morning at 08:50
+## What the numbers mean, and what they are worth
 
-One order, and it starts on the desk. Open `site/PremarketDesk.html`; it opens
-on today's Morning screen.
+Read this once. It is about the packet fields themselves, so it is true of
+every surface: the screens and the report are rendering the same values.
 
-1. **"What the evidence is worth", and the verdict at the foot.** Before
-   anything the morning concluded, find out what its evidence is worth. That
-   section quotes every sentence the packet resolved about itself, one per
-   line whether or not it names anybody, with the per name reasons under it,
-   and the evidence gaps the scan recorded beneath. The verdict strip at the
-   foot is the summary of the same thing: green means every check came back
-   clean, anything else is one click to Health. A name that cleared the volume
-   floor only once the capture correction was applied is named on Health.
-2. **The stat strip, then "How the list was cut".** How many names were ranked,
-   how many cleared the floors, how many were kept, and how many the rank cap
-   cut. A morning where the cap cut six names is a different morning from one
-   where it cut none, and the pipeline draws that stage by stage instead of
-   counting it in a sentence.
-3. **The gap spine.** Every candidate on one axis: distance from the centre
-   line is the premarket gap against the prior close, the side is direction,
-   and the stripe and the word are conviction. The reason column carries each
-   name's catalyst class and story count, so "why did this gap" is answered for
-   the whole list at a glance rather than one name at a time.
-4. **The deck of whichever name the spine makes you look at.** Clicking a row
-   loads it below.
-5. **The report, for the names you are still weighing.** The per name write ups
-   are the part a screen cannot draw: what the setup is, and the line saying
-   what would prove it wrong. That is the section to read slowly. Report in
-   the navigation opens it for whichever session you are on, or open the
-   day's own `report.html`.
-
-Everything else is reference you consult when a name interests you, and the
-Record screen once, as context: it does not change between 08:50 and 09:30 and
-it is not about any name in front of you.
-
-**If email is all you have**, the report alone is the whole morning, in this
-order: Skips and traps, then Summary, then the two watchlists, then the record.
-That is not the order the report is written in, and it is not an accident: you
-find out what the evidence is worth before you read what it concluded.
-
-**What none of it can do.** Gap setups resolve inside the first fifteen minutes
-and you are reading this at 09:00. It replaces the hour of scanning between
-07:00 and 09:30. It is not a signal and the design does not allow it to become
-one.
-
-### The desk, screen by screen
-
-Eight screens inside one document. The route is the state, so a screen can be
-linked, bookmarked and sent to another machine, and the browser's back button
-works. `#/session/2026-09-04/morning` is a whole address.
-
-| Route | Screen | What is on it |
-| --- | --- | --- |
-| `#/session/<date>/morning` | Morning | The tape strip, the funnel, the gap spine, the selected name's deck, what kind of morning this is by sector and catalyst, what else moved that is not a candidate, the economic calendar, and who reports tomorrow |
-| `#/session/<date>/midday` | Midday | What the open did to the levels the morning published, and what moved that the morning never named. Before 12:00 it counts down to the pass and shows the levels it is going to grade |
-| `#/session/<date>/report` | The report | The words delivered that morning, and the midday one where the 12:00 pass wrote it. The same markdown the email carried, under the same stylesheet |
-| `#/session/<date>` | Session | One session's shape, with links into the three above, what the record says, and the health verdict |
-| `#/sessions` | Sessions | Every session on file, as a calendar where the bar under each date is that morning's largest gap, or as a list |
-| `#/record` | Record | What the record says across every session: candidates a morning, how many cleared a screen, where the median pick ends up |
-| `#/name/<ticker>` | Name | Every session this ticker has appeared in, its gap and score each time, what noon made of it, and its deck for each |
-| `#/health/<date>` | Health | Was the machine right that morning. Every check in a sentence, with the packet's own figures folded underneath |
-
-**The deck is the unit.** Selecting a name draws one: the level ladder with the
-prior close, prior high, premarket low, VWAP, last and premarket high on one
-price axis; the premarket tape with its volume underneath and a crosshair; the
-score, component by component, with the points each one earned; the evidence;
-the catalyst and every headline behind it; and, once the 12:00 pass has run,
-what that name actually did. The Day and Swing badges say whether it cleared a
-screen and, where it did not, which condition it failed, and a Trap flagged or
-Thin at the level badge sits beside the score rather than eight sections away
-from it.
-
-**Nothing on a screen is computed by the page.** Every figure was written by
-Python into that morning's packet and copied by `desk/compact.py`, so a wrong
-number on a screen is a wrong number in the packet and the fix is upstream in
-`scan.py`.
-
-### What the numbers mean, and what they are worth
-
-This is the part that is worth reading once, whichever surface you use. It is
-about the figures themselves, so it applies to the report and to the screens
-equally: they are the same fields.
-
-#### The entry, the stop, and the table the guard reads
+### The entry, the stop, and the table the guard reads
 
 The day watchlist table has a fixed header, character for character, because
 the containment guard locates the ticker column by it:
@@ -287,42 +288,40 @@ the containment guard locates the ticker column by it:
 ```
 
 Entry and Stop are the two numbers the paper ledger books against, read from
-CRITERIA [Picks] through one function: the entry is the premarket high and the
-stop is the premarket low, so a name has to carry on past its premarket high
-rather than merely hold. They joined the table on 2026-09-01. On the desk they
-are the two marked lines on the level ladder, with an arrow at each.
+`CRITERIA [Picks]` through one function: the entry is the premarket high and
+the stop is the premarket low, so a name has to carry on past its premarket
+high rather than merely hold. On the desk they are the two marked lines on the
+level ladder, one arrow each.
 
-#### Premarket RVOL is an estimate, not a measurement
+### Premarket RVOL is an estimate, not a measurement
 
-The report says so in one sentence directly under the table every time, and the
-Health screen says it as a standing note. The collector's socket carries a
-measured fraction of the consolidated tape, so the numerator is the socket's
-count divided by `[Collector] premarket_capture_rate` while the denominator
-measures the whole tape. The sentence names how many rows would have cleared
+The collector's socket carries a measured fraction of the consolidated tape, so
+the numerator is the socket's count divided by
+`[Collector] premarket_capture_rate` while the denominator measures the whole
+tape. The report says so in a sentence directly under the table every time, and
+Health says it as a standing note. Both name how many rows would have cleared
 the volume floor on the raw socket count against how many clear on the
-estimate, so you can see how much work the correction is doing on any given
-morning. Where the correction is what put a name on the list, both surfaces
-name that name: it is the one place a name is present because of a scaling
-factor rather than a measurement.
+estimate, so you can see how much work the correction is doing; and where the
+correction is what put a name on the list, both name that name. It is the one
+place a name is present because of a scaling factor rather than a measurement.
 
-#### `unscored` is not a bucket
+### `unscored` is not a bucket
 
 A row whose score could not be computed says `unscored` and never a colour.
 CRUX above has a null RVOL, so the volume component could not be scored, so no
-total exists. It is on the list because `day_eligible` is true, which is
-decided by the screens and not by the score.
+total exists. It is on the list because `day_eligible` is true, which the
+screens decide and the score does not.
 
-#### Being on the list is not a recommendation
+### Being on the list is not a recommendation
 
 Membership means a name passed a set of thresholds copied from a third party
-and not yet validated on this data. See `### What the scope is today, plainly`.
+and not yet validated on this data. See `## What the scope is today, plainly`.
 
-#### What the evidence is worth: skips, traps and the fill warning
+### What the evidence is worth
 
-The report's Skips and traps section is built by quoting sentences the packet
-already resolved, rather than by the model judging anything. On the desk the
-same fields are the badges on a deck and the checks on Health. The block reads
-like this:
+The evidence roll is the packet resolving sentences about its own evidence. It
+is section 11 of the report and the "What the evidence is worth" block on the
+Morning screen, from the same rows. On a real morning it reads like this:
 
 ```
 Moving on no found catalyst, a skip: BOLT, CRUX, DELTA.
@@ -330,69 +329,61 @@ Moving on no found catalyst, a skip: BOLT, CRUX, DELTA.
 Catalyst status is unknown for ECHO: the news feed was never checked this
 run, so no catalyst judgment exists for them.
 
-Premarket path partial or absent, treat any level as partial: GRID.
-
 Traps: 0 of 12 candidates gap up against the balance of their own headlines.
 
 The trap question was not asked of 7 of 12 candidates: a trap is a gap up
 contradicted by its news, and those gaps are below the 3 percent the
 question is asked above, or were never computed.
 
-Trap undecided for FOXO: trap_why on those rows carries the reason, and
-undecided is not a verdict of safe.
-
 2 of 12 candidates carry a premarket RVOL built on a THIN denominator: at or
 above the 1,000 share floor and below 10,000 shares, measured 2026-08-28 as
 where 15 to 30 percent of a name's own ordinary premarket sessions reach the
-top RVOL band by construction, against 5 percent above 100,000. These ratios
-are published, screened on and scored like the rest: CRUX, FOXO.
+top RVOL band by construction, against 5 percent above 100,000: CRUX, FOXO.
 
 2 of 12 candidates traded so little near their own premarket high that the
-level may be a print rather than a price anyone could transact at. This is a
-WARNING and its silence is not an approval: measured over 54 past rows it
-missed 4 of the 10 levels the nightly check went on to call untradeable:
-ACME, BOLT.
+level may be a print rather than a price anyone could transact at: ACME, BOLT.
+
+4 of 12 candidates opened their premarket window late, so their premarket
+path evidence is partial: SWBI, MAMA, IOT, PL.
 
 Cleared selection and dropped before pricing, the collector having no bars
 for them: HALO (subscribed, no bars recorded).
-
-Evidence gaps recorded by the scan, 3 in total: ...
 ```
 
 Four things about it are worth knowing.
 
 **A `0 of 12` line is printed as readily as one that names somebody.** An
-absent line would be indistinguishable from a section the model forgot. The
-same rule governs every ranked list on a screen: each one prints its own state
-and denominator, so a short list cannot read as a quiet market.
+absent line is indistinguishable from a section that was forgotten. The same
+rule governs every ranked list on every screen: each prints its own state and
+denominator, so a short list cannot read as a quiet market.
 
 **The thin band line is the fill warning and it fires in one direction only.**
 A name it does NOT mention has not passed anything. Measured over the 54 past
-rows where the night reached a verdict at all, this check caught 6 of the 10
-levels it went on to call untradeable and flagged 6 of the 44 that were fine.
-Four in ten untradeable levels get past it. The population is 66 rows; the
-other 12 are the ones the night could not judge either, and they are counted
-apart rather than folded in. Neither surface may ever write that a level looks
-liquid, should fill, or anything of that shape, because the definitive answer
-is computed that night from a complete tape and is not available at 08:45.
+rows where the night reached a verdict at all, it caught 6 of the 10 levels it
+went on to call untradeable and flagged 6 of the 44 that were fine. Four in ten
+untradeable levels get past it. The population is 66 rows; the other 12 are the
+ones the night could not judge either, counted apart rather than folded in.
+Nothing in this system may ever write that a level looks liquid or should fill,
+because the definitive answer is computed that night from a complete tape and
+is not available at 08:45.
 
-**A trap is a packet field, not a reading of the headlines.** A name is called
-a trap only where `trap` is true, and the counts behind it are quoted, so you
-can disagree with the call. Until 2026-08-20 the model judged this from
-headline polarity and published names as traps on a single vendor mis-scored
-headline.
+**A trap is a packet field with three states, not two.** True is a gap up
+contradicted by the balance of its own headlines. False is asked and cleared.
+Null is could not be answered, and the report says in as many words that
+undecided is not a verdict of safe: the deck draws a Trap undecided badge for
+it. Until 2026-08-20 the model judged this from headline polarity and published
+names as traps on a single mis-scored headline; it is computed in Python now
+and the counts behind it are quoted so you can disagree with the call.
 
-**`dropped_no_coverage` names appear here too.** Those cleared selection and
-were dropped before pricing because the collector recorded no bars for them.
-They carry no premarket price at all and are absent from every table and every
-screen above.
+**Names dropped before pricing appear here and nowhere else.** They cleared
+selection and the collector recorded no bars for them, so they carry no
+premarket price at all and are absent from every table and every screen.
 
-#### What the record says, and what it is not
+### What the record says, and what it is not
 
-The one part of a morning that is not about that morning. It quotes counts from
-the paper ledger, which is what one written rule in `doc/CRITERIA.md [Paper]`
-would have done with every past pick. It is the report's section 10 and the
-desk's Record screen, from the same figures:
+The one part of a morning that is not about that morning: the Record screen,
+and section 10 of the report, from the paper ledger, which is what one written
+rule in `doc/CRITERIA.md [Paper]` would have done with every past pick.
 
 ```
 The ledger holds 66 picks across 7 sessions, of which 16 were traded across 6.
@@ -408,9 +399,7 @@ below their entry.
 entry closed above it.
 
 The best a position was worth while open was a median +1.84 percent, against
-a median -1.38 percent booked at the exit. Rule version v1. The ledger is as
-of last night: tonight's pass has not run, so today's picks are in no figure
-above.
+a median -1.38 percent booked at the exit. Rule version v1.
 ```
 
 Those are the real current figures and they are also in `doc/CHANGELOG.md`.
@@ -420,50 +409,59 @@ in the first ten minutes and faded has not recovered once in ten tries, and the
 four that worked were still making highs an hour or more in. Ten and four are
 not sample sizes.
 
-The template FORBIDS turning any of this into advice. Three specimens of the
-phrasing it may not use are written into `doc/REPORT_TEMPLATE.md` verbatim, and
-so is a ban on the words pattern, signal, edge and tendency. If you ever see
-one of those, that is a defect worth chasing, because a description of six
-sessions written as an instruction is a strategy nobody validated wearing the
-authority of a generated document.
+`doc/REPORT_TEMPLATE.md` FORBIDS turning any of this into advice: three
+specimens of the phrasing it may not use are written into it verbatim, and so
+is a ban on the words pattern, signal, edge and tendency. If you ever see one,
+that is a defect worth chasing, because a description of six sessions written
+as an instruction is a strategy nobody validated wearing the authority of a
+generated document.
 
-### The morning report, section by section
+## The morning report, section by section
 
 Eleven fixed sections, always in this order, always present even when a section
 has nothing to say. A section that goes missing is a defect, not an empty
-morning. This is a reference for finding your way around the document; what the
-figures in it mean is the section above.
+morning. This is how to find your way around the document; what the figures in
+it mean is the chapter above.
 
 | # | Section | What is in it |
 | ---: | --- | --- |
-| 1 | Summary | The counts. How many names were ranked, cleared the floors, were kept, and what the cap cut |
+| 1 | Summary | The counts: ranked, cleared the floors, kept, cut by the cap |
 | 2 | Premarket gappers | Everything that cleared the floors, eligible or not. The pool, not the picks |
 | 3 | Day watchlist | The names that passed every day condition, in the fixed table above |
 | 4 | Swing watchlist | The same, on a longer horizon |
 | 5 | Notable movers | What else moved that is not a candidate, ranked within one leg at a time |
 | 6 | Market trends | Index, volatility, rates, oil, dollar. Tone, and never an input to any screen |
 | 7 | Technical signals | Where each candidate sits against its prior high, premarket high and 200 day, then one write up per watchlist name closing with the line that says what would prove it wrong |
-| 8 | Economic data and rates | Today and tomorrow's high importance events, and what could overrun everything at 08:30 or 10:00 |
+| 8 | Economic data and rates | Today and tomorrow's high importance events |
 | 9 | Coming up | Earnings for candidates, and notable names reporting tomorrow |
 | 10 | What the record says so far | The ledger counts above. The only section not about today |
-| 11 | Skips and traps | The block above. Read it before the watchlists |
+| 11 | Skips and traps | The evidence roll above. Read it before the watchlists |
 
-Section 7's per name write ups are the one thing in the whole system that
-exists only here. Everything else in this table is also drawn on the Morning,
-Record or Health screens, section 11 as "What the evidence is worth" on the
-Morning screen, which quotes the same nine sentences with the same per name
-reasons under them.
+Section 7's per name write ups exist nowhere else in the system. Every other
+row is also drawn on the Morning, Record or Health screens.
 
-### The midday report, and the Midday screen
+Python writes all of it from the packet, every table, count and quoted
+sentence, and leaves marked slots for the prose only a model can write: the
+mood phrase in the title, the market tone, one sentence under each quoted
+headline saying who it is about, one write up per watchlist name, and one
+sentence on the rate picture. The model returns the report with the slots
+filled; the fixed text that ships is Python's copy, the model's answer is used
+only to find what it wrote in the slots, and the containment and quantifier
+guards read that prose. Before 2026-09-02 the model wrote the whole page from a
+68 KB instruction set, and at least 60 percent of what survived the guard was
+packet text copied under instruction. `CRITERIA [Analyst] mode` switches
+between the two.
+
+## The midday pass
 
 Live from 2026-08-31. It exists because the morning report is written ninety
 minutes before the session it is about, so at 08:45 nothing in it has happened
-yet. Two sections, in the document and on the screen, where the move against
-the prior close becomes a bar and the entry status becomes a chip.
+yet. It asks closed questions, a pick triggered or it did not, so it is laid
+out directly from arithmetic: no model, no containment check, nothing that
+could hallucinate.
 
-**Section 1, what the morning's picks did.** Every pick from today, graded
-against the levels the morning published. Invented numbers, but the shape is
-real:
+**What the morning's picks did.** Every pick from today, graded against the
+levels the morning published:
 
 | Ticker | Score | Morning entry | Stop | What happened | Now vs fill | Best vs fill | Stop state |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -473,75 +471,46 @@ real:
 Read the second row first, because it is the case the morning cannot show you.
 SAIC was the highest scoring name of the day, green, eligible on both screens.
 It opened above its entry, so a resting order filled at the open. It then ran
-1.6 percent, gave all of it back, broke its stop and sat nearly 9 percent below
-the fill. The 08:45 report could not know any of that and the night's pass
-would not say so until 22:15.
+1.6 percent, gave it all back, broke its stop and sat nearly 9 percent below
+the fill. The 08:45 report could not know any of that.
 
-There are four verdicts and the difference between two of them is the whole
-design:
+Four verdicts, and the difference between two of them is the whole design:
 
 - **never triggered.** The session high never reached the entry. The stop is
   NOT read, because a low with no trade under it stops nothing. MNSO's low was
   under its stop all day and that fact is meaningless: there was no position.
 - **gapped through at the open.** The open was already past the entry, so the
   fill is the session's first print. Everything after it is after it, which
-  means a later low through the stop is unambiguously a stop out.
-- **triggered after the open.** The fill happened somewhere in the middle of
-  the session. Here a daily high and a daily low carry no order, so if the low
-  went through the stop it says **stop level reached, sequence unknown** and
-  refuses to call it a stop out. It genuinely cannot be told apart from a dip
-  that happened before the entry.
+  makes a later low through the stop unambiguously a stop out.
+- **triggered after the open.** The fill happened mid session, where a daily
+  high and a daily low carry no order. If the low went through the stop it says
+  **stop level reached, sequence unknown** and refuses to call it a stop out.
 - **unknown.** A level the quote did not carry. Null with a written reason.
 
-That third case is the one thing this pass cannot answer and it says so on
-every edition, with a count. Fixing it means running the collector past the
-open so there are timestamped minute bars instead of one daily bar, and that is
-gated on a measurement that has not been taken yet.
+The third case is the one thing this pass cannot answer and it says so every
+edition, with a count. Fixing it means running the collector past the open for
+timestamped minute bars instead of one daily bar, and that is gated on a
+measurement not yet taken.
 
-**Section 2, what else moved.** The whole 2,751 name universe is quoted and
-ranked on today's move, excluding anything the morning already named:
+**What else moved.** The whole 2,751 name universe is quoted and ranked on
+today's move, excluding anything the morning named, and the headlines are
+fetched AFTER the ranking. **That order is the whole argument.** The cheap way
+is to pull the news feed and quote only names carrying a headline, which
+answers "which names had news and also moved" and makes a name that moved on no
+tagged headline invisible with nothing saying so. Here price selects and news
+only explains, so a name with no story stays on the list and the pass can tell
+you it does not know why it moved.
 
-| Ticker | Move | Day RVOL | Last | Market cap | Did the morning reach it |
-| --- | --- | --- | --- | --- | --- |
-| EIX.US | -22.69% | 8.59x | 54.25 | 20.88B | pooled not subscribed |
-| PCG.US | -19.22% | 6.81x | 13.41 | 29.53B | pooled not subscribed |
-| TECX.US | -15.95% | 3.84x | 29.94 | 0.59B | not pooled |
+The right hand column is a live recall measurement with three states that are
+not the same fact: **subscribed** means the collector was listening and the
+08:45 screen declined it; **pooled not subscribed** means discover ranked it
+and the 50 symbol cap cut it, so no premarket tape exists for it at all; **not
+pooled** means discover never had it. On the first real run the two largest
+moves of the day were both in the middle group.
 
-Then the headlines behind each, fetched AFTER the ranking:
-
-> **EIX.US**, -22.69%. discover ranked this name into the pool at 07:15 and the
-> subscription cap cut it, so no premarket tape was ever collected for it.
-> - PG&E Stock Plummets as California Withholds Wildfire Liability Protections
-> - Why Edison International Stock Just Crashed
->
-> **TECX.US**, -15.95%. discover did not have this name at 07:15 at all.
-> - the vendor tagged no story to this symbol today, so this name moved on
->   something the feed does not carry under its ticker. That is a silence in
->   the feed and not evidence of no news.
-
-**The order of those two operations is the whole argument.** The cheap way to
-build this section is to pull the news feed and quote only the names carrying a
-headline. That answers "which names had news and also moved", and a name that
-moved on no tagged headline would be invisible with nothing saying so. Here
-price selects and news only explains, so TECX stays on the list and it can tell
-you it does not know why the name moved.
-
-**The right hand column is a live recall measurement.** Three states, and they
-are not the same fact:
-
-- **subscribed.** The collector was listening to this name and the 08:45 screen
-  still did not publish it. The screen saw it and declined.
-- **pooled not subscribed.** discover ranked it at 07:15 and the 50 symbol
-  subscription cap cut it, so no premarket tape exists for it at all.
-- **not pooled.** discover never had it. Nothing this morning could have
-  reached it.
-
-On the first real run, the two largest moves of the day were both in the middle
-group.
-
-**What it costs.** About 2,900 credits a session against a shared 100,000 a
-day, almost all of it the per symbol universe sweep. There is no cheaper honest
-way to ask what moved: the vendor's bulk endpoints serve the previous session,
+**What it costs**: about 2,900 credits a session against a shared 100,000 a
+day, almost all the per symbol universe sweep. There is no cheaper honest way
+to ask what moved: the vendor's bulk endpoints serve the previous session,
 which is the trap that published a wrong report on 2026-08-14. The preflight is
 sized to the sweep and refuses rather than truncating, because half a universe
 is not a market wide scan.
@@ -551,11 +520,12 @@ not transactable, judged from a second vendor's tape. That measurement does not
 exist at midday, so these grades are arithmetic on levels without asking
 whether anyone could have traded them. It says so every day.
 
-### The weekly page, section by section
+## The weekly page
 
 Five sections, in the order a person actually asks them. It reads and renders
 only: no vendor call, no measurement of its own, and if a number is not already
-on disk it does not appear.
+on disk it does not appear. It is not weekly in cadence, only in span: rebuilt
+from scratch every night, always covering the last seven days ending yesterday.
 
 | Section | What it answers | What a bad answer looks like |
 | --- | --- | --- |
@@ -568,17 +538,18 @@ on disk it does not appear.
 **The score watch is the long game and it currently reads backwards.** Green
 n=20 at a median -7.44 percent favourable excursion against yellow n=21 at
 +1.36. Red is withheld at n=8 because it is below the stated minimum, and the
-page refuses to print any group below that minimum rather than printing a number
-with a caveat.
+page refuses to print any group below that minimum rather than printing a
+number with a caveat.
 
 That direction survived correcting the reference levels from the collector's
 sampled ones to measured ones, which is the correction that flipped the sign on
 both excursion medians for everything else. It is six sessions and it is not a
-result. `doc/research/SCORE_INVERSION.md` holds the pre-registered judging point
-and what would count as no relationship, written while the record was too small
-to judge, on purpose, so the verdict cannot be chosen once the counts arrive.
+result. `doc/research/SCORE_INVERSION.md` holds the pre-registered judging
+point and what would count as no relationship, written while the record was too
+small to judge, on purpose, so the verdict cannot be chosen once the counts
+arrive.
 
-### A worked example: one morning, end to end
+## A worked example: one morning, end to end
 
 03:55. Discovery runs for the first time and writes a provisional pool, so the
 collector has something to subscribe to when the extended session opens.
@@ -638,7 +609,7 @@ booking a trade against a level nobody could have got.
 Tomorrow morning, ACME's skip is one row inside the ledger counts, on the
 Record screen and in section 10 of the report.
 
-### What the scope is today, plainly
+## What the scope is today, plainly
 
 **The machine is complete and runs.** Seven scheduled tasks [corrected 2026-09-02: was eleven; the same seven jobs, each task now carrying every trigger its job has], every weekday since
 2026-08-13, with a watchdog over them and a job trail under them. The midday
@@ -782,7 +753,7 @@ destination is not in the tree at all, and is the last row for that reason:
 
 | Path | What |
 | --- | --- |
-| `data/premarketdesk.db` | SQLite (WAL): the picks table, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; the premarket volume baseline; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; and paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined |
+| `data/premarketdesk.db` | SQLite (WAL), six tables. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; and sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet |
 | `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
 | `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
