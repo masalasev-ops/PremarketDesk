@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twelve claims, a count read off
+and the two pages. It now carries two hundred and thirteen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -753,6 +753,82 @@ def claim_the_archive_does_not_publish_a_fixture_as_a_morning(failures: list[str
                         "would draw a packet no run wrote as a morning that happened")
     print("  not a morning a packet no build wrote is carried and labelled, and "
           "a packet written before the build field is not accused")
+
+
+def claim_the_nightly_list_names_every_step_it_runs(failures: list[str]) -> None:
+    """tasks/README.md's nightly row names every module the .bat invokes.
+
+    THIS ROW HAS BEEN SHORT THREE TIMES and its own brackets record two of
+    them: "said NINE over a list of ten" on 2026-08-24, and "said TEN and
+    omitted paper_ledger.py" on 2026-09-02. The third was desk/compact.py,
+    which joined the chain on 2026-09-04 between pool_recall and prune and
+    was described in a correction note beside a list that did not contain
+    it, under a count that still said ELEVEN.
+
+    It matters more than a miscount usually would. The row calls itself
+    closed, so a reader checking their own nightly against it treats a
+    missing step as a step that should not be there, and the step that went
+    missing is the one whose POSITION is load bearing: prune refuses to drop
+    a session's duplicate snapshot until compact has frozen that session's
+    bars, so a nightly built from the short list frees nothing and reports
+    success.
+
+    Asserted against the .bat rather than against a number, because the
+    number was right twice while the list was wrong. Only the full mode is
+    read: the universe firing is a separate branch after the :universe
+    label and the row for it is separate too.
+    """
+    bat = (config.PROJECT_ROOT / "tasks" / "job_nightly.bat").read_text(
+        encoding="utf-8", errors="replace")
+    full = bat.split(":universe", 1)[0]
+    # STEPS and not distinct modules. market_today runs twice, as the trading
+    # day guard and again as the calendar refresh, and the row counts both
+    # because a reader checking their own log sees two of them.
+    steps = []
+    for line in full.splitlines():
+        match = re.match(r"^%PY% -m ([A-Za-z_][A-Za-z0-9_.]*)", line.strip())
+        if match:
+            steps.append(match.group(1))
+    modules = list(dict.fromkeys(steps))
+    if not modules:
+        failures.append("no %PY% -m step was found in job_nightly.bat before "
+                        "the universe label, so this claim is checking nothing")
+        return
+
+    readme = (config.PROJECT_ROOT / "tasks" / "README.md").read_text(
+        encoding="utf-8", errors="replace")
+    row = ""
+    for line in readme.splitlines():
+        if line.startswith("| job_nightly.bat |"):
+            row = line
+            break
+    if not row:
+        failures.append("tasks/README.md has no job_nightly.bat row, so the "
+                        "list this claim protects is gone")
+        return
+
+    # night.true_volume is written true_volume.py in the row, desk.compact as
+    # desk/compact.py. Match on the module's last segment, which is the file.
+    for module in modules:
+        leaf = module.rsplit(".", 1)[-1]
+        if leaf not in row:
+            failures.append(
+                f"job_nightly.bat runs {module} in its full mode and the "
+                f"tasks/README.md nightly row never names {leaf}. That row "
+                "calls itself closed, so a step missing from it reads as a "
+                "step that should not be running")
+
+    words = {10: "TEN", 11: "ELEVEN", 12: "TWELVE", 13: "THIRTEEN",
+             14: "FOURTEEN", 15: "FIFTEEN"}
+    expected = words.get(len(steps))
+    claimed = re.search(r"\b(NINE|TEN|ELEVEN|TWELVE|THIRTEEN|FOURTEEN|FIFTEEN)"
+                        r" steps\b", row)
+    if expected and claimed and claimed.group(1) != expected:
+        failures.append(
+            f"the tasks/README.md nightly row says {claimed.group(1)} steps and "
+            f"job_nightly.bat runs {len(steps)} in its full mode")
+    print(f"  nightly list all {len(steps)} steps the nightly runs, over "
+          f"{len(modules)} modules, are named in the row that calls itself closed")
 
 
 def claim_reading_a_run_directory_does_not_create_one(failures: list[str]) -> None:
@@ -17057,6 +17133,7 @@ def main() -> int:
     run_claim(failures, claim_an_interrupted_packet_write_leaves_no_half_packet, failures)
     run_claim(failures, claim_the_archive_does_not_publish_a_fixture_as_a_morning, failures)
     run_claim(failures, claim_reading_a_run_directory_does_not_create_one, failures)
+    run_claim(failures, claim_the_nightly_list_names_every_step_it_runs, failures)
     run_claim(failures, claim_a_partial_batch_writes_each_minute_once, failures)
     run_claim(failures, claim_a_torn_tail_is_closed_before_the_next_bar, failures)
     run_claim(failures, claim_an_unplaceable_trade_is_not_a_lost_connection, failures)

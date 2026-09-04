@@ -361,6 +361,56 @@ the top, that Desk.html in its specification means the file the desk actually
 writes. README also never listed SCREENS.md or RETENTION.md among the
 documents; it does now.
 
+## 2026-09-04, sixty fourth: the nightly list was short by the step whose place matters
+
+The owner asked for the review pass to be checked for functional correctness.
+It is correct: the suite is green, the twenty file sweep from write_text to
+files.write_text_atomically is one pattern with a sound primitive, and the
+delivered report is untouched, which was proved rather than read by rendering
+today's report.md through the current code and finding the body verbatim inside
+the report.html that went out at 08:45. Nothing that deletes, backs up or
+measures was changed at all: prune_data, backup_evidence, paper_ledger,
+fill_outcomes and true_volume are byte identical.
+
+Two things it fixed were real defects introduced on 2026-09-04 by the archive
+retirement and the screens work, and both are worth naming because neither
+would have been visible until it cost something. monitor_jobs.JOBS still waited
+for "archive finished rc=0" after the .bat files stopped writing it, so the
+morning chain and the nightly would each have read started_not_finished after
+finishing cleanly and been RELAUNCHED at the 09:25 and 22:45 passes, a second
+scan racing on packet.json and a second claude CLI completion. And every screen
+attached its delegated click handler to a node that was refilled rather than
+replaced, so the handlers accumulated one per visit.
+
+WHAT THIS PASS FOUND THAT THE REVIEW DID NOT. The nightly step list in
+README.md and in tasks/README.md says eleven over a list of twelve, and the
+step missing from both is desk/compact.py. tasks/README.md's own brackets
+record two earlier versions of the same mistake: "said NINE over a list of ten"
+on 2026-08-24 and "said TEN and omitted paper_ledger.py" on 2026-09-02. This is
+the third.
+
+It matters more than a miscount normally would. Both rows call the list CLOSED,
+so a reader checking their own nightly treats a step that is missing from it as
+a step that should not be there, and compact is the one whose POSITION is load
+bearing: prune refuses to drop a session's duplicate snapshot until compact has
+frozen that session's bars, so a nightly assembled from the short list frees
+nothing and reports success. tasks/README.md described where compact runs in a
+correction note beside a list that did not contain it, which is how the count
+survived the edit that should have moved it.
+
+Fixed in both files, and then made unrepeatable.
+claim_the_nightly_list_names_every_step_it_runs reads job_nightly.bat up to the
+universe label and requires every module its full mode invokes to be named in
+the row, then checks the number word against the step count. Against the list
+and not only against the number, because the number was right twice while the
+list was wrong. It counts steps and not modules: market_today runs twice, as
+the guard and as the calendar refresh, and a reader watching their own log sees
+two of them.
+
+One more, cosmetic: README said the Morning screen is eight blocks and listed
+nine bullets. There are eight sections, and the tape and stat strips above the
+first heading are not sections; the sentence now says so.
+
 ## 2026-09-04, sixty third: the archive page is retired and the desk takes its name
 
 The owner asked to delete site/PremarketDesk.html and rename the desk to it,
