@@ -41,4 +41,11 @@ echo ===== midday render started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m midday.render_midday >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== midday render finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-exit /b %RC%
+if %RC% neq 0 exit /b %RC%
+
+rem The desk again, so the Midday screen carries what the 12:00 pass just
+rem wrote. Never fails the chain.
+echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m desk.render >> "%LOG%" 2>&1
+echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+exit /b 0

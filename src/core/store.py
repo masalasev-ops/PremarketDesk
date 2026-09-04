@@ -69,6 +69,55 @@ CREATE TABLE IF NOT EXISTS picks (
     PRIMARY KEY (date, ticker)
 );
 
+CREATE TABLE IF NOT EXISTS sessions (
+    -- One row a session, written by desk.compact after the morning and again
+    -- after the midday pass. It is a SUMMARY and never the evidence: every
+    -- column here is derivable from that session's packet, which is kept
+    -- forever under CRITERIA [Retention] and is what the screens are drawn
+    -- from. This table exists so the Sessions, Record and Name screens can
+    -- ask a question across every session without opening every packet.
+    --
+    -- Rewritten in full on every build, never appended, so running the build
+    -- twice is the same as running it once. That is build_archive's property
+    -- and it is the property that makes a summary safe to keep.
+    date                TEXT NOT NULL,
+    generated_at        TEXT,
+    run_at              TEXT,
+    -- The screen counts, as the morning published them.
+    candidates          INTEGER,
+    day_eligible        INTEGER,
+    swing_eligible      INTEGER,
+    green               INTEGER,
+    yellow              INTEGER,
+    red                 INTEGER,
+    gapped_up           INTEGER,
+    gapped_down         INTEGER,
+    top_symbol          TEXT,
+    top_gap_pct         REAL,
+    -- The pipeline, from candidate_provenance, so the Sessions screen can say
+    -- how twelve became three without reading the packet.
+    pool_size           INTEGER,
+    subscribed          INTEGER,
+    ranked              INTEGER,
+    cleared_floors      INTEGER,
+    kept                INTEGER,
+    capped_out          INTEGER,
+    -- The midday half. NULL for a session whose 12:00 pass never ran, which
+    -- is a different thing from a session where nothing triggered, and the
+    -- screens must not read one as the other.
+    midday_generated_at TEXT,
+    triggered           INTEGER,
+    gapped_through      INTEGER,
+    never_triggered      INTEGER,
+    midday_median_move  REAL,
+    -- Whether the day is readable at all, and in what form.
+    packet_bytes        INTEGER,
+    packet_compressed   INTEGER,
+    has_report          INTEGER,
+    computed_at         TEXT NOT NULL,
+    PRIMARY KEY (date)
+);
+
 CREATE TABLE IF NOT EXISTS paper_trades (
     date             TEXT NOT NULL,
     ticker           TEXT NOT NULL,

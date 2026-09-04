@@ -15,6 +15,70 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixtieth: the desk ships, and the run folder stops holding the tape twice
+
+The owner approved the screen design in the morning and asked for the
+retention work and then all seven screens, built through. Both landed the same
+day. site/Desk.html is one document with hash routes carrying every session the
+project has run, and runs/ went from 11 MB to 5.6 MB on the first sweep.
+
+SEVEN SCREENS IN src/desk/. Morning, Midday, Session, Sessions, Record, Name
+and Health, at #/session/<date>/morning and the rest, with back and forward
+working and every route a link that can be sent. Three modules: compact turns
+a run directory into the one payload every screen draws from, assets holds the
+stylesheet and the application as strings the way core/page.py holds
+REPORT_CSS, and render writes the document. No framework, no library, no CDN
+and no build step; the tokens are page.TOKENS_CSS and not a second set, so the
+conviction colours corrected this morning reached both surfaces at once.
+
+THE EMAILED REPORT IS UNTOUCHED. doc/SCREENS.md specified a core/charts.py
+returning SVG from Python so the mail could carry the same marks. That is NOT
+what was built and the file now says so. The desk needed one payload a session
+and the marks are drawn in the page from it; render_report.py, deliver.py and
+the report the owner gets at 08:45 are exactly as they were. Whether the mail
+ever carries pictures is still the open question SCREENS.md ends on.
+
+THE RUN FOLDER HELD THE TAPE TWICE AND NOW DOES NOT. prune_data grew a second
+verb: sweep_runs compresses a run directory past CRITERIA [Retention]
+hot_sessions, which is 30 sessions, and deletes exactly one thing, the
+duplicate premarket_snapshot.jsonl. Its docstring's claim that runs/ was not
+this module's business is corrected in place. Ten sessions were swept on the
+first run and one was refused, correctly, because the volume check had not run
+for today yet.
+
+THREE INTERLOCKS ON THAT DELETE AND THE THIRD IS THE INTERESTING ONE. The
+collector file must exist, the volume check must have run, and the session's
+bars must be frozen to desk.json.gz. The third exists because the reconstruction
+does not work without it: the collector file is the whole day and the snapshot
+is a point in time cut, and clipping the collector to the packet's own
+pm_window_start and pm_window_end reproduces seven of twelve names exactly and
+gives the other five ONE extra minute, always the 08:44 bar, which was open
+when the snapshot was written and complete when the collector flushed. No
+inclusive or exclusive rule on that field fixes both. So compact runs first and
+freezes the bars as the morning saw them, prune refuses any session it has not,
+and the payload records which tape it came from. On top of the interlocks the
+delete READS BOTH FILES and proves containment every time rather than citing
+the 2026-09-04 measurement, because deleting on a remembered property is how
+the only copy of something goes.
+
+The sessions table joins the store, one summary row a session, rewritten in
+full and never appended. It is what the Sessions and Record screens query so
+they never open a packet, and reading it back is the proof that they do not.
+
+core/files.py gained the gzip pair, so a warm session reads exactly like a hot
+one and a gunzip by hand puts it back. The plain file wins when both exist,
+because both existing means an interrupted compression and the original is the
+one nothing can have truncated.
+
+Wired into three chains. The morning chain and the midday chain rebuild the
+desk after their render, and the nightly runs compact, then prune, then the
+archive, then the desk. THAT ORDER IS LOAD BEARING: run the prune before the
+compact and it refuses every session and frees nothing.
+
+CRITERIA gained [Retention] and [Screens], eleven keys between them, so no
+display bound and no window is a literal in Python. The suite is green on every
+module with not one path changed.
+
 ## 2026-09-04, fifty ninth: the backtest cache is deleted, and a suite claim goes quiet with it
 
 The owner asked what data/backtest/ was for, was told, and said "if it's not

@@ -3631,3 +3631,53 @@ See the [Paper] section on which session it trades. They are shown together
 because they are the numbers that exist, and the page says on every rendering
 that they are not the same day.
 
+
+
+## Retention
+
+How long each artifact class stays as it was written, before it is compressed.
+NOTHING IN THIS SECTION DELETES ANYTHING. The one file class that is removed
+is a byte for byte duplicate whose original is kept forever, and it is removed
+only once the volume check has agreed for its session. The reasoning, the
+measurements behind these numbers and the four tiers are in doc/RETENTION.md.
+
+Age for the hot window is counted in SESSIONS on disk under runs/, newest
+first, because thirty sessions is a working span. Age for the cold window is
+counted in DAYS from the session date in the FILENAME, never the mtime,
+because a file describes the session its name carries whoever copied it and
+whenever, and an mtime rule makes the window a property of the filesystem
+rather than of the data. That is prune_data's existing rule and this section
+does not vary it.
+
+hot_sessions                  = 30         # newest run directories kept exactly as written, uncompressed
+cold_after_days               = 90         # a session older than this has its raw collector tape gzipped too. Still never deleted
+drop_duplicate_snapshot       = true       # remove runs/<date>/premarket_snapshot.jsonl once the volume check agrees for that session. It is a strict subset of data/premarket/<date>.jsonl, measured over every session carrying both
+snapshot_drop_needs_verify    = true       # and never remove it for a session whose volume check has not run
+
+### The duplicate snapshot note
+
+Measured 2026-09-04 over all eleven sessions that carried both files:
+runs/<date>/premarket_snapshot.jsonl is a STRICT SUBSET of
+data/premarket/<date>.jsonl, 6,024,048 bytes with zero lines unique to the run
+copy, and 61 percent of everything under runs/. The collector file is the one
+prune_data's whitelist protects forever as not reproducible at any price, so
+the copy is the derivable side of the pair and it is the copy that goes.
+
+The guard is the volume check rather than an age. verify_intraday.json is the
+collector against vendor comparison for a session, and until it has run for a
+session there is a reason to still have both copies open side by side. After
+it has, there is not.
+
+## Screens
+
+The desk, one document at site/Desk.html carrying every session, and the marks
+the screens are drawn from. The seven screens and the reasoning are in
+doc/SCREENS.md. Nothing here is a screen threshold in the sense the rest of
+this file means: these are display bounds, and they are here because the rule
+is that no literal of this kind lives in Python.
+
+inline_sessions               = 400        # sessions inlined into site/Desk.html. A compacted session gzips to about 15KB and inlines as about 20KB of base64, so this is a ceiling and not a window: 400 sessions is about 8MB
+spine_scale_pct               = 26         # the fixed symmetric scale on the gap spine, in percent either side of the centre rule, so two mornings compare by eye
+path_min_bars                 = 2          # below this many minute bars the tape path degrades to a sentence naming the count, rather than a line drawn through one point
+ladder_label_gap_px           = 17         # minimum vertical space between two labels on the level ladder before they are pushed apart
+sessions_page_size            = 60         # rows the Sessions screen renders before it asks to show more

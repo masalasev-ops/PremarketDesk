@@ -2,9 +2,19 @@
 
 Written 2026-09-04. The screen design in this file was approved by the owner
 on 2026-09-04, from a working prototype built over runs/2026-09-03 and read in
-a browser before approval. The prototype is the reference for the Morning
-screen and for the chart vocabulary; it is not the implementation, and nothing
-in this file is built yet.
+a browser before approval.
+
+[BUILT 2026-09-04, later the same day. All seven screens ship in src/desk/ and
+site/Desk.html carries every session. What actually landed differs from the
+specification below in two places and both are recorded where they belong: the
+marks are drawn in the page from an inlined payload rather than by a
+core/charts.py returning SVG from Python, because the desk needed one payload
+per session and the emailed report is a separate surface that has not been
+changed at all; and desk/compact.py freezes each session's payload to
+runs/<date>/desk.json.gz, which was not in this file and which doc/RETENTION.md
+explains, because a tape path cannot be redrawn exactly from the collector file
+alone. core/charts.py is therefore NOT built and the emailed report is exactly
+as it was. See CHANGELOG 2026-09-04 sixtieth.]
 
 This is a specification, not a proposal. Where a screen below was drawn and
 approved it says so; where it is specified in the same shape but has not been

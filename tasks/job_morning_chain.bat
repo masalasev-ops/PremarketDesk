@@ -58,4 +58,13 @@ echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.build_archive >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-exit /b %RC%
+if %RC% neq 0 exit /b %RC%
+
+rem The desk, so this morning's screens are there before the open. It reads
+rem and renders: no vendor call and no measurement of its own. Never fails the
+rem chain, because a report that was delivered is not undone by a page that
+rem did not draw.
+echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m desk.render >> "%LOG%" 2>&1
+echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+exit /b 0

@@ -33,12 +33,33 @@ SHELL_MARK = "/* premarketdesk page shell */"
 # at every size. --line is deliberately BELOW 3:1. A row divider is not a
 # meaningful graphical object, and a divider pushed to 3:1 is the heavy grid
 # that makes a table of numbers hard to read.
+# The status trio is not a free choice and was wrong in both themes until
+# 2026-09-04. These three carry conviction on every report, and conviction
+# is the one column a reader acts on, so two of them reading as one colour
+# is not a cosmetic fault.
+#
+# Measured against the surface each sits on, in OKLab delta E times 100,
+# with 8 the colour vision deficiency floor and 15 the normal vision floor:
+#
+#   light, was  #8A5300 warn vs #A61B1B bad    2.3 deutan, 11.6 normal
+#   light, now  #B07800 warn vs #B02020 bad   10.1 protan, 18.4 normal
+#   dark,  was  #E0B341 warn vs #6FBF73 good   5.3 protan, 14.3 normal
+#   dark,  now  #C79A1E warn vs #2E9E6B good   8.6 protan, 16.9 normal
+#
+# The light pair that failed and the dark pair that failed are DIFFERENT
+# pairs, which is why looking at one theme never found it. Both now clear
+# both floors. The status steps sit outside the categorical lightness band
+# by design, as status steps do, and that is not the check they are held to.
+#
+# Hue is still never the only channel: every conviction is printed with its
+# word beside it, and REPORT_CSS's conv- rules colour text that already
+# reads green, yellow or red. See doc/SCREENS.md.
 TOKENS_CSS = """
 :root {
   --bg: #FFFFFF; --surface: #FFFFFF; --raised: #F6F7F9;
   --ink: #16191D; --ink-2: #454B54; --muted: #5B6672;
   --line: #E4E7EB; --line-strong: #9AA0A6; --accent: #A2530F;
-  --good: #10704A; --warn: #8A5300; --bad: #A61B1B;
+  --good: #10704A; --warn: #B07800; --bad: #B02020;
   --active: rgba(162, 83, 15, 0.07);
   color-scheme: light;
 }
@@ -47,7 +68,7 @@ TOKENS_CSS = """
     --bg: #12161C; --surface: #12161C; --raised: #1A2028;
     --ink: #E7EAEE; --ink-2: #C3CAD3; --muted: #9AA5B1;
     --line: #2A323D; --line-strong: #6B7683; --accent: #E8A254;
-    --good: #6FBF73; --warn: #E0B341; --bad: #E57373;
+    --good: #2E9E6B; --warn: #C79A1E; --bad: #E06060;
     --active: rgba(232, 162, 84, 0.10);
     color-scheme: dark;
   }
@@ -56,7 +77,7 @@ TOKENS_CSS = """
   --bg: #12161C; --surface: #12161C; --raised: #1A2028;
   --ink: #E7EAEE; --ink-2: #C3CAD3; --muted: #9AA5B1;
   --line: #2A323D; --line-strong: #6B7683; --accent: #E8A254;
-  --good: #6FBF73; --warn: #E0B341; --bad: #E57373;
+  --good: #2E9E6B; --warn: #C79A1E; --bad: #E06060;
   --active: rgba(232, 162, 84, 0.10);
   color-scheme: dark;
 }

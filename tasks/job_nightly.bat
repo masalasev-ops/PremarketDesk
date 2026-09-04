@@ -121,11 +121,25 @@ echo ===== pool recall started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.pool_recall >> "%LOG%" 2>&1
 echo ===== pool recall finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
-rem Delete the dated data files past their retention window. Never fails the
-rem chain: unfreed disk is not a reason to fail a night, and the step reports
-rem what it kept as well as what it took. It deletes only what its PRUNABLE
-rem whitelist names, which is one file class; see CRITERIA.md [Universe] the
-rem closes retention note for what is deliberately NOT in it.
+rem Freeze each session's desk payload BEFORE the prune runs. The order is
+rem load bearing: prune's third interlock refuses to drop a duplicate snapshot
+rem until desk.json.gz exists for that session, because the collector file is
+rem the whole day and the snapshot is a point in time cut of it, so a session
+rem whose bars were never frozen cannot have its tape path redrawn exactly.
+rem Run the other way round this frees nothing and refuses every session.
+rem Never fails the chain.
+echo ===== compact started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m desk.compact >> "%LOG%" 2>&1
+echo ===== compact finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
+rem Delete the dated data files past their retention window, then sweep runs/.
+rem Never fails the chain: unfreed disk is not a reason to fail a night, and
+rem the step reports what it kept as well as what it took. Under data/ it
+rem deletes only what its PRUNABLE whitelist names, which is one file class;
+rem see CRITERIA.md [Universe] the closes retention note for what is
+rem deliberately NOT in it. Under runs/ it COMPRESSES past CRITERIA
+rem [Retention] hot_sessions and deletes exactly one thing, the duplicate
+rem premarket_snapshot.jsonl, under the three interlocks above.
 echo ===== prune started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.prune_data >> "%LOG%" 2>&1
 echo ===== prune finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
@@ -144,7 +158,15 @@ echo ===== archive started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m night.build_archive >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== archive finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-exit /b %RC%
+if %RC% neq 0 exit /b %RC%
+
+rem The desk, rebuilt last so it inlines what every step above has just
+rem written, including tonight's outcomes and the compaction. Full rebuild
+rem from disk, never an append. Never fails the chain.
+echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m desk.render --no-compact >> "%LOG%" 2>&1
+echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+exit /b 0
 
 :universe
 rem The Sunday firing. No trading day guard: Sunday is closed by definition

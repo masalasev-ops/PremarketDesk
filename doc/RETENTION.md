@@ -6,10 +6,18 @@ is the owner's, taken the same day: hot 30 sessions, a cleanup of data older
 than three months, the raw tape GZIPPED at that age rather than deleted, and
 data/backtest/ deleted outright on the ground that it is refetchable.
 
-Nothing in this file is built. It deletes nothing today: the oldest thing on
-disk is dated 2026-08-13 and is 22 days old, so a three month rule first bites
-on 2026-11-11. That is deliberate. A retention policy is cheapest to argue
-about while it has nothing to destroy.
+[BUILT 2026-09-04, steps 1, 3, 4 and the mechanism of 5. What runs tonight is
+night/prune_data.sweep_runs, wired into the nightly after desk.compact and
+before the archive. It freed 4.46 MB the first time it ran, taking runs/ from
+11 MB to 5.6 MB, by dropping ten proven duplicate snapshots. Step 2, having
+scan stop writing the duplicate at all, is NOT built and is the one item left.
+See CHANGELOG 2026-09-04 sixtieth.]
+
+It deletes nothing on an age. The oldest thing on disk is dated 2026-08-13 and
+is 22 days old, so the three month rule first bites on 2026-11-11, and when it
+does it compresses rather than deletes. The one thing removed at any age is the
+duplicate snapshot, under three interlocks, and only after the run's own copy
+has been read and proven contained in the collector's.
 
 ## What was measured, 2026-09-04
 
