@@ -128,13 +128,15 @@ shapes are good at different things.
 | File | `site/PremarketDesk.html` | `runs/YYYY-MM-DD/report.html` | `runs/YYYY-MM-DD/report_midday.html` | `site/Weekly.html` |
 | Written | End of the morning chain, the midday chain and the nightly | 08:46 to 08:49 | 12:00 | 22:15 |
 | Covers | Every session on file | This morning, except one section | Today's session so far | A rolling trailing 7 days |
-| It answers | Which name is worth your next forty five minutes, and what the evidence behind it is worth | Why that name is on the list, what the setup is, and what would prove it wrong | What the open did to the levels the morning published | Whether the machine itself is working, over a week rather than a morning |
+| It answers | Which name is worth your next forty five minutes, and what the evidence behind it is worth | What the setup is on a name, and what would prove it wrong. Two thirds of it is a copy of the screens; the prose is the third that is not | What the open did to the levels the morning published | Whether the machine itself is working, over a week rather than a morning |
 | Written by | Nothing. It is rendered | Python, with a handful of prose slots filled by the claude CLI | Nothing. It is rendered | Nothing. It is rendered |
 
 A screen puts twelve names on one axis, and a level, a tape and a score side by
 side, so you can see which one to look at. Prose can say what a setup is and
 what would prove it wrong, which no picture does. The report is also the only
-one an email can carry, so it is a complete document on its own.
+one an email can carry, so it is a complete document on its own, and being
+complete is why most of it repeats the screens. See
+`## The morning report, and what is only in it` for what does not.
 
 Every ticker and number in the examples below is INVENTED. `runs/` and `site/`
 are gitignored so no real morning is ever committed to a public repository. The
@@ -234,10 +236,12 @@ should be checkable and should not be the first thing read.
 3. **The gap spine.** Which name to look at, with why it gapped already beside
    it.
 4. **Its deck.** Levels, tape, score, headlines, warnings.
-5. **The report**, for the names you are still weighing. The per name write ups
-   are the one thing in the system that exists nowhere else: what the setup is,
-   and the line saying what would prove it wrong. Report in the navigation
-   opens it for the session you are on.
+5. **The report**, for the names you are still weighing, and only for its
+   prose. Two things in it are nowhere else: one write up per day eligible
+   name saying what the setup is and what would prove it wrong, and one
+   sentence under each quoted headline saying who the story is actually
+   about. The rest of the document is the screens again in words. Report in
+   the navigation opens it for the session you are on.
 
 The Record screen once, as context. It does not change between 08:50 and 09:30
 and it is not about any name in front of you.
@@ -416,41 +420,59 @@ that is a defect worth chasing, because a description of six sessions written
 as an instruction is a strategy nobody validated wearing the authority of a
 generated document.
 
-## The morning report, section by section
+## The morning report, and what is only in it
 
-Eleven fixed sections, always in this order, always present even when a section
-has nothing to say. A section that goes missing is a defect, not an empty
-morning. This is how to find your way around the document; what the figures in
-it mean is the chapter above.
+MOST OF IT IS A COPY OF THE SCREENS. Measured on `runs/2026-09-04/report.md`,
+47,000 characters: Python wrote 30,343 of them and the model 16,657. Every one
+of Python's 30,343 is a table, a count, a level or a quoted figure that the
+Morning, Record and Health screens now draw, usually better, because a bar
+compares and a number does not.
 
-| # | Section | What is in it |
-| ---: | --- | --- |
-| 1 | Summary | The counts: ranked, cleared the floors, kept, cut by the cap |
-| 2 | Premarket gappers | Everything that cleared the floors, eligible or not. The pool, not the picks |
-| 3 | Day watchlist | The names that passed every day condition, in the fixed table above |
-| 4 | Swing watchlist | The same, on a longer horizon |
-| 5 | Notable movers | What else moved that is not a candidate, ranked within one leg at a time |
-| 6 | Market trends | Index, volatility, rates, oil, dollar. Tone, and never an input to any screen |
-| 7 | Technical signals | Where each candidate sits against its prior high, premarket high and 200 day, then one write up per watchlist name closing with the line that says what would prove it wrong |
-| 8 | Economic data and rates | Today and tomorrow's high importance events |
-| 9 | Coming up | Earnings for candidates, and notable names reporting tomorrow |
-| 10 | What the record says so far | The ledger counts above. The only section not about today |
-| 11 | Skips and traps | The evidence roll above. Read it before the watchlists |
+The 16,657 are the reason to open it. They are 32 marked slots the model fills,
+and none of them is on any screen:
 
-Section 7's per name write ups exist nowhere else in the system. Every other
-row is also drawn on the Morning, Record or Health screens.
+| Slot | How many that morning | What it is |
+| --- | ---: | --- |
+| `{{SETUP:<ticker>}}` | 2 | One write up per day eligible name: what the setup is, and the line saying what would prove it wrong |
+| `{{HEADLINE:<ticker>:N}}` | 27 | One sentence under each quoted headline, saying who the story is actually about |
+| `{{MOOD}}` | 1 | The phrase in the title |
+| `{{TONE}}` | 1 | The market tone sentence |
+| `{{RATES}}` | 1 | One sentence on the rate picture |
 
-Python writes all of it from the packet, every table, count and quoted
-sentence, and leaves marked slots for the prose only a model can write: the
-mood phrase in the title, the market tone, one sentence under each quoted
-headline saying who it is about, one write up per watchlist name, and one
-sentence on the rate picture. The model returns the report with the slots
-filled; the fixed text that ships is Python's copy, the model's answer is used
-only to find what it wrote in the slots, and the containment and quantifier
-guards read that prose. Before 2026-09-02 the model wrote the whole page from a
-68 KB instruction set, and at least 60 percent of what survived the guard was
-packet text copied under instruction. `CRITERIA [Analyst] mode` switches
-between the two.
+The difference is easiest to see on one headline. The deck draws the title, the
+publisher, the time, the polarity and an "about this name" pill. The report
+adds the model's sentence under it:
+
+> Headline: "Samsara outlines FY 2027 revenue of $2.043B-$2.047B while
+> targeting 21% non-GAAP operating margin" (seekingalpha.com, 22:19)
+>
+> This is about the company itself, its outline of FY 2027 revenue and a 21
+> percent non-GAAP operating margin target.
+
+That is the whole case for the document. Open it for the two setup write ups
+and the headline sentences on the names you are still weighing; everything else
+in it you have already seen.
+
+The eleven sections, in the fixed order they always appear in, because a
+section that goes missing is a defect rather than an empty morning: Summary,
+Premarket gappers, Day watchlist, Swing watchlist, Notable movers, Market
+trends, Technical signals, Economic data and rates, Coming up, What the record
+says so far, Skips and traps. The slots are not spread evenly through them:
+the setups are in Technical signals, the headline sentences in Premarket
+gappers, the mood in the title, the tone in Summary and the rates sentence in
+Economic data and rates. The other six sections carry no prose at all, which
+is another way of saying they are the screens in words.
+
+**How the two halves are kept apart.** Python writes the whole report from the
+packet with the slots marked, pipes that skeleton and `doc/prompt_slots.md` to
+the CLI, and takes back only what the model put in the slots: the fixed text
+that ships is Python's copy, byte for byte, and a model answer that altered
+anything outside a slot is refused and kept beside the report as
+`report.slots-rejected-N.md`. The containment and quantifier guards then read
+the slot prose. Before 2026-09-02 the model wrote the whole page from a 68 KB
+instruction set and at least 60 percent of what survived the guard was packet
+text copied under instruction, which is what the slots exist to stop.
+`CRITERIA [Analyst] mode` switches between the two.
 
 ## The midday pass
 

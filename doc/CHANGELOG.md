@@ -15,6 +15,42 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, seventieth: what the morning report actually is, measured
+
+The owner asked what the morning report is and said the screens do not show
+it. Both halves of that are worth answering exactly, because the first is
+measurable and the second is true in a way the README did not admit.
+
+MEASURED ON runs/2026-09-04/report.md, 47,000 characters: analyst.fallback_report
+in slots mode wrote 30,343 of them and the model 16,657, across 32 slots. The
+30,343 are tables, counts, levels and quoted figures, every one of which the
+Morning, Record and Health screens now draw. The 16,657 are two SETUP write
+ups, one per day eligible name, closing with the line that says what would
+prove the setup wrong; twenty seven HEADLINE sentences, one under each quoted
+headline saying who the story is about; and one each of MOOD, TONE and RATES.
+None of those thirty two is on any screen. The deck draws a headline's title,
+publisher, time, polarity and about-this-name pill, and not the sentence.
+
+So the report is two thirds a copy of the screens and one third the only prose
+the system produces, and the README described it as a co-equal surface with an
+eleven row section table, which is the shape of a document rather than the
+shape of what it holds.
+
+THE OWNER'S CHOICE, given three options, was to leave the code alone and fix
+the README only. The prose stays in the document rather than moving onto the
+decks. The chapter is now "The morning report, and what is only in it": the
+measurement, the five slot kinds with their counts, one worked headline showing
+the deck's version beside the report's, and the sentence that the rest of the
+document is the screens again in words. The reading order's fifth step says to
+open it for the prose and names the two things that are nowhere else.
+
+THE SLOT TO SECTION MAPPING IN THAT CHAPTER WAS WRONG WHEN FIRST WRITTEN and
+was caught by checking rather than by review: it said the tone and the rates
+sentence live in Market trends. They do not. TONE is in Summary and RATES is in
+Economic data and rates, read out of the skeleton by walking its headings. Two
+of four wrong, in a paragraph asserting where things are, in a document being
+corrected for asserting where things are.
+
 ## 2026-09-04, sixty ninth: README rebuilt from the code, not edited again
 
 Three attempts at this document had each appended to it: a desk chapter beside
