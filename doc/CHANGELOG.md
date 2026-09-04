@@ -15,6 +15,45 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, fifty seventh: the screens are specified, and the report gets a second surface
+
+The owner asked for the project to grow a visual, dynamic interface in place
+of a page of reading, with a way to export a report to PDF. A working
+prototype of the morning screen was built over runs/2026-09-03 and read in a
+browser, and the screen design was approved from it the same day. Angular was
+raised and declined; the owner's conclusion was that Python is enough.
+
+doc/SCREENS.md is the specification that came out of that. Seven screens,
+seven reusable marks in a core/charts.py that does not exist yet, one single
+page document at site/Desk.html with hash routes in place of the four
+documents the reader clicks between today, and two PDF paths, a print dialog
+for a reader and a headless Chrome step for the mail. Nothing in it is built.
+
+TWO CONSTRAINTS SHAPED IT AND BOTH WERE ALREADY IN THE TREE. The emailed copy
+cannot be an application, because page.flatten_variables exists on the finding
+that CSS custom properties reach under half the clients caniemail tracks, and
+a client that cannot read var() cannot run a router; so the same Python
+renders both surfaces from one packet and flattens one of them, which is the
+property core/page.py was written to protect. And the desk inlines its data
+rather than fetching it, because build_archive already found that Chrome
+blocks fetch on file:// and site/PremarketDesk.html has been 349,737 bytes of
+inlined bytes ever since. The compacted form of one session measures 63,913
+bytes against a 254,252 byte packet, which is what the inline ceiling will be
+estimated from until it is measured.
+
+The specification also records a defect it found rather than folding it into
+the work. core/page.py's conviction colours put #8A5300 yellow and #A61B1B red
+2.3 apart under deuteranopia and 11.6 apart in normal vision, both under the
+floor, on a table that gives no second cue: to a reader with the commonest
+form of colour blindness those two convictions are one colour. #B07800 and
+#B02020 clear every check in the same warm family. That is a defect in a
+published page, it passes the freeze test on its own, and it goes in ahead of
+any screen work.
+
+The freeze is noted in SCREENS.md rather than left implicit. This work does
+not pass its test, no number on any screen is wrong today, and it proceeds on
+the owner's approval the way the 2026-09-02 tiers did.
+
 ## 2026-09-03, fifty sixth: a midday floor names the biggest mover it turned down
 
 The owner brought a vendor list of the session's 47 biggest gainers and asked

@@ -676,6 +676,9 @@ prose for want of a blank line, and the page was laid out to fit rather than
 to be read. All three are fixed and the day's report regenerated in slots
 mode (plan 0.7 to 0.9, CHANGELOG thirty ninth, DECISIONS eighth).]**
 
+**[2026-09-04: the screens are specified in doc/SCREENS.md and none of them
+are built. Read it first. The freeze was lifted for it. CHANGELOG fifty seventh.]**
+
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:
 

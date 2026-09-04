@@ -1,0 +1,506 @@
+# SCREENS
+
+Written 2026-09-04. The screen design in this file was approved by the owner
+on 2026-09-04, from a working prototype built over runs/2026-09-03 and read in
+a browser before approval. The prototype is the reference for the Morning
+screen and for the chart vocabulary; it is not the implementation, and nothing
+in this file is built yet.
+
+This is a specification, not a proposal. Where a screen below was drawn and
+approved it says so; where it is specified in the same shape but has not been
+drawn it says that too, because a reader six weeks from now must not have to
+guess which parts were seen and which were reasoned about.
+
+## What this file is for
+
+The morning report is a document. It is read at 08:45 by one person deciding
+which of twelve names is worth the next forty five minutes, and on 2026-09-03
+it was 55,076 characters of markdown and 72,405 of HTML. Nothing in it is
+wrong. The problem is that the decision has to be found.
+
+Every screen below replaces reading with looking. None of them replaces the
+prose: the analyst's words are kept, in full, one disclosure down, because the
+screen answers WHICH NAME and the prose answers WHY, and the second question
+is the one this project is actually good at.
+
+## The rule that governs every screen here
+
+READS AND RENDERS, NOTHING ELSE. No new measurement, no new vendor call, no
+new threshold, no new scheduled job that fetches. Every number on every screen
+below is already in packet.json, midday_packet.json, the picks table,
+job-status.jsonl or the meter trail today. A screen that wants a number the
+packet does not carry is not in this file; it is a change to scan.py, and it
+goes through the freeze like anything else.
+
+This is night/weekly_page.py's constraint, in its own words, and the reason it
+is worth having is the one its docstring gives: a reporting layer that fetches
+is a second pipeline to keep right.
+
+## The freeze
+
+BUILD_PLAN's "What remains" has carried a code freeze since 2026-08-21, and
+its test is: which published number is wrong today, and where would a reader
+see it. This work does not pass that test. No number here is wrong.
+
+It proceeds anyway, on the owner's approval of 2026-09-04, in the same way the
+2026-09-02 tiers did. That is recorded here rather than left implicit, because
+the freeze is a good rule and the next person to want past it should have to
+get the same answer from the same person rather than cite this file as
+precedent.
+
+## One document, no pages
+
+The owner's instruction on 2026-09-04 was that the result must not be a set of
+HTML pages clicked between, it must behave as a single application.
+
+TODAY there are four documents and the reader navigates between them by
+loading a new file. render_report.py writes a footer of relative links, at
+line 298 a literal `<a href="../../site/PremarketDesk.html#{date}">`, pointing
+at the archive, the weekly page, the midday page and the previous session.
+Four documents, four loads, no shared state, and deliver.py strips the whole
+footer before mailing because every one of those links is dead in an inbox.
+
+TOMORROW there is one document, `site/Desk.html`, and the reader never loads a
+second one. Views are hash routes resolved by client side JavaScript. Back and
+forward work, a route is a link that can be sent to another machine, and the
+selected name is part of the route so a screenshot is reproducible. That is a
+single page application in every sense that matters here.
+
+The one thing that cannot be escaped is that a browser opens a FILE, and that
+file is HTML. There will be exactly one of them and it is the shell, not a
+page. What goes away is the clicking between documents, which is what was
+asked for.
+
+### Why the data is inlined and not fetched
+
+build_archive.py already established this and its docstring is the authority:
+"Chrome blocks fetch on file://, so every byte the page needs is inlined at
+build time." site/PremarketDesk.html is 349,737 bytes today for exactly that
+reason. Desk.html inherits the finding. Python writes the shell and the data
+into one file, and the page reads its data out of a `<script
+type="application/json">` block rather than over the network.
+
+That has a size ceiling and the ceiling is measurable. The prototype's
+compaction of one session, which drops headlines_all and the provenance prose
+and keeps every figure any screen draws, took runs/2026-09-03 from a 254,252
+byte packet to 63,913 bytes, including the 216 minute bars of the tape path.
+Thirty sessions inlined whole is about 1.9MB, which is five times today's
+archive and still opens instantly from disk. One hundred and twenty, which is
+what CRITERIA [Archive] embed_sessions is set to, is about 7.7MB, and that is
+the point at which this needs measuring rather than estimating.
+
+THE ESCAPE HATCH, IF IT IS EVER NEEDED, IS THE STANDARD LIBRARY. `python -m
+http.server` costs nothing, adds no dependency to requirements.txt, and turns
+fetch back on, at which point sessions load on demand and the ceiling goes
+away. It is not the default because a file that opens by double clicking is
+worth more than lazy loading is, and because the moment there is a server
+there is a server to remember to start. Reach for it when a measured file size
+says to, not before.
+
+## The three surfaces, and which is which
+
+| Surface | What it is | Built how |
+| --- | --- | --- |
+| The 08:45 email | A flat document, no scripting | Python, static HTML and inline SVG, flattened by page.flatten_variables |
+| The desk | The single page application | Python writes the shell, the data and the marks; the browser routes |
+| The PDF | The printed desk | Headless Chrome against the desk, print stylesheet |
+
+The email is the surface that constrains everything, and it is not negotiable.
+page.flatten_variables exists because CSS custom properties reach under half
+the clients caniemail tracks and classic Outlook has none; a mail client that
+cannot read `var()` certainly cannot run a router. So the emailed copy is
+rendered by the same Python that renders the desk, from the same packet,
+through the same marks, and then flattened. One source of numbers, two
+documents, which is the property core/page.py was written to protect and the
+property that four drifting renderers cost this project once already.
+
+## The chart vocabulary
+
+Seven marks. They are defined once, in `core/charts.py`, and every screen
+draws from this list. Nothing on any screen is a one off drawing, for the same
+reason REPORT_CSS is one string with three users: parity by construction, not
+by remembering.
+
+Each mark is a function that takes packet values and returns an SVG string. No
+JavaScript is required to render any of them, which is what lets the emailed
+copy carry the same pictures as the desk.
+
+### 1. Gap spine
+
+Every candidate on one horizontal axis. Distance from the centre rule is the
+premarket gap against the prior close, the side is direction, the scale is
+fixed and symmetric so two mornings can be compared by eye. Conviction is a
+stripe at the row edge and the word in the row, never the bar.
+
+Used by: Morning, Session, Sessions.
+
+### 2. Level ladder
+
+A vertical price axis carrying prior close, premarket low, VWAP, last,
+premarket high, prior high, with the entry and stop marked and the gap itself
+drawn as a bracket to the same scale. Labels are pushed apart on collision and
+joined to their tick by a leader.
+
+This is the mark that earns the redesign. Six numbers in a table do not say
+that SNOW's entire premarket range on 2026-09-03 was a sliver sitting 24
+percent above a prior close that falls off the bottom of the frame. The ladder
+says it without a word.
+
+Used by: Morning, Session, Name.
+
+### 3. Tape path
+
+The collector's minute closes as an area, the premarket VWAP as a dashed rule
+across it, and the minute volume as a strip beneath, on one shared time axis.
+The last bar carries an emphasised endpoint.
+
+It degrades honestly. On 2026-09-03 the collector recorded 216 minutes for
+SNOW and 8 for PVH; under two bars the mark returns a sentence saying how many
+minutes there were, rather than a line drawn through one point. The count of
+minutes with a print, against the minutes in the window, is printed on the
+axis so a sparse tape is never mistaken for a quiet one.
+
+Used by: Morning, Session, Name.
+
+### 4. Component bars
+
+One row per score component, the points as a bar on a shared scale, the
+component named in words. Replaces the score as a single number that says
+nothing about what made it.
+
+Used by: Morning, Record.
+
+### 5. Stage strip
+
+A count per stage with the share carried forward drawn beneath it, and the
+reason for the drop written under that. The 2026-09-03 pipeline reads: pool
+681, subscribed 42, ranked 41, cleared floors 17, kept 12, day eligible 3,
+swing eligible 2, with 5 of the 17 cut by the cap of 12 rather than by any
+screen. That last fact is in candidate_provenance today and no reader has ever
+seen it.
+
+The stages are NOT drawn to one shared scale. 681 and 2 on one axis makes the
+2 invisible, and a funnel drawn on a square root scale is a lie told for
+looks. Every stage prints its own count and its own share of its own
+predecessor.
+
+Used by: Morning, Record.
+
+### 6. Condition track
+
+Per screen condition, out of one denominator: cleared, measured and failed,
+never measured. The third state is drawn as a dashed outline and not as a
+third colour, because never measured is not a smaller amount of failing and
+must not read as one. On 2026-09-03 premarket_rvol shows 4 failed of 12 with 3
+of those never measured, and that distinction is the difference between a
+screen doing its job and a screen with no evidence.
+
+Used by: Morning, Record.
+
+### 7. Diverging row
+
+A signed value against a zero rule, sized for a table cell. The mark that
+turns a column of percentages into a shape.
+
+Used by: Midday, Sessions, Record, Name.
+
+## Colour
+
+### Conviction owns the status hues, and never works alone
+
+Green, amber and red mean conviction and nothing else on any screen. Direction
+does not get them, because the score is unsigned: score_roll.direction_note
+says so in the packet, and on 2026-09-03 VSXY was green conviction and down
+16.11 percent. A page that colours both by the same pair cannot be read.
+Direction is carried by which side of the axis the bar sits on and by the sign
+on the number.
+
+Every conviction also carries its word. Hue is never the only channel.
+
+### A defect in the current conviction colours
+
+core/page.py lines 169 to 171 set `td.conv-green` to `#10704A`,
+`td.conv-yellow` to `#8A5300` and `td.conv-red` to `#A61B1B`. Run through a
+palette validator against the white surface they sit on, the yellow and the
+red measure 2.3 apart under deuteranopia and 11.6 in normal vision. Both are
+below the floor. For a reader with the commonest form of colour blindness
+those two convictions are the same colour, and the table gives no second cue.
+
+`#B07800` for yellow and `#B02020` for red clear every check, stay inside the
+same warm family, and hold their contrast against the surface. THIS IS A
+DEFECT IN A PUBLISHED PAGE AND NOT PART OF THE SCREEN WORK. It passes the
+freeze test on its own, it is a two line change to page.py, and it should go
+in ahead of any of this.
+
+### Magnitude is one hue
+
+Four steps of one amber ramp, stepped for each surface and validated against
+it. Light: `#D9A870`, `#C48744`, `#AC6820`, `#8C460B`. Dark: `#6E4C22`,
+`#996834`, `#C08A46`, `#E8A254`. More is darker in light, more is lighter in
+dark. Never a rainbow, never a second hue introduced to tell two bars apart:
+if a chart needs more than one hue to be readable it is the wrong chart.
+
+## The seven screens
+
+Every screen below names what it answers, its route, what is on it, and what
+it reads. Where a screen reads a file it reads what is already written there.
+
+### 1. Morning
+
+APPROVED AS DRAWN, 2026-09-04.
+
+Route: `#/session/<date>/morning`, and `#/` resolves to the newest session's
+morning.
+
+Answers: which of this morning's candidates is worth the next forty five
+minutes, and what would make me wrong.
+
+Reads: `runs/<date>/packet.json`, and `runs/<date>/midday_packet.json` where
+the 12:00 pass has already run, for the outcome strip only.
+
+Regions, in order:
+
+  Session tape        market_snapshot, one chip per proxy, with the prior
+                      session only ones marked as such rather than shown as
+                      though they were live
+  Decision counters   candidates kept, day eligible, swing eligible, green
+                      conviction, largest gap, each naming its members
+  Gap spine           mark 1, over all candidates, filterable by eligibility,
+                      conviction and direction, and selectable
+  Candidate deck      for the selected name: the level ladder, the tape path,
+                      the component bars, the evidence grid, the catalyst and
+                      its headlines with polarity, and the trap verdict in the
+                      packet's own words
+  Pipeline            mark 5, from candidate_provenance
+  Composition         sectors, catalyst classes and direction from list_shape,
+                      because concentration is what a list of twelve hides
+  Record digest       the two findings from record_so_far, linking to Record
+  Calendar            the economic events, today and tomorrow, from economic
+  Prose               the analyst's summary and the standing disclaimer, in
+                      disclosures, verbatim
+
+The evidence grid prints premarket RVOL, move in sigma, premarket volume,
+float rotation, market cap, twenty day dollar volume, news in window and pool
+rank with its tier reason, plus the earnings actual against estimate where the
+calendar carries one. Every one of those is a packet field today.
+
+### 2. Midday
+
+PARTLY DRAWN. The carry through table and the per name outcome strip were
+built into the prototype; the floor buckets were not.
+
+Route: `#/session/<date>/midday`.
+
+Answers: did the levels the morning published survive contact with the open,
+and what moved that the morning never named.
+
+Reads: `runs/<date>/midday_packet.json`.
+
+Regions:
+
+  Carry through       one row per pick: the entry state at noon in words, the
+                      move from the prior close as mark 7, the day RVOL, and
+                      the packet's own state_reason, which already says things
+                      like "the session high 427.27 came up -5.47 percent
+                      short of the 452 entry"
+  Movers              what moved that the morning never carried
+  The floors          what each floor turned down, largest mover first, which
+                      the 2026-09-03 fifty sixth change added to the packet
+                      and which nothing has ever displayed
+
+The four entry states get words and not codes: triggered reads "entry
+reached", gapped_through reads "opened past the entry", never_triggered reads
+"entry never reached". REPORT_TEMPLATE's rule that no field name is printed as
+English applies to screens exactly as it applies to prose.
+
+### 3. Session
+
+SPECIFIED, NOT DRAWN.
+
+Route: `#/session/<date>`.
+
+Answers: what happened on this day, whole.
+
+Reads: `packet.json`, `midday_packet.json`, `verify_intraday.json`, and the
+picks rows the night filled.
+
+This is the only screen where the morning's estimate and the night's
+measurement appear together, and the rule from CRITERIA [Truth] governs it:
+the night writes BESIDE the morning's values and never over them, so the
+screen shows both columns and never one. A premarket volume of 57,031 scaled
+by a capture share of 0.1172 and the consolidated figure the truth pass wrote
+that night are two different numbers, and a screen that shows one of them and
+calls it the volume is worse than the report is now.
+
+### 4. Sessions
+
+SPECIFIED, NOT DRAWN. Replaces the day rail in site/PremarketDesk.html.
+
+Route: `#/sessions`.
+
+Answers: what have the mornings looked like, and which one do I want.
+
+Reads: the compacted per session summaries inlined at build time, plus
+job-status.jsonl for whether each chain ran clean.
+
+One row per session: the date, candidates kept, day and swing eligible, the
+conviction split, the largest gap with its name, and a health mark. The gap
+spine appears here at row scale, so a morning's shape is legible before it is
+opened.
+
+### 5. Record
+
+SPECIFIED, NOT DRAWN. Replaces site/Weekly.html.
+
+Route: `#/record`.
+
+Answers: is any of this working.
+
+Reads: exactly what weekly_page.py reads today, which is job-status.jsonl, the
+meter trail, quantifier-flags.jsonl, verify_intraday.json and picks.
+
+Its five regions are weekly_page's five questions, unchanged, because they
+were already the right five and they are already written down in its
+docstring: did it run, is it trustworthy, what did it publish, what did it
+cost, does the score order anything.
+
+The finding that leads this screen is the one already in record_so_far and
+never displayed: of 87 picks over 10 sessions, all 12 that peaked within ten
+minutes closed red, and all 5 that peaked after a hundred minutes closed
+green. On 17 picks that is a hint and not a rule, and the screen must say so
+where it says the rest.
+
+### 6. Name
+
+SPECIFIED, NOT DRAWN. Exists in no form today.
+
+Route: `#/name/<ticker>`.
+
+Answers: has this name done this before.
+
+Reads: every inlined session's candidate rows for that symbol, plus its picks
+history.
+
+list_shape.repeat_appearances already computes this over a five session
+lookback and read 0 of 12 on 2026-09-03. The screen widens the lookback to
+whatever is inlined and gives it somewhere to be seen: the ladder and the tape
+path for each appearance, side by side, and what followed each one.
+
+### 7. Health
+
+SPECIFIED, NOT DRAWN.
+
+Route: `#/health`.
+
+Answers: is the machine right.
+
+Reads: job_health, quota_preflight, collector_coverage,
+collector_window_observed and capture_correction, all of which are in the
+packet already, plus job-status.jsonl and data/monitor-reruns.json.
+
+Today this is four lines appended to the report's disclaimer and an email from
+the watchdog. It is the least glamorous screen in this file and it is the one
+that would have shown, on the morning after the outage, that the catch up had
+subscribed the collector to proxies only while the watchdog read healthy.
+
+## Routing and state
+
+  Hash routes only. No server, no history API, no build step. `#/sessions`,
+  `#/session/2026-09-03/morning`, `#/name/SNOW`, `#/record`, `#/health`.
+
+  A route is a link. The selected candidate is in the route, so what one
+  person is looking at can be sent to another machine and be the same thing.
+
+  Back and forward work, because the router listens to hashchange and does
+  not push state the browser did not ask for.
+
+  Filters live in the hash after the route. A filtered spine is a link too.
+
+  Theme is a `data-theme` stamp on the root, remembered in localStorage,
+  with the system preference as the default and both themes designed rather
+  than one inverted. page.py's TOKENS_CSS already has this exact three state
+  shape and the desk uses it unchanged.
+
+  No framework. The prototype is 567 lines of JavaScript and 304 of CSS with
+  no library, no CDN and no build step, and it does everything on the Morning
+  screen. Angular was considered on 2026-09-04 and declined: it cannot reach
+  the email at all, it would put a second source of formatted numbers into a
+  project that has already paid for renderer drift once, and it would add npm
+  to a scheduled chain that today runs seven python -m steps off one venv.
+
+## PDF
+
+Two paths, and they are for two different people.
+
+FOR A READER AT THE DESK: a button that calls the browser's print dialog. The
+print stylesheet forces the light tokens, opens every disclosure, and, before
+printing, renders EVERY candidate's deck rather than the selected one, so the
+printed file is the whole morning and not the one name that happened to be
+open. Ctrl+P gives the same result without the button.
+
+FOR THE MAIL: a `morning/print_pdf.py` step after render_report in the morning
+chain. Headless Chrome print to PDF against the local file, no vendor, no new
+dependency in requirements.txt, writing `runs/<date>/report.pdf`. deliver.py
+attaches it beside the HTML and the plain text part it already sends. The
+2026-09-02 run has a report.pdf on disk from a hand run at 330,603 bytes, so
+the output shape is already known.
+
+Both stay behind data/UNVERIFIED like everything else that leaves the machine.
+
+## What does not change
+
+  EODHD stays the only vendor in the published path. No screen fetches.
+  Every threshold stays in CRITERIA.md. No literal in charts.py.
+  The analyst pass, slots mode and the containment checker are untouched.
+  The emailed report stays a flat document with a plain text part beside it.
+  data/UNVERIFIED still gates delivery.
+  The night still writes beside the morning's numbers and never over them.
+  scan.py, discover.py and the collector are not opened by this work.
+
+## Build order
+
+  1. `core/charts.py`, the seven marks, returning SVG strings. Tests assert
+     every drawn value is present in the packet that was passed in, which is
+     the containment property the analyst pass already has, applied to
+     pictures.
+  2. `site/Desk.html` from a new `render_deck.py`: the shell, the router, the
+     Morning screen, the inlined data, wrapped by page.shell like everything
+     else. render_report.py keeps writing today's report unchanged.
+  3. `morning/print_pdf.py` and the deliver attachment.
+  4. Midday, Session, Sessions, Record, Name, Health, in that order, which is
+     the order of how often they would be opened.
+
+The conviction colour fix in page.py goes in before any of it, on its own,
+because it is a defect and not a feature.
+
+## The knobs this will add to CRITERIA.md
+
+Listed here rather than added there, because criteria.py is a strict reader
+and a key with no reader is clutter. They move to a `## Screens` section when
+Phase 1 lands.
+
+  inline_sessions        how many sessions the desk inlines whole
+  spine_scale_pct        the fixed symmetric scale on the gap spine
+  path_min_bars          below which the tape path degrades to a sentence
+
+WHEN THEY MOVE, MIND THE SHADOW TRAP. A note in CRITERIA.md that begins in
+column zero with `key = value` is parsed as a second parameter and the last
+one wins; that is what disabled slots mode for a day. Never open a sentence in
+that file with the name of a key.
+
+## Open questions
+
+  How large the inlined file actually gets at thirty sessions and at a
+  hundred and twenty. Estimated above from one compacted session; not
+  measured.
+
+  Whether site/PremarketDesk.html and site/Weekly.html are deleted when
+  Sessions and Record land, or kept until a month of desk use says the
+  screens cover what the pages did. Default is keep, and revisit.
+
+  Whether the emailed copy carries the marks at all, or stays as it is. The
+  argument for carrying them is that inline SVG is well supported in mail and
+  the pictures are the point. The argument against is that caniemail is not
+  the same thing as a real inbox, and the report is currently readable
+  everywhere. Decide by sending one to the real inbox before deciding for
+  everyone.
