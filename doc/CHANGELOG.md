@@ -15,6 +15,64 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty second: the record is cut at 2026-09-01
+
+The owner asked how to start this project again on another machine and how to
+start the record over from 2026-09-01. doc/MIGRATION.md answers the first and
+carries what the second cost. The cut itself ran on this machine the same
+afternoon.
+
+WHY, AND THE CORRECTION THE OWNER WAS GIVEN FIRST. The stated reason was that
+too much has changed since August for those sessions to mean anything, which
+is right and is right about more than August: the two phase collector's first
+morning was 2026-09-03, so 09-01 and 09-02 measure premarket volume over a
+different window than the two sessions after them, and the midday volume floor
+that compared 150 traded minutes against 390 was fixed on 09-02. The owner was
+shown that and chose 2026-09-01 anyway, which is a defensible round number and
+is recorded as a decision rather than as an oversight. CRITERIA's history floor
+note says so in the place someone reading the four as a series would look.
+
+GONE: 11 run directories, 26 collector tape files, 91 logs, 5 dated data
+files, 488 picks, 136 paper trades, 8 session rows, 11.04 MB. Of those picks
+420 were source reconstructed and already fenced out of production, so what
+the screens actually lost is 8 live sessions and 68 rows. Four sessions
+remain.
+
+KEPT ON PURPOSE, and this is the half worth arguing about. The probes and
+studies under data/ stay, because they are the measurements that justify the
+numbers now in CRITERIA and several are cited there by name: deleting them
+would leave the thresholds standing on evidence that no longer exists, which
+is a worse state than an August record nobody reads. The baseline and
+gap_stats tables stay, because neither is a session record. baseline is keyed
+by ticker and cutoff and holds a rolling median over VENDOR bars; gap_stats is
+a propensity over the discovery universe rebuilt every Sunday. Dropping either
+would blind the volume floors and the pool ranking for weeks and would say
+nothing about August. And the backup root outside the tree still holds all
+fifteen sessions, so the cut is reversible by hand.
+
+THE FLOOR IS ENFORCED IN EXACTLY ONE PLACE and the first attempt got that
+wrong. CRITERIA [Retention] history_from is read by desk/compact.known_sessions
+and nowhere else, because that is the only point a cut session could rejoin
+the screens: the backup root would restore run directories, and the desk reads
+run directories. The database needs no fence, since nothing rewrites a pick for
+a session that is gone. The first attempt fenced weekly_page's two aggregates
+as well and the suite refused it: that page's split is deliberately checked
+against paper_ledger.record_so_far on every rendering, and fencing one author
+and not the other made them disagree over an open at end row. The guard built
+to catch that drift caught it on the first run.
+
+ONE TEST CLAIM STOPPED PINNING A SESSION BY DATE. The midday overwrite claim
+named 2026-08-31, and when that session went the claim turned into a failure
+about the fixture rather than about the code. It now discovers the newest
+session carrying a midday packet. A claim that names a session by date is a
+claim with an expiry date on it.
+
+doc/MIGRATION.md is new and covers the other half of the question: what travels
+to a new machine, what cannot be fetched again once it is left behind, the five
+things that are Windows shaped, and the one that will actually bite, which is
+that a laptop asleep at 03:55 records an empty window that looks like a quiet
+tape.
+
 ## 2026-09-04, sixty first: four screens stop wasting the reader's click
 
 The owner read the desk the day it shipped and named four places where a

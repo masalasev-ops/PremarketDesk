@@ -388,12 +388,21 @@ def summary_row(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def known_sessions() -> list[str]:
-    """Every session directory that carries a packet, newest first."""
+    """Every session directory that carries a packet, newest first.
+
+    Fenced by CRITERIA [Retention] history_from. The sessions before that
+    floor were deleted on 2026-09-04, so today this filter removes nothing;
+    it exists because a restore from the backup root, or a rerun that writes
+    an old run directory, would otherwise put a session back on the screens
+    that the owner cut for not being comparable. The floor is a decision and
+    it should take a CRITERIA edit to move, not an accident.
+    """
     if not config.RUNS_DIR.is_dir():
         return []
+    floor = _CRIT.text("retention", "history_from")
     out = []
     for entry in config.RUNS_DIR.iterdir():
-        if not entry.is_dir():
+        if not entry.is_dir() or entry.name < floor:
             continue
         if files.resolve_maybe_gz(entry / "packet.json") is not None:
             out.append(entry.name)

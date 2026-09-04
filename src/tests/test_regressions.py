@@ -11994,14 +11994,24 @@ def claim_the_midday_pass_never_touches_the_morning(failures: list[str]) -> None
     from ops import job_status
 
     with conftest_activate() as _sandbox:
-        day = "2026-08-31"
+        # NEWEST session carrying a midday packet, discovered rather than
+        # named. This claim pinned 2026-08-31 until 2026-09-04, when the
+        # owner cut the record at the CRITERIA [Retention] history_from floor
+        # and the session went with it, turning a real claim into a failure
+        # that was about the fixture and not about the code. A claim that
+        # names a session by date is a claim with an expiry date on it.
+        candidates = sorted(
+            (d.name for d in config.RUNS_DIR.iterdir()
+             if d.is_dir() and (d / scan_midday.PACKET_FILE).is_file()),
+            reverse=True)
+        if not candidates:
+            failures.append(
+                f"no session in the sandbox carries a {scan_midday.PACKET_FILE}, "
+                "so this claim cannot drive the midday pass and is checking nothing")
+            return
+        day = candidates[0]
         run = config.run_dir(day)
         packet_path = run / scan_midday.PACKET_FILE
-        if not packet_path.is_file():
-            failures.append(
-                f"the sandbox carries no {scan_midday.PACKET_FILE} for {day}, so "
-                "this claim cannot drive the midday pass and is checking nothing")
-            return
 
         def morning_hashes() -> dict[str, str]:
             return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()

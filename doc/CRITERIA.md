@@ -3654,6 +3654,49 @@ cold_after_days               = 90         # a session older than this has its r
 drop_duplicate_snapshot       = true       # remove runs/<date>/premarket_snapshot.jsonl once the volume check agrees for that session. It is a strict subset of data/premarket/<date>.jsonl, measured over every session carrying both
 snapshot_drop_needs_verify    = true       # and never remove it for a session whose volume check has not run
 
+### The history floor
+
+On 2026-09-04 the owner cut the record at 2026-09-01 and the sessions before
+it were deleted, not hidden. The key below records where the cut is and stops
+a restored or recomputed session from quietly rejoining the record.
+
+The reason is comparability and not disk. The two phase collector's first
+morning was 2026-09-03; before it the socket took one pool over a different
+window, so premarket volume and every RVOL and float rotation built on it are
+measured on a different basis. The midday volume floor that compared 150
+traded minutes against 390 was fixed 2026-09-02. Eight live August sessions
+and 420 reconstructed rows went; four sessions remain.
+
+The floor is 2026-09-01 and the collector changed on 2026-09-03, so the two
+earliest sessions inside the floor are NOT measured the way the two after them
+are. Read the four as a series knowing that.
+
+WHAT THIS FLOOR DOES NOT BOUND, and the distinction is the whole point: it
+fences THIS PROJECT'S RECORD OF WHAT IT PUBLISHED, which is picks,
+paper_trades, sessions and runs/. It does not fence the vendor history the
+morning reads to compute today's numbers. The volume baseline still takes its
+median over the sessions [Baseline] lookback names, gap propensity still
+sweeps the universe over its own window, and both reach back through August
+and should. A floor on those would blind today's screens to tidy an old
+record.
+
+WHERE IT IS ENFORCED. In the database, by the delete itself. Nothing rewrites
+a pick or a paper trade for a session that is gone, so those rows cannot come
+back and a WHERE clause on top of the delete buys nothing. On disk it is
+different: the backup root outside the tree still holds all fifteen sessions,
+and a restore would put the run directories back exactly where the desk looks.
+So the one fence in code is desk/compact.known_sessions, at the point where a
+cut session could actually return.
+
+The first attempt fenced weekly_page's two aggregates as well and the suite
+refused it. That page's split is checked against paper_ledger.record_so_far on
+every rendering, and fencing one author and not the other made them disagree
+over an open at end row. The guard that exists to catch exactly that drift
+caught it, which is the argument for putting a floor where regrowth is
+possible rather than everywhere the word record appears.
+
+history_from                  = 2026-09-01 # the earliest session this project keeps a record of. Read by desk/compact.known_sessions, which is the ONE place a cut session could rejoin the screens. NOT a bound on vendor lookbacks: see the note above
+
 ### The duplicate snapshot note
 
 Measured 2026-09-04 over all eleven sessions that carried both files:

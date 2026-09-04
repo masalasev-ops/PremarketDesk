@@ -253,12 +253,34 @@ On this machine, if B is what is wanted, take a copy first:
 and keep `data/premarket/` somewhere off the tree, because that is the half
 that cannot be fetched again.
 
-### The recommendation
+### What was actually done, 2026-09-04
 
-Do A here and let B happen on the MacBook. A is reversible and answers the
-actual complaint, which is about what the screens count, not about disk. B is
-not reversible for the tape, and taking it on this machine destroys the one
-asset a fresh machine cannot rebuild while the fresh machine is going to
-start empty anyway.
+The owner chose B with the floor at 2026-09-01, having been shown that the
+collector changed on 2026-09-03. Both halves were done the same afternoon.
 
-If A is wanted, the floor to argue about is 2026-09-03 and not 2026-09-01.
+DELETED, on this machine: 11 run directories 2026-08-17 to 2026-08-31, 26
+collector tape files, 91 logs, 5 dated data files, and from the database 488
+picks, 136 paper trades and 8 session rows. 11.04 MB. The job trail lost 595
+of 859 lines, the quantifier flag log 6 of 20, the watchdog's rerun record
+its only entry. Four sessions remain: 2026-09-01 to 2026-09-04, 43 picks, 62
+paper trades.
+
+KEPT, deliberately, and each for its own reason. The probes and studies under
+data/, because they are the measurements that justify the numbers now in
+CRITERIA and several are cited there by name; deleting them would leave the
+thresholds standing on evidence that no longer exists. The baseline and
+gap_stats tables, because neither is a session record: baseline is a rolling
+median over VENDOR bars keyed by ticker and cutoff, gap_stats is a propensity
+over the discovery universe rebuilt every Sunday, and dropping either would
+blind the volume floors and the pool ranking for weeks while saying nothing
+about August. And the backup root outside the tree, which still holds all
+fifteen sessions, so this cut is reversible by hand until someone empties it.
+
+RECORDED: CRITERIA [Retention] history_from. Enforced in exactly one place,
+desk/compact.known_sessions, which is the only point a restored run directory
+could put a cut session back on the screens. The database needs no fence
+because the delete is the fence there; an attempt to add one to weekly_page
+was refused by the suite, and CRITERIA's history floor note explains why.
+
+If the four are ever read as a series, remember that 09-01 and 09-02 ran the
+old collector and 09-03 and 09-04 the two phase one.
