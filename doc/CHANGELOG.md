@@ -15,6 +15,45 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty sixth: the reading chapter is rewritten rather than annotated
+
+The entry above added a desk chapter to README and a column to the eleven
+section table saying where each answer is drawn. The owner read it back and
+said the chapter was still not being read, only edited, and to write it from
+scratch if that was what it took. Read straight through, the complaint is
+exact: it told one morning three times.
+
+WHAT WAS WRONG WAS THE ORGANISATION, NOT THE FACTS. The chapter was arranged by
+artifact, and two of the artifacts answer the same questions. "The four things
+it produces" described the desk and the morning report; "The desk, screen by
+screen" described the desk again; "The morning report, section by section"
+described the same eleven answers a third time with a column pointing back at
+the screens; and "The reading order at 08:50" described the order a fourth
+time. A reader wanting to know what a premarket RVOL is worth had to find it
+under a heading about a document.
+
+IT IS ORGANISED BY WHAT THE READER IS DOING NOW. Four surfaces and what each is
+FOR, said once, with the point made plainly that the desk and the morning
+report are one morning in two shapes rather than two answers to check against
+each other. Then reading a morning at 08:50: one order, starting on the desk
+and ending in the report for the names still being weighed, with the report
+only order kept for a reader who has nothing but the email. Then the screens,
+once. Then a new section, "What the numbers mean, and what they are worth",
+which is where the entry and the stop, the RVOL estimate, unscored, the skips
+and traps block, the one directional fill warning, the trap field and the
+ledger counts now live: every one of those is a packet field rather than a
+property of a document, so each is written once and applies to both surfaces.
+The eleven section table survives as what it actually is, a way to find your
+way around the document, and says so. The midday report and the Midday screen
+are one section for the same reason.
+
+NOTHING WAS DROPPED. 443 lines became 436 and every figure, measured number and
+specimen block is still there: the fixed table header the containment guard
+reads, the fill warning's 6 of 10 caught and 4 of 10 missed over 54 rows, the
+66 pick ledger, the four midday verdicts and why the third cannot be resolved,
+the ordering argument behind what else moved, the three recall states, the
+2,900 credit cost, and the ban on the words pattern, signal, edge and tendency.
+
 ## 2026-09-04, sixty fifth: the three findings the review had left standing, and two report sections with no screen
 
 The entry above closed the faults and left three findings reported rather than
