@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and eleven claims, a count read off
+and the two pages. It now carries two hundred and twelve claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -14641,6 +14641,109 @@ def claim_no_published_artifact_is_written_by_a_truncating_call(
           "writes a file with a truncating write_text")
 
 
+def claim_every_screen_can_be_reached(failures: list[str]) -> None:
+    """Every screen is two clicks from the one the desk opens on, nav first.
+
+    THE REPORT SCREEN WAS NOT, from the afternoon it shipped until the owner
+    opened the desk and asked where the morning report was. It had one inbound
+    link in the whole application, a card on the Session screen, and Session is
+    not in the navigation either, so the route was Sessions, then a day, then
+    the card: three clicks, none of them signposted, from a screen the reader
+    had no reason to visit. README had gone as far as saying it was one click
+    away.
+
+    "SOMETHING LINKS TO IT" IS THE WRONG PROPERTY and the first version of this
+    claim asserted it, which is why that version passed on the tree it was
+    written to fail on. A link on a screen nobody can find is not a route. What
+    is checked here is distance from the default route: the navigation is
+    always available, so a screen in the navigation is one click, and a screen
+    linked from a screen in the navigation is two. Session is two, from the
+    Sessions calendar, and that is the design. Anything further is a screen
+    that has to be reached by typing a route.
+
+    The edges are declared, because which screen ought to link to which is a
+    judgement, and each declared edge names the markup that draws it, so a
+    renamed route fails here rather than going quiet.
+    """
+    import collections
+    import re
+
+    from desk import assets
+    from desk import render as desk_render
+
+    nav = desk_render._nav()
+    app = assets.DECK_JS
+
+    # Every screen render() dispatches on, read off the dispatch rather than
+    # listed here, so a new screen is covered the day it is written.
+    screens = set(re.findall(r'route\.screen === "(\w+)"', app))
+    screens.update(re.findall(r'screen: "(\w+)"', app))
+    screens.discard("")
+    if len(screens) < 8:
+        failures.append(f"only {len(screens)} screens were found in the router, "
+                        f"which is fewer than the eight that exist: {sorted(screens)}")
+
+    default = "morning"  # parse() with an empty hash
+    in_nav = ("morning", "midday", "report", "sessions", "record", "health")
+    # from -> to -> the markup that draws the link
+    draws = {
+        # The anchor text rather than the href for the health link, whose
+        # markup carries both kinds of quote. It is as unique, and it goes
+        # if the link goes.
+        "morning": {"name": '"#/name/" + tr.dataset.goto',
+                    "health": "every check, in full"},
+        "midday": {"name": '"#/name/" + tr.dataset.goto'},
+        "session": {"morning": '/morning">', "midday": '/midday">',
+                    "report": '/report">'},
+        "sessions": {"session": '"#/session/" + date'},
+        "name": {"morning": "/morning'>"},
+        "record": {},
+        "health": {},
+        "report": {},
+    }
+
+    for screen in in_nav:
+        if f'data-nav="{screen}"' not in nav:
+            failures.append(f"the navigation has no {screen} entry, so that screen "
+                            "is not one click from anywhere")
+    for source, targets in sorted(draws.items()):
+        for target, markup in sorted(targets.items()):
+            if markup not in app:
+                failures.append(
+                    f"the {source} screen is declared to link to {target} with "
+                    f"{markup!r}, and that markup is not in the application, so "
+                    "either the link went or this claim is describing a route "
+                    "that no longer exists")
+
+    # One click is the navigation. Two is a link drawn by a screen the
+    # navigation reaches, or by the default screen itself.
+    hops = {name: 0 for name in (default,)}
+    reachable = collections.deque([default])
+    for screen in in_nav:
+        if f'data-nav="{screen}"' in nav and screen not in hops:
+            hops[screen] = 1
+            reachable.append(screen)
+    while reachable:
+        here = reachable.popleft()
+        if hops[here] >= 2:
+            continue
+        for target, markup in draws.get(here, {}).items():
+            if markup in app and target not in hops:
+                hops[target] = hops[here] + 1
+                reachable.append(target)
+
+    for screen in sorted(screens):
+        if screen not in hops:
+            failures.append(
+                f"the {screen} screen is more than two clicks from the screen the "
+                "desk opens on: it is in the router, it is not in the navigation, "
+                "and no screen the navigation reaches draws a link to it, so a "
+                "reader can only get there by typing the route")
+    print(f"  reachable    each of the {len(screens)} screens is at most two "
+          "clicks from the one the desk opens on, and every declared link is "
+          "still in the application")
+
+
 def _slots_packet() -> dict[str, Any]:
     """A packet with two candidates, one on the day watchlist, three headlines."""
     return {
@@ -17005,6 +17108,7 @@ def main() -> int:
     run_claim(failures, claim_a_frozen_tape_survives_the_prune, failures)
     run_claim(failures, claim_every_report_section_is_drawn_somewhere, failures)
     run_claim(failures, claim_the_name_screen_opens_only_what_it_needs, failures)
+    run_claim(failures, claim_every_screen_can_be_reached, failures)
     run_claim(
         failures, claim_no_published_artifact_is_written_by_a_truncating_call,
         failures)

@@ -119,10 +119,18 @@ def payloads(dates: list[str]) -> tuple[dict[str, str], int, int]:
 
 def _nav() -> str:
     items = [("morning", "#/", "Morning"), ("midday", "#/", "Midday"),
+             ("report", "#/", "Report"),
              ("sessions", "#/sessions", "Sessions"),
              ("record", "#/record", "Record"), ("health", "#/health", "Health")]
-    # Morning and Midday resolve against whichever session is selected, so
-    # their href is rewritten by the picker rather than fixed here.
+    # Morning, Midday, Report and Health resolve against whichever session is
+    # selected, so their href is rewritten by setNav rather than fixed here.
+    #
+    # REPORT JOINED ON 2026-09-04, when the owner opened the desk and asked
+    # where the morning report was. It had exactly one inbound link in the
+    # whole application, a card on the Session screen, and Session is not in
+    # this list either: the only route to a written report was Sessions, then
+    # a day, then the card. The screen the desk OPENS on had no route to it
+    # at all, which is the same as not having built it.
     return "<nav>" + "".join(
         f'<a data-nav="{key}" href="{href}">{html.escape(label)}</a>'
         for key, href, label in items) + "</nav>"

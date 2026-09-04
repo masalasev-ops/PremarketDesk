@@ -515,6 +515,23 @@ empty, or a table. The first two are different facts and the screen must not
 let them look alike, which is the same rule as the midday pass that never
 ran.]
 
+### The navigation, and a screen with no route into it
+
+[CORRECTED 2026-09-04. The navigation shipped as Morning, Midday, Sessions,
+Record, Health, and section 8's Report screen was in none of it. Its only
+inbound link was a card on the Session screen, which is not in the navigation
+either, so the route was Sessions, then a day, then the card. The owner opened
+the desk and asked where the morning report was, which is the right question to
+ask of a screen that cannot be found. Report is in the navigation now and
+resolves against the selected session, like Morning, Midday and Health.
+
+The navigation is the reachability guarantee and it is worth stating as one: a
+screen not in it must be linked from a screen that is, or it cannot be opened
+without typing a route. Session is the one screen that relies on that, from the
+Sessions calendar, and it is a hub rather than a destination.
+claim_every_screen_can_be_reached measures the distance rather than looking for
+a link, because a link on a screen nobody can find is not a route.]
+
 ## Routing and state
 
   Hash routes only. No server, no history API, no build step. `#/sessions`,

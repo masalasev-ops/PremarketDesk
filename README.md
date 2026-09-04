@@ -214,9 +214,9 @@ on today's Morning screen.
    loads it below.
 5. **The report, for the names you are still weighing.** The per name write ups
    are the part a screen cannot draw: what the setup is, and the line saying
-   what would prove it wrong. That is the section to read slowly. It is one
-   click away at `#/session/<date>/report`, or open the day's own
-   `report.html`.
+   what would prove it wrong. That is the section to read slowly. Report in
+   the navigation opens it for whichever session you are on, or open the
+   day's own `report.html`.
 
 Everything else is reference you consult when a name interests you, and the
 Record screen once, as context: it does not change between 08:50 and 09:30 and

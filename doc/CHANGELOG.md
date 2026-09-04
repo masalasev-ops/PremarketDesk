@@ -15,6 +15,36 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty seventh: the Report screen had no route from the screen the desk opens on
+
+The owner opened site/PremarketDesk.html and asked where the morning report
+was. It was not anywhere a reader could get to. The Report screen had ONE
+inbound link in the whole application, a card on the Session screen, and
+Session is not in the navigation either, so the route was Sessions, then a day,
+then the card: three clicks, none of them signposted, from a screen nobody had
+a reason to visit. The navigation read Morning, Midday, Sessions, Record,
+Health. A screen with no route is the same as a screen that was not built, and
+README had gone as far as saying it was one click away.
+
+Report joins the navigation, resolving against whichever session is selected
+the way Morning, Midday and Health already do, so it is one click from
+anywhere and the picker keeps the session when it moves.
+
+WHAT THE FIRST CLAIM FOR IT GOT WRONG IS THE USEFUL PART. It asserted that
+something links to every screen, searched the navigation and the application
+together, and passed on exactly the tree it was written to fail on, twice
+over. Twice, because setNav holds a table of hrefs keyed by screen and
+REWRITES an anchor that already exists, so its entry for a screen with no
+anchor is dead code that answered for the missing one; and because "a link
+exists" was true of the Report screen for the whole time it was unreachable.
+The property that failed is DISTANCE, not existence. The claim now walks
+outward from the screen the desk opens on, counts the navigation as the first
+click and a link drawn by a screen the navigation reaches as the second, and
+fails on anything further. Session is two clicks, from the Sessions calendar,
+and that is the design. Every declared edge names the markup that draws it, so
+a renamed route fails here rather than going quiet, and the claim was checked
+against the tree as it shipped this morning: it names the report screen.
+
 ## 2026-09-04, sixty sixth: the reading chapter is rewritten rather than annotated
 
 The entry above added a desk chapter to README and a column to the eleven

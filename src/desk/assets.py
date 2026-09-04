@@ -2062,19 +2062,22 @@ DECK_JS = r"""
   }
 
   function setNav(route) {
-    var map = { morning: "morning", midday: "midday", session: "sessions",
-      sessions: "sessions", record: "record", health: "health", name: "",
-      report: "" };
+    var map = { morning: "morning", midday: "midday", report: "report",
+      session: "sessions", sessions: "sessions", record: "record",
+      health: "health", name: "" };
     Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
       var key = a.dataset.nav;
       if (key === map[route.screen]) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
-    // Morning, Midday and Health all resolve against the chosen session, so
-    // their links carry it rather than dropping the reader on the newest.
+    // Morning, Midday, Report and Health all resolve against the chosen
+    // session, so their links carry it rather than dropping the reader on
+    // the newest.
     var at = route.date || LAST;
     var link = { morning: "#/session/" + at + "/morning",
-      midday: "#/session/" + at + "/midday", health: "#/health/" + at };
+      midday: "#/session/" + at + "/midday",
+      report: "#/session/" + at + "/report",
+      health: "#/health/" + at };
     Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
       if (link[a.dataset.nav]) a.href = link[a.dataset.nav];
     });
