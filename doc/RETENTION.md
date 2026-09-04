@@ -1,8 +1,10 @@
 # RETENTION
 
 Written 2026-09-04, after the owner asked why runs/ grows every day and
-whether it could go into the database. The windows below are the owner's:
-hot 30 sessions, and a cleanup of data older than three months.
+whether it could go into the database. Every window and every decision below
+is the owner's, taken the same day: hot 30 sessions, a cleanup of data older
+than three months, the raw tape GZIPPED at that age rather than deleted, and
+data/backtest/ deleted outright on the ground that it is refetchable.
 
 Nothing in this file is built. It deletes nothing today: the oldest thing on
 disk is dated 2026-08-13 and is 22 days old, so a three month rule first bites
@@ -68,10 +70,15 @@ atomic write and is the right place for the paired read.
 
 ### Cold, older than three months
 
-The raw tape goes and the packet stays. Per session that leaves the compressed
-packet at about 32 KB, the compressed reports at about 33 KB, and the summary
-row in the database, which is about 70 KB a session forever, or roughly 18 MB
-a year against the 740 MB a year the tree grows now.
+The raw tape is gzipped, not deleted. The owner was offered both on 2026-09-04
+and chose compression, so every capability the tape carries survives at 13.1
+percent of the bytes.
+
+Per session that leaves the compressed tape at about 162 KB, the compressed
+packet at about 32 KB, the compressed reports at about 33 KB, the compressed
+midday packet and recall at about 14 KB, and the summary row in the database:
+roughly 241 KB a session forever, or about 61 MB a year against the 740 MB a
+year the tree grows now. A 92 percent reduction with nothing lost.
 
 THE PACKET IS NEVER DELETED. Dropping it for cold sessions was proposed in
 conversation on 2026-09-04, on the argument that the summary row and the
@@ -82,7 +89,9 @@ worth that capability.
 
 ### Never, at any age
 
-  data/premarket/*.jsonl   see the decision below, which is the owner's
+  data/premarket/*.jsonl   gzipped at three months, never deleted. 310 MB a
+                           year becomes 41 MB and the capture rate stays re
+                           measurable over every session ever recorded
   report.md, report.html   what a human actually saw. build_archive rebuilds
                            site/ FROM these, so pruning them shortens the
                            archive silently, which is prune_data's own
@@ -130,35 +139,84 @@ already, which is what the prototype read them from. What goes is the ability
 to re derive those bars from the raw tape if a bug is ever found in how scan
 clipped them, and to re measure the capture rate over that session.
 
-## The decision the owner has to make, and its cost
+## The decisions, taken 2026-09-04
 
-The owner said on 2026-09-04, of data older than three months, "I don't think
-we need it at all for this project." Taken at face value that includes
-data/premarket/*.jsonl, and this file assumes it does.
+THE RAW TAPE IS GZIPPED, NOT DELETED. The owner was shown the cost of deleting
+data/premarket/*.jsonl, which prune_data calls the only record of the
+2026-08-14 over count, and chose compression: 310 MB a year becomes 41 MB and
+the capture rate stays re measurable over every session ever recorded. The
+shipped constant that measurement backs is CRITERIA [Collector]
+premarket_capture_rate at 0.1172, which every RVOL and float rotation on every
+report divides by.
 
-STATED ONCE, PLAINLY, BECAUSE IT IS IRREVERSIBLE. prune_data's whitelist calls
-that file "NOT reproducible at any price: it is a recording of a tape that no
-longer exists," and names it as the only record of the 2026-08-14 over count,
-which is still unexplained. Deleting it at three months means:
+DATA/BACKTEST/ IS DELETED. The owner's instruction was "if it's not necessary
+and can be refetched, then delete backtest. I don't want unnecessary baggage."
+Both halves of that condition were tested before anything was removed and both
+hold. What follows is the provenance, written down BEFORE the bytes went,
+because deleting 27 MB must not also delete the knowledge of what it was.
 
-  the capture rate can only ever be re measured over the last three months,
-  and CRITERIA [Collector] premarket_capture_rate is a shipped constant of
-  0.1172 that every RVOL and float rotation on every report divides by
-  the truth pass cannot be re run over an older session
-  the 2026-08-14 over count becomes permanently unexplainable
+### What data/backtest/ was
 
-None of that blocks a report or a screen. All of it is research capability.
-If the owner wants the disk back but not that loss, the middle option is to
-gzip those files at three months instead of deleting them, at 13.1 percent,
-which turns 310 MB a year into 41 MB a year and keeps every capability.
+  eod/        62 daily bulk end of day files, 2026-05-15 to 2026-08-13, 13 MB.
+              The population the float rotation scoring edges were fitted on,
+              read by float_rotation_study, float_cache, addressable_sweep and
+              vwap_gappers.
+  sessions/   60 session directories, 2026-05-19 to 2026-08-13, 14 MB, each an
+              inputs.json of the reconstructed earnings calendar, overnight
+              news sweep, movers and prior closes, and an outcome.json of the
+              open against the prior close for every universe name. The replay
+              behind backtest_pool's tier ordering and the subscription cap
+              recall table.
+  premarket/  10 files, 164 KB, replay_session output.
 
-data/backtest/ IS A SEPARATE DECISION AND IS NOT COVERED BY THE THREE MONTH
-RULE as written here. It is 27 MB, it does not grow daily, and it is dated by
-study rather than by session: eod/ at 13 MB is the 61 session population the
-shipped float rotation edges were fitted on, and a re fit reads it;
-sessions/ at 14 MB is the replay behind the subscription cap recall table,
-which is an open purchasing decision. Deleting either ends the study it
-belongs to. Ask before including it.
+It was pre history: none of it is a session this project ran. It was fetched
+on 2026-08-14 so that day one had something to calibrate against, and it had
+not changed since 2026-08-13, which was 22 days before it was deleted. It
+never grew. It was never part of the daily growth this file exists to stop.
+
+### Why deleting it was safe
+
+NOTHING SCHEDULED READS IT. No .bat in tasks/ runs a research module. The
+morning chain, the midday pass and the nightly never open it. Deleting it
+cannot affect a report, a screen or a number a reader sees.
+
+THE FINDINGS SURVIVE, ONLY THE INPUT WENT. The fitted edges are in CRITERIA
+[Score premarket float rotation] with their derivation and the record of
+getting them wrong once and correcting them on 2026-08-16. The study outputs
+are still on disk: data/float_rotation_study.json, data/addressable_sweep.json,
+data/float_cache.json and data/cutoff-0830.json. What was lost is the ability
+to RE fit, not the fit.
+
+IT IS REFETCHABLE BY ONE COMMAND, whose defaults are already the exact window
+that was deleted:
+
+    PYTHONPATH=src .venv/Scripts/python.exe -m research.backtest_pool fetch         --sessions 60 --end 2026-08-13
+
+That costs about 6,200 counted calls, which is 62 bulk end of day days at the
+metered 100 each, because consecutive sessions share their end of day reads
+and sixty sessions need sixty two days rather than a hundred and eighty. The
+shared key allows 100,000 a day and the pipeline spends about 900 on bulk
+plus about 2,900 on the midday sweep, so a rebuild is about six percent of one
+day's quota. backtest_pool's docstring calls the fetch "expensive and can only
+be afforded once", and that sentence is about not refetching inside an
+evaluation loop, which is why the module is split into fetch and evaluate at
+all. It is not a claim that the fetch can never be run again.
+
+### The one thing deleting it did cost, and it is not free
+
+tests/test_backtest.py claim 4 reads the real cache and pins evaluate_session
+over 2026-08-13 against PUBLISHED_0813. With the cache gone it does not fail,
+it SKIPS, printing "claim 4 SKIPPED, 2026-08-13 is not in the cache", and the
+suite still reports ok.
+
+THAT IS THE PROJECT'S OWN WORST FAILURE MODE. The 2026-08-22 review's
+conclusion was that two thirds of what it found was a missing answer read as a
+measured one, and a green suite carrying a silently skipped claim is exactly
+that shape. The claim is not deleted and not weakened; it is simply not
+testing anything until someone refetches. Anyone reading a green suite as
+evidence that the pool ordering still evaluates as published is reading it
+wrong. Refetch before trusting that claim, or before changing anything
+backtest_pool touches.
 
 ## The discipline this follows
 
@@ -197,11 +255,15 @@ writing a second sweeper beside it.
   4. The sessions table in the database, holding the compacted summary row.
      This is what Sessions, Record and Name query instead of opening a hundred
      packets, and it is the piece SCREENS.md needs anyway.
-  5. Cold at three months, behind --dry-run, after the owner confirms the cost
-     above. Not before 2026-11-11, when the first session becomes eligible.
+  5. Cold at three months, behind --dry-run. Gzip, not delete, so it destroys
+     nothing either. Not before 2026-11-11, when the first session becomes
+     eligible.
 
-Steps 1, 3 and 4 destroy nothing. Step 2 is a code change with no data loss.
-Step 5 is the only one that deletes, and it deletes nothing until November.
+NO STEP IN THIS LIST DELETES ANYTHING. Step 1 removes a byte for byte
+duplicate whose original is kept forever, steps 3 and 5 compress, step 4 adds
+a table, and step 2 is a code change with no data loss. data/backtest/ was
+deleted by hand on 2026-09-04 and is not part of the scheduled policy: nothing
+in prune_data will ever touch it, because there is nothing left to touch.
 
 ## The knobs this will add to CRITERIA.md
 
@@ -210,8 +272,9 @@ and a key with no reader is clutter. They move to a `## Retention` section
 with the code.
 
   hot_sessions            = 30      sessions kept uncompressed under runs/
-  cold_after_days         = 90      days after which the raw tape is a
-                                    candidate, subject to the decision above
+  cold_after_days         = 90      days after which the raw tape and the
+                                    warm files are gzipped. Nothing at this
+                                    age is deleted
   snapshot_drop_requires_verify     the duplicate tape goes only once
                                     verify_intraday has agreed for that session
 
@@ -222,12 +285,15 @@ the name of a key.
 
 ## Open questions
 
-  Whether data/premarket/*.jsonl is deleted or gzipped at three months. The
-  owner's words say deleted; the cost is stated above; this file assumes
-  deleted and the assumption is cheap to reverse before November.
+  logs/ at 2.4 MB has no policy. It is small, it is not evidence, and it is
+  the obvious next whitelist entry once these five steps are done.
 
-  Whether data/backtest/ is in scope. Not included here. 27 MB, static, and
-  each half ends a study if it goes.
+  Whether the backtest cache is ever refetched, and when. It is not needed
+  until someone re fits the float rotation edges or reopens the subscription
+  cap question, and test_backtest claim 4 is silently skipping until then.
+  The command and its cost are recorded above.
 
-  logs/ at 2.4 MB has no policy either. It is small, it is not evidence, and
-  it is the obvious next whitelist entry once these five steps are done.
+  Whether site/PremarketDesk.html and site/Weekly.html keep being written once
+  the desk carries every session. They are 440 KB together and rebuilt from
+  runs/, so they cost nothing to keep and nothing to drop. SCREENS.md carries
+  the same question from the other side.

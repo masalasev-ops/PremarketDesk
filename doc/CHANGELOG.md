@@ -15,6 +15,50 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, fifty ninth: the backtest cache is deleted, and a suite claim goes quiet with it
+
+The owner asked what data/backtest/ was for, was told, and said "if it's not
+necessary and can be refetched, then delete backtest. I don't want unnecessary
+baggage." Both halves of that condition were tested before anything went and
+both hold, so the directory is gone: 27 MB, taking data/ from 47 MB to 21 MB
+and 252 paths out of the tree photograph.
+
+WHAT IT WAS, recorded in doc/RETENTION.md before the bytes went, because
+deleting 27 MB must not also delete the knowledge of what it was. 62 bulk end
+of day files and 60 reconstructed sessions spanning 2026-05-15 to 2026-08-13,
+none of them a session this project ran: pre history fetched on 2026-08-14 so
+day one had something to calibrate against, unchanged for the 22 days since,
+and never part of the daily growth the retention policy exists to stop.
+
+WHY IT WAS SAFE. Nothing scheduled reads it; no .bat in tasks/ runs a research
+module, so no report, screen or published number can be affected. The findings
+survive and only the input went: the fitted edges are in CRITERIA [Score
+premarket float rotation] with their derivation, and float_rotation_study.json,
+addressable_sweep.json, float_cache.json and cutoff-0830.json are all still on
+disk. What was lost is the ability to RE fit, not the fit. And that is
+recoverable by one command whose defaults are already the deleted window,
+`research.backtest_pool fetch --sessions 60 --end 2026-08-13`, at about 6,200
+counted calls, which is six percent of one day against the shared 100,000.
+backtest_pool's "can only be afforded once" is about not refetching inside an
+evaluation loop, which is why the module splits fetch from evaluate, and is
+not a claim that the fetch can never run again.
+
+WHAT IT COST, AND IT IS NOT NOTHING. test_backtest claim 4 reads the real
+cache and pins evaluate_session over 2026-08-13 against PUBLISHED_0813. With
+the cache gone it does not fail, it prints "claim 4 SKIPPED, 2026-08-13 is not
+in the cache" and the module still reports ok. A green suite carrying a
+silently skipped claim is the exact shape the 2026-08-22 review named as two
+thirds of everything it found: a missing answer read as a measured one. The
+claim is neither deleted nor weakened, it is simply not testing anything until
+someone refetches, and a green suite is no longer evidence that the pool
+ordering evaluates as published.
+
+The same day's retention decisions are recorded in RETENTION.md: the raw
+collector tape is GZIPPED at three months rather than deleted, on the owner's
+choice, so 310 MB a year becomes 41 MB and the capture rate behind the shipped
+0.1172 stays re measurable over every session ever recorded. Nothing in the
+scheduled policy deletes anything at all.
+
 ## 2026-09-04, fifty eighth: retention gets a policy, and the run folder turns out to hold the tape twice
 
 The owner asked why runs/ grows every day, whether it could go into the
