@@ -15,6 +15,89 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty fifth: the three findings the review had left standing, and two report sections with no screen
+
+The entry above closed the faults and left three findings reported rather than
+fixed, on the grounds that they were smells rather than defects. That was the
+wrong call and the owner said so. All three are closed here, and closing the
+first of them turned up two sections of the morning report that no screen has
+ever drawn.
+
+EVERY WRITER GOES THROUGH core/files NOW. That module exists because a plain
+write_text truncates the destination before it writes, which is how an
+interrupted run left a packet that parsed as nothing and how a session was
+retired from the verification sweep for ever, both recorded in BUILD_PLAN 5a.
+Six call sites were consolidated into it on 2026-09-02 and twenty six were
+left where they were, report.md, report.html, both midday files,
+analyst_usage.json, pool_recall.json, site/Weekly.html, the quantifier flag
+log's own hand rolled copy of the pattern, the gate marker on both its writers
+and, worst of the set, universe-closes, which discover writes at 07:15 and
+scan reads at 08:45 the same morning with no second copy anywhere. The
+instruments went with them, because leaving eighteen writers on the truncating
+path so a reader has to know which ones count is the shape the module exists
+to remove. files.ATTEMPTS and files.RETRY_S name the retry the antivirus on
+this machine needs, and write_text_atomically gained the newline keyword the
+one caller that cares was passing.
+claim_no_published_artifact_is_written_by_a_truncating_call walks the AST of
+every module under src/ and fails on a Path.write_text anywhere outside
+core/files and the tests.
+
+THE SCREEN ROOT IS REPLACED, NOT REFILLED. Six screens attach a delegated
+click handler to #screen, and innerHTML replaces an element's children while
+its own listeners stay, so every visit left another handler behind, each
+closed over the session it was made for. The Report screen's Morning and
+Midday toggle ran once for every report screen the reader had ever opened.
+render now builds a fresh node and swaps it in, and the handlers go with the
+old one.
+
+THE NAME SCREEN OPENS WHAT IT NEEDS. It used to Promise.all over every inlined
+session, inflate each, keep it, then draw a full deck per appearance. Four
+sessions hid that; inline_sessions is 400 and desk/render's docstring
+advertises it as more than a year. The sessions table gained a symbols column,
+comma joined and bare, so the question is answered off the index and only the
+matching payloads are opened: measured on this tree, LULU opens 1 session of 4
+and MSTR 2. CRITERIA [Screens] name_decks bounds the drawing at twelve
+appearances with the rest one click away. A row written before the column
+existed carries no symbols and is opened, so an old index degrades to the old
+behaviour rather than to a wrong answer.
+
+AND THE CHAINS STOP RECOMPACTING EVERY SESSION. The morning chain, the midday
+chain and the nightly all end on a desk build, and each one recompacted every
+session on file: its packet read, its two reports re-rendered from markdown,
+its payload gzipped and its summary row rewritten, three times a day. The
+chains now compact TODAY, plus any session with no summary row, which is how a
+machine that was off for a day catches up. The nightly still rebuilds
+everything, which is what carries a change to desk/compact to older sessions.
+
+TWO REPORT SECTIONS HAD NO SCREEN, found while writing the claim for the
+above. Section 5, notable movers, was compacted into every payload from the
+desk's first build and drawn nowhere: the bytes were in the file and the
+reader could not see them. It is the one section about names that are NOT
+candidates, so a Morning screen without it answers "what should I look at"
+with the pool only. Section 9, coming up, was not compacted at all. Both are
+on the Morning screen now, reads and renders like everything else there: the
+movers as one table over all three legs with the leg in words, ranked within a
+leg exactly as the packet ranked it, each of the four lists printing its own
+state and denominator underneath, and a row routing to the Name screen because
+a mover is often a candidate on another session. Coming up says which of its
+three states it is in, not checked, checked and empty, or a table, because the
+first two are different facts.
+claim_every_report_section_is_drawn_somewhere holds the mapping from all
+eleven sections to the function that draws each, and fails on one that is
+defined and never called.
+
+THE README'S READING GUIDE WAS WRITTEN BEFORE THE SCREENS AND STILL READ THAT
+WAY, which the owner pointed out. It described the report as the way to read a
+morning and prescribed a section order for it. The desk now has its own
+chapter, screen by screen with the route beside each; the eleven section table
+gained a column naming where the same answer is drawn; and the reading order
+at 08:50 is the desk's, verdict strip first, then the stat strip and the
+spine, then the deck, then the report for the names still being weighed, with
+the report only order kept for a reader who has nothing but the email. The
+worked example's 08:50 paragraph said the report will not join a trap warning
+to the score eight sections above it, which was true and is the reason the
+screens exist; on a deck the two sit together and it now says so.
+
 ## 2026-09-04, sixty fourth: a whole tree review, and two things the rename broke
 
 A review of the whole tree and every document in it, asked for the same

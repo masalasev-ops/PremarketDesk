@@ -42,6 +42,7 @@ import statistics
 from typing import Any
 
 from core import config
+from core import files
 from core import criteria
 from core import eodhd
 from core import ettime
@@ -212,7 +213,8 @@ def main(argv: list[str] | None = None) -> int:
            f"baseline_floor_study-{today.isoformat()}.json"
            if args.out is None else config.PROJECT_ROOT / args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    files.write_text_atomically(
+        out, json.dumps(payload, indent=1), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
 
     print(f"\n{'baseline median':>22} {'names':>6} "
           f"{'ordinary sessions above ' + str(TOP_BAND) + 'x':>32}")

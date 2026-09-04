@@ -59,6 +59,7 @@ _KNOB_KEYS = (
     ("screens", "path_min_bars", "integer", "path_min_bars"),
     ("screens", "ladder_label_gap_px", "integer", "ladder_label_gap_px"),
     ("screens", "sessions_page_size", "integer", "sessions_page_size"),
+    ("screens", "name_decks", "integer", "name_decks"),
     # The two times a midday screen counts down to before its pass has run.
     # Read from the sections that own them rather than restated under
     # [Screens], so the page counts down to the minute the scheduler actually
@@ -204,6 +205,38 @@ def render(limit: int | None = None, compact_first: bool = True) -> dict[str, An
             "raw": raw_total, "encoded": encoded_total}
 
 
+def compact_for_this_run() -> None:
+    """Today, plus any session the summary table has never seen.
+
+    NOT EVERY SESSION, which is what this did until 2026-09-04. The morning
+    chain, the midday chain and the nightly all end on a desk build, so
+    every session on file was recompacted three times a day: its packet
+    read, its two reports re-rendered from markdown, its payload gzipped
+    and its summary row rewritten. Four sessions hid the cost. At the
+    [Screens] inline_sessions ceiling of 400 it is four hundred packets and
+    eight hundred markdown renders, twice before the open.
+
+    Today is compacted because today is what changed: the scan wrote the
+    packet, the analyst wrote the report, the midday pass wrote its rows. A
+    session with no summary row is compacted too, because a payload the
+    index cannot see is a session missing from every screen, and that is
+    how a machine that was off for a day catches up. Everything else is
+    already frozen and correct, and the nightly rebuilds all of it anyway,
+    which is what carries a change to this file to older sessions.
+    """
+    known = compact.known_sessions()
+    seen = {row["date"] for row in index_rows()}
+    todo = [date for date in known if date not in seen]
+    today = ettime.today_str()
+    if today in known and today not in todo:
+        todo.insert(0, today)
+    if not todo:
+        print("desk: every session already has a summary row and today has "
+              "no packet, so nothing was recompacted")
+        return
+    compact.build(todo)
+
+
 OK_CODES = (0,)
 
 
@@ -214,11 +247,12 @@ def main(argv: list[str] | None = None) -> int:
                              "CRITERIA [Screens] inline_sessions.")
     parser.add_argument("--no-compact", action="store_true",
                         help="Do not recompact first. Use the frozen payloads "
-                             "as they are.")
+                             "as they are. The nightly passes this because it "
+                             "has already run desk.compact over every session.")
     args = parser.parse_args(argv)
 
     if not args.no_compact:
-        compact.main([])
+        compact_for_this_run()
     result = render(limit=args.limit, compact_first=False)
     print(f"desk: {result['sessions']} session(s) inlined, "
           f"{result['raw'] / 1048576:.2f} MB of payload became "

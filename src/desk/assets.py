@@ -493,6 +493,14 @@ DECK_JS = r"""
     triggered: "Entry reached", gapped_through: "Opened past the entry",
     never_triggered: "Entry never reached", skipped: "Skipped"
   };
+  // The three legs a notable mover can be ranked on, in words. The packet
+  // spells them with underscores and no field name is printed as English on
+  // these screens.
+  var LEG_WORD = {
+    premarket: "moving premarket", prior_session: "the prior session",
+    two_session: "over two sessions"
+  };
+
   var TAPE_NAME = {
     spy: "SPY", qqq: "QQQ", iwm: "IWM", dia: "DIA", vix: "VIX",
     "10y": "US 10Y", "3m": "US 3M", uso: "WTI proxy", dxy: "Dollar"
@@ -1059,8 +1067,15 @@ DECK_JS = r"""
       '<div id="deck" class="interactive-deck"></div>' +
       '<div id="printdeck" class="printonly"></div></section>';
 
-    html += pipelineSection(p) + compositionSection(p) + calendarSection(p);
+    html += pipelineSection(p) + compositionSection(p) + notableSection(p) +
+      calendarSection(p) + comingUpSection(p);
     root.innerHTML = html;
+    // The notable movers table routes to the Name screen the way the
+    // midday tables do; a mover is often a candidate on another session.
+    root.addEventListener("click", function (e) {
+      var tr = e.target.closest("[data-goto]");
+      if (tr) location.hash = "#/name/" + tr.dataset.goto;
+    });
 
     $("filters").addEventListener("click", function (e) {
       var b = e.target.closest("[data-f]"); if (!b) return;
@@ -1089,6 +1104,89 @@ DECK_JS = r"""
         return '<div class="print-deck">' + deckHTML(c, p) + "</div>";
       }).join("");
     };
+  }
+
+  /* Section 5 of the report, which the desk carried in its payload and drew
+     nowhere until 2026-09-04. It is the one section about names that are NOT
+     candidates, so a screen that omits it answers "what should I look at"
+     with the pool only. */
+  function notableSection(p) {
+    var rows = p.movers || [];
+    var lists = p.mover_lists || {};
+    var names = Object.keys(lists);
+    if (!rows.length && !names.length) return "";
+    var max = Math.max.apply(null,
+      rows.map(function (r) { return Math.abs(r.move || 0); }).concat([1])) * 1.12;
+    var body = rows.length
+      ? '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Company</th>' +
+        '<th>Ranked on</th><th style="text-align:right">Move</th><th></th>' +
+        '<th style="text-align:right">Sigma</th><th style="text-align:right">Market cap</th>' +
+        "</tr></thead><tbody>" + rows.map(function (r) {
+          return '<tr class="clickable" data-goto="' + esc(r.sym) + '">' +
+            '<td class="tk">' + esc(r.sym) + "</td>" +
+            '<td style="color:var(--muted);max-width:230px;overflow:hidden;' +
+            'text-overflow:ellipsis;white-space:nowrap">' + esc(r.name || "") +
+            (r.watch ? ' <span class="pill on">also a candidate</span>' : "") + "</td>" +
+            '<td style="color:var(--muted)">' + esc(LEG_WORD[r.leg] || r.leg || NIL) + "</td>" +
+            '<td class="n ' + dirClass(r.move) + '">' + pct(r.move) + "</td>" +
+            "<td>" + minibar(r.move, max) + "</td>" +
+            '<td class="n">' + (r.sigma == null ? NIL : n2(r.sigma, 1) + "\u03c3") + "</td>" +
+            '<td class="n">' + big(r.mcap) + "</td></tr>";
+        }).join("") + "</tbody></table></div>"
+      : '<div class="card pad empty">No list produced a row this morning.</div>';
+    // Every list says its own state and denominator, always, because a short
+    // list with nothing beside it reads as a quiet market rather than as a
+    // ranking key that was null.
+    var states = names.length
+      ? '<div class="card pad" style="margin-top:13px">' +
+        '<div class="panel-title">How each list came out</div>' +
+        names.sort().map(function (k) {
+          var l = lists[k];
+          return '<div class="reason"><span class="mono rk">' +
+            esc((l.state || "unknown").replace(/_/g, " ")) + "</span><span>" +
+            esc(l.text || (k.replace(/_/g, " ") + ": nothing recorded")) +
+            "</span></div>";
+        }).join("") + "</div>"
+      : "";
+    return '<section><div class="shead"><h2>What else moved</h2>' +
+      '<span class="note">not candidates</span></div>' +
+      '<p class="snote">Names outside this morning\'s pool that moved anyway, ranked ' +
+      "within one leg at a time so a premarket move never displaces a prior session " +
+      "one. Nothing here was screened; it is the context the watchlists cannot " +
+      "give you.</p>" + body + states + "</section>";
+  }
+
+  /* Section 9. Tomorrow's setup, today. */
+  function comingUpSection(p) {
+    var c = p.coming_up || {};
+    if (c.checked == null && !(c.tomorrow || []).length) return "";
+    var when = (c.window || []).length === 2
+      ? esc(c.window[0]) + " to " + esc(c.window[1]) : "";
+    var body;
+    if (!c.checked) {
+      body = '<div class="card pad empty">The calendar was not checked this ' +
+        "morning, so this is not an empty list, it is an unasked question.</div>";
+    } else if (!(c.tomorrow || []).length) {
+      body = '<div class="card pad empty">The calendar was checked and no ' +
+        "notable name reports tomorrow.</div>";
+    } else {
+      body = '<div class="card pad scroll"><table><thead><tr><th>Name</th>' +
+        '<th>Company</th><th>When</th><th style="text-align:right">Estimate</th>' +
+        "</tr></thead><tbody>" + c.tomorrow.map(function (r) {
+          return '<tr><td class="tk">' + esc(bare(r.symbol || r.code)) + "</td>" +
+            '<td style="color:var(--muted)">' + esc(r.name || "") + "</td>" +
+            '<td class="mono">' + esc(r.report_date || r.date || NIL) + " " +
+            esc(r.timing || r.report_time || "") + "</td>" +
+            '<td class="n">' + (r.estimate == null ? NIL : n2(r.estimate)) +
+            "</td></tr>";
+        }).join("") + "</tbody></table></div>";
+    }
+    return '<section><div class="shead"><h2>Coming up</h2>' +
+      (when ? '<span class="note">' + when + "</span>" : "") + "</div>" +
+      '<p class="snote">' + esc(c.definition
+        ? "Notable means " + c.definition + "."
+        : "Names worth knowing report between these dates.") +
+      " Tomorrow's setup, today.</p>" + body + "</section>";
   }
 
   function pipelineSection(p) {
@@ -1807,7 +1905,17 @@ DECK_JS = r"""
     root.innerHTML = '<section><div class="shead"><h2><span class="mono">' + esc(sym) +
       "</span></h2><span class=\"note\">reading every session on file</span></div>" +
       '<div id="name-body" class="card pad empty">Reading…</div></section>';
-    var dates = INDEX.sessions.map(function (r) { return r.date; });
+    // ONLY THE SESSIONS THAT CARRY THE NAME. Each session's summary row
+    // lists its candidates, so the question is answered off the index and
+    // only the matching payloads are inflated. This used to open every
+    // inlined session: fine at four, four hundred at the inline_sessions
+    // ceiling, each inflated and held. A row written before the column
+    // existed carries no symbols and is opened, so an old index degrades
+    // to the old behaviour rather than to a wrong answer.
+    var needle = "," + sym + ",";
+    var dates = INDEX.sessions.filter(function (r) {
+      return r.symbols == null || ("," + r.symbols + ",").indexOf(needle) >= 0;
+    }).map(function (r) { return r.date; });
     var mine = EPOCH;
     Promise.all(dates.map(function (d) {
       return loadSession(d).catch(function () { return null; });
@@ -1851,16 +1959,32 @@ DECK_JS = r"""
       $("name-body").className = "card pad scroll";
       $("name-body").innerHTML = body;
 
+      // A deck is a level ladder, a tape path and every headline, so a name
+      // that has appeared eighty times used to draw eighty of them before
+      // the screen was usable. CRITERIA [Screens] name_decks, newest first,
+      // with the rest one click away.
       var decks = document.createElement("div");
-      decks.innerHTML = hits.map(function (h) {
-        return '<section><div class="shead"><h3 style="font-size:15px">' +
-          esc(h.p.session) + "</h3></div>" + deckHTML(h.c, h.p) + "</section>";
-      }).join("");
       root.appendChild(decks);
-      hits.forEach(function (h, i) {
-        var w = decks.querySelectorAll(".chart-wrap")[i];
-        if (w) wirePath(w, h.c);
+      function drawDecks(limit) {
+        var shown = limit ? hits.slice(0, limit) : hits;
+        decks.innerHTML = shown.map(function (h) {
+          return '<section><div class="shead"><h3 style="font-size:15px">' +
+            esc(h.p.session) + "</h3></div>" + deckHTML(h.c, h.p) + "</section>";
+        }).join("") + (hits.length > shown.length
+          ? '<div class="filters noprint"><button class="chip" type="button" ' +
+            'data-alldecks="1">Draw the other ' + (hits.length - shown.length) +
+            " appearance" + (hits.length - shown.length === 1 ? "" : "s") +
+            "</button></div>"
+          : "");
+        shown.forEach(function (h, i) {
+          var w = decks.querySelectorAll(".chart-wrap")[i];
+          if (w) wirePath(w, h.c);
+        });
+      }
+      decks.addEventListener("click", function (e) {
+        if (e.target.closest("[data-alldecks]")) drawDecks(0);
       });
+      drawDecks(KNOBS.name_decks || 0);
     });
   }
 
@@ -1985,7 +2109,17 @@ DECK_JS = r"""
     EPOCH += 1;
     var mine = EPOCH;
     var route = parse();
-    var root = $("screen");
+    // A FRESH NODE, not a refilled one. Six screens attach a delegated
+    // click handler to this element, and innerHTML replaces an element's
+    // CHILDREN while its own listeners stay. Refilling it left one handler
+    // per visit, each closed over the session it was created for, so the
+    // Report screen's Morning and Midday toggle ran once for every report
+    // screen the reader had ever opened. Replacing the node drops them
+    // with it, and every screen goes on attaching whatever it needs.
+    var root = document.createElement("div");
+    root.id = "screen";
+    var previous = $("screen");
+    previous.parentNode.replaceChild(root, previous);
     setNav(route);
     window.__buildPrint = null;
     if (route.screen === "sessions") { screenSessions(root); return; }

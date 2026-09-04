@@ -32,7 +32,7 @@ import statistics
 import sys
 from typing import Any
 
-from core import config, criteria
+from core import config, criteria, files
 from night import pool_recall
 
 _CRIT = criteria.load()
@@ -248,7 +248,8 @@ def run(write: bool = True) -> dict[str, Any]:
 
         payload["generated_at"] = ettime.stamp(ettime.now_et())
         path = config.DATA_DIR / "addressable_sweep.json"
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        files.write_json_atomically(path, payload, indent=2, sort_keys=True,
+                                    attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print(f"sweep: wrote {path}")
     return payload
 

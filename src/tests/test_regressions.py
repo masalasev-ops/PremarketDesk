@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and eight claims, a count read off
+and the two pages. It now carries two hundred and eleven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -14465,6 +14465,182 @@ def claim_a_frozen_tape_survives_the_prune(failures: list[str]) -> None:
           "back to the labelled clip")
 
 
+def claim_every_report_section_is_drawn_somewhere(failures: list[str]) -> None:
+    """The eleven report sections each have a screen, and the payload carries them.
+
+    Nothing had ever checked the two lists against each other. Section 5,
+    notable movers, was compacted into every payload from the desk's first
+    build and drawn by no screen, so the bytes were in the file and the reader
+    could not see them; section 9, coming up, was not compacted at all. Both
+    were found by reading doc/REPORT_TEMPLATE.md against src/desk/assets.py by
+    hand on 2026-09-04, which is exactly the comparison a claim can make.
+
+    Checked on the PAYLOAD KEY and the SCREEN FUNCTION rather than on rendered
+    output, because a section's screen may legitimately draw nothing on a
+    morning that has nothing: the failure this catches is a section with no
+    route to a screen at all.
+    """
+    from desk import assets
+    from desk import compact
+
+    packet = _slots_packet()
+    packet["notable_movers"] = {
+        "rows": [{"symbol": "ZED.US", "name": "Zed", "leg": "prior_session",
+                  "move_pct": -12.0, "move_sigma": -3.1, "market_cap": 4.0e8,
+                  "also_on_watchlist": None, "as_of_session": "2026-01-01",
+                  "selected_by": ["prior_session_by_sigma"]}],
+        "list_reports": {"prior_session_by_sigma": {
+            "state": "ranked", "selected": 1, "considered": 900,
+            "ranks_on": "a move_sigma",
+            "text": "The prior session by sigma list is ranked: 1 selected of "
+                    "900 considered on the prior session leg."}},
+    }
+    packet["earnings"] = {"notable_tomorrow": [], "tomorrow_checked": True,
+                          "window": ["2026-01-02", "2026-01-03"],
+                          "notable_definition": "in the weekly universe"}
+
+    with conftest_activate():
+        run_dir = config.run_dir("2026-01-02")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps(packet), encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            payload = compact.compact_session("2026-01-02") or {}
+
+    if not payload.get("movers"):
+        failures.append("the payload carries no notable movers, so section 5 of "
+                        "the report has nothing to draw from")
+    if not payload.get("mover_lists"):
+        failures.append("the payload carries the movers without each list's state "
+                        "and denominator, so a short list on a screen reads as a "
+                        "quiet market rather than as a null ranking key")
+    coming = payload.get("coming_up") or {}
+    if coming.get("checked") is not True:
+        failures.append("the payload does not record whether the tomorrow calendar "
+                        "was checked, so a screen cannot tell an empty list from "
+                        f"an unasked question: {coming!r}")
+
+    # And a function per section that draws it. Named here rather than derived,
+    # because the mapping is a judgement and it belongs in one readable place.
+    drawn = {
+        "1 summary": "kpisHTML", "1 funnel": "pipelineSection",
+        "2 gappers": "spineHTML", "3 day": "deckHTML", "4 swing": "deckHTML",
+        "5 notable movers": "notableSection", "6 market trends": "tapeHTML",
+        "7 technical signals": "ladder", "8 economic": "calendarSection",
+        "9 coming up": "comingUpSection", "10 the record": "recordSection",
+        "11 skips and traps": "healthChecks",
+    }
+    for section, function in sorted(drawn.items()):
+        if f"function {function}(" not in assets.DECK_JS:
+            failures.append(f"report section {section} is drawn by {function}, "
+                            "which is not in the desk application any more")
+        # Counted over the whole file rather than after the definition: the
+        # screen functions are called from screenMorning, which is defined
+        # above most of them. One occurrence is the definition alone, which is
+        # dead code, and dead code is the state notableSection was in except
+        # that it had never been written at all.
+        if assets.DECK_JS.count(f"{function}(") < 2:
+            failures.append(f"{function} is defined and never called, so report "
+                            f"section {section} is drawn by dead code")
+    print("  every section  each of the eleven report sections has a screen "
+          "function, and the payload carries what sections 5 and 9 need")
+
+
+def claim_the_name_screen_opens_only_what_it_needs(failures: list[str]) -> None:
+    """A session's summary row lists its candidates, and the screen filters on it.
+
+    screenName used to Promise.all over EVERY inlined session, inflate each and
+    keep it, then draw a full deck per appearance. Four sessions on file hid
+    what that costs; CRITERIA [Screens] inline_sessions is 400 and the docstring
+    on desk/render advertises that as more than a year.
+
+    The column is what makes the filter possible, so it is what this checks,
+    along with the two page bounds that keep the drawing finite.
+    """
+    from desk import assets
+    from desk import compact
+
+    with conftest_activate():
+        run_dir = config.run_dir("2026-01-05")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "packet.json").write_text(json.dumps(_slots_packet()),
+                                             encoding="utf-8")
+        with contextlib.redirect_stdout(io.StringIO()):
+            payload = compact.compact_session("2026-01-05") or {}
+            row = compact.summary_row(payload)
+            compact.write_summary([row])
+            stored = {r["date"]: dict(r) for r in
+                      _sessions_rows()}.get(payload["session"], {})
+
+    symbols = (row.get("symbols") or "").split(",")
+    if sorted(symbols) != ["ARX", "BBB"]:
+        failures.append("the summary row does not list that session's candidates "
+                        f"bare and comma joined, it lists {row.get('symbols')!r}")
+    if stored.get("symbols") != row.get("symbols"):
+        failures.append("the symbols column did not survive the round trip through "
+                        f"the sessions table: {stored.get('symbols')!r}")
+
+    if "r.symbols == null ||" not in assets.DECK_JS:
+        failures.append("the Name screen does not fall back to opening a session "
+                        "whose row predates the symbols column, so an old index "
+                        "would answer 'never a candidate' about a name it carries")
+    for knob in ("name_decks", "sessions_page_size"):
+        if f"KNOBS.{knob}" not in assets.DECK_JS:
+            failures.append(f"CRITERIA [Screens] {knob} is passed to the page and "
+                            "read by nothing, so the bound it documents is not one")
+    print("  name screen  a session's row lists its candidates, an old row still "
+          "opens, and both drawing bounds are read")
+
+
+def _sessions_rows() -> list[Any]:
+    """Every row of the sessions table, for a claim that has just written one."""
+    from core import store
+
+    with store.session() as connection:
+        store.init(connection)
+        return connection.execute("SELECT * FROM sessions").fetchall()
+
+
+def claim_no_published_artifact_is_written_by_a_truncating_call(
+        failures: list[str]) -> None:
+    """Nothing under src/ writes a file with Path.write_text.
+
+    core/files exists because a plain write_text truncates the destination
+    before it writes, which is how an interrupted run left a packet that parsed
+    as nothing and how a session was retired from the verification sweep for
+    ever (BUILD_PLAN 5a). Six call sites were consolidated into it on
+    2026-09-02 and twenty six were left where they were, including report.md,
+    report.html, both midday files, site/Weekly.html and universe-closes, which
+    discover writes at 07:15 and scan reads at 08:45 the same morning.
+
+    The tests are exempt: a fixture that writes a two line file into a sandbox
+    is not an artifact, and routing them through the writer under test is how a
+    claim stops testing anything.
+    """
+    import ast
+
+    root = config.PROJECT_ROOT / "src"
+    offenders = []
+    for path in sorted(root.rglob("*.py")):
+        if path.parent.name == "tests":
+            continue
+        if path.name == "files.py" and path.parent.name == "core":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "write_text"):
+                offenders.append(
+                    f"{path.relative_to(config.PROJECT_ROOT)}:{node.lineno}")
+    if offenders:
+        failures.append(
+            "these calls write a file with Path.write_text, which truncates the "
+            "destination before it writes, rather than through core/files: "
+            + ", ".join(offenders))
+    print("  one writer   no call under src/ outside core/files and the tests "
+          "writes a file with a truncating write_text")
+
+
 def _slots_packet() -> dict[str, Any]:
     """A packet with two candidates, one on the day watchlist, three headlines."""
     return {
@@ -16827,6 +17003,11 @@ def main() -> int:
     run_claim(failures, claim_the_morning_page_links_to_its_siblings, failures)
     run_claim(failures, claim_the_archive_carries_the_midday_report, failures)
     run_claim(failures, claim_a_frozen_tape_survives_the_prune, failures)
+    run_claim(failures, claim_every_report_section_is_drawn_somewhere, failures)
+    run_claim(failures, claim_the_name_screen_opens_only_what_it_needs, failures)
+    run_claim(
+        failures, claim_no_published_artifact_is_written_by_a_truncating_call,
+        failures)
     run_claim(failures, claim_the_skeleton_opens_a_slot_for_each_prose_field, failures)
     run_claim(failures, claim_a_slots_answer_is_fitted_back_onto_the_skeleton, failures)
     run_claim(failures, claim_the_projection_keeps_what_the_template_names, failures)

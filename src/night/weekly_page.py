@@ -51,6 +51,7 @@ from typing import Any
 from core import config
 from core import criteria
 from core import ettime
+from core import files
 from core import page
 from core import store
 from night import true_volume
@@ -1394,7 +1395,8 @@ def build(window: int) -> Any:
                   what_did_it_publish(days), what_did_it_cost(days),
                   how_did_the_score_do())
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(page, encoding="utf-8")
+    files.write_text_atomically(OUT_PATH, page,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return OUT_PATH
 
 

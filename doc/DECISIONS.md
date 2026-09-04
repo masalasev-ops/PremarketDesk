@@ -18,6 +18,52 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-04, fifteenth: the instruments go through the atomic writer too, and the chains compact today only
+
+TWO CALLS while closing the findings the entry above had left standing.
+
+THE FIRST, how far to take the atomic writer. The production path was never in
+question. The eighteen writers under research/ and probe_alpaca.py were.
+
+REJECTED, LEAVE THE INSTRUMENTS. BUILD_PLAN says in as many words that they
+are instruments and not pipeline and that nothing downstream reads their
+output, so a truncated study payload costs a re-run of the instrument. That is
+true of most of them and false of the ones that matter: CRITERIA cites the
+float rotation and baseline floor payloads by name, the float rotation edges
+were fitted on a population that can no longer be recomputed from its own
+archive, and BUILD_PLAN records the 109.9 MB whose loss is exactly what "just
+re-run it" costs when the input has gone.
+
+REJECTED, LEAVE THE ONES THAT ARE CHEAP TO RE-RUN. This is the same rule with
+a list attached, and the list is the problem: it has to be right today and
+stay right, and a reader deciding whether a new instrument belongs on it has
+to reconstruct the argument. A rule with an exception list is a rule nobody
+checks.
+
+TAKEN, ALL OF THEM. One sentence, one claim, no list. It costs an import and
+a keyword per call site and it removes a class of failure rather than most of
+one.
+
+THE SECOND, what a chain should compact. The desk is a full rebuild from disk
+and that property is load bearing: it is what makes deleting the file cost
+nothing and what makes running the build twice the same as running it once.
+Compacting every session on every build was how that property was implemented,
+and it is not the same thing as the property.
+
+REJECTED, KEEP COMPACTING EVERYTHING AND MAKE IT CHEAPER. Skip a session whose
+frozen payload is newer than every input it reads. It is a correct incremental
+build until desk/compact.py itself changes, at which point every payload on
+disk is stale and nothing on disk says so. Stamping a version into the payload
+makes that a number somebody has to remember to bump, and the review above
+found two faults that were exactly a number somebody did not remember.
+
+TAKEN, THE CHAINS COMPACT TODAY AND THE NIGHTLY COMPACTS EVERYTHING. Today is
+what changed. A session with no summary row is compacted too, because a
+payload the index cannot see is a session missing from every screen. And the
+nightly's full pass is what carries a change to the compaction to older
+sessions, within a day, with no version to keep in step. The render is still a
+full rebuild from what is on disk; only the compaction is scoped.
+
 ## 2026-09-04, fourteenth: the frozen tape wins over the rebuilt one, and the desk's marker stops demanding rc=0
 
 Two calls made while closing the review above, both of which could have gone

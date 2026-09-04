@@ -3721,4 +3721,5 @@ inline_sessions               = 400        # sessions inlined into site/Premarke
 spine_scale_pct               = 26         # the fixed symmetric scale on the gap spine, in percent either side of the centre rule, so two mornings compare by eye
 path_min_bars                 = 2          # below this many minute bars the tape path degrades to a sentence naming the count, rather than a line drawn through one point
 ladder_label_gap_px           = 17         # minimum vertical space between two labels on the level ladder before they are pushed apart
+name_decks                    = 12         # appearances of one name whose full deck the Name screen draws, newest first, with a control for the rest. A deck is a level ladder, a tape path and every headline, so twelve is about a fortnight of a recurring name and the point past which the screen is scrolled rather than read
 sessions_page_size            = 60         # rows the Sessions screen's list renders before it offers to show the rest. Written here from the first build and honoured only from 2026-09-04: until then the page was handed the number and rendered every row anyway, which four sessions on file hid

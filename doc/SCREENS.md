@@ -492,6 +492,29 @@ finding. It must never read "none", which is how the packet spells it: a
 screen that prints a field's sentinel at a reader is the report prose rule
 applied to a screen.]
 
+### 9. What else moved, and Coming up
+
+[ADDED 2026-09-04, in the review that evening. Not in the original seven and
+not an oversight of design so much as of accounting: the eleven report
+sections were never checked off against the screens, and two of them had no
+screen at all. Section 5, notable movers, was compacted into every payload
+from the first build and drawn nowhere, which is the worse of the two: the
+bytes were in the file and the reader could not see them. It is the one
+section about names that are NOT candidates, so a Morning screen without it
+answers "what should I look at" with the pool only.
+
+Both are on the Morning screen. Notable movers is one table over all three
+legs with the leg in words in its own column, ranked within a leg exactly as
+the packet ranked it, and each of the four lists prints its own state and
+denominator underneath, because BUILD_PLAN 4.4 and 4.9 already settled that
+a short list with nothing beside it reads as a quiet market. A row routes to
+the Name screen, since a mover is often a candidate on another session.
+
+Coming up says which of the three states it is in: not checked, checked and
+empty, or a table. The first two are different facts and the screen must not
+let them look alike, which is the same rule as the midday pass that never
+ran.]
+
 ## Routing and state
 
   Hash routes only. No server, no history API, no build step. `#/sessions`,

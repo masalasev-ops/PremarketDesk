@@ -32,6 +32,7 @@ from core import artifacts
 from core import config
 from core import criteria
 from core import ettime
+from core import files
 from core import glossary
 from core.numbers import as_float
 from ops import job_status
@@ -3168,8 +3169,10 @@ def _write_for_inspection(report_path: Path, usage_path: Path, text: str,
     invented a ticker. Until 2026-09-02 the explanation call and every
     annotation were spent on it anyway.
     """
-    report_path.write_text(text, encoding="utf-8")
-    usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True), encoding="utf-8")
+    files.write_text_atomically(report_path, text,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
+    files.write_json_atomically(usage_path, usage, indent=2, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
 
 
 def write_report(packet_path: Path, overwrite: bool = False) -> int:
@@ -3293,7 +3296,9 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
                 rejected_path, _ = artifacts.resolve(
                     run_directory / f"report.slots-rejected-{attempt}.md",
                     allow_overwrite, what="analyst")
-                rejected_path.write_text(text, encoding="utf-8")
+                files.write_text_atomically(
+                    rejected_path, text,
+                    attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
                 print(f"analyst: the rejected answer is at {rejected_path.name}")
                 if attempt < attempts and _budget.remaining > 0:
                     correction = slot_correction(violations)
@@ -3585,7 +3590,8 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
                 "written by an explanation pass rather than by the narrative, "
                 "and the guard is in warn mode so they are published as written")
 
-    report_path.write_text(report_text, encoding="utf-8")
+    files.write_text_atomically(report_path, report_text,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     job_status.produced("report characters", len(report_text))
     if usage.get("fallback"):
         # The deterministic fallback is a real report and a real zero exit, and
@@ -3624,7 +3630,8 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
         # A pass that examined nothing is not a pass, and the reader must be
         # able to tell. The disclaimer line gets the statement.
         report_text = annotate_unvalidated(report_text, coverage)
-        report_path.write_text(report_text, encoding="utf-8")
+        files.write_text_atomically(report_path, report_text,
+                                    attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print("analyst: containment examined nothing "
               f"({_why_unvalidated(coverage)}); the disclaimer now states that "
               "ticker claims were not validated")
@@ -3642,7 +3649,8 @@ def write_report(packet_path: Path, overwrite: bool = False) -> int:
     # that, and deriving the name would then spare a file that is not there.
     usage_path, _usage_spared = artifacts.resolve(
         run_directory / "analyst_usage.json", allow_overwrite, what="analyst")
-    usage_path.write_text(json.dumps(usage, indent=2, sort_keys=True), encoding="utf-8")
+    files.write_json_atomically(usage_path, usage, indent=2, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     if usage["status"] == "ok":
         print(
             "analyst: tokens in "

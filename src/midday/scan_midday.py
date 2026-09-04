@@ -47,6 +47,7 @@ from core import config
 from core import criteria
 from core import eodhd
 from core import ettime
+from core import files
 from core import store
 from ops import job_status
 from ops import market_today
@@ -1110,8 +1111,9 @@ def write_packet(payload: dict[str, Any], overwrite: bool) -> tuple[Any, bool]:
     path = config.run_dir(payload["session_date"]) / PACKET_FILE
     destination, spared = artifacts.resolve(
         path, overwrite or artifacts.scheduled_run(), what="midday")
-    destination.write_text(
-        json.dumps(payload, indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    files.write_text_atomically(
+        destination, json.dumps(payload, indent=2, sort_keys=False) + "\n",
+        attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return destination, spared
 
 

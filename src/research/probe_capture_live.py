@@ -65,6 +65,7 @@ from typing import Any
 
 from collect import collect_premarket
 from core import config
+from core import files
 from core import criteria
 from core import ettime
 import probe_alpaca
@@ -590,7 +591,8 @@ def write_page(result: dict[str, Any]) -> Path:
         lines += ["## 3 and 4. The capture share", "",
                   result.get("capture_skipped", "not measured"), ""]
         path = page_path(day)
-        path.write_text("\n".join(lines), encoding="utf-8")
+        files.write_text_atomically(
+            path, "\n".join(lines), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         return path
 
     default = capture["default_capture_rate"]
@@ -655,7 +657,8 @@ def write_page(result: dict[str, Any]) -> Path:
             "",
         ]
     path = page_path(day)
-    path.write_text("\n".join(lines), encoding="utf-8")
+    files.write_text_atomically(
+        path, "\n".join(lines), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return path
 
 
@@ -748,7 +751,8 @@ def main(argv: list[str] | None = None) -> int:
 
     result = measure(day, control=not args.no_control)
     path = result_path(day)
-    path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+    files.write_text_atomically(
+        path, json.dumps(result, indent=2, default=str), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     page = write_page(result)
     report(result)
     print(f"\ncapture test: written to {path}")

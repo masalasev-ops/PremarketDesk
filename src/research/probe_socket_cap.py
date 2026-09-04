@@ -61,6 +61,7 @@ from typing import Any
 import websocket
 
 from core import config
+from core import files
 from core import criteria
 from core import ettime
 from collect import collect_premarket as collector
@@ -775,7 +776,8 @@ def main(argv: list[str] | None = None) -> int:
     }
     out = config.DATA_DIR / f"socket-cap-probe-{ettime.today_str()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    files.write_text_atomically(
+        out, json.dumps(payload, indent=2, sort_keys=True), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     print(f"probe: wrote {out}")
     print("probe: the vendor side of the off exchange question needs EODHD's own "
           "1m bars for these minutes, which are not published until the session "

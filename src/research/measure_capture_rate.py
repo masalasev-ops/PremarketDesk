@@ -78,6 +78,7 @@ import statistics
 from typing import Any
 
 from core import config
+from core import files
 from core import criteria
 from core import ettime
 from core import store
@@ -715,8 +716,8 @@ def main(argv: list[str] | None = None) -> int:
     # everything new under doc/research/ is LF; the default on Windows would
     # translate to CRLF and the file would land disagreeing with its own
     # directory the moment it was created.
-    out.write_text(json.dumps(payload, indent=1), encoding="utf-8",
-                   newline="\n")
+    files.write_text_atomically(
+        out, json.dumps(payload, indent=1), newline="\n", attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     print(f"\nmeasure_capture_rate: wrote {out}, "
           f"{len(collected['rows'])} raw row(s)")
     return 0

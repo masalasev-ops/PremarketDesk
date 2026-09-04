@@ -25,9 +25,26 @@ from pathlib import Path
 from typing import Any
 
 
+# The retry shape a scheduled writer on this machine uses. Norton denies a
+# first write intermittently and every documented instance has cleared on a
+# retry, so a step that writes an artifact nobody re-runs asks for these
+# rather than the single attempt a hand run is happy with. Named here so
+# the numbers live in one place: they were copied literally into five call
+# sites before this constant existed.
+ATTEMPTS = 3
+RETRY_S = 0.4
+
+
 def write_text_atomically(path: Path, text: str, attempts: int = 1,
-                          retry_s: float = 0.0, encoding: str = "utf-8") -> None:
+                          retry_s: float = 0.0, encoding: str = "utf-8",
+                          newline: str | None = None) -> None:
     """Write text so that the file on disk is always whole.
+
+    `newline` is passed through to the temp sibling. The default translates
+    a bare newline to the platform ending, which on Windows means a file
+    written here disagrees with one written by a sibling script that asked
+    for "\n"; research/measure_capture_rate is the caller that cares, and
+    its comment says why.
 
     `attempts` above one retries a denied write, sleeping `retry_s` between
     tries, because every documented instance of this machine's antivirus
@@ -39,7 +56,7 @@ def write_text_atomically(path: Path, text: str, attempts: int = 1,
     last: OSError | None = None
     for attempt in range(max(1, attempts)):
         try:
-            temporary.write_text(text, encoding=encoding)
+            temporary.write_text(text, encoding=encoding, newline=newline)
             os.replace(temporary, path)
             return
         except OSError as exc:

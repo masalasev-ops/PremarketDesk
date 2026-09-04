@@ -74,6 +74,7 @@ from typing import Any
 
 from collect import collect_premarket
 from core import config
+from core import files
 from core import criteria
 
 _CRIT = criteria.load()
@@ -655,7 +656,8 @@ def main(argv: list[str] | None = None) -> int:
     }
 
     out = config.DATA_DIR / f"{PATH_STEM}.json"
-    out.write_text(json.dumps(payload, indent=1, sort_keys=True), encoding="utf-8")
+    files.write_text_atomically(
+        out, json.dumps(payload, indent=1, sort_keys=True), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
 
     if args.json:
         print(json.dumps(payload, indent=1, sort_keys=True))

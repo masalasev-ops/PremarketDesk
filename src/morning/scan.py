@@ -37,6 +37,7 @@ from core import config
 from core import criteria
 from selection import discover
 from core import eodhd
+from core import files
 from core import ettime
 from core import glossary
 from night import paper_ledger
@@ -6366,7 +6367,8 @@ def thin_rerun_stands_down(payload: dict[str, Any]) -> bool:
         return False
 
     side_path = config.run_dir(session_date) / "packet_degraded.json"
-    side_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    files.write_json_atomically(side_path, payload, indent=2, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     print(f"scan: a fuller packet already exists for {session_date} and this rerun "
           f"stands down because {'; and '.join(reasons)}. Wrote {side_path.name} "
           "for the record; packet.json and the picks table keep the fuller "
@@ -6430,7 +6432,6 @@ def write_packet(payload: dict[str, Any], overwrite: bool = False) -> Any:
         overwrite or artifacts.scheduled_run(), what="scan")
     # core/files.py is the one atomic writer since 2026-09-02; sort_keys is this
     # file's own requirement, because its readers are diffed across sessions.
-    from core import files
 
     files.write_json_atomically(path, payload, indent=2, sort_keys=True)
     return path

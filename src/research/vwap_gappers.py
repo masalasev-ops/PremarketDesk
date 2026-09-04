@@ -57,7 +57,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from core import config, criteria, ettime
+from core import config, criteria, ettime, files
 from night import pool_recall
 import probe_alpaca
 
@@ -294,7 +294,8 @@ def borrow_flags(session: Any, refresh: bool = False) -> dict[str, dict[str, boo
         }
         for asset in response.json()
     }
-    ASSETS_PATH.write_text(json.dumps(flags, indent=1, sort_keys=True), encoding="utf-8")
+    files.write_json_atomically(ASSETS_PATH, flags, indent=1, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return flags
 
 

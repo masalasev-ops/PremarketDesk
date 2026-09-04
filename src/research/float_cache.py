@@ -29,7 +29,7 @@ import json
 import sys
 from typing import Any
 
-from core import config, criteria, eodhd
+from core import config, criteria, eodhd, files
 from night import pool_recall
 
 _CRIT = criteria.load()
@@ -254,7 +254,8 @@ def build(limit: int | None = None) -> dict[str, Any]:
     else:
         print("float_cache: no row came back this run, so fetched_at stays at "
               f"{cache.get('fetched_at') or 'never'} rather than claiming today")
-    CACHE_PATH.write_text(json.dumps(cache, indent=1, sort_keys=True), encoding="utf-8")
+    files.write_json_atomically(CACHE_PATH, cache, indent=1, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     print(f"float_cache: wrote {CACHE_PATH} with {len(cache['symbols']):,} symbols, "
           f"{fetched:,} carrying a float this run, {missing:,} answered without one, "
           f"{absent_from_answered_batch:,} absent from a batch that answered, "

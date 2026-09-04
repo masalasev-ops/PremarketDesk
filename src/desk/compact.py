@@ -333,15 +333,29 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
         })
     candidates.sort(key=lambda c: -(c["gap"] if c["gap"] is not None else -999))
 
+    notable = packet.get("notable_movers") or {}
     movers = [
         {
             "sym": _sym(r.get("symbol")), "name": r.get("name"),
             "leg": r.get("leg"), "move": r.get("move_pct"),
             "sigma": r.get("move_sigma"), "mcap": r.get("market_cap"),
             "watch": r.get("also_on_watchlist"),
+            "as_of": r.get("as_of_session"),
+            "why": r.get("selected_by") or [],
         }
-        for r in ((packet.get("notable_movers") or {}).get("rows") or [])
+        for r in (notable.get("rows") or [])
     ]
+    # Each ranked list's own state and count. CRITERIA and BUILD_PLAN both
+    # record why: a short list with no state beside it reads as a quiet
+    # market, and the four states exist so a null ranking key and an empty
+    # one cannot look alike on a screen either.
+    mover_lists = {
+        name: {"state": report.get("state"), "text": report.get("text"),
+               "selected": report.get("selected"),
+               "considered": report.get("considered"),
+               "ranks_on": report.get("ranks_on")}
+        for name, report in (notable.get("list_reports") or {}).items()
+    }
 
     mid_movers = (midday.get("movers") or {})
     payload = {
@@ -382,6 +396,17 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
         "criteria": packet.get("criteria_summary") or {},
         "record": packet.get("record_so_far") or {},
         "movers": movers,
+        "mover_lists": mover_lists,
+        # Section 9 of the report, which no screen could draw because this
+        # was never compacted. tomorrow is the packet's own list and
+        # checked says whether it was asked at all, so an empty list on a
+        # screen can say which of the two it is.
+        "coming_up": {
+            "tomorrow": (packet.get("earnings") or {}).get("notable_tomorrow") or [],
+            "checked": (packet.get("earnings") or {}).get("tomorrow_checked"),
+            "window": (packet.get("earnings") or {}).get("window") or [],
+            "definition": (packet.get("earnings") or {}).get("notable_definition"),
+        },
         "econ": (packet.get("economic") or {}).get("events") or [],
         "prov": packet.get("candidate_provenance") or {},
         "health": {
@@ -495,6 +520,9 @@ def summary_row(payload: dict[str, Any]) -> dict[str, Any]:
         "packet_bytes": found.stat().st_size if found else None,
         "packet_compressed": 1 if (found and found.suffix == ".gz") else 0,
         "has_report": 1 if report else 0,
+        # Bare and comma joined, so the Name screen can pick the sessions
+        # that carry a ticker without inflating the ones that do not.
+        "symbols": ",".join(c["sym"] for c in cands if c.get("sym")),
         "computed_at": ettime.stamp(),
     }
 
@@ -536,6 +564,34 @@ def write_summary(rows: list[dict[str, Any]]) -> int:
     return len(rows)
 
 
+def build(dates: list[str], freeze_payload: bool = True,
+          out: Path | None = None) -> tuple[int, int]:
+    """Compact these sessions. Returns (compacted, summary rows written).
+
+    Split out of main() so a caller with a list in hand does not have to
+    build argv to pass it. desk/render uses it to compact TODAY and any
+    session the summary table has never seen, rather than every session on
+    file, because the morning chain runs before the open and the nightly
+    has all night to rebuild the rest.
+    """
+    rows, built = [], 0
+    for date in dates:
+        payload = compact_session(date)
+        if payload is None:
+            print(f"compact: {date} has no packet, skipped")
+            continue
+        rows.append(summary_row(payload))
+        built += 1
+        if freeze_payload:
+            frozen = freeze(date, payload)
+            print(f"compact: {date} frozen to {frozen.name}, "
+                  f"{frozen.stat().st_size:,} bytes")
+        if out:
+            files.write_json_atomically(out, payload, indent=None)
+            print(f"compact: {date} written to {out}")
+    return built, write_summary(rows)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compact a session for the desk.")
     parser.add_argument("--session", help="One session date. Default is every one.")
@@ -549,22 +605,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     dates = [args.session] if args.session else known_sessions()
-    rows, built = [], 0
-    for date in dates:
-        payload = compact_session(date)
-        if payload is None:
-            print(f"compact: {date} has no packet, skipped")
-            continue
-        rows.append(summary_row(payload))
-        built += 1
-        if not args.no_freeze:
-            frozen = freeze(date, payload)
-            print(f"compact: {date} frozen to {frozen.name}, "
-                  f"{frozen.stat().st_size:,} bytes")
-        if args.out:
-            files.write_json_atomically(args.out, payload, indent=None)
-            print(f"compact: {date} written to {args.out}")
-    written = write_summary(rows)
+    built, written = build(dates, freeze_payload=not args.no_freeze, out=args.out)
     print(f"compact: {built} session(s) compacted, {written} summary row(s) stored")
     return 0
 

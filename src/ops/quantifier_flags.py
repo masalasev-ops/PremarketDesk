@@ -28,6 +28,7 @@ import argparse
 import json
 from typing import Any
 
+from core import files
 from core import ettime
 from morning import analyst
 
@@ -118,9 +119,11 @@ def mark(flag_id: int, verdict: str, note: str | None) -> int:
             flag["disposition_note"] = note
             flag["disposition_at"] = ettime.stamp(ettime.now_et())
     body = "".join(json.dumps(f, separators=(",", ":")) + "\n" for f in flags)
-    temporary = path.with_name(path.name + ".partial")
-    temporary.write_text(body, encoding="utf-8")
-    temporary.replace(path)
+    # This was the seventh hand rolled copy of write to a temp sibling then
+    # replace, and the only one with no retry and no cleanup of the sibling
+    # a crash leaves behind.
+    files.write_text_atomically(path, body,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     print(f"quantifier_flags: flag {flag_id} marked {verdict}")
     return 0
 

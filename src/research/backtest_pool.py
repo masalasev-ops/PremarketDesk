@@ -38,6 +38,7 @@ import sys
 from typing import Any
 
 from core import config
+from core import files
 from core import criteria
 from selection import discover
 from core import eodhd
@@ -102,7 +103,8 @@ def eod_day(api: eodhd.EodhdClient, day: dt.date, wanted: set[str]) -> dict[str,
             "c": _as_float(row.get("close")),
             "v": _as_float(row.get("volume")),
         }
-    path.write_text(json.dumps(out), encoding="utf-8")
+    files.write_text_atomically(
+        path, json.dumps(out), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return out
 
 
@@ -220,8 +222,10 @@ def fetch_session(
         "gappers": gappers,
     }
 
-    inputs_path.write_text(json.dumps(inputs), encoding="utf-8")
-    outcome_path.write_text(json.dumps(outcome), encoding="utf-8")
+    files.write_text_atomically(
+        inputs_path, json.dumps(inputs), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
+    files.write_text_atomically(
+        outcome_path, json.dumps(outcome), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return {"inputs": inputs, "outcome": outcome, "cached": False}
 
 
@@ -912,7 +916,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         from pathlib import Path
 
-        Path(args.json).write_text(json.dumps(outcome, indent=2), encoding="utf-8")
+        files.write_text_atomically(
+            Path(args.json), json.dumps(outcome, indent=2), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print(f"\nbacktest: wrote {args.json}")
     return 0
 

@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     packet_bytes        INTEGER,
     packet_compressed   INTEGER,
     has_report          INTEGER,
+    -- Every candidate that session kept, bare and comma joined. The Name
+    -- screen asks "which sessions carried this ticker", and without this
+    -- it could only answer by inflating every inlined session and looking:
+    -- one question, four hundred payloads at the [Screens] inline_sessions
+    -- ceiling. A summary column is exactly what this table is for.
+    symbols             TEXT,
     computed_at         TEXT NOT NULL,
     PRIMARY KEY (date)
 );
@@ -638,6 +644,14 @@ def session() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
+# Columns the sessions table gained after it shipped. It is rewritten in
+# full on every desk build, so an old row is corrected by the next build
+# rather than migrated; this only has to make the column exist.
+_SESSIONS_LATER_COLUMNS = (
+    ("symbols", "TEXT"),
+)
+
+
 def init(connection: sqlite3.Connection | None = None) -> None:
     """Create anything missing, widen anything old. Safe to call on every run."""
     owned = connection is None
@@ -649,6 +663,7 @@ def init(connection: sqlite3.Connection | None = None) -> None:
         ensure_columns(connection, "picks", OUTCOME_COLUMNS)
         ensure_columns(connection, "picks", TRUE_COLUMNS)
         ensure_columns(connection, "paper_trades", _PAPER_LATER_COLUMNS)
+        ensure_columns(connection, "sessions", _SESSIONS_LATER_COLUMNS)
         applied = {row[0] for row in
                    connection.execute("SELECT version FROM schema_version").fetchall()}
         if SCHEMA_VERSION not in applied:

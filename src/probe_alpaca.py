@@ -47,7 +47,7 @@ from typing import Any
 
 import requests
 
-from core import config, ettime
+from core import config, ettime, files
 
 # The premarket window this project cares about. 08:30 rather than 09:30
 # because the report has to be written before the open, so what matters is
@@ -701,7 +701,8 @@ def write_report(path, day: dt.date, day_note: str, results: dict[str, Any]) -> 
             add(f"- {item}")
         add("")
 
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    files.write_text_atomically(path, "\n".join(lines) + "\n",
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
 
 
 # ---------------------------------------------------------------------- runner

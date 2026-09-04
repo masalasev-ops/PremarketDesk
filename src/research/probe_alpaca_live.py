@@ -70,6 +70,7 @@ from typing import Any
 
 from collect import collect_premarket
 from core import config
+from core import files
 from core import criteria
 from core import ettime
 import probe_alpaca
@@ -841,7 +842,8 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
                 "",
             ]
     path = config.DATA_DIR / f"{TABLE_PATH_STEM}-{day}.md"
-    path.write_text("\n".join(lines), encoding="utf-8")
+    files.write_text_atomically(
+        path, "\n".join(lines), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return path
 
 

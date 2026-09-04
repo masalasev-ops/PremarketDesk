@@ -34,6 +34,7 @@ import sys
 from pathlib import Path
 
 from core import config
+from core import files
 from core import ettime
 from ops import job_status
 
@@ -50,7 +51,8 @@ _MARKER_TEXT = (
 def ensure_marker() -> None:
     if not UNVERIFIED_MARKER.exists():
         config.ensure_dirs()
-        UNVERIFIED_MARKER.write_text(_MARKER_TEXT, encoding="utf-8")
+        files.write_text_atomically(UNVERIFIED_MARKER, _MARKER_TEXT,
+                                    attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print(f"gate: created {UNVERIFIED_MARKER}")
 
 

@@ -93,7 +93,7 @@ import statistics
 import sys
 from typing import Any
 
-from core import config, criteria, ettime
+from core import config, criteria, ettime, files
 from night import pool_recall
 from research import float_cache
 import probe_alpaca
@@ -910,7 +910,8 @@ def run(sessions: int | None = None, write: bool = True) -> dict[str, Any]:
         print(f"    {edge:>9}  {a:>16.4f}  {t:>12.4f}")
 
     if write:
-        OUT_PATH.write_text(json.dumps(result, indent=1, sort_keys=True), encoding="utf-8")
+        files.write_json_atomically(OUT_PATH, result, indent=1, sort_keys=True,
+                                    attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print(f"\nwrote {OUT_PATH}")
     return result
 

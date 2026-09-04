@@ -20,6 +20,7 @@ import markdown
 from core import artifacts
 from core import config
 from core import ettime
+from core import files
 from core import glossary
 from core import page
 from ops import job_status
@@ -343,9 +344,9 @@ def render(report_path: Path, overwrite: bool = False) -> Path:
     # the midday page carry, so the three cannot drift apart in style.
     article = ('<article class="report">\n' + body + "\n"
                + footer_links(report_path) + "\n</article>")
-    html_path.write_text(
-        page.shell(html.escape(title, quote=False), article),
-        encoding="utf-8")
+    files.write_text_atomically(
+        html_path, page.shell(html.escape(title, quote=False), article),
+        attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return html_path
 
 

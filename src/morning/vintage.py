@@ -25,6 +25,7 @@ import datetime as dt
 from typing import Any
 
 from core import criteria
+from core import files
 from core import ettime
 from ops import market_today
 
@@ -430,7 +431,10 @@ def enforce(payload: dict[str, Any]) -> None:
         "This marker was rewritten automatically. Deleting it re-enables email "
         "and does not fix the data.\n"
     )
-    verify_morning.UNVERIFIED_MARKER.write_text(body, encoding="utf-8")
+    # The gate marker. deliver.py refuses to send while it exists, so a half
+    # written one is a file that still gates and an absent one is not.
+    files.write_text_atomically(verify_morning.UNVERIFIED_MARKER, body,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
 
     print(f"scan: REFUSING the {session_date} packet, "
           f"{len(violations)} vintage violation(s):")

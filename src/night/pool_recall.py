@@ -30,6 +30,7 @@ from typing import Any
 from core import config
 from core import criteria
 from core import eodhd
+from core import files
 from core import ettime
 from ops import job_status
 from selection import universe
@@ -679,7 +680,8 @@ def build(session_date: str | None = None, write: bool = True,
             overwrite or artifacts.scheduled_run(),
             what="pool_recall",
         )
-        path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+        files.write_json_atomically(path, payload, indent=2, sort_keys=True,
+                                    attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print(f"pool_recall: wrote {path}")
     return payload
 

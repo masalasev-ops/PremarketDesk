@@ -26,6 +26,7 @@ from typing import Any
 from core import artifacts
 from core import config
 from core import criteria
+from core import files
 from core import glossary
 from core import page
 from ops import job_status
@@ -549,10 +550,15 @@ def render(packet_path: Path, overwrite: bool = False) -> tuple[Path, Path]:
     run = config.run_dir(packet["session_date"])
     resolved = overwrite or artifacts.scheduled_run()
 
+    # Through the one atomic writer, like every other artifact a scheduled
+    # step publishes: a plain write_text truncates before it writes, and the
+    # desk reads both of these back for its Report screen.
     md_path, _ = artifacts.resolve(run / REPORT_MD, resolved, what="midday render")
-    md_path.write_text(markdown_text, encoding="utf-8")
+    files.write_text_atomically(md_path, markdown_text,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     html_path, _ = artifacts.resolve(run / REPORT_HTML, resolved, what="midday render")
-    html_path.write_text(to_html(markdown_text, title), encoding="utf-8")
+    files.write_text_atomically(html_path, to_html(markdown_text, title),
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return md_path, html_path
 
 

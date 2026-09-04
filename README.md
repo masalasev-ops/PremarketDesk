@@ -169,6 +169,38 @@ scratch every night, so it always covers the last seven days ending yesterday.
 Nothing accumulates in it and running the build twice is the same as running it
 once.
 
+### The desk, screen by screen
+
+Eight screens on hash routes inside one document. The route is the state, so a
+screen can be linked, bookmarked and sent to another machine, and the browser's
+back button works. `#/session/2026-09-04/morning` is a whole address.
+
+| Route | Screen | The question it answers |
+| --- | --- | --- |
+| `#/session/<date>/morning` | Morning | Which of today's names is worth the next forty five minutes. The gap spine puts every candidate on one axis with its catalyst and score; clicking one loads its deck below |
+| `#/session/<date>/midday` | Midday | What the open did to the levels the morning published, and what moved that the morning never named. Before 12:00 it counts down and shows the levels noon will grade |
+| `#/session/<date>/report` | The report | The words that were delivered that morning, and the midday one where the 12:00 pass wrote it. The same markdown the email carried, under the same stylesheet |
+| `#/session/<date>` | Session | One session's shape: the tape, the counts, links into the three above, what the record says, and whether the machine was right |
+| `#/sessions` | Sessions | Every session on file, as a calendar where the bar under each date is that morning's largest gap, or as a list |
+| `#/record` | Record | What the record says across every session: candidates a morning, how many cleared a screen, where the median pick ends up |
+| `#/name/<ticker>` | Name | Every session this ticker has appeared in, its gap and score each time, and what noon made of it |
+| `#/health/<date>` | Health | Was the machine right that morning. Every check in a sentence, with the packet's own figures folded underneath |
+
+**The deck is the unit.** On the Morning screen, selecting a name draws one:
+the level ladder with the prior close, prior high, premarket low, VWAP, last and
+premarket high on one price axis; the premarket tape with its volume underneath
+and a crosshair; the score, component by component, with the points each one
+earned; the evidence; the catalyst and every headline behind it; and, once the
+12:00 pass has run, what that name actually did. That is sections 3, 7 and 11 of
+the report for one name, in one picture, and the Name screen draws the same deck
+for every session that name has appeared in.
+
+**Nothing on a screen is computed by the page.** Every figure was written by
+Python into that morning's packet and copied by `desk/compact.py`, so a wrong
+number on a screen is a wrong number in the packet and the fix is upstream in
+`scan.py`. `doc/SCREENS.md` is the specification and says which parts were drawn
+and approved and which were reasoned about.
+
 ### Where the report is right now, and why it is not in your inbox
 
 `data/UNVERIFIED` is on disk, so `deliver.py` refuses to send regardless of what
@@ -195,23 +227,31 @@ numbers, checked them against an independent source, and found them right. See
 
 ### The morning report, section by section
 
+THE REPORT IS THE PROSE SURFACE, NOT THE ONLY ONE. Every figure in it is also
+drawn on a screen, and the screens are where you decide which name is worth
+your next forty five minutes; the report is where the reasoning is written
+down, and it is what an email can carry. Read the screens to choose and the
+report to understand, or read only the report, which is a complete document
+and always was.
+
 Eleven fixed sections, always in this order, always present even when a section
 has nothing to say. A section that goes missing is a defect, not an empty
-morning.
+morning. The last column is where the same answer is drawn rather than
+written.
 
-| # | Section | The question it answers | What you do with it |
+| # | Section | The question it answers | Drawn on |
 | ---: | --- | --- | --- |
-| 1 | Summary | What kind of morning is this, and how much survived the funnel | Read the counts. They tell you whether today is a twelve candidate morning or a two candidate one |
-| 2 | Premarket gappers | Everything that cleared the floors, eligible or not | Skim. This is the pool, not the picks |
-| 3 | Day watchlist | Which names passed every day trading condition | The main table. See below |
-| 4 | Swing watchlist | Which names passed the swing conditions | Same, on a longer horizon |
-| 5 | Notable movers | What else moved that is not a candidate | Context. Sector and index level moves you would otherwise miss |
-| 6 | Market trends | Index, volatility, rates, oil, dollar | Tone. Never an input to any screen |
-| 7 | Technical signals | Where each candidate sits against prior high, premarket high, 200 day | A table of levels for every candidate, then one write up per name on a watchlist, each closing with the line that says what would prove the setup wrong |
-| 8 | Economic data and rates | Today and tomorrow's high importance events | What could overrun everything at 08:30 or 10:00 |
-| 9 | Coming up | Earnings for candidates and notable names reporting tomorrow | Tomorrow's setup, today |
-| 10 | What the record says so far | What the paper ledger has observed across every session it holds | The only section not about today. See below |
-| 11 | Skips and traps | Names to leave alone, and every candidate with weak evidence | **Read this before the watchlists.** See below |
+| 1 | Summary | What kind of morning is this, and how much survived the funnel | Morning, the stat strip and How the list was cut, which draws the funnel stage by stage rather than counting it in a sentence |
+| 2 | Premarket gappers | Everything that cleared the floors, eligible or not | Morning, the gap spine: every candidate on one axis, distance from the centre is the gap and the side is direction |
+| 3 | Day watchlist | Which names passed every day trading condition | Morning, the spine's Day eligible filter, and the badge on each name's deck saying which conditions it failed |
+| 4 | Swing watchlist | Which names passed the swing conditions | Morning, the same filter on Swing |
+| 5 | Notable movers | What else moved that is not a candidate | Morning, What else moved, with each ranked list's own state and denominator beside it |
+| 6 | Market trends | Index, volatility, rates, oil, dollar | Morning and Session, the tape strip along the top |
+| 7 | Technical signals | Where each candidate sits against prior high, premarket high, 200 day | Morning, the level ladder and the premarket tape in the selected name's deck |
+| 8 | Economic data and rates | Today and tomorrow's high importance events | Morning, On the calendar |
+| 9 | Coming up | Earnings for candidates and notable names reporting tomorrow | Morning, Coming up; and the EPS actual against estimate in each candidate's deck |
+| 10 | What the record says so far | What the paper ledger has observed across every session it holds | Record, and the same block at the foot of Session |
+| 11 | Skips and traps | Names to leave alone, and every candidate with weak evidence | Morning, the Trap flagged and Thin at the level badges on a deck; and Health, which names every name that cleared a floor only on the estimate |
 
 #### 3. The day watchlist, and the one column that is not what it looks like
 
@@ -381,6 +421,12 @@ Live from 2026-08-31. It exists because the morning report is written ninety
 minutes before the session it is about, so at 08:45 nothing in it has happened
 yet.
 
+Both sections below are also drawn on the desk's Midday screen, which is where
+the move against the prior close becomes a bar and the entry status becomes a
+chip. Before 12:00 that screen counts down to the pass and shows the levels it
+is going to grade, because a screen that answers "not yet" and nothing else
+wastes the click.
+
 **Section 1, what the morning's picks did.** Every pick from today, graded
 against the levels the morning published. Invented numbers, but the shape is
 real:
@@ -473,19 +519,34 @@ whether anyone could have traded them. The report says so every day.
 
 ### The reading order at 08:50
 
-The section order in the report is not the order to read it in.
+Open the desk on the Morning screen. It opens on today.
 
-1. **Skips and traps.** Find out what today's evidence is worth before you look
-   at what it concluded. A thin band line against a name means the level in the
-   table above is a print rather than a price.
-2. **Summary.** The counts. How many names were ranked, how many cleared the
-   floors, how many were kept, and how many the rank cap cut. A morning where
-   the cap cut six names is a different morning from one where it cut none.
-3. **The two watchlists.** Now that you know what is behind them.
-4. **What the record says so far.** Shape, once, as context. It does not change
-   between 08:50 and 09:30 and it is not about any name in front of you.
+1. **The verdict strip at the foot, Was the machine right.** Before anything
+   it concluded, find out what today's evidence is worth. Green means every
+   check came back clean; anything else is one click to Health, where each
+   check is a sentence. A name that cleared the volume floor only once the
+   capture correction was applied is named there and nowhere else.
+2. **The stat strip and the gap spine.** How many were ranked, how many
+   cleared the floors, how many were kept and how many the cap cut, then
+   every candidate on one axis with its catalyst beside it. A morning where
+   the cap cut six names is a different morning from one where it cut none,
+   and How the list was cut draws that.
+3. **The deck of whichever name the spine makes you look at.** Its levels,
+   its tape, its score component by component, and its headlines. The Day
+   and Swing badges say whether it cleared a screen and, when it did not,
+   which condition it failed.
+4. **The report, for the names you are still weighing.** The write ups are
+   the part a screen cannot draw: what the setup is, and the line saying
+   what would prove it wrong. That is the section to read slowly.
 
-Everything else is reference you consult when a name interests you.
+Everything else is reference you consult when a name interests you, and the
+Record screen once, as context: it does not change between 08:50 and 09:30
+and it is not about any name in front of you.
+
+If email is all you have, the report alone is the whole morning in the order
+above: Skips and traps, then Summary, then the two watchlists, then the
+record. The links at its foot reach the desk on this machine and are stripped
+from the emailed copy, because a path is not a URL.
 
 **What this report cannot do.** Gap setups resolve inside the first fifteen
 minutes and you are reading this at 09:00. It replaces the hour of scanning
@@ -558,12 +619,16 @@ slot prose.
 08:49. `deliver.py` refuses because `data/UNVERIFIED` exists, and says so.
 `desk/render.py` rebuilds `site/PremarketDesk.html` with this morning in it.
 
-You open it at 08:50 and read Skips and traps first. It says the premarket high
-of ACME may not be a transactable price. ACME is the top row of the day
-watchlist at a score of 7.0 green. **Those two facts belong together and the
-report will not join them for you**, because the fill test's silence is not an
-approval and its warning is not a verdict. What you now know is that the 18.90
-in that row is a level the collector saw very little trade near.
+You open the desk at 08:50. The verdict at the foot of the Morning screen says
+one thing is worth a look, and Health names it: ACME cleared the volume floor
+only once the capture correction was applied. ACME is also the widest bar on
+the gap spine at a score of 7.0 green, so you click it, and its deck carries a
+Thin at the level badge beside that score with the sentence underneath. **On
+the desk those two facts sit together; in the report they are eight sections
+apart and it will not join them for you**, which is the whole reason the
+screens exist. Neither surface decides for you: the fill test's silence is not
+an approval and its warning is not a verdict. What you now know is that the
+18.90 on that ladder is a level the collector saw very little trade near.
 
 22:15 that night. The backfill writes what the premarket really was from EODHD
 intraday. The truth pass measures it again from Alpaca's complete tape and

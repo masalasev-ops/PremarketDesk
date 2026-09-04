@@ -47,6 +47,7 @@ from typing import Any
 from core import config
 from core import criteria
 from core import eodhd
+from core import files
 from core import ettime
 from ops import job_status
 from core import store
@@ -646,7 +647,8 @@ def write_universe_closes(
         "closes": rows,
     }
     path = config.DATA_DIR / f"universe-closes-{today.isoformat()}.json"
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    files.write_json_atomically(path, payload, indent=2, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     # Sessions that actually carried a close, not sessions asked for. This read
     # "3 if third_by else 2", which was true while prior_session_movers only
     # ever called this function with two populated maps in hand. It now calls

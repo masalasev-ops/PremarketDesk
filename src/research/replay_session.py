@@ -88,6 +88,7 @@ import probe_alpaca
 from collect import baseline as baseline_rules
 from core import criteria
 from core import ettime
+from core import files
 from core import store
 from morning import scan
 from night import true_volume
@@ -267,8 +268,8 @@ def fetch(day: str, force: bool = False,
         "universe_generated_at": universe_vintage,
         "symbols": rows,
     }
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True),
-                    encoding="utf-8")
+    files.write_json_atomically(path, payload, indent=2, sort_keys=True,
+                                attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return {"session_date": day, "written": len(rows), "path": str(path)}
 
 
