@@ -305,6 +305,20 @@ calendar carries one. Every one of those is a packet field today.
 PARTLY DRAWN. The carry through table and the per name outcome strip were
 built into the prototype; the floor buckets were not.
 
+[AMENDED 2026-09-04. A midday screen whose pass has not run no longer sits
+there saying nothing. It counts down in Eastern to the minute the 12:00 pass
+fires, and under the countdown it prints the levels that pass will grade: the
+entry and the stop the morning published, per name, in rank order. Four states,
+because they are four different facts and a reader must be able to tell them
+apart. Before 12:00 on today's session it counts down to the pass. Between
+12:00 and the watchdog's due time it counts down to that. Past the due time
+with a page built before it, it says the PAGE is behind the machine and to
+rebuild the desk. Past the due time with a page built after it, that is a
+fault and it says so. A session that is not today keeps the old sentence: the
+pass never ran, which is not the same as a session where nothing triggered.
+The two times come from CRITERIA [Midday] run_time and [Monitor] midday_due,
+read by render.py and passed in, so neither is restated under [Screens].]
+
 Route: `#/session/<date>/midday`.
 
 Answers: did the levels the morning published survive contact with the open,
@@ -351,6 +365,16 @@ calls it the volume is worse than the report is now.
 ### 4. Sessions
 
 SPECIFIED, NOT DRAWN. Replaces the day rail in site/PremarketDesk.html.
+
+[AMENDED 2026-09-04. It leads with a CALENDAR and not with the row per session
+below, which the owner read as a wall of line items. Every month on file is
+laid out at once, the day the desk holds a morning for is lifted and clickable
+and carries that morning's largest gap as a ticker and a bar on one scale
+across every month, and every other day is hazed. Two levels of hazing, because
+a weekday the machine did not run and a date before the history the desk
+carries are different facts. The row per session is still there behind a
+Calendar and List toggle; nothing described below was deleted, it stopped being
+the first thing seen.]
 
 Route: `#/sessions`.
 
@@ -406,7 +430,20 @@ path for each appearance, side by side, and what followed each one.
 
 SPECIFIED, NOT DRAWN.
 
-Route: `#/health`.
+[AMENDED 2026-09-04. The first build printed five blocks of the packet's raw
+JSON, which is the packet talking to itself, and the owner said so. It now
+answers its question in sentences: a verdict line, then one check at a time
+with a state and an English paragraph carrying the figures. Six or seven
+checks depending on the session, and the one that earns the screen its place
+is the last: the names that cleared the volume floor only once the capture
+estimate was applied and do not clear it on what the socket actually heard.
+That is the one place on any screen where a name is present because of a
+scaling factor and not because of a measurement, and nothing else displays it.
+The JSON is still here, folded, because the working should be checkable and
+should not be the first thing read. The route takes an optional date, so any
+morning on file can be checked and not only the newest.]
+
+Route: `#/health`, or `#/health/<date>`.
 
 Answers: is the machine right.
 

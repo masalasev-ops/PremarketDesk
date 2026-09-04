@@ -15,6 +15,55 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, sixty first: four screens stop wasting the reader's click
+
+The owner read the desk the day it shipped and named four places where a
+screen took a click and gave nothing back. All four are fixed. No renderer
+outside src/desk/ was touched and the emailed report is still untouched.
+
+A MIDDAY BEFORE NOON COUNTS DOWN. Opening today's midday screen at 10:30
+displayed one grey sentence saying the pass never ran, which was both useless
+and, before 12:00, not true yet. It now counts down in Eastern to the minute
+the pass fires and prints, under the countdown, exactly what that pass will
+grade: the entry and the stop the morning published, per name, in rank order.
+It distinguishes four states that the old screen collapsed into one, and the
+one worth naming is the third: past the due time with a page built before it,
+the PAGE is behind the machine, not the machine behind the schedule, and
+saying otherwise would send the owner looking for a fault that is a stale
+build. The clock is read through Intl in America/New_York and not off the
+browser, because every time this project writes down is Eastern and a
+countdown against the reader's own zone would be quietly right on this machine
+and wrong everywhere else, which is the worst way to be wrong.
+
+THE SESSIONS SCREEN LEADS WITH A CALENDAR. Twelve rows of a table was a wall
+of line items. Every month on file is now laid out at once; a day the desk
+holds a morning for is lifted and clickable and carries that morning's largest
+gap as a ticker and a bar on one shared scale, and every other day is hazed at
+one of two depths, because a weekday the machine did not run and a date before
+the history the desk carries are different facts. The table survives behind a
+toggle. Nothing was deleted; it stopped being first.
+
+THE HEADER'S DROPDOWN IS THAT SAME CALENDAR IN A POPOVER. Not a date input.
+A date input can clamp a range and cannot haze the individual days the desk
+holds nothing for, and those are most of the days in any month.
+
+HEALTH ANSWERS ITS QUESTION INSTEAD OF DUMPING THE PACKET. It printed five
+blocks of raw JSON at a reader who never asked for them. It now opens with a
+verdict and reads as one check at a time: a state, a title, and an English
+paragraph carrying the figures. The JSON is folded underneath, because the
+working should stay checkable and should not be the first thing read. The
+check that earns the screen its place is the capture one: the names that
+cleared the volume floor only once the capture estimate was applied and do not
+clear it on what the socket actually heard were sitting in every packet and
+were displayed nowhere. On 2026-09-04 that is three of eight. The route now
+takes an optional date, so any morning can be checked and not only the newest.
+
+The two clocks the countdown reads are CRITERIA [Midday] run_time and
+[Monitor] midday_due, read by render.py and passed to the page, so the desk
+counts down to the minute the scheduler actually fires and neither time is
+restated under [Screens]. The suite is green on every module with not one path
+changed.
+
 ## 2026-09-04, sixtieth: the desk ships, and the run folder stops holding the tape twice
 
 The owner approved the screen design in the morning and asked for the

@@ -49,18 +49,25 @@ DESK_FILE = "Desk.html"
 # JavaScript, so CRITERIA stays the one place a display bound is written down
 # and a change to it reaches the page without editing the page.
 _KNOB_KEYS = (
-    ("spine_scale_pct", "number"),
-    ("path_min_bars", "integer"),
-    ("ladder_label_gap_px", "integer"),
-    ("sessions_page_size", "integer"),
+    ("screens", "spine_scale_pct", "number", "spine_scale_pct"),
+    ("screens", "path_min_bars", "integer", "path_min_bars"),
+    ("screens", "ladder_label_gap_px", "integer", "ladder_label_gap_px"),
+    ("screens", "sessions_page_size", "integer", "sessions_page_size"),
+    # The two times a midday screen counts down to before its pass has run.
+    # Read from the sections that own them rather than restated under
+    # [Screens], so the page counts down to the minute the scheduler actually
+    # fires and moving either one reaches the screen without a second edit.
+    ("midday", "run_time", "text", "midday_run_time"),
+    ("monitor", "midday_due", "text", "midday_due"),
 )
 
 
 def knobs() -> dict[str, Any]:
     out: dict[str, Any] = {}
-    for key, kind in _KNOB_KEYS:
-        out[key] = (_CRIT.integer("screens", key) if kind == "integer"
-                    else _CRIT.number("screens", key))
+    for section, key, kind, name in _KNOB_KEYS:
+        out[name] = (_CRIT.integer(section, key) if kind == "integer"
+                     else _CRIT.text(section, key) if kind == "text"
+                     else _CRIT.number(section, key))
     return out
 
 
@@ -123,7 +130,14 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
     <div class="mark"><b>PremarketDesk</b><span>Desk</span></div>
     {_nav()}
     <div class="bar-actions noprint">
-      <select class="btn" id="session-picker" aria-label="Session"></select>
+      <div class="picker-wrap" id="picker-wrap">
+        <button class="btn" id="session-btn" type="button" aria-haspopup="dialog"
+                aria-expanded="false" aria-label="Choose a session">
+          <span class="mono" id="session-btn-label">n/a</span>
+          <span aria-hidden="true" style="color:var(--muted);font-size:10px">&#9660;</span>
+        </button>
+        <div class="cal-pop noprint" id="session-pop" hidden></div>
+      </div>
       <button class="btn" id="theme-btn" type="button">Theme</button>
       <button class="btn primary" id="print-btn" type="button">Save as PDF</button>
     </div>

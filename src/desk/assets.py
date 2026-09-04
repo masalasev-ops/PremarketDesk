@@ -283,11 +283,99 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
   font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 86ch; }
 .printonly { display: none; }
 
+/* the calendar. ONE component with two users: the sessions screen lays every
+   month on file side by side, and the header opens a single month in a
+   popover. A native date input cannot haze the days the desk holds nothing
+   for, only clamp a range, and "the machine did not run that morning" is the
+   thing the reader most needs to see. */
+.calwrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr));
+  gap: 15px; }
+/* Capped, because a month stretched to half a 1260px page reads as a table of
+   empty boxes rather than as a calendar. */
+.cal { background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 13px 14px 14px; max-width: 372px; }
+.cal-head { display: flex; align-items: baseline; gap: 7px; margin-bottom: 10px; }
+.cal-head .mo { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+.cal-head .yr { font-size: 12px; color: var(--muted); }
+.cal-nav { margin-left: auto; display: flex; gap: 4px; }
+.cal-nav button { border: 1px solid var(--line-strong); background: var(--surface);
+  border-radius: 5px; width: 25px; height: 24px; cursor: pointer; font-size: 14px;
+  line-height: 1; padding: 0; color: var(--ink-2); }
+.cal-nav button:hover:not(:disabled) { background: var(--raised); }
+.cal-nav button:disabled { opacity: 0.28; cursor: default; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-dow { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted); font-weight: 600; text-align: center; padding-bottom: 4px; }
+.cd { border-radius: 6px; padding: 4px 2px 5px; min-height: 46px; text-align: center;
+  border: 1px solid transparent; }
+.cd .dn { font-size: 12px; line-height: 1.25; font-variant-numeric: tabular-nums; }
+.cd .tk2 { font-size: 8px; letter-spacing: 0.01em; color: var(--muted); line-height: 1.3;
+  font-family: Consolas, "SF Mono", ui-monospace, monospace;
+  overflow: hidden; white-space: nowrap; }
+.cd .gb { height: 3px; border-radius: 2px; background: var(--r3); margin: 2px auto 0; }
+.cd.on { background: var(--raised); border-color: var(--line); cursor: pointer; }
+.cd.on .dn { font-weight: 600; color: var(--ink); }
+.cd.on:hover { border-color: var(--accent); }
+.cd.on.sel { background: var(--active); border-color: var(--accent); }
+.cd.off .dn { color: var(--muted); opacity: 0.55; }
+.cd.void .dn { color: var(--muted); opacity: 0.24; }
+.cal-key { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 13px;
+  font-size: 11.5px; color: var(--muted); align-items: center; }
+.cal-key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block;
+  vertical-align: -2px; margin-right: 6px; border: 1px solid var(--line-strong); }
+.cal-key i.k-on { background: var(--raised); }
+.cal-key i.k-off { background: transparent; opacity: 0.55; }
+.cal-key i.k-void { background: transparent; opacity: 0.28; border-style: dashed; }
+
+.picker-wrap { position: relative; }
+#session-btn { display: inline-flex; align-items: center; gap: 7px; }
+.cal-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
+  width: 296px; box-shadow: var(--shadow); }
+.cal-pop .cal { border-color: var(--line-strong); }
+
+/* the countdown a midday screen shows before its pass has run */
+.waiting { text-align: center; padding: 28px 20px 26px; }
+.count { display: flex; align-items: baseline; gap: 3px; justify-content: center;
+  padding: 14px 0 4px; }
+.count b { font-size: 44px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.count span { font-size: 13px; color: var(--muted); margin-right: 9px; }
+.waiting .lead { font-size: 13.5px; color: var(--ink-2); max-width: 62ch;
+  margin: 14px auto 0; line-height: 1.6; }
+
+/* health, said in sentences */
+.check { display: grid; grid-template-columns: 132px minmax(0,1fr); gap: 15px;
+  padding: 14px 0; border-top: 1px solid var(--line); align-items: start; }
+.check:first-of-type { border-top: 0; padding-top: 2px; }
+.check .t { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
+.check .s { font-size: 13px; color: var(--ink-2); line-height: 1.6; max-width: 80ch; }
+.chip { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+  font-weight: 700; display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap; padding-top: 2px; }
+.chip i { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+.chip.ok { color: var(--good); } .chip.ok i { background: var(--good); }
+.chip.watch { color: var(--warn); } .chip.watch i { background: var(--warn); }
+.chip.bad { color: var(--bad); } .chip.bad i { background: var(--bad); }
+.chip.note { color: var(--muted); } .chip.note i { background: var(--muted); }
+.verdict { display: flex; gap: 14px; align-items: center; padding: 0; overflow: hidden; }
+.verdict .rule { width: 4px; align-self: stretch; }
+.verdict .vin { padding: 15px 4px 15px 0; }
+.verdict .vt { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+.verdict .vs { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+.seg { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 7px;
+  overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 4px 13px; font-size: 12.5px;
+  cursor: pointer; color: var(--ink-2); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface);
+  font-weight: 500; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 @media print {
   .bar { position: static; border-bottom: 2px solid var(--ink); }
-  .bar-actions, .filters, nav, .noprint { display: none !important; }
+  .bar-actions, .filters, nav, .noprint, .seg { display: none !important; }
+  .cal { break-inside: avoid; }
   .wrap { max-width: none; padding: 0; }
   body { font-size: 10.5pt; }
   .printonly { display: block; }
@@ -350,6 +438,29 @@ DECK_JS = r"""
     return String(Math.round(v));
   }
   function commas(v) { return v == null ? NIL : Math.round(v).toLocaleString("en-US"); }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function bare(s) { return String(s == null ? "" : s).split(".")[0]; }
+  function hhmm(iso) {
+    if (!iso) return NIL;
+    var m = String(iso).match(/T(\d\d:\d\d)/);
+    return m ? m[1] : String(iso).slice(0, 5);
+  }
+  // The wall clock in New York, whatever zone the reader is sitting in. Every
+  // time this project writes down is Eastern, so a countdown read against the
+  // browser's own clock would be wrong for most of the world and quietly
+  // right here, which is the worst way for it to be wrong.
+  function etNow() {
+    var parts = {};
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York", hour12: false, year: "numeric",
+      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+      second: "2-digit"
+    }).formatToParts(new Date()).forEach(function (p) { parts[p.type] = p.value; });
+    var hh = (+parts.hour) % 24;
+    return { date: parts.year + "-" + parts.month + "-" + parts.day,
+      mins: hh * 60 + (+parts.minute), secs: +parts.second,
+      clock: pad2(hh) + ":" + parts.minute };
+  }
   function dirClass(v) { return v > 0 ? "up" : v < 0 ? "down" : "flat"; }
   function convWord(c) {
     return c === "green" ? "Green" : c === "yellow" ? "Yellow"
@@ -392,6 +503,109 @@ DECK_JS = r"""
     return new Response(stream).json().then(function (payload) {
       cache[date] = payload;
       return payload;
+    });
+  }
+
+  /* ---------- the calendar ----------
+     Every day the desk holds a morning for is lifted and clickable. A day
+     inside the history with no morning is hazed, and a day outside the
+     history entirely is hazed further, because "the machine did not run"
+     and "this is before anything on file" are different facts and a reader
+     deciding where to click needs to tell them apart. */
+  var MONTH_NAME = ["January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"];
+  var DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  var BYDATE = {};
+  INDEX.sessions.forEach(function (r) { BYDATE[r.date] = r; });
+  var DATES = INDEX.sessions.map(function (r) { return r.date; }).sort();
+  var FIRST = DATES[0] || "";
+  var LAST = DATES[DATES.length - 1] || "";
+  var CAL_MAX = Math.max.apply(null, INDEX.sessions.map(function (r) {
+    return Math.abs(r.top_gap_pct || 0); }).concat([1]));
+
+  function monthsOnFile() {
+    if (!FIRST) return [];
+    var out = [], y = +FIRST.slice(0, 4), m = +FIRST.slice(5, 7) - 1;
+    var ey = +LAST.slice(0, 4), em = +LAST.slice(5, 7) - 1;
+    while (y < ey || (y === ey && m <= em)) {
+      out.push(y + "-" + pad2(m + 1));
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+    return out;
+  }
+
+  function calMonth(ym, sel, withNav) {
+    var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1;
+    // Constructed local, read only for a weekday and a length, so no zone
+    // conversion happens and none is wanted.
+    var lead = new Date(y, m, 1).getDay();
+    var days = new Date(y, m + 1, 0).getDate();
+    var cells = "", i;
+    for (i = 0; i < 7; i++) cells += '<div class="cal-dow">' + DOW[i] + "</div>";
+    for (i = 0; i < lead; i++) cells += "<div></div>";
+    for (var d = 1; d <= days; d++) {
+      var iso = ym + "-" + pad2(d);
+      var r = BYDATE[iso];
+      if (r) {
+        var w = Math.max(7, Math.round(Math.abs(r.top_gap_pct || 0) / CAL_MAX * 28));
+        cells += '<div class="cd on' + (iso === sel ? " sel" : "") +
+          '" data-date="' + iso + '" role="button" tabindex="0" title="' +
+          esc(iso + ": " + (r.candidates == null ? NIL : r.candidates) +
+            " candidates, largest gap " + (r.top_symbol || NIL) + " " +
+            pct(r.top_gap_pct)) + '"><div class="dn">' + d + "</div>" +
+          '<div class="tk2">' + esc(bare(r.top_symbol).slice(0, 5)) + "</div>" +
+          '<div class="gb" style="width:' + w + 'px"></div></div>';
+      } else {
+        var outside = (iso < FIRST || iso > LAST);
+        cells += '<div class="cd ' + (outside ? "void" : "off") + '" title="' +
+          (outside ? "outside the history this desk carries"
+            : "no morning on file for this day") + '"><div class="dn">' +
+          d + "</div></div>";
+      }
+    }
+    var months = monthsOnFile(), at = months.indexOf(ym), nav = "";
+    if (withNav) {
+      nav = '<div class="cal-nav">' +
+        '<button type="button" aria-label="Previous month" data-mo="' +
+        esc(months[at - 1] || "") + '"' + (at <= 0 ? " disabled" : "") +
+        ">&lsaquo;</button>" +
+        '<button type="button" aria-label="Next month" data-mo="' +
+        esc(months[at + 1] || "") + '"' +
+        (at < 0 || at >= months.length - 1 ? " disabled" : "") +
+        ">&rsaquo;</button></div>";
+    }
+    return '<div class="cal"><div class="cal-head"><span class="mo">' +
+      MONTH_NAME[m] + '</span><span class="yr">' + y + "</span>" + nav +
+      '</div><div class="cal-grid">' + cells + "</div></div>";
+  }
+
+  function calKey() {
+    return '<div class="cal-key">' +
+      '<span><i class="k-on"></i>a morning on file, click it</span>' +
+      '<span><i class="k-off"></i>no morning that day</span>' +
+      '<span><i class="k-void"></i>outside the history on file</span>' +
+      '<span>the bar is that morning\'s largest gap, one scale across every ' +
+      "month</span></div>";
+  }
+
+  function wireCal(root, onPick) {
+    root.addEventListener("click", function (e) {
+      var mo = e.target.closest("button[data-mo]");
+      if (mo) {
+        if (!mo.disabled && mo.dataset.mo) {
+          root.innerHTML = calMonth(mo.dataset.mo, root.dataset.sel || null, true);
+        }
+        return;
+      }
+      var cd = e.target.closest(".cd.on");
+      if (cd) onPick(cd.dataset.date);
+    });
+    root.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      var cd = e.target.closest(".cd.on");
+      if (cd) { e.preventDefault(); onPick(cd.dataset.date); }
     });
   }
 
@@ -925,15 +1139,124 @@ DECK_JS = r"""
       }).join("") + "</tbody></table></div></section>";
   }
 
+  /* What noon will grade, shown while the pass has not run. A screen that
+     answers "not yet" and nothing else wastes the reader's click; the levels
+     below are exactly what the 12:00 pass will read back, so they are the
+     most useful thing this screen can hold in the meantime. */
+  function pendingLevels(p) {
+    var rows = (p.candidates || []).slice().sort(function (a, b) {
+      return (a.rank || 99) - (b.rank || 99); });
+    if (!rows.length) return "";
+    return '<section><div class="shead"><h2>What noon will grade</h2>' +
+      '<span class="note">' + rows.length + " published at " +
+      esc(p.run_at || "08:45") + "</span></div>" +
+      '<p class="snote">The entry and the stop the morning printed, exactly as ' +
+      "published. The pass reads each one back against the open and says whether it " +
+      "was ever reachable. It grades these levels and never the corrected ones the " +
+      "night writes later.</p>" +
+      '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Conviction</th>' +
+      '<th style="text-align:right">Gap</th><th style="text-align:right">Prior close</th>' +
+      '<th style="text-align:right">Entry</th><th style="text-align:right">Stop</th>' +
+      '<th>Screens</th></tr></thead><tbody>' + rows.map(function (c) {
+        var screens = [c.day ? "day" : "", c.swing ? "swing" : ""]
+          .filter(Boolean).join(" and ");
+        return '<tr class="clickable" data-goto="' + esc(c.sym) + '">' +
+          '<td class="tk">' + esc(c.sym) + "</td>" +
+          '<td><span class="pill ' + esc(c.conv || "") + '">' + convWord(c.conv) +
+          "</span></td>" +
+          '<td class="n ' + dirClass(c.gap) + '">' + pct(c.gap) + "</td>" +
+          '<td class="n">' + n2(c.prior_close) + '</td>' +
+          '<td class="n">' + n2(c.entry) + '</td><td class="n">' + n2(c.stop) + "</td>" +
+          '<td style="color:var(--muted)">' + (screens || "neither") + "</td></tr>";
+      }).join("") + "</tbody></table></div></section>";
+  }
+
+  function fmtLeft(total) {
+    if (total < 0) total = 0;
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var x = total % 60;
+    var out = "";
+    if (h) out += "<b>" + h + "</b><span>h</span>";
+    if (h || m) out += "<b>" + (h ? pad2(m) : m) + "</b><span>m</span>";
+    out += "<b>" + ((h || m) ? pad2(x) : x) + "</b><span>s</span>";
+    return out;
+  }
+
+  function middayWaiting(p, root) {
+    var now = etNow();
+    var runAt = KNOBS.midday_run_time || "12:00";
+    var dueBy = KNOBS.midday_due || "12:20";
+    var runM = toMin(runAt), dueM = toMin(dueBy);
+    var builtClock = (INDEX.built_at || "").slice(11, 16);
+    var builtM = /^\d\d:\d\d$/.test(builtClock) ? toMin(builtClock) : -1;
+    var isToday = (p.session === now.date);
+    var state, lead, target = null;
+
+    if (!isToday) {
+      state = "bad";
+      lead = "The 12:00 pass never ran for " + esc(p.session) + ", so nothing was " +
+        "read back against the levels that morning published. That is a different " +
+        "fact from a session where the pass ran and nothing triggered, and this " +
+        "screen will not let the two look alike.";
+    } else if (now.mins < runM) {
+      state = "note";
+      target = runM;
+      lead = "The pass fires at " + esc(runAt) + " Eastern and reads today's " +
+        (p.candidates || []).length + " published levels back against the open. It " +
+        "has not run yet. When it does, this screen fills in on its own next rebuild.";
+    } else if (now.mins < dueM) {
+      state = "note";
+      target = dueM;
+      lead = "The pass fired at " + esc(runAt) + " and is expected to have written by " +
+        esc(dueBy) + ". This page was built at " + esc(builtClock || NIL) +
+        " Eastern, before that, so reload it once the desk has rebuilt.";
+    } else if (builtM >= 0 && builtM < dueM) {
+      state = "note";
+      lead = "It is " + esc(now.clock) + " Eastern and the pass was due by " +
+        esc(dueBy) + ", but this page was built at " + esc(builtClock) +
+        ", before it. The page is behind the machine, not the other way round. " +
+        "Rebuild the desk and the session will carry its midday.";
+    } else {
+      state = "bad";
+      lead = "The pass was due by " + esc(dueBy) + " Eastern and had still not " +
+        "written when this page was built at " + esc(builtClock || NIL) +
+        ". Something stopped the 12:00 step.";
+    }
+
+    var head = state === "bad"
+      ? (isToday ? "The 12:00 pass has not written" : "The 12:00 pass never ran")
+      : (target === runM && isToday && now.mins < runM ? "Until the 12:00 pass"
+        : target ? "Until it is due" : "This page is behind");
+
+    root.innerHTML = '<section><div class="shead"><h2>Midday</h2>' +
+      '<span class="note">' + esc(p.session) + "</span></div>" +
+      '<div class="card"><div class="waiting">' + chip(state) +
+      (target == null ? "" : '<div class="count" id="countdown"></div>') +
+      (target == null ? "" : '<div class="panel-title" style="margin-top:9px">' +
+        esc(head) + "</div>") +
+      '<p class="lead">' + lead + "</p></div></div>" +
+      pendingLevels(p) + "</section>";
+
+    root.addEventListener("click", function (e) {
+      var tr = e.target.closest("[data-goto]");
+      if (tr) location.hash = "#/name/" + tr.dataset.goto;
+    });
+    if (target == null) return;
+    var box = $("countdown");
+    function tick() {
+      var t = etNow();
+      var left = (target - t.mins) * 60 - t.secs;
+      if (left <= 0) { box.innerHTML = "<b>0</b><span>s</span>"; return; }
+      box.innerHTML = fmtLeft(left);
+    }
+    tick();
+    TIMER = setInterval(tick, 1000);
+  }
+
   function screenMidday(p, root) {
     var mid = p.midday;
-    if (!mid) {
-      root.innerHTML = '<section><div class="shead"><h2>Midday</h2></div>' +
-        '<div class="card pad empty">The 12:00 pass never ran for ' + esc(p.session) +
-        ", so there is nothing to show against the levels the morning published. " +
-        "That is different from a session where nothing triggered.</div></section>";
-      return;
-    }
+    if (!mid) { middayWaiting(p, root); return; }
     var rows = p.candidates.filter(function (c) { return c.mid; });
     var states = {};
     rows.forEach(function (c) { states[c.mid.state] = (states[c.mid.state] || 0) + 1; });
@@ -1022,7 +1345,11 @@ DECK_JS = r"""
       { l: "Candidates", v: p.candidates.length, s: "examined at " + esc(p.run_at || "08:45") },
       { l: "Day eligible", v: (tally.day || {}).eligible == null ? NIL : tally.day.eligible, s: "" },
       { l: "Swing eligible", v: (tally.swing || {}).eligible == null ? NIL : tally.swing.eligible, s: "" },
-      { l: "Midday", v: mid ? "ran" : NIL, s: mid ? "read at " + (mid.generated || "").slice(11, 16) : "the 12:00 pass never ran" },
+      { l: "Midday", v: mid ? "ran" : (p.session === etNow().date ? "due" : NIL),
+        s: mid ? "read at " + (mid.generated || "").slice(11, 16)
+          : p.session === etNow().date
+            ? "at " + (KNOBS.midday_run_time || "12:00") + " ET"
+            : "the 12:00 pass never ran" },
       { l: "Vendor calls", v: p.api_calls == null ? NIL : p.api_calls, s: "on the morning pass" }
     ]) +
       '<section><div class="shead"><h2>This session</h2></div>' +
@@ -1037,7 +1364,9 @@ DECK_JS = r"""
       "tape, the score and what cut the list.</div></a>" +
       '<a class="card pad" style="text-decoration:none;display:block" href="#/session/' + esc(d) + '/midday">' +
       '<div class="panel-title">Midday</div><div style="font-size:20px;font-weight:600">' +
-      (mid ? p.candidates.filter(function (c) { return c.mid; }).length + " carried" : "not run") +
+      (mid ? p.candidates.filter(function (c) { return c.mid; }).length + " carried"
+        : p.session === etNow().date ? "due at " + (KNOBS.midday_run_time || "12:00")
+        : "not run") +
       "</div>" +
       '<div class="snote" style="margin:6px 0 0">What the open did to the levels the morning ' +
       "printed, and what moved that it never named.</div></a></div></section>" +
@@ -1105,35 +1434,153 @@ DECK_JS = r"""
       ]) + "</section>";
   }
 
-  function healthSection(p) {
+  /* ---------- health, answered rather than dumped ----------
+     This screen used to print five blocks of the packet's raw JSON, which is
+     the packet talking to itself. Every check below reads the same figures
+     and says what they mean; the JSON is still here, folded, because the
+     working should be checkable and should not be the first thing read. */
+  var CHIP_WORD = { ok: "Fine", watch: "Worth a look", bad: "Fault", note: "Note" };
+
+  function chip(state) {
+    return '<span class="chip ' + state + '"><i></i>' + CHIP_WORD[state] + "</span>";
+  }
+
+  function healthChecks(p) {
     var h = p.health || {};
-    var q = h.quota || {}, cov = h.coverage || {}, cap = h.capture || {};
-    var rows = [
-      ["Quota at entry", q.used == null ? NIL : commas(q.used) + " used",
-        q.remaining == null ? "" : commas(q.remaining) + " remaining"],
-      ["Collector coverage", cov.covered == null ? NIL : cov.covered + " covered",
-        cov.examined == null ? "" : "of " + cov.examined + " examined"],
-      ["Capture share", cap.capture_share == null ? NIL : n2(cap.capture_share * 100, 2) + "%",
-        esc(cap.basis || "")],
-      ["Vendor calls", p.api_calls == null ? NIL : commas(p.api_calls), "on the morning pass"]
-    ];
-    return '<section><div class="shead"><h2>Was the machine right</h2></div>' +
-      '<div class="card pad"><table><tbody>' + rows.map(function (r) {
-        return "<tr><td style='color:var(--muted);width:190px'>" + esc(r[0]) +
-          "</td><td class='mono'>" + r[1] + "</td><td style='color:var(--muted)'>" +
-          r[2] + "</td></tr>";
-      }).join("") + "</tbody></table></div></section>";
+    var job = h.job || {}, q = h.quota || {}, cov = h.coverage || {};
+    var w = h.window || {}, cap = h.capture || {};
+    var out = [];
+
+    var over = job.overdue || [];
+    out.push(over.length
+      ? { s: "bad", t: "The scheduled steps",
+          x: "Steps that should have finished had not when the morning packet was " +
+            "written: " + esc(over.join(", ")) + "." }
+      : { s: "ok", t: "The scheduled steps",
+          x: "Every step the schedule owns had finished by the time the morning " +
+            "packet was written, and nothing was overdue." });
+
+    if (q.api_requests != null) {
+      out.push({ s: q.refused ? "bad" : q.degraded ? "watch" : "ok",
+        t: "The vendor budget",
+        x: "The day had spent " + commas(q.api_requests) + " calls of the " +
+          commas(q.daily_limit) + " it is allowed when the morning checked at " +
+          hhmm(q.read_at) + ", leaving " + commas(q.remaining) + ". " +
+          (q.refused
+            ? "That was low enough to stand the morning down before it started."
+            : q.degraded
+              ? "That was low enough to make the morning cut its optional work."
+              : "The morning cuts its optional work below " + commas(q.degrade_below) +
+                " and stands down entirely below " + commas(q.refuse_below) +
+                ", so it was nowhere near either.") });
+    }
+
+    if (cov.requested != null) {
+      var silent = cov.silent || 0;
+      out.push({ s: silent ? "watch" : "ok", t: "What the collector heard",
+        x: "It was listening to " + cov.requested + " names and built a minute by " +
+          "minute tape for " + cov.produced_bars + " of them. " +
+          (silent
+            ? silent + " said nothing at all: " +
+              esc((cov.silent_symbols || []).map(bare).join(", ")) + "."
+            : "None of them went silent.") +
+          (cov.peak_trades_per_minute
+            ? " At its busiest minute it took " + commas(cov.peak_trades_per_minute) +
+              " trades."
+            : "") });
+    }
+
+    if (w.scheduled_start_et) {
+      var late = w.started_late_minutes || 0;
+      out.push({ s: late > 2 ? "watch" : "ok", t: "The listening window",
+        x: "The socket was meant to run " + esc(w.scheduled_start_et) + " to " +
+          esc(w.scheduled_stop_et) + " and started " +
+          (late > 0.5 ? n2(late, 1) + " minutes late" : "on time") +
+          ". The earliest minute it recorded is " + hhmm(w.first_bar_et) +
+          " and the latest is " + hhmm(w.last_bar_et) + ", " +
+          n2(w.minutes_since_last_bar, 1) + " minutes before the packet was built." +
+          (w.contains_replay
+            ? " " + (w.replay_rows || 0) + " rows arrived stamped to the prior " +
+              "session rather than this one and were held apart from the premarket " +
+              "count rather than added to it."
+            : "") });
+    }
+
+    if (cap.default_capture_share != null) {
+      var measured = (cap.rows || []).filter(function (r) {
+        return r.capture_minutes != null; }).length;
+      out.push({ s: "note", t: "Premarket volume is an estimate",
+        x: "The socket hears roughly " + n2(cap.default_capture_share * 100, 1) +
+          " percent of what the consolidated tape prints before the open, so every " +
+          "premarket RVOL and float rotation on these screens is scaled up from what " +
+          "it heard rather than measured directly. Of the " + (cap.candidates || 0) +
+          " names the volume floor was applied to, " + measured +
+          " were scaled by that name's own measured share and the rest by the " +
+          "standing default. The truth pass writes the measured figure overnight, " +
+          "beside these and never over them." });
+      var carried = cap.carried_across_the_floor || [];
+      if (carried.length) {
+        out.push({ s: "watch", t: "Cleared the floor on the estimate",
+          x: esc(carried.map(bare).join(", ")) + " cleared the volume floor of " +
+            esc(cap.floor || "") + " only once that scaling was applied. On what the " +
+            "socket actually heard " + (carried.length === 1 ? "it does" : "they do") +
+            " not clear it. This is the one place on these screens where a name is " +
+            "present because of a scaling factor and not because of a measurement." });
+      }
+    }
+
+    out.push(p.bars_source === "run_snapshot"
+      ? { s: "ok", t: "The tape behind the pictures",
+          x: "Every tape path on this session's screens is drawn from the exact rows " +
+            "the morning saw, frozen alongside the packet." }
+      : { s: "watch", t: "The tape behind the pictures",
+          x: "This session's bars were rebuilt by clipping the collector's whole day " +
+            "to the window the packet recorded, which can carry one extra minute at " +
+            "the end. The shape is right; the last minute may not be the one the " +
+            "morning saw." });
+    return out;
+  }
+
+  function checksHTML(list) {
+    return '<div class="card pad">' + list.map(function (c) {
+      return '<div class="check"><div>' + chip(c.s) + "</div><div>" +
+        '<div class="t">' + esc(c.t) + '</div><div class="s">' + c.x +
+        "</div></div></div>";
+    }).join("") + "</div>";
+  }
+
+  function verdictHTML(list) {
+    function count(k) {
+      return list.filter(function (c) { return c.s === k; }).length;
+    }
+    var bad = count("bad"), watch = count("watch");
+    var tone = bad ? "bad" : watch ? "warn" : "good";
+    var title = bad
+      ? (bad === 1 ? "One thing went wrong" : bad + " things went wrong")
+      : watch
+        ? (watch === 1 ? "One thing is worth a look"
+          : watch + " things are worth a look")
+        : "Everything the machine was asked to do, it did";
+    var sub = (bad || watch)
+      ? "Every other check came back clean."
+      : "Every check came back clean. What is marked a note is a standing caveat " +
+        "about how the numbers are made, not a fault.";
+    return '<div class="card verdict"><div class="rule" style="background:var(--' +
+      tone + ')"></div><div class="vin"><div class="vt">' + esc(title) +
+      '</div><div class="vs">' + esc(sub) + "</div></div></div>";
+  }
+
+  function healthSection(p) {
+    return '<section><div class="shead"><h2>Was the machine right</h2>' +
+      '<a class="note" href="#/health/' + esc(p.session) +
+      '">every check, in full</a></div>' + verdictHTML(healthChecks(p)) + "</section>";
   }
 
   function screenSessions(root) {
     var rows = INDEX.sessions;
-    var maxGap = Math.max.apply(null,
-      rows.map(function (r) { return Math.abs(r.top_gap_pct || 0); }).concat([1])) * 1.1;
-    root.innerHTML =
-      '<section><div class="shead"><h2>Every session</h2>' +
-      '<span class="note">' + rows.length + " on file</span></div>" +
-      '<p class="snote">One row a session, newest first. The bar is that morning\'s largest ' +
-      "gap, on a shared scale so two mornings compare by eye. Click a row to open it.</p>" +
+    var months = monthsOnFile();
+    var maxGap = CAL_MAX * 1.1;
+    var listHTML =
       '<div class="card pad scroll"><table><thead><tr><th>Session</th>' +
       '<th style="text-align:right">Cand</th><th style="text-align:right">Day</th>' +
       '<th style="text-align:right">Swing</th><th>Conviction</th><th>Largest gap</th>' +
@@ -1156,10 +1603,44 @@ DECK_JS = r"""
           '<td style="color:var(--muted);font-size:11.5px">' +
           (r.packet_bytes == null ? NIL
             : big(r.packet_bytes) + (r.packet_compressed ? " gz" : "")) + "</td></tr>";
-      }).join("") + "</tbody></table></div></section>";
-    root.addEventListener("click", function (e) {
-      var tr = e.target.closest("[data-date]");
+      }).join("") + "</tbody></table></div>";
+    var calHTML = '<div class="calwrap">' + months.map(function (ym) {
+      return calMonth(ym, null, false); }).join("") + "</div>" + calKey();
+
+    var NOTE = {
+      cal: "A lifted day is a morning the desk holds. The ticker under the date is " +
+        "that morning's largest gap and the bar is how large, on one scale across " +
+        "every month, so two mornings compare by eye. Everything faint is a day the " +
+        "machine did not run: a weekend, a holiday, or a date before the history " +
+        "this desk carries.",
+      list: "One row a session, newest first. The bar is that morning's largest gap " +
+        "on the same shared scale."
+    };
+
+    root.innerHTML =
+      '<section><div class="shead"><h2>Every session on file</h2>' +
+      '<span class="note">' + rows.length + " mornings, " + esc(FIRST) + " to " +
+      esc(LAST) + '</span><div class="seg noprint" style="margin-left:auto">' +
+      '<button type="button" data-view="cal" aria-pressed="true">Calendar</button>' +
+      '<button type="button" data-view="list" aria-pressed="false">List</button>' +
+      '</div></div><p class="snote" id="ses-note">' + esc(NOTE.cal) + "</p>" +
+      '<div id="ses-view">' + calHTML + "</div></section>";
+
+    var view = $("ses-view");
+    wireCal(view, function (date) { location.hash = "#/session/" + date; });
+    view.addEventListener("click", function (e) {
+      var tr = e.target.closest("tr[data-date]");
       if (tr) location.hash = "#/session/" + tr.dataset.date;
+    });
+    root.addEventListener("click", function (e) {
+      var b = e.target.closest("button[data-view]");
+      if (!b) return;
+      var which = b.dataset.view;
+      Array.prototype.forEach.call(root.querySelectorAll("button[data-view]"),
+        function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      view.innerHTML = which === "cal" ? calHTML : listHTML;
+      view.dataset.sel = "";
+      $("ses-note").textContent = NOTE[which];
     });
   }
 
@@ -1272,43 +1753,55 @@ DECK_JS = r"""
     });
   }
 
-  function screenHealth(root) {
-    root.innerHTML = '<section><div class="shead"><h2>Is the machine right</h2></div>' +
-      '<p class="snote">Read from the newest packet on file. Every figure here was already ' +
-      "in it; this screen is the first thing that displays them.</p>" +
-      '<div id="health-body" class="card pad empty">Reading…</div></section>';
-    var newest = INDEX.sessions[0];
-    if (!newest) return;
-    loadSession(newest.date).then(function (p) {
-      if (!p) return;
+  function screenHealth(date, root) {
+    root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
+      esc(date) + " ...</div>";
+    loadSession(date).then(function (p) {
+      if (!p) {
+        root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
+          esc(date) + " is not inlined in this document.</div>";
+        return;
+      }
+      $("stamp-date").textContent = p.session;
+      $("stamp-run").textContent = p.run_at || NIL;
       var h = p.health || {};
-      var ev = h.evidence || {};
-      var out = "";
-      out += kpisHTML([
-        { l: "Session", v: p.session, s: "packet at " + esc(p.run_at || NIL) + " ET" },
-        { l: "Vendor calls", v: p.api_calls == null ? NIL : p.api_calls, s: "on the morning pass" },
-        { l: "Quota remaining", v: big((h.quota || {}).remaining), s: "of the shared counter" },
-        { l: "Bars source", v: (p.bars_source === "run_snapshot" ? "exact" : "clipped"),
-          s: esc(p.bars_source || "unknown") }
-      ]);
-      function block(title, obj) {
+      var list = healthChecks(p);
+      function fold(title, obj) {
         if (!obj || !Object.keys(obj).length) return "";
-        return '<div class="card pad" style="margin-top:13px">' +
-          '<div class="panel-title">' + esc(title) + "</div>" +
-          '<pre class="mono" style="white-space:pre-wrap;font-size:11.5px;' +
-          'color:var(--ink-2);margin:0">' + esc(JSON.stringify(obj, null, 2)) + "</pre></div>";
+        return "<details><summary>" + esc(title) + "</summary>" +
+          '<div class="body"><pre class="mono" style="white-space:pre-wrap;' +
+          'font-size:11.5px;color:var(--ink-2);margin:0">' +
+          esc(JSON.stringify(obj, null, 2)) + "</pre></div></details>";
       }
-      out += block("Job health", h.job) + block("Quota preflight", h.quota) +
-        block("Collector coverage", h.coverage) + block("Collector window", h.window) +
-        block("Capture correction", h.capture);
+      var out = '<section><div class="shead"><h2>Was the machine right on ' +
+        esc(p.session) + "</h2>" +
+        '<span class="note">packet at ' + esc(p.run_at || NIL) + " ET</span></div>" +
+        '<p class="snote">Every answer below is read out of that morning\'s own ' +
+        "packet. This page measures nothing itself, so a wrong figure here is a " +
+        "wrong figure in the packet and the fix is upstream of the screen.</p>" +
+        verdictHTML(list) + '<div style="margin-top:13px">' + checksHTML(list) +
+        "</div></section>";
+
+      var ev = h.evidence || {};
       if (ev.band_thin && ev.band_thin.length) {
-        out += '<div class="card pad" style="margin-top:13px">' +
-          '<div class="panel-title">Thin at the level</div>' + ev.band_thin.map(function (r) {
-            return "<div style='font-size:12.5px;margin-bottom:7px'><span class='mono'>" +
-              esc((r.symbol || "").split(".")[0]) + "</span> " + esc(r.why) + "</div>";
-          }).join("") + "</div>";
+        out += '<section><div class="shead"><h2>Thin at the level</h2></div>' +
+          '<p class="snote">Names whose published entry sits where very little ' +
+          "traded. The level is not wrong; there may be nothing there to fill " +
+          "against.</p><div class=\"card pad\">" + ev.band_thin.map(function (r) {
+            return '<div class="reason"><span class="mono rk">' +
+              esc(bare(r.symbol)) + "</span><span>" + esc(r.why) + "</span></div>";
+          }).join("") + "</div></section>";
       }
-      $("health-body").outerHTML = "<div>" + out + "</div>";
+
+      out += '<section><div class="shead"><h2>The figures behind the answers</h2>' +
+        '</div><p class="snote">Folded away because the sentences above ' +
+        "are the point and these are the working. Nothing here is computed by this " +
+        "page.</p>" + fold("What the schedule reported", h.job) +
+        fold("The vendor budget as the morning read it", h.quota) +
+        fold("What the collector was listening to", h.coverage) +
+        fold("The window it actually ran", h.window) +
+        fold("The scaling applied to premarket volume", h.capture) + "</section>";
+      root.innerHTML = out;
     });
   }
 
@@ -1322,7 +1815,7 @@ DECK_JS = r"""
     }
     if (parts[0] === "sessions") return { screen: "sessions" };
     if (parts[0] === "record") return { screen: "record" };
-    if (parts[0] === "health") return { screen: "health" };
+    if (parts[0] === "health") return { screen: "health", date: parts[1] || LAST };
     if (parts[0] === "name") return { screen: "name", sym: parts[1] };
     if (parts[0] === "session") {
       return { screen: parts[2] || "session", date: parts[1] };
@@ -1338,25 +1831,38 @@ DECK_JS = r"""
       if (key === map[route.screen]) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    // Morning, Midday and Health all resolve against the chosen session, so
+    // their links carry it rather than dropping the reader on the newest.
+    var at = route.date || LAST;
+    var link = { morning: "#/session/" + at + "/morning",
+      midday: "#/session/" + at + "/midday", health: "#/health/" + at };
+    Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
+      if (link[a.dataset.nav]) a.href = link[a.dataset.nav];
+    });
     var scoped = (route.screen === "morning" || route.screen === "midday" ||
-      route.screen === "session");
-    var picker = $("session-picker");
-    if (picker && route.date) picker.value = route.date;
-    picker.style.display = scoped ? "" : "none";
+      route.screen === "session" || route.screen === "health");
+    $("picker-wrap").style.display = scoped ? "" : "none";
+    if (route.date) $("session-btn-label").textContent = route.date;
     // The stamp names the session a screen is about. On Sessions, Record,
     // Health and Name it is about all of them, and a dash beside the word
     // "session" reads as a session whose date went missing.
     $("stamp").style.display = scoped ? "" : "none";
   }
 
+  var TIMER = null;
+
   function render() {
+    // A screen that started a clock owns it until the route changes. Left
+    // running, a countdown keeps writing into a node the next screen has
+    // already replaced.
+    if (TIMER) { clearInterval(TIMER); TIMER = null; }
     var route = parse();
     var root = $("screen");
     setNav(route);
     window.__buildPrint = null;
     if (route.screen === "sessions") { screenSessions(root); return; }
     if (route.screen === "record") { screenRecord(root); return; }
-    if (route.screen === "health") { screenHealth(root); return; }
+    if (route.screen === "health") { screenHealth(route.date, root); return; }
     if (route.screen === "name") { screenName(route.sym, root); return; }
 
     root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
@@ -1380,15 +1886,38 @@ DECK_JS = r"""
   }
 
   /* ---------- chrome ---------- */
-  var picker = $("session-picker");
-  picker.innerHTML = INDEX.sessions.map(function (r) {
-    return '<option value="' + esc(r.date) + '">' + esc(r.date) + "</option>";
-  }).join("");
-  picker.addEventListener("change", function () {
-    var route = parse();
-    var screen = (route.screen === "midday" || route.screen === "session")
-      ? route.screen : "morning";
-    location.hash = "#/session/" + picker.value + (screen === "session" ? "" : "/" + screen);
+  // The session control is the calendar in a popover and not a date input,
+  // because a date input can clamp a range but cannot haze the individual
+  // days the desk holds no morning for, and those are most of them.
+  var pbtn = $("session-btn"), ppop = $("session-pop");
+  function closePop() {
+    ppop.hidden = true;
+    pbtn.setAttribute("aria-expanded", "false");
+  }
+  function openPop() {
+    var sel = parse().date || LAST;
+    ppop.dataset.sel = sel;
+    ppop.innerHTML = calMonth(sel.slice(0, 7), sel, true) + calKey();
+    ppop.hidden = false;
+    pbtn.setAttribute("aria-expanded", "true");
+  }
+  pbtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (ppop.hidden) openPop(); else closePop();
+  });
+  wireCal(ppop, function (date) {
+    closePop();
+    var screen = parse().screen;
+    location.hash = screen === "session" ? "#/session/" + date
+      : screen === "health" ? "#/health/" + date
+      : screen === "midday" ? "#/session/" + date + "/midday"
+      : "#/session/" + date + "/morning";
+  });
+  document.addEventListener("click", function (e) {
+    if (!ppop.hidden && !ppop.contains(e.target) && !pbtn.contains(e.target)) closePop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !ppop.hidden) { closePop(); pbtn.focus(); }
   });
 
   $("theme-btn").addEventListener("click", function () {
