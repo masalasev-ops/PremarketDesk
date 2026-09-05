@@ -1288,10 +1288,27 @@ four sessions. Replaying it would measure this project's own short history
 rather than the market's, so tier 5 is empty in all 240 replayed sessions and
 its conversion cannot be read there at any cap or floor.
 
-What does not need a measurement is the half already stated above: a source
-meant to find names the report has NOT already carried reads the table of
-names the report DID carry. That is the defect, and the population is the
-thing to change, not the floor.
+WHAT THE OBVIOUS FIX WOULD BE, AND WHY IT IS NOT TAKEN. This item offers the
+subscribed set as the replacement population, and there is a durable one:
+data/premarket/<date>-subscriptions.json, 15 sessions on disk at about 50
+names each against the twelve picks holds. But it is CIRCULAR. The subscribed
+set IS the pool, so tier 5 would propose names the pool had already found by
+some other prior the day before, and a name watched yesterday for its earnings
+would come back today as a "runner" on no evidence that it ran. That is a
+worse population than picks, not a better one, because picks at least means the
+name ranked into the published twelve.
+
+The concept the tier is named for is a name that RAN, and neither table records
+that. What does is the pick day and next day outcome columns, which now exist
+on picks, and gap_stats, which measures how often a name gaps at all. Both
+point at the same conclusion: this needs the live record. At 43 picks over four
+sessions there is not enough of it, and the replay cannot stand in because tier
+5 is empty there by construction.
+
+So it waits, and the two things known about it are written down rather than
+acted on: the population is wrong in a way the subscribed set does not fix,
+and the floor guarantees slots to a source whose lookback and decay are both
+seeds that were never validated.
 
 ### 6.5 The day screen has no rotation alternative when the baseline is degenerate
 
@@ -1316,7 +1333,22 @@ the open and were not published sat between -1.4 and -2.9 percent at
 open. The rank floor and the screen floor are the same number applied to
 different quantities. A lower ranking floor with the day screen floor kept
 where it is would put them in the briefing; measure what the packets say
-first (every packet carries below_floor and the snapshot).
+first.
+
+THE PACKETS COULD NOT SAY, established 2026-09-05, and that is fixed rather
+than worked around. below_floor was a COUNT. Across the four live sessions it
+is 112 of 169 subscribed names, 23, 28, 24 and 37, and not one of them could be
+named after the fact, so the follow up question had no population at all. The
+capped-out set on the same block has carried its symbols all along, which is
+what makes this an accident rather than a decision: two exclusions from one
+list, one followable and one not.
+
+The rank now records below_floor_symbols, each with the provisional gap it was
+carrying when it was turned down, so the crossing can be measured without
+re-deriving anything from a snapshot the nightly may have pruned. The
+measurement itself needs sessions from 2026-09-08 on: it cannot be run
+backwards over the four on disk, and the replay cannot stand in because the
+backtest pool has no premarket tape and therefore no 08:45 gap at all.
 
 ### 6.7 Three scan failure modes left as designed, named
 

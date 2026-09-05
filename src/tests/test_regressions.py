@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and nineteen claims, a count read off
+and the two pages. It now carries two hundred and twenty claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11269,6 +11269,76 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
           "and empty ONLY when all four looked and none did")
 
 
+def claim_the_rank_records_which_names_it_turned_down(
+        failures: list[str]) -> None:
+    """The 08:45 rank names the candidates it cut, not just how many.
+
+    THE RANKING FLOOR AND THE DAY SCREEN FLOOR ARE THE SAME NUMBER APPLIED TO
+    TWO DIFFERENT QUANTITIES, which is IMPROVEMENT_PLAN 6.6. The rank measures
+    the gap at 08:45 from the collector; the screen measures it at the open.
+    Six of the eight subscribed names on 2026-09-01 that gapped past 3 percent
+    at the open sat between -1.4 and -2.9 at 08:45 and crossed only later.
+
+    That question could not be followed up, because the packet recorded
+    below_floor as a COUNT. On the four live sessions on file it is 112 of 169
+    subscribed names and not one of them can be named after the fact. The
+    capped-out set beside it has carried its symbols all along, which is the
+    argument for this: two exclusions on the same list, one followable and one
+    not, is an accident rather than a decision.
+
+    The gap each name carried is kept beside it, so the follow up needs no
+    re-derivation from a snapshot that may since have been pruned.
+    """
+    from morning import scan
+
+    empty = scan._empty_ranking()
+    if "below_floor_symbols" not in empty:
+        failures.append(
+            "the empty ranking block has no below_floor_symbols, so a morning "
+            "that ranked nothing and one that turned down forty names produce "
+            "the same shape and neither can be read")
+
+    # One name far under the gap floor, one comfortably over, one with no
+    # prior close at all, which is UNRANKABLE and not below the floor.
+    candidates = [
+        {"symbol": "LOW.US", "price": 50.0, "pool_prior_close": 50.05},
+        {"symbol": "BIG.US", "price": 50.0, "pool_prior_close": 40.0},
+        {"symbol": "NONE.US", "price": 50.0, "pool_prior_close": None},
+    ]
+
+    class _Sink:
+        def gap(self, note: str) -> None:
+            pass
+
+    _ranked, stats = scan.rank_by_measured_gap(candidates, _Sink(), 12)
+    names = [row["symbol"] for row in stats["below_floor_symbols"]]
+    if "LOW.US" not in names:
+        failures.append(
+            f"a candidate under the gap floor was counted but not named: "
+            f"{stats['below_floor']} below the floor, symbols {names}")
+    if "BIG.US" in names:
+        failures.append("a candidate that cleared the floors was listed as "
+                        "turned down by them")
+    if "NONE.US" in names:
+        failures.append(
+            "a candidate with no prior close was listed as below the floor. "
+            "It is UNRANKABLE, which is a different fact: nobody measured its "
+            "gap, so nobody turned it down on one")
+    if stats["below_floor"] != len(stats["below_floor_symbols"]):
+        failures.append(
+            f"below_floor counts {stats['below_floor']} and names "
+            f"{len(stats['below_floor_symbols'])}. A count and a list that "
+            "disagree are worse than the count alone was")
+    for row in stats["below_floor_symbols"]:
+        if "provisional_gap_pct" not in row:
+            failures.append(
+                "a turned down name carries no gap, so answering 6.6 means "
+                "re-deriving it from a snapshot the nightly may have pruned")
+    print(f"  turned down  the 08:45 rank names the {len(names)} candidate(s) it cut "
+          "and the gap each was carrying, and an unrankable name is not counted "
+          "among them")
+
+
 def claim_the_slot_floor_is_judged_on_both_denominators(
         failures: list[str]) -> None:
     """Every replayed session reports recall on the big gap set as well.
@@ -18238,6 +18308,7 @@ def main() -> int:
     run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
     run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
     run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_the_rank_records_which_names_it_turned_down, failures)
     run_claim(failures, claim_the_slot_floor_is_judged_on_both_denominators, failures)
     run_claim(failures, claim_a_split_is_not_a_gap_the_replay_should_have_caught, failures)
     run_claim(failures, claim_a_replay_does_not_rank_last_year_on_this_week_s_universe, failures)

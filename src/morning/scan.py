@@ -532,6 +532,15 @@ def _empty_ranking() -> dict[str, Any]:
         "cleared_floors": 0,
         "kept": 0,
         "below_floor": 0,
+        # THE NAMES, not only how many, on the same argument that already gives
+        # capped_out its own symbol list ten lines below. A count cannot be
+        # followed up: nobody can ask afterwards what the names the 08:45 rank
+        # turned down went on to do, and that is the open question in
+        # IMPROVEMENT_PLAN 6.6, where the ranking floor and the day screen floor
+        # are the same number applied to two different quantities. On the four
+        # live sessions on file this set is 112 of 169 subscribed names and not
+        # one of them can be identified after the fact.
+        "below_floor_symbols": [],
         "unrankable": 0,
         "cap": _CRIT.integer("scan", "candidate_count"),
         "cap_source": "CRITERIA.md [Scan] candidate_count",
@@ -569,6 +578,7 @@ def rank_by_measured_gap(
 
     ranked: list[dict[str, Any]] = []
     below_floor = 0
+    below_floor_symbols: list[dict[str, Any]] = []
     unrankable = 0
     for candidate in candidates:
         price = candidate.get("price")
@@ -581,6 +591,15 @@ def rank_by_measured_gap(
         candidate["provisional_gap_pct"] = round(gap, 4)
         if not price_rule.test(price) or not gap_rule.test(abs(gap)):
             below_floor += 1
+            # The gap it was carrying when it was turned down, kept beside the
+            # name so the follow up question needs no re-derivation: a name at
+            # -2.9 at 08:45 that opens at -4 crossed the floor after the rank
+            # was taken, and one at -0.2 did not come close.
+            below_floor_symbols.append({
+                "symbol": candidate.get("symbol"),
+                "provisional_gap_pct": candidate["provisional_gap_pct"],
+                "price": price,
+            })
             continue
         ranked.append(candidate)
 
@@ -639,6 +658,9 @@ def rank_by_measured_gap(
         "cleared_floors": len(ranked),
         "kept": len(kept),
         "below_floor": below_floor,
+        "below_floor_symbols": sorted(
+            below_floor_symbols,
+            key=lambda row: -abs(row["provisional_gap_pct"] or 0.0)),
         "unrankable": unrankable,
         # Why cleared_floors and kept differ, which is the question those two
         # numbers raise and neither answers.

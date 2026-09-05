@@ -15,6 +15,44 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy eighth: the rank says which names it turned down, and one plan item is wrong
+
+Two of tier 6, and neither was finished by doing what the item said. One had a
+premise that does not hold and one had a fix that would have made it worse.
+
+6.6 SAID TO MEASURE WHAT THE PACKETS SAY. The packets could not say. below_floor
+was a COUNT, and across the four live sessions it is 112 of 169 subscribed
+names, 23, 28, 24 and 37, none of them identifiable afterwards. The question of
+whether the 08:45 ranking floor cuts names that cross by the open had no
+population to be asked of.
+
+That is the third time today the same shape has turned up: a count kept where
+the names were the thing needed. What settles it as an accident rather than a
+decision is that capped_out_symbols sits ten lines away on the same block and
+has carried its names all along. Two exclusions from one list, one followable
+and one not.
+
+The rank now records below_floor_symbols, each with the provisional gap the
+name was carrying when it was cut, so the follow up needs no re-derivation from
+a snapshot the nightly may have pruned. An UNRANKABLE name, one with no prior
+close, is not counted among them: nobody measured its gap, so nobody turned it
+down on one. The measurement needs sessions from 2026-09-08 on. It cannot run
+backwards over the four on disk, and the replay cannot stand in because the
+backtest pool has no premarket tape and so no 08:45 gap at all.
+
+6.4'S FIX WOULD HAVE MADE IT WORSE, so it is not taken. The item says to give
+recent_runners the subscribed set instead of picks, and a durable one exists:
+data/premarket/<date>-subscriptions.json, 15 sessions at about 50 names each
+against the twelve picks holds. But the subscribed set IS the pool. Tier 5
+would propose names the pool had already found by another prior the day before,
+so a name watched yesterday for its earnings returns today as a "runner" with
+no evidence that it ran. That is a worse population than picks, which at least
+means the name ranked into the published twelve. The tier is named for a
+behaviour neither table records, and the live record is four sessions, so it
+waits.
+
+Suite green at 220 claims, not one path changed under the working tree.
+
 ## 2026-09-05, seventy seventh: the slot floor is asked properly and does not move
 
 6.1's last repair, the sweep it existed for, and an answer that changes no
