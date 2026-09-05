@@ -244,11 +244,17 @@ def compact_for_this_run(recompact_all: bool = False) -> None:
     AND A PAYLOAD CAN GO STALE WITHOUT ITS SESSION CHANGING, which is why
     recompact_all exists. The Precedent block is computed from
     research_outcomes at compact time and frozen with the rest, so running the
-    replay fills that table and changes nothing a reader can see: every session
-    already has a summary row, so nothing is recompacted, and the screens keep
-    printing the empty state they were built with. Nothing about the session
-    changed, so no automatic rule can notice. It is a hand operation and it
-    says so on the flag.
+    replay fills that table and changes nothing a reader can see through THIS
+    function: every session already has a summary row, so nothing here is
+    recompacted and the screens keep printing the empty state they were built
+    with.
+
+    THE NIGHTLY DOES FIX IT, and this paragraph said otherwise until it was
+    checked. job_nightly.bat runs `desk.compact` with no --session, which is
+    every known session, and only then `desk.render --no-compact`. So a stale
+    payload survives until 22:15 and no longer. What this flag is for is the
+    window in between, and any hand run of desk.render on its own, where
+    waiting for the nightly is not the answer.
     """
     known = compact.known_sessions()
     if recompact_all:
