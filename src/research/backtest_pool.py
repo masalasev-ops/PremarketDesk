@@ -116,6 +116,7 @@ def fetch_session(
     universe_symbols: set[str],
     dollar_volume_20d: dict[str, float],
     force: bool = False,
+    ranking_metrics: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Cache one session's inputs and its outcome. Returns the session record."""
     directory = SESSION_DIR / session.isoformat()
@@ -196,6 +197,23 @@ def fetch_session(
             "to replay this source honestly"
         ),
         "universe_size": len(universe_symbols),
+        # THE RANKING AND SCREEN INPUTS AS THEY STOOD AT FETCH TIME, added
+        # 2026-09-05. Without them the evaluate stage reads TODAY'S
+        # universe.json, so the same cached bytes give a different answer every
+        # week as the universe is rebuilt: the ordering note recorded 0.1164
+        # and a re-run gave 0.1171 with nothing else changed. That breaks the
+        # rule the two stage split exists for, which is that evaluate is
+        # reproducible from the bytes fetch wrote.
+        #
+        # Only the two the replay actually consumes are kept, not the whole
+        # universe row. gap_propensity is deliberately absent: it comes from
+        # gap_stats and is already as_of dated, so it is point in time already
+        # and copying it here would give it a second home to drift from.
+        "ranking_metrics": ranking_metrics or {},
+        "ranking_metrics_note": (
+            "avg_dollar_volume_20d and market_cap as universe.json held them "
+            "when this session was fetched. A session cached before 2026-09-05 "
+            "has an empty map here and evaluate says which substitute it used"),
     }
 
     gap_rule = _CRIT.rule("discovery", "gap_pct")
@@ -255,6 +273,16 @@ def fetch_range(count: int, end: dt.date, force: bool = False) -> dict[str, Any]
         for row in universe_payload.get("symbols", [])
         if row.get("symbol")
     }
+    # Written into every session fetched from here on, so evaluate never has to
+    # ask today's universe what a name looked like a year ago.
+    ranking_metrics = {
+        str(row.get("symbol", "")).upper(): {
+            "avg_dollar_volume_20d": _as_float(row.get("avg_dollar_volume_20d")) or 0.0,
+            "market_cap": _as_float(row.get("market_cap")),
+        }
+        for row in universe_payload.get("symbols", [])
+        if row.get("symbol")
+    }
 
     # Two extra sessions so the earliest one still has a prior and an earlier.
     sessions = session_calendar(api, count + 2, end)
@@ -282,7 +310,8 @@ def fetch_range(count: int, end: dt.date, force: bool = False) -> dict[str, Any]
                 break
 
         record = fetch_session(api, session, prior, earlier, universe_symbols,
-                               dollar_volume_20d, force=force)
+                               dollar_volume_20d, force=force,
+                               ranking_metrics=ranking_metrics)
         if record is None:
             continue
         cached += 1
@@ -584,6 +613,90 @@ def evaluate_session(
     }
 
 
+def dollar_volume_as_of(session: str, lookback: int | None = None
+                        ) -> dict[str, float]:
+    """avg_dollar_volume_20d as of a session, from the bars already cached.
+
+    The universe's OWN definition, mean(close * volume) over the lookback
+    sessions, applied to data/backtest/eod/<day>.json instead of to a vendor
+    call. Free, and point in time by construction, which today's universe.json
+    is not: a name that has doubled its turnover since is ranked on the volume
+    it has now, not the volume it had on the morning being replayed.
+
+    Only the sessions STRICTLY BEFORE the one named are read, so a session is
+    never ranked partly on its own bar. Returns an empty map when fewer than
+    the lookback are cached, rather than a mean over five days wearing a twenty
+    day name.
+    """
+    lookback = lookback or _CRIT.integer("universe", "lookback_sessions")
+    if not EOD_DIR.is_dir():
+        return {}
+    days = sorted(p.stem for p in EOD_DIR.glob("*.json") if p.stem < session)
+    if len(days) < lookback:
+        return {}
+    totals: dict[str, list[float]] = {}
+    for day in days[-lookback:]:
+        try:
+            bars = json.loads((EOD_DIR / f"{day}.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for symbol, bar in (bars or {}).items():
+            close, volume = bar.get("c"), bar.get("v")
+            if close is None or volume is None:
+                continue
+            totals.setdefault(str(symbol).upper(), []).append(float(close) * float(volume))
+    # Divided by the bars this symbol actually had, which is what universe.py
+    # does: `sum(close * volume for ...) / sessions` with sessions = len(bars).
+    # So a name that did not trade every day gets the mean of the days it did,
+    # not a mean diluted by zeros, and the two definitions agree.
+    return {symbol: round(sum(values) / len(values), 2)
+            for symbol, values in totals.items() if values}
+
+
+def metrics_for_session(session: str, base: dict[str, dict[str, Any]],
+                        inputs: dict[str, Any] | None = None,
+                        ) -> tuple[dict[str, dict[str, Any]], str]:
+    """`base` with this session's own dollar volume and market cap laid over it.
+
+    Returns the metrics and WHERE THE TWO NON GAP_STATS FIELDS CAME FROM, which
+    the caller records, because the three answers are not equally good and a
+    reader cannot tell them apart from the numbers:
+
+      snapshot          inputs.json carried them, written at fetch time. Point
+                        in time and reproducible. Sessions fetched from
+                        2026-09-05.
+      recomputed        dollar volume recomputed from the cached bars by the
+                        universe's own formula, which is point in time; market
+                        cap still today's, because a daily bar does not carry
+                        shares outstanding and no free route to a historical
+                        one exists.
+      todays_universe   neither available. Every figure drawn from this run
+                        moves when the universe is next rebuilt.
+
+    gap_propensity and the other gap_stats fields are untouched here: they are
+    already as_of dated by load_metrics and giving them a second source would
+    make them drift.
+    """
+    snapshot = ((inputs or {}).get("ranking_metrics") or {})
+    metrics = {symbol: dict(row) for symbol, row in base.items()}
+    if snapshot:
+        for symbol, row in snapshot.items():
+            target = metrics.setdefault(str(symbol).upper(), {
+                "gap_propensity": None, "median_abs_gap_pct": None,
+                "atr_pct_20d": None})
+            target["avg_dollar_volume_20d"] = (
+                _as_float(row.get("avg_dollar_volume_20d")) or 0.0)
+            target["market_cap"] = _as_float(row.get("market_cap"))
+        return metrics, "snapshot"
+    recomputed = dollar_volume_as_of(session)
+    if recomputed:
+        for symbol, value in recomputed.items():
+            if symbol in metrics:
+                metrics[symbol]["avg_dollar_volume_20d"] = value
+        return metrics, "recomputed"
+    return metrics, "todays_universe"
+
+
 def load_metrics(as_of: str | None = None) -> dict[str, dict[str, Any]]:
     """Per name ranking inputs: dollar volume from the universe, the rest from gap_stats.
 
@@ -623,10 +736,33 @@ def sweep(
 ) -> dict[str, Any]:
     caps = caps or [_CRIT.integer("discovery", "max_subscribed_candidates")]
     cap = caps[0]
-    metrics = load_metrics(as_of)
+    base_metrics = load_metrics(as_of)
     sessions = sessions or cached_sessions()
     if not sessions:
         raise RuntimeError(f"no cached sessions under {SESSION_DIR}")
+
+    # Resolved ONCE per session rather than once per sweep, because the two
+    # non gap_stats fields are per session facts and reading them from today's
+    # universe is what made this stage unreproducible. Built here rather than
+    # inside the ordering loop so the same metrics serve every ordering, floor
+    # and cap: a sweep that re-resolved them per combination would let one
+    # ordering read a different market from the next.
+    per_session: dict[str, dict[str, Any]] = {}
+    provenance: dict[str, str] = {}
+    for session in sessions:
+        try:
+            inputs = json.loads(
+                (SESSION_DIR / session / "inputs.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            inputs = {}
+        per_session[session], provenance[session] = metrics_for_session(
+            session, base_metrics, inputs)
+    counts: dict[str, int] = {}
+    for where in provenance.values():
+        counts[where] = counts.get(where, 0) + 1
+    for where, n in sorted(counts.items()):
+        print(f"backtest: {n} session(s) took dollar volume and market cap "
+              f"from {where}")
 
     results: dict[str, Any] = {}
     for name in orderings:
@@ -634,8 +770,8 @@ def sweep(
         for floor in floors:
             for this_cap in caps:
                 rows = [
-                    evaluate_session(session, metrics, ordering, this_cap,
-                                     tier_floor=floor)
+                    evaluate_session(session, per_session[session], ordering,
+                                     this_cap, tier_floor=floor)
                     for session in sessions
                 ]
                 label = f"{name}/floor{floor}"
@@ -649,6 +785,12 @@ def sweep(
                     "sessions": rows,
                 }
     return {"cap": cap, "sessions": sessions, "metrics_as_of": as_of,
+            # Carried into every payload this writes, so a table drawn from a
+            # run that read today's universe cannot be mistaken later for one
+            # that read the session's own figures.
+            "ranking_metrics_source": provenance,
+            "ranking_metrics_source_counts": counts,
+            "reproducible": all(where == "snapshot" for where in provenance.values()),
             "results": results}
 
 

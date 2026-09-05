@@ -15,6 +15,47 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy fifth: a replayed session stops being ranked on this week's universe
+
+Tier 6's 6.1 lists four repairs to the replay before its measurement can be
+trusted. This is the first and the one the others rest on.
+
+THE EVALUATE STAGE READ TODAY'S UNIVERSE. backtest_pool.load_metrics took
+avg_dollar_volume_20d and market_cap from universe.json as it stands now, once
+per sweep, for every session being replayed. The two stage split exists so that
+evaluate is reproducible from the bytes fetch wrote, and this broke it: the
+ordering note recorded 0.1164 and a re-run gave 0.1171 with nothing else
+changed. A measurement whose value depends on when it is asked is not one.
+
+IT IS NOT A ROUNDING DIFFERENCE, measured against the 2026-08-13 cache before
+anything was built. 990 of 2,751 names, 36 in 100, have a dollar volume off by
+more than a quarter from the value that session actually had. Median ratio
+1.08, p90 1.41. That number feeds the movers source and the sweep floors, so it
+moves which names the replay says the pool would have found.
+
+THREE SOURCES, NEVER CONFUSED. fetch now writes ranking_metrics into
+inputs.json, the two fields as universe.json held them that day, and the sweep
+resolves metrics per session rather than once. A session cached before today
+has no snapshot, so dollar volume is recomputed from the bars already in
+data/backtest/eod by universe.py's own formula, mean of close times volume over
+the lookback, reading only sessions STRICTLY before the one replayed. Market cap
+stays today's there, because a daily bar carries no shares outstanding and no
+free historical route exists, and that is said rather than hidden. Every sweep
+reports which source each session used and sets reproducible only when all of
+them are snapshots.
+
+gap_propensity is deliberately NOT snapshotted. It comes from gap_stats and is
+already as_of dated, so copying it here would give it a second home to drift
+from.
+
+THE LOOK AHEAD GUARD IS THE PART THE CLAIM IS BUILT AROUND. The fixture gives
+the replayed session's own bar a turnover a hundred times the others, so if
+that bar were ever read the mean would jump and the claim fails. A session
+ranked partly on the outcome it is being scored against is the failure the
+whole as_of discipline exists to prevent.
+
+Suite green at 217 claims, not one path changed under the working tree.
+
 ## 2026-09-05, seventy fourth: the pool the collector listened to survives the handover
 
 The other half of tier 6's 6.3, and the same defect shape as the half before

@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and sixteen claims, a count read off
+and the two pages. It now carries two hundred and seventeen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11269,6 +11269,100 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
           "and empty ONLY when all four looked and none did")
 
 
+def claim_a_replay_does_not_rank_last_year_on_this_week_s_universe(
+        failures: list[str]) -> None:
+    """The replay's dollar volume and market cap are the session's, or say not.
+
+    THE TWO STAGE SPLIT EXISTS SO EVALUATE IS REPRODUCIBLE from the bytes fetch
+    wrote. backtest_pool.load_metrics read TODAY'S universe.json, so the same
+    cached session gave a different answer every week as the universe was
+    rebuilt: the ordering note recorded 0.1164 and a re-run gave 0.1171 with
+    nothing else changed, which is a measurement whose value depends on when
+    you ask it.
+
+    It is not a rounding difference. Measured 2026-09-05 against the 2026-08-13
+    cache: 990 of 2,751 names, 36 in 100, have a dollar volume off by more than
+    a quarter between today's universe and the value that session actually had,
+    with a p90 ratio of 1.41. That figure feeds the movers source and the sweep
+    floors, so it moves which names the replay says the pool would have found.
+
+    Three sources, and the point of this claim is that they are never confused:
+    a snapshot written at fetch time, a dollar volume recomputed from the bars
+    already cached, and today's universe. Only the first is reproducible; the
+    second is point in time for dollar volume and not for market cap, which no
+    daily bar carries; the third is neither. Every sweep says which it used.
+    """
+    from core import criteria as _criteria
+    from research import backtest_pool as bp
+
+    saved = (bp.EOD_DIR, bp.SESSION_DIR)
+    with tempfile.TemporaryDirectory(prefix="pmd-bt-") as raw:
+        where = pathlib.Path(raw)
+        bp.EOD_DIR = where / "eod"
+        bp.SESSION_DIR = where / "sessions"
+        bp.EOD_DIR.mkdir(parents=True)
+        try:
+            lookback = _criteria.load().integer("universe", "lookback_sessions")
+            # Every cached day gives ONE.US a turnover of 100, except the
+            # session itself, which gives it 10,000. If that bar is read the
+            # mean lifts, and a session ranked partly on its own outcome is
+            # the failure the as_of discipline exists to prevent.
+            days = [f"2026-01-{n:02d}" for n in range(1, lookback + 1)]
+            for day in days:
+                (bp.EOD_DIR / f"{day}.json").write_text(json.dumps(
+                    {"ONE.US": {"c": 10.0, "v": 10.0}}), encoding="utf-8")
+            session = "2026-02-01"
+            (bp.EOD_DIR / f"{session}.json").write_text(json.dumps(
+                {"ONE.US": {"c": 100.0, "v": 100.0}}), encoding="utf-8")
+
+            got = bp.dollar_volume_as_of(session)
+            if got.get("ONE.US") != 100.0:
+                failures.append(
+                    f"dollar volume as of {session} came out {got.get('ONE.US')!r} "
+                    "rather than 100.0. Only sessions STRICTLY BEFORE the one "
+                    "named may be read, or the replay ranks a session partly "
+                    "on the bar it is being scored against")
+
+            # One short of the lookback must answer nothing rather than a mean
+            # over the days that happen to be there wearing a twenty day name.
+            (bp.EOD_DIR / f"{days[0]}.json").unlink()
+            if bp.dollar_volume_as_of(session):
+                failures.append(
+                    "a dollar volume was returned from fewer than the lookback "
+                    "sessions, so a mean over a short window would be read as "
+                    "the twenty day figure the ranking is defined on")
+        finally:
+            bp.EOD_DIR, bp.SESSION_DIR = saved
+
+    base = {"AAA.US": {"avg_dollar_volume_20d": 1.0, "market_cap": 1.0,
+                       "gap_propensity": 0.5, "median_abs_gap_pct": 2.0,
+                       "atr_pct_20d": 3.0}}
+    snap = {"ranking_metrics": {"AAA.US": {"avg_dollar_volume_20d": 42.0,
+                                           "market_cap": 99.0}}}
+    metrics, where_from = bp.metrics_for_session("2026-02-01", base, snap)
+    if where_from != "snapshot":
+        failures.append(f"a session carrying its own metrics reported "
+                        f"{where_from!r} rather than 'snapshot'")
+    if metrics["AAA.US"]["avg_dollar_volume_20d"] != 42.0:
+        failures.append("the snapshot did not override today's universe, so "
+                        "the session is still ranked on this week's figures")
+    if metrics["AAA.US"]["gap_propensity"] != 0.5:
+        failures.append(
+            "the snapshot overwrote gap_propensity. That field comes from "
+            "gap_stats and is already as_of dated; a second source for it is "
+            "a second thing to drift")
+    if base["AAA.US"]["avg_dollar_volume_20d"] != 1.0:
+        failures.append("metrics_for_session mutated the shared base, so one "
+                        "session's figures would leak into the next")
+
+    metrics, where_from = bp.metrics_for_session("2026-02-01", base, {})
+    if where_from not in ("recomputed", "todays_universe"):
+        failures.append(f"a session with no snapshot reported {where_from!r}")
+    print("  replay inputs a replayed session takes dollar volume and market cap from "
+          "its own fetch, or from the cached bars, or from today's universe, and every "
+          "sweep records which of the three")
+
+
 def claim_the_pool_the_collector_listened_to_survives_the_handover(
         failures: list[str]) -> None:
     """The 03:55 pool is kept when the 07:15 pass replaces it, first pass wins.
@@ -17951,6 +18045,7 @@ def main() -> int:
     run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
     run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
     run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_a_replay_does_not_rank_last_year_on_this_week_s_universe, failures)
     run_claim(failures, claim_the_pool_the_collector_listened_to_survives_the_handover, failures)
     run_claim(failures, claim_the_score_watch_counts_a_pick_once_per_pick, failures)
     run_claim(failures, claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not, failures)

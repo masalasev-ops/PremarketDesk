@@ -1150,11 +1150,24 @@ Do: re-run src/research/backtest_pool.py with the after close tier, with
 recall measured at 8 percent as well as 3, sweeping min_slots_per_tier over
 0, 2 and 4, and with tier 2 ordered by news item count then propensity
 (the cache holds `items` per news name). Four repairs to the replay first,
-all found by the review: snapshot avg_dollar_volume_20d and market_cap per
-name into inputs.json at fetch time and read them in load_metrics, because
-the evaluate stage reads today's universe.json and the ordering note's
-figures cannot be regenerated (re-run today gives 0.1171 against the
-recorded 0.1164); cache adjusted_close and refuse corporate actions the way
+all found by the review.
+
+Repair one, DONE 2026-09-05. fetch writes ranking_metrics into inputs.json,
+avg_dollar_volume_20d and market_cap per name as universe.json held them that
+day, and the sweep resolves them per session instead of reading today's file
+once. gap_propensity is deliberately not copied: it comes from gap_stats and
+is already as_of dated. A session cached earlier has no snapshot, so the sweep
+recomputes dollar volume from the bars in data/backtest/eod by universe.py's
+own formula, mean of close times volume over the lookback, reading only
+sessions STRICTLY before the one being replayed; market cap stays today's,
+because a daily bar carries no shares outstanding and no free historical route
+exists. Every sweep now reports which of the three sources each session used
+and sets reproducible only when all of them are snapshots. The size of what
+this was hiding, measured against the 2026-08-13 cache: 990 of 2,751 names,
+36 in 100, had a dollar volume off by more than a quarter from the value that
+session actually had, p90 ratio 1.41.
+
+The remaining three: cache adjusted_close and refuse corporate actions the way
 pool_recall does; add a `--refresh-earnings` that replaces only
 inputs["earnings"] so the after close re-measurement changes one input;
 count the heavy and light split on earnings_before_open only. Then move
