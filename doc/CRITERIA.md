@@ -3703,7 +3703,7 @@ it has, there is not.
 ## Screens
 
 The desk, one document at site/PremarketDesk.html carrying every session, and
-the marks the screens are drawn from. The eight screens and the reasoning are
+the marks the screens are drawn from. The nine screens and the reasoning are
 in doc/SCREENS.md. Nothing here is a screen threshold in the sense the rest of
 this file means: these are display bounds, and they are here because the rule
 is that no literal of this kind lives in Python.
@@ -3751,7 +3751,7 @@ screen on a real tape, and the Record screen remains the only place live rows
 are read. See the pre-registration's section 2 for why mixing them corrupts
 both.
 
-gap_band_edges                = 4, 6, 8, 10, 15    # percent. Five edges, six bands, and the lowest is open downward so a gap under the screen's own floor still lands somewhere when the ladder widens
+gap_band_edges                = 4, 6, 8, 10, 15    # percent, and MAGNITUDES rather than signed values. Five edges, six bands each way, and the lowest is open downward so a gap under the screen's own floor still lands somewhere when the ladder widens. The direction is carried as a word in front of the band, so "up 6% to 8%" and "down 6% to 8%" are two groups: the entry is long only, a stop above the premarket high, so a gap down name reaching it is a reversal and a gap up name reaching it is a continuation [amended 2026-09-04, before the first outcome row existed: banding the signed gap put a name down 6.2 percent and one up 3 percent in one group, both of them "under 4%"]
 rvol_band_edges               = 1.5, 3, 5, 8       # multiples of the baseline. The first edge is [Day setup] premarket_rvol's floor on purpose, so a band boundary never sits inside the population the screen admits
 price_band_edges              = 2, 10, 50          # dollars. Three edges, four bands. A five dollar name and a five hundred dollar name do not move alike and a percentage does not make them comparable
 cap_band_edges                = 300, 2000, 10000   # MILLIONS of dollars. The middle edge is [Score booleans]' own 2B line, so the band boundary and the score's boolean agree rather than cutting the population twice in nearly the same place
@@ -3759,4 +3759,4 @@ min_rows                      = 30                 # SEED. Matched past rows a g
 min_sessions                  = 20                 # SEED, and the binding one. DISTINCT sessions those rows came from. Twelve names published on one morning share that morning's market and are one observation, so a group of 200 rows over 9 mornings is nine observations wearing a large label
 widen_order                   = cap_band, price_band, above_prior_high, rvol_band   # conditions dropped ONE AT A TIME, in this order, re-counting after each, stopping at the first count that clears both floors. Earnings overnight and the gap band are never dropped. Fixed in the pre-registration before any result existed and moving one is an amendment there, not an edit here
 max_widen_steps               = 4                  # after this many drops a group is WITHHELD rather than widened further. Equal to the length of widen_order, so exhausting the ladder and refusing are the same event and there is no fifth silent step
-peak_minutes_buckets          = 10, 30, 60, 120    # minutes to the session's best price. The buckets the Record screen already groups by, restated here so the two screens split the same axis and a reader can carry a finding from one to the other
+peak_minutes_buckets          = 10, 30, 60, 120    # minutes to the session's best price, and NEW TO THIS SCREEN. They do not line up with the Record screen and a finding does not carry between the two: record_so_far computes two buckets, minutes_to_peak <= 10 and >= 100, and these are five with a 120 line and no 100 line, and even the shared 10 disagrees on its boundary because Record's is inclusive and the bucketing here is strictly less than. Said plainly because the note here claimed the opposite until 2026-09-05, which would have had a reader compare an "120 and up" median against a "peaked after 100 minutes" count as though they described one population

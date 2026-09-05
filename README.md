@@ -198,7 +198,9 @@ rule it was matched on, how many past candidates matched and over how many
 DISTINCT sessions, how many of those reached the entry the report named, the
 middle result of the ones that did, the spread of them, and how long the middle
 one took to reach its high. Under it, the whole replayed population split by
-time to the high, on the same buckets the Record screen uses.
+time to the high. Those buckets are new to this screen and do NOT line up
+with the two the Record screen draws, so a finding does not carry between
+them.
 
 It is a separate screen and not a section of Morning on purpose. The score is
 what the desk thinks about a name; a base rate is a count of what lookalikes

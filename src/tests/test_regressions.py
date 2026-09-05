@@ -14816,6 +14816,7 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
     import sqlite3
 
     from core import criteria as _criteria
+    from core import store
     from desk import precedent
 
     root = pathlib.Path(__file__).resolve().parent.parent
@@ -14875,6 +14876,31 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
                     "so the rule this screen prints is not the rule that was "
                     "written down before the data")
 
+        # THE DATE, checked rather than asserted. The file claimed a suite
+        # check on its own date and there was none, so re-dating it after a
+        # result existed, or moving a band edge and re-stamping the line, would
+        # have passed green while destroying the one property that separates a
+        # pre-registration from a rationalisation.
+        stamp = re.search(r"^Pre-registered at:\s*(\d{4}-\d{2}-\d{2})", text,
+                          re.M)
+        if not stamp:
+            failures.append(
+                "the precedent pre-registration has no 'Pre-registered at: "
+                "YYYY-MM-DD' line, so nothing can check that it predates the "
+                "data it fixed the rule for")
+        else:
+            with store.session() as connection:
+                store.init(connection)
+                first = connection.execute(
+                    "SELECT MIN(computed_at) FROM research_outcomes").fetchone()[0]
+            if first and str(first)[:10] < stamp.group(1):
+                failures.append(
+                    f"the precedent pre-registration is stamped "
+                    f"{stamp.group(1)} and research_outcomes already held a row "
+                    f"computed {str(first)[:10]}. A rule written after its own "
+                    "results is not a pre-registration, whatever the file is "
+                    "called")
+
     # 4. A group under either floor is WITHHELD, and it is withheld on the
     #    session count and not only on the row count. Driven through the real
     #    matcher against a table built here, because the interesting case is
@@ -14889,20 +14915,28 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
         "rule_version TEXT, earnings_overnight INTEGER, gap_band TEXT, "
         "rvol_band TEXT, price_band TEXT, cap_band TEXT, "
         "above_prior_high INTEGER, booked INTEGER, pnl_pct REAL, "
-        "minutes_to_peak INTEGER)")
+        "minutes_to_peak INTEGER, skip_reason TEXT)")
     shape = {"earnings_overnight": 1, "gap_band": "4% to 6%",
              "rvol_band": "1.5x to 3x", "price_band": "10 to 50",
              "cap_band": "2000M to 10000M", "above_prior_high": 1}
 
-    def load(rows: int, sessions: int) -> None:
+    def load(rows: int, sessions: int, ungraded: int = 0) -> None:
         connection.execute("DELETE FROM research_outcomes")
-        for index in range(rows):
+        for index in range(rows + ungraded):
+            # The last `ungraded` rows carry a skip_reason, which is what the
+            # engine writes when a name had no entry reference or no bars.
+            # booked is NULL on those, never 0, and they must fall out of both
+            # the numerator and the denominator.
+            skipped = index >= rows
             connection.execute(
-                "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (f"2026-01-{(index % sessions) + 1:02d}", f"T{index}", "v1",
+                "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (f"2026-01-{(index % max(sessions, 1)) + 1:02d}", f"T{index}", "v1",
                  shape["earnings_overnight"], shape["gap_band"],
                  shape["rvol_band"], shape["price_band"], shape["cap_band"],
-                 shape["above_prior_high"], 1, 1.5, 20))
+                 shape["above_prior_high"],
+                 None if skipped else 1, None if skipped else 1.5,
+                 None if skipped else 20,
+                 "no regular session bars" if skipped else None))
 
     # Plenty of rows, far too few mornings. This is the case the row floor
     # alone would let through, and it is the one that matters: it is what a
@@ -14946,6 +14980,38 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
                 failures.append(
                     "a widened group still prints the dropped condition in its "
                     "own rule, so the rule shown is not the rule applied")
+
+    # 6. A row that could not be graded is in NEITHER the numerator nor the
+    #    denominator. The engine writes booked NULL with a reason when a name
+    #    had no entry reference or no bars, and a 0 there is byte for byte what
+    #    a measured non trigger looks like. The screen's headline figure is
+    #    "how many of this shape reached the buy", so counting the unmeasurable
+    #    as failures reads it low by exactly their number.
+    load(min_rows * 2, min_sessions + 4, ungraded=min_rows * 4)
+    graded = precedent.match(connection, dict(shape), "v1")
+    if graded["rows"] != min_rows * 2:
+        failures.append(
+            f"a group of {min_rows * 2} graded rows beside {min_rows * 4} "
+            f"ungraded ones counted {graded['rows']}. A name nobody could "
+            "measure is not a name that failed to reach its entry, and putting "
+            "it in the denominator reads the base rate low by its count")
+    if graded["reached"] != min_rows * 2:
+        failures.append(
+            f"the reached count came back {graded['reached']} against "
+            f"{min_rows * 2} graded rows that all triggered")
+
+    # 7. The undroppable condition, unknown. The earnings calendar can fail for
+    #    a whole session, and the engine then writes NULL rather than 0. There
+    #    is no honest way to widen past it, so the group is withheld.
+    unknown = dict(shape)
+    unknown["earnings_overnight"] = None
+    held = precedent.match(connection, unknown, "v1")
+    if not held["held"]:
+        failures.append(
+            "a candidate whose earnings calendar was never read still got a "
+            "base rate. earnings_overnight is the one condition the ladder may "
+            "never drop, so an unknown value has no group to draw and the "
+            "screen must say so rather than guess")
     connection.close()
 
     # 6. THE MORNING SCREEN IS NOT TOUCHED BY THIS FEATURE, which is the

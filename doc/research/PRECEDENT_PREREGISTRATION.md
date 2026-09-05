@@ -11,7 +11,23 @@ tune against. That is the point of the date on this line.
 
 The package this belongs to is IMPROVEMENT_PLAN 5.7, and the engine it grades
 is 5.4. This file must carry a date earlier than the first `research_outcomes`
-row, and a claim in the suite checks that it does.
+row. `claim_the_precedent_screen_cannot_borrow_the_record` parses the
+`Pre-registered at:` line and compares it against `MIN(computed_at)` from that
+table, and fails when this file is not strictly earlier.
+
+**Amended 2026-09-04, the same day and before a single outcome existed.** The
+gap band was specified as a band of the signed gap, which put a name down 6.2
+percent and a name up 3 percent in one group, both of them "under 4%". Condition
+2 now bands the MAGNITUDE and carries the direction as a word, so "up 6% to 8%"
+and "down 6% to 8%" can never collide. The reason is in section 4 and it is not
+a refinement: this desk's entry is long only, a stop above the premarket high,
+so a gap down name reaching it is a reversal and a gap up name reaching it is a
+continuation, and one number over both answers neither. It was found by
+comparing what the engine writes against what the screen recomputes, while the
+session cache was still being fetched and `research_outcomes` was still an empty
+table. An amendment made before the numbers are in is still a pre-registration;
+one made after is a rationalisation, and the only thing separating them is this
+paragraph and the commit that carries it.
 
 ## Why a pre-registration and not just code
 
@@ -70,9 +86,14 @@ Four quantities are printed and no others:
                       target: the rule has none, on purpose.
   how many finished up  the count of booked rows with `pnl_pct > 0`.
   minutes to the peak `minutes_to_peak`, a BAR COUNT and not a clock reading,
-                      as paper_ledger's own docstring says. On a thin name it
-                      understates elapsed time. The screen must say "bars"
-                      nowhere and must not imply a stopwatch.
+                      as paper_ledger's own docstring says. The vendor
+                      publishes a minute bar only for a minute that traded, so
+                      on a thin name this UNDERSTATES elapsed time and is exact
+                      on any name that trades every minute. The screen prints
+                      it as minutes, because that is what a reader
+                      understands, and this paragraph is where the caveat
+                      lives rather than in a column heading nobody can fit it
+                      into.
 
 The middle result is the MEDIAN of `pnl_pct` over booked rows, never the mean.
 One name that doubled would carry a group that otherwise lost money.
@@ -84,7 +105,14 @@ satisfies every condition that has not been dropped by section 5.
 
   1. earnings overnight   exact boolean match.
   2. gap band             both rows fall in the same band of
-                          [Precedent] gap_band_edges.
+                          [Precedent] gap_band_edges AND gapped the same way.
+                          The edges are MAGNITUDES and the direction is a word
+                          in front of the band, so "up 6% to 8%" and "down 6%
+                          to 8%" are two groups and never one. Long only entry:
+                          a gap down name reaching a stop above the premarket
+                          high is a reversal, a gap up name reaching it is a
+                          continuation, and one figure over both is a figure
+                          about neither.
   3. premarket RVOL band  same band of rvol_band_edges.
   4. above prior high     exact boolean match.
   5. price band           same band of price_band_edges.
@@ -157,6 +185,13 @@ A withheld group is a result and is displayed as one.
 day. A band whose rows happen to fall on trending days will read well. The
 screen's "what kind of morning this is" section is a partial answer and not a
 control.
+
+**The market value is today's, not the session's.** `cap_band` is cut from
+`gap_stats`' market cap for the name as the universe last recorded it, which is
+the vintage `replay_session` already notes per session. A name that was a 400M
+company during the replayed year and is a 3B company now is banded as the
+second. It biases the large bands toward names that grew, which is the same
+direction as the survivorship bias below and compounds with it.
 
 **Survivorship in the universe.** `data/universe.json` is today's universe. A
 name delisted during the replayed year is absent from it, so the past the

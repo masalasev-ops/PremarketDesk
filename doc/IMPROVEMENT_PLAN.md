@@ -1042,15 +1042,23 @@ the score is the desk's opinion, the base rate is a count of what lookalikes
 did, and folding one into the other hides the case where they disagree, which
 is the only case either of them gets corrected by. Section for section:
 
-| On Precedent | Mirrors on Morning |
-| --- | --- |
-| The names on today's list | The gap spine |
-| What the desk missed | What else moved |
-| What each floor turned down | How the list was cut |
-| Whether thin evidence has cost anything | What the evidence is worth |
-| How these events have resolved before | Coming up |
-| What kind of morning this is | What kind of morning this is |
-| What noon has graded before | What noon will grade |
+| On Precedent | Mirrors on Morning | State |
+| --- | --- | --- |
+| The names on today's list | The gap spine | BUILT |
+| When a winner stopped going up | Record's timing split | BUILT |
+| What these counts are not | nothing; it is new | BUILT |
+| What the desk missed | What else moved | needs the pool's rejects graded, which the engine does not fetch bars for |
+| What each floor turned down | How the list was cut | needs every screen reject graded, same gap |
+| Whether thin evidence has cost anything | What the evidence is worth | needs the evidence roll carried into the session cache |
+| How these events have resolved before | Coming up | needs a historical calendar the session cache does not hold |
+| What kind of morning this is | What kind of morning this is | needs a session level shape match, not a name level one |
+| What noon has graded before | What noon will grade | needs the midday target replayed, which nothing does |
+
+THREE OF THE NINE SHIPPED on 2026-09-04 and the rest are named above with what
+each one is missing, rather than left as a table a reader would take for the
+state. Every unbuilt row needs the ENGINE extended, not the screen: the screen
+draws what desk/precedent.build returns and that function can only count what
+research_outcomes holds.
 
 WHY IT IS NOT THE REPLAY SCREEN. A retrospective page is opened once and then
 never again, because the event it describes is over. The owner said so and it

@@ -483,7 +483,7 @@ tbody tr:hover{background:var(--ground)}
       <div class="t"><b>22:15</b>ET</div>
       <div class="c night">
         <h5>Write down what was really true</h5>
-        <p>Eleven steps in one order, counting the C50 guard and its calendar refresh, and the order is the argument. C62 copies the six artifacts
+        <p>Twelve steps in one order, counting the C50 guard and its calendar refresh, and the order is the argument. C62 copies the six artifacts
         that cannot be rebuilt, first, before anything else touches the tree: the collector's own
         socket capture, its two sidecars, the packet the morning was judged on, and the report in
         both markdown and HTML. A report is on that list because the same input does not produce
@@ -497,12 +497,12 @@ tbody tr:hover{background:var(--ground)}
         levels and the fill verdict. C60 books the paper rule, and it comes after C59 rather than
         before because every level it books against is written by C59. C42 measures what the morning's
         pool missed, C63 deletes the one file class its whitelist names, C61 renders the weekly page from what the
-        steps above have just written, and C53 rebuilds the desk last. C67 runs one step BEFORE C63,
+        steps above have just written, and C53 rebuilds the desk last. C70 runs one step BEFORE C63,
         because the prune refuses to drop a session's duplicate snapshot until that session's bars
         are frozen. Only C20 and C21 can stop
         the chain. Every step after them is a record, nothing downstream reads it, and a bad
         measurement must not cost the desk its rebuild.</p>
-        <div class="ids">C06 fires C50, C62, C20, C21, C59, C60, C42, C67, C63, C61, C53 &rarr; writes C31,
+        <div class="ids">C06 fires C50, C62, C20, C21, C59, C60, C42, C70, C63, C61, C53 &rarr; writes C31,
         C64, C65</div>
       </div>
     </div>
@@ -543,7 +543,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 04:00</td><td>none</td><td>C15, C34</td></tr>
       <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
       <tr><td class="id">C67</td><td class="nm">job_midday.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 12:00</td><td>none</td><td>C50, C68, C69, C34</td></tr>
-      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>One task, three triggers, told apart by the clock inside the .bat: weekdays 22:15 (the full night), weekdays 07:00 (the catch-up, which runs C62, C20 and C21 only) and Sunday 21:00 (the universe rebuild, C02)</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C63, C61, C53, C34</td></tr>
+      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>One task, three triggers, told apart by the clock inside the .bat: weekdays 22:15 (the full night), weekdays 07:00 (the catch-up, which runs C62, C20 and C21 only) and Sunday 21:00 (the universe rebuild, C02)</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C70, C63, C61, C53, C34</td></tr>
       <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, 12:25 every 30m for 1h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
       <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, and C34. Never C67, which it watches and reports on only</td></tr>
       <tr><td class="id">C48</td><td class="nm">job_meter_sampler.bat</td><td><span class="lay sched">Scheduler</span></td><td>Every day 00:00, every 30m for 24h</td><td>none</td><td>C49, C34</td></tr>
@@ -579,7 +579,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
       <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C26, C27, C35</td><td>C32</td></tr>
       <tr><td class="id">C53</td><td class="nm">desk/render.py</td><td><span class="lay night">Night</span></td><td>22:15, and as the last step of the morning and midday chains</td><td>C29, C32</td><td>C54</td></tr>
-      <tr><td class="id">C67</td><td class="nm">desk/compact.py</td><td><span class="lay night">Night</span></td><td>22:15, between C42 and C63</td><td>C32</td><td>C32</td></tr>
+      <tr><td class="id">C70</td><td class="nm">desk/compact.py</td><td><span class="lay night">Night</span></td><td>22:15, between C42 and C63, and inside C53 on the morning and midday chains, which invoke desk/render without --no-compact</td><td>C32, and premarketdesk.db research_outcomes through desk/precedent</td><td>C32</td></tr>
       <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td><span class="lay night">Night</span></td><td>22:15, after C21</td><td>C31, C32, C66</td><td>C31</td></tr>
       <tr><td class="id">C60</td><td class="nm">paper_ledger.py</td><td><span class="lay night">Night</span></td><td>22:15, after C59</td><td>C23, C31, C66</td><td>C64</td></tr>
       <tr><td class="id">C61</td><td class="nm">weekly_page.py</td><td><span class="lay night">Night</span></td><td>22:15, after every step that writes</td><td>C29, C31, C32, C34, C56, C57, C64</td><td>C65</td></tr>
@@ -1177,14 +1177,22 @@ tbody tr:hover{background:var(--ground)}
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two of the columns are for
   stores that sit outside the relay: the desk (C54), whose single writer is
   desk/render at the end of the morning chain, the midday chain and the nightly, and the job trail (C56), which
-  every scheduled step appends one line to as it exits. Five stores are deliberately not columned
+  every scheduled step appends one line to as it exits. Six stores are deliberately not columned
   here, because nothing in the morning path touches any of them. The gap_stats table (C41) is
   written weekly by C40 and read at 07:15 by C13. The quantifier flag log (C57) is written by the
   analyst's guard and judged by hand through C55. The exchange calendar cache (C58) is read by C50
   as the first step of every weekday job and rewritten only by the nightly's refresh pass. The paper
   ledger table (C64) has one writer, C60 at 22:15, and two readers, C61 and, for the record block
   only, C16. And the weekly page (C65) is written by C61 and read by nobody, which is what a
-  reporting layer should be. The shape of C68's row is the design of the whole 12:00 pass: it reads
+  reporting layer should be. The research_outcomes table has one writer, research/replay_outcomes.py,
+  which is run BY HAND and is not a scheduled step at all, and one reader, desk/precedent.py, which
+  desk/compact calls at freeze time and which is therefore reached at the end of the morning chain
+  through C53. It holds what a RECONSTRUCTED pick did on its own session, graded through the same
+  imported paper_ledger.simulate at the same rule_version as the live ledger, so the two are the
+  same instrument over two populations. It is never pooled with C64 under any question, and it is a
+  separate table rather than a source column on it for a structural reason: paper_trades is keyed on
+  (date, ticker, rule_version) with no source in the key, so a reconstructed row written over a live
+  date would REPLACE the live one rather than sit beside it. The shape of C68's row is the design of the whole 12:00 pass: it reads
   the picks table and never writes it, because a second writer booking against levels the night has
   not yet corrected would destroy the comparison that table exists for. Its read of C28 is the subscriptions
   sidecar written beside the bars at subscribe time, not the bars themselves, because what the
@@ -1372,7 +1380,7 @@ tbody tr:hover{background:var(--ground)}
     <b>midday</b> (scan_midday, render_midday),
     <b>night</b> (backup_evidence, backfill_premarket, fill_outcomes, true_volume, paper_ledger,
     pool_recall, prune_data, weekly_page, in the order the nightly runs them, with
-    <b>desk</b> (compact, assets, render) running compact between pool_recall and prune and
+    <b>desk</b> (compact, precedent the base rate matcher compact calls at freeze time, assets, render) running compact between pool_recall and prune and
     render last of all; build_archive was the last of the night package until 2026-09-04, when
     the owner retired it and desk/render took its filename),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
@@ -1390,7 +1398,7 @@ tbody tr:hover{background:var(--ground)}
     <span style="color:var(--ink-3)">(C07-C22, C39, C40, C42-C45, C47, C49-C53, C55, C59-C63, C68, C69)</span></dd>
 
     <dt>doc\</dt>
-    <dd>CRITERIA.md, prompt_analyst.md, prompt_slots.md (piped under [Analyst] mode = slots), REPORT_TEMPLATE.md (eleven fixed sections), IMPROVEMENT_PLAN.md (the 2026-09-02 review as work packages), BUILD_PLAN.md,
+    <dd>CRITERIA.md, prompt_analyst.md, prompt_slots.md (piped under [Analyst] mode = slots), REPORT_TEMPLATE.md (eleven fixed sections), IMPROVEMENT_PLAN.md (the 2026-09-02 review as work packages), SCREENS.md (the specification the desk was built from), RETENTION.md, MIGRATION.md, BUILD_PLAN.md,
     CHANGELOG.md, DECISIONS.md, ALPACA_PROBE.md, sample_report.html, this page, the day run arc page
     beside it, and <b>research\</b> holding the written up studies: COLLECTOR_VOLUME.md,
     VWAP_GAPPERS.md, TEMPLATE_DERIVATIONS.md, SCORE_INVERSION.md, which pre-registers what would
@@ -1429,7 +1437,7 @@ tbody tr:hover{background:var(--ground)}
     <dt>data\</dt>
     <dd>universe.json, watchlist.json, universe-closes-&lt;date&gt;.json,
     premarket\&lt;date&gt;.jsonl beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json,
-    premarketdesk.db (baseline, picks, gap_stats, gap_sweeps, paper_trades),
+    premarketdesk.db (seven tables: baseline, picks, gap_stats, gap_sweeps, paper_trades, sessions the per session summary desk/compact writes, and research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by research/replay_outcomes and read only by desk/precedent),
     job-status.jsonl, exchange-details.json,
     monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard fires live,
     UNVERIFIED, backtest\

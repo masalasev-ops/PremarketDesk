@@ -77,9 +77,18 @@ import datetime as dt
 import json
 from typing import Any
 
-from core import config, criteria, ettime, files, store
+from core import config, criteria, ettime, files, lookalike, store
 from night import paper_ledger
 from research import backtest_pool, replay_session
+
+# The band cutter and the overnight predicate live in core/lookalike.py and are
+# re-exported here, because this module's callers and the desk's matcher have to
+# cut identically or every group is empty forever. See that module's docstring
+# for what went wrong when they did not.
+band = lookalike.band
+gap_band = lookalike.gap_band
+bands_for = lookalike.bands_for
+_edges = lookalike.edges
 
 _CRIT = criteria.load()
 
@@ -116,55 +125,6 @@ def _as_float(value: Any) -> float | None:
         return None if value is None else float(value)
     except (TypeError, ValueError):
         return None
-
-
-# --------------------------------------------------------------- the bands --
-
-def _edges(key: str) -> list[float]:
-    """One CRITERIA edge list, ascending, as floats.
-
-    Raises rather than sorting a mis-entered list. An edge list that is not
-    ascending would put a value in two bands or none, and quietly repairing it
-    here would hide the typo from the person who made it.
-    """
-    values = [float(x) for x in _CRIT.text_list("precedent", key)]
-    if values != sorted(values):
-        raise ValueError(f"CRITERIA [Precedent] {key} is not ascending: {values}")
-    return values
-
-
-def band(value: float | None, edges: list[float], unit: str = "") -> str | None:
-    """Which band a value falls in, as the text that is stored and printed.
-
-    None in, None out. A value that was never measured has no band, and giving
-    it one would put unmeasured names into a group that claims to describe
-    measured ones.
-
-    The value ON an edge belongs to the band ABOVE it, which is the convention
-    CRITERIA states and the same one every screen condition in this project
-    already uses.
-    """
-    if value is None:
-        return None
-    def show(number: float) -> str:
-        text = f"{number:.4f}".rstrip("0").rstrip(".")
-        return f"{text}{unit}"
-    if value < edges[0]:
-        return f"under {show(edges[0])}"
-    for low, high in zip(edges, edges[1:]):
-        if low <= value < high:
-            return f"{show(low)} to {show(high)}"
-    return f"{show(edges[-1])} and up"
-
-
-def bands_for(gap_pct: float | None, pm_rvol: float | None,
-              price: float | None, cap_musd: float | None) -> dict[str, str | None]:
-    return {
-        "gap_band": band(gap_pct, _edges("gap_band_edges"), "%"),
-        "rvol_band": band(pm_rvol, _edges("rvol_band_edges"), "x"),
-        "price_band": band(price, _edges("price_band_edges")),
-        "cap_band": band(cap_musd, _edges("cap_band_edges"), "M"),
-    }
 
 
 # --------------------------------------------------------------- the fetch --
@@ -235,13 +195,24 @@ def fetch(day: str, force: bool = False, probe: Any = None) -> dict[str, Any]:
 
 # ------------------------------------------------------------ the evaluate --
 
-def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]], set[str], list[str]]:
-    """(price and cap per symbol, the earnings names, notes).
+def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]], set[str] | None,
+                                      list[str]]:
+    """(price and cap per symbol, the earnings names or None, notes).
 
     build_candidates is called rather than reimplemented, for the same reason
     replay_session calls scan.evaluate_eligibility: the price this bands on has
     to be the price the screen priced on, and a second definition of it here
     would be a different quantity wearing the same column name.
+
+    THE EARNINGS SET IS None WHEN THE CALL FAILED, and that is the whole point
+    of returning it separately. discover.earnings_reporters records a status,
+    and a session whose calendar came back NOT_FETCHED has an EMPTY names list
+    that is indistinguishable from a session on which nobody reported. Writing
+    0 for every name on such a session stores an unasked question as a measured
+    no, on the one condition the widening ladder may never drop, so the whole
+    group for every name of that session would be drawn from the wrong
+    population. This is CRITERIA's standing rule and the defect class that two
+    thirds of this project's closed defects belong to.
     """
     candidates, notes = replay_session.build_candidates(day)
     facts = {c["symbol"]: {
@@ -249,8 +220,14 @@ def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]], set[str], list[
         "market_cap": _as_float((c.get("quote") or {}).get("marketCap")),
     } for c in candidates}
     inputs, _outcome = backtest_pool.load_session(day)
-    earnings = set((inputs.get("earnings") or {}).get("names") or [])
-    return facts, earnings, notes
+    block = (inputs.get("earnings") or {})
+    status = str(block.get("status") or "").strip().lower()
+    if status and status != "ok":
+        notes.append(f"the earnings calendar for {day} came back '{status}', so "
+                     "earnings_overnight is null on every row of this session "
+                     "rather than zero")
+        return facts, None, notes
+    return facts, set(block.get("names") or []), notes
 
 
 def evaluate(day: str) -> dict[str, Any]:
@@ -290,10 +267,13 @@ def evaluate(day: str) -> dict[str, Any]:
         stop = _as_float(row["stop_ref"])
         bars = cache.get("bars", {}).get(code) or []
 
+        # None, not 0, when the calendar was never read. See _session_facts.
+        overnight = None if earnings is None else (1 if ticker in earnings else 0)
+
         for version, mode in versions.items():
             record: dict[str, Any] = {
                 "date": day, "ticker": ticker, "rule_version": version,
-                "earnings_overnight": 1 if ticker in earnings else 0,
+                "earnings_overnight": overnight,
                 "above_prior_high": above,
                 "gap_pct": gap, "pm_rvol": rvol,
                 "price_ref": price, "market_cap_musd": cap_musd,
@@ -306,8 +286,16 @@ def evaluate(day: str) -> dict[str, Any]:
             }
             record.update(cut)
             if entry is None or stop is None:
+                # booked stays NULL, never 0. A 0 here is byte for byte what a
+                # measured non trigger looks like, and the screen's headline
+                # figure is "how many of this shape reached the buy". A name
+                # that could not be graded at all belongs in NEITHER the
+                # numerator nor the denominator of that, and desk/precedent
+                # excludes it on skip_reason for exactly this reason.
+                record["booked"] = None
                 record["skip_reason"] = NO_REFS
             elif not bars:
+                record["booked"] = None
                 record["skip_reason"] = NO_BARS
             else:
                 result = paper_ledger.simulate(bars, entry, stop, mode)
@@ -420,6 +408,8 @@ def main(argv: list[str] | None = None) -> int:
             written = write_day(result, dry_run=args.dry_run)
             if written.get("refused"):
                 print(f"    refused: {written['refused']}")
+            elif written.get("dry_run"):
+                print(f"    dry run: {written['dry_run']} row(s) would be written")
             elif written.get("written"):
                 print(f"    wrote {written['written']} row(s)")
     return 0

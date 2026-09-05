@@ -1615,10 +1615,14 @@ DECK_JS = r"""
       return L + (c + dom) / (dom * 2) * PW;
     }
     function clipped(v) { return v < -dom || v > dom; }
-    var tone = g.median == null ? "flat" : g.median < 0 ? "down"
-      : g.median < 1 ? "warn" : "up";
-    var col = tone === "down" ? "var(--bad)" : tone === "warn" ? "var(--warn)"
-      : tone === "up" ? "var(--good)" : "var(--line-strong)";
+    // COLOURED BY SIGN AND NOTHING ELSE. An earlier version used a third
+    // colour below one percent, which is a threshold, and a threshold in this
+    // project lives in CRITERIA or does not exist. It also contradicted the
+    // figure printed beside it: +0.9 drew amber and +1.0 drew green with
+    // nothing on the page to say what had changed. The sign is the only
+    // boundary the number carries on its own.
+    var col = g.median == null ? "var(--line-strong)"
+      : g.median < 0 ? "var(--bad)" : "var(--good)";
     var out = '<line class="pzero" x1="' + X(0) + '" y1="1" x2="' + X(0) +
       '" y2="' + (H - 1) + '"/>';
     if (g.worst != null && g.best != null) {
@@ -1734,10 +1738,11 @@ DECK_JS = r"""
         '<div class="rule" style="background:var(--warn)"></div><div class="vin">' +
         '<div class="vt">The replay has not been run, so there is no past to ' +
         'count</div><div class="vs">This screen reads reconstructed sessions ' +
-        'only, and there are none on file. The live record is four sessions ' +
-        'and is deliberately not used here: four mornings cannot make a base ' +
-        'rate, and pooling them into one would corrupt the year and say ' +
-        'nothing about the four. Fill it with <span class="mono">' +
+        'only, and there are none on file. The live record is deliberately ' +
+        'not used here however large it grows: it is what the desk actually ' +
+        'published, this is what a replay of sessions it never ran produced, ' +
+        'and one figure over both would describe neither. Fill it with ' +
+        '<span class="mono">' +
         esc(cover.command || "") + '</span>. Every name below still shows the ' +
         'rule it WOULD be matched on, which is the part worth checking before ' +
         'any number exists.</div></div></div>';

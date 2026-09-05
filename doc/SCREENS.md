@@ -571,8 +571,21 @@ and the wrong version of this screen is easy to build.
 
   Every section mirrors a Morning section, and says which one. The names on
   this list against the gap spine, and when a winner stopped going up against
-  the Record screen's own timing split, on the same buckets so a finding
-  carries between them.
+  the Record screen's own timing split. Those two splits are NOT the same and
+  a finding does not carry between them: Record computes two buckets, minutes
+  to the peak at most 10 and at least 100, and this screen cuts five with a
+  120 line and no 100 line, and even the shared 10 differs because Record's is
+  inclusive and this one is strictly less than. This paragraph said they were
+  the same buckets until 2026-09-05, which would have had a reader compare two
+  populations as one.
+
+  THREE OF THE SEVEN MIRRORED SECTIONS SHIPPED, and the table above is the
+  design rather than the state. What history says, when a winner stopped going
+  up, and what these counts are not, are built. What the desk missed, what each
+  floor turned down, whether thin evidence cost anything, and how these events
+  have resolved before all need data the engine does not yet produce: the
+  rejects the screen turned down, the evidence roll per past session, and a
+  historical calendar. IMPROVEMENT_PLAN 5.7 carries what each of them needs.
 
 Regions, in order:
 

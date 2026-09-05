@@ -43,9 +43,8 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from core import criteria, store
+from core import criteria, lookalike, store
 from night import paper_ledger
-from research import replay_outcomes
 
 _CRIT = criteria.load()
 
@@ -96,16 +95,33 @@ def conditions_for(candidate: dict[str, Any]) -> dict[str, Any]:
     above = None
     if isinstance(price, (int, float)) and isinstance(prior_high, (int, float)):
         above = 1 if price > prior_high else 0
-    cut = replay_outcomes.bands_for(
+    cut = lookalike.bands_for(
         candidate.get("gap"), candidate.get("rvol"), price, cap_musd)
+    # TRI-STATE, and it was a boolean over the wrong question until 2026-09-05.
+    # compact carries earn_overnight, computed by core/lookalike from the same
+    # rule selection/discover tiers the pool with. Reading the raw earnings
+    # membership instead treated a name that reported before the PREVIOUS
+    # morning's open as one that reported overnight: NIO.US on 2026-09-02,
+    # report_date 2026-09-01 BeforeMarket, was stamped 1 and matched against
+    # names that genuinely reported between the last close and this open.
+    #
+    # None means the calendar was never read. It is not a zero, and match()
+    # withholds the whole group rather than guessing, because this is the one
+    # condition the widening ladder may never drop.
+    overnight = candidate.get("earn_overnight")
     return {
-        "earnings_overnight": 1 if candidate.get("earn") else 0,
+        "earnings_overnight": (None if overnight is None else int(bool(overnight))),
         "gap_band": cut["gap_band"],
         "rvol_band": cut["rvol_band"],
         "price_band": cut["price_band"],
         "cap_band": cut["cap_band"],
         "above_prior_high": above,
     }
+
+
+UNREAD_EARNINGS = ("the earnings calendar was never read for this session, so "
+                   "whether the name reported overnight is unknown, and that is "
+                   "the one condition the match may never drop")
 
 
 def in_words(conditions: dict[str, Any], dropped: list[str]) -> list[str]:
@@ -116,9 +132,13 @@ def in_words(conditions: dict[str, Any], dropped: list[str]) -> list[str]:
     """
     out: list[str] = []
     if "earnings_overnight" not in dropped:
-        out.append("reported overnight" if conditions.get("earnings_overnight")
+        overnight = conditions.get("earnings_overnight")
+        out.append("earnings calendar not read" if overnight is None
+                   else "reported overnight" if overnight
                    else "did not report overnight")
     if conditions.get("gap_band") and "gap_band" not in dropped:
+        # The band already carries its direction as a word, so this reads
+        # "gap up 6% to 8%" rather than naming the direction twice.
         out.append(f"gap {conditions['gap_band']}")
     if conditions.get("rvol_band") and "rvol_band" not in dropped:
         out.append(f"volume {conditions['rvol_band']} normal")
@@ -146,6 +166,13 @@ def _select(connection: sqlite3.Connection, conditions: dict[str, Any],
             continue
         where.append(f"{column} = ?")
         params.append(value)
+    # skip_reason IS NULL, which is what keeps an UNGRADED row out of the
+    # denominator. The engine writes booked NULL with a reason when a name had
+    # no entry reference or no bars, and the screen's headline figure is "how
+    # many of this shape reached the buy". A row nobody could measure is not a
+    # row that failed to trigger, and counting it as one reads the base rate
+    # low by exactly the number of names that were never measurable.
+    where.append("skip_reason IS NULL")
     sql = ("SELECT date, booked, pnl_pct, minutes_to_peak FROM research_outcomes "
            "WHERE " + " AND ".join(where))
     return [dict(row) for row in connection.execute(sql, params)]
@@ -222,6 +249,16 @@ def match(connection: sqlite3.Connection, conditions: dict[str, Any],
             f"droppable condition. The four that may be dropped are "
             f"{sorted(_DROPPABLE)}; earnings and the gap band never are")
 
+    if conditions.get("earnings_overnight") is None:
+        return {
+            "held": True, "widened": [], "version": version,
+            "matched_on": in_words(conditions, []),
+            "floors": {"rows": min_rows, "sessions": min_sessions},
+            "rows": 0, "sessions": 0, "reached": None, "median": None,
+            "up": None, "p25": None, "p75": None, "worst": None, "best": None,
+            "peak": None, "why": UNREAD_EARNINGS,
+        }
+
     dropped: list[str] = []
     attempts: list[dict[str, Any]] = []
     for step in range(min(max_steps, len(ladder)) + 1):
@@ -261,9 +298,14 @@ def peak_buckets(connection: sqlite3.Connection,
                  version: str | None = None) -> list[dict[str, Any]]:
     """How the population ended, split by how long it took to reach its high.
 
-    The buckets are [Precedent] peak_minutes_buckets, which restate the ones
-    the Record screen already groups by, so a finding carries from one screen
-    to the other instead of being two findings about two axes.
+    The buckets are [Precedent] peak_minutes_buckets and they are NEW TO THIS
+    SCREEN. They do not line up with the Record screen: record_so_far computes
+    two, minutes_to_peak <= 10 and >= 100, and these are five with a 120 line
+    and no 100 line, and even the shared 10 disagrees because Record's is
+    inclusive and the bucketing here is strictly less than. Said here because
+    the docstring claimed the opposite until 2026-09-05, and a reader who
+    believed it would have compared this screen's slowest bucket against
+    Record's "peaked after 100 minutes" count as though they were one split.
     """
     version = version or rule_version()
     edges = [int(x) for x in _CRIT.text_list("precedent", "peak_minutes_buckets")]
@@ -271,9 +313,13 @@ def peak_buckets(connection: sqlite3.Connection,
         "SELECT date, pnl_pct, minutes_to_peak FROM research_outcomes "
         "WHERE rule_version = ? AND booked = 1 AND pnl_pct IS NOT NULL "
         "AND minutes_to_peak IS NOT NULL", (version,))]
+    # "and up" rather than "over", because a value ON an edge belongs to the
+    # band above it and the last bucket therefore CONTAINS its edge. A label
+    # reading "over 120" on a bucket holding exactly 120 is a small lie in the
+    # one place a reader checks the arithmetic.
     labels = ([f"under {edges[0]}"] +
               [f"{low} to {high}" for low, high in zip(edges, edges[1:])] +
-              [f"over {edges[-1]}"])
+              [f"{edges[-1]} and up"])
     buckets: list[list[dict[str, Any]]] = [[] for _ in labels]
     for row in rows:
         minutes = int(row["minutes_to_peak"])
@@ -284,10 +330,15 @@ def peak_buckets(connection: sqlite3.Connection,
                 break
         buckets[index].append(row)
     min_sessions = _CRIT.integer("precedent", "min_sessions")
+    min_rows = _CRIT.integer("precedent", "min_rows")
     out = []
     for label, group in zip(labels, buckets):
         stats = summarise([{**r, "booked": 1} for r in group])
-        held = stats["sessions"] < min_sessions
+        # BOTH floors, as the pre-registration says, and only the session one
+        # was applied until 2026-09-05. A bucket of eleven trades spread over
+        # twenty five mornings cleared the session floor and printed a median
+        # over eleven trades.
+        held = stats["sessions"] < min_sessions or stats["rows"] < min_rows
         out.append({"label": label, "held": held, "rows": stats["rows"],
                     "sessions": stats["sessions"],
                     "median": None if held else stats["median"],
@@ -311,7 +362,8 @@ def coverage(connection: sqlite3.Connection,
         "SELECT COUNT(*) AS rows, COUNT(DISTINCT date) AS sessions, "
         "MIN(date) AS first, MAX(date) AS last, "
         "SUM(CASE WHEN booked = 1 THEN 1 ELSE 0 END) AS reached "
-        "FROM research_outcomes WHERE rule_version = ?", (version,)).fetchone()
+        "FROM research_outcomes WHERE rule_version = ? "
+        "AND skip_reason IS NULL", (version,)).fetchone()
     return {
         "rows": row["rows"] or 0, "sessions": row["sessions"] or 0,
         "reached": row["reached"] or 0,

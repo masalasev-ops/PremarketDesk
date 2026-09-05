@@ -38,6 +38,7 @@ from core import config
 from core import criteria
 from core import ettime
 from core import files
+from core import lookalike
 from core import store
 from desk import precedent
 from morning import render_report
@@ -294,6 +295,25 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
         _sym(row.get("symbol")): row
         for row in ((packet.get("earnings") or {}).get("candidates") or [])
     }
+    # WHETHER THE NAME REPORTED OVERNIGHT, which is not the same question as
+    # whether it appears in the earnings block. That block is a calendar WINDOW
+    # running from the prior session to tomorrow, so it carries names that
+    # already gapped on an earlier morning and names that gap on a later one.
+    # Measured on the packet on disk: 2026-09-02 lists NIO.US as report_date
+    # 2026-09-01 BeforeMarket, a name that reported before the PREVIOUS
+    # morning's open. Reading membership as "reported overnight" put it in a
+    # group of names that reported between the last close and this open, on the
+    # one Precedent condition the widening ladder may never drop.
+    #
+    # core/lookalike holds the rule and selection/discover applies the same one
+    # when it tiers the pool, so there is one definition rather than two.
+    # None when the calendar was never read: an unasked question is not a no.
+    earnings_checked = (packet.get("earnings") or {}).get("candidates_checked")
+    overnight = {}
+    for symbol, row in earnings.items():
+        overnight[symbol] = lookalike.reported_overnight(
+            row.get("before_after_market"), row.get("report_date"),
+            packet.get("session_date"))
 
     candidates = []
     for c in raw_candidates:
@@ -341,6 +361,10 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             "rvol_lower_bound": (c.get("pm_rvol_basis") or {}).get("is_lower_bound"),
             "bars": bars.get(symbol, []),
             "earn": earnings.get(_sym(symbol)),
+            # Tri-state. True reported overnight, False did not, None the
+            # calendar was never read for this session.
+            "earn_overnight": (None if earnings_checked is False
+                               else bool(overnight.get(_sym(symbol), False))),
             "mid": mid_by_ticker.get(symbol),
         })
     candidates.sort(key=lambda c: -(c["gap"] if c["gap"] is not None else -999))
