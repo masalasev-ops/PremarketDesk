@@ -18,6 +18,48 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-04, sixteenth: the base rate gets a screen of its own, and the replay does not
+
+TWO CHOICES, and the owner made the first one twice before it stuck.
+
+**The base rate is not on the Morning screen.** The first design put a line
+under each candidate in the ranked list: what happened the last 96 times a
+name looked like this. It reads well and it is wrong. The score is the desk's
+OPINION about a name and a base rate is a COUNT of what lookalikes did, and
+they are different kinds of claim. Printed together they read as one number
+with two halves, and the case that matters, where a name scores well and its
+own history disagrees, stops being visible at the moment it becomes visible.
+Separate screens keep the disagreement legible, and the disagreement is the
+only mechanism by which either the score or the bands ever get corrected.
+
+The cost is a click, and the owner will pay it every morning. That is the real
+argument against and it is recorded rather than dismissed: a screen you have
+to choose to open is a screen you can forget. The mitigation is that Precedent
+sits beside Morning in the navigation rather than after Record, so it is next
+to the thing it is about.
+
+**The replay does not get a screen.** A retrospective was drawn first: score
+ordering, component lift, threshold sweeps, cost. The owner's question about
+it was the one that mattered, "the event is over already when they see it",
+and there is no good answer. A page read once a quarter does not earn a tab,
+and building one teaches the reader that this feature is about the past.
+
+So the replay is the ENGINE and Precedent is what reaches a reader. The
+engine's own findings, which are real and are the thing that would change
+CRITERIA, become a generated document under doc/research/ when the first run
+produces them. That document is written to be read once and acted on, which is
+what it is, rather than dressed as a screen that is visited.
+
+**What was given up.** Grouping by conviction. The calibration line, "when
+this desk printed GREEN the name closed up N percent of the time", was the
+strongest single sentence in the drawn design and it cannot be computed:
+reconstructed rows carry no score, because the catalyst class needs EODHD news
+tags per article and the session cache stores a newest title. Approximating it
+from earnings-versus-none was considered and refused, because a line about
+GREEN that was not computed from green rows is a different claim wearing the
+same words. It stays unbuilt until the session cache carries tags, and
+IMPROVEMENT_PLAN 5.7 records the gap rather than hiding it.
+
 ## 2026-09-04, fifteenth: the instruments go through the atomic writer too, and the chains compact today only
 
 TWO CALLS while closing the findings the entry above had left standing.

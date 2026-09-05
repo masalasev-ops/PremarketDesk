@@ -15,6 +15,65 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-04, seventy first: a Precedent screen, and the engine that will fill it
+
+The desk gained a ninth route and the navigation a seventh entry. Precedent
+prints, beside each name this morning's list ranked, what happened the last
+time a name looked like it: how many past candidates matched, over how many
+distinct sessions, how many reached the entry the report named, the middle
+result of the ones that did, the spread, and how long the middle one took to
+reach its high.
+
+Five pieces landed together.
+
+`doc/research/PRECEDENT_PREREGISTRATION.md` first and deliberately first. It
+fixes what "a name like this one" means: six conditions, a widening ladder in
+a stated order, two floors, and the confounds. It was written before
+`research_outcomes` existed as a table, which is the only thing separating a
+match rule from a rule chosen afterwards to flatter the desk.
+
+CRITERIA gained a `[Precedent]` section carrying the band edges, both floors,
+the widening order and the peak buckets, and `[Screens]` gained
+`precedent_strip_domain_pct`, the one fixed scale every spread bar is drawn
+on. Every one of them is a SEED.
+
+`store.research_outcomes`, a table of its own rather than a source column on
+`paper_trades`, because `paper_trades` is keyed on (date, ticker,
+rule_version) with no source in the key, so a reconstructed row over a live
+date would replace the live one rather than sit beside it.
+
+`research/replay_outcomes.py`, the engine. It fetches the regular session for
+the names `replay_session` reconstructed, runs them through the SHIPPED
+`paper_ledger.simulate` rather than a second copy of the rule, and writes
+`research_outcomes`. Two stages that never run together, like every other
+research module here. No EODHD quota at all.
+
+`desk/precedent.py` and the screen. The matcher reads `research_outcomes` and
+never `picks`, the payload is frozen at compact time like every other figure
+the desk carries, and the screen reads no database.
+
+WHAT IT DOES NOT DO, and this was the argument rather than the code. It does
+not touch the Morning screen. Two earlier drafts put the base rate under each
+name in the ranked list and the owner refused both. The refusals were right:
+the score is what the desk thinks and the base rate is a count of what
+lookalikes did, and folding one into the other hides the case where they
+disagree, which is the only case either of them gets corrected by.
+`claim_the_precedent_screen_cannot_borrow_the_record` now fails if
+`screenMorning` so much as reads the payload.
+
+It also does not print a calibration line. The drawn design carried one saying
+what GREEN had been worth, and writing the pre-registration killed it: `score`
+and `conviction` are NULL on every reconstructed row, because the catalyst
+class needs the vendor's news tags per article and the session cache holds a
+newest title only. A number that cannot be computed is not approximated here.
+
+The screen ships EMPTY, and that is the shipping state rather than a defect.
+`research_outcomes` holds nothing until the replay is run, and the backtest
+caches went with the 2026-09-01 history cut, so today it says the replay has
+not run, names the command that fills it, and still prints the rule each name
+would be matched on. That last part is the half worth reading before any
+number exists.
+
 ## 2026-09-04, seventieth: what the morning report actually is, measured
 
 The owner asked what the morning report is and said the screens do not show

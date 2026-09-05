@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and thirteen claims, a count read off
+and the two pages. It now carries two hundred and fourteen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13235,7 +13235,20 @@ def claim_every_production_read_of_picks_is_fenced(failures: list[str]) -> None:
     # to find out whether a live or test row is already sitting on the date it
     # is about to write, and a source filter would blind it to the thing it is
     # checking for.
-    allowed = {("research/replay_session.py", "SELECT source, COUNT(*)")}
+    allowed = {
+        ("research/replay_session.py", "SELECT source, COUNT(*)"),
+        # replay_outcomes reads the RECONSTRUCTED population on purpose: it
+        # grades what the replay produced, and a source='live' filter there
+        # would make it grade the record instead, which is the one thing every
+        # fence in this project exists to stop. The parameter is bound to the
+        # module's SOURCE constant and a claim below pins that it still is.
+        ("research/replay_outcomes.py",
+         "SELECT ticker, day_eligible, gap_pct"),
+        # And its refusal query, which has to see EVERY source for the same
+        # reason replay_session's does: it is asking whether a live or test row
+        # already sits on the date it is about to write about.
+        ("research/replay_outcomes.py", "SELECT COUNT(*) FROM picks"),
+    }
 
     unfenced: list[str] = []
     for path in sorted(root.rglob("*.py")):
@@ -14775,6 +14788,206 @@ def claim_no_published_artifact_is_written_by_a_truncating_call(
           "writes a file with a truncating write_text")
 
 
+def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> None:
+    """A base rate is counted over replayed sessions and never over live ones.
+
+    THE WHOLE FEATURE IS ONE SENTENCE PRINTED BESIDE A NAME: what happened the
+    last time a name looked like this. The sentence is worth having only if the
+    population behind it is what it claims. Two ways it could stop being that,
+    and both are silent:
+
+      the record leaks in.  research_outcomes holds reconstructed sessions the
+        desk never ran. picks holds 43 live rows over four sessions, every one
+        of them after the 2026-09-01 history floor and two of them from before
+        the two phase collector. A count that pooled them would describe
+        neither, and the four would be swamped by a year.
+      a thin group prints anyway.  Twelve names published on one morning share
+        that morning's market and are ONE observation. A median over 200 rows
+        drawn from 9 mornings is nine observations wearing a large label.
+
+    The floors and the widening ladder are pre-registered in
+    doc/research/PRECEDENT_PREREGISTRATION.md, which was written before
+    research_outcomes existed as a table. That file's date is what separates a
+    rule from a rationalisation, so its existence is checked here too: without
+    it the bands are just numbers somebody could have chosen after seeing which
+    ones flattered the desk.
+    """
+    import ast as _ast
+    import sqlite3
+
+    from core import criteria as _criteria
+    from desk import precedent
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+
+    # 1. desk/precedent reads research_outcomes and nothing else. Not "reads
+    #    picks with a fence": reads it NEVER. A fence is a line somebody can
+    #    delete; a module that does not name the table cannot be unfenced by
+    #    one edit.
+    source = (root / "desk" / "precedent.py").read_text(encoding="utf-8")
+    for node in _ast.walk(_ast.parse(source)):
+        if not (isinstance(node, _ast.Constant) and isinstance(node.value, str)):
+            continue
+        flat = " ".join(node.value.split())
+        if not flat.upper().startswith(("SELECT", "INSERT", "UPDATE", "DELETE")):
+            continue
+        if re.search(r"\b(picks|paper_trades)\b", flat):
+            failures.append(
+                f"desk/precedent.py:{node.lineno} touches the live record: "
+                f"{flat[:90]}. This module may read research_outcomes only, "
+                "because a base rate that quietly counted live rows would "
+                "describe a year it did not measure")
+
+    # 2. research/replay_outcomes writes nowhere near the record either. It is
+    #    allowed to READ picks for the reconstructed rows it grades, and the
+    #    fence claim above pins that; what it may never do is write.
+    engine = (root / "research" / "replay_outcomes.py").read_text(encoding="utf-8")
+    for node in _ast.walk(_ast.parse(engine)):
+        if not (isinstance(node, _ast.Constant) and isinstance(node.value, str)):
+            continue
+        flat = " ".join(node.value.split())
+        if flat.upper().startswith(("INSERT", "UPDATE", "DELETE")) and re.search(
+                r"\b(picks|paper_trades)\b", flat):
+            failures.append(
+                f"research/replay_outcomes.py:{node.lineno} writes to the "
+                f"record: {flat[:90]}. It may write research_outcomes only")
+    for table in ('"paper_trades"', "'paper_trades'", '"picks"', "'picks'"):
+        if f"upsert(connection, {table}" in engine:
+            failures.append(
+                f"research/replay_outcomes.py upserts into {table}, which is "
+                "the record. Reconstructed rows go to research_outcomes")
+
+    # 3. The pre-registration exists. The bands are only a rule because of it.
+    prereg = root.parent / "doc" / "research" / "PRECEDENT_PREREGISTRATION.md"
+    if not prereg.is_file():
+        failures.append(
+            "doc/research/PRECEDENT_PREREGISTRATION.md is missing. Every band "
+            "edge and both floors were fixed in it before any outcome existed, "
+            "and without that file they are numbers somebody could have chosen "
+            "afterwards to flatter the desk")
+    else:
+        text = prereg.read_text(encoding="utf-8")
+        for phrase in ("Pre-registered at:", "min_rows", "min_sessions",
+                       "widening ladder"):
+            if phrase not in text:
+                failures.append(
+                    f"the precedent pre-registration no longer says {phrase!r}, "
+                    "so the rule this screen prints is not the rule that was "
+                    "written down before the data")
+
+    # 4. A group under either floor is WITHHELD, and it is withheld on the
+    #    session count and not only on the row count. Driven through the real
+    #    matcher against a table built here, because the interesting case is
+    #    many rows from few mornings and no real session has ever produced it.
+    crit = _criteria.load()
+    min_rows = crit.integer("precedent", "min_rows")
+    min_sessions = crit.integer("precedent", "min_sessions")
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    connection.execute(
+        "CREATE TABLE research_outcomes (date TEXT, ticker TEXT, "
+        "rule_version TEXT, earnings_overnight INTEGER, gap_band TEXT, "
+        "rvol_band TEXT, price_band TEXT, cap_band TEXT, "
+        "above_prior_high INTEGER, booked INTEGER, pnl_pct REAL, "
+        "minutes_to_peak INTEGER)")
+    shape = {"earnings_overnight": 1, "gap_band": "4% to 6%",
+             "rvol_band": "1.5x to 3x", "price_band": "10 to 50",
+             "cap_band": "2000M to 10000M", "above_prior_high": 1}
+
+    def load(rows: int, sessions: int) -> None:
+        connection.execute("DELETE FROM research_outcomes")
+        for index in range(rows):
+            connection.execute(
+                "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (f"2026-01-{(index % sessions) + 1:02d}", f"T{index}", "v1",
+                 shape["earnings_overnight"], shape["gap_band"],
+                 shape["rvol_band"], shape["price_band"], shape["cap_band"],
+                 shape["above_prior_high"], 1, 1.5, 20))
+
+    # Plenty of rows, far too few mornings. This is the case the row floor
+    # alone would let through, and it is the one that matters: it is what a
+    # narrow band on a busy fortnight looks like.
+    load(min_rows * 8, 2)
+    thin = precedent.match(connection, dict(shape), "v1")
+    if not thin["held"]:
+        failures.append(
+            f"a group of {min_rows * 8} rows drawn from 2 sessions was printed "
+            f"rather than withheld, against a floor of {min_sessions} sessions. "
+            "Twelve names from one morning are one observation, and a median "
+            "over two mornings is a median over two days of market")
+    if thin["median"] is not None:
+        failures.append("a withheld group still carried a median, which is the "
+                        "number the withholding exists to suppress")
+
+    # Enough of both, and the same matcher prints.
+    load(max(min_rows, min_sessions) * 2, min_sessions + 4)
+    wide = precedent.match(connection, dict(shape), "v1")
+    if wide["held"]:
+        failures.append(
+            "a group clearing both floors was withheld anyway, so the screen "
+            "would print nothing on the population it was built for")
+    if wide["median"] is None:
+        failures.append("a group clearing both floors carried no median")
+
+    # 5. A widened group SAYS it was widened. A count that quietly dropped a
+    #    condition is weaker evidence wearing a narrow rule's label.
+    load(min_rows * 4, min_sessions + 2)
+    asked = dict(shape)
+    asked["cap_band"] = "300M to 2000M"   # matches nothing, forces a drop
+    widened = precedent.match(connection, asked, "v1")
+    if not widened["held"] and not widened["widened"]:
+        failures.append(
+            "a group that only qualified after a condition was dropped did not "
+            "say so. Every widened count is weaker evidence and the reader is "
+            "never left to infer that")
+    if "cap_band" in (widened["widened"] or []):
+        for phrase in widened["matched_on"]:
+            if "market value" in phrase:
+                failures.append(
+                    "a widened group still prints the dropped condition in its "
+                    "own rule, so the rule shown is not the rule applied")
+    connection.close()
+
+    # 6. THE MORNING SCREEN IS NOT TOUCHED BY THIS FEATURE, which is the
+    #    owner's requirement and not a preference. The base rate went onto a
+    #    screen of its own precisely so the ranked list stays what the desk
+    #    thinks and the count stays what lookalikes did, and so a reader can
+    #    watch them disagree. The check is narrow on purpose: the morning may
+    #    change for its own reasons, it may not start reading this payload.
+    from desk import assets as _assets
+
+    app = _assets.DECK_JS
+    morning = app[app.index("function screenMorning("):
+                  app.index("function notableSection(")]
+    if "precedent" in morning:
+        failures.append(
+            "screenMorning now mentions the precedent payload. The base rate "
+            "belongs on its own screen: folding it into the ranked list hides "
+            "the case where the score and the count disagree, and that case is "
+            "the only one either of them gets corrected by")
+    if app.count("p.precedent") != 1:
+        failures.append(
+            f"the precedent payload is read in {app.count('p.precedent')} "
+            "places. It has exactly one reader, screenPrecedent, and a second "
+            "one is this feature leaking into a screen that was promised it "
+            "would not change")
+
+    # The morning's own section list, pinned so a change to it is deliberate
+    # rather than a side effect of working on this feature.
+    for helper in ("notableSection", "comingUpSection", "evidenceSection",
+                   "pipelineSection", "compositionSection", "calendarSection"):
+        if f"{helper}(p)" not in morning:
+            failures.append(
+                f"the morning screen no longer draws {helper}. Its section "
+                "list is pinned here because the precedent screen was added on "
+                "the promise that the morning would be left alone")
+
+    print(f"  precedent    a base rate reads research_outcomes only, is "
+          f"withheld under {min_rows} rows or {min_sessions} sessions however "
+          "many rows there are, says so when it was widened, and the morning "
+          "screen never reads it")
+
+
 def claim_every_screen_can_be_reached(failures: list[str]) -> None:
     """Every screen is two clicks from the one the desk opens on, nav first.
 
@@ -14818,7 +15031,8 @@ def claim_every_screen_can_be_reached(failures: list[str]) -> None:
                         f"which is fewer than the eight that exist: {sorted(screens)}")
 
     default = "morning"  # parse() with an empty hash
-    in_nav = ("morning", "midday", "report", "sessions", "record", "health")
+    in_nav = ("morning", "precedent", "midday", "report", "sessions",
+              "record", "health")
     # from -> to -> the markup that draws the link
     draws = {
         # The anchor text rather than the href for the health link, whose
@@ -14826,6 +15040,12 @@ def claim_every_screen_can_be_reached(failures: list[str]) -> None:
         # if the link goes.
         "morning": {"name": '"#/name/" + tr.dataset.goto',
                     "health": "every check, in full"},
+        # Precedent is one click from anywhere, and it draws the reader onward
+        # to the two screens its own numbers must not be confused with: a name's
+        # own history, and the RECORD, which is the live population this screen
+        # never counts.
+        "precedent": {"name": "<a href=\"#/name/' + esc(n.sym)",
+                      "record": '<a href="#/record">Record</a>'},
         "midday": {"name": '"#/name/" + tr.dataset.goto'},
         "session": {"morning": '/morning">', "midday": '/midday">',
                     "report": '/report">'},
@@ -17244,6 +17464,7 @@ def main() -> int:
     run_claim(failures, claim_every_report_section_is_drawn_somewhere, failures)
     run_claim(failures, claim_the_name_screen_opens_only_what_it_needs, failures)
     run_claim(failures, claim_every_screen_can_be_reached, failures)
+    run_claim(failures, claim_the_precedent_screen_cannot_borrow_the_record, failures)
     run_claim(
         failures, claim_no_published_artifact_is_written_by_a_truncating_call,
         failures)

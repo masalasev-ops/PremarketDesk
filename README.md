@@ -3,7 +3,7 @@
 A single machine, single user premarket desk for US equities. Every weekday
 morning it builds a watchlist, listens to the live premarket tape, scores the
 candidates, and puts the morning in front of you two ways before the open: as
-eight screens you look at, and as one report you read. Every evening it goes
+nine screens you look at, and as one report you read. Every evening it goes
 back and checks itself against what the vendors published.
 
 The design has one brain and one voice: **Python decides, the model narrates.**
@@ -152,8 +152,8 @@ Every screen is a hash route, so it can be linked, bookmarked and sent to
 another machine, and the browser's back button works.
 `#/session/2026-09-04/morning` is a whole address.
 
-The navigation carries six of the eight; Session and Name are reached from the
-screens that name them.
+The navigation carries seven of the nine; Session and Name are reached from
+the screens that name them.
 
 **Morning** `#/session/<date>/morning`, and the desk opens here on today.
 The tape and stat strips, then eight sections, in this order:
@@ -191,6 +191,28 @@ behind it with its polarity; and, once noon has run, what that name actually
 did. Its badges are the warnings: conviction and score, Day and Swing
 eligibility with the failed conditions in the tooltip, Trap flagged, Trap
 undecided, Thin at the level, Partial window, No collector coverage.
+
+**Precedent** `#/session/<date>/precedent`. What happened the last time a name
+looked like each of the ones on that morning's list. One row a candidate: the
+rule it was matched on, how many past candidates matched and over how many
+DISTINCT sessions, how many of those reached the entry the report named, the
+middle result of the ones that did, the spread of them, and how long the middle
+one took to reach its high. Under it, the whole replayed population split by
+time to the high, on the same buckets the Record screen uses.
+
+It is a separate screen and not a section of Morning on purpose. The score is
+what the desk thinks about a name; a base rate is a count of what lookalikes
+did. Folding one into the other hides the case where they disagree, and that
+case is the only one either of them ever gets corrected by.
+
+Everything on it comes from RECONSTRUCTED sessions, which are sessions the desk
+did not run, replayed over a real tape by `research/replay_session.py` and
+graded by `research/replay_outcomes.py`. The live record is the Record screen's
+and the two are never added together. A group under `[Precedent] min_rows` or
+`min_sessions` prints that it is too few rather than a number, and a group that
+only qualified after a condition was dropped says which one. Until the replay
+has been run the screen says so and names the command, and still prints the
+rule each name would be matched on.
 
 **Midday** `#/session/<date>/midday`. What the open did to the levels the
 morning published, name by name, with the packet's own reason under each; what
@@ -775,13 +797,13 @@ destination is not in the tree at all, and is the last row for that reason:
 
 | Path | What |
 | --- | --- |
-| `data/premarketdesk.db` | SQLite (WAL), six tables. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; and sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet |
+| `data/premarketdesk.db` | SQLite (WAL), seven tables. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet; and research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by `research/replay_outcomes.py` and read only by the Precedent screen, never pooled with paper_trades under any question |
 | `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
 | `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
-| `site/PremarketDesk.html` | The desk: every session on file in one self contained document, eight screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended |
+| `site/PremarketDesk.html` | The desk: every session on file in one self contained document, nine screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended |
 | `runs/YYYY-MM-DD/desk.json.gz` | That session's compacted payload, frozen by `desk/compact.py` in the nightly. It is what the desk inlines, and the file `prune_data.py` requires before it will drop the duplicate premarket snapshot, because the run copy is the only exact record of the tape the morning saw |
 | `site/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own |
 | `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the six artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, its stats and subscriptions sidecars, the frozen 08:45 packet a morning was judged on, and the report in markdown and HTML, because the same input does not produce the same words twice. A dated snapshot of `data/quantifier-flags.jsonl` sits beside them. See `doc/CRITERIA.md [Backup]` |

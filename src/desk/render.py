@@ -1,4 +1,4 @@
-"""Write site/PremarketDesk.html: one document, eight screens, every session
+"""Write site/PremarketDesk.html: one document, nine screens, every session
 inlined.
 
 A FULL REBUILD FROM WHAT IS ON DISK, never an append, so running it twice is
@@ -60,6 +60,7 @@ _KNOB_KEYS = (
     ("screens", "ladder_label_gap_px", "integer", "ladder_label_gap_px"),
     ("screens", "sessions_page_size", "integer", "sessions_page_size"),
     ("screens", "name_decks", "integer", "name_decks"),
+    ("screens", "precedent_strip_domain_pct", "number", "precedent_strip_domain_pct"),
     # The two times a midday screen counts down to before its pass has run.
     # Read from the sections that own them rather than restated under
     # [Screens], so the page counts down to the minute the scheduler actually
@@ -118,7 +119,15 @@ def payloads(dates: list[str]) -> tuple[dict[str, str], int, int]:
 
 
 def _nav() -> str:
-    items = [("morning", "#/", "Morning"), ("midday", "#/", "Midday"),
+    items = [("morning", "#/", "Morning"),
+             # Sits beside Morning and not after Record, because it is about
+             # the SAME session and is read at the same hour. It is a separate
+             # screen and not a section of Morning on purpose: the score is
+             # the desk's opinion and a base rate is a count of what lookalikes
+             # did, and folding one into the other hides the case where they
+             # disagree, which is the only case either gets corrected by.
+             ("precedent", "#/", "Precedent"),
+             ("midday", "#/", "Midday"),
              ("report", "#/", "Report"),
              ("sessions", "#/sessions", "Sessions"),
              ("record", "#/record", "Record"), ("health", "#/health", "Health")]

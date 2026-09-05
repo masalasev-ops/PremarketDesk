@@ -285,6 +285,38 @@ td.tk { font-weight: 600; font-family: Consolas, monospace; }
 tr.clickable { cursor: pointer; }
 tr.clickable:hover td { background: var(--active); }
 
+/* precedent. The table rows are two lines deep, so the cells top align and
+   the second line is the small one; every other table on the desk is one
+   line a row and centres. */
+.ptable td { vertical-align: top; padding-top: 11px; padding-bottom: 11px; }
+.ptable .tk { font-weight: 700; font-size: 14px; font-family: Consolas, monospace; }
+.ptable .tk a { color: inherit; text-decoration: none; }
+.ptable .tk a:hover { color: var(--accent); }
+.ptable .sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.ptable td.empty { color: var(--muted); font-size: 12.5px; }
+.prule { font-size: 11.5px; color: var(--muted); margin-top: 3px;
+  font-family: Consolas, monospace; line-height: 1.45; max-width: 34ch; }
+.ptag { font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase;
+  font-weight: 700; padding: 1px 6px; border-radius: 4px; white-space: nowrap;
+  border: 1px solid var(--line-strong); color: var(--muted); margin-left: 7px;
+  vertical-align: 2px; }
+.pstrip, .ptable th svg { display: block; }
+.paxis { stroke: var(--line); stroke-width: 1; }
+.pzero { stroke: var(--line-strong); stroke-width: 1.5; }
+.ptick { font-size: 10px; fill: var(--muted); }
+.plegend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px;
+  font-size: 11.5px; color: var(--muted); align-items: center; }
+.plegend i { display: inline-block; vertical-align: -1px; margin-right: 6px; }
+.plegend .pbox { width: 16px; height: 10px; border-radius: 2px;
+  background: var(--good); opacity: .34; }
+.plegend .pline { width: 16px; height: 2px; background: var(--line-strong); }
+.plegend .pdot { width: 10px; height: 10px; border-radius: 999px;
+  background: var(--good); }
+.pnote { font-size: 13px; color: var(--ink-2); line-height: 1.6; max-width: 86ch;
+  padding: 8px 0; border-top: 1px solid var(--line); }
+.pnote:first-child { border-top: 0; padding-top: 0; }
+.pnote b { color: var(--ink); font-weight: 600; }
+
 /* disclosures */
 details { border: 1px solid var(--line); border-radius: 8px; background: var(--surface);
   margin-top: 9px; }
@@ -410,7 +442,7 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 DECK_JS = r"""
 /* premarketdesk desk application.
 
-   One document, eight screens, hash routes. No framework, no library, no
+   One document, nine screens, hash routes. No framework, no library, no
    build step and no network: every session is inlined at render time,
    gzipped and base64 encoded, and inflated in the page on first view.
 
@@ -1559,6 +1591,240 @@ DECK_JS = r"""
     });
   }
 
+  /* ---------- Precedent ----------
+
+     A SEPARATE SCREEN AND NOT A SECTION OF MORNING, which is the whole design
+     and was argued four times before it was drawn. The score is the desk's
+     opinion about a name. A base rate is a count of what lookalikes did.
+     Folding the second into the first hides the case where they disagree, and
+     that case is the only one either of them ever gets corrected by.
+
+     Every figure here comes from RECONSTRUCTED sessions, which are sessions
+     the desk did not run, replayed over a real tape. The live record is the
+     Record screen's and is never pooled in. desk/precedent.py holds the fence
+     and doc/research/PRECEDENT_PREREGISTRATION.md holds the reasoning. */
+
+  function pstrip(g, dom) {
+    // ONE SCALE for every bar on the screen, fixed in CRITERIA rather than
+    // fitted per row, so two names compare by eye. A result outside the
+    // domain is clamped to the edge and the clamp is drawn as a notch, which
+    // is a visible lie rather than an invisible one.
+    var W = 260, H = 30, L = 6, CY = 15, PW = W - L * 2;
+    function X(v) {
+      var c = Math.max(-dom, Math.min(dom, v));
+      return L + (c + dom) / (dom * 2) * PW;
+    }
+    function clipped(v) { return v < -dom || v > dom; }
+    var tone = g.median == null ? "flat" : g.median < 0 ? "down"
+      : g.median < 1 ? "warn" : "up";
+    var col = tone === "down" ? "var(--bad)" : tone === "warn" ? "var(--warn)"
+      : tone === "up" ? "var(--good)" : "var(--line-strong)";
+    var out = '<line class="pzero" x1="' + X(0) + '" y1="1" x2="' + X(0) +
+      '" y2="' + (H - 1) + '"/>';
+    if (g.worst != null && g.best != null) {
+      out += '<line x1="' + X(g.worst).toFixed(1) + '" y1="' + CY + '" x2="' +
+        X(g.best).toFixed(1) + '" y2="' + CY + '" stroke="var(--line-strong)" ' +
+        'stroke-width="2" stroke-linecap="round"/>';
+      [[g.worst, "worst"], [g.best, "best"]].forEach(function (e) {
+        if (!clipped(e[0])) return;
+        out += '<line x1="' + X(e[0]).toFixed(1) + '" y1="' + (CY - 7) + '" x2="' +
+          X(e[0]).toFixed(1) + '" y2="' + (CY + 7) +
+          '" stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="2 2"/>';
+      });
+    }
+    if (g.p25 != null && g.p75 != null) {
+      out += '<rect x="' + X(g.p25).toFixed(1) + '" y="' + (CY - 8) + '" width="' +
+        Math.max(2, X(g.p75) - X(g.p25)).toFixed(1) + '" height="16" rx="3" fill="' +
+        col + '" opacity="0.34"/>';
+    }
+    if (g.median != null) {
+      out += '<circle cx="' + X(g.median).toFixed(1) + '" cy="' + CY +
+        '" r="6" fill="' + col + '" stroke="var(--surface)" stroke-width="2"/>';
+    }
+    var label = g.median == null ? "withheld"
+      : "middle " + pct(g.median) + ", worst " + pct(g.worst) +
+        ", best " + pct(g.best);
+    return '<svg class="pstrip" width="' + W + '" height="' + H +
+      '" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' +
+      esc(label) + '">' + out + "</svg>";
+  }
+
+  function paxis(dom) {
+    // The scale drawn ONCE, in the column heading, rather than repeated under
+    // every row. Twelve copies of the same ruler is twelve chances to read a
+    // different one.
+    var W = 260, L = 6, PW = W - L * 2, out = "";
+    function X(v) { return L + (v + dom) / (dom * 2) * PW; }
+    var step = dom > 4 ? 2 : 1;
+    for (var g = -dom + step; g < dom; g += step) {
+      if (Math.abs(g) < 0.001) continue;
+      out += '<line class="paxis" x1="' + X(g).toFixed(1) + '" y1="14" x2="' +
+        X(g).toFixed(1) + '" y2="20"/>';
+      out += '<text class="ptick" x="' + X(g).toFixed(1) +
+        '" y="11" text-anchor="middle">' + (g > 0 ? "+" : "\u2212") +
+        Math.abs(g) + '%</text>';
+    }
+    out += '<line class="pzero" x1="' + X(0) + '" y1="12" x2="' + X(0) + '" y2="22"/>';
+    out += '<text class="ptick" x="' + X(0) + '" y="9" text-anchor="middle">0</text>';
+    out += '<line class="paxis" x1="' + L + '" y1="20" x2="' + (W - L) + '" y2="20"/>';
+    return '<svg width="' + W + '" height="26" viewBox="0 0 ' + W +
+      ' 26" aria-hidden="true">' + out + "</svg>";
+  }
+
+  function precedentRow(n, dom, bare) {
+    var rule = (n.matched_on || []).join(" \u00b7 ") || "nothing measurable";
+    var tag = "";
+    if (n.held) tag = '<span class="ptag">too few</span>';
+    else if ((n.widened || []).length) {
+      tag = '<span class="ptag">widened, dropped ' +
+        esc(n.widened.join(", ").replace(/_/g, " ")) + "</span>";
+    }
+    var head = '<td><span class="tk"><a href="#/name/' + esc(n.sym) + '">' +
+      esc(n.sym) + "</a></span>" + tag +
+      '<div class="prule">' + esc(rule) + "</div></td>";
+    if (n.held) {
+      // BARE is the whole table being held for the same reason, which is what
+      // an unfilled research_outcomes looks like. Twelve identical paragraphs
+      // down a page is noise the reader has to read past to find the rules,
+      // and the rules are the only thing on the screen worth reading before
+      // the replay has run. The sentence is said once, above the table.
+      return "<tr>" + head +
+        '<td class="n">' + n.rows + '<div class="sub">' + n.sessions +
+        " session" + (n.sessions === 1 ? "" : "s") + "</div></td>" +
+        '<td colspan="4" class="empty">' + (bare ? "nothing replayed yet"
+          : "Too few to say anything, so nothing is said. " + esc(n.why || "") +
+            ". The score on the Morning screen stands on its own here.") +
+        "</td></tr>";
+    }
+    var reach = n.rows ? Math.round(n.reached / n.rows * 100) : null;
+    var upshare = n.reached ? Math.round(n.up / n.reached * 100) : null;
+    return "<tr>" + head +
+      '<td class="n">' + n.rows + '<div class="sub">' + n.sessions +
+      " sessions</div></td>" +
+      '<td class="n">' + n.reached + '<div class="sub">' +
+      (reach == null ? NIL : reach + " in 100") + "</div></td>" +
+      '<td class="n ' + dirClass(n.median) + '">' + pct(n.median) +
+      '<div class="sub">' + (upshare == null ? NIL : upshare + " in 100 up") +
+      "</div></td>" +
+      "<td>" + pstrip(n, dom) + "</td>" +
+      '<td class="n">' + (n.peak == null ? NIL : n.peak) +
+      '<div class="sub">' + (n.peak == null ? "" : "to its high") + "</div></td></tr>";
+  }
+
+  function screenPrecedent(p, root) {
+    var pr = p.precedent || {};
+    var cover = pr.coverage || {};
+    var names = pr.names || [];
+    var dom = KNOBS.precedent_strip_domain_pct || 6;
+
+    var html = fixtureBanner(p) +
+      '<section><div class="shead"><h2>What history says about this list</h2>' +
+      '<span class="note">a count of the past, not a forecast</span></div>' +
+      '<p class="snote">For each name the Morning screen ranked, this searches ' +
+      'every REPLAYED session for names that looked like it at the scan, and ' +
+      'reports what those did by the close. It does not change the ranking and ' +
+      'it is not an instruction. Where the past holds too few similar mornings, ' +
+      'it says so and stops.</p>';
+
+    if (!cover.rows) {
+      // THE EMPTY STATE IS A STATE AND NOT AN ERROR. A screen that draws
+      // nothing when its table is empty reads as broken, and the reader is
+      // told which command fills it rather than left to find one.
+      html += '<div class="card verdict" style="margin-top:4px">' +
+        '<div class="rule" style="background:var(--warn)"></div><div class="vin">' +
+        '<div class="vt">The replay has not been run, so there is no past to ' +
+        'count</div><div class="vs">This screen reads reconstructed sessions ' +
+        'only, and there are none on file. The live record is four sessions ' +
+        'and is deliberately not used here: four mornings cannot make a base ' +
+        'rate, and pooling them into one would corrupt the year and say ' +
+        'nothing about the four. Fill it with <span class="mono">' +
+        esc(cover.command || "") + '</span>. Every name below still shows the ' +
+        'rule it WOULD be matched on, which is the part worth checking before ' +
+        'any number exists.</div></div></div>';
+    } else {
+      html += kpisHTML([
+        { l: "Sessions replayed", v: cover.sessions,
+          s: (cover.first || NIL) + " to " + (cover.last || NIL) },
+        { l: "Past candidates", v: commas(cover.rows), s: "graded rows on file" },
+        { l: "Reached a buy", v: commas(cover.reached),
+          s: cover.rows ? Math.round(cover.reached / cover.rows * 100) +
+            " in 100 of them" : NIL },
+        { l: "Named on this list", v: names.length,
+          s: names.filter(function (n) { return !n.held; }).length +
+            " with enough history to count" },
+        { l: "Paper rule", v: cover.version || NIL,
+          s: "the same rule the Record screen books" }
+      ]);
+    }
+
+    html += '<div class="card pad" style="margin-top:13px"><div class="scroll">' +
+      '<table class="ptable"><thead><tr>' +
+      "<th>Name and what it was matched on</th>" +
+      '<th class="n">Times seen</th><th class="n">Reached the buy</th>' +
+      '<th class="n">Middle result</th>' +
+      "<th>How they ended" + paxis(dom) + "</th>" +
+      '<th class="n">Peaked after</th></tr></thead><tbody>' +
+      (names.map(function (n) { return precedentRow(n, dom, !cover.rows); }).join("") ||
+        '<tr><td colspan="6" class="empty">This session kept no candidates.</td></tr>') +
+      "</tbody></table></div>" +
+      '<div class="plegend"><span><i class="pbox"></i>where half of them ' +
+      'landed</span><span><i class="pline"></i>the single best and worst ' +
+      'day</span><span><i class="pdot"></i>the one in the middle</span>' +
+      "<span>rows AND sessions are both printed, because twelve names from " +
+      "one morning share that morning's market and are one observation</span>" +
+      "</div></section>";
+
+    var peaks = pr.peaks || [];
+    if (peaks.length) {
+      html += '<section><div class="shead"><h2>When a winner stopped going up</h2>' +
+        '<span class="note">across every replayed session, not this list</span>' +
+        '</div><p class="snote">How the whole replayed population ended, split ' +
+        'by how long after the buy it reached its best price. If the early ' +
+        'group ends below zero, the finding is about when to sell and not ' +
+        'about which names the desk picks, and those are different repairs.</p>' +
+        '<div class="card pad"><div class="scroll"><table class="ptable">' +
+        '<thead><tr><th>Minutes to the high</th><th class="n">Trades</th>' +
+        '<th class="n">Sessions</th><th class="n">Middle result</th>' +
+        "<th>How they ended" + paxis(dom) + "</th></tr></thead><tbody>" +
+        peaks.map(function (b) {
+          if (b.held) {
+            return "<tr><td>" + esc(b.label) + '</td><td class="n">' + b.rows +
+              '</td><td class="n">' + b.sessions +
+              '</td><td colspan="2" class="empty">Too few sessions to say.</td></tr>';
+          }
+          return "<tr><td>" + esc(b.label) + '</td><td class="n">' + b.rows +
+            '</td><td class="n">' + b.sessions + '</td><td class="n ' +
+            dirClass(b.median) + '">' + pct(b.median) + "</td><td>" +
+            pstrip(b, dom) + "</td></tr>";
+        }).join("") + "</tbody></table></div></div></section>";
+    }
+
+    // WHAT THESE COUNTS ARE NOT, printed on the screen and not left in a
+    // document nobody opens. Each of the three is a known way for a number
+    // above to be wrong, and a reader who cannot see them cannot weigh one.
+    html += '<section><div class="shead"><h2>What these counts are not</h2></div>' +
+      '<div class="card pad"><div class="pnote"><b>Not the record.</b> Every ' +
+      'row counted here is a session the desk did not run, reconstructed by ' +
+      'replaying the shipped screen over a real tape. What the desk actually ' +
+      'published is on the <a href="#/record">Record</a> screen and the two are ' +
+      'never added together.</div>' +
+      '<div class="pnote"><b>Not sorted by catalyst.</b> A reconstructed row ' +
+      'has no catalyst class: rebuilding it needs the vendor news tags per ' +
+      'article and the session cache holds a newest title only. The one ' +
+      'catalyst fact in the match is whether the name reported overnight, so a ' +
+      'takeover and a trial result with the same gap and volume are one group ' +
+      'here.</div>' +
+      '<div class="pnote"><b>Not survivorship free.</b> ' +
+      esc(cover.survivorship || "") + '.</div>' +
+      '<div class="pnote"><b>Not a measured rule.</b> Every band edge and both ' +
+      'floors are seeds, chosen before any of this data existed and written ' +
+      'down in doc/research/PRECEDENT_PREREGISTRATION.md so they could not be ' +
+      'chosen afterwards to flatter the desk. Changing one is an amendment ' +
+      'there, not an edit.</div></div></section>';
+
+    root.innerHTML = html;
+  }
+
   /* The written report, inlined with its session. This screen IS the
      retired site/PremarketDesk.html archive: that page existed to read old
      mornings' prose across sessions, the desk took its filename on
@@ -2136,7 +2402,8 @@ DECK_JS = r"""
   }
 
   function setNav(route) {
-    var map = { morning: "morning", midday: "midday", report: "report",
+    var map = { morning: "morning", precedent: "precedent",
+      midday: "midday", report: "report",
       session: "sessions", sessions: "sessions", record: "record",
       health: "health", name: "" };
     Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
@@ -2149,6 +2416,7 @@ DECK_JS = r"""
     // the newest.
     var at = route.date || LAST;
     var link = { morning: "#/session/" + at + "/morning",
+      precedent: "#/session/" + at + "/precedent",
       midday: "#/session/" + at + "/midday",
       report: "#/session/" + at + "/report",
       health: "#/health/" + at };
@@ -2157,7 +2425,7 @@ DECK_JS = r"""
     });
     var scoped = (route.screen === "morning" || route.screen === "midday" ||
       route.screen === "session" || route.screen === "health" ||
-      route.screen === "report");
+      route.screen === "report" || route.screen === "precedent");
     $("picker-wrap").style.display = scoped ? "" : "none";
     if (route.date) $("session-btn-label").textContent = route.date;
     // The stamp names the session a screen is about. On Sessions, Record,
@@ -2216,6 +2484,7 @@ DECK_JS = r"""
       $("stamp-date").textContent = p.session;
       $("stamp-run").textContent = p.run_at || NIL;
       if (route.screen === "midday") screenMidday(p, root);
+      else if (route.screen === "precedent") screenPrecedent(p, root);
       else if (route.screen === "report") screenReport(p, root);
       else if (route.screen === "session") screenSession(p, root);
       else screenMorning(p, root);
@@ -2253,6 +2522,7 @@ DECK_JS = r"""
     location.hash = screen === "session" ? "#/session/" + date
       : screen === "health" ? "#/health/" + date
       : screen === "midday" ? "#/session/" + date + "/midday"
+      : screen === "precedent" ? "#/session/" + date + "/precedent"
       : screen === "report" ? "#/session/" + date + "/report"
       : "#/session/" + date + "/morning";
   });

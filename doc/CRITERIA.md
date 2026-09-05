@@ -3721,5 +3721,42 @@ inline_sessions               = 400        # sessions inlined into site/Premarke
 spine_scale_pct               = 26         # the fixed symmetric scale on the gap spine, in percent either side of the centre rule, so two mornings compare by eye
 path_min_bars                 = 2          # below this many minute bars the tape path degrades to a sentence naming the count, rather than a line drawn through one point
 ladder_label_gap_px           = 17         # minimum vertical space between two labels on the level ladder before they are pushed apart
-name_decks                    = 12         # appearances of one name whose full deck the Name screen draws, newest first, with a control for the rest. A deck is a level ladder, a tape path and every headline, so twelve is about a fortnight of a recurring name and the point past which the screen is scrolled rather than read
+name_decks                    = 12         # appearances of one name whose full deck the Name screen draws, newest first, with a control for the rest. A deck is a level ladder, a tape path and every headline, so twelve is about a fortnight of a recurring name and the point past which the screen is scrolled rather than read
 sessions_page_size            = 60         # rows the Sessions screen's list renders before it offers to show the rest. Written here from the first build and honoured only from 2026-09-04: until then the page was handed the number and rendered every row anyway, which four sessions on file hid
+precedent_strip_domain_pct    = 6          # the fixed symmetric scale, in percent either side of zero, that every spread bar on the Precedent screen is drawn on. Fixed rather than per row so two bars compare by eye, and a result beyond it is clamped and marked rather than rescaling the column
+
+## Precedent
+
+What "a name like this one" means, and the floors under which a count is
+withheld rather than printed. The reasoning, the six conditions, the widening
+ladder and the confounds are in doc/research/PRECEDENT_PREREGISTRATION.md,
+which was written before this section had a reader and must not be edited to
+match a result.
+
+Every band edge below is a boundary between groups, not a filter: a candidate
+falls in exactly one band and matches a past row only if that row falls in the
+same one. Edges are ascending, and the value ON an edge belongs to the band
+ABOVE it. Bands are open at both ends, so an edge list of three numbers makes
+four bands.
+
+None of these numbers is measured. All of them are SEED, chosen on
+2026-09-04 against no data at all, and IMPROVEMENT_PLAN 5.4's sweep is what
+replaces the guess with a measurement. Until that has run, the screen is a
+working screen printing counts under bands nobody has justified, which is worse
+than it sounds only if a reader forgets it. The screen says so on its face.
+
+The population is reconstructed rows and never the live record. A count here
+describes sessions the desk did not run, produced by replaying the shipped
+screen on a real tape, and the Record screen remains the only place live rows
+are read. See the pre-registration's section 2 for why mixing them corrupts
+both.
+
+gap_band_edges                = 4, 6, 8, 10, 15    # percent. Five edges, six bands, and the lowest is open downward so a gap under the screen's own floor still lands somewhere when the ladder widens
+rvol_band_edges               = 1.5, 3, 5, 8       # multiples of the baseline. The first edge is [Day setup] premarket_rvol's floor on purpose, so a band boundary never sits inside the population the screen admits
+price_band_edges              = 2, 10, 50          # dollars. Three edges, four bands. A five dollar name and a five hundred dollar name do not move alike and a percentage does not make them comparable
+cap_band_edges                = 300, 2000, 10000   # MILLIONS of dollars. The middle edge is [Score booleans]' own 2B line, so the band boundary and the score's boolean agree rather than cutting the population twice in nearly the same place
+min_rows                      = 30                 # SEED. Matched past rows a group needs before any number is printed for it. Under this the screen prints that it is too few and names the count
+min_sessions                  = 20                 # SEED, and the binding one. DISTINCT sessions those rows came from. Twelve names published on one morning share that morning's market and are one observation, so a group of 200 rows over 9 mornings is nine observations wearing a large label
+widen_order                   = cap_band, price_band, above_prior_high, rvol_band   # conditions dropped ONE AT A TIME, in this order, re-counting after each, stopping at the first count that clears both floors. Earnings overnight and the gap band are never dropped. Fixed in the pre-registration before any result existed and moving one is an amendment there, not an edit here
+max_widen_steps               = 4                  # after this many drops a group is WITHHELD rather than widened further. Equal to the length of widen_order, so exhausting the ladder and refusing are the same event and there is no fifth silent step
+peak_minutes_buckets          = 10, 30, 60, 120    # minutes to the session's best price. The buckets the Record screen already groups by, restated here so the two screens split the same axis and a reader can carry a finding from one to the other

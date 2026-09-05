@@ -105,12 +105,12 @@ at the root and is gitignored along with .env.
              [Truth]. [corrected 2026-09-02: was "true_volume is the only
              module in the tree that talks to Alpaca in production", and the
              list omitted backup_evidence and paper_ledger.]
-  - desk/    compact, assets, render. The one document below, rebuilt at the
-             end of all three chains; compact freezes each session to
-             runs/<date>/desk.json.gz, which prune_data reads. Spec: SCREENS.
+  - desk/    compact, assets, render, precedent (replayed lookalikes counted
+             into the payload). One document, rebuilt at the end of all three
+             chains; compact freezes desk.json.gz, prune reads it. Spec: SCREENS.
   - research/ backtest_pool, float_cache, float_rotation_study,
-             counterfactual_watchlist, cutoff_0830, replay_session (the live
-             screen run over a finished session from Alpaca bars),
+             counterfactual_watchlist, cutoff_0830, replay_session (the shipped
+             screen over a finished session), replay_outcomes (grading it),
              addressable_sweep, vwap_gappers, the four probe_ scripts
              (probe_live_v1, probe_alpaca_live, probe_socket_cap,
              probe_capture_live), the four measure_ scripts
@@ -292,7 +292,7 @@ at the root and is gitignored along with .env.
   rest of site/
 - site/PremarketDesk.html: THE DESK since 2026-09-04, when build_archive was
   retired and desk/render took its filename. Every session in one document on
-  eight hash routes, each inlined gzipped and inflated in the page. Rebuilt
+  nine hash routes, each inlined gzipped and inflated in the page. Rebuilt
   whole at the end of all three chains, not by the 07:00 catch-up
   (desk/render.py, inline_sessions in CRITERIA [Screens]); gitignored
 

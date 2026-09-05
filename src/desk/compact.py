@@ -39,6 +39,7 @@ from core import criteria
 from core import ettime
 from core import files
 from core import store
+from desk import precedent
 from morning import render_report
 
 _CRIT = criteria.load()
@@ -401,6 +402,18 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             for t in (packet.get("market_snapshot") or [])
         ],
         "candidates": candidates,
+        # What happened the last time a name looked like each of these. Frozen
+        # into the payload at compact time rather than computed at render
+        # time, for the same reason every other figure here is: the published
+        # file carries its own answers and the screens read no database.
+        #
+        # It is COMPUTED FROM RECONSTRUCTED SESSIONS ONLY and it is not the
+        # record. desk/precedent's docstring and
+        # doc/research/PRECEDENT_PREREGISTRATION.md say why those two must
+        # never be pooled. With research_outcomes empty this returns a
+        # coverage block naming the command that fills it, which is what the
+        # screen draws, so the section ships before the data does.
+        "precedent": precedent.build(candidates),
         "tally": packet.get("screen_tally") or {},
         "shape": {k: (packet.get("list_shape") or {}).get(k)
                   for k in ("sectors", "catalyst_classes", "gap_direction")},

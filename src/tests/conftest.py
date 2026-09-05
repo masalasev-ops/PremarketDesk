@@ -63,6 +63,7 @@ _DERIVED = (
     ("research.backtest_pool", "CACHE_DIR", lambda c: c.DATA_DIR / "backtest"),
     ("research.backtest_pool", "EOD_DIR", lambda c: c.DATA_DIR / "backtest" / "eod"),
     ("research.backtest_pool", "SESSION_DIR", lambda c: c.DATA_DIR / "backtest" / "sessions"),
+    ("research.replay_outcomes", "OUTCOMES_DIR", lambda c: c.DATA_DIR / "backtest" / "outcomes"),
     ("ops.job_status", "RECORD_PATH", lambda c: c.DATA_DIR / "job-status.jsonl"),
     ("ops.market_today", "CACHE_PATH", lambda c: c.DATA_DIR / "exchange-details.json"),
     ("ops.monitor_jobs", "STATE_PATH", lambda c: c.DATA_DIR / "monitor-reruns.json"),

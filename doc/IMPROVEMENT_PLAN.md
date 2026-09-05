@@ -1022,6 +1022,72 @@ A fifth item, the disposition of `data/UNVERIFIED`, stood here until
 2026-09-02 and was dropped from the plan at the owner's word (DECISIONS
 2026-09-02, seventh). The gate itself is unchanged.
 
+### 5.7 Precedent: what happened the last time a name looked like this
+
+Added 2026-09-04 at the owner's request, after four rounds on a drawn design.
+This package is the REASON to build 5.4 rather than a screen bolted onto it,
+and 5.4's evaluate half is folded into it here. Build 5.4's fetch first; it is
+unchanged and its fences hold for this too.
+
+Files: new `src/research/replay_outcomes.py` (the engine), new
+`src/desk/precedent.py` (the matcher), a new `research_outcomes` table via
+store.py, a new Precedent route in `src/desk/assets.py` and
+`src/desk/render.py`, a new `[Precedent]` CRITERIA section, and
+`doc/research/PRECEDENT_PREREGISTRATION.md` written BEFORE the first evaluate.
+
+WHAT IT IS. A separate screen, reached from its own tab, whose every section
+is the historical mirror of a section the Morning screen already carries. The
+Morning screen is not changed, and that is a requirement and not an accident:
+the score is the desk's opinion, the base rate is a count of what lookalikes
+did, and folding one into the other hides the case where they disagree, which
+is the only case either of them gets corrected by. Section for section:
+
+| On Precedent | Mirrors on Morning |
+| --- | --- |
+| The names on today's list | The gap spine |
+| What the desk missed | What else moved |
+| What each floor turned down | How the list was cut |
+| Whether thin evidence has cost anything | What the evidence is worth |
+| How these events have resolved before | Coming up |
+| What kind of morning this is | What kind of morning this is |
+| What noon has graded before | What noon will grade |
+
+WHY IT IS NOT THE REPLAY SCREEN. A retrospective page is opened once and then
+never again, because the event it describes is over. The owner said so and it
+is right. The replay is the ENGINE; what reaches a reader daily is this screen,
+which uses the engine's output before the open. The engine's own system level
+findings (the score's ordering, the component lift, the threshold sweeps) are a
+generated document under doc/research/ and NOT a tab, for the same reason.
+
+THE MATCHER, which is where this package can go wrong. "Looked like this" is
+the whole design. Too loose and the count is meaningless, too tight and it is
+noise. The rule is a CRITERIA table of bands, applied as a conjunction, with a
+widening ladder that drops named conditions in a fixed order when the count
+falls under the floor. Three things are compulsory:
+
+1. Every printed count carries BOTH rows and distinct sessions. Twelve names
+   from one morning share that morning's market and are one observation.
+2. A group under `[Precedent] min_sessions` prints "too few to say anything"
+   rather than a number. A widened group is labelled widened, every time,
+   with the dropped condition named.
+3. The bands are fixed in the pre-registration BEFORE any outcome is read. A
+   matcher tuned after the results are visible is a matcher tuned to flatter
+   the desk, and this is the failure mode the whole package exists to avoid.
+
+Must not: change the Morning screen, change the ranking, write to `picks`
+outcome columns or `paper_trades`, spend EODHD quota at render time, or read
+any row whose `source` is not `reconstructed` when computing a base rate. The
+live record is 43 picks over four sessions and must never be pooled into a
+figure that claims to describe a year.
+
+Acceptance: with `research_outcomes` empty the screen renders and says the
+replay has not been run, naming the command; a claim fails if `desk/precedent`
+reads picks without a source fence; a claim fails if any base rate is printed
+over fewer sessions than `[Precedent] min_sessions`; a claim fails if the
+Morning screen's section list changed; the pre-registration file carries a date
+earlier than the first `research_outcomes` row. Effort L. Risk: the matcher,
+held by the pre-registration. Delegable: no, not the matcher.
+
 ---
 
 ## Tier 6: what the 2026-09-02 evening review left open
@@ -1207,6 +1273,7 @@ and probe_socket_cap refuses inside it; re-time it or retire it.
 | Week 2 | 2.1 or 2.2, 2.5, 1.5, 3.1, 3.4, 3.5 | Output tokens down by two thirds, CLI time under two minutes, the guards scanning a few hundred words, one page shell, midday reachable |
 | Week 3 | 4.1 to 4.7, 4.9, 5.1, 5.2, 5.3 | Nine floats become one, six writers become one, CRITERIA checked at test time, the suite cannot hide a raising claim, the record page answers the questions a trader asks |
 | Week 4 | 5.4, 5.5 | The 60 session replay and the fifth prior test, both free, both pre-registered, both ending in a table the owner can decide on |
+| Week 4 | 5.7 | The Precedent screen: what happened the last time a name looked like this, printed before the open rather than after the event |
 | Owner | 5.6 | The four decisions the measurements are waiting on |
 | Later | 3.6, 4.8, 4.10 | Sparklines, the scan split, the single entrypoint |
 

@@ -537,6 +537,67 @@ null and the badge drew only the true case, so the eight names on that morning
 whose question could not be answered looked like the four that were asked and
 cleared.]
 
+### 11. Precedent
+
+[ADDED 2026-09-04, at the owner's request, after four rounds on a drawn design.
+It is the ninth route and the seventh entry in the navigation.
+
+Route: `#/session/<date>/precedent`.
+
+Answers: what happened the last time a name looked like each of the ones on
+this morning's list.
+
+Reads: the compacted payload's `precedent` block, which desk/precedent.py
+computes at compact time from `research_outcomes`. It reads no database at
+render time, like every other screen here.
+
+THE DESIGN ARGUMENT, because it was made three times before it was accepted
+and the wrong version of this screen is easy to build.
+
+  Not on the Morning screen. The first draft put a base rate under each name
+  in the ranked list and the owner refused it twice. The refusals were right.
+  The score is what the desk THINKS about a name and the base rate is a COUNT
+  of what lookalikes did, and folding the second into the first hides the case
+  where they disagree, which is the only case either of them ever gets
+  corrected by. claim_the_precedent_screen_cannot_borrow_the_record pins the
+  separation: screenMorning may not read this payload at all.
+
+  Not a retrospective. The owner's question that killed the first design was
+  "the event is over already when they see it", asked of a screen that
+  reported on a finished replay. It is the right question and it is why this
+  screen is about THIS morning and is read at the same hour as the Morning
+  screen. The replay is the engine; the retrospective is a document under
+  doc/research/ and not a tab.
+
+  Every section mirrors a Morning section, and says which one. The names on
+  this list against the gap spine, and when a winner stopped going up against
+  the Record screen's own timing split, on the same buckets so a finding
+  carries between them.
+
+Regions, in order:
+
+  What history says   one row a candidate: the rule it was matched on, rows
+                      AND distinct sessions, how many reached the buy, the
+                      middle result, the spread on mark 8, and the median
+                      minutes to the high
+  When a winner       the whole replayed population split on time to the high,
+    stopped going up  drawn only when there is a population to split
+  What these counts   four things the numbers are not, printed on the screen
+    are not           rather than left in a document nobody opens
+
+  Mark 8, the spread bar, is new and is the only chart this screen adds: a
+  thin line from worst to best, a thick box over the middle half, a dot on the
+  median, on ONE scale fixed in CRITERIA [Screens] precedent_strip_domain_pct
+  and drawn once in the column heading rather than under every row. A result
+  outside the domain is clamped and the clamp is drawn as a dashed notch,
+  which is a visible lie rather than an invisible one.
+
+THE EMPTY STATE IS THE SHIPPING STATE. research_outcomes is empty until the
+replay has been run, and on this machine the backtest caches were removed with
+the September 1 history cut. So the screen ships saying the replay has not run,
+naming the command that fills it, and still printing the rule each name WOULD
+be matched on, which is the part worth checking before any number exists.]
+
 ### The navigation, and a screen with no route into it
 
 [CORRECTED 2026-09-04. The navigation shipped as Morning, Midday, Sessions,
@@ -633,6 +694,14 @@ Phase 1 lands.
   inline_sessions        how many sessions the desk inlines whole
   spine_scale_pct        the fixed symmetric scale on the gap spine
   path_min_bars          below which the tape path degrades to a sentence
+
+[appended 2026-09-04] They moved, and four more went with them:
+ladder_label_gap_px, name_decks, sessions_page_size and
+precedent_strip_domain_pct, all under `## Screens`. The Precedent screen also
+added a `## Precedent` section of its own, which is not display bounds but the
+match rule: band edges, the two floors and the widening order. It is a section
+rather than four more keys under Screens because a band edge is a measurement
+rule and a strip domain is a drawing bound, and the two would read as one list.
 
 WHEN THEY MOVE, MIND THE SHADOW TRAP. A note in CRITERIA.md that begins in
 column zero with `key = value` is parsed as a second parameter and the last

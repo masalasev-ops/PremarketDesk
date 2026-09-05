@@ -190,6 +190,68 @@ CREATE TABLE IF NOT EXISTS paper_trades (
     booked_at        TEXT,
     PRIMARY KEY (date, ticker, rule_version)
 );
+
+CREATE TABLE IF NOT EXISTS research_outcomes (
+    -- What a RECONSTRUCTED pick did on its own session. Written only by
+    -- research/replay_outcomes.py, read only by desk/precedent.py, and never
+    -- pooled with paper_trades under any question.
+    --
+    -- THIS IS NOT THE RECORD AND MUST NEVER BE COUNTED AS ONE. Every row here
+    -- describes a session the desk did not run, produced by replaying the
+    -- shipped screen over a real tape. paper_trades holds what the desk
+    -- actually published and is the only table the Record screen reads. The
+    -- two answer different questions and a figure mixing them would describe
+    -- neither: see doc/research/PRECEDENT_PREREGISTRATION.md section 2.
+    --
+    -- A separate table rather than a source column on paper_trades, for the
+    -- same reason picks needed the reconstruction fence. paper_trades is keyed
+    -- on (date, ticker, rule_version) with no source in the key, so a
+    -- reconstructed row over a live date would REPLACE the live one rather
+    -- than sit beside it.
+    date             TEXT NOT NULL,
+    ticker           TEXT NOT NULL,
+    -- The paper rule this was simulated under, carried per row so a row says
+    -- which instrument measured it. Bumping [Paper] rule_version writes beside
+    -- these rather than over them, exactly as it does on the live ledger.
+    rule_version     TEXT NOT NULL,
+    -- The six match conditions, frozen onto the row at write time rather than
+    -- recomputed at read time. A base rate has to be reproducible from the
+    -- bytes that produced it, and a band edge moving in CRITERIA would
+    -- silently re-cut every historical group if these were derived on read.
+    earnings_overnight INTEGER,
+    gap_band         TEXT,
+    rvol_band        TEXT,
+    price_band       TEXT,
+    cap_band         TEXT,
+    above_prior_high INTEGER,
+    -- The raw values the bands came from, so a later sweep can re-cut the
+    -- bands without re-fetching a year of tape.
+    gap_pct          REAL,
+    pm_rvol          REAL,
+    price_ref        REAL,
+    market_cap_musd  REAL,
+    -- What paper_ledger.simulate returned. booked=1 means the session's tape
+    -- reached the entry the report named. A row that never reached it is
+    -- KEPT, with booked=0 and pnl_pct NULL, because it belongs in the
+    -- denominator of "how often did this shape become a trade at all".
+    booked           INTEGER,
+    skip_reason      TEXT,
+    entry_ref_used   REAL,
+    stop_ref_used    REAL,
+    entry_price      REAL,
+    exit_price       REAL,
+    exit_reason      TEXT,
+    pnl_pct          REAL,
+    max_drawdown_pct REAL,
+    mfe_pct_held     REAL,
+    minutes_to_trigger INTEGER,
+    minutes_to_peak  INTEGER,
+    bars_held        INTEGER,
+    -- Why a number is absent, in words, when it is absent. Never a zero.
+    match_note       TEXT,
+    computed_at      TEXT NOT NULL,
+    PRIMARY KEY (date, ticker, rule_version)
+);
 """
 
 # Columns added after the first schema shipped. init() widens existing
