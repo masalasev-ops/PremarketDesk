@@ -424,6 +424,21 @@ ORDERINGS: dict[str, dict[str, Any]] = {
         "use_shipped_rank": True,
         "tier_row_key": {2: "news_items"},
     },
+    "G": {
+        # 6.2's first candidate: news_fresh and news_stale as ONE tier, so the
+        # six hour age split stops deciding anything. Movers stay tier 4, which
+        # is what separates this from COLLAPSED.
+        "label": "shipped, except the news freshness split is dropped entirely",
+        "use_shipped_rank": True,
+        "collapse_tiers": {3: 2},
+    },
+    "H": {
+        # 6.2's second candidate: fresh means the evening cycle, 16:00 to
+        # 22:00 ET, rather than the last six hours.
+        "label": "shipped, except news is tiered by window position not age",
+        "use_shipped_rank": True,
+        "retier": "window_position",
+    },
     "C": {"label": "median absolute gap descending", "key": "median_abs_gap_pct"},
     "D": {"label": "20 day ATR as a percent of price descending", "key": "atr_pct_20d"},
     "E": {
@@ -496,6 +511,37 @@ def order_pool(
         rows = [dict(row) for row in rows]
         for row in rows:
             row["pool_tier"] = collapse.get(row["pool_tier"], row["pool_tier"])
+
+    # RE-TIER BY WHERE IN THE WINDOW THE NEWS LANDED, rather than by how old it
+    # is. This is 6.2's second candidate. news_fresh_hours is an AGE, so at the
+    # 07:15 pass "fresh" means published after 01:15 ET and the 16:00 to 20:00
+    # window where earnings and guidance actually land is stale, tier 3, four
+    # floored slots against hundreds of names. At the 03:55 pass the boundary is
+    # 21:55 and the skew is the same, so the 04:00 to 07:20 tape is lost for
+    # exactly those names.
+    #
+    # Position asks the opposite question: an item published in the first hours
+    # AFTER the prior close is the evening news cycle, whatever time the pass
+    # runs. Read off the item's own ET hour, which needs no session date
+    # plumbed through here and cannot disagree with one that was.
+    if ordering.get("retier") == "window_position":
+        rows = [dict(row) for row in rows]
+        for row in rows:
+            if row["pool_tier"] not in (2, 3):
+                continue
+            stamp = ((row.get("pool_evidence") or {}).get("news") or {}).get(
+                "newest_item_at")
+            hour = None
+            if isinstance(stamp, str) and len(stamp) >= 13:
+                try:
+                    hour = int(stamp[11:13])
+                except ValueError:
+                    hour = None
+            # None stays where the shipped rule put it. An unreadable stamp is
+            # not an evening one and guessing would move a name on no evidence.
+            if hour is None:
+                continue
+            row["pool_tier"] = 2 if 16 <= hour < 22 else 3
 
     rows.sort(key=sort_key)
     for index, row in enumerate(rows):

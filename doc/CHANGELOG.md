@@ -15,6 +15,46 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, eighty first: the freshness split is measured, and its own argument does not survive
+
+6.2 said the six hour freshness split puts after close corporate news in the
+wrong tier, and the reasoning is sound: news_fresh_hours is an AGE, so at the
+07:15 pass "fresh" means published after 01:15 ET and the 16:00 to 20:00 window
+where earnings and guidance land is stale, tier 3, four floored slots against
+hundreds of names. On 2026-09-02 the 16:00 hour was the largest bucket at 82
+names, all of them tier 3.
+
+BOTH CANDIDATES WERE BUILT AND MEASURED over 240 sessions, cap 42, floor 4, as
+orderings G and H. Mean subscribed recall per session:
+
+  shipped, six hour age split                     0.1589 past 3, 0.3113 past 8
+  G, no freshness split, tier 3 folded into 2     0.1616 past 3, 0.3117 past 8
+  H, fresh means 16:00 to 22:00 rather than age   0.1430 past 3, 0.2854 past 8
+
+H IS DECISIVELY WORSE, which is the answer to the item as written: -0.0159 past
+3 percent at a t of -6.45, -0.0259 past 8 percent at a t of -4.90, better on 19
+sessions and worse on 62. The reason is worth keeping. Promoting the evening
+bucket is not free, because it is a LARGE bucket: moving it into tier 2 dilutes
+that tier and pushes higher propensity names out of the cap. The names 6.2
+wants reached are reached at the cost of more names than it gains.
+
+G IS NOT DISTINGUISHABLE from the shipped rule, +0.0027 past 3 at a t of 1.86
+and +0.0004 past 8 at a t of 0.09, better on 105 sessions and worse on 71. That
+says the six hour boundary is not doing much work in either direction, which is
+useful, and is not a reason to move a parameter.
+
+news_fresh_hours stays at 6 and is now MEASURED rather than seeded, which it had
+been since it was written. CRITERIA carries a freshness note with the table.
+
+WHAT THREE MEASUREMENTS NOW POINT AT, none of which was measuring it. 6.1 found
+the slot floor's benefit reverses between the 3 and 8 percent denominators. The
+after close crossing found three in five gapping after close reporters are held
+by the pool and then cut. And 6.2 finds that promoting more names into tier 2
+backfires because that tier is already oversubscribed. All three are about the
+CAP.
+
+Suite green at 221 claims, not one path changed under the working tree.
+
 ## 2026-09-05, eightieth: the after close crossing goes on disk, and a hundred percent that means nothing
 
 The last two of tier 6's smaller items. One produced a number that looks like a

@@ -612,9 +612,41 @@ prior_session_dollar_multiple = 3          # seed, not validated: prior session 
 recent_runner_lookback        = 10         # seed, not validated: sessions of picks history a recent runner can come from
 recent_runner_decay           = 0.85       # seed, not validated: per session weight decay, recorded on the row as pool_evidence.runners.weight. It ORDERS NOTHING: every tier, tier 5 included, is ordered by within_tier_key, and until 2026-09-02 this line claimed 3 days ago outranks 3 weeks ago, which the code never did
 news_window_start             = 16:00      # prior day ET, the close after which overnight news starts counting
-news_fresh_hours              = 6          # seed: news newer than this is tier 2, older but inside the window is tier 3
+news_fresh_hours              = 6          # MEASURED 2026-09-05 and kept, having been a seed until then. See the freshness note below the pool note
 news_sweep_page_size          = 1000       # rows per news call
 news_sweep_max_pages          = 5          # hard bound on the sweep, truncation is recorded rather than silent
+
+### The freshness note, measured 2026-09-05
+
+news_fresh_hours was a seed for its whole life and IMPROVEMENT_PLAN 6.2 argued
+it was in the wrong place: six hours is an AGE, so at the 07:15 pass "fresh"
+means published after 01:15 ET and the 16:00 to 20:00 window where earnings and
+guidance land is stale, tier 3, four floored slots against hundreds of names. On
+2026-09-02 the 16:00 hour was the largest bucket, 82 names, all tier 3.
+
+The argument is sound and the measurement does not support it. Over 240
+replayed sessions, cap 42, floor 4, mean subscribed recall per session:
+
+  ordering                                        past 3 percent   past 8 percent
+  shipped, six hour age split                     0.1589           0.3113
+  G, no freshness split at all, tier 3 into 2     0.1616           0.3117
+  H, fresh means 16:00 to 22:00 rather than age   0.1430           0.2854
+
+H IS DECISIVELY WORSE, -0.0159 at 3 percent with a t of -6.45 and -0.0259 at 8
+percent with a t of -4.90, better on 19 sessions and worse on 62. Promoting the
+evening bucket is not free: it is a large bucket, so moving it into tier 2
+dilutes that tier and pushes higher propensity names out of the cap. The names
+6.2 wants reached are reached at the cost of more names than it gains.
+
+G is not distinguishable from the shipped rule: +0.0027 at 3 percent with a t of
+1.86, and +0.0004 at 8 percent with a t of 0.09. Better on 105 sessions and
+worse on 71. That is worth knowing on its own, because it says the six hour
+split is not doing much work in either direction, but it is not a reason to
+move a parameter.
+
+So the key stays at 6, now measured rather than seeded, and the thing to
+re-open is not the boundary but the tier 2 CAP, which 6.1 and the after close
+crossing both point at from different directions.
 
 ### The pool note
 
