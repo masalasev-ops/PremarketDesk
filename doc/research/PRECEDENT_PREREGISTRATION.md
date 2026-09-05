@@ -335,3 +335,62 @@ windows that existed at the time. Each replayed session still reads only a
 window dated strictly before it, so no session is ranked on its own outcome,
 but the cadence is a reconstruction and the universe those windows were
 computed over is today's. A name delisted during the year is in none of them.
+
+## 12. The first falsifier reading, 2026-09-05
+
+Section 9 named three things that would make this wrong. The replay finished at
+240 sessions and 9,500 graded rows under one rule version, which is the fence
+the screen reads through, so two of the three can now be read. Nothing in
+sections 4, 5 or 6 was changed to produce these numbers, and
+`research.falsifier_reading` recomputes every one of them by calling
+`desk.precedent.match` once per replayed candidate, so the figures below and
+the shipped ladder cannot drift apart silently.
+
+**The widening ladder fires on 41 percent of candidates. NOT tripped.** Pooled
+over the replay, 41 percent need at least one condition dropped. The median
+morning is 39 percent. Counted a morning at a time, 64 of the 240 are strictly
+over half. Section 9's bar is half and all three readings sit under it. Where
+the ladder settles: 5,634 candidates match on the full conjunction, 1,391 after
+one drop, 1,517 after two, 203 after three, 721 after four, and 34 are withheld
+with the ladder exhausted.
+
+**The reading depends on how an unmeasured condition is treated, and this is
+the number to be careful with.** 1,685 of the 9,500, 18 percent, carry no
+premarket RVOL band, because the name was never subscribed or the window held
+no bars. `_select` drops an unmeasured condition from the conjunction rather
+than comparing it to NULL, which would match nothing and empty the group. So
+those candidates are matched on five conditions and land in a group wide enough
+to clear the floors without the ladder. Counted the other way, treating an
+unmeasured condition as a failure to match, the same population reads 54
+percent pooled, 58 percent on the median morning and 135 of 240 mornings, and
+the falsifier trips on all three. The first reading is the one that stands
+because it is what the shipped code does; the second is recorded here so that
+nobody recomputing this later finds 54 and concludes the page is lying.
+
+**Fewer than a third clearing the floors at all: NOT tripped.** 34 candidates
+in 9,500 are refused with the ladder exhausted, so better than 99 in 100 reach
+a printable group.
+
+**The reached-entry comparison: not readable.** It needs the live record at 200
+booked trades and the live record holds 43. It stays unread, and of the three
+it is the one that can still overturn the screen rather than its bands.
+
+**No band edge moves.** Section 9's remedy is conditional on the trip and the
+trip did not happen. The edges stay as CRITERIA describes them, which is seeds
+chosen against no data, awaiting the measured sweep that note already promises.
+A falsifier that did not fire is not evidence that the seeds are right.
+
+**A gap between section 5's promise and the code, found while reading this and
+closed the same day.** Section 5 says every widened group is labelled widened
+on the screen, every time, naming the dropped conditions. A condition dropped
+for being unmeasured was not labelled: `match` returns an empty `widened` list
+for it, because the ladder never ran. The printed rule was not wrong, `in_words`
+omits the condition it could not apply, so the reader saw a rule with no volume
+clause rather than a false one. But a group matched on five conditions and a
+group matched on six were drawn alike, and on 18 percent of candidates that is
+the difference between them. `match` now returns `unmeasured` beside `widened`
+and the row says which condition the group ignores. This is a disclosure and
+not a rule change: no edge, no floor, no ladder order and no condition moved,
+and the counts on the screen are the same counts. Section 10 governs the rule,
+and adding a sentence about what the rule could not apply is not an amendment
+to it.

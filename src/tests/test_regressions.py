@@ -12627,7 +12627,16 @@ def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None
              7: "seven", 8: "eight", 9: "nine", 10: "ten", 11: "eleven",
              12: "twelve", 13: "thirteen", 14: "fourteen", 15: "fifteen",
              16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen",
-             20: "twenty"}
+             20: "twenty", 21: "twenty one", 22: "twenty two",
+             23: "twenty three", 24: "twenty four", 25: "twenty five",
+             26: "twenty six", 27: "twenty seven", 28: "twenty eight",
+             29: "twenty nine", 30: "thirty"}
+    # Unhyphenated, which is the house spelling: doc/CHANGELOG.md has written
+    # "twenty one" since 2026-08. A hyphen here would fail every document that
+    # is in fact correct. The list ran out at twenty on 2026-09-05 when
+    # research gained falsifier_reading, and the claim refused rather than
+    # reporting a stale document, which is the right way round but reads like
+    # a document fault until you get to this line.
 
     root = config.PROJECT_ROOT
     suite = (root / "src" / "tests" / "run_tests.py").read_text(encoding="utf-8")
@@ -15098,6 +15107,84 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
             "the precedent coverage block names no population, so the screen "
             "prints counts without saying which names they are counts of")
 
+    # 10. A CONDITION NOBODY MEASURED IS NAMED, and it is not the same event as
+    #     a ladder drop. _select leaves an unmeasured condition OUT of the
+    #     conjunction rather than comparing it to NULL, which would match
+    #     nothing and empty every group. So the group is wider than the rule
+    #     beside it reads, the ladder never ran, and until 2026-09-05 nothing
+    #     on the row said so. On the replayed pool it is 1,685 of 9,500
+    #     candidates, 18 percent, nearly all of them missing premarket volume,
+    #     and it is large enough to move the section 9 falsifier from 41
+    #     percent to 54 across a bar of 50. A silent five condition group drawn
+    #     beside a six condition one is the deception this screen was built not
+    #     to commit.
+    measured_zero = {"earnings_overnight": 0, "gap_band": "up 4% to 6%",
+                     "rvol_band": "1.5x to 3x", "price_band": "$10 to $50",
+                     "cap_band": "300M to 2000M", "above_prior_high": 0}
+    if precedent.unmeasured(measured_zero):
+        failures.append(
+            "a candidate with every condition measured was reported as missing "
+            "one. above_prior_high 0 is an answer, not an absence: it means the "
+            "name opened below yesterday's high")
+    missing_volume = dict(measured_zero, rvol_band=None)
+    named = precedent.unmeasured(missing_volume)
+    if not named:
+        failures.append(
+            "a candidate with no premarket volume band reported nothing "
+            "unmeasured, so the screen draws a five condition group as though "
+            "it were a six condition one")
+    if any("_" in word for word in named):
+        failures.append(
+            f"the unmeasured conditions are printed as column names {named}. "
+            "A field name is never printed as English on a page a reader sees")
+    # The case that matters is a group that clears WITHOUT the ladder while
+    # still missing a condition, because that is the one drawn beside a full
+    # six condition group with nothing to tell them apart. Built here: rows
+    # that carry no volume band, matched by a candidate that has none either.
+    # _select leaves the condition out of the conjunction, the group clears on
+    # the other five, and the ladder never runs.
+    blind = sqlite3.connect(":memory:")
+    blind.row_factory = sqlite3.Row
+    blind.execute(
+        "CREATE TABLE research_outcomes (date TEXT, ticker TEXT, "
+        "rule_version TEXT, earnings_overnight INTEGER, gap_band TEXT, "
+        "rvol_band TEXT, price_band TEXT, cap_band TEXT, "
+        "above_prior_high INTEGER, booked INTEGER, pnl_pct REAL, "
+        "minutes_to_peak INTEGER, skip_reason TEXT, day_eligible INTEGER)")
+    for index in range(max(min_rows, min_sessions) * 2):
+        blind.execute(
+            "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (f"2026-02-{(index % (min_sessions + 4)) + 1:02d}", f"B{index}",
+             "v1", missing_volume["earnings_overnight"],
+             missing_volume["gap_band"], None, missing_volume["price_band"],
+             missing_volume["cap_band"], missing_volume["above_prior_high"],
+             1, 1.5, 20, None, 1))
+    clear = precedent.match(blind, dict(missing_volume), "v1")
+    blind.close()
+    if clear["held"]:
+        failures.append(
+            "a group with enough rows and enough sessions was withheld because "
+            "one condition was unmeasured. An unmeasured condition is dropped "
+            "from the conjunction, not compared to NULL, or every group holding "
+            "one would be empty")
+    if clear["widened"]:
+        failures.append(
+            f"an unmeasured condition was reported as a LADDER drop "
+            f"{clear['widened']}. The ladder drops a condition to REACH the "
+            "floors and this group cleared them without it. Calling the two "
+            "one event hides that the group was never narrow to begin with")
+    if not clear.get("unmeasured"):
+        failures.append(
+            "a group that cleared the floors on five conditions carried no "
+            "note that the sixth was never measured, so it is drawn beside a "
+            "six condition group with nothing to tell the reader them apart")
+    for phrase in clear.get("matched_on") or []:
+        if "volume" in phrase:
+            failures.append(
+                "a group that could not apply the volume condition still "
+                "prints it in its own rule, so the rule shown is not the rule "
+                "applied")
+
     # 6. THE MORNING SCREEN IS NOT TOUCHED BY THIS FEATURE, which is the
     #    owner's requirement and not a preference. The base rate went onto a
     #    screen of its own precisely so the ranked list stays what the desk
@@ -15134,8 +15221,8 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
 
     print(f"  precedent    a base rate reads research_outcomes only, is "
           f"withheld under {min_rows} rows or {min_sessions} sessions however "
-          "many rows there are, says so when it was widened, and the morning "
-          "screen never reads it")
+          "many rows there are, says so when it was widened AND when a "
+          "condition was never measured, and the morning screen never reads it")
 
 
 def claim_the_daily_bar_sections_are_a_separate_instrument(

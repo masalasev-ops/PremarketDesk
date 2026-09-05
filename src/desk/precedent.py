@@ -35,7 +35,12 @@ WHAT THIS MODULE MAY NOT DO, and why each one is a rule rather than a habit.
   makes the whole screen worthless.
 
   No silent widening. A group that only qualified after conditions were
-  dropped says which ones, every time it is drawn.
+  dropped says which ones, every time it is drawn. That covers two different
+  drops and it took until 2026-09-05 to say the second out loud: the ladder
+  dropping a condition to reach the floors, and _select leaving out a
+  condition the candidate has no value for. The second is not a ladder step,
+  so it carried no label at all, and on the replayed pool it is 18 percent of
+  candidates. Both are named on the row now. See unmeasured().
 """
 
 from __future__ import annotations
@@ -150,6 +155,34 @@ def in_words(conditions: dict[str, Any], dropped: list[str]) -> list[str]:
     if conditions.get("cap_band") and "cap_band" not in dropped:
         out.append(f"market value {conditions['cap_band']}")
     return out
+
+
+def unmeasured(conditions: dict[str, Any]) -> list[str]:
+    """Conditions this candidate has no value for, which _select leaves out.
+
+    NOT a ladder drop and never labelled as one. _select omits an unmeasured
+    condition from the conjunction rather than comparing it to NULL, which
+    matches nothing and would empty the group. The effect is real and it is
+    invisible without this: the group was matched on FEWER conditions than the
+    rule names, so it is wider than a reader comparing it to the group beside
+    it would assume.
+
+    Measured on the replayed pool 2026-09-05: 1,685 of 9,500 candidates, 18
+    percent, carry no premarket RVOL band, the name never having been
+    subscribed or the window holding no bars. That is large enough to move the
+    section 9 falsifier from 41 percent to 54 across a bar of 50, so it is not
+    a rounding detail and the screen says which condition it could not apply.
+
+    above_prior_high is compared to None and not to falsity, because 0 is a
+    measured answer meaning the name opened below yesterday's high.
+
+    Returns WORDS and not column names, on the same rule as in_words: a field
+    name is never printed as English on a page a reader sees.
+    """
+    words = (("gap_band", "the gap"), ("rvol_band", "premarket volume"),
+             ("price_band", "price"), ("cap_band", "market value"),
+             ("above_prior_high", "where it sits against yesterday's high"))
+    return [word for column, word in words if conditions.get(column) is None]
 
 
 def _select(connection: sqlite3.Connection, conditions: dict[str, Any],
@@ -269,6 +302,7 @@ def match(connection: sqlite3.Connection, conditions: dict[str, Any],
     if conditions.get("earnings_overnight") is None:
         return {
             "held": True, "widened": [], "version": version,
+            "unmeasured": unmeasured(conditions),
             "matched_on": in_words(conditions, []),
             "floors": {"rows": min_rows, "sessions": min_sessions},
             "rows": 0, "sessions": 0, "reached": None, "median": None,
@@ -286,6 +320,7 @@ def match(connection: sqlite3.Connection, conditions: dict[str, Any],
         if stats["rows"] >= min_rows and stats["sessions"] >= min_sessions:
             return {
                 "held": False, "widened": list(dropped), "version": version,
+                "unmeasured": unmeasured(conditions),
                 "matched_on": in_words(conditions, dropped),
                 "floors": {"rows": min_rows, "sessions": min_sessions},
                 **stats,
@@ -297,6 +332,7 @@ def match(connection: sqlite3.Connection, conditions: dict[str, Any],
     last = attempts[-1]
     return {
         "held": True, "widened": list(dropped), "version": version,
+        "unmeasured": unmeasured(conditions),
         # The NARROW rule, not the one the exhausted ladder ended on. A held
         # group has no count, so what the reader wants from the row is what it
         # would have been matched on, and printing the fully widened rule

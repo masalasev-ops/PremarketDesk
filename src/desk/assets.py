@@ -1683,6 +1683,17 @@ DECK_JS = r"""
       tag = '<span class="ptag">widened, dropped ' +
         esc(n.widened.join(", ").replace(/_/g, " ")) + "</span>";
     }
+    // AN UNMEASURED CONDITION IS NOT A LADDER DROP, and until 2026-09-05 it
+    // was drawn as though it were nothing at all. The matcher leaves such a
+    // condition out of the conjunction rather than comparing it to NULL, which
+    // would match nothing, so the group is WIDER than the rule beside it
+    // looks. On the replayed pool that is 18 percent of candidates, nearly all
+    // of them missing premarket volume. Added to the widened tag rather than
+    // replacing it, because a group can be both widened and short a condition.
+    if ((n.unmeasured || []).length) {
+      tag += '<span class="ptag">not measured for this name, so the group '
+        + 'ignores ' + esc(n.unmeasured.join(" and ")) + "</span>";
+    }
     var head = '<td><span class="tk"><a href="#/name/' + esc(n.sym) + '">' +
       esc(n.sym) + "</a></span>" + tag +
       '<div class="prule">' + esc(rule) + "</div></td>";

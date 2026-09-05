@@ -15,30 +15,57 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
-## 2026-09-05, seventy second: the replay ran, and the pre-registered falsifier tripped
+## 2026-09-05, seventy second: the replay ran, and the pre-registered falsifiers were read
 
 The Precedent screen's other six sections were built and the year behind them
 was graded. 240 sessions, 2025-08-29 to 2026-08-13, 9,500 graded candidate rows
 under paper rule v1 and 40,983 daily bar rows beside them. What follows is what
 the run measured, including the part that says the match rule is not working.
 
-THE WIDENING FALSIFIER TRIPPED. Section 9 of the pre-registration says: "If the
-widening ladder fires on more than half of a morning's candidates, the bands are
-too tight and the rule needs re-cutting, not the data." On 2026-09-04 it fired
-on 11 of 12. One name printed on the narrow rule. cap_band was dropped on 11 of
-the 11, price_band on 5 of them. Nothing has been re-cut, because moving a band
-edge is an amendment to that page and the owner has not seen this yet.
+THE WIDENING FALSIFIER WAS READ AND DID NOT TRIP. Section 9 of the
+pre-registration says: "If the widening ladder fires on more than half of a
+morning's candidates, the bands are too tight and the rule needs re-cutting,
+not the data." Read through desk.precedent.match itself, over 9,500 graded rows
+on 240 sessions fenced to one rule_version, the ladder fires on 41 percent of
+candidates pooled, 39 percent of the median morning, and 64 of the 240 mornings
+taken one at a time. The bar is half and all three sit under it. It settles at
+5,634 candidates on the full conjunction, 1,391 after one drop, 1,517 after
+two, 203 after three, 721 after four, 34 withheld. The floors falsifier did not
+trip either: 34 refusals in 9,500 is better than 99 in 100 printable. The third
+cannot be run until the live record passes 200 booked trades, and it is not
+reported as passing. No band edge moves, because section 9's remedy was
+conditional on a trip that did not happen. research/falsifier_reading.py
+recomputes all of it and section 12 of the pre-registration is the record.
+[corrected 2026-09-05, three times before it was right, which is why the module
+exists: this entry first read "it fired on 11 of 12" from one LIVE morning,
+which is not this screen's population; then 54 percent from a reimplementation
+of the ladder that dropped the rule_version fence and used earnings_tier_key
+instead of the earnings_overnight boolean; then 54 percent again from a
+reimplementation that treated an unmeasured condition as a failure to match,
+where _select drops it from the conjunction. Only the last of those changes the
+verdict, and the module now calls the shipped path rather than describing it.]
 
-WHY IT FIRES, measured rather than guessed. The six conditions take 2, 12, 5, 4,
-3 and 2 distinct values on this population, and the 9,500 rows land in 929
-occupied cells: a mean of 10.2 rows per cell against a min_rows floor of 30.
-Only 50 of the 929 cells clear both floors on the narrow rule. Those 50 hold 55
-percent of all rows, which is the shape of the problem: the lattice is dense
-where the market is ordinary and sparse exactly where a published candidate
-sits, because a name reaches the morning list by being unusual. The floors
-falsifier did NOT trip: all 12 candidates got a printable group after widening.
-The third falsifier cannot be run until the live record passes 200 booked
-trades, and it is not reported as passing.
+THE 18 PERCENT THAT DECIDES IT. 1,685 of the 9,500 carry no premarket RVOL
+band, the name never having been subscribed or the window holding no bars.
+_select drops an unmeasured condition rather than comparing it to NULL, which
+would match nothing, so those candidates match on five conditions and clear the
+floors without the ladder. Counted the other way the same population reads 54
+percent and the falsifier trips. The shipped behaviour is the one that counts
+and 41 percent is the reading, but the two numbers are 13 points apart on a
+50 point bar and both are written down. A related gap: section 5 promises every
+widened group is labelled widened, and a condition dropped for being unmeasured
+is not, because the ladder never ran. The printed rule omits the clause it
+could not apply, so it is not false, but a group matched on five conditions and
+one matched on six are shown alike.
+
+WHY THE LATTICE IS THIN ANYWAY, measured rather than guessed. The six
+conditions take 2, 12, 5, 4, 3 and 2 distinct values on this population, and
+the 9,500 rows carry 929 distinct condition shapes between them: a mean of 10.2
+rows per shape against a min_rows floor of 30. The lattice is dense where the
+market is ordinary and sparse exactly where a published candidate sits, because
+a name reaches the morning list by being unusual. That the ladder still clears
+most candidates is a fact about how far one drop widens a group, not evidence
+that the seed edges were well chosen.
 
 THE POOL WAS UNUSABLE AND NOBODY HAD NOTICED. replay_session refuses a session
 with no gap_stats window dated strictly before it, which is what stops the pool
