@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and eighteen claims, a count read off
+and the two pages. It now carries two hundred and nineteen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11269,6 +11269,90 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
           "and empty ONLY when all four looked and none did")
 
 
+def claim_the_slot_floor_is_judged_on_both_denominators(
+        failures: list[str]) -> None:
+    """Every replayed session reports recall on the big gap set as well.
+
+    min_slots_per_tier was set on a +0.0017 mean margin measured over gaps past
+    the 3 percent DISCOVERY floor, which admits far more names than anyone
+    would trade, and the seven live sessions say the two questions have
+    different answers: the 28 floored slots in tiers 3, 4 and 5 subscribed 7,
+    10 and 9 names past 3 percent and NOT ONE past 8, while the tier 2 region
+    the floor cuts into held 12 that were past 8. A floor judged on the 3
+    percent number is judged on the population it is least accountable for.
+
+    Re-measured over 240 sessions on 2026-09-05 the two denominators really do
+    disagree, so both are reported on every session and neither is allowed to
+    stand alone. The floor stayed at 4 on that evidence and CRITERIA's ordering
+    note carries the table.
+
+    The 8 percent line is a CRITERIA key and not a literal here, because a
+    threshold written in two places is a threshold that will be changed in one.
+    """
+    from core import criteria as _criteria
+    from research import backtest_pool as bp
+
+    crit = _criteria.load()
+    floor = crit.number("discovery", "recall_big_gap_pct")
+    # The big set has to be a SUBSET of the gapper set, or the two rates have
+    # different populations and the comparison in the ordering note is void.
+    # Asked of the shipped discovery rule rather than against a literal 3.
+    if not crit.rule("discovery", "gap_pct").test(floor):
+        failures.append(
+            f"a gap of {floor} percent does not clear the discovery gap floor, "
+            "so the big gap denominator is not a subset of the gapper set and "
+            "the two recall figures describe different populations")
+
+    session = "2026-08-13"
+    if session not in bp.cached_sessions():
+        print(f"  both denominators SKIPPED, {session} is not cached")
+        return
+    row = bp.evaluate_session(session, bp.load_metrics(),
+                              bp.ORDERINGS["SHIPPED"], cap=42, tier_floor=0)
+    for key in ("gapped_big", "pool_held_big", "subscribed_held_big",
+                "discovery_recall_big", "subscribed_recall_big"):
+        if key not in row:
+            failures.append(f"a replayed session reports no {key}, so the floor "
+                            "can only be judged on the denominator it was "
+                            "already tuned on")
+    if row.get("big_gap_floor_pct") != floor:
+        failures.append(
+            f"the session reports a big gap floor of {row.get('big_gap_floor_pct')} "
+            f"against CRITERIA's {floor}, so the number in the payload and the "
+            "number in the config are two different thresholds")
+    if row.get("gapped_big") is not None and row.get("gapped") is not None:
+        if row["gapped_big"] > row["gapped"]:
+            failures.append(
+                f"{row['gapped_big']} big gappers out of {row['gapped']} "
+                "gappers. The big set is a subset and cannot be larger")
+
+    # Ordering F reaches a key that lives on the ROW, not in metrics, so a
+    # sort that silently ignored it would look like a working ordering.
+    inputs, outcome = bp.load_session(session)
+    metrics = bp.load_metrics()
+    pool = bp.build_pool(inputs, metrics)
+    ordered = bp.order_pool(pool, metrics, bp.ORDERINGS["F"])
+    tier_two = [r for r in ordered if r["pool_tier"] == 2]
+    counts = [((r.get("pool_evidence") or {}).get("news") or {}).get("items")
+              for r in tier_two]
+    measured = [c for c in counts if c is not None]
+    if len(measured) > 1 and measured != sorted(measured, reverse=True):
+        failures.append(
+            "ordering F did not sort tier 2 by overnight news item count "
+            f"descending: {measured[:8]}. It reads a key on the row rather "
+            "than in metrics, so an ordering that ignored it would still "
+            "produce a plausible looking list")
+    if len(measured) != len(counts):
+        # A null must sort last, on the same rule the metric keys use.
+        if counts[:len(measured)] != measured:
+            failures.append(
+                "a tier 2 name with no news item count did not sort last. "
+                "Never measured is not measured as none")
+    print("  both floors  a replayed session reports recall past the discovery floor "
+          "AND past CRITERIA's big gap line, and ordering F really does sort tier 2 "
+          "by a key that lives on the row")
+
+
 def claim_a_split_is_not_a_gap_the_replay_should_have_caught(
         failures: list[str]) -> None:
     """The replay refuses corporate actions, and weighs a morning comparably.
@@ -18154,6 +18238,7 @@ def main() -> int:
     run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
     run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
     run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_the_slot_floor_is_judged_on_both_denominators, failures)
     run_claim(failures, claim_a_split_is_not_a_gap_the_replay_should_have_caught, failures)
     run_claim(failures, claim_a_replay_does_not_rank_last_year_on_this_week_s_universe, failures)
     run_claim(failures, claim_the_pool_the_collector_listened_to_survives_the_handover, failures)

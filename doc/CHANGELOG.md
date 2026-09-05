@@ -15,6 +15,58 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy seventh: the slot floor is asked properly and does not move
+
+6.1's last repair, the sweep it existed for, and an answer that changes no
+parameter. The table is in CRITERIA's ordering note.
+
+CALENDAR-EARNINGS HAD NO PRICE, found while costing the last repair. discover
+calls it on both morning passes and every backtest session fetch uses it, and
+an unpriced endpoint cannot appear in a quota gate at all, because credit_cost
+raises rather than guessing. Measured the way the rest of that table was, five
+calls between two free meter reads, 36,230 to 36,235: one credit. The two
+meter reads again moved nothing, pinning user at zero a fourth time.
+
+REPAIR THREE. refresh-earnings replaces only inputs["earnings"], one calendar
+call per session, so a re-measurement can attribute a difference to the
+calendar instead of to a whole re-fetch. Not run against the current cache and
+it does not need to be: the 240 session fetch already carries after close
+reporters everywhere.
+
+TWO NEW MEASURES, because the old one could not ask the question. CRITERIA
+[Discovery] recall_big_gap_pct is a SECOND denominator and not a filter:
+min_slots_per_tier was set on a +0.0017 margin over gaps past the 3 percent
+discovery floor, which admits far more names than anyone would trade. And
+ordering F is the shipped rule with tier 2 sorted by overnight news item count
+before propensity, which asks whether coverage volume beats propensity inside
+the tier news defines. No ordering that reads only metrics can ask it, because
+the count lives on the pool row.
+
+THE FLOOR STAYS AT 4, and the two denominators disagreeing IS the finding. Past
+3 percent it plainly helps: paired per session, floor 0 minus floor 4 is -0.0121
+at a t of -5.77, and floor 4 wins 149 of the 207 sessions where they differ.
+Past 8 percent it points the other way and does not carry: mean +0.0044 at a t
+of 0.73, inside the noise, though floor 0 wins 71 of the 118 that differ, which
+a sign test puts at 0.018. The floor wins more often on big gaps and loses
+bigger when it loses, so the means wash out. Nothing moves on a mean a t of 0.73
+cannot separate from zero while the other denominator says the opposite at 5.77.
+
+ORDERING F IS REJECTED, worse on both denominators at every floor and 0.022 to
+0.025 worse past 8 percent. How many stories are written about a name says less
+about whether it gaps than the name's own history does. SHIPPED and B agree to
+every decimal, which is the harness checking itself: within_tier_key is
+gap_propensity and B is gap propensity descending.
+
+6.4 IS NOT MEASURABLE AS WRITTEN, and the plan is corrected rather than left to
+mislead. It assumed this sweep would add the runners source. It deliberately
+does not: that source reads picks WHERE source='live' and the live record is
+four sessions, so replaying it would measure this project's own history rather
+than the market's. Tier 5 is empty in all 240 replayed sessions. What still
+needs no measurement is the defect already stated: a source meant to find names
+the report has NOT carried is reading the table of names it did.
+
+Suite green at 219 claims, not one path changed under the working tree.
+
 ## 2026-09-05, seventy sixth: a split stops counting as a gap the desk should have caught
 
 6.1's second and fourth repairs. Both are the denominator, which is the half of

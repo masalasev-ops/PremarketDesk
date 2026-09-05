@@ -1191,10 +1191,32 @@ sessions by cache vintage as much as by the market. Measured over the cache,
 4,240 before open against 4,965 after close and 2,649 of unknown timing. It
 reads earnings_names_before_open now, with the raw total kept beside it.
 
-The one remaining: add a `--refresh-earnings` that replaces only
-inputs["earnings"] so the after close re-measurement changes one input. Then move
-CRITERIA or leave it, with the table in the ordering note. Do not change
-the floor or the key before this runs.
+Repair three, DONE 2026-09-05. `backtest_pool refresh-earnings` replaces only
+inputs["earnings"], one calendar call per session. It is not run against the
+current cache and does not need to be: the 240 session fetch already carries
+after close reporters on every session. Pricing it turned up a real gap, since
+fixed: calendar-earnings had NO cost line in CRITERIA at all, though discover
+calls it on both morning passes and every backtest fetch uses it, and an
+unpriced endpoint cannot appear in a quota gate because credit_cost raises
+rather than guessing. Measured at one credit, five calls between two free meter
+reads, 36,230 to 36,235.
+
+THE SWEEP RAN 2026-09-05 AND THE FLOOR STAYS AT 4. The table is in CRITERIA's
+ordering note, which is where this plan said to put it. The two denominators
+disagree, and that is the finding. Past the 3 percent discovery floor the slot
+floor plainly helps: paired per session, floor 0 minus floor 4 is -0.0121 with
+a t of -5.77, and floor 4 wins 149 of the 207 sessions where the two differ.
+Past 8 percent it points the other way and does not carry: mean +0.0044, t of
+0.73, inside the noise, though floor 0 wins 71 of the 118 that differ, which a
+sign test puts at 0.018. The floor wins more often on big gaps and loses bigger
+when it loses. A parameter is not moved on a mean a t of 0.73 cannot separate
+from zero while the other denominator says the opposite at 5.77. Nothing moved,
+and the question is now on the record as having been asked properly.
+
+Ordering F, tier 2 sorted by overnight news item count before propensity, is
+rejected: worse on both denominators at every floor, by 0.022 to 0.025 past 8
+percent. How many stories are written about a name says less about whether it
+gaps than the name's own history does.
 
 ### 6.2 The six hour freshness split puts after close corporate news in tier 3
 
@@ -1258,9 +1280,18 @@ twelve or fewer published names per day, so the four floored tier 5 slots
 go to names the report already carried. ASST was subscribed as a runner
 and left unpublished in five of seven sessions. The recent_runner_decay
 weight is computed, recorded and orders nothing (CRITERIA now says so).
-Measure tier 5's conversion in the replay (6.1 adds the source) and either
-give it a real population (the subscribed set, or names that cleared the
-floors) or drop its floor.
+NOT MEASURABLE FROM THE REPLAY, established 2026-09-05 when 6.1 ran. This
+item assumed 6.1 would add the runners source and it deliberately does not:
+backtest_pool builds every replayed pool with runners fetched-and-empty,
+because that source reads picks WHERE source='live' and the live record is
+four sessions. Replaying it would measure this project's own short history
+rather than the market's, so tier 5 is empty in all 240 replayed sessions and
+its conversion cannot be read there at any cap or floor.
+
+What does not need a measurement is the half already stated above: a source
+meant to find names the report has NOT already carried reads the table of
+names the report DID carry. That is the defect, and the population is the
+thing to change, not the floor.
 
 ### 6.5 The day screen has no rotation alternative when the baseline is degenerate
 

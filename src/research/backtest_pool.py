@@ -414,6 +414,16 @@ ORDERINGS: dict[str, dict[str, Any]] = {
         "use_shipped_rank": True,
         "collapse_tiers": {3: 2, 4: 2},
     },
+    "F": {
+        # 6.1's question about tier 2, which is the tier the cut actually bites
+        # in: the seven live sessions put 12 names that gapped past 8 percent in
+        # the tier 2 cut region while the 28 floored slots in tiers 3, 4 and 5
+        # caught none that big. If coverage volume orders that tier better than
+        # propensity does, the floor is spending slots the cut region wanted.
+        "label": "shipped, except tier 2 ordered by overnight news items then propensity",
+        "use_shipped_rank": True,
+        "tier_row_key": {2: "news_items"},
+    },
     "C": {"label": "median absolute gap descending", "key": "median_abs_gap_pct"},
     "D": {"label": "20 day ATR as a percent of price descending", "key": "atr_pct_20d"},
     "E": {
@@ -450,9 +460,28 @@ def order_pool(
             if (metrics.get(row["symbol"], {}).get("avg_dollar_volume_20d") or 0.0) >= floor
         ]
 
+    # A key that lives on the ROW rather than in metrics, applied to named
+    # tiers only. Tier 2 is the news tier and the cache carries how many
+    # overnight items each name had; the shipped rule ignores that entirely and
+    # sorts the whole tier on gap propensity, so a name with one wire story
+    # outranks one with nine if its propensity is higher. Whether volume of
+    # coverage beats propensity INSIDE the tier it defines is 6.1's question
+    # and cannot be asked by any ordering that only reads metrics.
+    tier_row_key = ordering.get("tier_row_key") or {}
+
+    def _row_first(row: dict[str, Any]) -> tuple:
+        which = tier_row_key.get(row["pool_tier"])
+        if which != "news_items":
+            return ()
+        items = ((row.get("pool_evidence") or {}).get("news") or {}).get("items")
+        # Null sorts last inside the tier rather than as zero, the same rule
+        # the metric keys use: never measured is not measured as none.
+        return (0 if items is not None else 1, -(items or 0))
+
     if ordering.get("use_shipped_rank"):
         def sort_key(row: dict[str, Any]) -> tuple:
-            return (row["pool_tier"], *discover.rank_value(row["symbol"], metrics),
+            return (row["pool_tier"], *_row_first(row),
+                    *discover.rank_value(row["symbol"], metrics),
                     row["symbol"])
     else:
         key = ordering["key"]
@@ -639,6 +668,20 @@ def evaluate_session(
         session_date, inputs.get("prior_session"), outcome["gappers"])
     result = pool_recall.measure(gappers, capped)
 
+    # THE SAME MEASUREMENT ON THE NAMES THAT ACTUALLY MATTER. min_slots_per_tier
+    # was set on a mean recall margin of +0.0017 over gaps past 3 percent with
+    # no size weighting, and 3 percent is the DISCOVERY floor, which admits a
+    # great many names nobody would trade. The seven live sessions say the two
+    # questions have different answers: the 28 floored slots in tiers 3, 4 and 5
+    # subscribed 7, 10 and 9 names that gapped past 3 and NOT ONE that gapped 8
+    # or more, while the tier 2 region the floor cuts into held 12 that did. A
+    # floor judged on the 3 percent number is judged on the population it is
+    # least accountable for.
+    big_floor = _CRIT.number("discovery", "recall_big_gap_pct")
+    big = {symbol: row for symbol, row in gappers.items()
+           if abs(_as_float(row.get("gap_at_open_pct")) or 0.0) >= big_floor}
+    big_result = pool_recall.measure(big, capped)
+
     per_tier: dict[int, dict[str, int]] = {}
     for row in capped:
         if not row["subscribed"]:
@@ -690,6 +733,14 @@ def evaluate_session(
         "corporate_actions_refused": len(actions["refused_corporate_action"]),
         "gappers_unchecked_for_corporate_action":
             actions["unchecked_for_corporate_action"],
+        # The same three counts over the big gap denominator, named so no
+        # reader has to infer which population a rate belongs to.
+        "big_gap_floor_pct": big_floor,
+        "gapped_big": big_result["gapped"],
+        "pool_held_big": big_result["pool_held"],
+        "subscribed_held_big": big_result["subscribed_held"],
+        "discovery_recall_big": big_result["discovery_recall_all_gappers"],
+        "subscribed_recall_big": big_result["subscribed_recall_all_gappers"],
     }
 
 
@@ -781,6 +832,68 @@ def backfill_adjusted_close(symbols: list[str] | None = None,
           + (f", {len(failed)} symbol(s) failed" if failed else ""))
     return {"symbols": len(symbols), "days": len(days), "filled": filled,
             "failed": failed}
+
+
+def refresh_earnings(sessions: list[str] | None = None,
+                     dry_run: bool = False) -> dict[str, Any]:
+    """FETCH STAGE. Replace inputs["earnings"] and nothing else, per session.
+
+    WHY ONE INPUT AND NOT THE WHOLE SESSION. The earnings source is the one
+    that has changed shape since this cache was first built: sessions fetched
+    before 2026-09-02 hold before open reporters only, and discover has tiered
+    the prior session's after close reporters since. Re-fetching a whole
+    session to pick that up would also replace its bars, its news sweep and its
+    outcome, so a measurement taken before and after could not attribute the
+    difference to the calendar. Changing one input at a time is the only way a
+    re-measurement means anything.
+
+    It costs one calendar-earnings call per session, priced at one credit in
+    CRITERIA [Quota costs] and measured there on 2026-09-05, so a full 240
+    session refresh is 240 credits.
+
+    NOT NEEDED FOR THE CURRENT CACHE, and that is recorded rather than assumed:
+    the 240 session fetch of 2026-09-05 already carries after close reporters
+    on every session, 4,965 of them against 4,240 before open and 2,649 of
+    unknown timing. This exists for the NEXT time the calendar rule moves.
+    """
+    sessions = sessions or cached_sessions()
+    if not sessions:
+        return {"sessions": 0, "rewritten": 0, "note": "no cached sessions"}
+    print(f"backtest: refreshing the earnings input on {len(sessions)} session(s), "
+          "one calendar call each")
+    if dry_run:
+        return {"sessions": len(sessions), "rewritten": 0, "dry_run": True}
+
+    api = eodhd.client()
+    universe_payload = universe.load_universe(require_fresh=False)
+    universe_symbols = set(universe.universe_symbols(universe_payload))
+    rewritten = 0
+    failed: list[str] = []
+    for session in sessions:
+        path = SESSION_DIR / session / "inputs.json"
+        try:
+            inputs = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            failed.append(session)
+            continue
+        earnings = discover.earnings_reporters(
+            api, universe_symbols, dt.date.fromisoformat(session))
+        if earnings.get("status") == discover.NOT_FETCHED:
+            failed.append(session)
+            continue
+        inputs["earnings"] = {"status": earnings["status"],
+                              "names": earnings["names"],
+                              "window": earnings.get("window")}
+        # Stamped so a reader can tell a session whose calendar was replaced
+        # from one whose whole record came out of a single fetch.
+        inputs["earnings_refreshed_at"] = ettime.stamp(ettime.now_et())
+        files.write_text_atomically(path, json.dumps(inputs, indent=2),
+                                    attempts=files.ATTEMPTS,
+                                    retry_s=files.RETRY_S)
+        rewritten += 1
+    print(f"backtest: rewrote the earnings input on {rewritten} session(s)"
+          + (f", {len(failed)} failed" if failed else ""))
+    return {"sessions": len(sessions), "rewritten": rewritten, "failed": failed}
 
 
 def adjustment_ratio(bar: dict[str, Any] | None) -> float | None:
@@ -1152,6 +1265,12 @@ def main(argv: list[str] | None = None) -> int:
     adjusted.add_argument("--dry-run", action="store_true",
                           help="Say what would be fetched and spend nothing.")
 
+    refresh = sub.add_parser(
+        "refresh-earnings",
+        help="Replace only the earnings input on cached sessions. Touches the network.")
+    refresh.add_argument("--dry-run", action="store_true",
+                         help="Say what would be fetched and spend nothing.")
+
     evaluate = sub.add_parser("evaluate", help="Read the cache only. No network.")
     evaluate.add_argument("--ordering", action="append", default=[],
                           help="One of A B C D E, repeatable. Defaults to all.")
@@ -1191,6 +1310,16 @@ def main(argv: list[str] | None = None) -> int:
         print("history of the null ones, in sessions:")
         for bucket, count in report["history_buckets"].items():
             print(f"    {bucket:>16}: {count}")
+        return 0
+
+    if args.stage == "refresh-earnings":
+        try:
+            refresh_earnings(dry_run=args.dry_run)
+        except (eodhd.QuotaRefusal, RuntimeError) as exc:
+            print(f"backtest: {exc}")
+            eodhd.print_call_report()
+            return 1
+        eodhd.print_call_report()
         return 0
 
     if args.stage == "adjusted":

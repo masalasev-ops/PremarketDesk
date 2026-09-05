@@ -164,7 +164,20 @@ cost = exchange-symbol-list : 1
 cost = news : 5
 cost = news-feed : 5
 cost = intraday-1m : 5
+cost = calendar-earnings : 1
 cost = user : 0
+
+**calendar-earnings, added 2026-09-05, and it had no price at all until then.**
+Measured the same way as the rest: five calls of one kind between two user
+reads moved the shared counter from 36,230 to 36,235, so the cost is one and
+the two meter reads are again zero, which pins that endpoint at zero for a
+fourth independent time. It was found while pricing a re-fetch of the backtest
+earnings, and the gap mattered: this endpoint is called by discover on BOTH
+morning passes and by every backtest session fetch, and an unpriced endpoint
+cannot appear in a quota gate at all, because credit_cost raises on it rather
+than guessing. Any preflight that had tried to include the earnings call would
+have refused to run instead of undercounting, which is the safe direction and
+still not a working gate.
 
 **The three added 2026-08-31, and the one that is a correction.** Measured the
 same way as the rest, five calls of one kind between two user reads, and every
@@ -514,6 +527,7 @@ max_subscribed_candidates     = 42         # seed: the collector's 50 subscripti
 within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
 within_tier_fallback          = atr_pct_20d      # for names propensity cannot score: it needs 100 sessions, this needs 20
 min_slots_per_tier            = 4          # MEASURED, see the ordering note below
+recall_big_gap_pct            = 8          # the SECOND denominator every discovery measurement is reported on, beside the discovery gap floor. Not a filter and nothing in production reads it: research/backtest_pool reports recall over gappers past this as well as over all of them, because min_slots_per_tier was set on a +0.0017 mean margin measured over gaps past the 3 percent discovery floor, which admits far more names than anyone would trade. On the seven live sessions the two questions disagree: the 28 floored slots in tiers 3, 4 and 5 subscribed 7, 10 and 9 names past 3 percent and not one past 8, while the tier 2 region the floor cuts into held 12 that were past 8
 min_ranked_fraction_to_subscribe = 0.5     # SEED, not measured. Below this share
                                            # of the universe carrying a ranking
                                            # key, discover writes no watchlist and
@@ -558,6 +572,41 @@ at 0.40 and 0.35, which is at or above tier 2's 0.37. The floor costs
 heavy-calendar recall, 0.1262 down to 0.1211, and buys light-calendar recall,
 0.1053 up to 0.1126, which is the trade worth making on a window whose median
 session is light.
+
+**Re-measured 2026-09-05 over 240 sessions, and the floor STAYS AT 4.** This is
+IMPROVEMENT_PLAN 6.1, run after its four repairs, so the replay no longer ranks
+a session on this week's universe and no longer counts a split as a gap. Mean
+subscribed recall per session, cap 42:
+
+  ordering  floor   past 3 percent   past 8 percent
+  SHIPPED   0       0.1468           0.3156
+  SHIPPED   2       0.1543           0.3131
+  SHIPPED   4       0.1589           0.3113
+  F         0       0.1149           0.2895
+  F         4       0.1264           0.2863
+  A         0       0.1056           0.2421
+  A         4       0.0995           0.2202
+
+THE TWO DENOMINATORS DISAGREE ON THE FLOOR, which is what 6.1 suspected. Past 3
+percent the floor plainly helps: paired per session, floor 0 minus floor 4 is
+-0.0121 with a t of -5.77, and of the 207 sessions where the two differ at all
+floor 4 wins 149. Past 8 percent it points the other way and does not carry:
+the mean is +0.0044 with a t of 0.73, inside the noise, though floor 0 wins 71
+of the 118 sessions that differ, which a sign test puts at 0.018. So the floor
+wins MORE OFTEN at 8 percent, and when it loses it loses bigger, and the means
+wash out. A parameter is not moved on a mean that a t of 0.73 cannot separate
+from zero while the other denominator says the opposite at 5.77. It stays at 4
+and this paragraph is the record of the question being asked properly.
+
+ORDERING F IS REJECTED. It is the shipped rule with tier 2 sorted by overnight
+news item count before propensity, which asks whether volume of coverage beats
+propensity inside the tier that news defines. It is worse on both denominators
+at every floor, by 0.022 to 0.025 past 8 percent, so the count of stories about
+a name says less about whether it gaps than its own history does.
+
+SHIPPED and B agree to every decimal, which is the harness checking itself:
+within_tier_key is gap_propensity and B is gap propensity descending, so the
+two are the same rule reached by different code paths.
 prior_session_move_pct        = 5          # seed, not validated: absolute close to close percent that makes a name a continuation candidate
 prior_session_dollar_multiple = 3          # seed, not validated: prior session dollar volume this many times its 20 day average counts as unusual
 recent_runner_lookback        = 10         # seed, not validated: sessions of picks history a recent runner can come from
