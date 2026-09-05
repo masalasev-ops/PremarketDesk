@@ -302,10 +302,18 @@ _SECTION_ONLY = frozenset({"bands", "band_number", "band_result", "section"})
 def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
     """Four questions the parser cannot ask at read time.
 
-    1. Is any key prose? The parser reads every column zero line holding an
+    1. Is any pair prose? The parser reads every column zero line holding an
        equals sign under a `##` heading as a pair, and on 2026-09-02 [paper]
-       carried the key "quotient: 10,000 / 0.04" from a sentence. A key with a
-       space or a colon in it is a sentence.
+       carried the key "quotient: 10,000 / 0.04" from a sentence. Asked of the
+       KEY, which must be an identifier, and of the VALUE, which must not run
+       on into a sentence. The second half was added 2026-09-05 because
+       question 3 only catches a prose value on a key something reads as a
+       scalar, and question 4 is blind to any key in a section that has one
+       literal read, so between them a well spelled key with a paragraph for a
+       value could sit in this file unreported. That is exactly what [Analyst]
+       mode was. Question 4 stays section wide on purpose: a section read by a
+       variable key cannot be resolved to the keys it touches, so listing them
+       all would be noise, and this question closes the hole instead.
     2. Does every literal `_CRIT.<accessor>("section", "key")` in src/ resolve?
        A typo in a key read inside a function surfaces at 08:45 on the first
        candidate; this surfaces it in the suite.
@@ -333,9 +341,30 @@ def check(crit: Criteria, src_root: Path) -> dict[str, list[str]]:
 
     prose_keys: list[str] = []
     for name in crit.section_names():
-        for key, _value in crit.section(name).pairs:
-            if " " in key or ":" in key:
-                prose_keys.append(f"[{name}] {key!r}")
+        for key, value in crit.section(name).pairs:
+            # THE KEY. Every one of the 349 real pairs is a valid identifier,
+            # measured 2026-09-05, so anything else is a sentence that happened
+            # to hold an equals sign. This replaced a test for a space or a
+            # colon, which let `key through: the slots note explained the trap
+            # by printing its own shape at column zero and so became a
+            # parameter demonstrating itself.
+            if not key.isidentifier():
+                prose_keys.append(
+                    f"[{name}] {key!r} is not an identifier, so it is a "
+                    "sentence the parser read as a parameter")
+                continue
+            # THE VALUE, which is the half that cost a morning. [Analyst] mode
+            # was spelled correctly and read as a scalar; what made it wrong
+            # was a value of "slots since 2026-09-02. Under it..." rather than
+            # "slots". No real value contains a sentence break, measured over
+            # all 349 on 2026-09-05, and the longest legitimate one is a 234
+            # character stopword list with no full stop in it. So this catches
+            # the shape that got past questions 1 and 3 together, and it does
+            # not depend on anything reading the key.
+            if ". " in value:
+                prose_keys.append(
+                    f"[{name}] {key} has a value that runs on into a "
+                    f"sentence: {value[:60]!r}")
 
     # Filled below with (section, key) for every literal call that reads one
     # value, so question 3 asks only of keys whose repetition is a mistake.

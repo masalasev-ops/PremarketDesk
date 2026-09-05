@@ -11168,10 +11168,18 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
     only thing that would have caught it is somebody opening a payload and
     asking why a column is empty in all 803 rows.
 
-    The fix is a null and a reason and not a computation, because the answer is
-    not available at 22:15: it needs discover's four source lists as they stood
-    at 07:15, and production retains none of them. Computing it is a vendor
-    spend and a design decision. Saying so is free and is what the record needs.
+    The first fix was a null and a reason rather than a computation, because
+    the answer was not available at 22:15: it needed discover's four source
+    lists as they stood at 07:15 and production retained none of them.
+
+    From 2026-09-05 it retains them, as names only, about 11 KB a session, so
+    the question is answered rather than declined. That was worth doing on the
+    numbers: over the 240 cached sessions, 3,649 of the 4,326 gappers past 8
+    percent at the open sat in at least one prior's list, so 84 in 100 get a
+    real answer and the rest get a measured "all four looked and none found
+    it". Both branches are claimed below, because the interesting failure now
+    is the opposite one: an empty list must mean every prior was searched and
+    none held the name, and it may only ever mean that.
     """
     from night import pool_recall
 
@@ -11208,14 +11216,57 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
             "computed, so a reader cannot tell an unasked question from a "
             f"source that looked and found nothing. Reason was {reason!r}")
 
+    # THE OTHER HALF, from 2026-09-05. discover now retains each prior's name
+    # list in the watchlist, about 11 KB a session, so the question IS
+    # answerable for a session that carries them. The null branch above stays
+    # exactly as it was and is what a session written before that gets.
+    #
+    # The two answers must not be confusable. An EMPTY LIST here now means
+    # something real and new: all four priors were retained, every one was
+    # searched, and none held the name. That is the finding the empty list was
+    # falsely publishing before anything had looked, and it is only honest
+    # because the lists are present.
+    answered = pool_recall.measure(
+        gappers, pool_rows,
+        source_names={"earnings": ["MISS.US"], "news": ["OTHER.US", "MISS.US"],
+                      "movers": ["OTHER.US"], "runners": []})
+    row = {r["symbol"]: r for r in answered["missed"]}.get("MISS.US") or {}
+    if row.get("sources_that_would_have_caught_it") != ["earnings", "news"]:
+        failures.append(
+            "with every prior's list retained, the missed gapper's source list "
+            "was not computed as the priors that actually held it. Expected "
+            "['earnings', 'news'], got "
+            f"{row.get('sources_that_would_have_caught_it')!r}")
+    if row.get("sources_unknown_reason") is not None:
+        failures.append(
+            "a computed source list still carries the reason saying it was "
+            "never computed, so the record says the question was unasked and "
+            f"answers it in the same row: {row.get('sources_unknown_reason')!r}")
+
+    none_held = pool_recall.measure(
+        gappers, pool_rows,
+        source_names={"earnings": [], "news": [], "movers": [], "runners": []})
+    row = {r["symbol"]: r for r in none_held["missed"]}.get("MISS.US") or {}
+    if row.get("sources_that_would_have_caught_it") != []:
+        failures.append(
+            "four retained and empty priors did not produce an empty list. "
+            "With the lists present, 'every prior looked and none found it' is "
+            "a measured finding and must be sayable, or the fix has only moved "
+            f"the silence: got {row.get('sources_that_would_have_caught_it')!r}")
+    if row.get("sources_unknown_reason") is not None:
+        failures.append(
+            "a searched but empty source list is reported as never computed, "
+            "which is the original defect wearing the opposite mask")
+
     # And the held row is untouched: this changes what is said about names the
     # pool MISSED, and says nothing about the ones it caught.
     held = {r["symbol"]: r for r in result["pool_held_rows"]} if "pool_held_rows" in result else {}
     if held and held.get("HELD.US", {}).get("pool_source") != ["news"]:
         failures.append("the held row lost its pool_source, which IS measured")
 
-    print("  unasked      a missed gapper's source list is null with a reason "
-          "rather than an empty list that reads as a measurement")
+    print("  unasked      a missed gapper's source list is null with a reason when "
+          "the priors were not retained, the priors that held it when they were, "
+          "and empty ONLY when all four looked and none did")
 
 
 def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
@@ -15985,7 +16036,13 @@ def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> No
     # pair, so the sentence wins and the parameter is dead. Score band
     # repeats its key too and must NOT be reported, because bands are read
     # by an accessor that wants every pair.
+    # note is the case NOTHING ELSE catches: a key spelled correctly, sitting
+    # in a section a literal call does read, defined once, read by no literal
+    # call, and carrying a paragraph for a value. Question 3 wants a scalar
+    # read and question 4 exempts the whole section, so only the value half of
+    # question 1 can see it.
     text = ("## Widget\n\nsize = 3\nthe quotient: 1 / 2 = 0.5.\n"
+            "note = a plain looking key. Whose value runs on into prose\n"
             "mode = slots\nmode = slots since Tuesday. Under it the pass does not\n"
             "\n## Score band\n\nband = >= 7 : green\nband = else : red\n"
             "\n## Tier map\n\ntier = a : 1\ntier = b : 2\n")
@@ -16001,6 +16058,19 @@ def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> No
         report = criteria.check(crit, src)
     if not any("quotient" in p for p in report["prose_keys"]):
         failures.append(f"a sentence read as a key was not reported: {report['prose_keys']}")
+    if not any("note" in p for p in report["prose_keys"]):
+        failures.append(
+            "a key carrying a paragraph for a value was not reported. Nothing "
+            "else in check() can see that shape: it is spelled correctly so the "
+            "key half of question 1 passes, it is defined once so question 3 is "
+            "silent, and its section has a literal read so question 4 exempts "
+            f"it. It is what [Analyst] mode was on 2026-09-02, and that cost a "
+            f"morning: {report['prose_keys']}")
+    if not any("mode" in p for p in report["prose_keys"]):
+        failures.append(
+            "the 2026-09-02 defect itself is reported only as a shadow and not "
+            f"as prose, so a version of it nothing read would pass: "
+            f"{report['prose_keys']}")
     if not any("'colour'" in u for u in report["unresolved"]):
         failures.append(f"a literal call to a missing key was not reported: {report['unresolved']}")
     if not any("'nowhere'" in u for u in report["unresolved"]):
@@ -16014,8 +16084,9 @@ def claim_criteria_check_reads_what_the_code_asks_for(failures: list[str]) -> No
                         f"are written: {report['shadowed']}")
     if any("band" in s for s in report["shadowed"]):
         failures.append(f"a bands key was reported as shadowed: {report['shadowed']}")
-    print("  criteria     --check reads every literal call, finds a prose key, a bad key "
-          "and a scalar key a sentence shadowed, and the live tree is clean")
+    print("  criteria     --check reads every literal call, finds a prose key, a prose "
+          "VALUE on a well spelled key nothing reads, a bad key and a scalar key a "
+          "sentence shadowed, and the live tree is clean")
 
 
 def claim_the_collector_hands_over_to_the_real_pool(failures: list[str]) -> None:

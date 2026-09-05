@@ -2089,9 +2089,12 @@ prose_token_stopwords         = ET, EST, EDT, UTC, GMT, AM, PM, US, USA, Q1, Q2,
 ### The slots note
 
 The mode has been slots since 2026-09-02, and this paragraph does not open
-with the key name and an equals sign, because a column zero line shaped like
-`key = value` under a `##` heading IS a parameter to the parser. It opened
-with the word mode, an equals sign and "slots since 2026-09-02. Under it..." when it was written, which the
+with the key name and an equals sign, because any column zero line shaped
+like a backticked key, an equals sign and a value, under a `##` heading, IS a
+parameter to the parser. This very sentence used to demonstrate that shape
+literally and so became a parameter itself, `key`, which is the joke the
+paragraph could not afford. It opened with the word mode, an equals sign and
+"slots since 2026-09-02. Under it..." when it was written, which the
 parser read as a second [Analyst] mode whose value was that whole sentence,
 and the accessor takes the last pair, so report_mode() saw an unrecognised
 value and fell back to freeform. Slots mode therefore never ran: the

@@ -1181,14 +1181,28 @@ NTNX, WEN, HLF, BNTX in the seven sessions).
 ### 6.3 There is no discovery pass after 07:15
 
 17 of 46 big gappers were never in the pool. Which prior would have caught
-them is unknowable from the artifacts because pool_recall writes
-sources_that_would_have_caught_it as never computed; nothing retains the
-four source lists past the run. Two cheap things and one decision. Cheap:
-discover writes its four source name lists into the watchlist (they are
-small) so the nightly can answer the question; and the provisional pool is
-retained as data/watchlist-provisional.json so pool_recall can report
-provisional_held and dropped_at_handover, which today it scores as
-"missed". Decision: an 08:15 pass. The collector rereads until its stop,
+them was unknowable from the artifacts because pool_recall wrote
+sources_that_would_have_caught_it as never computed; nothing retained the
+four source lists past the run. Two cheap things and one decision.
+
+Cheap one, DONE 2026-09-05: discover keeps each prior's name list in the
+watchlist under pool_sources.<source>.found, names only and sorted, so the
+payloads and the universe's closes stay out of it. About 11 KB a session.
+pool_recall reads them and answers the question, and build() already refuses
+to measure at all unless data/watchlist.json is provably the file the morning
+read, so no new guard was needed. Worth doing on the numbers: across the 240
+cached sessions, 3,649 of the 4,326 gappers past 8 percent at the open were
+in at least one prior's list, so 84 in 100 get a real answer. The other 16
+get an empty list, which now means all four looked and none found it, and
+that sentence is only honest because the lists are present. The claim pins
+both branches and the null one is unchanged for sessions written earlier.
+
+Cheap two, still open: the provisional pool is not retained as
+data/watchlist-provisional.json, so pool_recall cannot report
+provisional_held or dropped_at_handover and still scores a name the 03:55
+pass held and the 07:15 pass dropped as "missed".
+
+Decision: an 08:15 pass. The collector rereads until its stop,
 so a third pass lands mechanically; it costs 306 credits and a shorter
 news window, and it would catch catalysts landing 07:15 to 08:15. Measure
 what it would have caught from the news feed's timestamps before arming
@@ -1266,11 +1280,17 @@ and probe_socket_cap refuses inside it; re-time it or retire it.
 - universe.py: min_sessions equals lookback_sessions, so one missing bar
   excludes a name for the week; gap_stats counts a split session as a gap
   where pool_recall refuses it.
-- CRITERIA prose lines that the parser reads as keys inside [Analyst]
-  (about lines 2004, 2005 and 2017: a backticked `key`, `mode`, and
-  `slots=True`); none shadows a scalar read, and check()'s unread question
-  is blind to a new prose key in any section that has one literal read.
-  Make the unread report per key.
+- CRITERIA prose lines that the parser reads as keys inside [Analyst].
+  DONE 2026-09-05. One was still live, a backticked key from the slots note
+  demonstrating its own shape at column zero, and the note is reflowed so it
+  no longer is one. The unread report stays section wide, because a section
+  read by a variable key cannot be resolved to the keys it touches and
+  listing all of them would be noise. What closed the hole instead is
+  question 1, which now asks TWO things: the key must be an identifier, true
+  of all 349 real pairs and false of that one, and the value must not run on
+  into a sentence, true of no real value and true of the [Analyst] mode that
+  cost the 2026-09-02 morning. That shape was previously invisible to every
+  question: spelled right for 1, defined once for 3, in a read section for 4.
 - The after close measurement (26 gappers, 23 in pool, 2 subscribed) is
   quoted in CHANGELOG thirty eighth and DECISIONS seventh and is not on
   disk; write the crossing as data/research/after_close_reporters-<date>.json

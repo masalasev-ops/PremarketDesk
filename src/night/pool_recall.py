@@ -283,6 +283,7 @@ def measure(
     addressable: dict[str, dict[str, Any]] | None = None,
     published: set[str] | None = None,
     published_reason: str | None = None,
+    source_names: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Recall of the pool against the set that actually gapped.
 
@@ -301,6 +302,13 @@ def measure(
     held: list[dict[str, Any]] = []
     missed: list[dict[str, Any]] = []
     subscribed_hits = 0
+    # None means discover retained no source lists for this session, which is
+    # every session written before 2026-09-05. Then the answer stays null with
+    # its reason, because an absent list is not a list that found nothing.
+    looked_in: dict[str, set[str]] | None = None
+    if source_names is not None:
+        looked_in = {name: {str(s).upper() for s in (names or [])}
+                     for name, names in source_names.items()}
 
     for symbol, gapper in sorted(gappers.items()):
         row = by_symbol.get(symbol)
@@ -324,8 +332,12 @@ def measure(
                 # answer costs a re-fetch at 22:15 of the prior session
                 # movers, the news window and the earnings calendar, which is
                 # a design decision and a vendor spend, not a fix.
-                "sources_that_would_have_caught_it": None,
+                "sources_that_would_have_caught_it": (
+                    None if looked_in is None
+                    else sorted(name for name, seen in looked_in.items()
+                                if symbol in seen)),
                 "sources_unknown_reason": (
+                    None if looked_in is not None else
                     "never computed. Which of discover's priors would have "
                     "found this name needs the four source lists as they "
                     "stood at 07:15, and nothing retains them past that run. "
@@ -616,8 +628,17 @@ def build(session_date: str | None = None, write: bool = True,
     target = addressable_target(gappers, universe_rows)
     published, published_reason = published_symbols(today.isoformat())
 
+    # The lists discover retained for each prior, or None for a session
+    # written before it did. Safe to read straight off the watchlist: build()
+    # has already refused above unless data/watchlist.json is provably the file
+    # this morning read, so these are the lists as they stood at 07:15 and not
+    # a later pool's.
+    retained = {name: source["found"]
+                for name, source in (watchlist.get("pool_sources") or {}).items()
+                if isinstance(source, dict) and isinstance(source.get("found"), list)}
     result = measure(gappers, pool_rows, target["addressable"], published,
-                     published_reason=published_reason)
+                     published_reason=published_reason,
+                     source_names=retained or None)
     payload = {
         "addressable_funnel": target["funnel"],
         "market_cap_sensitivity": target["market_cap_sensitivity"],

@@ -1032,13 +1032,30 @@ def build(write: bool = True) -> dict[str, Any]:
             "this plan has one for the whole universe at 07:15. See "
             "DECISIONS.md 2026-08-14 and 2026-09-02, seventh."
         ),
-        # names and closes are per symbol payloads carried on the pool rows
+        # names and closes are per symbol PAYLOADS carried on the pool rows
         # themselves; repeating them here would put the whole universe's closes
         # into watchlist.json.
+        #
+        # The SYMBOLS those payloads are keyed by are a different matter and
+        # are kept, under `found`. Without them nothing retains what each prior
+        # saw past this run, and pool_recall's
+        # sources_that_would_have_caught_it has been null on every missed
+        # gapper since it shipped: a name the pool never held is by definition
+        # not in `symbols` below, so afterwards there is no way to ask which
+        # prior would have caught it. Measured on the 240 cached sessions
+        # 2026-09-05, of 4,326 gappers past 8 percent at the open, 3,649 were
+        # in at least one of these lists, so the question is answerable for 84
+        # in 100 of them and the rest become a measured "all four looked and
+        # none found it" rather than a question nobody asked.
+        #
+        # The cost is names only, sorted, about 11 KB a session across the
+        # four, against a re-fetch of the movers, the news window and the
+        # calendar at 22:15 as the alternative.
         "pool_sources": {
             name: {
-                key: value for key, value in source.items()
-                if key not in ("names", "closes")
+                **{key: value for key, value in source.items()
+                   if key not in ("names", "closes")},
+                "found": sorted(source.get("names") or {}),
             }
             for name, source in sources.items()
         },

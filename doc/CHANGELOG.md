@@ -15,6 +15,55 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy third: the config file stops hiding a sentence, and the pool says which prior would have caught it
+
+Two of tier 6's smaller items, both of them the same shape: an answer that was
+never computed reading as though it had been.
+
+A PROSE LINE WAS STILL A PARAMETER, AND IT WAS THE ONE EXPLAINING THE TRAP.
+[Analyst] carried eleven pairs where it should carry ten. The eleventh came
+from the slots note, which demonstrated the shape to avoid by printing it at
+column zero, so the paragraph warning that a backticked key equals value line
+IS a parameter became one. Harmless, nothing read it, and invisible: check()
+asked only whether a key held a space or a colon.
+
+CHECK() NOW ASKS TWO THINGS, AND THE SECOND IS THE ONE THAT MATTERS. The key
+must be an identifier, true of all 349 real pairs and false of that one. The
+value must not run on into a sentence, true of no real value and true of the
+[Analyst] mode that cost the 2026-09-02 morning. That shape was invisible to
+every question at once: spelled correctly so question 1 passed, defined once so
+question 3 was silent, and in a section with a literal read so question 4
+exempted it. The unread report stays section wide on purpose, because a section
+read by a variable key cannot be resolved to the keys it touches and listing
+them all is noise nobody reads; the value question closes the same hole
+precisely instead. The claim carries a fixture only the value question can see.
+
+THE FOUR PRIORS ARE RETAINED, SO THE MISSED ROWS CAN BE ANSWERED. discover
+stripped names and closes out of pool_sources to keep the universe's closes out
+of watchlist.json, which was right, and took the SYMBOLS with them, which was
+not. Nothing retained what each prior saw past 07:15, and a name the pool never
+held is by definition not in the file afterwards, so
+sources_that_would_have_caught_it has been null on every missed gapper since it
+shipped. It now keeps names only, sorted, under pool_sources.<source>.found,
+about 11 KB a session against a re-fetch of the movers, the news window and the
+calendar as the alternative.
+
+MEASURED BEFORE IT WAS BUILT. Across the 240 cached sessions, of 4,326 gappers
+past 8 percent at the open, 3,649 sat in at least one prior's list. So 84 in 100
+missed big gappers get a real answer, and the 677 that get an empty list get a
+measured "all four looked and none found it". pool_recall needed no new guard:
+build() already refuses to measure at all unless data/watchlist.json is provably
+the file the morning read.
+
+THE EMPTY LIST IS NOW THE INTERESTING ONE. It is the exact value the field
+published on 803 rows across 13 sessions before anything had looked, and it is
+honest only because the lists are present. The claim pins all three states: null
+with a reason when the priors were not retained, which is every session written
+before today and is unchanged; the priors that held the name when they were;
+and empty ONLY when all four were searched and none did.
+
+Suite green, not one path changed under the working tree.
+
 ## 2026-09-05, seventy second: the replay ran, and the pre-registered falsifiers were read
 
 The Precedent screen's other six sections were built and the year behind them
