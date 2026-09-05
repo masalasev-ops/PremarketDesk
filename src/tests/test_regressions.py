@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and fifteen claims, a count read off
+and the two pages. It now carries two hundred and sixteen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11269,6 +11269,109 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
           "and empty ONLY when all four looked and none did")
 
 
+def claim_the_pool_the_collector_listened_to_survives_the_handover(
+        failures: list[str]) -> None:
+    """The 03:55 pool is kept when the 07:15 pass replaces it, first pass wins.
+
+    Both passes write one file. So the pool the collector actually listened to
+    from 04:00 stopped existing at the handover, and pool_recall scored a name
+    that pool HELD and the 07:15 re-rank DROPPED as one the morning never
+    found. Those are opposite repairs: a prior that is not looking in the right
+    place, against a re-rank letting go of a name it already had.
+
+    THE SUBTLETY IS THE RERUN, and getting it backwards would be worse than not
+    keeping the file. discover reruns: monitor_jobs rebuilds the watchlist at
+    any hour while none has been written today, and there is a 07:25 repair
+    pass. A copy taken on every write would leave the file called provisional
+    holding the 07:15 pool by 07:25, which looks like an answer and is not one.
+    So the first copy a session takes is the one it keeps.
+
+    Every path here writes into a temporary directory. A claim that touched
+    data/watchlist.json would destroy the morning's own record of its pool.
+    """
+    from selection import discover
+
+    today = ettime.today_str()
+    saved = (config.WATCHLIST_PATH, config.PROVISIONAL_WATCHLIST_PATH)
+    with tempfile.TemporaryDirectory(prefix="pmd-prov-") as raw:
+        where = pathlib.Path(raw)
+        config.WATCHLIST_PATH = where / "watchlist.json"
+        config.PROVISIONAL_WATCHLIST_PATH = where / "watchlist-provisional.json"
+        try:
+            def put(stamp: str, symbols: list[str]) -> None:
+                config.WATCHLIST_PATH.write_text(json.dumps(
+                    {"generated_at": stamp,
+                     "symbols": [{"symbol": s} for s in symbols]}),
+                    encoding="utf-8")
+
+            if discover.keep_provisional() is not None:
+                failures.append("a session with no watchlist on disk kept a "
+                                "provisional copy of nothing")
+
+            put(f"{today}T03:55:00-04:00", ["A.US", "B.US"])
+            if discover.keep_provisional() != today:
+                failures.append(
+                    "the 03:55 pool was not kept when a later pass replaced "
+                    "it, so the pool the collector listened to from 04:00 is "
+                    "gone by the handover")
+            put(f"{today}T07:15:00-04:00", ["B.US", "C.US"])
+            discover.keep_provisional()
+            kept = discover.load_provisional_watchlist(today) or {}
+            names = sorted(r.get("symbol") for r in (kept.get("symbols") or []))
+            if names != ["A.US", "B.US"]:
+                failures.append(
+                    f"after a second pass the provisional copy holds {names}. "
+                    "First pass wins: discover reruns, and a copy taken on "
+                    "every write leaves the file called provisional holding "
+                    "the pool it is supposed to be evidence against")
+
+            # A file from another morning must answer for no session at all.
+            config.PROVISIONAL_WATCHLIST_PATH.unlink()
+            put("2026-01-02T07:15:00-05:00", ["OLD.US"])
+            discover.keep_provisional()
+            if config.PROVISIONAL_WATCHLIST_PATH.exists():
+                failures.append(
+                    "yesterday's watchlist was kept as today's provisional "
+                    "pool, which would date every handover answer wrongly")
+            if discover.load_provisional_watchlist(today) is not None:
+                failures.append("a provisional pool from another session was "
+                                "returned for today")
+
+            # An unreadable watchlist must not raise inside the write path the
+            # morning depends on.
+            config.WATCHLIST_PATH.write_text("{ truncated", encoding="utf-8")
+            if discover.keep_provisional() is not None:
+                failures.append("an unparsable watchlist was kept as a "
+                                "provisional pool")
+        finally:
+            config.WATCHLIST_PATH, config.PROVISIONAL_WATCHLIST_PATH = saved
+
+    # And the three states the count can be in, which must not collapse.
+    from night import pool_recall
+    gappers = {"MISS.US": {"symbol": "MISS.US", "gap_at_open_pct": 6.0}}
+    rows: list[dict[str, Any]] = []
+    unknown = pool_recall.measure(gappers, rows)
+    if unknown["dropped_at_handover"] is not None:
+        failures.append(
+            "with no copy of the 03:55 pool on disk the handover count is a "
+            "number rather than null. 'the handover dropped none' and 'nobody "
+            "kept the file' are the same figure and different facts")
+    if not (unknown.get("dropped_at_handover_unknown_reason") or ""):
+        failures.append("the null handover count carries no reason")
+    held = pool_recall.measure(gappers, rows, provisional_symbols=["MISS.US"])
+    if held["dropped_at_handover"] != 1:
+        failures.append(
+            "a gapper the 03:55 pool held and the final pool did not was not "
+            f"counted as dropped at the handover: {held['dropped_at_handover']}")
+    none = pool_recall.measure(gappers, rows, provisional_symbols=["OTHER.US"])
+    if none["dropped_at_handover"] != 0:
+        failures.append("a kept provisional pool that held no gapper did not "
+                        "produce a measured zero")
+    print("  handover     the 03:55 pool survives the 07:15 pass, the FIRST copy of a "
+          "session wins over a rerun, another morning's file answers for nobody, and "
+          "the dropped count is null rather than zero when no copy was kept")
+
+
 def claim_a_hand_run_of_scan_spares_the_morning_it_would_replace(
         failures: list[str]) -> None:
     """scan's two writes route through the artifacts guard. Neither used to.
@@ -17848,6 +17951,7 @@ def main() -> int:
     run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
     run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
     run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_the_pool_the_collector_listened_to_survives_the_handover, failures)
     run_claim(failures, claim_the_score_watch_counts_a_pick_once_per_pick, failures)
     run_claim(failures, claim_a_trigger_that_fired_is_never_counted_as_one_that_did_not, failures)
     run_claim(failures, claim_every_printed_column_has_plain_english, failures)

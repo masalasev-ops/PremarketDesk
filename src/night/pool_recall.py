@@ -284,6 +284,7 @@ def measure(
     published: set[str] | None = None,
     published_reason: str | None = None,
     source_names: dict[str, list[str]] | None = None,
+    provisional_symbols: list[str] | None = None,
 ) -> dict[str, Any]:
     """Recall of the pool against the set that actually gapped.
 
@@ -309,6 +310,15 @@ def measure(
     if source_names is not None:
         looked_in = {name: {str(s).upper() for s in (names or [])}
                      for name, names in source_names.items()}
+    # The 03:55 pool, when discover kept a copy of it. None means no copy for
+    # this session, which is every session before 2026-09-05 and any session
+    # whose first pass was the only pass. A name this pool held and the final
+    # pool did not was DROPPED AT THE HANDOVER, which is a re-rank or a cap
+    # letting go of a name it had, and not a prior that failed to find it.
+    provisional: set[str] | None = None
+    if provisional_symbols is not None:
+        provisional = {str(s).upper() for s in provisional_symbols}
+    dropped_at_handover = 0
 
     for symbol, gapper in sorted(gappers.items()):
         row = by_symbol.get(symbol)
@@ -343,7 +353,17 @@ def measure(
                     "stood at 07:15, and nothing retains them past that run. "
                     "This is an unasked question, not a source that looked "
                     "and found nothing"),
+                "provisional_held": (
+                    None if provisional is None else symbol in provisional),
+                "provisional_unknown_reason": (
+                    None if provisional is not None else
+                    "no copy of this session's 03:55 pool is on disk, so "
+                    "whether the pool held this name before the handover and "
+                    "let go of it is unknown. It is not a name the provisional "
+                    "pool failed to hold"),
             })
+            if provisional is not None and symbol in provisional:
+                dropped_at_handover += 1
             continue
         subscribed = bool(row.get("subscribed", True))
         subscribed_hits += 1 if subscribed else 0
@@ -392,6 +412,20 @@ def measure(
         "addressable_pool_held": addressable_held,
         "subscribed_held": subscribed_hits,
         "addressable_subscribed_held": addressable_subscribed,
+
+        # A THIRD FAILURE THE OTHER TWO CANNOT SHOW. A name the 03:55 pool held
+        # and the 07:15 pool did not is neither a prior that failed to find it
+        # nor a cap that cut it from the final pool: the morning HAD it and the
+        # re-rank let go. Null rather than zero when no copy of the provisional
+        # pool exists for this session, because "the handover dropped none"
+        # and "nobody kept the file" are the same number and different facts.
+        "dropped_at_handover": (
+            dropped_at_handover if provisional is not None else None),
+        "dropped_at_handover_unknown_reason": (
+            None if provisional is not None else
+            "no copy of this session's 03:55 pool is on disk, so how many "
+            "gappers the pool held before the handover and let go of cannot "
+            "be counted"),
 
         # Every rate below carries its denominator in its own name. There is
         # deliberately no bare "recall" key: the denominator is the entire
@@ -636,9 +670,18 @@ def build(session_date: str | None = None, write: bool = True,
     retained = {name: source["found"]
                 for name, source in (watchlist.get("pool_sources") or {}).items()
                 if isinstance(source, dict) and isinstance(source.get("found"), list)}
+    # The 03:55 pool, dated on read so a stale file cannot answer for the wrong
+    # morning. None when discover kept no copy, which is every session before
+    # 2026-09-05.
+    early = discover.load_provisional_watchlist(today.isoformat())
+    provisional_symbols = None
+    if early is not None:
+        provisional_symbols = [str(row.get("symbol") or "")
+                               for row in (early.get("symbols") or [])]
     result = measure(gappers, pool_rows, target["addressable"], published,
                      published_reason=published_reason,
-                     source_names=retained or None)
+                     source_names=retained or None,
+                     provisional_symbols=provisional_symbols)
     payload = {
         "addressable_funnel": target["funnel"],
         "market_cap_sensitivity": target["market_cap_sensitivity"],

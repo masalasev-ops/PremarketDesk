@@ -15,6 +15,43 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy fourth: the pool the collector listened to survives the handover
+
+The other half of tier 6's 6.3, and the same defect shape as the half before
+it: a fact nobody kept, read afterwards as a fact that was not true.
+
+BOTH DISCOVERY PASSES WROTE ONE FILE. The 03:55 pass builds the provisional
+pool the collector listens to from 04:00, and the 07:15 pass replaces it. So by
+the handover the pool the morning actually listened to no longer exists, and
+pool_recall scored a name that pool HELD and the 07:15 re-rank DROPPED as one
+the morning never found at all. Those point at opposite repairs. The first is a
+re-rank or a cap letting go of a name it already had; the second is a prior not
+looking in the right place.
+
+discover now copies the outgoing watchlist to data/watchlist-provisional.json
+before replacing it. pool_recall reports provisional_held per missed row and
+dropped_at_handover per session.
+
+FIRST COPY OF A SESSION WINS, and the opposite would be worse than keeping
+nothing. discover reruns: monitor_jobs rebuilds the watchlist at any hour while
+none has been written today, and there is a 07:25 repair pass. A copy taken on
+every write would leave the file called provisional holding the 07:15 pool by
+07:25, which looks like an answer and is not one. Five paths are claimed:
+nothing on disk, the first pass, a second pass, another morning's file, and a
+truncated file, which must not raise inside the write path the morning depends
+on.
+
+NULL AND NOT ZERO, again. Where no copy exists, dropped_at_handover is null with
+a reason and provisional_held is null with its own, because "the handover
+dropped none" and "nobody kept the file" are the same figure and different
+facts. Every session written before today reads null.
+
+The file is undated and overwritten once a session, so it does not accumulate
+and RETENTION is unaffected. The suite counts its own claims and caught the
+docstring still saying two hundred and fifteen; it is two hundred and sixteen.
+
+Suite green, not one path changed under the working tree.
+
 ## 2026-09-05, seventy third: the config file stops hiding a sentence, and the pool says which prior would have caught it
 
 Two of tier 6's smaller items, both of them the same shape: an answer that was

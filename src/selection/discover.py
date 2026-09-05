@@ -1120,9 +1120,81 @@ def build(write: bool = True) -> dict[str, Any]:
         # the plan: it costs a slice of a window that runs 04:00 to 09:25 and
         # cannot be collected later, so the atomic write below is
         # what keeps the morning from needing any of it.
+        keep_provisional()
         universe.write_atomically(payload, config.WATCHLIST_PATH)
         print(f"discover: wrote {config.WATCHLIST_PATH}")
 
+    return payload
+
+
+def _session_of(payload: dict[str, Any]) -> str:
+    """The ET session a watchlist was generated for, from its own stamp.
+
+    The stamp is written by ettime.stamp, so it is already Eastern and the date
+    is its first ten characters. Read this way rather than reparsed, because a
+    file that is unreadable or has no stamp must come back as "no session" and
+    not raise inside a write path the morning depends on.
+    """
+    return str(payload.get("generated_at") or "")[:10]
+
+
+def keep_provisional() -> str | None:
+    """Copy the outgoing watchlist aside, once per session, before it is lost.
+
+    THE 03:55 PASS AND THE 07:15 PASS BOTH WRITE ONE FILE. So the pool the
+    collector actually listened to from 04:00 stops existing at the handover,
+    and pool_recall scores a name that pool HELD and the 07:15 re-rank DROPPED
+    as one the morning never found. That reads as a source that was not looking
+    in the right place when it was a pool that found the name and then let go
+    of it, which is a different repair entirely.
+
+    FIRST PASS OF A SESSION WINS, and that is the whole subtlety. discover
+    reruns: monitor_jobs rebuilds the watchlist at any hour while none has been
+    written today, and the 07:25 repair pass exists. Copying on every write
+    would leave "provisional" holding the 07:15 pool by 07:25, which is worse
+    than not keeping it at all, because it would look like an answer. So a
+    session that already has a provisional copy keeps the one it has.
+
+    Returns the session it kept a copy for, or None when it kept nothing, so
+    the caller can say which happened rather than the file appearing silently.
+    """
+    try:
+        outgoing = json.loads(config.WATCHLIST_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(outgoing, dict):
+        return None
+    session = _session_of(outgoing)
+    # No stamp, or yesterday's file that nothing has replaced yet. Neither is
+    # this session's provisional pool and copying either would date the answer
+    # wrongly.
+    if not session or session != ettime.today_str():
+        return None
+    try:
+        held = json.loads(
+            config.PROVISIONAL_WATCHLIST_PATH.read_text(encoding="utf-8"))
+        if isinstance(held, dict) and _session_of(held) == session:
+            return None
+    except (OSError, ValueError):
+        pass
+    universe.write_atomically(outgoing, config.PROVISIONAL_WATCHLIST_PATH)
+    print(f"discover: kept the pool this session already had as "
+          f"{config.PROVISIONAL_WATCHLIST_PATH.name}, generated at "
+          f"{outgoing.get('generated_at')}")
+    return session
+
+
+def load_provisional_watchlist(session_date: str) -> dict[str, Any] | None:
+    """The provisional pool for one session, or None if that is not what is on
+    disk. Dated on read, because the file is undated in its name and a stale
+    one would answer a question about the wrong morning."""
+    try:
+        payload = json.loads(
+            config.PROVISIONAL_WATCHLIST_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(payload, dict) or _session_of(payload) != session_date:
+        return None
     return payload
 
 

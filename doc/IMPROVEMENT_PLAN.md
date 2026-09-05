@@ -1197,10 +1197,18 @@ get an empty list, which now means all four looked and none found it, and
 that sentence is only honest because the lists are present. The claim pins
 both branches and the null one is unchanged for sessions written earlier.
 
-Cheap two, still open: the provisional pool is not retained as
-data/watchlist-provisional.json, so pool_recall cannot report
-provisional_held or dropped_at_handover and still scores a name the 03:55
-pass held and the 07:15 pass dropped as "missed".
+Cheap two, DONE 2026-09-05: discover copies the outgoing watchlist to
+data/watchlist-provisional.json before replacing it, so the pool the collector
+listened to from 04:00 survives the handover. pool_recall reports
+provisional_held per missed row and dropped_at_handover per session, both null
+with a reason where no copy exists rather than zero, because "the handover
+dropped none" and "nobody kept the file" are the same figure and different
+facts. The FIRST copy a session takes is the one it keeps: discover reruns,
+monitor_jobs rebuilds the watchlist at any hour while none has been written
+today and there is a 07:25 repair pass, so a copy taken on every write would
+leave the file called provisional holding the 07:15 pool by 07:25, which looks
+like an answer and is not one. The file is undated and overwritten once a
+session, so it does not accumulate and RETENTION is unaffected.
 
 Decision: an 08:15 pass. The collector rereads until its stop,
 so a third pass lands mechanically; it costs 306 credits and a shorter

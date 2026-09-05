@@ -71,6 +71,14 @@ SITE_DIR = PROJECT_ROOT / "site"
 DB_PATH = DATA_DIR / "premarketdesk.db"
 UNIVERSE_PATH = DATA_DIR / "universe.json"
 WATCHLIST_PATH = DATA_DIR / "watchlist.json"
+# The pool the 03:55 pass built, kept when the 07:15 pass replaces it. Both
+# passes write WATCHLIST_PATH, so without this the pool the collector actually
+# listened to from 04:00 is gone by the handover and a name that pool HELD and
+# the handover DROPPED is indistinguishable afterwards from one no prior ever
+# found. Those are opposite failures: the first is a pool that was right and a
+# cap or a re-rank that was not, the second is a source not looking in the
+# right place.
+PROVISIONAL_WATCHLIST_PATH = DATA_DIR / "watchlist-provisional.json"
 
 REPORT_TEMPLATE_PATH = DOC_DIR / "REPORT_TEMPLATE.md"
 ANALYST_PROMPT_PATH = DOC_DIR / "prompt_analyst.md"
