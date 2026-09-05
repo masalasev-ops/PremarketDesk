@@ -680,10 +680,29 @@ pure trade: the context tickers feed the market snapshot the report is written
 against, so the eight are buying something this measurement cannot see. What
 has changed is that the price is now known.
 
-THE OTHER END IS A VENDOR QUESTION nobody has asked. probe_socket_cap tested
-whether the 50 symbol cap starves message DELIVERY. It never asked whether the
-plan allows more than 50 subscriptions, which on this slope is the single
-highest value question left in selection.
+THE OTHER END IS CLOSED. The owner confirmed on 2026-09-05 that EODHD does not
+allow more than 50, so 50 is a hard vendor ceiling and not a plan tier that
+could be bought past. probe_socket_cap had only ever asked the neighbouring
+question, whether subscribing 50 starves message DELIVERY against 8, and
+answered no.
+
+SO NOTHING IS BROKEN BY THIS, and the table above is not a defect report. The
+collector is built for the limit: the 8 context symbols are never dropped, the
+watchlist takes the remaining slots in discover's ranked order, and anything
+that does not fit is logged by name. That path works and is claimed.
+
+What the table says is where QUALITY stops rather than where the system fails,
+and its practical value is mostly negative: it says the slot floor, the
+freshness split and the tier 2 ordering are all rearrangements INSIDE 42 slots,
+which is why measuring all three on 2026-09-05 moved none of them. The
+constraint is the 42, not the arrangement, and effort spent on tier boundaries
+is effort spent on the wrong end.
+
+THE ONE LEVER LEFT is the 8 context tickers, at roughly 0.005 of big gap recall
+each. They are probably worth keeping, because a premarket price path with no
+idea what the index futures did is a price path nobody can read, which is the
+argument collect_premarket already makes for never dropping them. The change is
+that the price is now known rather than assumed.
 
 ### The pool note
 

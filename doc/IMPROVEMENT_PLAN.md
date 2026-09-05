@@ -1241,6 +1241,21 @@ indistinguishable from the shipped rule. news_fresh_hours stays at 6, now
 measured rather than seeded. CRITERIA's freshness note carries the table and
 doc/research/TIER6_MEASURED.md the reasoning.
 
+### 6.10 The cap is the binding constraint, and it is a ceiling not a choice
+
+Recall is still climbing at the 42 cap and the marginal subscription is worth
+about 0.005 of big gap recall, more than the entire slot floor question of 6.1.
+42 is the socket's 50 less the 8 context tickers, and EODHD does not allow more
+than 50, confirmed by the owner 2026-09-05, so this is a hard ceiling.
+
+NOTHING IS BROKEN BY IT. The collector is built for the limit and the overflow
+path is claimed. The finding's value is mostly NEGATIVE and that is why it is
+kept: the floor, the freshness split and the tier 2 ordering are rearrangements
+INSIDE 42 slots, which is why measuring all three moved none of them. Do not
+spend more on tier boundaries. The one lever left is the 8 context tickers at
+about 0.005 each, and they are probably worth keeping. Table and reasoning in
+CRITERIA's cap note and doc/research/TIER6_MEASURED.md.
+
 ### 6.3 There is no discovery pass after 07:15
 
 17 of 46 big gappers were never in the pool. Which prior would have caught

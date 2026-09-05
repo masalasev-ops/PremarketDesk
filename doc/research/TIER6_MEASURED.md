@@ -25,11 +25,16 @@ in total: one more subscription is worth more than that entire question.
 
 WHAT TO DO WITH IT, in the order the evidence supports.
 
-  1. Ask the vendor question nobody has asked. 42 is the socket's 50 less the 8
-     context tickers, and probe_socket_cap only ever asked whether 50 starves
-     message delivery, never whether the plan allows more than 50. On this
-     slope that is the highest value open question in selection, and it costs a
-     read of the plan's terms rather than any quota.
+  1. CLOSED 2026-09-05, the same day it was filed. The owner confirms EODHD
+     does not allow more than 50, so this is a hard vendor ceiling and not a
+     plan tier that could be bought past. Nothing is broken by it: the
+     collector is built for the limit, never drops the 8 context symbols, fills
+     the rest in discover's ranked order and logs by name whatever does not
+     fit. The value of the sweep is therefore mostly NEGATIVE, and that is
+     worth keeping: the floor, the freshness split and the tier 2 ordering are
+     all rearrangements INSIDE 42 slots, which is exactly why measuring all
+     three moved none of them. Effort spent on tier boundaries is effort spent
+     at the wrong end.
   2. Price the 8 context tickers deliberately. They cost somewhere near 0.03 to
      0.04 of big gap recall by extrapolation, which is written as an
      extrapolation because it is past the measured range. It is not a pure
@@ -61,11 +66,46 @@ at is not the boundary but the tier 2 CAP, which 6.1 and the after close
 crossing reach from two other directions: three in five gapping after close
 reporters are found by the pool and then cut.
 
-### 6.10 The cap is the binding constraint, and it is a ceiling not a choice
+### Three subscribed context tickers are read by nothing, found 2026-09-05
 
-Recall is still climbing at the 42 cap and the marginal subscription is worth
-about 0.005 of big gap recall, flat across the last two steps. That is more
-than the entire slot floor question of 6.1 was worth. 42 is the socket's 50
-less the 8 context tickers, so the ceiling is a vendor limit. The table, the
-extrapolated price of those 8 tickers and the unasked vendor question are in
-CRITERIA's cap note and in doc/research/TIER6_MEASURED.md.
+Found while asking whether any of the 8 context slots could be freed, once the
+owner confirmed EODHD's 50 is a hard ceiling. The answer is better than a trim:
+three of the eight are already spending a slot for nothing.
+
+  [Collector] context_symbols   SPY QQQ IWM DIA TLT USO UUP VIXY
+  [Scan snapshot] snapshot      SPY QQQ IWM DIA USO, plus VIX.INDX,
+                                US10Y.GBOND, US3M.GBOND, DXY.INDX
+
+TLT, UUP and VIXY are subscribed and appear in NO snapshot row, so their bars
+are collected and never read. Meanwhile the four rows that are not subscribed
+fall through to the end of day feed, and the 2026-09-04 packet shows them
+labelled source eod and prior_session_only true: the report printed yesterday's
+move for the 10 year, the 3 month, the dollar and the VIX.
+
+IT IS A DOUBLE LOSS. Three of fifty slots produce nothing, worth about 0.015 of
+big gap recall on the cap slope measured above, which is three times the whole
+slot floor question. And the rates, dollar and volatility rows are a day stale
+while a live proxy for each sat subscribed and unread.
+
+THE MECHANISM FOR FIXING IT ALREADY EXISTS AND IS ALREADY USED. wti maps to
+USO.US and carries the proxy note "USO is an oil ETF standing in for WTI, EODHD
+commodities are not on this plan". Someone subscribed TLT, UUP and VIXY for
+exactly that purpose and only USO was ever wired up.
+
+THE THREE ARE NOT EQUALLY WORTH WIRING, measured on premarket bar occupancy
+over the four live sessions, which needs no statistics because a ticker that
+prints twice in a 325 minute window will not be dense on the fifth morning:
+
+  QQQ 805 bars, SPY 658, TLT 534, USO 463, IWM 327, DIA 144, VIXY 85, UUP 14
+
+  TLT to 10y     134 bars a session. Clear win, live instead of a day stale.
+  VIXY to vix    21 a session. Better than stale and thin enough that the row
+                 should carry its bar count.
+  UUP to dxy     3.5 a session, 2, 2, 8, 2. Not worth wiring. Independently
+                 corroborated by the probe evidence note above, where UUP's
+                 B/A was one message against none. Better to drop it from
+                 context_symbols and take the slot back.
+
+Wiring TLT and VIXY and dropping UUP nets one slot back and turns two stale
+rows live. It changes what the report SHOWS, so it is the owner's call and is
+recorded here rather than taken.
