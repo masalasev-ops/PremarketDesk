@@ -3520,9 +3520,40 @@ def claim_a_thin_window_is_not_merely_a_late_one(failures: list[str]) -> None:
                              {"symbol": "FULL.US", "subscribed": True},
                              {"symbol": "GONE.US", "subscribed": True}]}
     sink = Sink()
-    scan.attach_premarket_path(
-        [thin, full], watchlist, sink,
-        {"THIN.US": bars(4, 42), "FULL.US": bars(50, 26)})
+
+    # THE WINDOW THIS IS JUDGED AGAINST IS PINNED HERE, and it was ambient
+    # until 2026-09-05. attach_premarket_path reads
+    # collect_premarket.window_open_hhmm(), which defaults to TODAY and reads
+    # today's subscription sidecar. An earlier claim in this file writes that
+    # sidecar for today through write_subscriptions, which stamps
+    # window_open_at with the wall clock and leaves it behind, so this fixture
+    # was being compared against the moment the suite happened to run: both
+    # bars, at 07:26 and 07:42, read as late before 07:26 in the morning and
+    # as not late after it. The suite passed at 02:50 and failed at 10:15 on
+    # identical code. A claim about lateness must own the clock it is late
+    # against.
+    from collect import collect_premarket as _cp
+
+    today = ettime.today_str()
+    sidecar = _cp.subscriptions_path(today)
+    restore = sidecar.read_text(encoding="utf-8") if sidecar.is_file() else None
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    sidecar.write_text(json.dumps({
+        "window_open_at": f"{today}T04:00:00-04:00",
+        "symbols": ["THIN.US", "FULL.US", "GONE.US"],
+        "subscribed_since": {},
+    }), encoding="utf-8")
+    try:
+        scan.attach_premarket_path(
+            [thin, full], watchlist, sink,
+            {"THIN.US": bars(4, 42), "FULL.US": bars(50, 26)})
+    finally:
+        # Put back exactly what was there, so this claim pollutes no more than
+        # it inherited. That is the rule the claim above broke.
+        if restore is None:
+            sidecar.unlink(missing_ok=True)
+        else:
+            sidecar.write_text(restore, encoding="utf-8")
 
     if thin.get("pm_window_thin") is not True:
         failures.append(f"a four bar window was not called thin: "
