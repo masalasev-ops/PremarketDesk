@@ -1047,18 +1047,26 @@ is the only case either of them gets corrected by. Section for section:
 | The names on today's list | The gap spine | BUILT |
 | When a winner stopped going up | Record's timing split | BUILT |
 | What these counts are not | nothing; it is new | BUILT |
-| What the desk missed | What else moved | needs the pool's rejects graded, which the engine does not fetch bars for |
-| What each floor turned down | How the list was cut | needs every screen reject graded, same gap |
-| Whether thin evidence has cost anything | What the evidence is worth | needs the evidence roll carried into the session cache |
-| How these events have resolved before | Coming up | needs a historical calendar the session cache does not hold |
-| What kind of morning this is | What kind of morning this is | needs a session level shape match, not a name level one |
-| What noon has graded before | What noon will grade | needs the midday target replayed, which nothing does |
+| What the desk missed | What else moved | BUILT 2026-09-05, from research_daily |
+| What each floor turned down | How the list was cut | BUILT 2026-09-05 |
+| Whether thin evidence has cost anything | What the evidence is worth | BUILT 2026-09-05, three of the roll's nine lines, the other six named |
+| How these events have resolved before | Coming up | BUILT 2026-09-05, from research_daily |
+| What kind of morning this is | What kind of morning this is | BUILT 2026-09-05, narrower than the Morning section and says so |
+| What noon has graded before | What noon will grade | BUILT 2026-09-05, scan_midday.grade folded over the cached tape |
 
-THREE OF THE NINE SHIPPED on 2026-09-04 and the rest are named above with what
-each one is missing, rather than left as a table a reader would take for the
-state. Every unbuilt row needs the ENGINE extended, not the screen: the screen
-draws what desk/precedent.build returns and that function can only count what
-research_outcomes holds.
+ALL NINE ARE BUILT. Three shipped 2026-09-04 and six on 2026-09-05, and the
+"needs" column this table carried until then was wrong on five rows and half
+wrong on the sixth. Not one of the six needed a new network call. The rejects
+were already being graded and their verdict discarded; the evidence roll's
+reconstructible lines were already columns replay_session writes; the
+historical calendar was already in every session cache with timing, estimate
+and actual on it; the session level shape was a GROUP BY over bands already
+frozen onto the row; and the noon target needed a fold of minutes the engine
+already fetches, handed to the shipped grade function. What the desk missed was
+the only genuinely blocked one, and only because "graded" was the wrong verb: a
+name nobody subscribed has no premarket tape, so no entry and no stop, and no
+paper rule can be run on it. Its outcome is the daily bar, which is why
+research_daily exists as a table of its own.
 
 WHY IT IS NOT THE REPLAY SCREEN. A retrospective page is opened once and then
 never again, because the event it describes is over. The owner said so and it

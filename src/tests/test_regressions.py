@@ -15098,6 +15098,100 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
           "screen never reads it")
 
 
+def claim_the_daily_bar_sections_are_a_separate_instrument(
+        failures: list[str]) -> None:
+    """A daily bar and a simulated trade are never counted as one thing.
+
+    Two of the nine Precedent sections describe names the desk never PRICED: a
+    gapper the pool never subscribed, and a company on the earnings calendar.
+    Neither has a premarket tape, so neither has a premarket high, so neither
+    has an entry or a stop, and paper_ledger.simulate cannot be run on either
+    under any rule. What exists for them is the daily bar, open to close and
+    open to high, and that is a WEAKER measurement than the one the trade
+    sections print.
+
+    So the two live in separate tables, and this claim is the thing keeping
+    them apart. precedent._select's only row level exclusion is skip_reason: a
+    daily bar row carrying a matching gap and price band, sitting in
+    research_outcomes, would join the denominator of every count on the screen
+    and quietly change what all of them mean. Nobody would see it happen.
+    """
+    from desk import precedent
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    source = (root / "research" / "replay_daily.py").read_text(encoding="utf-8")
+    matcher = (root / "desk" / "precedent.py").read_text(encoding="utf-8")
+
+    # 1. The writer touches no table that holds a trade or a pick. Checked
+    #    against the SQL and the upsert targets rather than the file's text:
+    #    the module's docstring names research_outcomes on purpose, to say why
+    #    it is not writing there, and a claim that punished the explanation
+    #    would push the reasoning out of the file.
+    import ast as _ast
+
+    for node in _ast.walk(_ast.parse(source)):
+        if not (isinstance(node, _ast.Constant) and isinstance(node.value, str)):
+            continue
+        flat = " ".join(node.value.split())
+        if not flat.upper().startswith(("INSERT", "UPDATE", "DELETE")):
+            continue
+        if re.search(r"\b(picks|paper_trades|research_outcomes)\b", flat):
+            failures.append(
+                f"research/replay_daily.py:{node.lineno} writes to a table "
+                f"holding trades or picks: {flat[:90]}")
+    for table in ("paper_trades", "research_outcomes", "picks"):
+        for quoted in (f'"{table}"', f"'{table}'"):
+            if f"upsert(connection, {quoted}" in source:
+                failures.append(
+                    f"research/replay_daily upserts into {table}. It writes "
+                    "daily bars for names that were never priced, and putting "
+                    "one beside a simulated trade makes every count on the "
+                    "screen a count over two instruments")
+
+    # 2. No single SELECT reads both tables. A join is how the separation would
+    #    be lost without either table changing.
+    for chunk in matcher.split("SELECT")[1:]:
+        head = chunk[:400]
+        if "research_daily" in head and "research_outcomes" in head:
+            failures.append(
+                "a single SELECT in desk/precedent reads research_daily and "
+                "research_outcomes together. They are different measurements "
+                "and one query over both produces a number describing neither")
+
+    # 3. The weaker measurement says so, wherever it is drawn.
+    if "NO_ENTRY_HERE" not in matcher:
+        failures.append(
+            "desk/precedent no longer carries the sentence saying the daily "
+            "bar sections were never priced. A reader comparing a daily bar "
+            "median against a booked median is comparing two instruments")
+    for name in ("missed", "events"):
+        function = getattr(precedent, name)
+        if "caveat" not in (function.__doc__ or "") + matcher:
+            failures.append(f"precedent.{name} draws no caveat")
+
+    # 4. The noon fold IMPORTS the shipped grade rather than restating it, the
+    #    same rule paper_ledger.simulate is held to. A second copy of the four
+    #    state vocabulary would drift the first time CRITERIA [Midday] moved.
+    engine = (root / "research" / "replay_outcomes.py").read_text(
+        encoding="utf-8")
+    if "scan_midday.grade(" not in engine:
+        failures.append(
+            "research/replay_outcomes no longer calls scan_midday.grade. The "
+            "noon fold must run the shipped rule, or the disagreement it "
+            "reports is between two rules rather than between noon and the "
+            "close")
+    for state in ("never_triggered", "gapped_through", "triggered"):
+        if f'"{state}"' in engine:
+            failures.append(
+                f"research/replay_outcomes spells the noon state {state!r} "
+                "itself. The states are scan_midday's and a second copy of "
+                "them is the two definitions fault this project keeps finding")
+
+    print("  precedent    the daily bar sections are a separate table, joined "
+          "to the trade table by nothing, and the noon fold runs the shipped "
+          "grade rather than a copy of it")
+
+
 def claim_every_screen_can_be_reached(failures: list[str]) -> None:
     """Every screen is two clicks from the one the desk opens on, nav first.
 
@@ -17640,6 +17734,8 @@ def main() -> int:
     run_claim(failures, claim_a_headline_says_why_it_is_under_this_ticker,
               failures)
     run_claim(failures, claim_the_gappers_are_grouped_by_direction, failures)
+    run_claim(failures, claim_the_daily_bar_sections_are_a_separate_instrument,
+              failures)
 
     if failures:
         for failure in failures:

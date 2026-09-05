@@ -579,13 +579,16 @@ and the wrong version of this screen is easy to build.
   the same buckets until 2026-09-05, which would have had a reader compare two
   populations as one.
 
-  THREE OF THE SEVEN MIRRORED SECTIONS SHIPPED, and the table above is the
-  design rather than the state. What history says, when a winner stopped going
-  up, and what these counts are not, are built. What the desk missed, what each
-  floor turned down, whether thin evidence cost anything, and how these events
-  have resolved before all need data the engine does not yet produce: the
-  rejects the screen turned down, the evidence roll per past session, and a
-  historical calendar. IMPROVEMENT_PLAN 5.7 carries what each of them needs.
+  ALL NINE SECTIONS ARE BUILT, three on 2026-09-04 and six on 2026-09-05.
+  The paragraph here used to say the other six needed data the engine does not
+  produce, and that was wrong on five of them: the rejects were already being
+  graded with their verdict thrown away, the reconstructible evidence lines
+  were already columns, the historical calendar was already in every session
+  cache, and the session shape was a group by over bands already on the row.
+  Only what the desk missed was really blocked, and only because a name nobody
+  subscribed has no premarket tape and therefore no entry and no stop, so no
+  paper rule can be run on it. Its outcome is the daily bar and it comes from
+  research_daily, a separate table for the reason given below.
 
 Regions, in order:
 
@@ -595,8 +598,32 @@ Regions, in order:
                       minutes to the high
   When a winner       the whole replayed population split on time to the high,
     stopped going up  drawn only when there is a population to split
+  What each floor     every day condition, what it refused across the whole
+    turned down       replay, and what those refusals went on to do. The
+                      counts OVERLAP: a name can fail two conditions
+  Whether thin        three splits, each drawn as a pair so neither side is a
+    evidence has      number without a scale. The roll's other six sentences
+    cost anything     cannot be rebuilt and are named rather than dropped
+  What the desk       every name that cleared a session's gap floor, by band:
+    missed            how many the pool had, and what the rest did
+  How these events    every overnight reporter, by tier and by whether it beat
+    have resolved     the vendor's own estimate
+    before
+  What kind of        four measures, today's share against the median and the
+    morning this is   tenth to ninetieth of every replayed morning
+  What noon has       the noon pass's own grade folded from the cached tape,
+    graded before     against what the same name did by the close
   What these counts   four things the numbers are not, printed on the screen
     are not           rather than left in a document nobody opens
+
+  TWO TABLES AND TWO INSTRUMENTS. The trade sections measure a simulated entry
+  to a simulated exit and read research_outcomes. What the desk missed and how
+  these events have resolved read research_daily, which is the DAILY BAR: open
+  to close and open to high, for names that were never priced and have no entry
+  under any rule. The two must never be compared and every daily bar figure on
+  the screen carries that sentence beside it. research_daily is a separate
+  table because precedent's own selector excludes only on skip_reason, so such
+  a row would otherwise join the denominator of every count above it.
 
   Mark 8, the spread bar, is new and is the only chart this screen adds: a
   thin line from worst to best, a thick box over the middle half, a dot on the
@@ -605,11 +632,15 @@ Regions, in order:
   outside the domain is clamped and the clamp is drawn as a dashed notch,
   which is a visible lie rather than an invisible one.
 
-THE EMPTY STATE IS THE SHIPPING STATE. research_outcomes is empty until the
-replay has been run, and on this machine the backtest caches were removed with
-the September 1 history cut. So the screen ships saying the replay has not run,
-naming the command that fills it, and still printing the rule each name WOULD
-be matched on, which is the part worth checking before any number exists.]
+THE EMPTY STATE IS A STATE THIS SCREEN DRAWS, and it was the shipping state on
+2026-09-04 because no backtest cache existed on this machine. The pool was
+fetched on 2026-09-05, 240 sessions, and the replay filled the table. The empty
+state stays and is not decoration: research_outcomes is empty on any machine
+that has not run the replay, and the screen then says so, names the command
+that fills it, and still prints the rule each name WOULD be matched on, which
+is the part worth checking before any number exists. The two daily bar sections
+carry their own coverage and can answer while the trade table is still empty,
+because they fill from the session caches alone.]
 
 ### The navigation, and a screen with no route into it
 

@@ -1177,7 +1177,7 @@ tbody tr:hover{background:var(--ground)}
   reader, <code>deliver.py</code>, which refuses to send while it exists. Two of the columns are for
   stores that sit outside the relay: the desk (C54), whose single writer is
   desk/render at the end of the morning chain, the midday chain and the nightly, and the job trail (C56), which
-  every scheduled step appends one line to as it exits. Six stores are deliberately not columned
+  every scheduled step appends one line to as it exits. Seven stores are deliberately not columned
   here, because nothing in the morning path touches any of them. The gap_stats table (C41) is
   written weekly by C40 and read at 07:15 by C13. The quantifier flag log (C57) is written by the
   analyst's guard and judged by hand through C55. The exchange calendar cache (C58) is read by C50
@@ -1384,7 +1384,7 @@ tbody tr:hover{background:var(--ground)}
     render last of all; build_archive was the last of the night package until 2026-09-04, when
     the owner retired it and desk/render took its filename),
     <b>research</b> (backtest_pool, float_cache, float_rotation_study, addressable_sweep,
-    vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session which runs the live screen
+    vwap_gappers, cutoff_0830, counterfactual_watchlist, replay_session which runs the live screen, replay_daily which grades the gappers and overnight reporters no screen ever priced,
     over a trading day that is long finished, replay_outcomes which grades what those reconstructed
     names then did, four probe_ scripts, four measure_ scripts
     and two sweep_ scripts, sweep_baseline_floor and sweep_capture_rate: nineteen modules in all,
@@ -1437,7 +1437,7 @@ tbody tr:hover{background:var(--ground)}
     <dt>data\</dt>
     <dd>universe.json, watchlist.json, universe-closes-&lt;date&gt;.json,
     premarket\&lt;date&gt;.jsonl beside &lt;date&gt;-stats.jsonl and &lt;date&gt;-subscriptions.json,
-    premarketdesk.db (seven tables: baseline, picks, gap_stats, gap_sweeps, paper_trades, sessions the per session summary desk/compact writes, and research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by research/replay_outcomes and read only by desk/precedent),
+    premarketdesk.db (eight tables: baseline, picks, gap_stats, gap_sweeps, paper_trades, sessions the per session summary desk/compact writes, research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by research/replay_outcomes and read only by desk/precedent, and research_daily, what a name the desk never PRICED did on a replayed session, from its daily bar, written only by research/replay_daily and read only by desk/precedent. The two research tables are separate because they are separate instruments: one holds simulated trades under a paper rule_version and the other holds a daily bar for names that have no entry and no stop under any rule),
     job-status.jsonl, exchange-details.json,
     monitor-reruns.json, float_cache.json, quantifier-flags.jsonl once the guard fires live,
     UNVERIFIED, backtest\

@@ -29,6 +29,34 @@ table. An amendment made before the numbers are in is still a pre-registration;
 one made after is a rationalisation, and the only thing separating them is this
 paragraph and the commit that carries it.
 
+**Amended 2026-09-05, and this one is not clean, so the ordering is written
+out rather than summarised.** Six further sections were built that night, and
+before the amendment was typed the engine had already graded ONE pilot session,
+2026-05-19, 84 rows, to prove the plumbing ran end to end. So the sequence was:
+sections designed, engine written, one session graded, its numbers seen, this
+amendment written, then the year graded. What was seen in the pilot: 2 of 42
+names cleared the day screen, `require_above_prior_high` was in almost every
+refusal, and 4 names that the noon fold called "never triggered" reached the
+buy by the close. Those are the plumbing working, and they are also numbers,
+and a reader is entitled to know they were visible before section 11 below was
+fixed. The pilot rows were deleted before the year was graded. What would make
+this a rationalisation rather than a pre-registration is choosing a measure
+because the pilot flattered it; what protects against that is that section 11
+specifies every measure as a COUNT of a state the shipped rule already names,
+with no threshold chosen here at all.
+
+**Amended 2026-09-05: the population was stated too narrowly and is corrected
+here.** Section 2 said `research_outcomes` rows, which is right, and the
+matcher briefly read that as the rows whose `day_eligible` is 1. That is a
+different population from the one the screen sits beside. The morning list is
+the RANKED candidates, published with an entry and a stop whether or not they
+cleared the day screen, and on the four live sessions on file only 0, 0, 3 and
+2 of twelve cleared it. Matching today's mostly refused names against a history
+of only cleared ones asks the past about a different kind of name. The base
+rate is therefore over every replayed candidate the reconstructed screen
+priced, and the day screen's verdict is a column that sections read, never a
+filter on the count. Caught before any figure was drawn from it.
+
 ## Why a pre-registration and not just code
 
 The Precedent screen prints, next to a name the desk published this morning,
@@ -242,3 +270,68 @@ Stated now so it cannot be argued about later.
     choosing a subgroup by its answer.
   - The engine is never re-run with a changed question over the same bytes and
     the old result quietly dropped. Both runs stay.
+
+## 11. The six further sections, specified 2026-09-05
+
+Each one mirrors a section the Morning screen already draws. None of them adds
+a threshold: every figure is a COUNT of a state the shipped rule already names,
+and every one is withheld under the same `min_rows` and `min_sessions` floors
+in section 6. They are specified here so the measures cannot be chosen later
+from whichever cut reads best.
+
+**What each floor turned down.** Population: every replayed candidate whose
+`day_eligible` is not null. For each condition key `scan.evaluate_eligibility`
+records, the count it refused, the distinct sessions, the subset whose input
+was never measured, and what those refusals went on to do under the paper rule.
+The counts OVERLAP by construction, because a name can fail two conditions, and
+the screen says so. `require_fresh_price` can never fire in a replay because no
+collector ran, and it is reported as unevaluated, never as a floor that turned
+nobody down.
+
+**Whether thin evidence has cost anything.** Three splits, each drawn as a
+PAIR so neither side is a number without a scale: a baseline resting on fewer
+than `[Baseline] min_sessions_for_rvol` sessions against one that is not, a
+null premarket RVOL against a measured one, and a premarket window of one
+minute or none against more than one. A row whose input cannot answer the
+question joins neither side. The roll's other six sentences cannot be rebuilt
+from a replayed session and the screen names them rather than dropping them.
+
+**What the desk missed.** Population: every name that cleared a replayed
+session's own gap floor, from `research_daily`, which is the daily bar and NOT
+a simulated trade. Per gap band: how many gapped, how many the pool subscribed,
+and what the rest did open to close and open to high. Rows on sessions the
+replay has not screened carry `subscribed` null and are excluded, because there
+"not subscribed" is unknown rather than false.
+
+**How these events have resolved before.** Population: every name discover
+tiered as an overnight reporter, again from the daily bar. Split by tier and by
+whether the vendor's actual beat its own estimate. A row with no estimate is on
+neither side of that split rather than counted as a miss.
+
+**What kind of morning this is.** A session level comparison, not a name level
+one: for each of four measures the share of a morning's list that answers yes,
+today's against the median and the tenth to ninetieth of every replayed
+morning. It is NARROWER than the Morning section it mirrors and says so.
+Sector is on no disk for a replayed session and catalyst class needs the per
+article news tags the session cache does not hold, so two of that section's
+three panels cannot be rebuilt at any price.
+
+**What noon has graded before.** The same cached minutes the simulation reads,
+folded to `[Midday] run_time` and handed to `midday.scan_midday.grade` itself
+rather than a copy of it. Per noon state: the count, the sessions, how many
+reached the buy by the close, and the spread. The figure the section exists for
+is the disagreement between the two, and no threshold is set on it here.
+
+**A confound these six add, written down now.** The two daily bar sections
+measure open to close, and the trade sections measure a simulated entry to a
+simulated exit. They are different instruments and a reader must not compare a
+number from one against a number from the other. Every daily bar figure on the
+screen carries that sentence beside it.
+
+**A confound the whole replay adds, written down now.** The `gap_stats`
+windows that rank the replayed pool were BACKFILLED on 2026-09-05, 51 of them
+at a weekly cadence chosen to mirror the production Sunday rebuild, not the
+windows that existed at the time. Each replayed session still reads only a
+window dated strictly before it, so no session is ranked on its own outcome,
+but the cadence is a reconstruction and the universe those windows were
+computed over is today's. A name delisted during the year is in none of them.
