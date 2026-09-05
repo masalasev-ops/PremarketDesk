@@ -1804,6 +1804,244 @@ DECK_JS = r"""
         }).join("") + "</tbody></table></div></div></section>";
     }
 
+    // WHAT EACH FLOOR TURNED DOWN. The mirror of the Morning screen's "How
+    // the list was cut", asked backwards: that section says which floor cut
+    // how many this morning, and this one says what the names it cut went on
+    // to do. Only the second can say whether a floor is paying for itself.
+    var fl = pr.floors;
+    if (fl && fl.conditions && fl.conditions.length) {
+      html += '<section><div class="shead"><h2>What each floor turned down</h2>' +
+        '<span class="note">mirrors How the list was cut</span></div>' +
+        '<p class="snote">Every day screen condition, the names it refused ' +
+        'across the whole replay, and what those names did anyway. A floor ' +
+        'whose refusals went on to do nothing is earning its place; one whose ' +
+        'refusals ran is costing something. ' + esc(fl.overlap || "") + ', and ' +
+        'a condition the replay could not evaluate says so instead of ' +
+        'printing a zero.</p>' +
+        '<div class="card pad"><div class="scroll"><table class="ptable">' +
+        '<thead><tr><th>Condition</th><th class="n">Refused</th>' +
+        '<th class="n">Sessions</th><th class="n">Never measured</th>' +
+        '<th class="n">Reached the buy</th><th class="n">Middle result</th>' +
+        '</tr></thead><tbody>' +
+        fl.conditions.map(function (c) {
+          var head = '<td><span class="mono">' +
+            esc(String(c.condition).replace(/_/g, " ")) + "</span></td>";
+          if (c.rows == null) {
+            return "<tr>" + head + '<td colspan="5" class="empty">' +
+              esc(c.why || "not evaluated in a replay") + "</td></tr>";
+          }
+          if (c.held) {
+            return "<tr>" + head + '<td class="n">' + c.rows +
+              '</td><td class="n">' + c.sessions + '</td><td class="n">' +
+              (c.unmeasured || 0) + '</td><td colspan="2" class="empty">' +
+              "Too few to say what they did.</td></tr>";
+          }
+          var reach = c.rows ? Math.round(c.reached / c.rows * 100) : null;
+          return "<tr>" + head + '<td class="n">' + c.rows +
+            '</td><td class="n">' + c.sessions + '</td><td class="n">' +
+            (c.unmeasured || 0) + '</td><td class="n">' + c.reached +
+            '<div class="sub">' + (reach == null ? NIL : reach + " in 100") +
+            '</div></td><td class="n ' + dirClass(c.median) + '">' +
+            pct(c.median) + "</td></tr>";
+        }).join("") + "</tbody></table></div>" +
+        '<div class="plegend"><span>' + commas(fl.population) +
+        " graded rows, of which " + commas(fl.cleared) +
+        " cleared every day condition</span></div></div></section>";
+    }
+
+    // WHETHER THIN EVIDENCE HAS COST ANYTHING. The Morning screen prints what
+    // the packet resolved about its own evidence and stops. This asks the
+    // question that section cannot, which is whether any of it mattered.
+    var ev = pr.evidence;
+    if (ev && ev.splits && ev.splits.length) {
+      html += '<section><div class="shead"><h2>Whether thin evidence has cost ' +
+        'anything</h2><span class="note">mirrors What the evidence is worth' +
+        '</span></div><p class="snote">Each split is drawn as a pair, because ' +
+        'a figure for the thin group on its own is a number with no scale. A ' +
+        'row whose input was never measured joins neither side rather than ' +
+        'being counted as good news. ' + esc(ev.unavailable || "") + '.</p>' +
+        '<div class="card pad"><div class="scroll"><table class="ptable">' +
+        '<thead><tr><th>Split</th><th class="n">Names</th>' +
+        '<th class="n">Sessions</th><th class="n">Reached the buy</th>' +
+        '<th class="n">Middle result</th></tr></thead><tbody>' +
+        ev.splits.map(function (s) {
+          var rows = s.sides.map(function (side, i) {
+            var lead = i === 0
+              ? '<td rowspan="2"><span class="mono">' +
+                esc(String(s.split).replace(/_/g, " ")) + "</span>" +
+                (s.note ? '<div class="prule">' + esc(s.note) + "</div>" : "") +
+                (s.unknown ? '<div class="prule">' + commas(s.unknown) +
+                  " row(s) could not be answered either way</div>" : "") +
+                "</td>"
+              : "";
+            var words = '<div class="prule">' + esc(side.words) + "</div>";
+            if (side.held) {
+              return "<tr>" + lead + '<td class="n">' + side.rows + words +
+                '</td><td class="n">' + side.sessions +
+                '</td><td colspan="2" class="empty">Too few to say.</td></tr>';
+            }
+            var reach = side.rows
+              ? Math.round(side.reached / side.rows * 100) : null;
+            return "<tr>" + lead + '<td class="n">' + side.rows + words +
+              '</td><td class="n">' + side.sessions + '</td><td class="n">' +
+              side.reached + '<div class="sub">' +
+              (reach == null ? NIL : reach + " in 100") +
+              '</div></td><td class="n ' + dirClass(side.median) + '">' +
+              pct(side.median) + "</td></tr>";
+          });
+          return rows.join("");
+        }).join("") + "</tbody></table></div></div></section>";
+    }
+
+    // WHAT THE DESK MISSED. The only section here that asks about the
+    // SELECTION rather than the screen: of everything that gapped, how much
+    // did the pool ever listen to, and what did the rest do.
+    var ms = pr.missed;
+    if (ms && ms.bands && ms.bands.length) {
+      html += '<section><div class="shead"><h2>What the desk missed</h2>' +
+        '<span class="note">mirrors What else moved</span></div>' +
+        '<p class="snote">Every name that cleared a replayed session\'s gap ' +
+        'floor, whether or not the pool subscribed it, grouped by how far it ' +
+        'gapped at the open. ' + esc(ms.caveat || "") + '. ' +
+        esc(ms.survivorship || "") + '.' +
+        (ms.unknown_sessions ? " " + commas(ms.unknown_sessions) +
+          " gapper(s) sit on sessions the replay has not screened, so whether " +
+          "the pool subscribed them is unknown and they are left out." : "") +
+        '</p><div class="card pad"><div class="scroll"><table class="ptable">' +
+        '<thead><tr><th>Gapped</th><th class="n">Names</th>' +
+        '<th class="n">Pool had it</th><th class="n">Missed</th>' +
+        '<th class="n">Middle day of the missed</th>' +
+        '<th class="n">Best it offered</th></tr></thead><tbody>' +
+        ms.bands.map(function (b) {
+          var head = "<td>" + esc(b.band) + "</td>" +
+            '<td class="n">' + b.gapped + '</td><td class="n">' + b.subscribed +
+            '<div class="sub">' + (b.share_subscribed == null ? NIL
+              : b.share_subscribed + " in 100") + '</div></td><td class="n">' +
+            b.missed + "</td>";
+          if (b.held) {
+            return "<tr>" + head + '<td colspan="2" class="empty">' +
+              "Too few to say what they did.</td></tr>";
+          }
+          return "<tr>" + head + '<td class="n ' + dirClass(b.median) + '">' +
+            pct(b.median) + '</td><td class="n ' + dirClass(b.median_high) +
+            '">' + pct(b.median_high) + '<div class="sub">to its high</div>' +
+            "</td></tr>";
+        }).join("") + "</tbody></table></div></div></section>";
+    }
+
+    // HOW THESE EVENTS HAVE RESOLVED BEFORE. "Coming up" lists tomorrow's
+    // reporters and stops, which is a calendar. This is what the last few
+    // hundred of them did, which is the part worth reading before the open.
+    var evt = pr.events;
+    if (evt && evt.tiers && evt.tiers.length) {
+      html += '<section><div class="shead"><h2>How these events have resolved ' +
+        'before</h2><span class="note">mirrors Coming up</span></div>' +
+        '<p class="snote">Every name the calendar placed between a close and ' +
+        'the next open, by the kind of report and by whether it beat the ' +
+        'vendor\'s estimate. ' + esc(evt.caveat || "") + '.</p>' +
+        '<div class="cols2"><div class="card pad">' +
+        '<div class="panel-title">By when it reported</div>' +
+        '<div class="scroll"><table class="ptable"><thead><tr>' +
+        '<th>Kind</th><th class="n">Names</th><th class="n">Gapped</th>' +
+        '<th class="n">Middle day</th></tr></thead><tbody>' +
+        evt.tiers.map(function (t) {
+          var head = "<td>" + esc(String(t.tier).replace(/earnings_/, "")
+            .replace(/_/g, " ")) + '</td><td class="n">' + t.rows +
+            '</td><td class="n">' + t.gapped + '<div class="sub">' +
+            (t.share_gapped == null ? NIL : t.share_gapped + " in 100") +
+            "</div></td>";
+          if (t.held) {
+            return "<tr>" + head + '<td class="empty">too few</td></tr>';
+          }
+          return "<tr>" + head + '<td class="n ' + dirClass(t.median) + '">' +
+            pct(t.median) + "</td></tr>";
+        }).join("") + "</tbody></table></div></div>" +
+        '<div class="card pad"><div class="panel-title">Against the estimate' +
+        "</div><div class=\"scroll\"><table class=\"ptable\"><thead><tr>" +
+        '<th>Result</th><th class="n">Names</th><th class="n">Sessions</th>' +
+        '<th class="n">Middle day</th></tr></thead><tbody>' +
+        evt.surprise.map(function (s) {
+          var head = "<td>" + esc(s.words) + '</td><td class="n">' + s.rows +
+            '</td><td class="n">' + s.sessions + "</td>";
+          if (s.held) {
+            return "<tr>" + head + '<td class="empty">too few</td></tr>';
+          }
+          return "<tr>" + head + '<td class="n ' + dirClass(s.median) + '">' +
+            pct(s.median) + "</td></tr>";
+        }).join("") + "</tbody></table></div>" +
+        '<div class="prule" style="margin-top:10px">' + commas(evt.no_estimate) +
+        " row(s) carry no estimate, so they are on neither side rather than " +
+        "counted as a miss.</div></div></div></section>";
+    }
+
+    // WHAT KIND OF MORNING THIS IS. A narrower thing than the Morning
+    // section of the same name, and it says so: sector and catalyst class
+    // cannot be rebuilt for a replayed session at any price.
+    var sh = pr.shape;
+    if (sh && sh.measures && sh.measures.length) {
+      html += '<section><div class="shead"><h2>What kind of morning this is' +
+        '</h2><span class="note">against ' + commas(sh.sessions) +
+        ' replayed mornings</span></div><p class="snote">This morning\'s mix ' +
+        'against the same measure on every replayed session, so a share has a ' +
+        'scale rather than standing alone. The middle column is the median ' +
+        'morning and the range beside it is the tenth to the ninetieth. ' +
+        esc(sh.unavailable || "") + '.</p>' +
+        '<div class="card pad"><div class="scroll"><table class="ptable">' +
+        '<thead><tr><th>Share of the list that</th><th class="n">This morning' +
+        '</th><th class="n">Median morning</th><th class="n">Usual range</th>' +
+        "</tr></thead><tbody>" +
+        sh.measures.map(function (m) {
+          var mine = m.today == null ? NIL : Math.round(m.today) + "%";
+          var mid = m.median == null ? NIL : Math.round(m.median) + "%";
+          var band = (m.p10 == null || m.p90 == null) ? NIL
+            : Math.round(m.p10) + "% to " + Math.round(m.p90) + "%";
+          // Flagged only when this morning sits outside the usual range,
+          // which is the one case the row is telling the reader something.
+          var odd = (m.today != null && m.p10 != null && m.p90 != null &&
+            (m.today < m.p10 || m.today > m.p90));
+          return "<tr><td>" + esc(m.words) + (odd
+            ? '<span class="ptag">outside the usual range</span>' : "") +
+            '</td><td class="n">' + mine + '</td><td class="n">' + mid +
+            '</td><td class="n">' + band + "</td></tr>";
+        }).join("") + "</tbody></table></div></div></section>";
+    }
+
+    // WHAT NOON HAS GRADED BEFORE. "What noon will grade" prints the levels
+    // the pass is about to read and can say nothing about them. This is the
+    // question that raises: when noon said a name never triggered, how often
+    // was that the end of it.
+    var nn = pr.noon;
+    if (nn && nn.states && nn.states.length) {
+      html += '<section><div class="shead"><h2>What noon has graded before</h2>' +
+        '<span class="note">mirrors What noon will grade</span></div>' +
+        '<p class="snote">Every replayed name graded at ' + esc(nn.clock || "12:00") +
+        ' by the noon pass\'s own rule, against what the same name did by the ' +
+        'close. The column that matters is the last one: a noon verdict that ' +
+        'the close rarely overturns is worth acting on and one it often does ' +
+        'is not. ' + esc(nn.note || "") + '.' +
+        (nn.ungraded ? " " + commas(nn.ungraded) + " row(s) had no levels or " +
+          "no tape to grade and are left out." : "") +
+        '</p><div class="card pad"><div class="scroll"><table class="ptable">' +
+        '<thead><tr><th>Noon said</th><th class="n">Names</th>' +
+        '<th class="n">Sessions</th><th class="n">Reached the buy by the close' +
+        '</th><th class="n">Middle result</th><th>How they ended' + paxis(dom) +
+        "</th></tr></thead><tbody>" +
+        nn.states.map(function (s) {
+          var head = "<td>" + esc(String(s.state).replace(/_/g, " ")) +
+            '</td><td class="n">' + s.rows + '</td><td class="n">' +
+            s.sessions + "</td>";
+          if (s.held) {
+            return "<tr>" + head + '<td colspan="3" class="empty">' +
+              "Too few to say.</td></tr>";
+          }
+          return "<tr>" + head + '<td class="n">' + s.reached_by_close +
+            '<div class="sub">' + (s.share_reached == null ? NIL
+              : s.share_reached + " in 100") + '</div></td><td class="n ' +
+            dirClass(s.median) + '">' + pct(s.median) + "</td><td>" +
+            pstrip(s, dom) + "</td></tr>";
+        }).join("") + "</tbody></table></div></div></section>";
+    }
+
     // WHAT THESE COUNTS ARE NOT, printed on the screen and not left in a
     // document nobody opens. Each of the three is a known way for a number
     // above to be wrong, and a reader who cannot see them cannot weigh one.

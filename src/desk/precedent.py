@@ -154,23 +154,22 @@ def in_words(conditions: dict[str, Any], dropped: list[str]) -> list[str]:
 
 def _select(connection: sqlite3.Connection, conditions: dict[str, Any],
             dropped: list[str], version: str,
-            eligible: int | None = 1) -> list[dict[str, Any]]:
+            eligible: int | None = None) -> list[dict[str, Any]]:
     where = ["rule_version = ?"]
     params: list[Any] = [version]
-    # THE PUBLISHED POPULATION, not every name the pool subscribed. The replay
-    # screens all ~42 subscribed names a session and writes a graded row for
-    # each, cleared or refused, so without this fence a base rate pools the
-    # names a morning published with the names it turned down. It reads as a
-    # narrow error and is not one: the widening ladder drops above_prior_high
-    # at step 3 and rvol_band at step 4, and past that point a group is "every
-    # subscribed name in this gap and price and size band", where the rejects
-    # outnumber the passes. Rows written before the column existed carry NULL
-    # and are excluded by this comparison, which is correct: a row that cannot
-    # say whether its screen admitted the name cannot answer this question.
+    # THE POPULATION IS EVERY REPLAYED CANDIDATE, and the day screen's verdict
+    # is deliberately NOT a filter on it. This defaulted to day_eligible = 1
+    # for part of 2026-09-05 and that was a population error, caught before any
+    # figure was drawn from it: the list this screen sits beside is the RANKED
+    # candidates, published with an entry and a stop whether or not they
+    # cleared the day screen, and on the four live sessions on file only 0, 0,
+    # 3 and 2 of twelve did. Matching today's mostly refused names against a
+    # history of only cleared ones asks the past a question about a different
+    # kind of name, which is the exact fault the peak buckets already carry a
+    # paragraph about.
     #
-    # eligible=0 selects the refused names instead, which is the population the
-    # floors section counts, and eligible=None pools both and is used by
-    # nothing that prints a base rate.
+    # eligible=0 selects the refused names, which is the population the floors
+    # section counts and the only caller that passes anything here.
     if eligible is not None:
         where.append("day_eligible = ?")
         params.append(eligible)
@@ -327,12 +326,13 @@ def peak_buckets(connection: sqlite3.Connection,
     """
     version = version or rule_version()
     edges = [int(x) for x in _CRIT.text_list("precedent", "peak_minutes_buckets")]
-    # day_eligible = 1 for the reason _select carries it: this is the split of
-    # the population the desk PUBLISHED, and pooling the refused names into it
-    # would describe a list no reader was ever shown.
+    # No day_eligible filter, for the reason _select gives: the ranked list
+    # this screen sits beside carries names the day screen refused, so a split
+    # over cleared names only would describe a population the reader is not
+    # looking at.
     rows = [dict(r) for r in connection.execute(
         "SELECT date, pnl_pct, minutes_to_peak FROM research_outcomes "
-        "WHERE rule_version = ? AND day_eligible = 1 AND booked = 1 "
+        "WHERE rule_version = ? AND booked = 1 "
         "AND pnl_pct IS NOT NULL AND minutes_to_peak IS NOT NULL", (version,))]
     # "and up" rather than "over", because a value ON an edge belongs to the
     # band above it and the last bucket therefore CONTAINS its edge. A label
@@ -384,10 +384,14 @@ def coverage(connection: sqlite3.Connection,
         "MIN(date) AS first, MAX(date) AS last, "
         "SUM(CASE WHEN booked = 1 THEN 1 ELSE 0 END) AS reached "
         "FROM research_outcomes WHERE rule_version = ? "
+        "AND skip_reason IS NULL", (version,)).fetchone()
+    # The day screen's split of that same population, counted apart and printed
+    # as its own line rather than used as a filter. It is what the floors
+    # section reads, and it is the number that says how much of the replayed
+    # history is names the desk would have refused.
+    cleared = connection.execute(
+        "SELECT COUNT(*) AS rows FROM research_outcomes WHERE rule_version = ? "
         "AND day_eligible = 1 AND skip_reason IS NULL", (version,)).fetchone()
-    # The refused names, counted apart rather than folded in. They are the
-    # population the floors section reads, and printing one total over both
-    # would put a number on the screen that describes no list anybody saw.
     refused = connection.execute(
         "SELECT COUNT(*) AS rows, COUNT(DISTINCT date) AS sessions "
         "FROM research_outcomes WHERE rule_version = ? "
@@ -395,13 +399,452 @@ def coverage(connection: sqlite3.Connection,
     return {
         "rows": row["rows"] or 0, "sessions": row["sessions"] or 0,
         "reached": row["reached"] or 0,
+        "cleared_rows": cleared["rows"] or 0,
         "refused_rows": refused["rows"] or 0,
         "refused_sessions": refused["sessions"] or 0,
+        # Said in words on the screen, because a count with no stated
+        # population is the thing this whole feature exists not to print.
+        "population": ("every name the replayed pool subscribed and the "
+                       "reconstructed screen priced, whether or not it cleared "
+                       "the day screen, which is the same kind of name the "
+                       "ranked morning list carries"),
         "first": row["first"], "last": row["last"], "version": version,
         "command": "python -m research.replay_outcomes --fetch --all "
                    "then --evaluate --all",
         "survivorship": SURVIVORSHIP,
     }
+
+
+# Day conditions the REPLAY CANNOT EVALUATE, with the reason each one is
+# absent. A screen tabulating the floors uniformly would print a measured zero
+# beside a floor nobody ran, which is the defect class this project logs most,
+# so the absence is named here and drawn as an absence.
+UNEVALUATED_FLOORS = {
+    "require_fresh_price": (
+        "no collector ran on a replayed session, so the print age this floor "
+        "reads was never measured and it turned nobody down. On the live "
+        "sessions on file it cut 2 of 12 and 3 of 12"),
+}
+
+
+def floors(connection: sqlite3.Connection,
+           version: str | None = None) -> dict[str, Any]:
+    """What each day screen condition turned down, and what those names did.
+
+    The mirror of the Morning screen's "How the list was cut", asked backwards.
+    That section says which floor cut how many THIS morning; this one says what
+    the names a floor cut went on to do, across every replayed session. The two
+    are different questions and only the second can say whether a floor is
+    paying for itself.
+
+    A CONDITION CAN CUT A NAME THAT ANOTHER CONDITION ALSO CUT, so these counts
+    overlap by construction and are not a partition. Said here because a reader
+    summing the column and finding more than the population would otherwise be
+    right to distrust the whole screen.
+
+    The unmeasured split is carried through from the engine for the reason
+    scan.evaluate_eligibility records it: a floor a name failed because the
+    number came in low and a floor it failed because nobody could compute the
+    number are different facts, and the fix for the second is an instrument.
+    """
+    version = version or rule_version()
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, day_failed, day_failed_unmeasured, booked, pnl_pct "
+        "FROM research_outcomes WHERE rule_version = ? AND skip_reason IS NULL "
+        "AND day_eligible IS NOT NULL", (version,))]
+    min_rows = _CRIT.integer("precedent", "min_rows")
+    min_sessions = _CRIT.integer("precedent", "min_sessions")
+
+    seen: dict[str, list[dict[str, Any]]] = {}
+    unmeasured: dict[str, int] = {}
+    for row in rows:
+        keys = [k.strip() for k in (row["day_failed"] or "").split(",") if k.strip()]
+        never = {k.strip() for k in
+                 (row["day_failed_unmeasured"] or "").split(",") if k.strip()}
+        for key in keys:
+            seen.setdefault(key, []).append(row)
+            if key in never:
+                unmeasured[key] = unmeasured.get(key, 0) + 1
+
+    out = []
+    for key, cut in sorted(seen.items(), key=lambda kv: -len(kv[1])):
+        stats = summarise(cut)
+        held = stats["sessions"] < min_sessions or stats["rows"] < min_rows
+        out.append({
+            "condition": key, "rows": stats["rows"], "sessions": stats["sessions"],
+            "unmeasured": unmeasured.get(key, 0),
+            "held": held,
+            "reached": None if held else stats["reached"],
+            "median": None if held else stats["median"],
+            "best": None if held else stats["best"],
+            "worst": None if held else stats["worst"],
+        })
+    for key, why in sorted(UNEVALUATED_FLOORS.items()):
+        if key not in seen:
+            out.append({"condition": key, "rows": None, "sessions": None,
+                        "unmeasured": None, "held": True, "reached": None,
+                        "median": None, "best": None, "worst": None, "why": why})
+    return {"conditions": out, "population": len(rows),
+            "cleared": sum(1 for r in rows if not (r["day_failed"] or "").strip()),
+            "floors": {"rows": min_rows, "sessions": min_sessions},
+            "overlap": ("a name refused by two floors is counted under both, so "
+                        "these do not sum to the population")}
+
+
+# The evidence splits this population can rebuild, and the roll lines it
+# cannot. Named as a pair on purpose: a section showing three of nine
+# sentences without saying which six are missing reads as a complete answer.
+EVIDENCE_UNAVAILABLE = (
+    "band_thin, coverage_absent, dropped_no_coverage, catalyst_absent and "
+    "catalyst_unknown cannot be rebuilt from a replayed session: the first "
+    "three need the collector's own coverage record and no collector ran, and "
+    "the catalyst pair needs the EODHD news tags per article, which the session "
+    "cache does not hold")
+
+
+def evidence(connection: sqlite3.Connection,
+             version: str | None = None) -> dict[str, Any]:
+    """Whether a name the evidence was thin on did worse than one it was not.
+
+    The mirror of "What the evidence is worth", which prints what the packet
+    resolved about its own evidence and stops there. This asks the question
+    that section cannot: did it matter. Three of the roll's nine sentences are
+    reconstructible and the other six are named rather than quietly dropped.
+
+    Each split is drawn as a PAIR, thin against not thin, because a median for
+    the thin group alone is a number with no scale.
+    """
+    version = version or rule_version()
+    min_rows = _CRIT.integer("precedent", "min_rows")
+    min_sessions = _CRIT.integer("precedent", "min_sessions")
+    floor_sessions = _CRIT.integer("baseline", "min_sessions_for_rvol")
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, booked, pnl_pct, pm_rvol, baseline_sessions, pm_bars "
+        "FROM research_outcomes WHERE rule_version = ? AND skip_reason IS NULL",
+        (version,))]
+
+    def pair(label: str, test: Any, thin_words: str, thick_words: str,
+             note: str | None = None) -> dict[str, Any]:
+        thin = [r for r in rows if test(r) is True]
+        thick = [r for r in rows if test(r) is False]
+        # A row the test cannot answer joins NEITHER side. It is not thin and
+        # it is not thick, and putting it on either would be an answer invented
+        # out of a missing input.
+        unknown = len(rows) - len(thin) - len(thick)
+        out = {"split": label, "thin_words": thin_words,
+               "thick_words": thick_words, "unknown": unknown, "note": note,
+               "sides": []}
+        for words, group in ((thin_words, thin), (thick_words, thick)):
+            stats = summarise(group)
+            held = stats["sessions"] < min_sessions or stats["rows"] < min_rows
+            out["sides"].append({
+                "words": words, "rows": stats["rows"],
+                "sessions": stats["sessions"], "held": held,
+                "reached": None if held else stats["reached"],
+                "median": None if held else stats["median"],
+                "worst": None if held else stats["worst"],
+                "best": None if held else stats["best"]})
+        return out
+
+    def thin_baseline(row: dict[str, Any]) -> Any:
+        used = row.get("baseline_sessions")
+        return None if used is None else used < floor_sessions
+
+    def rvol_null(row: dict[str, Any]) -> Any:
+        # Never None: the column's own NULL IS the answer to this question.
+        return row.get("pm_rvol") is None
+
+    def few_bars(row: dict[str, Any]) -> Any:
+        bars = row.get("pm_bars")
+        return None if bars is None else bars < 2
+
+    return {
+        "splits": [
+            pair("thin_baseline", thin_baseline,
+                 f"fewer than {floor_sessions} baseline sessions",
+                 f"{floor_sessions} or more",
+                 "the RVOL denominator rests on this many prior premarkets"),
+            pair("rvol_null", rvol_null,
+                 "premarket RVOL could not be computed at all",
+                 "RVOL was measured"),
+            pair("window_thin", few_bars,
+                 "one premarket minute or none",
+                 "more than one premarket minute"),
+        ],
+        "unavailable": EVIDENCE_UNAVAILABLE,
+        "floors": {"rows": min_rows, "sessions": min_sessions},
+    }
+
+
+def morning_shape(connection: sqlite3.Connection, today: list[dict[str, Any]],
+                  version: str | None = None) -> dict[str, Any]:
+    """Where this morning's mix sits against every replayed morning's.
+
+    The mirror of "What kind of morning this is", and a NARROWER thing than
+    that section, which is why it says so on the screen. That one draws sector,
+    catalyst class and direction. Sector is on no disk for a replayed session
+    and catalyst class needs per article news tags the session cache does not
+    hold, so neither can be rebuilt at any price. What survives is the shape
+    the bands already carry, and it is drawn on a shared axis: today's share
+    against the median replayed share, so a reader can see which way this
+    morning leans rather than reading a number with no scale.
+    """
+    version = version or rule_version()
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, gap_band, rvol_band, price_band, cap_band, "
+        "earnings_overnight FROM research_outcomes "
+        "WHERE rule_version = ? AND skip_reason IS NULL", (version,))]
+    by_session: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        by_session.setdefault(row["date"], []).append(row)
+
+    def share(group: list[dict[str, Any]], test: Any) -> float | None:
+        answered = [r for r in group if test(r) is not None]
+        if not answered:
+            return None
+        return sum(1 for r in answered if test(r)) * 100.0 / len(answered)
+
+    measures = [
+        ("gapped up", lambda r: (None if not r.get("gap_band")
+                                 else str(r["gap_band"]).startswith("up"))),
+        ("reported overnight", lambda r: (None if r.get("earnings_overnight") is None
+                                          else bool(r["earnings_overnight"]))),
+        ("volume at least 3x normal",
+         lambda r: (None if not r.get("rvol_band")
+                    else str(r["rvol_band"]) not in ("under 1.5x", "1.5x to 3x"))),
+        ("priced over 50", lambda r: (None if not r.get("price_band")
+                                      else str(r["price_band"]) == "50 and up")),
+    ]
+
+    def today_row(candidate: dict[str, Any]) -> dict[str, Any]:
+        cut = lookalike.bands_for(
+            candidate.get("gap"), candidate.get("rvol"), candidate.get("price"),
+            (candidate.get("mcap") / 1_000_000.0
+             if isinstance(candidate.get("mcap"), (int, float)) else None))
+        overnight = candidate.get("earn_overnight")
+        return {**cut, "earnings_overnight":
+                None if overnight is None else int(bool(overnight))}
+
+    mine = [today_row(c) for c in today]
+    out = []
+    for words, test in measures:
+        past = sorted(v for v in (share(g, test) for g in by_session.values())
+                      if v is not None)
+        out.append({
+            "words": words,
+            "today": share(mine, test),
+            "median": None if not past else round(_percentile(past, 0.5), 1),
+            "p10": None if not past else round(_percentile(past, 0.10), 1),
+            "p90": None if not past else round(_percentile(past, 0.90), 1),
+            "sessions": len(past),
+        })
+    return {"measures": out, "sessions": len(by_session),
+            "unavailable": ("sector and catalyst class are drawn on the Morning "
+                            "screen and cannot be rebuilt here: no replayed "
+                            "session carries a sector, and the catalyst class "
+                            "needs per article news tags the cache does not hold")}
+
+
+def _daily_stats(rows: list[dict[str, Any]], min_rows: int,
+                 min_sessions: int) -> dict[str, Any]:
+    """The printed figures for a group of DAILY BAR rows.
+
+    A different instrument from summarise() and deliberately not sharing its
+    shape. There is no entry here, so there is no "reached the buy" and no
+    booked count: these names were never priced. What exists is where the day
+    opened and where it went, so the figures are open to close and the best a
+    holder could have got, and calling either of them a result would be a
+    simulated trade wearing a daily bar's clothes.
+    """
+    sessions = {r["date"] for r in rows}
+    closes = [float(r["open_to_close_pct"]) for r in rows
+              if r.get("open_to_close_pct") is not None]
+    highs = [float(r["open_to_high_pct"]) for r in rows
+             if r.get("open_to_high_pct") is not None]
+    held = len(sessions) < min_sessions or len(rows) < min_rows
+    out = {"rows": len(rows), "sessions": len(sessions), "held": held,
+           "median": None, "p25": None, "p75": None, "worst": None,
+           "best": None, "up": None, "median_high": None}
+    if closes and not held:
+        out["median"] = round(_percentile(closes, 0.5), 4)
+        out["p25"] = round(_percentile(closes, 0.25), 4)
+        out["p75"] = round(_percentile(closes, 0.75), 4)
+        out["worst"] = round(min(closes), 4)
+        out["best"] = round(max(closes), 4)
+        out["up"] = sum(1 for v in closes if v > 0)
+    if highs and not held:
+        out["median_high"] = round(_percentile(highs, 0.5), 4)
+    return out
+
+
+NO_ENTRY_HERE = ("these names were never priced, so there is no entry, no stop "
+                 "and no trade. The figures are the DAY: where it opened and "
+                 "where it went, which is a weaker question than the one the "
+                 "table above answers and must not be read beside it")
+
+
+def missed(connection: sqlite3.Connection) -> dict[str, Any]:
+    """What gapped that the pool never subscribed, by how far it gapped.
+
+    The mirror of the Morning screen's "What else moved", asked of a year. That
+    section names today's movers outside the pool; this one asks whether the
+    pool has been missing the ones that mattered, band by band, and it is the
+    only section here that can answer a question about the SELECTION rather
+    than about the screen.
+
+    Rows whose session the replay has not screened carry subscribed NULL and
+    are excluded: on those, "not subscribed" is unknown rather than false.
+    """
+    min_rows = _CRIT.integer("precedent", "min_rows")
+    min_sessions = _CRIT.integer("precedent", "min_sessions")
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, ticker, gap_band, subscribed, open_to_close_pct, "
+        "open_to_high_pct FROM research_daily WHERE gapped = 1 "
+        "AND subscribed IS NOT NULL AND skip_reason IS NULL")]
+    unknown = connection.execute(
+        "SELECT COUNT(*) FROM research_daily WHERE gapped = 1 "
+        "AND subscribed IS NULL").fetchone()[0]
+
+    bands: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        bands.setdefault(row["gap_band"] or "not banded", []).append(row)
+
+    out = []
+    for band_name, group in sorted(bands.items(), key=lambda kv: -len(kv[1])):
+        taken = [r for r in group if r["subscribed"]]
+        left = [r for r in group if not r["subscribed"]]
+        stats = _daily_stats(left, min_rows, min_sessions)
+        out.append({
+            "band": band_name, "gapped": len(group),
+            "subscribed": len(taken), "missed": len(left),
+            "share_subscribed": (round(len(taken) * 100.0 / len(group))
+                                 if group else None),
+            **stats})
+    return {"bands": out, "unknown_sessions": unknown,
+            "floors": {"rows": min_rows, "sessions": min_sessions},
+            "caveat": NO_ENTRY_HERE, "survivorship": SURVIVORSHIP}
+
+
+def events(connection: sqlite3.Connection) -> dict[str, Any]:
+    """What names that reported overnight did, split by the kind of report.
+
+    The mirror of "Coming up", which lists tomorrow's reporters and stops. This
+    asks what the last few hundred of them did, which is the only thing that
+    makes a calendar entry worth reading before the open.
+
+    The beat and miss split is the vendor's own estimate against its own
+    actual. It is absent on a large share of rows, and an absent estimate joins
+    NEITHER side rather than being read as a miss.
+    """
+    min_rows = _CRIT.integer("precedent", "min_rows")
+    min_sessions = _CRIT.integer("precedent", "min_sessions")
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, earnings_tier_key, earnings_estimate, earnings_actual, "
+        "gapped, open_to_close_pct, open_to_high_pct FROM research_daily "
+        "WHERE earnings_tier_key IS NOT NULL AND skip_reason IS NULL")]
+
+    tiers: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        tiers.setdefault(row["earnings_tier_key"], []).append(row)
+    by_tier = []
+    for key, group in sorted(tiers.items(), key=lambda kv: -len(kv[1])):
+        gapped = [r for r in group if r["gapped"]]
+        by_tier.append({
+            "tier": key, "rows": len(group),
+            "gapped": len(gapped),
+            "share_gapped": round(len(gapped) * 100.0 / len(group)) if group else None,
+            **_daily_stats(group, min_rows, min_sessions)})
+
+    def surprise(row: dict[str, Any]) -> Any:
+        estimate, actual = row.get("earnings_estimate"), row.get("earnings_actual")
+        if estimate is None or actual is None:
+            return None
+        return actual > estimate
+
+    beat = [r for r in rows if surprise(r) is True]
+    missed_it = [r for r in rows if surprise(r) is False]
+    return {
+        "tiers": by_tier,
+        "surprise": [
+            {"words": "beat the estimate",
+             **_daily_stats(beat, min_rows, min_sessions)},
+            {"words": "came in at or under it",
+             **_daily_stats(missed_it, min_rows, min_sessions)},
+        ],
+        "no_estimate": len(rows) - len(beat) - len(missed_it),
+        "floors": {"rows": min_rows, "sessions": min_sessions},
+        "caveat": NO_ENTRY_HERE, "survivorship": SURVIVORSHIP,
+    }
+
+
+def noon(connection: sqlite3.Connection,
+         version: str | None = None) -> dict[str, Any]:
+    """What a noon verdict has been worth by the close.
+
+    The mirror of "What noon will grade", which prints the levels the pass is
+    about to read back and can say nothing about them. This is the question
+    that section raises and cannot answer: when noon said a name never
+    triggered, how often was that the end of it.
+
+    The grades are midday/scan_midday.grade's own, folded from the same cached
+    minutes the simulation read, so the state names here are the state names
+    the live pass writes and not a second vocabulary.
+    """
+    version = version or rule_version()
+    min_rows = _CRIT.integer("precedent", "min_rows")
+    min_sessions = _CRIT.integer("precedent", "min_sessions")
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, noon_state, noon_now_vs_fill_pct, booked, pnl_pct "
+        "FROM research_outcomes WHERE rule_version = ? "
+        "AND noon_skip_reason IS NULL AND noon_state IS NOT NULL", (version,))]
+    ungraded = connection.execute(
+        "SELECT COUNT(*) FROM research_outcomes WHERE rule_version = ? "
+        "AND noon_skip_reason IS NOT NULL", (version,)).fetchone()[0]
+
+    states: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        states.setdefault(row["noon_state"], []).append(row)
+
+    out = []
+    for state, group in sorted(states.items(), key=lambda kv: -len(kv[1])):
+        stats = summarise(group)
+        # THE ONE FIGURE THIS SECTION EXISTS FOR: of the names noon called one
+        # way, how many the close called the other. A noon verdict that never
+        # changes is a verdict worth acting on and one that often changes is
+        # not, and no other section here can say which.
+        turned = sum(1 for r in group if r.get("booked"))
+        out.append({
+            "state": state, "rows": stats["rows"], "sessions": stats["sessions"],
+            "held": stats["sessions"] < min_sessions or stats["rows"] < min_rows,
+            "reached_by_close": turned,
+            "share_reached": (round(turned * 100.0 / len(group)) if group
+                              else None),
+            "median": stats["median"], "worst": stats["worst"],
+            "best": stats["best"], "p25": stats["p25"], "p75": stats["p75"]})
+    for entry in out:
+        if entry["held"]:
+            for key in ("reached_by_close", "share_reached", "median", "worst",
+                        "best", "p25", "p75"):
+                entry[key] = None
+    return {"states": out, "ungraded": ungraded,
+            "clock": _CRIT.text("midday", "run_time"),
+            "floors": {"rows": min_rows, "sessions": min_sessions},
+            "note": ("the grade is the noon pass's own rule read off the same "
+                     "cached minutes, and reached by the close is the paper "
+                     "rule's own answer for the same name, so a row where they "
+                     "disagree is one instrument disagreeing with the other "
+                     "rather than two measurements of different things")}
+
+
+def daily_coverage(connection: sqlite3.Connection) -> dict[str, Any]:
+    """How much daily bar history exists, for the two sections that read it."""
+    row = connection.execute(
+        "SELECT COUNT(*) AS rows, COUNT(DISTINCT date) AS sessions, "
+        "MIN(date) AS first, MAX(date) AS last FROM research_daily "
+        "WHERE skip_reason IS NULL").fetchone()
+    return {"rows": row["rows"] or 0, "sessions": row["sessions"] or 0,
+            "first": row["first"], "last": row["last"],
+            "command": "python -m research.replay_daily --evaluate --all"}
 
 
 def build(candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -424,4 +867,18 @@ def build(candidates: list[dict[str, Any]]) -> dict[str, Any]:
                           "name": candidate.get("name"),
                           "conditions": conditions, **group})
         buckets = peak_buckets(connection, version) if cover["rows"] else []
-    return {"coverage": cover, "names": names, "peaks": buckets}
+        cut = floors(connection, version) if cover["rows"] else None
+        worth = evidence(connection, version) if cover["rows"] else None
+        shape = (morning_shape(connection, candidates, version)
+                 if cover["rows"] else None)
+        # The two daily bar sections stand on their OWN coverage, because
+        # research_daily fills from the session caches alone and can hold a
+        # year while research_outcomes is still empty. Gating them on the
+        # trade table would blank two sections that have answers.
+        daily = daily_coverage(connection)
+        gone = missed(connection) if daily["rows"] else None
+        calendar = events(connection) if daily["rows"] else None
+        midday = noon(connection, version) if cover["rows"] else None
+    return {"coverage": cover, "names": names, "peaks": buckets,
+            "floors": cut, "evidence": worth, "shape": shape,
+            "daily": daily, "missed": gone, "events": calendar, "noon": midday}

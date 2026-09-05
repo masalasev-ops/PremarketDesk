@@ -15017,34 +15017,46 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
             "never drop, so an unknown value has no group to draw and the "
             "screen must say so rather than guess")
 
-    # 8. A NAME THE SCREEN TURNED DOWN IS NOT IN A BASE RATE. The replay grades
-    #    every subscribed name, cleared or refused, because the refused ones are
-    #    the population the floors section counts. Both live in one table, so
-    #    the only thing keeping them apart is the day_eligible fence, and
-    #    without it the widening ladder does the damage: it drops
-    #    above_prior_high at step 3 and rvol_band at step 4, and past that a
-    #    group is every subscribed name in a gap and price and size band, where
-    #    the names the morning refused outnumber the names it published.
+    # 8. THE DAY SCREEN'S VERDICT IS NOT A SILENT FILTER ON THE BASE RATE, and
+    #    the population every count is over is stated rather than assumed. The
+    #    ranked list this screen sits beside carries names the day screen
+    #    refused: on the four live sessions on file only 0, 0, 3 and 2 of twelve
+    #    cleared it. So a history fenced to cleared names only would answer a
+    #    question about a different kind of name, and this claim exists because
+    #    that fence was briefly the default on 2026-09-05.
     load(min_rows * 2, min_sessions + 4)
-    for index in range(min_rows * 6):
+    for index in range(min_rows * 2):
         connection.execute(
             "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (f"2026-01-{(index % (min_sessions + 4)) + 1:02d}", f"R{index}", "v1",
              shape["earnings_overnight"], shape["gap_band"], shape["rvol_band"],
              shape["price_band"], shape["cap_band"], shape["above_prior_high"],
-             1, 9.9, 20, None, 0))
-    fenced = precedent.match(connection, dict(shape), "v1")
-    if fenced["rows"] != min_rows * 2:
+             1, 1.5, 20, None, 0))
+    pooled = precedent.match(connection, dict(shape), "v1")
+    if pooled["rows"] != min_rows * 4:
         failures.append(
-            f"a group of {min_rows * 2} published rows beside {min_rows * 6} "
-            f"refused ones counted {fenced['rows']}. A name the day screen "
-            "turned down was never on anybody's list, and counting what it did "
-            "describes a morning no reader was shown")
-    if fenced["median"] is not None and abs(fenced["median"] - 9.9) < 0.01:
+            f"a group of {min_rows * 2} cleared rows beside {min_rows * 2} "
+            f"refused ones counted {pooled['rows']} rather than {min_rows * 4}. "
+            "The day screen's verdict is not a filter on this count: the "
+            "morning list carries names it refused, and dropping them here "
+            "matches today's names against a population they are not in")
+    refused_only = precedent._select(connection, dict(shape), [], "v1", eligible=0)
+    if len(refused_only) != min_rows * 2:
         failures.append(
-            "the median came back as the refused rows' own figure, so the "
-            "base rate is being computed over the names the screen rejected")
+            f"selecting the refused names returned {len(refused_only)} rather "
+            f"than {min_rows * 2}, so the floors section cannot isolate the "
+            "population it counts")
     connection.close()
+
+    # 9. EVERY COUNT SAYS WHAT IT IS A COUNT OF. A base rate with no stated
+    #    population is the thing this feature exists not to print.
+    with store.session() as connection:
+        store.init(connection)
+        cover = precedent.coverage(connection)
+    if not str(cover.get("population") or "").strip():
+        failures.append(
+            "the precedent coverage block names no population, so the screen "
+            "prints counts without saying which names they are counts of")
 
     # 6. THE MORNING SCREEN IS NOT TOUCHED BY THIS FEATURE, which is the
     #    owner's requirement and not a preference. The base rate went onto a

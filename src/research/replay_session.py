@@ -477,12 +477,43 @@ def report(result: dict[str, Any]) -> None:
         print(f"  not replayed: {note}")
 
 
+# The sentinel --fetch and --evaluate carry when they are given no date. A
+# bare flag means every cached day, which is what a year long replay needs and
+# what replay_outcomes already accepts; a date still means that date alone, so
+# nothing that already invokes this module changes.
+ALL_DAYS = "\x00all"
+
+
+def replayable_days() -> tuple[list[str], list[str]]:
+    """(the pool days that can be replayed, the ones refused and why).
+
+    A day is replayable only when a gap_stats window is dated strictly before
+    it. metrics_before refuses the rest, and it is right to: ranking a pool on
+    a propensity computed partly from the session being replayed hands the
+    replay a look ahead the morning never had. Refusing them one at a time
+    inside a loop would print the same traceback a hundred times, so the split
+    is made once and the refusal is reported as a count.
+    """
+    days = backtest_pool.cached_sessions()
+    with store.session() as connection:
+        store.init(connection)
+        row = connection.execute(
+            "SELECT MIN(as_of) AS first FROM gap_stats").fetchone()
+    earliest = row["first"] if row else None
+    if not earliest:
+        return [], days
+    return ([d for d in days if d > str(earliest)],
+            [d for d in days if d <= str(earliest)])
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--fetch", metavar="DAY",
-                        help="fetch one cached session's premarket tape")
-    parser.add_argument("--evaluate", metavar="DAY",
-                        help="screen one session from its cached tape")
+    parser.add_argument("--fetch", metavar="DAY", nargs="?", const=ALL_DAYS,
+                        help="fetch one cached session's premarket tape, or "
+                             "every replayable one when given no date")
+    parser.add_argument("--evaluate", metavar="DAY", nargs="?", const=ALL_DAYS,
+                        help="screen one session from its cached tape, or "
+                             "every cached one when given no date")
     parser.add_argument("--write", action="store_true",
                         help="with --evaluate, write source='reconstructed' rows")
     parser.add_argument("--dry-run", action="store_true",
@@ -501,23 +532,58 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.fetch:
-        outcome = fetch(args.fetch, force=args.force)
-        print(json.dumps(outcome, indent=2, sort_keys=True))
-        return 1 if outcome.get("error") else 0
+        if args.fetch != ALL_DAYS:
+            outcome = fetch(args.fetch, force=args.force)
+            print(json.dumps(outcome, indent=2, sort_keys=True))
+            return 1 if outcome.get("error") else 0
+        days, refused = replayable_days()
+        if refused:
+            print(f"replay: {len(refused)} cached session(s) have no gap_stats "
+                  f"window dated before them and are not replayable without a "
+                  f"look ahead ({refused[0]} to {refused[-1]}). Build earlier "
+                  "windows with selection.gap_stats --as-of to reach them.")
+        print(f"replay: fetching the premarket tape for {len(days)} session(s)")
+        errors = 0
+        for day in days:
+            outcome = fetch(day, force=args.force)
+            if outcome.get("error"):
+                errors += 1
+                print(f"  {day}  error: {outcome['error']}")
+            elif outcome.get("skipped"):
+                print(f"  {day}  skipped: {outcome['skipped']}")
+            else:
+                print(f"  {day}  {outcome.get('written')} name(s) cached")
+        print(f"replay: {len(days) - errors} of {len(days)} session(s) cached")
+        return 1 if errors else 0
 
     if args.evaluate:
-        if not cache_path(args.evaluate).is_file():
-            print(f"replay: no cached tape for {args.evaluate}. Run --fetch first.")
+        days = ([args.evaluate] if args.evaluate != ALL_DAYS
+                else cached_days())
+        if not days:
+            print("replay: no cached premarket tape. Run --fetch first.")
             return 1
-        result = evaluate(args.evaluate)
-        report(result)
-        if args.write:
-            outcome = write_day(result, dry_run=args.dry_run)
-            if outcome.get("refused"):
-                print(f"replay: REFUSED to write {outcome['refused']}")
+        refused = 0
+        for day in days:
+            if not cache_path(day).is_file():
+                print(f"replay: no cached tape for {day}. Run --fetch first.")
                 return 1
-            print(f"replay: {outcome.get('dry_run') or str(outcome['written']) + ' row(s) written'} "
-                  f"as source={SOURCE!r}")
+            result = evaluate(day)
+            report(result)
+            if args.write:
+                outcome = write_day(result, dry_run=args.dry_run)
+                if outcome.get("refused"):
+                    # A refusal is a fence doing its job, not a crash. On one
+                    # named day it is the answer; across a year it is a handful
+                    # of dates the desk really ran, and stopping the whole
+                    # replay for them would strand the other two hundred.
+                    refused += 1
+                    print(f"replay: REFUSED to write {outcome['refused']}")
+                    continue
+                print(f"replay: {outcome.get('dry_run') or str(outcome['written']) + ' row(s) written'} "
+                      f"as source={SOURCE!r}")
+        if refused:
+            print(f"replay: {refused} of {len(days)} day(s) refused, which is "
+                  "the live record being protected rather than a failure")
         return 0
 
     parser.print_help()

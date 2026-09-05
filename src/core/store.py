@@ -269,10 +269,70 @@ CREATE TABLE IF NOT EXISTS research_outcomes (
     baseline_median  REAL,
     baseline_sessions INTEGER,
     pm_bars          INTEGER,
+    -- What the noon pass would have said, folded from the same cached minutes
+    -- and graded by midday/scan_midday.grade itself rather than a copy of it.
+    noon_state       TEXT,
+    noon_state_reason TEXT,
+    noon_stop_state  TEXT,
+    noon_now_vs_fill_pct REAL,
+    noon_move_pct    REAL,
+    noon_skip_reason TEXT,
     -- Why a number is absent, in words, when it is absent. Never a zero.
     match_note       TEXT,
     computed_at      TEXT NOT NULL,
     PRIMARY KEY (date, ticker, rule_version)
+);
+
+CREATE TABLE IF NOT EXISTS research_daily (
+    -- What a name the desk never traded did on a replayed session, from its
+    -- DAILY BAR. Written only by research/replay_daily.py, read only by
+    -- desk/precedent.py, and never pooled with research_outcomes.
+    --
+    -- A SEPARATE TABLE BECAUSE IT IS A DIFFERENT MEASUREMENT, not a variant of
+    -- the same one. research_outcomes holds simulated trades: an entry, a
+    -- stop, a fill, a booked flag, all under a paper rule_version. A name that
+    -- gapped and was never subscribed has no premarket tape, therefore no
+    -- premarket high, therefore no entry and no stop, and simulate cannot be
+    -- run on it under any rule. Its honest outcome is open to close and open
+    -- to high. Putting such a row in research_outcomes would join
+    -- precedent._select's denominator, whose only exclusion is skip_reason,
+    -- and silently change what every count on the shipped screen means.
+    --
+    -- No rule_version in the key, for the same reason: nothing here was
+    -- simulated, so there is no rule under which it was measured.
+    date             TEXT NOT NULL,
+    ticker           TEXT NOT NULL,
+    -- 1 the replayed pool subscribed it, 0 it did not, NULL the replay has not
+    -- screened this session at all. Never a computed 0: not subscribed and not
+    -- yet replayed are different facts and the screen must be able to tell.
+    subscribed       INTEGER,
+    -- 1 it cleared the session's own gap floor, 0 it is here as an overnight
+    -- reporter that did not gap.
+    gapped           INTEGER,
+    -- MEASURED AT THE OPEN against the prior close, which is NOT the gap the
+    -- morning screens on: that one is measured at the scan clock off the
+    -- premarket tape, and no tape exists for a name nobody listened to.
+    gap_at_open_pct  REAL,
+    gap_band         TEXT,
+    open_price       REAL,
+    high_price       REAL,
+    low_price        REAL,
+    close_price      REAL,
+    prior_close      REAL,
+    volume           REAL,
+    open_to_close_pct REAL,
+    open_to_high_pct REAL,
+    open_to_low_pct  REAL,
+    -- discover's own tier for the name on this session, when it reported.
+    earnings_tier_key TEXT,
+    earnings_timing  TEXT,
+    earnings_estimate REAL,
+    earnings_actual  REAL,
+    -- Why a number is absent, in words. Never a zero.
+    skip_reason      TEXT,
+    note             TEXT,
+    computed_at      TEXT NOT NULL,
+    PRIMARY KEY (date, ticker)
 );
 """
 
@@ -523,6 +583,18 @@ _RESEARCH_OUTCOMES_LATER_COLUMNS = (
     ("baseline_median", "REAL"),
     ("baseline_sessions", "INTEGER"),
     ("pm_bars", "INTEGER"),
+    # WHAT THE NOON PASS WOULD HAVE SAID, folded from the same cached minutes
+    # the simulation already read and graded by midday/scan_midday.grade
+    # itself. The shipped rule is imported rather than reimplemented, for the
+    # reason paper_ledger.simulate is: a base rate and the live pass have to be
+    # the same instrument or the difference between them is a finding about
+    # nothing. noon_skip_reason says why a row has no grade, in words.
+    ("noon_state", "TEXT"),
+    ("noon_state_reason", "TEXT"),
+    ("noon_stop_state", "TEXT"),
+    ("noon_now_vs_fill_pct", "REAL"),
+    ("noon_move_pct", "REAL"),
+    ("noon_skip_reason", "TEXT"),
 )
 
 

@@ -108,8 +108,82 @@ NO_BARS = "no regular session bars for this name on this date"
 NO_REFS = "the reconstructed screen produced no entry or stop reference"
 
 
+# Why a row has no noon grade, in words rather than as a blank state.
+NO_NOON_BARS = ("the cached tape carries no minute between the open and the "
+                "midday clock for this name, so the noon pass has nothing to "
+                "read and this is unknown rather than untriggered")
+
+
 def ensure_dirs() -> None:
     OUTCOMES_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _bar_time(bar: dict[str, Any]) -> dt.datetime | None:
+    text = str(bar.get("t") or "").strip()
+    if not text:
+        return None
+    try:
+        return dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def noon_grade(bars: list[dict[str, Any]], cutoff: dt.datetime,
+               row: dict[str, Any], prior_close: float | None) -> dict[str, Any]:
+    """What the midday pass would have said about this name, at its own clock.
+
+    THE SHIPPED RULE IS IMPORTED AND NOT REIMPLEMENTED, exactly as
+    paper_ledger.simulate is, and for the same reason: a base rate and the live
+    pass have to be the same instrument, or the difference between what the
+    replay says and what noon says is a finding about two different rules.
+    scan_midday.grade takes a pick and a quote, so the only work here is
+    folding the cached minutes into the quote it expects.
+
+    average_volume is not available for a replayed session, so grade() writes
+    its own reason and leaves day_rvol null. That is the function doing what it
+    was built to do rather than something this fold has to paper over.
+    """
+    taken = []
+    for bar in bars:
+        stamp = _bar_time(bar)
+        if stamp is None:
+            continue
+        if stamp >= cutoff:
+            # The cache is written in order and simulate depends on that, so
+            # the first bar at or past the clock ends the fold.
+            break
+        taken.append(bar)
+    if not taken:
+        return {"noon_skip_reason": NO_NOON_BARS}
+
+    opens = _as_float(taken[0].get("o"))
+    highs = [_as_float(b.get("h")) for b in taken]
+    lows = [_as_float(b.get("l")) for b in taken]
+    last = _as_float(taken[-1].get("c"))
+    volume = sum((_as_float(b.get("v")) or 0.0) for b in taken)
+    quote = {
+        "open": opens,
+        "high": max([h for h in highs if h is not None], default=None),
+        "low": min([lo for lo in lows if lo is not None], default=None),
+        "last": last,
+        "prev_close": prior_close,
+        "volume": volume,
+        # Absent for a replayed session and left absent. grade() records the
+        # reason itself rather than being handed a substitute.
+        "average_volume": None,
+        "refused_reason": None,
+    }
+    from midday import scan_midday
+
+    graded = scan_midday.grade(row, quote)
+    return {
+        "noon_state": graded.get("state"),
+        "noon_state_reason": graded.get("state_reason"),
+        "noon_stop_state": graded.get("stop_state"),
+        "noon_now_vs_fill_pct": graded.get("now_vs_fill_pct"),
+        "noon_move_pct": graded.get("move_pct"),
+        "noon_skip_reason": None,
+    }
 
 
 def cache_path(day: str) -> Any:
@@ -248,6 +322,12 @@ def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]],
                  "floor was never evaluated and turned nobody down; its count "
                  "is unmeasured here and is not a zero")
     inputs, _outcome = backtest_pool.load_session(day)
+    # The prior close the noon grade measures its move against, taken from
+    # discover's own bulk read rather than derived back out of the gap, so the
+    # replayed pass divides by the number the live one would have.
+    closes = inputs.get("prior_closes") or {}
+    for symbol, fact in facts.items():
+        fact["prior_close"] = _as_float(closes.get(symbol))
     block = (inputs.get("earnings") or {})
     status = str(block.get("status") or "").strip().lower()
     # THE VOCABULARY IS discover's AND IT HAS NO "ok" IN IT. This compared the
@@ -290,6 +370,14 @@ def evaluate(day: str) -> dict[str, Any]:
     facts, earnings, notes = _session_facts(day)
     versions = paper_ledger.rule_versions()
     stamp = ettime.stamp(ettime.now_et())
+    # The midday clock, in the session's own timezone, taken from CRITERIA
+    # rather than written as noon here. [Midday] run_time is the pass's own
+    # setting and a second copy of it would drift the day somebody moves it.
+    session_start, _session_end = paper_ledger.session_window(day)
+    hour, minute = (int(part) for part
+                    in _CRIT.text("midday", "run_time").split(":")[:2])
+    noon_cutoff = session_start.replace(hour=hour, minute=minute,
+                                        second=0, microsecond=0)
     out: list[dict[str, Any]] = []
 
     for row in rows:
@@ -367,6 +455,25 @@ def evaluate(day: str) -> dict[str, Any]:
                             "pnl_pct", "max_drawdown_pct", "mfe_pct_held",
                             "minutes_to_trigger", "minutes_to_peak", "bars_held"):
                     record[key] = result.get(key)
+            # THE NOON GRADE IS TAKEN WHETHER OR NOT THE TRADE BOOKED, and on
+            # the same bars, because "never triggered by noon" is one of the
+            # four states the pass reports and is the interesting one. A row
+            # with no refs still has no levels to grade against, so it carries
+            # the skip reason rather than a state.
+            if entry is None or stop is None:
+                record["noon_skip_reason"] = NO_REFS
+            elif not bars:
+                record["noon_skip_reason"] = NO_BARS
+            else:
+                record.update(noon_grade(
+                    bars, noon_cutoff,
+                    {"ticker": ticker, "entry_ref": entry, "stop_ref": stop,
+                     "pm_high": _as_float(row["pm_high"]),
+                     "pm_low": _as_float(row["pm_low"]),
+                     "gap_pct": gap, "score": None, "conviction": None,
+                     "day_eligible": fact.get("day_eligible"),
+                     "swing_eligible": None},
+                    fact.get("prior_close")))
             # The one catalyst fact this population holds, said on every row so
             # a reader of the table is never left to infer it from an absence.
             record["match_note"] = (
