@@ -584,16 +584,32 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
     print(f"universe: {len(series)} symbols had at least one session")
 
     # Stage one, everything that costs no extra calls.
+    #
+    # THE THREE REFUSALS ARE COUNTED SEPARATELY, added 2026-09-05. The funnel
+    # recorded only how many cleared all three, so a name dropped for having 19
+    # bars and one dropped for trading at a dollar were the same number, and
+    # the cost of min_sessions sitting equal to lookback_sessions could not be
+    # read from anything on disk. It is a real question, because at equality a
+    # single missing bar excludes a name for the whole week until the Sunday
+    # rebuild, and it cannot be answered from the backtest cache either: that
+    # cache is trimmed to universe membership, so the excluded names were never
+    # in it. Counting here is what makes the threshold askable.
     staged: list[dict[str, Any]] = []
+    short_history = 0
+    below_price = 0
+    below_dollar_volume = 0
     for code, bars in series.items():
         sessions = len(bars)
         if sessions < min_sessions:
+            short_history += 1
             continue
         price = bars[-1][0]
         if not price_rule.test(price):
+            below_price += 1
             continue
         dollar_volume = sum(close * volume for close, volume in bars) / sessions
         if not dollar_volume_rule.test(dollar_volume):
+            below_dollar_volume += 1
             continue
         staged.append(
             {
@@ -661,6 +677,19 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
         "previous_count": _previous_count(),
         "listed_common_stocks": len(listed_as),
         "cleared_price_and_liquidity": len(staged),
+        # What the three stage one rules each turned away. short_history is the
+        # one worth watching: it is the cost of min_sessions being equal to
+        # lookback_sessions, which makes one missing bar an exclusion for the
+        # week.
+        "stage_one_funnel": {
+            "had_a_bar": len(series),
+            "short_history": short_history,
+            "min_sessions": min_sessions,
+            "lookback_sessions": lookback,
+            "below_price": below_price,
+            "below_dollar_volume": below_dollar_volume,
+            "cleared": len(staged),
+        },
         # Why each examined name is or is not in this file, by name and not
         # only by count. check_admissible reads it to answer "is this whole",
         # which the count alone cannot: a sweep starved of quota and a vendor

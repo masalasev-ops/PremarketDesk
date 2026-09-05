@@ -15,6 +15,47 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy ninth: a reminder that goes quiet, and a fix the suite refused
+
+Two more of tier 6's smaller items. One of them is a change I wrote, the suite
+rejected, and I reverted, which is the part worth recording.
+
+THE FIX THAT WAS WRONG. backup_evidence refuses a session whose collector row
+never ended, so a morning killed by a power cut is skipped every night and then
+falls out of [Backup] catchup_sessions having never been copied. I changed it
+to back such a session up once its day was over, on the argument that nothing
+can still be appending to a capture whose window has closed. An existing claim
+failed, and checking rather than adjusting it showed the claim was right:
+backup_evidence runs at line 75 of the nightly and backfill_premarket at line
+79, the backup is WRITE ONCE, and an unfinished capture frozen as the permanent
+copy is exactly the 2026-08-24 defect where five bars stood in for a 2,089 bar
+session. Reverted. The --date override exists so that a person decides, and
+that is the design rather than an oversight.
+
+WHAT WAS ACTUALLY BROKEN WAS THE REMINDER. The nightly prints the --date advice
+beside a refused session every night, and then the day leaves the catch up
+window and is never mentioned again, so the prompt disappears at the moment the
+loss becomes permanent. stranded_sessions() keeps naming a session for as long
+as its capture is on disk, asked per ARTIFACT against HELD_SINCE so one that
+predates an artifact joining the held set is not reported forever, which is the
+cry wolf shape this module is written to avoid. Nothing is copied on that
+check's authority. It was extracted from inline code so it could be claimed at
+all: nothing is stranded today, the backup holding 17 sessions, so there is no
+live case to watch it fire on.
+
+THE UNIVERSE HISTORY FLOOR IS NOW MEASURABLE, threshold unchanged.
+min_sessions equals lookback_sessions, so one missing bar excludes a name for
+the week until the Sunday rebuild. The funnel recorded only how many names
+cleared all three stage one rules, so a name dropped for having 19 bars and one
+dropped for trading at a dollar were the same number. The backtest cache cannot
+answer it either, and a count taken there is CIRCULAR: that cache is trimmed to
+universe membership, so the excluded names were never in it. A first attempt at
+measuring it that way returned a reassuring 5 of 2,751 and meant nothing.
+universe.json now carries stage_one_funnel with short_history, below_price and
+below_dollar_volume counted apart. Read it after the next Sunday rebuild.
+
+Suite green at 221 claims, not one path changed under the working tree.
+
 ## 2026-09-05, seventy eighth: the rank says which names it turned down, and one plan item is wrong
 
 Two of tier 6, and neither was finished by doing what the item said. One had a

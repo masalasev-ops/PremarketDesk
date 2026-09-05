@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty claims, a count read off
+and the two pages. It now carries two hundred and twenty one claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11269,6 +11269,86 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
           "and empty ONLY when all four looked and none did")
 
 
+def claim_an_unheld_session_keeps_being_named(failures: list[str]) -> None:
+    """A session that falls out of the catch up window unheld is still reported.
+
+    THE PROMPT USED TO STOP AT THE WINDOW EDGE. A morning whose collector was
+    killed records no ended_at, so collector_finished refuses it and the
+    nightly prints the --date advice beside it. Then the day falls out of
+    [Backup] catchup_sessions and is not mentioned again, so the reminder
+    disappears at exactly the moment the loss becomes permanent. Losing the one
+    artifact class this module calls irreplaceable, by going quiet.
+
+    NOTHING IS COPIED ON ITS OWN AUTHORITY, and that is the half that must not
+    move. An unfinished session stays unfinished and a person decides, because
+    a partial copy held is worse than none: write once makes it permanent, and
+    that is the 2026-08-24 defect where five bars stood in for 2,089. This only
+    keeps naming the session while it is still recoverable.
+
+    Asked per artifact against HELD_SINCE, because a session older than the
+    date an artifact joined the held set was never a candidate for it, and
+    reporting those forever is the cry wolf shape the module is written to
+    avoid.
+    """
+    from night import backup_evidence as be
+
+    saved_dir = config.PREMARKET_DIR
+    saved_artifacts = be._ARTIFACTS
+    saved_held = dict(be.HELD_SINCE)
+    with tempfile.TemporaryDirectory(prefix="pmd-strand-") as raw:
+        where = pathlib.Path(raw)
+        live, root = where / "premarket", where / "backup"
+        live.mkdir()
+        root.mkdir()
+        config.PREMARKET_DIR = live
+        be._ARTIFACTS = (("premarket", lambda day: live / f"{day}.jsonl"),)
+        be.HELD_SINCE["premarket"] = "2026-01-01"
+        try:
+            # Twelve past sessions with a capture and no backup at all. With a
+            # catch up of 10, the two oldest are past the window.
+            days = [f"2026-05-{n:02d}" for n in range(1, 13)]
+            for day in days:
+                (live / f"{day}.jsonl").write_text("{}\n", encoding="utf-8")
+            stranded = dict(be.stranded_sessions(10))
+            if days[0] not in stranded or days[1] not in stranded:
+                failures.append(
+                    f"the sessions past the catch up window were not reported "
+                    f"as unheld: {sorted(stranded)}. A capture that stops being "
+                    "named is a capture nobody will take")
+            if days[-1] in stranded:
+                failures.append(
+                    "a session still INSIDE the catch up window was reported "
+                    "as stranded, which would fire beside the --date advice "
+                    "the nightly already prints for it")
+
+            # A day older than the date the artifact joined the held set was
+            # never a candidate, and must not be reported forever.
+            be.HELD_SINCE["premarket"] = "2026-05-05"
+            older = dict(be.stranded_sessions(10))
+            if days[0] in older:
+                failures.append(
+                    f"{days[0]} is older than HELD_SINCE for its artifact and "
+                    "was still reported. That is history, not a finding, and "
+                    "printing it every night is the cry wolf shape")
+
+            # A source not on disk cannot be copied and is not at risk.
+            be.HELD_SINCE["premarket"] = "2026-01-01"
+            (live / f"{days[0]}.jsonl").unlink()
+            gone = dict(be.stranded_sessions(10))
+            if days[0] in gone:
+                failures.append(
+                    "a session with no capture on disk was reported as unheld. "
+                    "There is nothing to take, so it is not a finding")
+        finally:
+            config.PREMARKET_DIR = saved_dir
+            be._ARTIFACTS = saved_artifacts
+            be.HELD_SINCE.clear()
+            be.HELD_SINCE.update(saved_held)
+    print("  still named  a session that leaves the catch up window unheld keeps "
+          "being reported while it is recoverable, and nothing is copied on this "
+          "check's authority")
+
+
 def claim_the_rank_records_which_names_it_turned_down(
         failures: list[str]) -> None:
     """The 08:45 rank names the candidates it cut, not just how many.
@@ -18308,6 +18388,7 @@ def main() -> int:
     run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
     run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
     run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_an_unheld_session_keeps_being_named, failures)
     run_claim(failures, claim_the_rank_records_which_names_it_turned_down, failures)
     run_claim(failures, claim_the_slot_floor_is_judged_on_both_denominators, failures)
     run_claim(failures, claim_a_split_is_not_a_gap_the_replay_should_have_caught, failures)

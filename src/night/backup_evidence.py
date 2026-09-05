@@ -379,6 +379,45 @@ def collector_finished(day: str, rows: list[dict[str, Any]] | None = None
                    "job_status tracked it")
 
 
+
+def stranded_sessions(catchup: int) -> list[tuple[str, list[str]]]:
+    """Past sessions that fell out of the catch up window still unheld.
+
+    WHERE THE PROMPT USED TO STOP. A morning whose collector was killed records
+    no ended_at, so collector_finished refuses it and main prints the --date
+    advice beside it every night. Then the day falls out of [Backup]
+    catchup_sessions and stops being mentioned at all, so the reminder
+    disappears at exactly the moment the loss becomes permanent.
+
+    NOTHING IS COPIED ON THIS FUNCTION'S AUTHORITY. An unfinished session stays
+    unfinished and a person still decides, which is the 2026-08-24 rule and it
+    does not move: a partial copy held is worse than none, because write once
+    makes it permanent. All this does is keep naming the session for as long as
+    it is still recoverable.
+
+    Asked per ARTIFACT, because HELD_SINCE differs per artifact and a session
+    older than the date one of them joined the held set was never a candidate
+    for it. Reporting those would be the cry wolf shape this module's docstring
+    says it must not have. A source that is not on disk is not reported either:
+    it cannot be copied and it is not at risk.
+    """
+    if not config.PREMARKET_DIR.is_dir():
+        return []
+    every = sorted({p.stem for p in config.PREMARKET_DIR.glob("*.jsonl")
+                    if len(p.stem) == 10}, reverse=True)
+    today = ettime.today_str()
+    out: list[tuple[str, list[str]]] = []
+    for day in [d for d in every[catchup:] if d < today]:
+        missing = [
+            label for label, locate in _ARTIFACTS
+            if day >= HELD_SINCE.get(label, "0000-00-00")
+            and locate(day).is_file()
+            and not _target(day, label, locate(day)).is_file()
+        ]
+        if missing:
+            out.append((day, missing))
+    return out
+
 def survey(days: list[str]) -> dict[str, Any]:
     """What would be copied, what is already held, and what disagrees."""
     copied: list[dict[str, Any]] = []
@@ -731,6 +770,28 @@ def main(argv: list[str] | None = None) -> int:
                      "than none, because write once makes it permanent. "
                      f"Force it with --date {day} once the session is "
                      "over."))
+    # PAST THE WINDOW AND STILL NOT HELD, which is where the prompt above used
+    # to stop. A morning whose collector was killed records no end, so it is
+    # SKIPPED every night with the --date advice printed beside it, and then it
+    # falls out of [Backup] catchup_sessions and stops being mentioned at all.
+    # The loss becomes permanent at exactly the moment the reminder disappears.
+    #
+    # Nothing is copied here on its own authority: an unfinished session stays
+    # unfinished and the operator still decides, which is the 2026-08-24 rule
+    # and it does not move. What changes is that the session keeps being named
+    # for as long as it is recoverable, instead of going quiet.
+    if not args.date:
+        stranded = stranded_sessions(catchup)
+        for day, missing in stranded[:5]:
+            print(f"  NOT HELD AND PAST THE WINDOW  {day} is older than the "
+                  f"{catchup} session catch up and still has no backup of "
+                  f"{', '.join(missing)}. The capture is on disk and is the "
+                  f"only copy: take it with --date {day}, or it is lost the "
+                  "next time prune or a rebuild touches it")
+        if len(stranded) > 5:
+            print(f"  NOT HELD AND PAST THE WINDOW  and {len(stranded) - 5} "
+                  "further session(s)")
+
     result = run(sorted(ready), dry_run=args.dry_run)
     report(result)
 

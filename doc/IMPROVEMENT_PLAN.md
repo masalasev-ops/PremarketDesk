@@ -1377,15 +1377,45 @@ and probe_socket_cap refuses inside it; re-time it or retire it.
 
 - backup_evidence never holds a power cut morning: an open collector row
   is refused and after catchup_sessions the session leaves the window
-  uncopied unless someone runs --date.
+  uncopied unless someone runs --date. HALF FIXED 2026-09-05, and the half
+  left undone is deliberate.
+
+  The obvious fix, backing the session up once its day is over on the ground
+  that nothing can still be appending, was written and then REVERTED. The
+  suite refused it and was right: backup_evidence runs at line 75 of the
+  nightly and backfill_premarket at line 79, the backup is WRITE ONCE, and an
+  unfinished capture frozen as the permanent copy is exactly the 2026-08-24
+  defect where five bars stood in for a 2,089 bar session. The --date override
+  exists precisely so a person decides that, and a person deciding is the
+  point.
+
+  What was wrong was that the prompt went QUIET. The nightly prints the --date
+  advice beside a refused session every night, and then the day falls out of
+  [Backup] catchup_sessions and is never mentioned again, so the reminder
+  disappears at the moment the loss becomes permanent. stranded_sessions()
+  keeps naming it for as long as the capture is on disk, asked per artifact
+  against HELD_SINCE so a session that predates an artifact joining the held
+  set is not reported forever. Nothing is copied on that check's authority.
 - In slots mode a containment failure (a peer's ticker in a headline
   slot) still exits 2 and costs the chain, where the offending text is one
   located slot the guard could blank; and subprocess timeouts on Windows
   can block on a grandchild's inherited pipe, so the 1,007 second bound
   rests on the CLI not spawning one.
 - universe.py: min_sessions equals lookback_sessions, so one missing bar
-  excludes a name for the week; gap_stats counts a split session as a gap
-  where pool_recall refuses it.
+  excludes a name for the week. MADE MEASURABLE 2026-09-05, threshold
+  unchanged. The funnel recorded only how many names cleared all three stage
+  one rules, so a name dropped for having 19 bars and one dropped for trading
+  at a dollar were the same number, and the cost of the equality could not be
+  read from anything on disk. The backtest cache cannot answer it either: it is
+  trimmed to universe membership, so the excluded names were never in it, and a
+  count taken there is circular. universe.json now carries stage_one_funnel
+  with short_history, below_price and below_dollar_volume counted apart. Read
+  it after the next Sunday rebuild and the threshold question has an answer;
+  moving the threshold before that would be moving it blind.
+- gap_stats counts a split session as a gap where pool_recall refuses it. The
+  refusal now exists in the replay too, on the vendor's adjustment, but
+  gap_stats itself is untouched: its propensity is computed over raw closes, so
+  a name that split inside the window carries one fake gap in its own history.
 - CRITERIA prose lines that the parser reads as keys inside [Analyst].
   DONE 2026-09-05. One was still live, a backticked key from the slots note
   demonstrating its own shape at column zero, and the note is reflowed so it
