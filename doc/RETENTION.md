@@ -10,7 +10,10 @@ data/backtest/ deleted outright on the ground that it is refetchable.
 night/prune_data.sweep_runs, wired into the nightly after desk.compact and
 before the desk rebuild. It freed 4.46 MB the first time it ran, taking runs/ from
 11 MB to 5.6 MB, by dropping ten proven duplicate snapshots. Step 2, having
-scan stop writing the duplicate at all, is NOT built and is the one item left.
+scan stop writing the duplicate at all, is NOT built. Re-costed 2026-09-05 and
+deliberately left: it now saves about a megabyte, because step 1 already drops
+every snapshot the night it is verified, and it would edit the morning path.
+See the note under it in the order of work.
 See CHANGELOG 2026-09-04 sixtieth.]
 
 It deletes nothing on an age. The oldest thing on disk is dated 2026-08-13 and
@@ -263,6 +266,25 @@ writing a second sweeper beside it.
      which says premarket high, low and VWAP come from the collector file,
      than reading a copy of it is. Touches scan.py, artifacts.py and the two
      suites that read the snapshot by name.
+
+     NOT DONE, and re-costed 2026-09-05 rather than left as an open task.
+     Step 1 has already taken the disk: exactly ONE snapshot exists on this
+     machine right now, 1.3 MB for the most recent session, because the
+     nightly drops each one as soon as verify_intraday agrees. So the standing
+     saving from step 2 is about a megabyte, not the six step 1 recovered, and
+     what it buys is hard rule 6 read more literally rather than space.
+
+     Against that, the copy is doing two jobs its own docstring names. The
+     collector appends until 09:25 and scan reads at 08:45, so the copy is
+     what makes the parse run on bytes that have stopped moving; and it is the
+     frozen record of exactly what the packet was built from, which the
+     collector file cannot be afterwards because it has grown since. Both
+     survive only until the nightly, which is precisely when they are needed.
+
+     A megabyte is not worth a change to the morning path, which is the least
+     safe place in this system to edit, so this stays open on purpose with the
+     arithmetic written down. If it is taken later, take it for hard rule 6
+     and not for the disk.
   3. Warm compression at 30 sessions, and the gzip aware reader in core/files.
   4. The sessions table in the database, holding the compacted summary row.
      This is what Sessions, Record and Name query instead of opening a hundred

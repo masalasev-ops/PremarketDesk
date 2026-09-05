@@ -15,6 +15,47 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, eightieth: the after close crossing goes on disk, and a hundred percent that means nothing
+
+The last two of tier 6's smaller items. One produced a number that looks like a
+result and is not, which is the part worth keeping.
+
+THE AFTER CLOSE CROSSING IS WRITTEN. CHANGELOG thirty eighth and DECISIONS
+seventh quote 26 gappers, 23 in pool and 2 subscribed, and that measurement was
+never written to any file, so it could not be checked or re-derived.
+data/research/after_close_reporters-2026-09-05.json now holds it over the 188
+replayed sessions that carry an after close reporter: 4,965 such names, 2,636
+of them gapped past the discovery floor with corporate actions refused, 1,043
+subscribed.
+
+IN POOL READS 2,636 OF 2,636 AND IS A TAUTOLOGY. The first run of this reported
+"100 percent were in the pool", which reads as a strong recall figure and is no
+information at all: an after close reporter is in the pool BECAUSE discover's
+earnings source is what put it there. The column is kept, because the identity
+is worth being able to see, and the file says in its own provenance that it is
+not a recall number.
+
+WHAT THE FILE ACTUALLY SAYS is the subscribed line: 1,043 of 2,636, two in
+five. The pool holds every after close reporter that gapped and the cap and the
+tier floor carry two in five of them, so three in five are found and then cut.
+That is the same tier 2 cut region 6.1 measured today and deliberately left
+alone. It does not replace the quoted figure either, which was 8 LIVE sessions
+against 188 reconstructed ones, and the file records that rather than letting
+the two be read as one series.
+
+RETENTION STEP 2 IS RE-COSTED AND LEFT. Step 1 already took the disk: exactly
+one snapshot exists on this machine, 1.3 MB, because the nightly drops each one
+as soon as verify_intraday agrees. So step 2 saves about a megabyte rather than
+the six step 1 recovered, and what it buys is hard rule 6 read more literally
+rather than space. The copy meanwhile does two jobs its own docstring names:
+the collector appends until 09:25 while scan reads at 08:45, so it is what
+makes the parse run on bytes that have stopped moving, and it is the frozen
+record of what the packet was built from. A megabyte does not justify editing
+the morning path, and the arithmetic is now in RETENTION.md rather than the
+item sitting open with no cost beside it.
+
+Suite green at 221 claims, not one path changed under the working tree.
+
 ## 2026-09-05, seventy ninth: a reminder that goes quiet, and a fix the suite refused
 
 Two more of tier 6's smaller items. One of them is a change I wrote, the suite

@@ -1429,8 +1429,21 @@ and probe_socket_cap refuses inside it; re-time it or retire it.
   question: spelled right for 1, defined once for 3, in a read section for 4.
 - The after close measurement (26 gappers, 23 in pool, 2 subscribed) is
   quoted in CHANGELOG thirty eighth and DECISIONS seventh and is not on
-  disk; write the crossing as data/research/after_close_reporters-<date>.json
-  the next time it is run.
+  disk. DONE 2026-09-05:
+  data/research/after_close_reporters-2026-09-05.json, over the 188 replayed
+  sessions holding an after close reporter. 4,965 such names, 2,636 gapped,
+  1,043 subscribed.
+
+  IN POOL READS 100 PERCENT AND IS A TAUTOLOGY, said in the file itself so
+  nobody quotes it as recall: an after close reporter is in the pool because
+  discover's earnings source is what put it there. The number that means
+  something is SUBSCRIBED, two in five, so three in five gapping after close
+  reporters are found by the pool and then cut by the cap. That is the same
+  cut region 6.1 measured and left alone.
+
+  It does not replace the quoted figure, which was 8 LIVE sessions against 188
+  reconstructed ones, and the file says so rather than letting the two be read
+  as one series.
 
 ---
 
