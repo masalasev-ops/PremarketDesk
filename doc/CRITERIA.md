@@ -523,7 +523,7 @@ price                         = > 3        # applied by the 08:45 scan, not here
 gap_pct                       = > 3        # applied by the 08:45 scan to the measured gap, matches the day setup gap floor
 run_time                      = 07:15
 provisional_run_time          = 03:55      # the first pass, whose pool the collector opens on at [Collector] start_time. tasks/register_tasks.ps1 ExtraStart must match; the code reads nothing from it but the reconciliation compares the machine against the script
-max_subscribed_candidates     = 42         # seed: the collector's 50 subscription cap less the 8 context tickers
+max_subscribed_candidates     = 42         # the collector's 50 subscription cap less the 8 context tickers, so it is a CEILING and not a choice. MEASURED 2026-09-05 as still binding hard: see the cap note below the freshness note
 within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
 within_tier_fallback          = atr_pct_20d      # for names propensity cannot score: it needs 100 sessions, this needs 20
 min_slots_per_tier            = 4          # MEASURED, see the ordering note below
@@ -647,6 +647,43 @@ move a parameter.
 So the key stays at 6, now measured rather than seeded, and the thing to
 re-open is not the boundary but the tier 2 CAP, which 6.1 and the after close
 crossing both point at from different directions.
+
+### The cap note, measured 2026-09-05
+
+THE CAP IS THE BINDING CONSTRAINT, and nothing had measured it. Three separate
+questions today ended up pointing here: 6.1 found the slot floor's benefit
+reverses between the two denominators, the after close crossing found three in
+five gapping after close reporters are held by the pool and then cut, and 6.2
+found that promoting more names into tier 2 backfires. All three are about what
+happens at the cut, so the cut was swept. SHIPPED, floor 4, 240 sessions, mean
+subscribed recall per session:
+
+  cap   past 3 percent   past 8 percent   per added slot, past 8
+  14    0.0571           0.1015
+  20    0.0843           0.1639           0.0104
+  26    0.1081           0.2243           0.0101
+  32    0.1290           0.2638           0.0066
+  38    0.1478           0.2927           0.0048
+  42    0.1589           0.3113           0.0047
+
+IT IS STILL CLIMBING AT THE CEILING. The marginal subscription is worth about
+0.005 of big gap recall, and that figure is FLAT across the last two steps
+rather than decaying toward nothing. For scale, the entire slot floor question
+6.1 spent a day on was worth 0.004 in total, so one more subscription is worth
+more than the whole of that argument.
+
+WHICH MAKES THE EIGHT CONTEXT TICKERS A PRICED DECISION rather than an
+assumption. 42 is 50 less 8, and the 50 is the socket's, so those 8 slots cost
+somewhere near 0.03 to 0.04 of big gap recall on this slope. That is an
+EXTRAPOLATION past the measured range and is written as one. It is also not a
+pure trade: the context tickers feed the market snapshot the report is written
+against, so the eight are buying something this measurement cannot see. What
+has changed is that the price is now known.
+
+THE OTHER END IS A VENDOR QUESTION nobody has asked. probe_socket_cap tested
+whether the 50 symbol cap starves message DELIVERY. It never asked whether the
+plan allows more than 50 subscriptions, which on this slope is the single
+highest value question left in selection.
 
 ### The pool note
 

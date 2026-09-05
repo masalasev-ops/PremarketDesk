@@ -15,6 +15,56 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, eighty second: the cap is the thing, and the plan hits its line cap saying so
+
+THREE QUESTIONS TODAY ALL ENDED AT THE SAME PLACE and none of them was
+measuring it. 6.1 found the slot floor's benefit reverses between the 3 and 8
+percent denominators. The after close crossing found three in five gapping
+after close reporters are held by the pool and then cut. 6.2 found that
+promoting more names into tier 2 backfires because that tier is already
+oversubscribed. All three are about what happens at the cut, so the cut was
+swept, which nothing had done. SHIPPED, floor 4, 240 sessions:
+
+  cap   past 3 percent   past 8 percent   per added slot, past 8
+  14    0.0571           0.1015
+  20    0.0843           0.1639           0.0104
+  26    0.1081           0.2243           0.0101
+  32    0.1290           0.2638           0.0066
+  38    0.1478           0.2927           0.0048
+  42    0.1589           0.3113           0.0047
+
+IT IS STILL CLIMBING AT THE CEILING. The marginal subscription is worth about
+0.005 of big gap recall and that figure is FLAT across the last two steps
+rather than decaying toward nothing, so the cap has not reached diminishing
+returns anywhere in the measured range. For scale, the entire slot floor
+question 6.1 spent the day on was worth 0.004 in total: one more subscription
+is worth more than that whole argument.
+
+THE EIGHT CONTEXT TICKERS ARE NOW PRICED rather than assumed. 42 is the
+socket's 50 less 8, so those slots cost somewhere near 0.03 to 0.04 of big gap
+recall on this slope. That is an EXTRAPOLATION past the measured range and is
+written as one, and it is not a pure trade either: the context tickers feed the
+market snapshot the report is written against, so they buy something this
+measurement cannot see. What changed is that the price is known.
+
+THE UNASKED QUESTION. probe_socket_cap only ever asked whether the 50 symbol
+cap starves message DELIVERY. It never asked whether the plan allows more than
+50 subscriptions, which on this slope is the highest value question left in
+selection and costs a read of the vendor's terms rather than any quota. Filed
+as 6.10.
+
+AND THE PLAN HIT ITS 1,500 LINE CAP saying all this, at 1,525. It was NOT added
+to _DOC_CAP_EXEMPT: that list is for files that are append only by design, and
+a working plan is not one, so exempting it would have been fixing the check
+instead of the file. The prose moved to doc/research/TIER6_MEASURED.md and the
+plan keeps a verdict per item pointing there, 1,481 lines. The split matches
+what was already true of this repo: CRITERIA holds the tables beside the keys
+they are about, because that is where a derivation belongs; the plan holds
+verdicts; the working notes live under doc/research. That moved the write up
+count from nine to ten, which the architecture page asserts and a claim checks.
+
+Suite green at 221 claims, not one path changed under the working tree.
+
 ## 2026-09-05, eighty first: the freshness split is measured, and its own argument does not survive
 
 6.2 said the six hour freshness split puts after close corporate news in the

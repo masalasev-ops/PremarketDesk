@@ -1235,27 +1235,11 @@ rather than age. The after close tier already lifts the reporters; this is
 about the non reporter names with real evening news (SOLS, SMMT, OOMA,
 NTNX, WEN, HLF, BNTX in the seven sessions).
 
-RUN 2026-09-05, AND THE ARGUMENT DOES NOT SURVIVE ITS OWN TEST. Both
-candidates were built as orderings G and H and measured over 240 sessions. The
-table is in CRITERIA's new freshness note.
-
-Window position, which is what this item implicitly asks for, is DECISIVELY
-WORSE: -0.0159 past 3 percent at a t of -6.45 and -0.0259 past 8 percent at a
-t of -4.90, better on 19 sessions and worse on 62. Promoting the evening bucket
-is not free. It is a LARGE bucket, 82 names on 2026-09-02 alone, so moving it
-into tier 2 dilutes that tier and pushes higher propensity names out of the
-cap. The names this item wants reached are reached at the cost of more names
-than it gains.
-
-Dropping the split entirely is not distinguishable from the shipped rule,
-+0.0027 at 3 percent with a t of 1.86 and +0.0004 at 8 percent with a t of
-0.09. Useful to know, because it says the six hour boundary is not doing much
-work in either direction, and not a reason to move anything.
-
-news_fresh_hours stays at 6, upgraded from seed to measured. What this points
-at is not the boundary but the tier 2 CAP, which 6.1 and the after close
-crossing reach from two other directions: three in five gapping after close
-reporters are found by the pool and then cut.
+RUN 2026-09-05, AND THE ARGUMENT DOES NOT SURVIVE ITS OWN TEST. Tiering by
+window position is decisively WORSE, and dropping the split entirely is
+indistinguishable from the shipped rule. news_fresh_hours stays at 6, now
+measured rather than seeded. CRITERIA's freshness note carries the table and
+doc/research/TIER6_MEASURED.md the reasoning.
 
 ### 6.3 There is no discovery pass after 07:15
 
