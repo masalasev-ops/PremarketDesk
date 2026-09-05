@@ -102,6 +102,14 @@ def eod_day(api: eodhd.EodhdClient, day: dt.date, wanted: set[str]) -> dict[str,
             "l": _as_float(row.get("low")),
             "c": _as_float(row.get("close")),
             "v": _as_float(row.get("volume")),
+            # THE VENDOR'S OWN RECORD OF A CORPORATE ACTION, added 2026-09-05.
+            # close / adjusted_close is flat between actions and steps at each
+            # one, which is the test pool_recall and fill_outcomes both use. It
+            # was dropped here, so a two for one split read as a clean 50
+            # percent gap and joined the set every recall figure is scored
+            # against. Days cached before this carry no "a" and are filled by
+            # backfill_adjusted_close.
+            "a": _as_float(row.get("adjusted_close")),
         }
     files.write_text_atomically(
         path, json.dumps(out), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
@@ -559,6 +567,57 @@ def screen_passed(
     return passed
 
 
+def _day_bars(day: str) -> dict[str, Any]:
+    try:
+        return json.loads((EOD_DIR / f"{day}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def refuse_corporate_actions(session_date: str, prior_session: str | None,
+                             gappers: dict[str, Any],
+                             ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The gappers a corporate action does not explain, and the census.
+
+    pool_recall's rule, on this cache's field names, so the replay and the live
+    measurement refuse the same names for the same reason. A two for one split
+    is a clean fifty percent gap that no screen could have caught and no screen
+    should be scored for missing: leaving it in inflates the denominator every
+    recall figure is divided by, and it does it in the biggest bucket, where
+    the ordering work actually cares.
+
+    A name whose adjustment cannot be computed at BOTH ends is counted as
+    unchecked and KEPT, never quietly dropped. An unchecked gapper is a gapper
+    nobody could rule on, which is not the same as one ruled genuine, and the
+    census carries both numbers so a reader can see how much of the set was
+    only assumed.
+    """
+    drift_limit = _CRIT.number("outcomes", "max_adjustment_drift_pct")
+    today_bars = _day_bars(session_date)
+    prior_bars = _day_bars(prior_session or "")
+    kept: dict[str, Any] = {}
+    refused: list[dict[str, Any]] = []
+    unchecked = 0
+    for symbol, gapper in gappers.items():
+        today_ratio = adjustment_ratio(today_bars.get(symbol))
+        prior_ratio = adjustment_ratio(prior_bars.get(symbol))
+        if today_ratio is None or prior_ratio is None:
+            unchecked += 1
+            kept[symbol] = gapper
+            continue
+        drift = abs(today_ratio - prior_ratio) / prior_ratio * 100.0
+        if drift > drift_limit:
+            refused.append({"symbol": symbol,
+                            "gap_at_open_pct": gapper.get("gap_at_open_pct"),
+                            "adjustment_drift_pct": round(drift, 4)})
+            continue
+        kept[symbol] = gapper
+    refused.sort(key=lambda row: row["symbol"])
+    return kept, {"refused_corporate_action": refused,
+                  "unchecked_for_corporate_action": unchecked,
+                  "drift_limit_pct": drift_limit}
+
+
 def evaluate_session(
     session_date: str,
     metrics: dict[str, dict[str, Any]],
@@ -572,7 +631,12 @@ def evaluate_session(
     pool = build_pool(inputs, metrics)
     ranked = order_pool(pool, metrics, ordering)
     capped = apply_cap(ranked, cap, tier_floor=tier_floor)
-    gappers = outcome["gappers"]
+    # Applied HERE and not baked into outcome.json, so the cached bytes stay
+    # what the vendor sent and the interpretation stays reproducible. Rewriting
+    # the outcome file would make a re-run of evaluate depend on whether an
+    # earlier one had already filtered it.
+    gappers, actions = refuse_corporate_actions(
+        session_date, inputs.get("prior_session"), outcome["gappers"])
     result = pool_recall.measure(gappers, capped)
 
     per_tier: dict[int, dict[str, int]] = {}
@@ -608,9 +672,129 @@ def evaluate_session(
         ),
         "pool_size": len(ranked),
         "earnings_names": len(inputs["earnings"]["names"]),
+        # THE COMPARABLE COUNT, and the one the heavy and light split reads.
+        # earnings_names above is not comparable across this cache: a session
+        # fetched before 2026-09-02 holds before open reporters ONLY, and one
+        # fetched after holds the prior session's after close reporters beside
+        # them. So the later session looks like a heavier earnings morning
+        # because the FETCH changed, not because the market did, and a split on
+        # the raw total sorts sessions by when they were cached. Measured over
+        # the cache 2026-09-05: 4,240 before open against 4,965 after close and
+        # 2,649 of unknown timing, so the total is better than twice the figure
+        # the older sessions were summarised on.
+        "earnings_names_before_open": sum(
+            1 for row in inputs["earnings"]["names"].values()
+            if (row or {}).get("tier_key") == "earnings_before_open"),
         "per_tier": per_tier,
         "missed": [row["symbol"] for row in result["missed"]],
+        "corporate_actions_refused": len(actions["refused_corporate_action"]),
+        "gappers_unchecked_for_corporate_action":
+            actions["unchecked_for_corporate_action"],
     }
+
+
+def backfill_adjusted_close(symbols: list[str] | None = None,
+                            dry_run: bool = False) -> dict[str, Any]:
+    """FETCH STAGE. Fill the missing adjusted close into the cached day files.
+
+    Every day cached before 2026-09-05 kept open, high, low, close and volume
+    and dropped adjusted_close, so no replayed session could tell a split from
+    a move. A ratio heuristic is not a substitute and was measured to prove it:
+    of the 4,326 gappers past 8 percent in the cache, 145 sit within 2 percent
+    of a simple split fraction, and reading a few of them settles it. ORCL at
+    +32.2 percent on 2025-09-10 and NBIS at +51.7 on 2025-09-09 are real moves
+    that happen to land near 4:3 and 3:2; HDB at -49.7 and OXLC at +400 are
+    actions. Only the vendor's own adjustment separates them, which is why
+    pool_recall uses it and why this fetches it rather than guessing.
+
+    ONE CALL PER SYMBOL FOR THE WHOLE RANGE, at a credit each, against a
+    hundred for one bulk day. Only symbols that appear as a gapper somewhere in
+    the cache are fetched, because a name that never gapped cannot have a gap
+    explained away: 2,588 of the universe's 2,751 rather than all of them, and
+    2,588 credits rather than the 24,200 a re-fetch of 242 bulk days would
+    cost.
+
+    Writes only the "a" field into existing day files and touches nothing else,
+    so a session's bars are the bytes they always were plus the field that
+    should have been kept with them.
+    """
+    days = sorted(p.stem for p in EOD_DIR.glob("*.json")) if EOD_DIR.is_dir() else []
+    if not days:
+        return {"symbols": 0, "days": 0, "filled": 0, "note": "no cached days"}
+    if symbols is None:
+        wanted: set[str] = set()
+        for directory in sorted(SESSION_DIR.glob("*")):
+            try:
+                outcome = json.loads(
+                    (directory / "outcome.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            wanted.update((outcome.get("gappers") or {}).keys())
+        symbols = sorted(wanted)
+    start = dt.date.fromisoformat(days[0])
+    end = dt.date.fromisoformat(days[-1])
+    print(f"backtest: adjusted close for {len(symbols)} symbol(s) over "
+          f"{days[0]} to {days[-1]}, one call each")
+    if dry_run:
+        return {"symbols": len(symbols), "days": len(days), "filled": 0,
+                "dry_run": True}
+
+    api = eodhd.client()
+    # symbol -> {day: adjusted_close}, held in memory because the write is per
+    # DAY file and the fetch is per SYMBOL, so one has to be turned inside out.
+    by_day: dict[str, dict[str, float]] = {day: {} for day in days}
+    failed: list[str] = []
+    for index, symbol in enumerate(symbols, start=1):
+        result = api.eod(symbol, start=start, end=end)
+        if not result.ok:
+            failed.append(symbol)
+            continue
+        for row in result.data or []:
+            day = str(row.get("date") or "")
+            adjusted = _as_float(row.get("adjusted_close"))
+            if day in by_day and adjusted is not None:
+                by_day[day][symbol] = adjusted
+        if index % 250 == 0:
+            print(f"backtest: {index} of {len(symbols)} symbols")
+
+    filled = 0
+    for day in days:
+        adjusted = by_day.get(day) or {}
+        if not adjusted:
+            continue
+        path = EOD_DIR / f"{day}.json"
+        try:
+            bars = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        touched = False
+        for symbol, value in adjusted.items():
+            if symbol in bars and bars[symbol].get("a") is None:
+                bars[symbol]["a"] = value
+                filled += 1
+                touched = True
+        if touched:
+            files.write_text_atomically(path, json.dumps(bars),
+                                        attempts=files.ATTEMPTS,
+                                        retry_s=files.RETRY_S)
+    print(f"backtest: filled {filled} adjusted close(s) across {len(days)} day(s)"
+          + (f", {len(failed)} symbol(s) failed" if failed else ""))
+    return {"symbols": len(symbols), "days": len(days), "filled": filled,
+            "failed": failed}
+
+
+def adjustment_ratio(bar: dict[str, Any] | None) -> float | None:
+    """close / adjusted_close for one cached bar, or None if it cannot be had.
+
+    pool_recall._adjustment_ratio's rule on this cache's field names. Flat
+    between corporate actions and stepping at each one.
+    """
+    if not bar:
+        return None
+    close, adjusted = _as_float(bar.get("c")), _as_float(bar.get("a"))
+    if close is None or not adjusted:
+        return None
+    return close / adjusted
 
 
 def dollar_volume_as_of(session: str, lookback: int | None = None
@@ -796,8 +980,16 @@ def sweep(
 
 def summarise(rows: list[dict[str, Any]], heavy_threshold: int) -> dict[str, Any]:
     recalls = [r["subscribed_recall_all_gappers"] for r in rows if r["subscribed_recall_all_gappers"] is not None]
-    heavy = [r for r in rows if r["earnings_names"] >= heavy_threshold]
-    light = [r for r in rows if r["earnings_names"] < heavy_threshold]
+    # Split on the before open count, not the raw total. See the note beside
+    # earnings_names_before_open in evaluate_session: the total counts a
+    # different thing depending on when the session was fetched, so a split on
+    # it sorts sessions by cache vintage as much as by the market.
+    def _weight(row: dict[str, Any]) -> int:
+        got = row.get("earnings_names_before_open")
+        return row["earnings_names"] if got is None else got
+
+    heavy = [r for r in rows if _weight(r) >= heavy_threshold]
+    light = [r for r in rows if _weight(r) < heavy_threshold]
 
     def mean(values: list[float]) -> float | None:
         return round(sum(values) / len(values), 4) if values else None
@@ -955,6 +1147,11 @@ def main(argv: list[str] | None = None) -> int:
     fetch.add_argument("--end", default="2026-08-13")
     fetch.add_argument("--force", action="store_true")
 
+    adjusted = sub.add_parser(
+        "adjusted", help="Fill adjusted close into cached days. Touches the network.")
+    adjusted.add_argument("--dry-run", action="store_true",
+                          help="Say what would be fetched and spend nothing.")
+
     evaluate = sub.add_parser("evaluate", help="Read the cache only. No network.")
     evaluate.add_argument("--ordering", action="append", default=[],
                           help="One of A B C D E, repeatable. Defaults to all.")
@@ -994,6 +1191,16 @@ def main(argv: list[str] | None = None) -> int:
         print("history of the null ones, in sessions:")
         for bucket, count in report["history_buckets"].items():
             print(f"    {bucket:>16}: {count}")
+        return 0
+
+    if args.stage == "adjusted":
+        try:
+            backfill_adjusted_close(dry_run=args.dry_run)
+        except (eodhd.QuotaRefusal, RuntimeError) as exc:
+            print(f"backtest: {exc}")
+            eodhd.print_call_report()
+            return 1
+        eodhd.print_call_report()
         return 0
 
     if args.stage == "fetch":

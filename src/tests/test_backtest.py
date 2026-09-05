@@ -52,9 +52,26 @@ from core import eodhd
 # side: a backtest whose universe is today's cannot be compared across a
 # universe rebuild, and a figure published against one vintage is not a
 # constant. Nothing in the harness, discover or the pool builder changed.]
+# [corrected 2026-09-05, second: was gapped 105, pool_held 80, discovery recall
+# 0.7619, subscribed recall 0.2857. Overtaken the same day by a repair rather
+# than by a vintage, so this one IS a correction to what the figures mean and
+# not only to what they are.
+#
+# 6.1's repair two gave the replay the adjusted close it never cached, so a
+# corporate action can be told from a move. One of this session's 105 gappers
+# was an action and is now refused, which is the whole delta: 105 to 104,
+# pool_held 80 to 79 because the pool had held it. discovery recall falls to
+# 0.7596 on the smaller numerator and denominator, while subscribed recall
+# RISES to 0.2885, because subscribed_held is unchanged at 30 and its
+# denominator lost one. A number moving in the opposite direction to the one
+# beside it is what a denominator repair looks like.
+#
+# Across the whole cache the refusal removes 372 of 34,519 gapper rows, 1.08
+# percent, of which 58 gapped 8 percent or more. Not one gapper is left
+# unchecked, so no part of this denominator is now merely assumed.]
 PUBLISHED_0813 = {
-    "gapped": 105, "pool_held": 80, "discovery_recall_all_gappers": 0.7619,
-    "subscribed_held": 30, "subscribed_recall_all_gappers": 0.2857,
+    "gapped": 104, "pool_held": 79, "discovery_recall_all_gappers": 0.7596,
+    "subscribed_held": 30, "subscribed_recall_all_gappers": 0.2885,
 }
 
 

@@ -1167,10 +1167,32 @@ this was hiding, measured against the 2026-08-13 cache: 990 of 2,751 names,
 36 in 100, had a dollar volume off by more than a quarter from the value that
 session actually had, p90 ratio 1.41.
 
-The remaining three: cache adjusted_close and refuse corporate actions the way
-pool_recall does; add a `--refresh-earnings` that replaces only
-inputs["earnings"] so the after close re-measurement changes one input;
-count the heavy and light split on earnings_before_open only. Then move
+Repair two, DONE 2026-09-05. The cache kept open, high, low, close and volume
+and dropped adjusted_close, so no replayed session could tell a split from a
+move and every split in the year sat in the set recall is divided by, in the
+biggest bucket. eod_day keeps it from now on, and backfill_adjusted_close fills
+the 242 cached days for the 2,588 symbols that appear as a gapper somewhere:
+one eod call per symbol covers the whole range at a credit each, 2,588 against
+the 24,200 a re-fetch of 242 bulk days would cost at a flat hundred per day.
+The refusal runs at EVALUATE time on pool_recall's own rule and threshold,
+[Outcomes] max_adjustment_drift_pct, so outcome.json stays the bytes the vendor
+sent. A name whose adjustment cannot be computed at both ends is kept and
+counted unchecked, never dropped. A ratio heuristic was tried first and
+rejected on measurement: 145 of the 4,326 big gappers sit within 2 percent of a
+simple split fraction, but ORCL at +32.2 and NBIS at +51.7 are real moves near
+4:3 and 3:2 while HDB at -49.7 is an action, and only the vendor's adjustment
+separates them.
+
+Repair four, DONE 2026-09-05. The heavy against light split read the raw
+earnings count, which is not the same quantity across this cache: a session
+fetched before 2026-09-02 holds before open reporters only and one fetched
+after holds the prior session's after close reporters too, so the split sorted
+sessions by cache vintage as much as by the market. Measured over the cache,
+4,240 before open against 4,965 after close and 2,649 of unknown timing. It
+reads earnings_names_before_open now, with the raw total kept beside it.
+
+The one remaining: add a `--refresh-earnings` that replaces only
+inputs["earnings"] so the after close re-measurement changes one input. Then move
 CRITERIA or leave it, with the table in the ordering note. Do not change
 the floor or the key before this runs.
 

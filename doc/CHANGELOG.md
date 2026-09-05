@@ -15,6 +15,65 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy sixth: a split stops counting as a gap the desk should have caught
+
+6.1's second and fourth repairs. Both are the denominator, which is the half of
+a recall figure nobody looks at.
+
+THE CACHE NEVER KEPT THE ADJUSTED CLOSE. eod_day stored open, high, low, close
+and volume and dropped adjusted_close, so no replayed session could tell a two
+for one split from a fifty percent fall. pool_recall refuses an action on close
+over adjusted_close, flat between actions and stepping at each; the replay had
+nothing to refuse it with, so every split in the year sat in the set recall is
+divided by, and sat in the biggest bucket, which is where the ordering work
+cares.
+
+A RATIO HEURISTIC WAS TRIED AND REJECTED ON MEASUREMENT, before any call was
+spent. Of the 4,326 gappers past 8 percent, 145 sit within 2 percent of a
+simple split fraction. Reading them settles it: ORCL at +32.2 on 2025-09-10 and
+NBIS at +51.7 on 2025-09-09 are real moves that happen to land near 4:3 and
+3:2, while HDB at -49.7 and OXLC at +400 are actions. The vendor's own
+adjustment is the only thing that separates them. The heuristic would have been
+wrong about roughly 60 of every 100 it flagged.
+
+PRICED BEFORE IT WAS BOUGHT. One bulk day is a flat hundred credits, so
+re-fetching 242 days is 24,200. A per symbol eod call is one and returns the
+whole range, and only a name that appears as a gapper somewhere can have a gap
+explained away, which is 2,588 of the universe's 2,751. 2,588 credits against
+24,200, a tenth of the price. The run made 2,588 calls, zero retries, zero
+failures, and filled 614,507 adjusted closes across 242 days in six minutes.
+
+WHAT IT FOUND. 372 of 34,519 gapper rows, 1.08 percent, are corporate actions
+and not moves; 58 of them gapped 8 percent or more. The largest are
+unmistakable: SHAZ +4900, AGL +2361, ASST +1951, VOR +1920, and TLRY +900 and
+LCID +856, both of them reverse splits anyone following the tape would
+remember. Not one gapper is left unchecked, so no part of this denominator is
+now merely assumed.
+
+THE REFUSAL RUNS AT EVALUATE TIME, not at fetch. outcome.json stays the bytes
+the vendor sent, and a re-run cannot depend on whether an earlier one already
+filtered the file. A name whose adjustment cannot be computed at both ends is
+KEPT and counted unchecked, because a gapper nobody could rule on is not one
+ruled genuine.
+
+THE HEAVY AND LIGHT SPLIT WAS SORTING BY CACHE VINTAGE. It read the raw
+earnings count, and that is not the same quantity across this cache: a session
+fetched before 2026-09-02 holds before open reporters only, one fetched after
+holds the prior session's after close reporters too. Over the cache that is
+4,240 before open against 4,965 after close and 2,649 of unknown timing, so the
+total is better than twice the figure the older sessions were summarised on. It
+reads the before open count now, with the raw total kept beside it.
+
+THE PUBLISHED 2026-08-13 FIGURES MOVE, and the direction is the interesting
+part. One of that session's 105 gappers was an action: gapped 104, pool_held 79
+because the pool had held it, discovery recall down to 0.7596, and subscribed
+recall UP to 0.2885, because subscribed_held is unchanged at 30 and its
+denominator lost one. Two numbers moving opposite ways is what a denominator
+repair looks like, and the constant carries that reasoning rather than only the
+new digits.
+
+Suite green at 218 claims, not one path changed under the working tree.
+
 ## 2026-09-05, seventy fifth: a replayed session stops being ranked on this week's universe
 
 Tier 6's 6.1 lists four repairs to the replay before its measurement can be

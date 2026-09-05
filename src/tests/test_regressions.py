@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and seventeen claims, a count read off
+and the two pages. It now carries two hundred and eighteen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -11269,6 +11269,115 @@ def claim_a_source_nobody_asked_is_not_a_source_that_found_nothing(
           "and empty ONLY when all four looked and none did")
 
 
+def claim_a_split_is_not_a_gap_the_replay_should_have_caught(
+        failures: list[str]) -> None:
+    """The replay refuses corporate actions, and weighs a morning comparably.
+
+    TWO WAYS THE DENOMINATOR WAS WRONG, both of them 6.1 repairs.
+
+    A two for one split is a clean fifty percent gap. pool_recall refuses one
+    on close over adjusted_close, which is flat between actions and steps at
+    each, but the backtest cache dropped adjusted_close entirely, so every
+    split in a year of bars sat in the set the replay's recall is divided by,
+    in the biggest bucket, where the ordering work actually cares. A ratio
+    heuristic is not a substitute and was measured to prove it: of the 4,326
+    gappers past 8 percent, 145 sit within 2 percent of a simple split
+    fraction, and ORCL at +32.2 and NBIS at +51.7 are real moves near 4:3 and
+    3:2 while HDB at -49.7 is an action. Only the vendor's own adjustment
+    separates them.
+
+    And the heavy against light split read the raw earnings count, which is not
+    the same quantity across this cache: a session fetched before 2026-09-02
+    holds before open reporters only, one fetched after holds the prior
+    session's after close reporters too. Measured over the cache, 4,240 before
+    open against 4,965 after close and 2,649 unknown, so the total is better
+    than twice what the older sessions were summarised on and a split on it
+    sorts sessions by cache vintage. It reads the before open count now.
+
+    THE UNCHECKED CASE IS THE ONE TO GET RIGHT. A name whose adjustment cannot
+    be computed at both ends is KEPT and counted, never dropped. A gapper
+    nobody could rule on is not a gapper ruled genuine, and dropping it would
+    quietly shrink the denominator by exactly the names the vendor was quiet
+    about.
+    """
+    from research import backtest_pool as bp
+
+    saved = bp.EOD_DIR
+    with tempfile.TemporaryDirectory(prefix="pmd-act-") as raw:
+        bp.EOD_DIR = pathlib.Path(raw)
+        try:
+            # SPLIT.US halves its adjustment ratio overnight, which is what a
+            # two for one split looks like. MOVE.US keeps its ratio and merely
+            # doubles, which is a real move. QUIET.US has no adjusted close at
+            # either end, so nobody can rule on it.
+            bp.EOD_DIR.joinpath("2026-03-02.json").write_text(json.dumps({
+                "SPLIT.US": {"c": 50.0, "a": 50.0},
+                "MOVE.US": {"c": 20.0, "a": 20.0},
+                "QUIET.US": {"c": 10.0, "a": None},
+            }), encoding="utf-8")
+            bp.EOD_DIR.joinpath("2026-03-03.json").write_text(json.dumps({
+                "SPLIT.US": {"c": 50.0, "a": 100.0},
+                "MOVE.US": {"c": 40.0, "a": 40.0},
+                "QUIET.US": {"c": 20.0, "a": None},
+            }), encoding="utf-8")
+            gappers = {name: {"symbol": name, "gap_at_open_pct": 50.0}
+                       for name in ("SPLIT.US", "MOVE.US", "QUIET.US")}
+            kept, census = bp.refuse_corporate_actions(
+                "2026-03-03", "2026-03-02", gappers)
+
+            if "SPLIT.US" in kept:
+                failures.append(
+                    "a name whose vendor adjustment stepped overnight stayed in "
+                    "the gapper set. A split is a gap no screen could have "
+                    "caught and none should be scored for missing")
+            if "MOVE.US" not in kept:
+                failures.append(
+                    "a real move whose adjustment did not step was refused as a "
+                    "corporate action, so the replay is now throwing away the "
+                    "moves it exists to measure")
+            if "QUIET.US" not in kept:
+                failures.append(
+                    "a name with no adjusted close at either end was DROPPED. "
+                    "It must be kept and counted unchecked: a gapper nobody "
+                    "could rule on is not one ruled genuine")
+            if census["unchecked_for_corporate_action"] != 1:
+                failures.append(
+                    "the unchecked count is "
+                    f"{census['unchecked_for_corporate_action']} rather than 1, "
+                    "so a reader cannot tell how much of the denominator was "
+                    "only assumed")
+            if len(census["refused_corporate_action"]) != 1:
+                failures.append(
+                    f"{len(census['refused_corporate_action'])} refusals rather "
+                    "than 1")
+        finally:
+            bp.EOD_DIR = saved
+
+    # The session weighting, which must read the before open count when it is
+    # there and fall back to the total only for a row that has none.
+    def _row(before_open: int) -> dict[str, Any]:
+        # Both sessions carry the SAME raw total, so a split on that total
+        # puts them on the same side and this claim could not tell the two
+        # readings apart.
+        return {"earnings_names": 40, "earnings_names_before_open": before_open,
+                "subscribed_recall_all_gappers": 0.5,
+                "discovery_recall_all_gappers": 0.5, "gapped": 10,
+                "subscribed_held": 5, "per_tier": {}}
+
+    rows = [_row(5), _row(30)]
+    out = bp.summarise(rows, heavy_threshold=20)
+    if out["heavy_sessions"] != 1 or out["light_sessions"] != 1:
+        failures.append(
+            "the heavy and light split did not read the before open count: "
+            f"{out['heavy_sessions']} heavy and {out['light_sessions']} light "
+            "from one session with 5 before open reporters and one with 30, "
+            "both of which carry 40 in total. Splitting on the total sorts "
+            "sessions by when they were fetched")
+    print("  replay set   a split is refused from the replay's denominator on the "
+          "vendor's own adjustment, a name nobody can rule on is kept and counted, "
+          "and a morning is weighed on its before open reporters")
+
+
 def claim_a_replay_does_not_rank_last_year_on_this_week_s_universe(
         failures: list[str]) -> None:
     """The replay's dollar volume and market cap are the session's, or say not.
@@ -18045,6 +18154,7 @@ def main() -> int:
     run_claim(failures, claim_unregister_removes_every_probe_register_can_create, failures)
     run_claim(failures, claim_a_hand_run_of_scan_spares_the_morning_it_would_replace, failures)
     run_claim(failures, claim_a_source_nobody_asked_is_not_a_source_that_found_nothing, failures)
+    run_claim(failures, claim_a_split_is_not_a_gap_the_replay_should_have_caught, failures)
     run_claim(failures, claim_a_replay_does_not_rank_last_year_on_this_week_s_universe, failures)
     run_claim(failures, claim_the_pool_the_collector_listened_to_survives_the_handover, failures)
     run_claim(failures, claim_the_score_watch_counts_a_pick_once_per_pick, failures)
