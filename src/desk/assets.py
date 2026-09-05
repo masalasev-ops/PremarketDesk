@@ -1875,6 +1875,16 @@ DECK_JS = r"""
                 "</td>"
               : "";
             var words = '<div class="prule">' + esc(side.words) + "</div>";
+            // A side with NO rows is a measured zero and not thin evidence.
+            // "Too few to say" on an empty side reads as "we could not tell",
+            // when what happened is that no replayed name was ever in this
+            // state, which is a finding and the stronger of the two.
+            if (!side.rows) {
+              return "<tr>" + lead + '<td class="n">0' + words +
+                '</td><td class="n">' + NIL +
+                '</td><td colspan="2" class="empty">No replayed name was in ' +
+                "this state, so there is nothing to compare.</td></tr>";
+            }
             if (side.held) {
               return "<tr>" + lead + '<td class="n">' + side.rows + words +
                 '</td><td class="n">' + side.sessions +

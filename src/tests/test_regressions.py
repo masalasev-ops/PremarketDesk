@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and fourteen claims, a count read off
+and the two pages. It now carries two hundred and fifteen claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13248,6 +13248,15 @@ def claim_every_production_read_of_picks_is_fenced(failures: list[str]) -> None:
         # reason replay_session's does: it is asking whether a live or test row
         # already sits on the date it is about to write about.
         ("research/replay_outcomes.py", "SELECT COUNT(*) FROM picks"),
+        # replay_daily asks the same two questions for the same two reasons.
+        # The first reads the RECONSTRUCTED subscription list, so it can say
+        # whether a gapper was one the pool listened to, and a source='live'
+        # filter would have it answer about the record instead. The second is
+        # its refusal query and has to see every source, because it is asking
+        # whether a live or test row already sits on the date. Both bind the
+        # source as a parameter rather than leaving it open.
+        ("research/replay_daily.py", "SELECT ticker FROM picks"),
+        ("research/replay_daily.py", "SELECT COUNT(*) FROM picks"),
     }
 
     unfenced: list[str] = []

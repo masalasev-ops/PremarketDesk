@@ -15,9 +15,9 @@ never priced at all:
                                 the calendar names, and most of the names it
                                 lists were never in the pool either.
 
-So the honest outcome for both is the DAILY BAR, which this project already
-pays for, and it is a different measurement from a simulated trade: open to
-close and open to high, with no entry, no stop and no rule version. Putting
+So the only outcome that exists for either is the DAILY BAR, which this project
+already pays for, and it is a different measurement from a simulated trade:
+open to close and open to high, with no entry, no stop and no rule version. Putting
 such a row in research_outcomes would join precedent._select's own denominator,
 whose only exclusion is skip_reason, and quietly change what every count on the
 shipped screen means. Hence a table of its own.

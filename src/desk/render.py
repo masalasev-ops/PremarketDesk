@@ -222,7 +222,7 @@ def render(limit: int | None = None, compact_first: bool = True) -> dict[str, An
             "raw": raw_total, "encoded": encoded_total}
 
 
-def compact_for_this_run() -> None:
+def compact_for_this_run(recompact_all: bool = False) -> None:
     """Today, plus any session the summary table has never seen.
 
     NOT EVERY SESSION, which is what this did until 2026-09-04. The morning
@@ -240,8 +240,26 @@ def compact_for_this_run() -> None:
     how a machine that was off for a day catches up. Everything else is
     already frozen and correct, and the nightly rebuilds all of it anyway,
     which is what carries a change to this file to older sessions.
+
+    AND A PAYLOAD CAN GO STALE WITHOUT ITS SESSION CHANGING, which is why
+    recompact_all exists. The Precedent block is computed from
+    research_outcomes at compact time and frozen with the rest, so running the
+    replay fills that table and changes nothing a reader can see: every session
+    already has a summary row, so nothing is recompacted, and the screens keep
+    printing the empty state they were built with. Nothing about the session
+    changed, so no automatic rule can notice. It is a hand operation and it
+    says so on the flag.
     """
     known = compact.known_sessions()
+    if recompact_all:
+        if not known:
+            print("desk: no sessions to recompact")
+            return
+        print(f"desk: recompacting all {len(known)} session(s) by hand, "
+              "because a frozen payload can go stale without its session "
+              "changing")
+        compact.build(known)
+        return
     seen = {row["date"] for row in index_rows()}
     todo = [date for date in known if date not in seen]
     today = ettime.today_str()
@@ -249,7 +267,9 @@ def compact_for_this_run() -> None:
         todo.insert(0, today)
     if not todo:
         print("desk: every session already has a summary row and today has "
-              "no packet, so nothing was recompacted")
+              "no packet, so nothing was recompacted. Pass --recompact-all if "
+              "something the payloads READ has changed, such as the replay "
+              "behind the Precedent screen")
         return
     compact.build(todo)
 
@@ -266,10 +286,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="Do not recompact first. Use the frozen payloads "
                              "as they are. The nightly passes this because it "
                              "has already run desk.compact over every session.")
+    parser.add_argument("--recompact-all", action="store_true",
+                        help="Recompact every session, not just today and "
+                             "the ones the index has never seen. For when "
+                             "something the payloads READ has changed rather "
+                             "than the sessions themselves, such as the "
+                             "replay behind the Precedent screen.")
     args = parser.parse_args(argv)
 
     if not args.no_compact:
-        compact_for_this_run()
+        compact_for_this_run(recompact_all=args.recompact_all)
     result = render(limit=args.limit, compact_first=False)
     print(f"desk: {result['sessions']} session(s) inlined, "
           f"{result['raw'] / 1048576:.2f} MB of payload became "

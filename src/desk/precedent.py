@@ -62,7 +62,7 @@ _DROPPABLE = {
 # Said on the screen wherever a count is drawn, because a reader cannot see
 # the universe file that produced it. data/universe.json is TODAY'S universe,
 # so a name delisted during the replayed year is not in the past this counted.
-SURVIVORSHIP = ("the replayed universe is today's, so names that delisted "
+SURVIVORSHIP = ("The replayed universe is today's, so names that delisted "
                 "during the year are absent and every count here reads high")
 
 
@@ -487,19 +487,19 @@ def floors(connection: sqlite3.Connection,
     return {"conditions": out, "population": len(rows),
             "cleared": sum(1 for r in rows if not (r["day_failed"] or "").strip()),
             "floors": {"rows": min_rows, "sessions": min_sessions},
-            "overlap": ("a name refused by two floors is counted under both, so "
-                        "these do not sum to the population")}
+            "overlap": ("A name refused by two floors is counted under both, "
+                        "so these do not sum to the population")}
 
 
 # The evidence splits this population can rebuild, and the roll lines it
 # cannot. Named as a pair on purpose: a section showing three of nine
 # sentences without saying which six are missing reads as a complete answer.
 EVIDENCE_UNAVAILABLE = (
-    "band_thin, coverage_absent, dropped_no_coverage, catalyst_absent and "
-    "catalyst_unknown cannot be rebuilt from a replayed session: the first "
-    "three need the collector's own coverage record and no collector ran, and "
-    "the catalyst pair needs the EODHD news tags per article, which the session "
-    "cache does not hold")
+    "Six of the roll's nine lines cannot be rebuilt at all. The fill warning, "
+    "the two collector coverage lines and the lower bound on relative volume "
+    "each need the collector's own record, and no collector ran on a session "
+    "the desk never had. The two catalyst lines need the vendor news tags per "
+    "article, which the session cache does not hold")
 
 
 def evidence(connection: sqlite3.Connection,
@@ -639,7 +639,7 @@ def morning_shape(connection: sqlite3.Connection, today: list[dict[str, Any]],
             "sessions": len(past),
         })
     return {"measures": out, "sessions": len(by_session),
-            "unavailable": ("sector and catalyst class are drawn on the Morning "
+            "unavailable": ("Sector and catalyst class are drawn on the Morning "
                             "screen and cannot be rebuilt here: no replayed "
                             "session carries a sector, and the catalyst class "
                             "needs per article news tags the cache does not hold")}
@@ -677,10 +677,10 @@ def _daily_stats(rows: list[dict[str, Any]], min_rows: int,
     return out
 
 
-NO_ENTRY_HERE = ("these names were never priced, so there is no entry, no stop "
-                 "and no trade. The figures are the DAY: where it opened and "
-                 "where it went, which is a weaker question than the one the "
-                 "table above answers and must not be read beside it")
+NO_ENTRY_HERE = ("These names were never priced, so there is no entry, no "
+                 "stop and no trade. The figures are the DAY: where it opened "
+                 "and where it went, which is a weaker question than the one "
+                 "the table above answers and must not be read beside it")
 
 
 def missed(connection: sqlite3.Connection) -> dict[str, Any]:
@@ -829,7 +829,7 @@ def noon(connection: sqlite3.Connection,
     return {"states": out, "ungraded": ungraded,
             "clock": _CRIT.text("midday", "run_time"),
             "floors": {"rows": min_rows, "sessions": min_sessions},
-            "note": ("the grade is the noon pass's own rule read off the same "
+            "note": ("The grade is the noon pass's own rule read off the same "
                      "cached minutes, and reached by the close is the paper "
                      "rule's own answer for the same name, so a row where they "
                      "disagree is one instrument disagreeing with the other "

@@ -15,6 +15,73 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-05, seventy second: the replay ran, and the pre-registered falsifier tripped
+
+The Precedent screen's other six sections were built and the year behind them
+was graded. 240 sessions, 2025-08-29 to 2026-08-13, 9,500 graded candidate rows
+under paper rule v1 and 40,983 daily bar rows beside them. What follows is what
+the run measured, including the part that says the match rule is not working.
+
+THE WIDENING FALSIFIER TRIPPED. Section 9 of the pre-registration says: "If the
+widening ladder fires on more than half of a morning's candidates, the bands are
+too tight and the rule needs re-cutting, not the data." On 2026-09-04 it fired
+on 11 of 12. One name printed on the narrow rule. cap_band was dropped on 11 of
+the 11, price_band on 5 of them. Nothing has been re-cut, because moving a band
+edge is an amendment to that page and the owner has not seen this yet.
+
+WHY IT FIRES, measured rather than guessed. The six conditions take 2, 12, 5, 4,
+3 and 2 distinct values on this population, and the 9,500 rows land in 929
+occupied cells: a mean of 10.2 rows per cell against a min_rows floor of 30.
+Only 50 of the 929 cells clear both floors on the narrow rule. Those 50 hold 55
+percent of all rows, which is the shape of the problem: the lattice is dense
+where the market is ordinary and sparse exactly where a published candidate
+sits, because a name reaches the morning list by being unusual. The floors
+falsifier did NOT trip: all 12 candidates got a printable group after widening.
+The third falsifier cannot be run until the live record passes 200 booked
+trades, and it is not reported as passing.
+
+THE POOL WAS UNUSABLE AND NOBODY HAD NOTICED. replay_session refuses a session
+with no gap_stats window dated strictly before it, which is what stops the pool
+being ranked on a propensity computed partly from the session being replayed.
+The earliest window on disk was 2026-05-18, so 51 of the 240 fetched sessions
+could be replayed and 189 could not. gap_stats.build takes a LIST of as_of
+dates and one end of day call per symbol serves all of them, so 51 weekly
+vintages backfilled for 2,751 calls, the same price as a single sweep. Every
+sweep complete, 2,751 of 2,751, zero failed. All 240 sessions replayable.
+
+FINDINGS THE SCREEN NOW CARRIES. Names whose high came in the first ten minutes
+ended at a median of -2.22 percent over 2,588 trades and 240 sessions; names
+whose high came at 120 minutes or later ended at +5.66 percent over 1,698
+trades. That is a finding about when to sell rather than about which names the
+desk picks. At noon, of 4,283 names the pass called triggered, 98 in 100 had
+reached the buy by the close; of 3,768 it called never triggered, 10 in 100
+still did. After close reporters gapped 53 in 100 and ended the day at a median
+-0.17 percent; before open reporters gapped 52 in 100 and ended +0.13.
+
+THREE DEFECTS FOUND BEFORE ANY NUMBER WAS DRAWN FROM THEM. The engine compared
+the earnings calendar's status against "ok", which nothing writes: discover's
+three words are "fetched", "fetched_and_empty" and "not_fetched". Every session
+took the failure branch, so earnings_overnight would have been NULL on every row
+and the matcher withholds on a null earnings condition. The screen would have
+said the calendar was never read against every name forever, and the empty table
+hid it. core/lookalike was reading a second dialect of the same field and
+disagreed with discover on 2,545 of 9,366 cached rows; with the market holiday
+case fixed too it now agrees on all 9,417. And research_outcomes had no
+ensure_columns line, so a column added to its schema would have appeared on a
+fresh database and silently not on the one in use.
+
+A POPULATION ERROR OF MY OWN, caught before a figure was drawn from it. The base
+rate was briefly fenced to names that cleared the day screen. The list this
+screen sits beside is the RANKED candidates, published with an entry and a stop
+whether or not they cleared it, and on the four live sessions on file only 0, 0,
+3 and 2 of twelve did. The fence is gone and the population is stated on the
+screen.
+
+[corrected 2026-09-05: test_backtest's published 2026-08-13 figures moved with
+the cache rebuild, 99 gappers to 105, and the old numbers and the reason are
+recorded at the constant. The universe grew from 2,745 symbols to 2,751 and the
+gapper count grew by exactly six. Nothing in the harness changed.]
+
 ## 2026-09-04, seventy first: a Precedent screen, and the engine that will fill it
 
 The desk gained a ninth route and the navigation a seventh entry. Precedent

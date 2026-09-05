@@ -33,9 +33,28 @@ from research import backtest_pool
 from selection import discover
 from core import eodhd
 
+# [corrected 2026-09-05: was gapped 99, pool_held 72, discovery recall 0.7273,
+# subscribed_held 28, subscribed recall 0.2828. Those figures were right when
+# they were written and have been overtaken, which is history rather than a
+# mistake, so they stay on this page.
+#
+# WHAT MOVED WAS THE CACHE, NOT THE HARNESS. data/backtest was rebuilt on
+# 2026-09-05 by a 240 session fetch, and both of this session's inputs are
+# rebuilt with it: the gap sweep runs over data/universe.json, which is TODAY'S
+# universe and now carries 2,751 symbols against the 2,745 the old figures were
+# measured on, and the universe also supplies the dollar volume the pool orders
+# on. Six more symbols, six more gappers, 99 to 105 exactly. pool_held and
+# subscribed_held moved with it. Both sets are internally consistent, then
+# 72/99 = 0.7273 and 28/99 = 0.2828, now 80/105 = 0.7619 and 30/105 = 0.2857,
+# and the new pair reproduces twice from cache alone with no network call.
+#
+# This is the survivorship confound the replay documents, seen from the other
+# side: a backtest whose universe is today's cannot be compared across a
+# universe rebuild, and a figure published against one vintage is not a
+# constant. Nothing in the harness, discover or the pool builder changed.]
 PUBLISHED_0813 = {
-    "gapped": 99, "pool_held": 72, "discovery_recall_all_gappers": 0.7273,
-    "subscribed_held": 28, "subscribed_recall_all_gappers": 0.2828,
+    "gapped": 105, "pool_held": 80, "discovery_recall_all_gappers": 0.7619,
+    "subscribed_held": 30, "subscribed_recall_all_gappers": 0.2857,
 }
 
 

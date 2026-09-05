@@ -207,14 +207,33 @@ what the desk thinks about a name; a base rate is a count of what lookalikes
 did. Folding one into the other hides the case where they disagree, and that
 case is the only one either of them ever gets corrected by.
 
+Six further sections sit under it, each the historical mirror of a section the
+Morning screen already draws, and each saying which one. What each floor turned
+down, and what the names it refused went on to do. Whether thin evidence has
+cost anything, drawn as pairs so neither side is a number without a scale. What
+the desk missed, meaning everything that cleared a session's gap floor and how
+much of it the pool ever subscribed. How these events have resolved before, for
+every name the calendar placed between a close and the next open. What kind of
+morning this is, today's mix against the median replayed morning. And what noon
+has graded before, which is the noon pass's own rule folded over the same
+cached tape against what the same name did by the close.
+
+TWO INSTRUMENTS, NEVER COMPARED. The trade sections measure a simulated entry
+to a simulated exit and read `research_outcomes`. What the desk missed and how
+these events have resolved read `research_daily`, which is the DAILY BAR, open
+to close and open to high, because a name nobody subscribed has no premarket
+tape and therefore no entry and no stop under any rule. They are separate
+tables and a claim keeps them so.
+
 Everything on it comes from RECONSTRUCTED sessions, which are sessions the desk
-did not run, replayed over a real tape by `research/replay_session.py` and
-graded by `research/replay_outcomes.py`. The live record is the Record screen's
-and the two are never added together. A group under `[Precedent] min_rows` or
-`min_sessions` prints that it is too few rather than a number, and a group that
-only qualified after a condition was dropped says which one. Until the replay
-has been run the screen says so and names the command, and still prints the
-rule each name would be matched on.
+did not run, replayed over a real tape by `research/replay_session.py`, graded
+by `research/replay_outcomes.py`, and for the two daily bar sections by
+`research/replay_daily.py`, which spends nothing at all. The live record is the
+Record screen's and the two are never added together. A group under
+`[Precedent] min_rows` or `min_sessions` prints that it is too few rather than a
+number, and a group that only qualified after a condition was dropped says which
+one. Until the replay has been run the screen says so and names the command, and
+still prints the rule each name would be matched on.
 
 **Midday** `#/session/<date>/midday`. What the open did to the levels the
 morning published, name by name, with the packet's own reason under each; what
@@ -799,7 +818,7 @@ destination is not in the tree at all, and is the last row for that reason:
 
 | Path | What |
 | --- | --- |
-| `data/premarketdesk.db` | SQLite (WAL), seven tables. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet; and research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by `research/replay_outcomes.py` and read only by the Precedent screen, never pooled with paper_trades under any question |
+| `data/premarketdesk.db` | SQLite (WAL), eight tables. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet; research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by `research/replay_outcomes.py` and read only by the Precedent screen, never pooled with paper_trades under any question; and research_daily, what a name the desk never PRICED did on a replayed session, from its daily bar, written only by `research/replay_daily.py` and read only by the Precedent screen, a separate table from research_outcomes because a daily bar and a simulated trade are different measurements and one count over both would describe neither |
 | `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
 | `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
