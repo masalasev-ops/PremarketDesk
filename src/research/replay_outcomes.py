@@ -78,8 +78,10 @@ import json
 from typing import Any
 
 from core import config, criteria, ettime, files, lookalike, store
+from morning import scan
 from night import paper_ledger
 from research import backtest_pool, replay_session
+from selection import discover
 
 # The band cutter and the overnight predicate live in core/lookalike.py and are
 # re-exported here, because this module's callers and the desk's matcher have to
@@ -195,9 +197,9 @@ def fetch(day: str, force: bool = False, probe: Any = None) -> dict[str, Any]:
 
 # ------------------------------------------------------------ the evaluate --
 
-def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]], set[str] | None,
-                                      list[str]]:
-    """(price and cap per symbol, the earnings names or None, notes).
+def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]],
+                                      dict[str, Any] | None, list[str]]:
+    """(price and cap per symbol, the overnight reporters or None, notes).
 
     build_candidates is called rather than reimplemented, for the same reason
     replay_session calls scan.evaluate_eligibility: the price this bands on has
@@ -215,19 +217,64 @@ def _session_facts(day: str) -> tuple[dict[str, dict[str, Any]], set[str] | None
     thirds of this project's closed defects belong to.
     """
     candidates, notes = replay_session.build_candidates(day)
-    facts = {c["symbol"]: {
-        "price": _as_float(c.get("price")),
-        "market_cap": _as_float((c.get("quote") or {}).get("marketCap")),
-    } for c in candidates}
+    facts: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        # THE SAME CALL replay_session.evaluate MAKES, on the same rebuilt
+        # candidate, so the verdict recorded here is the one that produced the
+        # picks row rather than a second opinion about it. Re-running it costs
+        # nothing: evaluate_eligibility reads CRITERIA and the candidate and
+        # touches no network.
+        scan.evaluate_eligibility(candidate)
+        facts[candidate["symbol"]] = {
+            "price": _as_float(candidate.get("price")),
+            "market_cap": _as_float((candidate.get("quote") or {}).get("marketCap")),
+            "day_eligible": 1 if candidate.get("day_eligible") else 0,
+            "day_failed": ", ".join(
+                candidate.get("day_failed_conditions") or []) or None,
+            "day_failed_unmeasured": ", ".join(
+                candidate.get("day_failed_unmeasured") or []) or None,
+            "baseline_median": _as_float(candidate.get("baseline_median")),
+            "baseline_sessions": candidate.get("baseline_sessions"),
+            "pm_bars": candidate.get("pm_bars"),
+        }
+    # ONE DAY CONDITION CANNOT FIRE IN A REPLAY AND ITS ZERO WOULD BE A LIE.
+    # require_fresh_price reads candidate["price_stale"], which build_candidates
+    # never sets because no collector ran, so the staleness floor turns nobody
+    # down here. On the live sessions it cut 2 of 12 on 2026-09-04 and 3 of 12
+    # on 2026-09-03. A screen tabulating the day conditions uniformly would
+    # print a measured zero beside a floor that was never evaluated, so the
+    # absence is said in words and carried onto the session.
+    notes.append("the replay has no collector clock, so the require_fresh_price "
+                 "floor was never evaluated and turned nobody down; its count "
+                 "is unmeasured here and is not a zero")
     inputs, _outcome = backtest_pool.load_session(day)
     block = (inputs.get("earnings") or {})
     status = str(block.get("status") or "").strip().lower()
-    if status and status != "ok":
-        notes.append(f"the earnings calendar for {day} came back '{status}', so "
+    # THE VOCABULARY IS discover's AND IT HAS NO "ok" IN IT. This compared the
+    # status against "ok", a word nothing in this project writes: the three
+    # discover can record are "fetched", "fetched_and_empty" and "not_fetched".
+    # Every session therefore took the failure branch, earnings_overnight would
+    # have been NULL on every row ever written, and desk/precedent withholds a
+    # group whose earnings condition is null because that is the one condition
+    # its ladder may never drop. The screen would have said "the earnings
+    # calendar was never read" against every name forever. Measured 2026-09-05
+    # over the cached sessions: 203 "fetched" and 7 "fetched_and_empty", and
+    # not one "ok". Nothing caught it because research_outcomes was empty.
+    if status not in (discover.FETCHED, discover.FETCHED_EMPTY):
+        notes.append(f"the earnings calendar for {day} came back "
+                     f"{status or 'with no status at all'!r}, so "
                      "earnings_overnight is null on every row of this session "
                      "rather than zero")
         return facts, None, notes
-    return facts, set(block.get("names") or []), notes
+    # fetched_and_empty is a MEASURED ZERO and not an absence. The calendar was
+    # read and no universe name reported overnight, so every row of that
+    # session carries a true 0 and belongs in the group that did not report.
+    #
+    # The dict is returned whole rather than reduced to a set of keys, because
+    # each row carries tier_key, timing, report_date, estimate and actual, and
+    # a caller asking which KIND of overnight report this was should not have
+    # to re-open the session cache to find out. Membership still reads the same.
+    return facts, dict(block.get("names") or {}), notes
 
 
 def evaluate(day: str) -> dict[str, Any]:
@@ -268,12 +315,29 @@ def evaluate(day: str) -> dict[str, Any]:
         bars = cache.get("bars", {}).get(code) or []
 
         # None, not 0, when the calendar was never read. See _session_facts.
+        # Membership is the overnight test because the cached names dict is
+        # discover's OWN tier output: it holds only before_open, after_close
+        # and timing_unknown reporters and drops every other calendar row, so a
+        # name is in it exactly when it reported between the last close and
+        # this open. The dict is carried rather than a set of keys so the tier
+        # travels with the boolean.
+        report = (earnings.get(ticker) or {}) if earnings is not None else {}
         overnight = None if earnings is None else (1 if ticker in earnings else 0)
 
         for version, mode in versions.items():
             record: dict[str, Any] = {
                 "date": day, "ticker": ticker, "rule_version": version,
                 "earnings_overnight": overnight,
+                "earnings_tier_key": report.get("tier_key"),
+                "earnings_timing": report.get("timing"),
+                "earnings_estimate": _as_float(report.get("estimate")),
+                "earnings_actual": _as_float(report.get("actual")),
+                "day_eligible": fact.get("day_eligible"),
+                "day_failed": fact.get("day_failed"),
+                "day_failed_unmeasured": fact.get("day_failed_unmeasured"),
+                "baseline_median": fact.get("baseline_median"),
+                "baseline_sessions": fact.get("baseline_sessions"),
+                "pm_bars": fact.get("pm_bars"),
                 "above_prior_high": above,
                 "gap_pct": gap, "pm_rvol": rvol,
                 "price_ref": price, "market_cap_musd": cap_musd,

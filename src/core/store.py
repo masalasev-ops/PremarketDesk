@@ -247,6 +247,28 @@ CREATE TABLE IF NOT EXISTS research_outcomes (
     minutes_to_trigger INTEGER,
     minutes_to_peak  INTEGER,
     bars_held        INTEGER,
+    -- WHETHER THE REPLAYED DAY SCREEN ADMITTED THE NAME, and what cut it when
+    -- it did not. replay_session writes a picks row for every subscribed
+    -- candidate, cleared or refused, and replay_outcomes grades all of them,
+    -- so a base rate that does not fence on day_eligible pools the names a
+    -- morning published with the names it turned down. The keys are the ones
+    -- screen_tally counts, never the sentences, and the unmeasured subset is
+    -- carried apart because a floor failed on a low reading and a floor failed
+    -- on a missing instrument are different facts.
+    day_eligible     INTEGER,
+    day_failed       TEXT,
+    day_failed_unmeasured TEXT,
+    -- WHICH KIND of overnight report, beside the boolean the match uses.
+    earnings_tier_key TEXT,
+    earnings_timing  TEXT,
+    earnings_estimate REAL,
+    earnings_actual  REAL,
+    -- What pm_rvol was measured against, so a group can be split on whether
+    -- the evidence under it was thin. pm_rvol's own NULL is already the
+    -- "never measured" flag and needs no companion column.
+    baseline_median  REAL,
+    baseline_sessions INTEGER,
+    pm_bars          INTEGER,
     -- Why a number is absent, in words, when it is absent. Never a zero.
     match_note       TEXT,
     computed_at      TEXT NOT NULL,
@@ -451,6 +473,56 @@ _PAPER_LATER_COLUMNS = (
     ("minutes_to_trigger", "INTEGER"),
     ("minutes_to_peak", "INTEGER"),
     ("mfe_pct_held", "REAL"),
+)
+
+
+# Columns added to research_outcomes after it first shipped, and the reason
+# this tuple exists at all. research_outcomes is created by a CREATE TABLE IF
+# NOT EXISTS in _SCHEMA, so once the table is on a disk, editing that block
+# adds nothing to it: the statement is a no-op against an existing table. Every
+# other widened table here already had an ensure_columns line and this one did
+# not, so a column added to _SCHEMA alone would appear on a fresh database and
+# silently not on the one in use, and store.upsert builds its INSERT column
+# list from the record's keys, so the first write would fail outright rather
+# than quietly drop the field.
+#
+# EVERY COLUMN HERE IS NULL ON A ROW WRITTEN BEFORE IT EXISTED, and null means
+# the row predates the column. It never means zero, never means "did not", and
+# no reader may fold the two together. This is the same convention the sector
+# column above is documented under.
+_RESEARCH_OUTCOMES_LATER_COLUMNS = (
+    # WHETHER THE REPLAYED DAY SCREEN ADMITTED THIS NAME. replay_session writes
+    # a picks row for every subscribed candidate, cleared or not, and
+    # replay_outcomes grades all of them, so without this column a base rate
+    # pools the names the screen published with the names it turned down. The
+    # widening ladder drops above_prior_high at step 3 and rvol_band at step 4,
+    # at which point a group is "every subscribed name in this gap and price
+    # and size band" and the distinction is gone entirely.
+    ("day_eligible", "INTEGER"),
+    # The CONDITION KEYS the day screen cut it on, comma joined, in scan's own
+    # order. Keys and not sentences, for the reason scan.evaluate_eligibility
+    # gives: a reworded sentence would silently stop being counted.
+    ("day_failed", "TEXT"),
+    # The subset of day_failed whose input was never measured at all. A floor a
+    # name failed because the number came in low and a floor it failed because
+    # nobody could compute the number are different facts, and the 2026-08-20
+    # finding is that folding them gives a count meaning neither.
+    ("day_failed_unmeasured", "TEXT"),
+    # WHICH KIND of overnight report, beside the boolean the match already
+    # carries. earnings_overnight answers whether, and these answer what: the
+    # tier discover assigned, the vendor's own timing word, and the two numbers
+    # that make a report a beat or a miss.
+    ("earnings_tier_key", "TEXT"),
+    ("earnings_timing", "TEXT"),
+    ("earnings_estimate", "REAL"),
+    ("earnings_actual", "REAL"),
+    # What the RVOL was computed against, so a group can be split on whether
+    # the evidence behind it was thin. pm_rvol is already on the row and its
+    # NULL is already the "never measured" flag; these are the denominator it
+    # was measured against and the number of premarket bars the tape held.
+    ("baseline_median", "REAL"),
+    ("baseline_sessions", "INTEGER"),
+    ("pm_bars", "INTEGER"),
 )
 
 
@@ -726,6 +798,8 @@ def init(connection: sqlite3.Connection | None = None) -> None:
         ensure_columns(connection, "picks", TRUE_COLUMNS)
         ensure_columns(connection, "paper_trades", _PAPER_LATER_COLUMNS)
         ensure_columns(connection, "sessions", _SESSIONS_LATER_COLUMNS)
+        ensure_columns(connection, "research_outcomes",
+                       _RESEARCH_OUTCOMES_LATER_COLUMNS)
         applied = {row[0] for row in
                    connection.execute("SELECT version FROM schema_version").fetchall()}
         if SCHEMA_VERSION not in applied:

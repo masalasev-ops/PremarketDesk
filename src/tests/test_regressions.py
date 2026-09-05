@@ -14915,7 +14915,7 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
         "rule_version TEXT, earnings_overnight INTEGER, gap_band TEXT, "
         "rvol_band TEXT, price_band TEXT, cap_band TEXT, "
         "above_prior_high INTEGER, booked INTEGER, pnl_pct REAL, "
-        "minutes_to_peak INTEGER, skip_reason TEXT)")
+        "minutes_to_peak INTEGER, skip_reason TEXT, day_eligible INTEGER)")
     shape = {"earnings_overnight": 1, "gap_band": "4% to 6%",
              "rvol_band": "1.5x to 3x", "price_band": "10 to 50",
              "cap_band": "2000M to 10000M", "above_prior_high": 1}
@@ -14929,14 +14929,18 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
             # the numerator and the denominator.
             skipped = index >= rows
             connection.execute(
-                "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (f"2026-01-{(index % max(sessions, 1)) + 1:02d}", f"T{index}", "v1",
                  shape["earnings_overnight"], shape["gap_band"],
                  shape["rvol_band"], shape["price_band"], shape["cap_band"],
                  shape["above_prior_high"],
                  None if skipped else 1, None if skipped else 1.5,
                  None if skipped else 20,
-                 "no regular session bars" if skipped else None))
+                 "no regular session bars" if skipped else None,
+                 # Every synthetic row is a name the screen ADMITTED, which is
+                 # the population a base rate describes. Part 8 below loads
+                 # refused rows beside these to check they are not counted.
+                 1))
 
     # Plenty of rows, far too few mornings. This is the case the row floor
     # alone would let through, and it is the one that matters: it is what a
@@ -15012,6 +15016,34 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
             "base rate. earnings_overnight is the one condition the ladder may "
             "never drop, so an unknown value has no group to draw and the "
             "screen must say so rather than guess")
+
+    # 8. A NAME THE SCREEN TURNED DOWN IS NOT IN A BASE RATE. The replay grades
+    #    every subscribed name, cleared or refused, because the refused ones are
+    #    the population the floors section counts. Both live in one table, so
+    #    the only thing keeping them apart is the day_eligible fence, and
+    #    without it the widening ladder does the damage: it drops
+    #    above_prior_high at step 3 and rvol_band at step 4, and past that a
+    #    group is every subscribed name in a gap and price and size band, where
+    #    the names the morning refused outnumber the names it published.
+    load(min_rows * 2, min_sessions + 4)
+    for index in range(min_rows * 6):
+        connection.execute(
+            "INSERT INTO research_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (f"2026-01-{(index % (min_sessions + 4)) + 1:02d}", f"R{index}", "v1",
+             shape["earnings_overnight"], shape["gap_band"], shape["rvol_band"],
+             shape["price_band"], shape["cap_band"], shape["above_prior_high"],
+             1, 9.9, 20, None, 0))
+    fenced = precedent.match(connection, dict(shape), "v1")
+    if fenced["rows"] != min_rows * 2:
+        failures.append(
+            f"a group of {min_rows * 2} published rows beside {min_rows * 6} "
+            f"refused ones counted {fenced['rows']}. A name the day screen "
+            "turned down was never on anybody's list, and counting what it did "
+            "describes a morning no reader was shown")
+    if fenced["median"] is not None and abs(fenced["median"] - 9.9) < 0.01:
+        failures.append(
+            "the median came back as the refused rows' own figure, so the "
+            "base rate is being computed over the names the screen rejected")
     connection.close()
 
     # 6. THE MORNING SCREEN IS NOT TOUCHED BY THIS FEATURE, which is the

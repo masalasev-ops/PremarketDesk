@@ -153,9 +153,27 @@ def in_words(conditions: dict[str, Any], dropped: list[str]) -> list[str]:
 
 
 def _select(connection: sqlite3.Connection, conditions: dict[str, Any],
-            dropped: list[str], version: str) -> list[dict[str, Any]]:
+            dropped: list[str], version: str,
+            eligible: int | None = 1) -> list[dict[str, Any]]:
     where = ["rule_version = ?"]
     params: list[Any] = [version]
+    # THE PUBLISHED POPULATION, not every name the pool subscribed. The replay
+    # screens all ~42 subscribed names a session and writes a graded row for
+    # each, cleared or refused, so without this fence a base rate pools the
+    # names a morning published with the names it turned down. It reads as a
+    # narrow error and is not one: the widening ladder drops above_prior_high
+    # at step 3 and rvol_band at step 4, and past that point a group is "every
+    # subscribed name in this gap and price and size band", where the rejects
+    # outnumber the passes. Rows written before the column existed carry NULL
+    # and are excluded by this comparison, which is correct: a row that cannot
+    # say whether its screen admitted the name cannot answer this question.
+    #
+    # eligible=0 selects the refused names instead, which is the population the
+    # floors section counts, and eligible=None pools both and is used by
+    # nothing that prints a base rate.
+    if eligible is not None:
+        where.append("day_eligible = ?")
+        params.append(eligible)
     for column, value in conditions.items():
         if column in dropped:
             continue
@@ -309,10 +327,13 @@ def peak_buckets(connection: sqlite3.Connection,
     """
     version = version or rule_version()
     edges = [int(x) for x in _CRIT.text_list("precedent", "peak_minutes_buckets")]
+    # day_eligible = 1 for the reason _select carries it: this is the split of
+    # the population the desk PUBLISHED, and pooling the refused names into it
+    # would describe a list no reader was ever shown.
     rows = [dict(r) for r in connection.execute(
         "SELECT date, pnl_pct, minutes_to_peak FROM research_outcomes "
-        "WHERE rule_version = ? AND booked = 1 AND pnl_pct IS NOT NULL "
-        "AND minutes_to_peak IS NOT NULL", (version,))]
+        "WHERE rule_version = ? AND day_eligible = 1 AND booked = 1 "
+        "AND pnl_pct IS NOT NULL AND minutes_to_peak IS NOT NULL", (version,))]
     # "and up" rather than "over", because a value ON an edge belongs to the
     # band above it and the last bucket therefore CONTAINS its edge. A label
     # reading "over 120" on a bucket holding exactly 120 is a small lie in the
@@ -363,10 +384,19 @@ def coverage(connection: sqlite3.Connection,
         "MIN(date) AS first, MAX(date) AS last, "
         "SUM(CASE WHEN booked = 1 THEN 1 ELSE 0 END) AS reached "
         "FROM research_outcomes WHERE rule_version = ? "
-        "AND skip_reason IS NULL", (version,)).fetchone()
+        "AND day_eligible = 1 AND skip_reason IS NULL", (version,)).fetchone()
+    # The refused names, counted apart rather than folded in. They are the
+    # population the floors section reads, and printing one total over both
+    # would put a number on the screen that describes no list anybody saw.
+    refused = connection.execute(
+        "SELECT COUNT(*) AS rows, COUNT(DISTINCT date) AS sessions "
+        "FROM research_outcomes WHERE rule_version = ? "
+        "AND day_eligible = 0 AND skip_reason IS NULL", (version,)).fetchone()
     return {
         "rows": row["rows"] or 0, "sessions": row["sessions"] or 0,
         "reached": row["reached"] or 0,
+        "refused_rows": refused["rows"] or 0,
+        "refused_sessions": refused["sessions"] or 0,
         "first": row["first"], "last": row["last"], "version": version,
         "command": "python -m research.replay_outcomes --fetch --all "
                    "then --evaluate --all",

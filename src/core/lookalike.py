@@ -90,18 +90,39 @@ def overnight_tier(timing: Any, report_date: Any, session_date: Any,
         return None
     prior = _as_date(prior_session)
     word = str(timing or "").strip().lower()
+    # TWO DIALECTS REACH THIS ARGUMENT AND BOTH MEAN "the vendor sent no
+    # timing". discover.earnings_reporters computes its tier from the RAW
+    # before_after_market field, where absent is an empty string, and then
+    # STORES the row as timing "unknown" for a reader. desk/compact passes the
+    # raw field and every cached session under data/backtest passes the stored
+    # one. Testing only for the empty string made this function disagree with
+    # discover on the timing_unknown tier for every cached row: measured
+    # 2026-09-05 across 203 sessions, 2,545 of 9,366 rows, all of them a stored
+    # "unknown" that this read as a known timing of some other kind and so
+    # answered "not overnight" for.
+    if word == "unknown":
+        word = ""
 
     if word == "beforemarket" and reported == session:
         return BEFORE_OPEN
     if word == "aftermarket":
-        if prior is not None and reported == prior:
+        # THE WINDOW, not the prior session's date exactly. A company that
+        # reports after the close on a market holiday sitting between the prior
+        # session and this one has still reported after the last close and
+        # before this open, and testing equality dropped it. Measured
+        # 2026-09-05 over 207 cached sessions this was the entire remaining
+        # disagreement with discover: NAT on 2025-11-28, which reported on
+        # Thanksgiving Day, and four names on 2026-02-17 that reported over the
+        # Presidents' Day weekend. A row dated the session itself is still
+        # excluded, because that one gaps tomorrow.
+        if prior is not None and prior <= reported < session:
             return AFTER_CLOSE
         if prior is None and reported < session:
             return AFTER_CLOSE
         return None
     if not word:
-        in_window = reported == session or (
-            reported == prior if prior is not None else reported < session)
+        in_window = (prior <= reported <= session if prior is not None
+                     else reported <= session)
         if in_window:
             return TIMING_UNKNOWN
     return None
