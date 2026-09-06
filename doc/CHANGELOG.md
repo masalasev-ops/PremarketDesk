@@ -15,6 +15,63 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty fifth: a section that could not be read without a lookup table
+
+THE OWNER SAID SECTION 11 OF THE ARCHITECTURE PAGE WAS NOT CLEAR AT ALL, and
+that the C-numbers made it worse. Both halves were right and the second is the
+larger finding.
+
+THE SECTION CONTRADICTED ITSELF IN ITS OWN HEADING. It was called "One picks
+row, four passes, one ledger row" and its first paragraph then said "a fifth
+pass writes to a different table entirely", so a reader counting passes got
+four and then five with nothing reconciling them. The "one ledger row" in the
+heading WAS the fifth pass, and nothing said so. The plain words block under it
+described four passes and never mentioned the ledger at all, so the one part of
+the section written for a non technical reader was missing a fifth of the
+subject. It is now "Four passes fill one row, and a fifth books a trade beside
+it", the plain block covers all five and says why the fifth writes somewhere
+else, and the technical paragraph names the four and then names the fifth as
+the fifth.
+
+THE C-NUMBERS WERE LOAD BEARING IN PROSE, WHICH IS WHAT THE PAGE PROMISED THEY
+WOULD NEVER BE. Section 02 says "you can ignore them entirely and lose
+nothing". That is true of a label on a box in a diagram. It is not true of
+"C60 applies ONE written rule from CRITERIA [Paper] to every live pick and
+books the result into C64", which is a sentence a reader cannot follow at all
+without holding a lookup table, and where the reader most needs to follow it.
+
+Counted rather than guessed at: 515 C-numbers on the page, 402 of them in the
+reference sections at the back where the catalogue lives and they belong, 113
+in front of those, and THIRTY ONE inside running prose. Every one of the thirty
+one is now the file name, so `scan.py`, `true_volume.py`, `paper_ledger.py`,
+and the codes are left to the pictures and the
+tables. The worst single case was the nightly's twelve step paragraph, whose
+whole point is the ORDER of the steps and which carried ELEVEN codes: it is
+rewritten in file names with the five stages marked, and it kept the `ids`
+line under it, so nothing was lost from the diagram. Section
+02's note now says what the rule actually is instead of making a promise the
+page broke.
+
+THE SAME STALE RECORD AS ENTRY EIGHTY FOURTH, one document over. The v1 against
+v2 comparison was the sixteen trade August record, and over the thirteen trades
+since the cut IT READS THE OTHER WAY: v1 is +1,062.39 with a worst trade of
+-386.28 on 5,610 of risk, v2 is +295.32 with a worst of -749.94 on 9,422. In
+August v2 looked safer on every measure and took less risk. Both are on the
+page now with their dates, because two samples of sixteen and thirteen with no
+rows in common disagreeing about which SIZING is safer is the most useful thing
+either of them says. The fill verdict's 44 plausible, 10 implausible and 12
+unknown gained its 2026-08-28 date and the note that its population was cut.
+
+Premarketdesk_ADayRunArc.html has no C-numbers and never did, but its whole
+ledger chapter is written on the sixteen trade record. It gained ONE dated
+paragraph at the top rather than a dozen edited figures: the reasoning there is
+about the design of the rule and survives the cut, and rewriting the numbers
+under it would have destroyed the argument they carry. Two "16 trades will fit
+any value of" phrasings became "a record this size", which cannot go stale
+again.
+
+Suite green, both pages parse balanced. No code changed.
+
 ## 2026-09-06, eighty fourth: README was quoting a record that had been cut two days earlier
 
 THE OWNER ASKED FOR THE README CHECKED AND EVERYTHING BROUGHT INTO SYNC. It was

@@ -220,7 +220,7 @@
       <li><a href="#night">After dark, what was really true</a></li>
       <li><a href="#chain">From a level, to a fill, to a booked trade</a></li>
       <li><a href="#sizing">Why there is one rule</a></li>
-      <li><a href="#row">One picks row, four passes</a></li>
+      <li><a href="#row">Four passes fill one row</a></li>
       <li><a href="#warning">The fill warning</a></li>
       <li><a href="#loop">What the record is worth to a reader</a></li>
       <li><a href="#failure">When something fails</a></li>
@@ -991,6 +991,16 @@
   <p class="eyebrow">What the ledger is for</p>
   <h2>Why there is one rule, and why the second version changes only the size</h2>
   <div class="prose">
+    <p><strong>Every figure in this chapter is the record as it stood on
+    2026-08-29, at sixteen booked trades, and that record no longer exists.</strong>
+    The owner cut the live history back to 2026-09-01 on 2026-09-04, taking eight
+    sessions and 68 picks rows with it. As of 2026-09-06 the ledger holds 13
+    booked trades across 3 sessions at a median +0.11 percent, where the sixteen
+    below sat at -1.38. The reasoning in this chapter is about the DESIGN of the
+    rule and survives the cut unchanged; the numbers illustrating it are dated
+    and are kept because rewriting them would destroy the argument they were
+    written to carry. Anywhere a count here reads as current, it is not. See
+    CHANGELOG 2026-09-04, entry sixty second.</p>
     <p>A ledger that loses money looks like a verdict on the screen. It is not,
     and separating those two things is most of what this stage achieves. A rule
     has a trigger, a stop, an exit and a size, and a losing rule can fail at any
@@ -1030,8 +1040,8 @@ losers never up more than 0.5%           2 of 11</p>
     the same trades and any difference is attributable to the sizing alone.</p>
     <p>Two other candidates were refused and the refusals are the useful part.
     An <strong>exit rule</strong>, a target or a trail, would capture some of
-    that 3.91 point give-back and is a free parameter that 16 trades will fit
-    any value of. A <strong>different stop reference</strong> changes which
+    that 3.91 point give-back and is a free parameter that a record this size
+    will fit any value of. A <strong>different stop reference</strong> changes which
     trades exist, so the versions would stop booking the same trades and
     nothing could be attributed.</p>
     <p><strong>The risk budget holds TOTAL risk constant.</strong> v1's 16
@@ -1053,7 +1063,7 @@ losers never up more than 0.5%           2 of 11</p>
 
 <section id="row">
   <p class="eyebrow">What one row looks like when the night is done</p>
-  <h2>One picks row, filled in four passes, and a ledger row beside it</h2>
+  <h2>Four passes fill one row, and a fifth books a trade beside it</h2>
   <div class="prose">
     <p>The clearest way to see the flow is to follow a single database row. The
     scan creates it in the morning, the backfill and the truth pass widen it the
@@ -1454,7 +1464,7 @@ losers never up more than 0.5%           2 of 11</p>
     </div>
     <div>
       <dt>The paper rule is written in CRITERIA before it is written in code.</dt>
-      <dd>Entry, stop, exit, size and every refusal live in CRITERIA [Paper] and paper_ledger.py applies them. One rule, not a family: no target, because a target is a free parameter that sixteen trades will fit any value of, and a rule with something to tune is a rule that cannot be wrong. Versions are booked side by side over the same trades, each differing from the last in exactly one thing, so a change that helped can be told from a change that merely happened.</dd>
+      <dd>Entry, stop, exit, size and every refusal live in CRITERIA [Paper] and paper_ledger.py applies them. One rule, not a family: no target, because a target is a free parameter that a record this size will fit any value of, and a rule with something to tune is a rule that cannot be wrong. Versions are booked side by side over the same trades, each differing from the last in exactly one thing, so a change that helped can be told from a change that merely happened.</dd>
     </div>
     <div>
       <dt>Email is gated until a human verifies a real morning.</dt>
