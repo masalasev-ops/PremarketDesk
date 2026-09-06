@@ -18,6 +18,19 @@ other morning. Below that it costs 306 credits and a scheduled task every
 weekday to catch a name less often than the sweep in 5.5 catches three, and
 the honest answer is no.
 
+THE POPULATION CHANGED BEFORE THE RUN AND AFTER A SMOKE TEST, which is worth
+stating plainly rather than leaving to be noticed. It was written as every
+cached session. Two sessions were fetched to prove the instrument worked and
+cost 18 calls and 56 seconds, so all 240 would be about 10,800 credits and two
+hours of wall clock. It is a SYSTEMATIC ONE IN FOUR sample instead, 60
+sessions taken by stride across the whole range rather than the first 60,
+because the first 60 are all 2025 and the feed's volume is not flat across a
+year.
+
+The smoke test returned exactly 0.500, sitting on the bar, which is the least
+informative number it could have produced and is why changing the population
+here costs nothing: no direction was visible to steer toward.
+
 WHAT WOULD MAKE IT VOID. The vendor filters its news from and to on UTC
 DATES and the cutoff is applied by the client, so both sweeps here fetch the
 same rows and differ only in where the instant cut falls. That is what makes
@@ -57,12 +70,14 @@ def _sessions() -> list[str]:
     return sorted(p.name for p in SESSIONS_DIR.iterdir() if p.is_dir())
 
 
-def fetch(limit: int | None, force: bool) -> int:
+def fetch(limit: int | None, force: bool, stride: int = 1) -> int:
     from selection import discover
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     api = eodhd.EodhdClient()
     days = _sessions()
+    if stride > 1:
+        days = days[::stride]
     if limit:
         days = days[:limit]
 
@@ -102,10 +117,10 @@ def fetch(limit: int | None, force: bool) -> int:
         if index % 20 == 0 or index == len(days):
             print(f"  {index}/{len(days)}  {day}  early "
                   f"{len(sweeps['early']['names'])} name(s), late "
-                  f"{len(sweeps['late']['names'])}, {api.call_count()} call(s)")
+                  f"{len(sweeps['late']['names'])}, {eodhd.call_count()} call(s)")
 
     print(f"late news: {written} session(s) written, {spared} already on disk, "
-          f"{api.call_count()} EODHD call(s)")
+          f"{eodhd.call_count()} EODHD call(s)")
     return 0
 
 
@@ -186,11 +201,14 @@ def main(argv: list[str] | None = None) -> int:
     f = sub.add_parser("fetch")
     f.add_argument("--sessions", type=int, default=None)
     f.add_argument("--force", action="store_true")
+    f.add_argument("--stride", type=int, default=1,
+                   help="take every Nth session, so a sample spans the whole "
+                        "range instead of its first weeks")
     e = sub.add_parser("evaluate")
     e.add_argument("--as-of", default=None)
     args = parser.parse_args(argv)
     if args.cmd == "fetch":
-        return fetch(args.sessions, args.force)
+        return fetch(args.sessions, args.force, args.stride)
     return evaluate(args.as_of)
 
 

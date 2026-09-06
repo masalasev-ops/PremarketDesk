@@ -1268,16 +1268,11 @@ sources_that_would_have_caught_it as never computed; nothing retained the
 four source lists past the run. Two cheap things and one decision.
 
 Cheap one, DONE 2026-09-05: discover keeps each prior's name list in the
-watchlist under pool_sources.<source>.found, names only and sorted, so the
-payloads and the universe's closes stay out of it. About 11 KB a session.
-pool_recall reads them and answers the question, and build() already refuses
-to measure at all unless data/watchlist.json is provably the file the morning
-read, so no new guard was needed. Worth doing on the numbers: across the 240
-cached sessions, 3,649 of the 4,326 gappers past 8 percent at the open were
-in at least one prior's list, so 84 in 100 get a real answer. The other 16
-get an empty list, which now means all four looked and none found it, and
-that sentence is only honest because the lists are present. The claim pins
-both branches and the null one is unchanged for sessions written earlier.
+watchlist under pool_sources.<source>.found, sorted names only, about 11 KB a
+session, and pool_recall reads them. Across the 240 cached sessions 3,649 of
+the 4,326 gappers past 8 percent were in at least one prior's list, so 84 in
+100 get a real answer and the other 16 get an empty list that now means all
+four looked and none found it. The claim pins both branches.
 
 Cheap two, DONE 2026-09-05: discover copies the outgoing watchlist to
 data/watchlist-provisional.json before replacing it, so the pool the collector
@@ -1297,6 +1292,11 @@ so a third pass lands mechanically; it costs 306 credits and a shorter
 news window, and it would catch catalysts landing 07:15 to 08:15. Measure
 what it would have caught from the news feed's timestamps before arming
 it.
+MEASURED 2026-09-06 AND IT CLEARS: 0.820 big gappers a session against a bar
+of 0.5, a LOWER bound since 12 of the 61 truncated. A quarter of 5.5's reach
+and, unlike 5.5, buildable on this plan. Arming registers a trigger so it is
+the owner's, and max_pool_reloads must rise in the same commit or the pass
+eats a watchdog repair. See doc/research/LATE_NEWS_RESULT.md.
 
 ### 6.4 Tier 5 spends four slots on names already published
 
