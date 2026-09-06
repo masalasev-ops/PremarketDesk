@@ -15,6 +15,82 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty eighth: a way to stand down, and a written answer on a second vendor
+
+THE OWNER ASKED TWO THINGS. Whether a subscription lapsing for months would
+leave this able to pick up, and whether it could run on a different vendor. The
+first was already true and undocumented. The second was more nearly true than
+expected, and its blocker is not the code.
+
+WHAT ALREADY HAPPENS WHEN THE TOKEN DIES, traced rather than assumed. 401 is
+not in the client's retry set, so a dead token fails on the first attempt and
+nothing storms. Every module gets a null with a reason, because the client
+returns a (data, error) pair and raises at nobody. Within ten days
+universe.json passes [Universe] max_age_days, require_fresh_universe raises,
+and discover and the scan both catch it and exit non zero with the reason
+printed, so the morning chain stops at scan. NO PICKS ROW IS EVER WRITTEN from
+a dead vendor. The record gets a gap rather than a lie, which is the outcome
+worth having, and none of it was written down anywhere.
+
+WHAT IT DOES BADLY IS STAY QUIET. The tasks keep firing for months: the
+collector spends its refusal budget every weekday, the watchdog reports
+everything overdue every thirty minutes all morning, and the meter sampler
+reads a counter that is not there 48 times a day including weekends. Nothing
+breaks and the logs become unreadable exactly for the person who comes back.
+
+SO THERE IS A DORMANCY GATE NOW, data/DORMANT, deliberately the same shape as
+data/UNVERIFIED: a file whose existence is the whole state, written by
+`ops.market_today --dormant "reason"` and removed by `--wake`. The guard checks
+it BEFORE the calendar, because a stale calendar cache costs a vendor call and
+the point of standing down is to stop calling the vendor.
+
+IT IS EXIT 4 AND NOT A SECOND REASON FOR 3, which is the only interesting
+decision in it. Reusing EXIT_CLOSED would have cost nothing in code and made
+every .bat log "market closed today" through a lapsed subscription. A log read
+six months later would then say the wrong one of the two things happened, and
+one fact wearing another's label is the defect class this project spends most
+of its effort on. Eight .bat files carry the branch, each naming its own job.
+
+THE METER SAMPLER STANDS DOWN TOO, and that needed thinking about because it is
+the one job that deliberately skips the trading day guard. The two exceptions
+are not the same exception: a day the market is shut is exactly a day a sibling
+project draining the shared key would go unrecorded, and a day there is no
+subscription is a counter that is not there to read.
+
+THE SECOND VENDOR QUESTION: THE SEAM WAS ALREADY THERE. Every module in the
+published path takes its client from one factory, eodhd.client(), and not one
+constructs its own. Every call returns the same pair. The URLs are in config
+because a URL is not a criterion. So a second provider is a second class, not a
+refactor of twenty two modules.
+
+MEASURED RATHER THAN ESTIMATED: the published path calls ELEVEN endpoints, plus
+user_status through the preflight. bulk_live_us is on the client and NOTHING in
+production calls it, which is the endpoint that published the wrong report on
+2026-08-14 and is worth knowing is dead. core/provider.py states that interface
+as a Protocol with what each call feeds and what breaks without it, adds no
+indirection, and is imported by nothing at runtime.
+
+THE CLAIM IS THE POINT OF THE FILE, and its second half is the half that
+matters: it fails when the published path starts calling a thirteenth endpoint
+the protocol omits, so the written answer to "what would another vendor have to
+serve" cannot silently understate the job. Mutation tested against three edits,
+production gaining a call, the protocol naming a method the client lost, and a
+signature drifting; all three caught.
+
+doc/PROVIDERS.md carries the table and the two things that are NOT portable.
+The trades websocket is not a client method and is not in the protocol, because
+folding the hardest thing to replace into a list of twelve understates it:
+without a live premarket feed there is no tape, and every screen here is a
+drawing of that tape. And the credit model is rewritable rather than
+translatable, being denominated in EODHD credits and priced per endpoint in
+[Quota costs].
+
+NO SECOND IMPLEMENTATION AND NO ADAPTER LAYER, on the owner's answer that this
+is insurance rather than a chosen vendor. An abstraction shaped by guesses
+about an API nobody has read is a second code path the suite cannot exercise.
+
+Suite green at 223 claims.
+
 ## 2026-09-06, eighty seventh: four surfaces counted trades and none of them named the trader
 
 THE OWNER READ THE NEW FUNNEL, SAW "13 TRADED", AND ASKED WHO IS TRADING.

@@ -23,6 +23,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, monitor skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, monitor skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 echo ===== monitor run %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m ops.monitor_jobs >> "%LOG%" 2>&1

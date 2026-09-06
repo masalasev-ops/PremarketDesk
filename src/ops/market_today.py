@@ -33,12 +33,68 @@ from core import config
 from core import criteria
 from core import eodhd
 from core import ettime
+from core import files
 from ops import job_status
 
 _CRIT = criteria.load()
 
 CACHE_PATH = config.DATA_DIR / "exchange-details.json"
 EXIT_CLOSED = 3
+
+# THE DORMANCY GATE, and it answers a different question from the calendar's.
+# EXIT_CLOSED means the market is shut today. This means the OWNER has stood
+# the machine down, because the data subscription has lapsed or is paused, and
+# it is a separate exit code rather than a second reason for 3 so that a log
+# read months later says which of the two happened. A .bat that printed
+# "market closed today" through a lapsed subscription would be the exact class
+# of defect this project spends its effort on: one fact wearing another's
+# label.
+#
+# WITHOUT THIS the machine does not break, it just makes noise. Every weekday
+# job keeps firing at a dead token: 401 is not a retryable status so nothing
+# storms, and once universe.json passes [Universe] max_age_days every later
+# step refuses by itself with the reason printed. What is left is months of
+# failed calls, an overdue report from the watchdog every thirty minutes all
+# morning, and a meter sampler reading a counter that is not there, all of it
+# burying the logs somebody will want on the day they come back.
+EXIT_DORMANT = 4
+
+# Same shape as data/UNVERIFIED, deliberately: a file whose existence is the
+# whole state, placed where a person can see it, removed by hand or by --wake.
+DORMANT_MARKER = config.DATA_DIR / "DORMANT"
+
+_DORMANT_TEXT = """PremarketDesk is standing down.
+
+While this file exists, every scheduled job logs one line and exits cleanly
+without calling the vendor. The tasks stay registered, so nothing has to be
+re-armed later.
+
+Delete this file, or run
+
+    .venv\\Scripts\\python.exe -m ops.market_today --wake
+
+to resume. The two steps that rebuild what goes stale while dormant are
+
+    .venv\\Scripts\\python.exe -m selection.universe
+    .venv\\Scripts\\python.exe -m selection.gap_stats
+
+and both need a live subscription. Everything else re-derives itself from
+vendor history, which is retroactive.
+"""
+
+
+def dormant_reason() -> str | None:
+    """The marker's text, or None when the machine is meant to be running."""
+    if not DORMANT_MARKER.exists():
+        return None
+    try:
+        first = DORMANT_MARKER.read_text(encoding="utf-8").strip().splitlines()
+    except OSError as exc:
+        # An unreadable marker still means dormant. Reading the reason is a
+        # convenience; the file EXISTING is the state, and failing open here
+        # would resume the machine on a permissions error.
+        return f"marker present but unreadable ({exc})"
+    return first[0] if first else "no reason recorded"
 
 # The exit codes that mean this step did its job, read by __main__ below AND by
 # the entrypoint test harness. It is a module constant rather than a literal in
@@ -47,7 +103,7 @@ EXIT_CLOSED = 3
 # to the test that exists to prove this entrypoint behaves. That drift made the
 # suite pass Monday to Friday and fail on a Saturday, when a closed market is
 # the only time EXIT_CLOSED is returned at all.
-OK_CODES = (0, EXIT_CLOSED)
+OK_CODES = (0, EXIT_CLOSED, EXIT_DORMANT)
 
 _WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -347,7 +403,43 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--refresh", action="store_true",
                         help="Force the exchange calendar to be re-fetched. The "
                              "nightly runs this so the morning never has to.")
+    parser.add_argument("--dormant", metavar="REASON", nargs="?", const="",
+                        default=None,
+                        help="Stand the machine down: write data/DORMANT so every "
+                             "scheduled job exits cleanly without calling the "
+                             "vendor. For a lapsed or paused subscription.")
+    parser.add_argument("--wake", action="store_true",
+                        help="Remove data/DORMANT and resume. Rebuild the universe "
+                             "and gap statistics afterwards.")
     args = parser.parse_args(argv)
+
+    if args.wake:
+        existed = DORMANT_MARKER.exists()
+        DORMANT_MARKER.unlink(missing_ok=True)
+        print(f"dormant: {DORMANT_MARKER} "
+              f"{'removed, the schedule resumes' if existed else 'was not there'}")
+        if existed:
+            print("dormant: run selection.universe then selection.gap_stats before "
+                  "the next morning. Everything else re-derives itself.")
+        return 0
+
+    if args.dormant is not None:
+        reason = args.dormant.strip() or "no reason recorded"
+        files.write_text_atomically(
+            DORMANT_MARKER,
+            f"{reason}\nstood down {ettime.now_et().isoformat()}\n\n{_DORMANT_TEXT}",
+            attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
+        print(f"dormant: {DORMANT_MARKER} written. Every scheduled job will now "
+              "log one line and exit without calling the vendor.")
+        return 0
+
+    # BEFORE THE CALENDAR, because the calendar costs a vendor call on a stale
+    # cache and the whole point of standing down is to stop calling the vendor.
+    reason = dormant_reason()
+    if reason is not None:
+        print(f"dormant: {DORMANT_MARKER} exists, standing down. {reason}")
+        job_status.produced("dormant", 1)
+        return EXIT_DORMANT
 
     if args.refresh:
         # Deliberately ignores the age check: the point is to leave the cache

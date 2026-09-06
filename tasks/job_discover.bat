@@ -26,6 +26,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, discover skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, discover skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 echo ===== discover started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m selection.discover >> "%LOG%" 2>&1

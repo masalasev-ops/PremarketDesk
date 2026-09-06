@@ -56,6 +56,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, nightly skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, nightly skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 rem Refresh the exchange calendar here so the 08:45 chain never fetches it.
 rem scan.py sets ALLOW_NETWORK false, so a stale calendar in the morning is

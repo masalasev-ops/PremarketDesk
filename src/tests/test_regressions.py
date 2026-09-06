@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty two claims, a count read off
+and the two pages. It now carries two hundred and twenty three claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18327,6 +18327,78 @@ def conftest_activate():
 
     return conftest.activate()
 
+def claim_the_provider_protocol_covers_what_production_calls(failures: list[str]) -> None:
+    """core/provider.MarketDataProvider names every client method the published
+    path calls, with a matching signature, and names nothing it does not.
+
+    The second half is the one that keeps the file honest. A protocol is a
+    comment unless something fails when it drifts, and the drift that matters
+    is production quietly starting to depend on a thirteenth endpoint: the
+    written answer to "what would a second vendor have to serve" would then be
+    wrong in the direction that costs the most, by understating the job.
+
+    Research modules and this suite are excluded from the scan on purpose.
+    They reach for endpoints the morning never touches, and a probe someone
+    writes on a Tuesday must not become a thing another vendor has to
+    implement. bulk_live_us is the live case: it exists on the client, serves
+    the last COMPLETED session, published a wrong report on 2026-08-14, and
+    nothing in the published path has called it since.
+    """
+    import inspect
+    import re
+
+    from core import eodhd, provider
+
+    protocol_methods = {
+        name for name, value in vars(provider.MarketDataProvider).items()
+        if not name.startswith("_") and inspect.isfunction(value)
+    }
+    if not protocol_methods:
+        failures.append("core/provider.py declares no protocol methods at all, "
+                        "so the seam it documents is not being checked")
+        return
+
+    # ONE: the shipped client still satisfies it, name and signature.
+    for name in sorted(protocol_methods):
+        actual = getattr(eodhd.EodhdClient, name, None)
+        if actual is None:
+            failures.append(
+                f"core/provider.py names {name}, which EodhdClient no longer has. "
+                "The protocol describes a client that does not exist")
+            continue
+        want = inspect.signature(getattr(provider.MarketDataProvider, name))
+        got = inspect.signature(actual)
+        want_args = [(p.name, p.default) for p in want.parameters.values()]
+        got_args = [(p.name, p.default) for p in got.parameters.values()]
+        if want_args != got_args:
+            failures.append(
+                f"core/provider.py declares {name}{want} and EodhdClient has "
+                f"{name}{got}. A second provider written against the protocol "
+                "would be called with arguments it does not take")
+
+    # TWO: production calls nothing the protocol omits.
+    root = config.PROJECT_ROOT / "src"
+    client_source = (root / "core" / "eodhd.py").read_text(encoding="utf-8")
+    endpoints = {
+        name for name in re.findall(r"\n    def ([a-z_][a-z_0-9]*)\(", client_source)
+        if not name.startswith("_")
+    } - {"init_poolmanager", "proxy_manager_for", "ok", "record", "summary", "report"}
+
+    published = [
+        path for path in root.rglob("*.py")
+        if "tests" not in path.parts and "research" not in path.parts
+        and path.name not in ("probe_alpaca.py", "eodhd.py", "provider.py")
+    ]
+    for path in sorted(published):
+        text = path.read_text(encoding="utf-8")
+        for name in sorted(endpoints - protocol_methods):
+            if re.search(r"\b(?:api|client\(\))\.%s\(" % name, text):
+                failures.append(
+                    f"{path.relative_to(root).as_posix()} calls {name}, which "
+                    "core/provider.py does not name. Either add it to the "
+                    "protocol with what it feeds and what breaks without it, "
+                    "or stop calling it from the published path")
+
 
 def main() -> int:
     failures: list[str] = []
@@ -18557,6 +18629,8 @@ def main() -> int:
               failures)
     run_claim(failures, claim_the_gappers_are_grouped_by_direction, failures)
     run_claim(failures, claim_the_daily_bar_sections_are_a_separate_instrument,
+              failures)
+    run_claim(failures, claim_the_provider_protocol_covers_what_production_calls,
               failures)
 
     if failures:

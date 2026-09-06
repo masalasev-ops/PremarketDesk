@@ -33,6 +33,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, collector skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, collector skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 echo ===== collector started %DATE% %TIME% ===== >> "%LOG%"
 if /i "%MODE%"=="stale-watchlist-ok" (

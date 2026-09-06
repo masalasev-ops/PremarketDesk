@@ -170,6 +170,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.report:
         return report(args.date)
 
+    # THE ONE JOB THAT RUNS ON CLOSED DAYS STILL STANDS DOWN WHEN DORMANT, and
+    # the two exceptions are not the same exception. This skips no trading day
+    # guard on purpose, because a day the market is shut is exactly a day a
+    # sibling project draining the shared key would go unrecorded. Dormancy is
+    # the other case entirely: there is no subscription to drain, the counter
+    # this reads is not there to be read, and 48 failed calls a day for months
+    # is the noise that buries the log somebody comes back to.
+    from ops import market_today
+
+    reason = market_today.dormant_reason()
+    if reason is not None:
+        print(f"sampler: {market_today.DORMANT_MARKER} exists, not sampling. {reason}")
+        return 0
+
     config.ensure_dirs()
     if not args.loop:
         sample()

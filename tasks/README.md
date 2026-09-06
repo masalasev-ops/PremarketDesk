@@ -102,6 +102,20 @@ were registered, the tree does not refresh itself.
   skips it because the counter it reads is shared with everything else using
   the token and rolls at midnight UTC, so a day this market is closed is
   exactly a day a drain would otherwise go unrecorded.
+- **Exit 4 is the OTHER reason nothing runs, and it is a separate code on
+  purpose.** It means `data\DORMANT` exists, which is the owner standing the
+  machine down for a lapsed or paused data subscription, written by
+  `python -m ops.market_today --dormant "reason"` and removed by `--wake`. The
+  guard checks it BEFORE the calendar, because a stale calendar cache costs a
+  vendor call and the whole point of standing down is to stop calling the
+  vendor. Every `.bat` here that runs the guard carries a branch for it,
+  logging that it stood down rather than that the market was closed: one fact
+  wearing the other's label is exactly the defect this project spends its
+  effort on, and the log is read months later by someone who needs to know
+  which happened. The meter sampler, which skips the trading day guard, checks
+  this one anyway. Those two exceptions are not the same exception: a closed
+  market is still a day a sibling could drain the shared key, and a lapsed
+  subscription is a counter that is not there to read.
 - The machine must be awake at trigger time. Task Scheduler does not wake a
   sleeping laptop by default; enable "wake the computer to run this task" in
   the task's properties, or keep the machine plugged in and awake weekday

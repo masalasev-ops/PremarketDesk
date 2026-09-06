@@ -964,6 +964,11 @@ Other documents:
 - `doc/SCREENS.md` is the specification of the desk's screens, with a BUILT
   note recording where what shipped differs from it, and `doc/RETENTION.md`
   is what is kept, for how long, and what may never be deleted.
+- `doc/PROVIDERS.md` is what another market data vendor would have to serve for
+  this to run on it: the twelve calls the published path makes, what each
+  feeds, what breaks without it, and why the premarket trades websocket is the
+  part no code solves. `src/core/provider.py` is the same interface as a
+  protocol the suite holds the shipped client to.
 - `doc/ALPACA_PROBE.md` is what the Alpaca free plan was measured to serve and
   to refuse, which is what puts the truth pass at night rather than in the
   morning, and is also what blocks the premarket sweep below. `doc/research/`
@@ -1037,6 +1042,62 @@ Other documents:
   CLI fails or times out, the morning still ships:
   `analyst.py` falls back to a plain table report built from the packet and
   says so in the report itself.
+
+## If the subscription lapses, and if you want a different one
+
+**Stand the machine down rather than letting it fail politely for months:**
+
+```
+.venv\Scripts\python.exe -m ops.market_today --dormant "EODHD paused"
+```
+
+That writes `data\DORMANT`, the same shape as the delivery gate. While it
+exists every scheduled job logs one line and exits cleanly without calling the
+vendor, and the tasks stay registered so nothing has to be re-armed. The
+trading day guard returns exit 4 for this, a separate code from the 3 that
+means the market is shut, so a log read months later says which of the two
+happened. The meter sampler stands down too, and it is the one job that
+deliberately runs on closed days: a day the market is shut is exactly a day a
+sibling project draining the shared key would go unrecorded, but a day there is
+no subscription is not.
+
+```
+.venv\Scripts\python.exe -m ops.market_today --wake
+```
+
+**Without the marker nothing breaks, it just gets loud.** A dead token returns
+401, which is not a retryable status, so no call storms. Every module gets a
+null with a reason. Within ten days `universe.json` passes
+`[Universe] max_age_days` and `require_fresh_universe` makes discover and the
+scan refuse outright, so **no picks row is ever written from a dead vendor and
+the record has a gap in it rather than a lie**. What you are left with is
+months of failed calls, an overdue report from the watchdog every thirty
+minutes all morning, and a log directory to dig through on the day you come
+back.
+
+**Coming back takes two commands**, the same two as step 6 of Setup:
+
+```
+.venv\Scripts\python.exe -m selection.universe
+.venv\Scripts\python.exe -m selection.gap_stats
+```
+
+Everything else re-derives itself. The volume baseline re-warms from vendor
+history, gap propensity is a sweep over history, the calendar refreshes on the
+next nightly. All of it is retroactive, so all of it recovers. The only thing
+permanently missing is the premarket tape for the dormant days, and there was
+nothing to record.
+
+**A different vendor is possible and the code is the easy part.**
+`doc/PROVIDERS.md` is the specification: the twelve calls the published path
+makes, what each one feeds, and what breaks without it. The seam is already
+there, since every module gets its client from one factory and every call
+returns the same `(data, error)` pair, so a second provider is a second class
+rather than a refactor. `core/provider.py` states that interface, and a claim
+fails the moment production starts calling a thirteenth endpoint the document
+does not name. What no amount of code solves is the trades websocket: without a
+live premarket feed there is no premarket tape, and every screen here is a
+drawing of that tape.
 
 ## When things go wrong
 

@@ -30,6 +30,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, midday skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, midday skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 echo ===== midday scan started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m midday.scan_midday >> "%LOG%" 2>&1

@@ -68,6 +68,13 @@ _DERIVED = (
     ("ops.market_today", "CACHE_PATH", lambda c: c.DATA_DIR / "exchange-details.json"),
     ("ops.monitor_jobs", "STATE_PATH", lambda c: c.DATA_DIR / "monitor-reruns.json"),
     ("morning.verify_morning", "UNVERIFIED_MARKER", lambda c: c.DATA_DIR / "UNVERIFIED"),
+    # Both markers have to be here for the same reason and it is not tidiness.
+    # These are files whose EXISTENCE is a state, so an un-redirected one does
+    # not read as an empty sandbox, it reads as the real machine's answer. A
+    # real data/DORMANT would make ops.market_today.main return EXIT_DORMANT
+    # inside the suite, and every claim about the trading day guard would pass
+    # by never reaching the guard.
+    ("ops.market_today", "DORMANT_MARKER", lambda c: c.DATA_DIR / "DORMANT"),
 )
 
 # Real roots, captured before anything is redirected. Kept because the escape

@@ -57,6 +57,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, capture probe skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, capture probe skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 echo ===== capture probe started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m research.probe_capture_live >> "%LOG%" 2>&1

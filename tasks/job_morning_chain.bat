@@ -24,6 +24,10 @@ if %ERRORLEVEL% equ 3 (
     echo ===== market closed today, morning chain skipped %DATE% %TIME% ===== >> "%LOG%"
     exit /b 0
 )
+if %ERRORLEVEL% equ 4 (
+    echo ===== standing down, data\DORMANT exists, morning chain skipped %DATE% %TIME% ===== >> "%LOG%"
+    exit /b 0
+)
 
 echo ===== scan started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m morning.scan >> "%LOG%" 2>&1
