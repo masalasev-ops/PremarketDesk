@@ -38,9 +38,11 @@ Breaking one is a failed package, not a style note.
    render_midday run end to end on fixtures).
 7. Run the suite before and after: `set PYTHONPATH=%CD%\src` then
    `.venv\Scripts\python.exe -m tests.run_tests`. It takes about 40 seconds.
-   If the tree photograph fails on a mtime only change to `.git/gk/config` or
-   a `.db-shm` sidecar, run it again; two clean runs mean it was an external
-   toucher. Package 4.6 fixes the sidecar case.
+   [corrected 2026-09-06: this told you to re-run when the photograph failed
+   on an mtime only change to `.git/gk/config` or a `.db-shm` sidecar. Do not.
+   It now hashes every file at or under 64 KB, so an mtime that moved with the
+   bytes identical is not a difference and neither case fails a run. A
+   photograph failure is a real finding now: investigate rather than re-run.]
 8. Line endings are mixed per file and git has no autocrlf. Edit with the
    Edit tool, not with a Python script using write_text. Check
    `git diff --stat` before committing: a line count far larger than the

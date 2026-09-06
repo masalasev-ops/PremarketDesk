@@ -32,8 +32,13 @@ subscription size with the clock. Each arm is a fresh connection, and the first
 message per symbol is discarded because the server replays a stale last trade
 on subscribe.
 
-Run it outside the collector's window, which is 07:20 to 09:25 ET. Before it
-or after it are both fine and the tool refuses anything that would overlap: the
+Run it outside the collector's window, which the tool reads from CRITERIA
+[Collector] rather than from this sentence. It is 04:00 to 09:25 ET since
+2026-09-02 and was 07:20 to 09:25 when this was written, which left the
+-Probe arm in register_tasks.ps1 at 06:30 pointing inside the window: the
+probe refuses itself there, so the arm is inert rather than dangerous, and
+retiring or re-timing it is package 6.8's second half. After it is fine and
+before it now means before 04:00, and the tool refuses anything overlapping: the
 fifty symbol pool is account wide, so a probe holding slots would starve the
 morning it is trying to explain. After 09:25 the tape is denser than premarket,
 which makes the ratio easier to measure and is a different tape from the one
