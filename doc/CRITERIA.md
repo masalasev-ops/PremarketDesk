@@ -189,8 +189,8 @@ intraday-1m is the correction. Nothing had ever priced it, and a reader
 counting http calls would have costed it at one. It is FIVE, so the two
 scheduled steps that use it cost five times what a call count suggests: the
 baseline warm, which runs after each of discover's two passes at 03:55 and
-07:15, makes one call per stale subscribed ticker on each pass, up to 42, which
-is about 210 credits per pass and not 42, and the nightly verify_against_intraday makes
+07:15, makes one call per stale subscribed ticker on each pass, up to 45, which
+is about 225 credits per pass and not 45, and the nightly verify_against_intraday makes
 one per collected symbol, about 50, which is about 250 and not 50. Neither is
 gated on a number sized off the old reading, so nothing was actually undersized
 and nothing is being fixed here. What changes is that the next gate to be
@@ -523,7 +523,7 @@ price                         = > 3        # applied by the 08:45 scan, not here
 gap_pct                       = > 3        # applied by the 08:45 scan to the measured gap, matches the day setup gap floor
 run_time                      = 07:15
 provisional_run_time          = 03:55      # the first pass, whose pool the collector opens on at [Collector] start_time. tasks/register_tasks.ps1 ExtraStart must match; the code reads nothing from it but the reconciliation compares the machine against the script
-max_subscribed_candidates     = 42         # the collector's 50 subscription cap less the 8 context tickers, so it is a CEILING and not a choice. MEASURED 2026-09-05 as still binding hard: see the cap note below the freshness note
+max_subscribed_candidates     = 45         # the collector's 50 subscription cap less the 5 context tickers, so it is a CEILING and not a choice. MEASURED 2026-09-05 as still binding hard, and raised from 42 on 2026-09-06 when three of the context tickers turned out to be read by nothing: see the cap note and the context ticker note under it
 within_tier_key               = gap_propensity   # MEASURED, see the ordering note below
 within_tier_fallback          = atr_pct_20d      # for names propensity cannot score: it needs 100 sessions, this needs 20
 min_slots_per_tier            = 4          # MEASURED, see the ordering note below
@@ -665,6 +665,13 @@ subscribed recall per session:
   32    0.1290           0.2638           0.0066
   38    0.1478           0.2927           0.0048
   42    0.1589           0.3113           0.0047
+  45    0.1659           0.3242           0.0043
+
+The 45 row is where the cap SHIPPED from 2026-09-06 and was measured the same
+day, on the same 240 sessions and the same floor of 4. Read the rows above it
+as history: they were swept while three of the eight context tickers were
+still holding slots nothing read, which is what the row below the table is
+about.
 
 IT IS STILL CLIMBING AT THE CEILING. The marginal subscription is worth about
 0.005 of big gap recall, and that figure is FLAT across the last two steps
@@ -672,13 +679,13 @@ rather than decaying toward nothing. For scale, the entire slot floor question
 6.1 spent a day on was worth 0.004 in total, so one more subscription is worth
 more than the whole of that argument.
 
-WHICH MAKES THE EIGHT CONTEXT TICKERS A PRICED DECISION rather than an
-assumption. 42 is 50 less 8, and the 50 is the socket's, so those 8 slots cost
-somewhere near 0.03 to 0.04 of big gap recall on this slope. That is an
-EXTRAPOLATION past the measured range and is written as one. It is also not a
-pure trade: the context tickers feed the market snapshot the report is written
-against, so the eight are buying something this measurement cannot see. What
-has changed is that the price is now known.
+WHICH MAKES THE CONTEXT TICKERS A PRICED DECISION rather than an assumption.
+The candidate cap is 50 less however many of them there are, and the 50 is the
+socket's, so each one costs about 0.0043 of big gap recall. They are not a pure
+trade, because they feed the market snapshot the report is written against, so
+each is buying something this measurement cannot see. What changed on 2026-09-05
+is that the price stopped being unknown. What changed the day after is that
+three of them turned out to be buying nothing at all: see the note below.
 
 THE OTHER END IS CLOSED. The owner confirmed on 2026-09-05 that EODHD does not
 allow more than 50, so 50 is a hard vendor ceiling and not a plan tier that
@@ -687,22 +694,59 @@ question, whether subscribing 50 starves message DELIVERY against 8, and
 answered no.
 
 SO NOTHING IS BROKEN BY THIS, and the table above is not a defect report. The
-collector is built for the limit: the 8 context symbols are never dropped, the
+collector is built for the limit: the context symbols are never dropped, the
 watchlist takes the remaining slots in discover's ranked order, and anything
 that does not fit is logged by name. That path works and is claimed.
 
 What the table says is where QUALITY stops rather than where the system fails,
 and its practical value is mostly negative: it says the slot floor, the
-freshness split and the tier 2 ordering are all rearrangements INSIDE 42 slots,
-which is why measuring all three on 2026-09-05 moved none of them. The
-constraint is the 42, not the arrangement, and effort spent on tier boundaries
-is effort spent on the wrong end.
+freshness split and the tier 2 ordering are all rearrangements INSIDE a fixed
+number of slots, which is why measuring all three on 2026-09-05 moved none of
+them. The constraint is the cap, not the arrangement, and effort spent on tier
+boundaries is effort spent on the wrong end.
 
-THE ONE LEVER LEFT is the 8 context tickers, at roughly 0.005 of big gap recall
-each. They are probably worth keeping, because a premarket price path with no
-idea what the index futures did is a price path nobody can read, which is the
-argument collect_premarket already makes for never dropping them. The change is
-that the price is now known rather than assumed.
+THE ONE LEVER LEFT is the context tickers, at roughly 0.0043 of big gap recall
+each. Every one that earns its slot is worth keeping, because a premarket price
+path with no idea what the index futures did is a price path nobody can read,
+which is the argument collect_premarket already makes for never dropping them.
+The note below is what happened when that argument was checked name by name
+instead of taken as a whole.
+
+### The context ticker note, 2026-09-06
+
+THREE OF THE EIGHT WERE READ BY NOTHING. The list held SPY, QQQ, IWM, DIA, TLT,
+USO, UUP and VIXY. The market snapshot they exist to feed draws nine rows, and
+only five of those nine were ever on the list. TLT, UUP and VIXY were subscribed
+every morning, cost a slot each, and appeared in no snapshot row, no score, no
+screen and no report sentence. Grepping the tree for them outside the list
+itself returns research probes and test fixtures only.
+
+The other four snapshot rows are the mirror image: VIX.INDX, US10Y.GBOND,
+US3M.GBOND and DXY.INDX are drawn in the report and are NOT subscribed, so they
+resolve through the end of day path and say so, source eod with
+prior_session_only true. That is correct and stays. Those four have no premarket
+tape on this plan, which is why they were never on the list to begin with.
+
+SO THE THREE WERE DROPPED and the candidate cap went 42 to 45. Measured over the
+same 240 sessions at the same floor of 4, cache only, no vendor call:
+
+  big gap recall        0.3113 -> 0.3242
+  big gappers held      1,200  -> 1,262    over 240 sessions, so about 5 a month
+  names past the screen 1,686  -> 1,784    about 9 a month
+  gappers past 3 pct    4,252  -> 4,477
+
+Nothing in the report changes. The three fed no row, so no row moves, and the
+four stale rows stay exactly as stale as they already were and already admitted
+to being.
+
+WHAT NOT TO CONCLUDE FROM THIS. The tempting next step is to wire TLT into the
+10Y row and VIXY into the VIX row through the proxy mechanism USO already uses,
+which would make two stale rows live and still free a slot. Do not: TLT is a
+bond FUND and moves opposite to the yield, so a row labelled 10Y carrying TLT's
+move would print the wrong sign, and VIXY is a VIX futures ETF whose level is
+not the index level. USO works as a proxy for WTI because it tracks oil in the
+same direction. Neither of these does, and a proxy that inverts is worse than a
+row honestly labelled a day old.
 
 ### The pool note
 
@@ -948,8 +992,8 @@ two_phase_first_session       = 2026-09-03 # the first session the 04:00 start r
 start_time_before_two_phase   = 07:20      # the clock every session before two_phase_first_session ran under. Read by window_open_hhmm for those sessions and nothing else; never move it
 resubscribe_time              = 07:20      # ET. The handover: the run rereads the watchlist and moves onto the pool discover wrote at 07:15. See the two phase note. A run that starts after this, a watchdog restart, rereads from its own start, so a rerun of discover lands whenever it happens
 stop_time                     = 09:25
-context_symbols               = SPY, QQQ, IWM, DIA, TLT, USO, UUP, VIXY
-max_subscriptions             = 50         # hard socket cap including the 8 context tickers, so 42 candidate slots. Overflow comes off the tail of discover's ranked list, the collector does not reorder
+context_symbols               = SPY, QQQ, IWM, DIA, USO   # exactly the five the market snapshot draws. TLT, UUP and VIXY sat here until 2026-09-06, subscribed every morning and read by nothing: see the context ticker note under the cap note
+max_subscriptions             = 50         # hard socket cap including the 5 context tickers, so 45 candidate slots. Overflow comes off the tail of discover's ranked list, the collector does not reorder
 bar_seconds                   = 60
 reconnect_backoff_start_s     = 1
 reconnect_backoff_max_s       = 60
@@ -2952,7 +2996,7 @@ between discover and the collector to nothing. The collector reads the
 watchlist ONCE, at subscribe time. It read the file in the same second discover
 was replacing it, got the previous session's, and select_symbols found no row
 in it marked subscribed. An empty list is not an error, so it subscribed to the
-eight [Collector] context_symbols and nothing else, wrote its subscription
+[Collector] context_symbols and nothing else, wrote its subscription
 list, and ran healthy. Nothing objected. The watchdog restarts a collector that
 is DEAD and this one was alive, listening perfectly to the wrong thing, and
 _collector_has_subscribed read the list it had written as proof discovery was
@@ -3018,7 +3062,7 @@ Resolution takes the collector's premarket price first and falls back to end of
 day. The end of day call is made for every label regardless, because the prior
 close comes from it; the collector only ever supplies the last price.
 
-Five of the nine are also on the collector's context list, so those rows are
+Five of the nine ARE the collector's context list entire, so those rows are
 priced from this morning's tape and record source collector with
 prior_session_only false. The index, bond and dollar symbols are not subscribed
 and have no premarket tape on this plan, so they report the last completed

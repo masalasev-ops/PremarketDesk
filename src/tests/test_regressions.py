@@ -14372,7 +14372,7 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
     the collector to nothing. The collector read watchlist.json in the same
     second discover was replacing it, got the previous session's file, and
     select_symbols found no row in it marked subscribed. An empty list is not
-    an error, so it subscribed to the eight context tickers and nothing else,
+    an error, so it subscribed to the context tickers and nothing else,
     then ran healthy for fourteen minutes. The watchdog cannot see it: it
     restarts a collector that is DEAD, and this one was listening perfectly to
     the wrong thing, and _collector_has_subscribed reads the subscription list

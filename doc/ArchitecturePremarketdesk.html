@@ -356,8 +356,8 @@ tbody tr:hover{background:var(--ground)}
         over two bulk end of day calls, and recent runners from the picks table, decay weighted so a
         name from three days ago outranks one from three weeks. It is ranked by tier, then within
         tier by gap propensity, with 20 day ATR percent as the fallback for names carrying too little
-        history to score. Subscriptions are capped at 42, the collector's 50 slot limit less the
-        eight context tickers, and each populated tier takes a floor of four slots before the
+        history to score. Subscriptions are capped at 45, the collector's 50 slot limit less the
+        five context tickers, and each populated tier takes a floor of four slots before the
         remainder fills by overall rank, because strict priority never gave tiers 3 or 4 a single
         slot across 60 replayed sessions. Everything below the cut is written out too, marked
         <code>not_subscribed</code>, so the cut is auditable. In the same pass it refreshes any stale
@@ -368,8 +368,8 @@ tbody tr:hover{background:var(--ground)}
       <div class="t"><b>04:00</b>to 09:25</div>
       <div class="c morn">
         <h5>Listen to live trades</h5>
-        <p>Opens the trades websocket with the extended session itself, subscribes to the eight fixed
-        context tickers plus the names discover marked subscribed, at most 42, which is the socket's
+        <p>Opens the trades websocket with the extended session itself, subscribes to the five fixed
+        context tickers plus the names discover marked subscribed, at most 45, which is the socket's
         50 subscription cap less the context tickers, and aggregates incoming prints into one-minute
         bars on disk. This is the only source of today's premarket price path.</p>
         <p>It opens on the pool the 03:55 pass wrote. From 07:20 until its 09:25 stop time it rereads
@@ -635,7 +635,7 @@ tbody tr:hover{background:var(--ground)}
     <div class="relay">
       <div class="box morn"><span class="cid">C12</span><span class="nm">universe.py</span><span class="dt">Sun 21:00. Common stock only, about 2,751 names.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">03:55 and 07:15. Four priors unioned, ranked by tier then gap propensity, 42 subscribed with 4 slots floored per tier.</span></div>
+      <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">03:55 and 07:15. Four priors unioned, ranked by tier then gap propensity, 45 subscribed with 4 slots floored per tier.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">04:00-09:25. Websocket trades to 1m bars.</span></div>
       <div class="ar">&rarr;</div>

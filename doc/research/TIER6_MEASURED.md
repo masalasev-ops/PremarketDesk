@@ -28,7 +28,7 @@ WHAT TO DO WITH IT, in the order the evidence supports.
   1. CLOSED 2026-09-05, the same day it was filed. The owner confirms EODHD
      does not allow more than 50, so this is a hard vendor ceiling and not a
      plan tier that could be bought past. Nothing is broken by it: the
-     collector is built for the limit, never drops the 8 context symbols, fills
+     collector is built for the limit, never drops the context symbols, fills
      the rest in discover's ranked order and logs by name whatever does not
      fit. The value of the sweep is therefore mostly NEGATIVE, and that is
      worth keeping: the floor, the freshness split and the tier 2 ordering are
@@ -40,6 +40,9 @@ WHAT TO DO WITH IT, in the order the evidence supports.
      extrapolation because it is past the measured range. It is not a pure
      trade either: they feed the market snapshot the report is written against.
      The point is that the price is now known and was not.
+     DONE 2026-09-06, and it paid: pricing them was what made anyone look at
+     them one at a time, and three of the eight were feeding nothing. The cap
+     is 45 from that date. See the finding below.
   3. Only then revisit the floor and the tiering. Both were measured today and
      neither moved, and both are second order against this.
 
@@ -109,3 +112,30 @@ prints twice in a 325 minute window will not be dense on the fifth morning:
 Wiring TLT and VIXY and dropping UUP nets one slot back and turns two stale
 rows live. It changes what the report SHOWS, so it is the owner's call and is
 recorded here rather than taken.
+
+RESOLVED 2026-09-06, AND THE WIRING HALF OF THAT WAS WRONG. The bar occupancy
+above is right and the ranking off it is right, but occupancy only says a
+symbol PRINTS often. It says nothing about whether the row it would fill means
+what the row's label claims, and that is the question a proxy has to answer.
+
+TLT is a bond FUND. It moves opposite to the 10 year yield, so a row labelled
+10Y carrying TLT's move prints the wrong SIGN, and it prints it densely, 134
+bars a session of confidently inverted direction. VIXY is a VIX futures ETF
+whose level is not the index level. USO earns the proxy label it carries
+because it tracks oil in the same direction; neither of these does. A proxy
+that inverts is worse than a row honestly labelled a day old, and the whole
+value of the eod fallback is that it is labelled.
+
+So the wiring was dropped and only the slot recovery was taken. All three came
+off context_symbols and the candidate cap went 42 to 45. Measured on the same
+240 sessions at the shipped floor of 4, cache only: big gap recall 0.3113 to
+0.3242, big gappers held 1,200 to 1,262, names past the screen 1,686 to 1,784.
+About 5 more big gappers and 9 more screen names a month. No report row moves,
+because none of the three fed one. The full note lives in CRITERIA beside the
+cap note, where the derivation of a threshold belongs.
+
+THE HABIT WORTH KEEPING from this one: the measurement that ranked the three
+was real and still stands, and it still pointed at the wrong action, because it
+measured the property that was easy to count rather than the property the
+decision turned on. Occupancy was available. Directional validity had to be
+thought about.

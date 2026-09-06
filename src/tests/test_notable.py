@@ -1027,7 +1027,7 @@ def claim_the_context_tickers_stay_out_of_the_premarket_leg(
     """SPY is subscribed, heard, and not a notable mover.
 
     Decided here rather than by the owner and cheap to overrule, which is why
-    it is asserted rather than assumed. The eight [Collector] context_symbols
+    it is asserted rather than assumed. The five [Collector] context_symbols
     are in bars_by_symbol, and 4.3 says every subscribed name is eligible for
     the premarket leg. They are ETFs and the universe is common stock, so they
     are in none of the three joins the section needs: no row in universe.json,

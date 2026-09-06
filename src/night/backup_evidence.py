@@ -53,7 +53,7 @@ file's authority.]
                                 can be rewritten after the socket has read it.
                                 2026-08-24 is the case: by 12:00 the watchlist
                                 on disk was today's and the socket had spent
-                                the morning on eight context tickers.
+                                the morning on context tickers alone.
 
 The universe rebuilds. The closes re-fetch. Reports render from packets. The
 database has store.guard_live_database. Those all have a route back; these

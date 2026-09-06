@@ -857,7 +857,7 @@ def morning_context(day: str) -> dict[str, Any]:
     # flag, which is discover's INTENT at 07:15 and is a different fact.
     # CRITERIA [Monitor]'s stale watchlist note settles this: on 2026-08-24 a
     # power cut collapsed the gap between the two jobs, the collector read
-    # the previous session's watchlist and subscribed to the eight context
+    # the previous session's watchlist and subscribed to the context
     # symbols alone, and by 12:00 the file on disk was today's and marked 42
     # names subscribed. Every one of them would have been captioned here as a
     # name the collector heard and the screen declined, which is exactly the

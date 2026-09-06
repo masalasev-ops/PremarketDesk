@@ -1167,8 +1167,8 @@ rather than what the screen could have traded, the whole session is the
 better measure.
 
 The premarket leg covers only the names the collector heard, at most
-[Collector] max_subscriptions of the universe, 50 including the eight context
-tickers, and it reads bars_by_symbol rather than the
+[Collector] max_subscriptions of the universe, 50 including the five context
+tickers [corrected 2026-09-06: was eight], and it reads bars_by_symbol rather than the
 candidate list: every subscribed name is eligible, not only the twelve that
 survived the screen. Its baseline is c1 from the same file.
 
@@ -1404,7 +1404,7 @@ Items that surfaced in review and kept falling off. Each line records what
 actually happened to it, dated, so none of them silently becomes folklore.
 
 - Containment fail open outside the universe: FIXED 2026-08-14. The universe
-  holds common stock only, so every ETF, including the eight context tickers
+  holds common stock only, so every ETF, including the context tickers
   the report names every morning, was invisible to the claim check. Claims
   are now validated against the union of universe.json and the CRITERIA.md
   [collector] context list (analyst._claimable_symbols), and the regression

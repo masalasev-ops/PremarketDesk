@@ -117,7 +117,7 @@ free on 2026-09-01, so the collector may start at 04:00; the consequence has
 not been drawn.
 
 **Discovery.** Published recall of addressable gappers runs 0.05 to 0.15. The
-pool holds 0.38 to 0.67 and the 42 slot cap throws the rest away. A free
+pool holds 0.38 to 0.67 and the 45 slot cap throws the rest away. A free
 Alpaca sweep of the completed premarket tape, measured on 2026-08-24 as serving
 a live session up to fifteen minutes behind the clock in five requests, would
 give the whole universe's measured premarket gap at 07:15. It was dismissed
@@ -983,7 +983,7 @@ File: new src/research/premarket_prior_test.py.
 
 For the nine live sessions: sweep 04:00 to 07:00 of the completed tape, rank
 the universe by absolute gap against the cached prior close with a volume
-floor, take 42, and score `subscribed_recall_addressable` against each
+floor, take 45, and score `subscribed_recall_addressable` against each
 session's pool_recall.json `actual_gappers`. Pre-register the ranking rule and
 the bar (beats the shipped recall on at least seven of nine sessions) before
 running. Zero EODHD quota, nothing live, nothing written under picks. Effort
@@ -1243,18 +1243,19 @@ doc/research/TIER6_MEASURED.md the reasoning.
 
 ### 6.10 The cap is the binding constraint, and it is a ceiling not a choice
 
-Recall is still climbing at the 42 cap and the marginal subscription is worth
-about 0.005 of big gap recall, more than the entire slot floor question of 6.1.
-42 is the socket's 50 less the 8 context tickers, and EODHD does not allow more
-than 50, confirmed by the owner 2026-09-05, so this is a hard ceiling.
+Recall is still climbing at the cap and the marginal subscription is worth
+about 0.0043 of big gap recall, more than the entire slot floor question of
+6.1. The cap is the socket's 50 less the context tickers, and EODHD does not
+allow more than 50, confirmed by the owner 2026-09-05, so it is a hard ceiling.
 
 NOTHING IS BROKEN BY IT. The collector is built for the limit and the overflow
-path is claimed. The finding's value is mostly NEGATIVE and that is why it is
-kept: the floor, the freshness split and the tier 2 ordering are rearrangements
-INSIDE 42 slots, which is why measuring all three moved none of them. Do not
-spend more on tier boundaries. The one lever left is the 8 context tickers at
-about 0.005 each, and they are probably worth keeping. Table and reasoning in
-CRITERIA's cap note and doc/research/TIER6_MEASURED.md.
+path is claimed. The value looked mostly NEGATIVE at first: the floor, the
+freshness split and the tier 2 ordering are rearrangements INSIDE the cap,
+which is why measuring all three moved none of them. Do not spend more on tier
+boundaries. But pricing the context tickers is what made anyone read them one
+at a time, and DONE 2026-09-06, three of the eight fed no report row at all.
+They came off and the cap is 45. Reasoning in CRITERIA's cap note and the
+context ticker note under it, and in doc/research/TIER6_MEASURED.md.
 
 ### 6.3 There is no discovery pass after 07:15
 

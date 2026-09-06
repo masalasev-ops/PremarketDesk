@@ -19,7 +19,7 @@ about what the vendor meters for the socket itself; the vendor side answer
 comes from measure_socket_cost.py, which reads the account counter before and
 after a run and records the delta as a measured fact.
 
-Symbol budget. The feed allows 50 concurrent subscriptions. The eight context
+Symbol budget. The feed allows 50 concurrent subscriptions. The five context
 symbols are never dropped, because a premarket price path with no idea what
 the index futures did is a price path you cannot read. The watchlist takes the
 remaining slots in the order discover ranked it, tier first and the within

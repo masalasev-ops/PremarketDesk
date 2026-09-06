@@ -568,7 +568,7 @@ def claim_reach_reads_what_the_collector_asked_for(failures: list[str]) -> None:
 
     2026-08-24 is the morning that made the distinction: a power cut collapsed
     the gap between the jobs, the collector read the previous session's
-    watchlist and subscribed to the eight context symbols alone, and by 12:00
+    watchlist and subscribed to the context symbols alone, and by 12:00
     the file on disk was today's and marked 42 names subscribed. Every one would
     have been captioned as a name the collector heard and the screen declined.
     """

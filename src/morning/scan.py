@@ -328,7 +328,7 @@ def market_snapshot(
     Reading it here is what put "SPY up 0.70 percent" in the 2026-08-14 report
     when 0.70 percent was yesterday's move. See DECISIONS.md 2026-08-14.
 
-    The eight context tickers are subscribed every morning, so the index and
+    The five context tickers are subscribed every morning, so the index and
     commodity rows come from the collector. Government bonds and the dollar
     index are not subscribed and have no premarket tape here, so they fall back
     to the end of day feed and the row says so: source 'eod' with
@@ -5113,7 +5113,7 @@ def notable_movers(
     Two calls were made here rather than by the owner and are cheap to overrule,
     which is why they are named rather than buried.
 
-    ONE: the eight [Collector] context_symbols are excluded from the premarket
+    ONE: the five [Collector] context_symbols are excluded from the premarket
     leg. They are subscribed, so they are in bars_by_symbol, and 4.3 says every
     subscribed name is eligible. But they are ETFs, and the universe is common
     stock, so they are in NONE of the three joins this section needs: no row in

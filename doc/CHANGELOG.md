@@ -15,6 +15,42 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty third: three context tickers were paying rent on nothing
+
+THE CAP WENT 42 TO 45 without buying a thing, because three of the eight
+context tickers were subscribed every morning and read by no part of the
+report. The list held SPY, QQQ, IWM, DIA, TLT, USO, UUP and VIXY. The market
+snapshot those exist to feed draws nine rows and only five of the nine were
+ever on the list, so TLT, UUP and VIXY cost a slot each and appeared in no
+snapshot row, no score, no screen and no sentence. They came off.
+
+Measured on the same 240 sessions at the shipped floor of 4, cache only and no
+vendor call: big gap recall 0.3113 to 0.3242, big gappers held 1,200 to 1,262,
+names past the screen 1,686 to 1,784. About five more big gappers and nine more
+screen names a month. No report row moves, because none of the three fed one,
+and the four snapshot rows that ARE a day old, VIX, 10Y, 3M and DXY, stay
+exactly as stale as they already were and already said they were.
+
+THE FIRST ANSWER TO THIS WAS WRONG and is worth keeping written down. The
+finding of 2026-09-05 ranked the three by premarket bar occupancy and proposed
+wiring TLT into the 10Y row and VIXY into the VIX row through the proxy
+mechanism USO already uses, which would have made two stale rows live and still
+freed a slot. Occupancy says a symbol prints often. It does not say the row it
+fills means what the row's label claims. TLT is a bond FUND and moves opposite
+to the yield, so a 10Y row carrying TLT would have printed the wrong sign,
+densely, 134 bars a session of confident inversion; VIXY is a futures ETF whose
+level is not the index level. USO earns its proxy label by tracking oil in the
+same direction. Neither of these does, and a proxy that inverts is worse than a
+row honestly labelled a day old. Only the slot recovery was taken.
+
+The derivation is in CRITERIA's new context ticker note under the cap note, and
+the correction is recorded against the original finding in TIER6_MEASURED.md.
+Prose naming the count was updated in the collector, the scan, the analyst and
+the architecture page; the three dated 2026-08-24 incident accounts that say
+"the eight context symbols" stopped carrying a count instead, because eight was
+true that morning and a dated record that restates itself against today's
+config is a falsified record.
+
 ## 2026-09-05, eighty second: the cap is the thing, and the plan hits its line cap saying so
 
 THREE QUESTIONS TODAY ALL ENDED AT THE SAME PLACE and none of them was

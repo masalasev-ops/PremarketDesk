@@ -2353,7 +2353,7 @@ def _claimable_symbols() -> set[str] | None:
     """The symbols a ticker claim is validated against, or None when unknowable.
 
     The universe alone is not enough: it holds common stock only, so every
-    ETF is outside it, including the eight context tickers the report talks
+    ETF is outside it, including the five context tickers the report talks
     about every single morning (SPY, QQQ and friends). A claim check that
     cannot see them is fail open for exactly the names the model is most
     likely to write. So claims are validated against the union of the
