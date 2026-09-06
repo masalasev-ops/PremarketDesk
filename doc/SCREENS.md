@@ -311,6 +311,18 @@ calendar carries one. Every one of those is a packet field today.
 PARTLY DRAWN. The carry through table and the per name outcome strip were
 built into the prototype; the floor buckets were not.
 
+[corrected 2026-09-06: the floor buckets are drawn now, and the way they were
+not is worth keeping. A section did ship under the right heading and the right
+note, and it rendered JSON.stringify of the packet's `floors` object, which is
+the three THRESHOLD descriptions and not one refused name. So it asked what
+each floor turned down and answered with the floors themselves, in raw JSON,
+which is the same defect the Health screen was corrected for a day earlier and
+which the rule below this list forbids outright. The names had been in the
+packet since 2026-09-03 and desk/compact had been carrying them the whole
+time, one key away, under movers.tally.floor_examples. Found while writing the
+architecture page's account of this screen: describing a screen is a different
+act from building it, and it reads the result rather than the intent.]
+
 [AMENDED 2026-09-04. A midday screen whose pass has not run no longer sits
 there saying nothing. It counts down in Eastern to the minute the 12:00 pass
 fires, and under the countdown it prints the levels that pass will grade: the
@@ -342,7 +354,9 @@ Regions:
   Movers              what moved that the morning never carried
   The floors          what each floor turned down, largest mover first, which
                       the 2026-09-03 fifty sixth change added to the packet
-                      and which nothing has ever displayed
+                      and which nothing displayed until 2026-09-06: the name,
+                      the move and the volume against its own average, one row
+                      per refused name, labelled by the floor that refused it
 
 The four entry states get words and not codes: triggered reads "entry
 reached", gapped_through reads "opened past the entry", never_triggered reads
@@ -351,7 +365,7 @@ English applies to screens exactly as it applies to prose.
 
 ### 3. Session
 
-SPECIFIED, NOT DRAWN.
+SPECIFIED, NOT DRAWN [corrected 2026-09-06: BUILT 2026-09-04, as the header records. The status here was written before the build and was left standing through it].
 
 Route: `#/session/<date>`.
 
@@ -370,7 +384,7 @@ calls it the volume is worse than the report is now.
 
 ### 4. Sessions
 
-SPECIFIED, NOT DRAWN. Replaces the day rail in site/PremarketDesk.html.
+SPECIFIED, NOT DRAWN [corrected 2026-09-06: BUILT 2026-09-04]. Replaces the day rail in site/PremarketDesk.html.
 
 [AMENDED 2026-09-04. It leads with a CALENDAR and not with the row per session
 below, which the owner read as a wall of line items. Every month on file is
@@ -396,7 +410,7 @@ opened.
 
 ### 5. Record
 
-SPECIFIED, NOT DRAWN. Replaces site/Weekly.html.
+SPECIFIED, NOT DRAWN [corrected 2026-09-06: BUILT 2026-09-04]. Replaces site/Weekly.html.
 
 Route: `#/record`.
 
@@ -418,7 +432,7 @@ where it says the rest.
 
 ### 6. Name
 
-SPECIFIED, NOT DRAWN. Exists in no form today.
+SPECIFIED, NOT DRAWN. Exists in no form today [corrected 2026-09-06: BUILT 2026-09-04, so it exists; the sentence was true the hour it was written and false by that evening].
 
 Route: `#/name/<ticker>`.
 
@@ -434,7 +448,7 @@ path for each appearance, side by side, and what followed each one.
 
 ### 7. Health
 
-SPECIFIED, NOT DRAWN.
+SPECIFIED, NOT DRAWN [corrected 2026-09-06: BUILT 2026-09-04, and amended the same day, which the note below already records].
 
 [AMENDED 2026-09-04. The first build printed five blocks of the packet's raw
 JSON, which is the packet talking to itself, and the owner said so. It now

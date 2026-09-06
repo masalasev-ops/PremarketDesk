@@ -1577,12 +1577,38 @@ DECK_JS = r"""
         }).join("") + "</tbody></table></div></section>";
     }
 
-    if (mid.floors) {
+    // WHAT THE FLOORS TURNED DOWN, BY NAME AND NOT BY THRESHOLD. This
+    // shipped rendering JSON.stringify(mid.floors), which is the three
+    // threshold descriptions and not one refused name, under a heading and a
+    // note that both promised the movers. So it answered a different question
+    // from the one it asked, and it answered it by printing field names at a
+    // reader, which is the defect the Health screen was already corrected for
+    // and which SCREENS forbids on every screen. The names have been in the
+    // packet since 2026-09-03 under movers.tally.floor_examples, which
+    // compact already carries, and nothing had ever displayed them.
+    var fex = (mid.tally || {}).floor_examples || {};
+    var fLabel = { below_move: "the move floor", below_rvol: "the volume floor" };
+    var fRows = ["below_move", "below_rvol"].reduce(function (acc, k) {
+      return acc.concat((fex[k] || []).map(function (r) {
+        return { floor: fLabel[k] || k, sym: r.symbol,
+                 move: r.move_pct, rvol: r.day_rvol };
+      }));
+    }, []);
+    if (fRows.length) {
       html += '<section><div class="shead"><h2>What the floors turned down</h2></div>' +
-        '<p class="snote">The biggest movers each floor refused, which is the only way to ' +
-        "ask what a floor costs.</p><div class=\"card pad\"><pre class=\"mono\" " +
-        'style="white-space:pre-wrap;font-size:12px;color:var(--ink-2);margin:0">' +
-        esc(JSON.stringify(mid.floors, null, 2)) + "</pre></div></section>";
+        '<p class="snote">The biggest movers each floor refused, largest move first, ' +
+        "which is the only way to ask what a floor costs. Every name here was " +
+        "measured and rejected, which is what tells it apart from a name the pass " +
+        'could not price at all.</p><div class="card pad"><div class="scroll">' +
+        '<table class="ptable"><thead><tr><th>Turned down by</th><th>Name</th>' +
+        '<th class="n">Move</th><th class="n">Volume against its own average</th>' +
+        "</tr></thead><tbody>" +
+        fRows.map(function (r) {
+          return "<tr><td>" + esc(r.floor) + '</td><td class="tk">' + esc(r.sym) +
+            '</td><td class="n ' + dirClass(r.move) + '">' + pct(r.move) +
+            '</td><td class="n">' +
+            (r.rvol == null ? NIL : n2(r.rvol) + "×") + "</td></tr>";
+        }).join("") + "</tbody></table></div></div></section>";
     }
     root.innerHTML = html;
     root.addEventListener("click", function (e) {
