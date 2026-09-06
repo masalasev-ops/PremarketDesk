@@ -15,6 +15,79 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty fourth: README was quoting a record that had been cut two days earlier
+
+THE OWNER ASKED FOR THE README CHECKED AND EVERYTHING BROUGHT INTO SYNC. It was
+the one document none of the day's ten commits had touched, and the drift it
+had accumulated was worse than the stale cap number that prompted the check.
+
+THE RECORD IT QUOTED NO LONGER EXISTS AND THE FILE NEVER NOTICED. Every ledger
+figure in it, 66 picks across 7 sessions, 16 trades at a median -1.38 percent,
+10 of 10 early peaks closing red, described the August record, and entry sixty
+second of 2026-09-04 removed 8 live sessions and 68 rows of that record the
+same afternoon. The README rebuild later that day, entry sixty ninth, carried
+the scope note and the ledger block through UNCHANGED on the stated ground that
+they were factual reference already checked against the tree. They were checked
+against the tree. They were not re-derived against the database, and the cut
+had landed between the two entries. The lesson is specific: a number carried
+forward because it was true when it was written is exactly what a rebuild does
+not catch, because nothing about it looks wrong.
+
+RE-DERIVED, from night/paper_ledger.record_so_far rather than from the previous
+copy: 43 picks across 4 sessions, 13 traded across 3, 11 of 13 reaching their
+trigger within thirty minutes at a median of 0, 6 of 6 early peaks closing red,
+4 of 4 late peaks closing green, a median 1.18 percent best while held against
+0.11 booked. The block's SHAPE was stale too and is now the renderer's: it had
+lost the sizing refusal bullet the report has printed since the five state
+split, and the closing sentence saying the ledger is as of last night.
+
+THE SCORE WATCH SURVIVED THE CUT, which is worth stating because it is the one
+reading that got stronger. Over August it was green n=20 at -7.44 against
+yellow n=21 at +1.36. Over the four sessions since, with NO ROWS IN COMMON, it
+is green n=12 at -6.10 against yellow n=13 at -1.74. Red is withheld at n=6
+over 2 sessions, under both [Score watch] minimums. Green has now read worse
+than yellow on two disjoint samples. It is still four sessions, it is still not
+a result, and SCORE_INVERSION.md still holds the judging point.
+
+WHAT ELSE WAS STALE. The cap in two places, still 42 where CRITERIA has said 45
+since this morning. The midday recall column called it "the 50 symbol cap",
+which stopped being one number the moment the candidate cap and the socket cap
+diverged. "Eight tables" over a schema holding nine, schema_version being the
+one nobody lists. The fill warning's 6 of 10 and 6 of 44 printed with no date,
+over a 66 row population that is no longer on disk. And the cost section still
+priced ONE discovery pass, three days after the second one began firing: it is
+306 credits a pass and 612 a day, against a weekday total near 1,628.
+
+WHAT WAS MISSING RATHER THAN WRONG. A nine step setup with no way to run the
+test suite in it, so step 4 is the suite now, which is also the only step that
+costs nothing and proves the install. The two measurements of 2026-09-06 are
+named where a reader looks for what this project knows about its own selection,
+in the scope section and in the document list, each with the statement that it
+is not built and that one of them cannot be on this plan.
+
+THE DAY'S OTHER SIX COMMITS HAD NO ENTRY HERE EITHER, which is the same failure
+one level up, so they are recorded now rather than left to the git log. The
+architecture page was rebuilt for a reader who trades nothing and writes no
+code: a plain words opening, a twenty term glossary, the two setups with worked
+examples, a walk through all nine screens, and the maintainer's reference
+material moved to the back. The Midday screen's "What the floors turned down"
+was printing JSON.stringify of the floor DESCRIPTIONS, three threshold
+sentences, where the names each floor actually refused had been in the packet
+since 2026-09-03 and drawn by nothing; it is a table now. The suite's tree
+photograph moved from mtime and size to a content hash for files under 64 KB,
+so a no-op touch of a sidecar stops failing a green run while a same size
+rewrite starts failing one it used to pass. And packages 5.5 and 6.3 each
+landed as a pre-registration commit followed by a result commit.
+
+One wording correction in PREMARKET_PRIOR_RESULT.md: "the honest reading" is a
+framing this project does not use, because it implies the other readings were
+not. late_news_test.py carries the same word and KEEPS IT. That docstring is a
+pre-registration committed before the run, and editing it once the number is
+known damages the only property it exists to have, which is worth more than the
+word is.
+
+README 964 lines to 1,076, under the 1,500 cap. No code changed.
+
 ## 2026-09-06, eighty third: three context tickers were paying rent on nothing
 
 THE CAP WENT 42 TO 45 without buying a thing, because three of the eight

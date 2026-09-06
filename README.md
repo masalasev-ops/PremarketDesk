@@ -138,10 +138,21 @@ one an email can carry, so it is a complete document on its own, and being
 complete is why most of it repeats the screens. See
 `## The morning report, and what is only in it` for what does not.
 
-Every ticker and number in the examples below is INVENTED. `runs/` and `site/`
-are gitignored so no real morning is ever committed to a public repository. The
-one place real figures appear is the paper ledger's aggregate counts, which are
-labelled where they are used.
+Tickers and numbers in the examples below are INVENTED unless the text says
+otherwise. `runs/` and `site/` are gitignored so no real morning is ever
+committed to a public repository. Real figures appear in exactly three places
+and each says so where it is used: the paper ledger's aggregate counts, the
+score watch's group medians, and the two rows of the midday worked example,
+which are MNSO and SAIC on 2026-08-31, the first session that pass ever ran.
+
+Every one of those three is an aggregate over the live record, and THE LIVE
+RECORD WAS CUT ON 2026-09-04 to start at 2026-09-01. Eight sessions and 68 live
+picks from August went, on the owner's decision that too much had changed for
+them to mean anything: the two phase collector's first morning was 2026-09-03,
+so even the sessions that remain do not all measure premarket volume over the
+same window. Figures printed here from before the cut carry their date.
+`doc/CHANGELOG.md` 2026-09-04 records what went and what was kept, and
+`doc/MIGRATION.md` records how it was done.
 
 ### The desk
 
@@ -405,11 +416,17 @@ rule governs every ranked list on every screen: each prints its own state and
 denominator, so a short list cannot read as a quiet market.
 
 **The thin band line is the fill warning and it fires in one direction only.**
-A name it does NOT mention has not passed anything. Measured over the 54 past
-rows where the night reached a verdict at all, it caught 6 of the 10 levels it
-went on to call untradeable and flagged 6 of the 44 that were fine. Four in ten
-untradeable levels get past it. The population is 66 rows; the other 12 are the
-ones the night could not judge either, counted apart rather than folded in.
+A name it does NOT mention has not passed anything. Measured 2026-08-28, over
+the 54 rows of the then live record where the night reached a verdict at all,
+it caught 6 of the 10 levels it went on to call untradeable and flagged 6 of
+the 44 that were fine. Four in ten untradeable levels get past it. The
+population was 66 rows; the other 12 are the ones the night could not judge
+either, counted apart rather than folded in. That population is the August one
+and no longer exists on disk, which is why the date is on the sentence: the
+calibration behind the floor is a dated measurement and the record it was taken
+over was cut on 2026-09-04. The counts travel with the threshold in
+`doc/CRITERIA.md` and `doc/DECISIONS.md`, and re-deriving them means the same
+sweep over the new record.
 Nothing in this system may ever write that a level looks liquid or should fill,
 because the definitive answer is computed that night from a complete tape and
 is not available at 08:45.
@@ -433,33 +450,50 @@ and section 10 of the report, from the paper ledger, which is what one written
 rule in `doc/CRITERIA.md [Paper]` would have done with every past pick.
 
 ```
-The ledger holds 66 picks across 7 sessions, of which 16 were traded across 6.
-The sample unit is the session and not the pick, so this rests on six
-observations rather than sixteen.
+The ledger holds 43 picks across 4 sessions, of which 13 were traded across 3.
+The sample unit is the session and not the pick, so this rests on 3
+observations rather than on the row count.
 
-14 of 16 trades reached their trigger within thirty minutes of the open, at a
-median of 1 minute.
-28 picks never reached their trigger at all, across 6 sessions.
-10 of 10 trades that made their best price within ten minutes of entry closed
-below their entry.
-4 of 4 trades that made their best price more than a hundred minutes after
-entry closed above it.
+- 11 of 13 trades reached their trigger within thirty minutes of the open, at
+  a median of 0 minutes.
+- 15 picks never reached their trigger at all, across 4 sessions.
+- 0 picks reached their trigger and the sizing rule declined to buy anything,
+  across 0 sessions. That is a fact about CRITERIA [Paper] sizing and not
+  about the screen.
+- 6 of 6 trades that made their best price within ten minutes of entry went on
+  to close below their entry.
+- 4 of 4 trades that made their best price more than a hundred minutes after
+  entry closed above it.
 
-The best a position was worth while open was a median +1.84 percent, against
-a median -1.38 percent booked at the exit. Rule version v1.
+The best a position was worth while open was a median 1.18 percent, against a
+median 0.11 percent booked at the exit. Rule version v1. These are counts over
+a small record and describe nothing beyond what was observed.
 ```
 
-Those are the real current figures and they are also in `doc/CHANGELOG.md`.
+Those are the REAL figures as the ledger stands on 2026-09-06, over the four
+sessions left after the 2026-09-04 cut. They are what
+`night/paper_ledger.record_so_far` returns, which is where the report and the
+Record screen both read them.
 
 **What you take from it is shape, not instruction.** A name that made its high
-in the first ten minutes and faded has not recovered once in ten tries, and the
-four that worked were still making highs an hour or more in. Ten and four are
-not sample sizes.
+in the first ten minutes and faded has not recovered once in six tries, and the
+four that worked were still making highs an hour or more in. Six and four are
+not sample sizes, and three sessions is not three independent weeks.
+
+**The August version of this block said something stronger and it is gone with
+its record.** As the ledger stood on 2026-08-29, over 66 picks in 7 sessions,
+the same rule had booked 16 trades across 6 at a median -1.38 percent while the
+best price while held was a median +1.84, so v1 lost money on trades that had
+all been in profit at some point. That was the first thing the record earned
+and it is now history: the four sessions since sit at a median +0.11 percent
+booked, on thirteen trades, which
+is a different number over a different market and settles nothing either way.
+Both are counts over a handful of sessions. Neither is a result.
 
 `doc/REPORT_TEMPLATE.md` FORBIDS turning any of this into advice: three
 specimens of the phrasing it may not use are written into it verbatim, and so
 is a ban on the words pattern, signal, edge and tendency. If you ever see one,
-that is a defect worth chasing, because a description of six sessions written
+that is a defect worth chasing, because a description of four sessions written
 as an instruction is a strategy nobody validated wearing the authority of a
 generated document.
 
@@ -569,8 +603,9 @@ you it does not know why it moved.
 The right hand column is a live recall measurement with three states that are
 not the same fact: **subscribed** means the collector was listening and the
 08:45 screen declined it; **pooled not subscribed** means discover ranked it
-and the 50 symbol cap cut it, so no premarket tape exists for it at all; **not
-pooled** means discover never had it. On the first real run the two largest
+and the candidate cap cut it, 45 names out of the socket's 50, so no premarket
+tape exists for it at all; **not pooled** means discover never had it. On the
+first real run the two largest
 moves of the day were both in the middle group.
 
 **What it costs**: about 2,900 credits a session against a shared 100,000 a
@@ -600,15 +635,21 @@ from scratch every night, always covering the last seven days ending yesterday.
 | What did it cost | This project's spend against the shared key's siblings, and the closest any morning came to the preflight floor | A morning that came close to the floor. The jobs that spend before the open refuse rather than discover the limit through errors |
 | Does the score order anything | Filled outcomes grouped by conviction bucket AND by each score component separately, with both denominators everywhere | Nothing yet. See below |
 
-**The score watch is the long game and it currently reads backwards.** Green
-n=20 at a median -7.44 percent favourable excursion against yellow n=21 at
-+1.36. Red is withheld at n=8 because it is below the stated minimum, and the
-page refuses to print any group below that minimum rather than printing a
-number with a caveat.
+**The score watch is the long game and it currently reads backwards.** Real
+figures, over the four live sessions on file at 2026-09-06: green n=12 at a
+median -6.10 percent favourable excursion against yellow n=13 at -1.74. Red is
+withheld at n=6 over 2 sessions, below both `[Score watch] min_group_rows` of
+10 and `min_group_sessions` of 3, and the page refuses to print any group below
+either minimum rather than printing a number with a caveat.
 
-That direction survived correcting the reference levels from the collector's
-sampled ones to measured ones, which is the correction that flipped the sign on
-both excursion medians for everything else. It is six sessions and it is not a
+That direction has now survived two things. First the correction of the
+reference levels from the collector's sampled ones to measured ones, which
+flipped the sign on both excursion medians for everything else. Then the
+2026-09-04 cut, which took the whole population the earlier reading rested on:
+over the August record it was green n=20 at -7.44 against yellow n=21 at +1.36,
+and over the four sessions since it is green n=12 at -6.10 against yellow n=13
+at -1.74. Those are different samples with no rows in common, and green has
+read worse than yellow in both. It is still four sessions and it is still not a
 result. `doc/research/SCORE_INVERSION.md` holds the pre-registered judging
 point and what would count as no relationship, written while the record was too
 small to judge, on purpose, so the verdict cannot be chosen once the counts
@@ -678,23 +719,60 @@ Record screen and in section 10 of the report.
 
 **The machine is complete and runs.** Seven scheduled tasks [corrected 2026-09-02: was eleven; the same seven jobs, each task now carrying every trigger its job has], every weekday since
 2026-08-13, with a watchdog over them and a job trail under them. The midday
-pass is the newest and joined on 2026-08-31.
+pass is the newest job and joined on 2026-08-31. The newest change to how a
+morning runs is the two phase collector, from 2026-09-03: the socket opens at
+04:00 on a provisional pool and moves onto the 07:15 one at 07:20, where before
+it opened at 07:20 and saw none of the early session.
 
-**The record is 66 picks across 7 sessions.** That is enough to have found real
-defects and nowhere near enough to validate anything.
+**The record is 43 picks across 4 sessions, 2026-09-01 to 2026-09-04.** It was
+111 live picks across 12 sessions until 2026-09-04, when the owner cut the 68
+rows and 8 sessions that fell before 2026-09-01, on the grounds that too much
+had changed for August to mean anything. That is enough to have found real
+defects and nowhere near enough to validate anything, and there is now less of
+it than there was a week ago.
 
-**Every threshold in `doc/CRITERIA.md` is a seed value copied from a third
-party.** Until a few dozen more sessions of outcomes exist, the report is a well
-formatted list of names that met a stranger's rules. That is not modesty, it is
-the actual epistemic state, and the pre-registered judging points exist so the
-moment it changes is not a matter of opinion.
+**The pool is measured to miss most of what gaps, and by how much is now
+known.** Over a 240 session replay the shipped selection reaches 0.32 of the
+names that gap 8 percent or more; giving ten of the forty five candidate slots
+to names an outside premarket tape says are already moving at 07:00 takes that
+to 0.59, measured 2026-09-06 with a paired t of 21.27 over 239 sessions. That
+is the largest single finding this project has produced about its own
+selection, it is not built, and it cannot be built on the current data plan:
+the vendor that serves the premarket tape refuses a session that is still
+running on its free tier, so the 0.59 is an upper bound on anything live. A
+cheaper quarter of it IS buildable and is also unbuilt: a third discovery pass
+at 08:15 reaches 0.820 big gappers a session against a pre-registered bar of
+0.5, on the same vendor and the same code. Both are written up in
+`doc/research/` with their pre-registrations committed before the code that
+produced a number, and both are owner decisions rather than pending work.
 
-**The one thing the record has already earned.** Rule v1 lost money over its
-first 16 trades, and every one of those 16 was in profit at some point while it
-was held. A trigger producing random entries could not do that. So the first
-result indicts the exit and the risk carried per trade, not the screen behind
-it, and that is a more useful thing to know than a profitable sixteen trades
-would have been.
+**Every threshold that decides whether a name reaches a watchlist is a seed
+value copied from a third party.** Not one line of `[Day setup]` or
+`[Swing setup]` carries a MEASURED marker, and those are the lines that decide
+membership. Until a few dozen more sessions of outcomes exist, the report is a
+well formatted list of names that met a stranger's rules. That is not modesty,
+it is the actual epistemic state, and the pre-registered judging points exist
+so the moment it changes is not a matter of opinion.
+
+What HAS been measured on this project's own data is the plumbing under those
+screens rather than the screens: the capture rate the RVOL estimate divides by,
+the tier floor and the within tier ranking key discovery orders the pool with,
+the news freshness window, the fill warning's band, the Alpaca batch size, and
+the analyst timeout. Every one of those carries its measurement in the note
+beside it. None of them says a gap of 3 percent is the right gap.
+
+**The one thing the record earned, and it went with the record.** Measured
+2026-08-29 over the seven sessions then on file, rule v1 lost money on its
+first 16 trades and every one of those 16 had been in profit at some point
+while it was held. A
+trigger producing random entries could not do that, so that first result
+indicted the exit and the risk carried per trade rather than the screen behind
+it, which was a more useful thing to know than a profitable sixteen would have
+been. Those trades are no longer on disk. Over the four sessions since the cut
+the same rule is 13 trades at a median +0.11 percent, which does not overturn
+the earlier reading and is nowhere near enough to confirm it either. The
+finding stands as a hypothesis about the exit, waiting on a record that has to
+be rebuilt from 2026-09-01.
 
 ## What you need
 
@@ -756,20 +834,38 @@ would have been.
    .venv\Scripts\python.exe -m core.config
    ```
 
-4. **Arm the delivery gate.** This creates `data\UNVERIFIED`, and
+4. **Run the suite.** It spends no vendor calls and reaches no network, so it
+   is the cheapest thing that proves the install. Run it from `src`, which is
+   the import root every `.bat` sets:
+
+   ```
+   cd src
+   ..\.venv\Scripts\python.exe -m tests.run_tests
+   cd ..
+   ```
+
+   Fourteen suites of named claims, each a sentence about behaviour rather
+   than a test number. Every test runs inside a sandbox that redirects the
+   writable roots, and the whole working tree is photographed before and after
+   and compared by content, so a test that hardcodes an absolute path and
+   escapes the sandbox fails the run rather than quietly editing your
+   checkout. `--prove-check` and `--prove-check-outside` deliberately escape,
+   to show the check is real; both are meant to FAIL.
+
+5. **Arm the delivery gate.** This creates `data\UNVERIFIED`, and
    `deliver.py` refuses to email while that file exists:
 
    ```
    .venv\Scripts\python.exe -m morning.verify_morning --arm
    ```
 
-5. **Build the first universe, and the gap statistics that rank it.** Normally
+6. **Build the first universe, and the gap statistics that rank it.** Normally
    the Sunday firing of `job_nightly.bat`, and it is both halves: that firing
    runs the rebuild and then the propensity sweep over every name in it. Discovery ranks
    the pool inside each tier by `gap_propensity`, so a universe with no gap
    statistics behind it leaves discover with nothing to order by, and
    `[Discovery] min_ranked_fraction_to_subscribe` makes it write no watchlist
-   and exit non zero rather than subscribe an arbitrary 42 names. The second
+   and exit non zero rather than subscribe an arbitrary 45 names. The second
    command is the larger of the two: one counted call per universe name,
    measured at 2,745 calls and 421 seconds.
 
@@ -778,7 +874,7 @@ would have been.
    .venv\Scripts\python.exe -m selection.gap_stats
    ```
 
-6. **Register the scheduled jobs:**
+7. **Register the scheduled jobs:**
 
    ```
    powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
@@ -796,7 +892,7 @@ would have been.
    uses the PowerShell ScheduledTasks module, which stores the path
    structurally. Details and caveats are in `tasks/README.md`.
 
-7. **Let a real morning run**, then read the gate table that
+8. **Let a real morning run**, then read the gate table that
    `src/morning/verify_morning.py` prints into `logs\morning-chain-YYYY-MM-DD.log`.
    For the first three candidates it lays the evidence out on one line: the
    price and the minute it printed, the collector's premarket volume, the
@@ -806,7 +902,7 @@ would have been.
    lesson of the first live morning. You can also run any step by hand in
    pipeline order; every script is idempotent and safe to rerun.
 
-8. **Go live.** When a morning looks right: delete `data\UNVERIFIED`, put
+9. **Go live.** When a morning looks right: delete `data\UNVERIFIED`, put
    `RESEND_API_KEY` and `EMAIL_TO` into `.env`. The next morning's report
    arrives by email. Everything before this point is guaranteed to send
    nothing.
@@ -818,10 +914,10 @@ destination is not in the tree at all, and is the last row for that reason:
 
 | Path | What |
 | --- | --- |
-| `data/premarketdesk.db` | SQLite (WAL), eight tables. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet; research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by `research/replay_outcomes.py` and read only by the Precedent screen, never pooled with paper_trades under any question; and research_daily, what a name the desk never PRICED did on a replayed session, from its daily bar, written only by `research/replay_daily.py` and read only by the Precedent screen, a separate table from research_outcomes because a daily bar and a simulated trade are different measurements and one count over both would describe neither |
+| `data/premarketdesk.db` | SQLite (WAL), nine tables, eight of them records and the ninth `schema_version`, one row saying which migration the file has had applied. picks, one row per (date, ticker), carrying the pool source and tier that put each name in front of the collector; baseline, the premarket volume denominator; gap_stats, one row per (ticker, as_of), and gap_sweeps, one row per sweep recording what that as_of covered; paper_trades, one row per live pick per rule version, holding the trade the `[Paper]` rule took or the reason it declined; sessions, one summary row per session written by `desk/compact.py`, which is what lets the Sessions, Record and Name screens ask a question across every session without opening every packet; research_outcomes, what a RECONSTRUCTED pick did on its own session, written only by `research/replay_outcomes.py` and read only by the Precedent screen, never pooled with paper_trades under any question; and research_daily, what a name the desk never PRICED did on a replayed session, from its daily bar, written only by `research/replay_daily.py` and read only by the Precedent screen, a separate table from research_outcomes because a daily bar and a simulated trade are different measurements and one count over both would describe neither |
 | `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
 | `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
-| `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, and that is not simply the top 42: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
+| `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, which is 45 since 2026-09-06, the socket's hard 50 less the five context tickers. That is not simply the top 45: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
 | `site/PremarketDesk.html` | The desk: every session on file in one self contained document, nine screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended |
@@ -850,7 +946,13 @@ Other documents:
   fetched again once it is left behind, and the two ways to start the record
   over. Written for a Windows to macOS move.
 - `doc/ArchitecturePremarketdesk.html` and `doc/Premarketdesk_ADayRunArc.html`
-  are the architecture pages; open them in a browser.
+  are the architecture pages; open them in a browser. The first was rewritten
+  on 2026-09-06 for a reader who trades nothing and writes no code: it opens by
+  saying what a gap is in plain words, carries a twenty term glossary, explains
+  the two setups with worked examples, and walks the nine screens one at a
+  time. The reference material a maintainer needs, the module catalogue, the
+  store matrix, the failure modes and the file map, now sits at the back rather
+  than the front.
 - `doc/REPORT_TEMPLATE.md` and `doc/prompt_analyst.md` are the report shape
   and the narrative instructions, the specification of every sentence the
   skeleton renders and the documents piped to the CLI when `CRITERIA
@@ -862,8 +964,14 @@ Other documents:
   is what is kept, for how long, and what may never be deleted.
 - `doc/ALPACA_PROBE.md` is what the Alpaca free plan was measured to serve and
   to refuse, which is what puts the truth pass at night rather than in the
-  morning. `doc/research/` holds the other measurement write ups and the raw
-  outputs behind them.
+  morning, and is also what blocks the premarket sweep below. `doc/research/`
+  holds the other measurement write ups and the raw outputs behind them. Two
+  are worth naming because they are the largest findings about selection this
+  project has: `PREMARKET_PRIOR_RESULT.md`, which takes big gap recall from
+  0.32 to 0.59 and cannot be built on this data plan, and
+  `LATE_NEWS_RESULT.md`, which is about a quarter of it and can. Each sits
+  beside its own pre-registration, committed before the code that produced the
+  number, so the rule and the bar cannot have been chosen after the fact.
 - `doc/sample_report.html` is a hand built mock with invented data, kept
   because `runs/` and `site/` are gitignored and no real report is in the
   repository. It predates the settled template: its watchlist headers are the
@@ -877,11 +985,16 @@ Other documents:
 - **EODHD:** the websocket collector was measured at zero against the
   vendor's own API counter (connections, subscribes, and reconnects
   included; `src/research/measure_socket_cost.py` reproduces the measurement). REST
-  usage is a few hundred counted calls a day. Discovery spends up to three
+  usage is a few hundred counted calls a day and a measured weekday total near
+  1,628 of the shared 100,000. Discovery spends up to three
   bulk end of day calls at a measured 100 credits each, two for the prior
   session movers source and one more for the third session close the
   briefing's two session leg is measured from, plus one earnings calendar
-  call and up to five news calls; the baseline warm spends one
+  call and up to five news calls. That is 306 credits a pass, measured on
+  2026-08-20, 2026-09-01 and 2026-09-02, and DISCOVERY RUNS TWICE since
+  2026-09-03, so 612 a day rather than 306. The collector's longer window costs
+  nothing at all: listening from 04:00 rather than 07:20 makes no priced call,
+  because its only HTTP request is the user preflight. The baseline warm spends one
   intraday call per stale name; the 08:45 scan spends a few dozen across
   quotes, history and news; the nightly spends one intraday call per pick
   plus two bulk end of day calls for the pool recall measurement, today's

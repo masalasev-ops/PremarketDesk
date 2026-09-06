@@ -38,7 +38,7 @@ recently. The sweep looks at what is happening this morning. The reason the
 project has never done that is not oversight, it is that no EODHD endpoint on
 this plan serves the whole universe's premarket before the open.
 
-So the honest reading is not "the priors are bad". It is that the priors are
+So the reading is not "the priors are bad". It is that the priors are
 being asked to predict something that, three hours before the scan, is already
 observable through a vendor this project does not use for selection.
 
