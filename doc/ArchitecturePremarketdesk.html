@@ -291,19 +291,21 @@ tbody tr:hover{background:var(--ground)}
         <li><span class="n">04</span><a href="#s4">The weekday, end to end</a></li>
         <li><span class="n">05</span><a href="#s5">The morning relay</a></li>
         <li><span class="n">06</span><a href="#s6">Inside the scan</a></li>
-        <li><span class="n">07</span><a href="#s7">Inside the analyst pass</a></li>
-        <li><span class="n">08</span><a href="#s8">The blind window and the night</a></li>
-        <li><span class="n">09</span><a href="#s9">One picks row, four passes, one ledger row</a></li>
-        <li><span class="n">10</span><a href="#s10">Load-bearing rules</a></li>
+        <li><span class="n">07</span><a href="#s7">What makes a share qualify</a></li>
+        <li><span class="n">08</span><a href="#s8">Inside the analyst pass</a></li>
+        <li><span class="n">09</span><a href="#s9">The nine screens</a></li>
+        <li><span class="n">10</span><a href="#s10">The blind window and the night</a></li>
+        <li><span class="n">11</span><a href="#s11">One picks row, four passes, one ledger row</a></li>
+        <li><span class="n">12</span><a href="#s12">Load-bearing rules</a></li>
       </ol>
     </div>
     <div>
       <div class="grp">Reference, for looking up</div>
       <ol>
-        <li><span class="n">11</span><a href="#s11">Layers and component catalogue</a></li>
-        <li><span class="n">12</span><a href="#s12">Data store read and write matrix</a></li>
-        <li><span class="n">13</span><a href="#s13">Failure behaviour</a></li>
-        <li><span class="n">14</span><a href="#s14">File map</a></li>
+        <li><span class="n">13</span><a href="#s13">Layers and component catalogue</a></li>
+        <li><span class="n">14</span><a href="#s14">Data store read and write matrix</a></li>
+        <li><span class="n">15</span><a href="#s15">Failure behaviour</a></li>
+        <li><span class="n">16</span><a href="#s16">File map</a></li>
       </ol>
     </div>
   </div>
@@ -469,7 +471,7 @@ tbody tr:hover{background:var(--ground)}
   <div class="note"><p><b>About the C-numbers.</b> From section 04 onward you will see codes like
   <code>C16</code> and <code>C59</code>. They are just names for the seventy moving parts, used
   consistently so that a diagram, a table and a paragraph can all refer to the same thing without
-  ambiguity. Section 11 lists every one of them. You can ignore them entirely and lose nothing.</p></div>
+  ambiguity. Section 13 lists every one of them. You can ignore them entirely and lose nothing.</p></div>
 </section>
 
 <!-- 3 -->
@@ -882,12 +884,106 @@ tbody tr:hover{background:var(--ground)}
   <code>record_so_far</code> and carries the result into C29. It is the first thing in the morning
   path that reads the record back rather than only writing to it, it costs one local table read and no
   vendor call, and what it produces is a report section that is not about today's names. See section
-  08.</p></div>
+  11.</p></div>
+</section>
+
+<!-- setups -->
+<section id="s7">
+  <h2><span class="n">07</span> &nbsp;Setups</h2>
+  <h3>What makes a share qualify</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>Twelve names reach the report each morning. Two separate tests then ask whether each one is
+    worth acting on, and a name can pass either, both, or neither. Passing nothing is a normal
+    result and the name still appears, described and unrecommended.</p>
+    <p>The <strong>day setup</strong> is for something to be done in the first hour: a decent move,
+    genuinely unusual volume behind it, and a price that has already cleared yesterday's peak. The
+    <strong>swing setup</strong> is for something held for days: a much bigger move, a real piece of
+    news behind it, and a price above its own long term trend.</p>
+    <p>They are deliberately kept as two separate lists of rules rather than one list with settings,
+    because a share worth an hour and a share worth a week are different animals and the two are
+    allowed to disagree about the same name. They frequently do, and the example below shows one.</p>
+  </div>
+
+  <p>Every threshold on this page is read from <code>CRITERIA.md</code> at run time and appears in
+  no Python file. A candidate is <code>day_eligible</code> only when every line of the day setup
+  passes, and <code>swing_eligible</code> only when every line of the swing setup does. The names of
+  any failed conditions are recorded on the row, so a rejection can be argued with rather than
+  guessed at.</p>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>The rule</th><th>Day setup</th><th>Swing setup</th><th>Why it is there</th></tr></thead>
+    <tbody>
+      <tr><td class="nm">gap vs prior close</td><td>more than 3%</td><td>8% or more</td><td>Absolute in both, so a fall of 9% clears the number as surely as a rise. What makes both screens long in practice is the prior high rule two lines down, not the gap.</td></tr>
+      <tr><td class="nm">latest premarket price</td><td>above $3</td><td>above $3</td><td>Below three dollars the spread between buying and selling price is a large fraction of the move, so the level printed is not a level anyone trades at.</td></tr>
+      <tr><td class="nm">market value</td><td>above $1B</td><td>$800M or more</td><td>Keeps out the very small companies where a modest amount of buying moves the price a long way and the move means little.</td></tr>
+      <tr><td class="nm">relative volume</td><td>above 1.5x</td><td>not tested</td><td><b>The day setup's most important line.</b> The move has to be backed by at least half again the trading this share normally sees by this time. The swing setup omits it deliberately: over days, the news matters more than this morning's crowd.</td></tr>
+      <tr><td class="nm">above yesterday's high</td><td>required</td><td>required</td><td>The single condition that makes both screens long in practice, since clearing yesterday's peak requires a price above that session's close.</td></tr>
+      <tr><td class="nm">above the 200 day average</td><td>not tested</td><td>required</td><td>Only the swing setup cares. Something held for a week is being held against the longer trend; something held for an hour is not.</td></tr>
+      <tr><td class="nm">a catalyst was found</td><td>not tested</td><td>required</td><td>A swing needs a reason that will still be true tomorrow. A day trade can be taken on flow alone.</td></tr>
+      <tr><td class="nm">the price is fresh</td><td>required</td><td>required</td><td>The last trade heard must be recent at the 08:45 clock. Since 2026-09-02 a stale print fails this line and the name stays in the report saying so, rather than vanishing from it.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note"><p><b>Every number in the worked example below is invented.</b> The four ticker
+  symbols are real companies, and nothing beside them is: the prices, gaps, volumes and outcomes
+  were made up to show the rules working, and the catalysts are named only by the class the system
+  records rather than as events that happened. This is not a real session, not a record of one, and
+  not a recommendation about any of these companies.</p></div>
+
+  <figure>
+  <div class="tw">
+  <table>
+    <thead><tr>
+      <th>Illustrative morning</th>
+      <th>SNOW<br><span style="font-family:var(--sans);text-transform:none;letter-spacing:0">the clean pass</span></th>
+      <th>F<br><span style="font-family:var(--sans);text-transform:none;letter-spacing:0">the disagreement</span></th>
+      <th>PLTR<br><span style="font-family:var(--sans);text-transform:none;letter-spacing:0">too small to swing</span></th>
+      <th>RIVN<br><span style="font-family:var(--sans);text-transform:none;letter-spacing:0">wrong direction</span></th>
+    </tr></thead>
+    <tbody>
+      <tr><td class="nm">gap vs prior close</td><td>+11.8%</td><td>+9.1%</td><td>+4.2%</td><td>-12.4%</td></tr>
+      <tr><td class="nm">premarket price</td><td>$214.60</td><td>$12.40</td><td>$28.90</td><td>$9.15</td></tr>
+      <tr><td class="nm">market value</td><td>$71B</td><td>$49B</td><td>$64B</td><td>$9B</td></tr>
+      <tr><td class="nm">relative volume</td><td>22.4x</td><td><b>1.2x</b></td><td>6.8x</td><td>14.1x</td></tr>
+      <tr><td class="nm">above yesterday's high</td><td>yes</td><td>yes</td><td>yes</td><td><b>no</b></td></tr>
+      <tr><td class="nm">above 200 day average</td><td>yes</td><td>yes</td><td>yes</td><td>no</td></tr>
+      <tr><td class="nm">catalyst class found</td><td>earnings</td><td>guidance</td><td>analyst action</td><td>none found</td></tr>
+      <tr><td class="nm">price fresh at 08:45</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr>
+      <tr style="border-top:2px solid var(--rule)"><td class="nm"><b>Day setup</b></td><td style="color:var(--store)"><b>PASSES</b></td><td style="color:var(--ext)"><b>fails</b><br>relative volume 1.2 is under 1.5</td><td style="color:var(--store)"><b>PASSES</b></td><td style="color:var(--ext)"><b>fails</b><br>not above yesterday's high</td></tr>
+      <tr><td class="nm"><b>Swing setup</b></td><td style="color:var(--store)"><b>PASSES</b></td><td style="color:var(--store)"><b>PASSES</b></td><td style="color:var(--ext)"><b>fails</b><br>4.2% gap is under 8%</td><td style="color:var(--ext)"><b>fails</b><br>not above yesterday's high, no catalyst</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <figcaption><b>Each column teaches one thing.</b> SNOW is the uncomplicated case and needs no
+  explanation. <b>F is why the two setups are separate blocks of rules:</b> a nine percent move on
+  almost ordinary volume is not something to trade in the first hour, and the day setup refuses it
+  on exactly that line, but over a week the volume this morning matters much less than the reason,
+  so the swing setup takes it. One screen says no and the other says yes about the same share on the
+  same morning, and that is the intended behaviour rather than a contradiction to be resolved.
+  <b>PLTR</b> shows the gap thresholds doing their only job. <b>RIVN</b> shows why both screens end
+  up long without either one containing a rule about direction: its twelve percent fall clears both
+  gap numbers comfortably, because both are measured in absolute terms, and then the requirement to
+  sit above yesterday's high rejects it in both. All four names still appear in the report, priced
+  and described. Eligibility decides what is recommended for attention, never what is
+  shown.</figcaption>
+  </figure>
+
+  <div class="note"><p><b>A rule that cannot be measured is not a rule that passed.</b> If the
+  baseline for a share is missing, or fewer than ten sessions of history exist, or the collector
+  heard nothing, relative volume is <code>null</code> with a written reason rather than a zero or a
+  guess. A null cannot satisfy "above 1.5", so the day setup fails and the report names that
+  candidate in its disclaimer line by ticker. This is the difference between a share that was tested
+  and rejected and one that could not be tested at all, and the report is required to keep the two
+  apart.</p></div>
 </section>
 
 <!-- 6 -->
-<section id="s7">
-  <h2><span class="n">07</span> &nbsp;Opened up</h2>
+<section id="s8">
+  <h2><span class="n">08</span> &nbsp;Opened up</h2>
   <h3>Inside the analyst pass</h3>
 
   <div class="plain">
@@ -1057,9 +1153,145 @@ tbody tr:hover{background:var(--ground)}
   </figure>
 </section>
 
+<!-- screens -->
+<section id="s9">
+  <h2><span class="n">09</span> &nbsp;The desk</h2>
+  <h3>The nine screens</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>The emailed report is a document, and on 2026-09-03 it was seventy two thousand characters of
+    it. Nothing in it was wrong. The problem was that the decision had to be found by reading.</p>
+    <p>So there is a second surface. <strong>The desk</strong> is a single web page holding every
+    session the project has ever recorded, nine views onto it, and no server behind it. It answers
+    WHICH NAME by letting you look. The prose still answers WHY, kept in full one click away,
+    because explaining why is the thing this project is actually good at.</p>
+    <p class="aside">It is one file. Every session's data is compressed and embedded inside the page
+    itself, so it opens from a hard drive with no internet connection and behaves identically. There
+    is no framework, no library and no build step: about 570 lines of JavaScript and 300 of CSS.</p>
+  </div>
+
+  <p>Every view is a hash route, which means every view is a link. The share you are looking at is
+  in the address, so what one person is reading can be sent to another machine and be the same
+  thing. Filters live in the address too, so a filtered list is also a link. Back and forward work.
+  Both light and dark themes are designed rather than one inverted from the other.</p>
+
+  <div class="rules">
+    <div class="rule-c" style="border-left-color:var(--morn)">
+      <span class="tag">#/session/&lt;date&gt;/morning</span>
+      <h5>1. Morning</h5>
+      <p><b>Answers: which of this morning's names is worth the next forty five minutes, and what
+      would make me wrong.</b> The screen the desk opens on. Across the top, how the wider market is
+      behaving. Then counters saying how many names were kept, how many passed each setup, how many
+      scored green, each naming its members. Then every candidate on one chart, filterable and
+      clickable. Selecting one opens everything known about it: the levels, the shape of its
+      morning's trading, the score broken into its parts, the evidence behind each, the headline and
+      what the model says the headline is actually about, and the traps.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--mid)">
+      <span class="tag">#/session/&lt;date&gt;/midday</span>
+      <h5>2. Midday</h5>
+      <p><b>Answers: did the levels the morning published survive contact with the open, and what
+      moved that the morning never named.</b> One row per name saying, in words rather than codes,
+      whether the entry level was reached, opened straight past, or never came near. Beside it what
+      the rest of the market did, and what each of the screening floors turned down, biggest mover
+      first. Before noon it counts down to the pass instead of sitting blank, and it distinguishes a
+      pass that has not run yet from one that failed from a page that is simply older than the
+      machine.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--night)">
+      <span class="tag">#/session/&lt;date&gt;</span>
+      <h5>3. Session</h5>
+      <p><b>Answers: what happened on this day, whole.</b> The only screen where the morning's
+      estimate and the night's measurement appear together, in two columns, never merged. A
+      premarket volume the morning estimated by scaling what it heard, and the true consolidated
+      figure the night bought from a second data provider, are two different numbers. A screen that
+      showed one of them and called it "the volume" would be worse than the report already is.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--sched)">
+      <span class="tag">#/sessions</span>
+      <h5>4. Sessions</h5>
+      <p><b>Answers: what have the mornings looked like, and which one do I want.</b> A calendar of
+      every month on file at once. A day the desk holds a morning for is lifted and clickable and
+      carries that morning's biggest mover as a bar on one scale across all months, so a heavy
+      morning is visible before it is opened. Every other day is greyed, at two different weights,
+      because a weekday the machine did not run and a date before the records begin are different
+      facts.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--conf)">
+      <span class="tag">#/record</span>
+      <h5>5. Record</h5>
+      <p><b>Answers: is any of this working.</b> Five questions in order: did it run, is it
+      trustworthy, what did it publish, what did it cost, and does the conviction score actually
+      order the outcomes. That last one is the whole project's exam. Every count arrives with both
+      of its denominators, rows and sessions, and any group below the stated minimum size refuses to
+      print rather than showing a number too small to mean anything.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--found)">
+      <span class="tag">#/name/&lt;ticker&gt;</span>
+      <h5>6. Name</h5>
+      <p><b>Answers: has this share done this before.</b> Every previous appearance of one ticker,
+      side by side, with the levels and the shape of each morning and what followed each one. On the
+      report this exists only as a count of repeats within five sessions. Here it opens back across
+      everything on file.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--ext)">
+      <span class="tag">#/health, #/health/&lt;date&gt;</span>
+      <h5>7. Health</h5>
+      <p><b>Answers: is the machine right.</b> A verdict line, then six or seven checks each with a
+      state and a plain English paragraph carrying the figures. The one that earns this screen its
+      place is the last: the names that cleared the volume floor only because an estimated scaling
+      factor was applied, and which do not clear it on what was actually heard. That is the single
+      place anywhere that a name is shown to be present because of an assumption rather than a
+      measurement. The raw data is still here, folded, because the working should be checkable
+      without being the first thing read.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--morn)">
+      <span class="tag">#/session/&lt;date&gt;/report</span>
+      <h5>8. The report, as written</h5>
+      <p><b>Answers: what did the email actually say that morning.</b> The prose exactly as it
+      shipped. The screens replace reading with looking; they do not replace the writing, and the
+      version that went out has to remain retrievable without qualification.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--night)">
+      <span class="tag">#/session/&lt;date&gt;/precedent</span>
+      <h5>9. Precedent</h5>
+      <p><b>Answers: what happened the last time a share looked like each of these.</b> The newest
+      screen, and the one closest to the point of the whole project. It matches each of this
+      morning's names against every comparable name in the record and reports what those did. What
+      counts as "a name like this one" was written down before a single base rate existed, so the
+      definition could not be shaped to flatter the answer.</p>
+    </div>
+  </div>
+
+  <div class="note"><p><b>Every screen reads what is already on disk and computes nothing at view
+  time.</b> Each session's data is frozen once, at the end of the morning, into a compressed payload
+  embedded in the page. That freeze is what makes a screen reproducible: the shape of a morning's
+  trading cannot be redrawn exactly from the collector's file afterwards, so it is drawn once and
+  kept. No screen touches the database when it renders.</p></div>
+
+  <div class="plain">
+    <span class="tag">Worked example</span>
+    <p>Take the illustrative SNOW row from section 07, and follow it across the screens.</p>
+    <p class="aside"><b>Morning</b> shows it on the chart of all twelve, marked green, and selecting
+    it opens the entry and stop levels, the trading shape of its morning, the score split into the
+    gap, the volume, the catalyst and the position, the earnings headline with a sentence saying
+    whether that headline is about the company itself or its sector, and the traps. <b>Midday</b>
+    says in words whether the entry was reached and by how much it missed if not. <b>Session</b>
+    puts the morning's estimated volume beside what the night measured from the other data provider,
+    so the size of the morning's error is visible rather than corrected away. <b>Precedent</b> says
+    what happened the other times a name gapped like this on earnings with volume like this.
+    <b>Name</b> says whether SNOW itself has been here before, and what followed. <b>Record</b> says
+    whether green names as a class have been outperforming red ones at all yet, and refuses to
+    answer if the sample is still too small.</p>
+    <p class="aside">The numbers in that walk are the invented ones from section 07. The screens are
+    real and shipped.</p>
+  </div>
+</section>
+
 <!-- 7 -->
-<section id="s8">
-  <h2><span class="n">08</span> &nbsp;Coverage</h2>
+<section id="s10">
+  <h2><span class="n">10</span> &nbsp;Coverage</h2>
   <h3>The blind window and the night</h3>
 
   <div class="plain">
@@ -1201,8 +1433,8 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 8 -->
-<section id="s9">
-  <h2><span class="n">09</span> &nbsp;Record</h2>
+<section id="s11">
+  <h2><span class="n">11</span> &nbsp;Record</h2>
   <h3>One picks row, four passes, one ledger row</h3>
 
   <div class="plain">
@@ -1347,8 +1579,8 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 11 -->
-<section id="s10">
-  <h2><span class="n">10</span> &nbsp;Rules</h2>
+<section id="s12">
+  <h2><span class="n">12</span> &nbsp;Rules</h2>
   <h3>Load-bearing rules</h3>
 
   <div class="plain">
@@ -1421,8 +1653,8 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 3 -->
-<section id="s11">
-  <h2><span class="n">11</span> &nbsp;Catalogue</h2>
+<section id="s13">
+  <h2><span class="n">13</span> &nbsp;Catalogue</h2>
   <h3>Layers and component catalogue</h3>
 
   <div class="deep"><b>Reference</b><span>A lookup table for the seventy C-numbers used elsewhere on
@@ -1534,8 +1766,8 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 9 -->
-<section id="s12">
-  <h2><span class="n">12</span> &nbsp;Stores</h2>
+<section id="s14">
+  <h2><span class="n">14</span> &nbsp;Stores</h2>
   <h3>Data store read and write matrix</h3>
 
   <div class="deep"><b>Reference</b><span>Which part reads and which part writes each file, as a
@@ -1632,8 +1864,8 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 10 -->
-<section id="s13">
-  <h2><span class="n">13</span> &nbsp;Failure</h2>
+<section id="s15">
+  <h2><span class="n">15</span> &nbsp;Failure</h2>
   <h3>Failure behaviour</h3>
 
   <div class="deep"><b>Reference</b><span>What happens when each part breaks, one row per
@@ -1699,8 +1931,8 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 12 -->
-<section id="s14">
-  <h2><span class="n">14</span> &nbsp;Reference</h2>
+<section id="s16">
+  <h2><span class="n">16</span> &nbsp;Reference</h2>
   <h3>File map</h3>
 
   <div class="deep"><b>Reference</b><span>Where everything lives on disk, for someone reading the
