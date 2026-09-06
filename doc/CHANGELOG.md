@@ -15,6 +15,57 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty sixth: the record chapter explained why it exists, in pictures
+
+THE OWNER READ THE REWRITTEN SECTION 11 AND SAID THE MORE IMPORTANT QUESTION
+WAS NEVER ANSWERED: what is the point of all this, what is anyone supposed to
+do with it, and "I don't remember at any point the system determining to pick
+something to paper trade". Every part of that was fair.
+
+THE LAST ONE IS THE TELL, AND THE DOCUMENT CAUSED IT. There IS no selection
+step. CRITERIA [Paper] says "UNIVERSE: every live picks row. Not only the
+eligible ones", so every candidate the 08:45 scan writes gets a ledger row that
+night, automatically, and day_eligible and swing_eligible ride along as
+GROUPING columns rather than filters, because booking only what the screen
+admitted makes "did the screen separate outcomes" unaskable. The owner was
+looking for a decision the design deliberately does not contain, and eleven
+paragraphs of mechanism had never once said so.
+
+THE CHAPTER OPENED ON MECHANISM AND NEVER STATED ITS PURPOSE. It began "follow
+one share through the database", which answers HOW before anyone has been told
+WHY. It now opens with a bordered block that states the question in three
+paragraphs: the score is unearned, the only question that matters is whether it
+separates good mornings from bad, that cannot be answered by remembering, and
+so a written record of the claim, the truth and the outcome has to exist. Plus
+the sentence the owner most needed: it is not a trading log, no trade is ever
+placed, and the P&L is the instrument and not the goal.
+
+THREE NEW FIGURES, because the flow was prose only. A CLOCK showing the five
+passes grouped by when they actually fire, which makes visible the thing a list
+hides, that three of the five run seconds apart inside one nightly job in an
+order each step depends on, with a chip on every row saying whether it writes
+the picks row or the ledger's. A TRACE of one invented stock through all five,
+whose right hand column is what a reader would wrongly conclude if they stopped
+at that row, so ACME goes from "strong candidate" to "that level was a print,
+not a market" to refused, which is the most common real outcome and the
+clearest demonstration of why the later passes exist. And a FUNNEL over the 43
+live picks: 15 refused because the level was not a price anyone could have got,
+15 that never reached the entry, 13 booked, 9 held to the close and 4 stopped.
+
+AND WHAT A READER MAY TAKE FROM IT TODAY, which was nowhere. Splitting those 13
+by conviction gives green 6, yellow 5, red 2 against a floor of 10 rows and 3
+sessions, so every group is withheld and the chapter now says so rather than
+leaving a reader to wonder where the answer is. The peak timing shape, 6 of 6
+and 4 of 4, is stated with its size and with the template's ban on writing it
+as advice.
+
+The column by column figure that used to open the chapter is kept and demoted,
+under a heading calling it reference. New CSS for the three figures is scoped
+to them, matches the page's existing tokens and layers, and stacks under
+860px like the figures beside it. Rendered and checked once before shipping.
+
+2,076 lines to 2,271, the page parses balanced, suite green. No code changed.
+
 ## 2026-09-06, eighty fifth: a section that could not be read without a lookup table
 
 THE OWNER SAID SECTION 11 OF THE ARCHITECTURE PAGE WAS NOT CLEAR AT ALL, and

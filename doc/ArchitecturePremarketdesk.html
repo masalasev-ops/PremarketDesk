@@ -198,6 +198,61 @@ tbody tr:hover{background:var(--ground)}
 .life .col .when{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-bottom:10px;display:block}
 .life .col ul{margin:0;padding:0;list-style:none;font-family:var(--mono);font-size:11.5px;line-height:1.85;color:var(--ink-2)}
 
+/* record: the question, the clock, one trace, the funnel */
+.why{background:var(--conf-bg);border:1px solid var(--conf);border-left-width:3px;padding:16px 18px;margin:0 0 6px}
+.why h4{margin:0 0 7px;font-size:15.5px;color:var(--conf)}
+.why p{margin:0 0 9px;font-size:14px;line-height:1.62;color:var(--ink-2)}
+.why p:last-child{margin-bottom:0}
+.why b{color:var(--ink)}
+
+.tline{margin:22px 0 0;border:1px solid var(--rule);background:var(--panel)}
+.tline .zone{border-bottom:1px solid var(--rule-2);padding:13px 16px 15px}
+.tline .zone:last-child{border-bottom:0}
+.tline .clock{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;
+  color:var(--ink-3);margin-bottom:10px}
+.tline .zone.m .clock{color:var(--morn)}
+.tline .zone.n .clock{color:var(--night)}
+.tline .stops{display:grid;gap:8px}
+.tline .stop{display:grid;grid-template-columns:186px 1fr 128px;gap:14px;align-items:baseline;
+  border-left:3px solid var(--rule);padding:5px 0 5px 12px}
+.tline .zone.m .stop{border-left-color:var(--morn)}
+.tline .zone.n .stop{border-left-color:var(--night)}
+.tline .zone.l .clock{color:var(--sched)}
+.tline .zone.l .stop{border-left-color:var(--sched)}
+.tline .stop .who{font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:600}
+.tline .stop .does{font-size:13.5px;color:var(--ink-2)}
+.tline .stop .tbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-align:center;
+  padding:3px 0;background:var(--store-bg);color:var(--store);border:1px solid var(--store);
+  white-space:nowrap}
+.tline .stop .tbl.led{background:var(--ext-bg);color:var(--ext);border-color:var(--ext)}
+
+.trace{width:100%;border-collapse:collapse;margin:20px 0 0;background:var(--panel);
+  border:1px solid var(--rule)}
+.trace th{text-align:left;font-size:11.5px;font-family:var(--mono);letter-spacing:.04em;
+  color:var(--ink-3);font-weight:600;padding:9px 13px;border-bottom:1px solid var(--rule);
+  background:var(--ground)}
+.trace td{padding:11px 13px;border-bottom:1px solid var(--rule-2);font-size:13.5px;
+  color:var(--ink-2);vertical-align:top}
+.trace tr:last-child td{border-bottom:0}
+.trace td.w{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);white-space:nowrap}
+.trace td.said{color:var(--ink)}
+.trace td.said b{color:var(--ext)}
+
+.funnel{margin:20px 0 0}
+.funnel .fbar{display:flex;height:44px;border:1px solid var(--rule);background:var(--panel)}
+.funnel .fseg{display:flex;align-items:center;justify-content:center;font-family:var(--mono);
+  font-size:11px;letter-spacing:.03em;text-align:center;padding:0 8px;border-right:1px solid var(--rule)}
+.funnel .fseg:last-child{border-right:0}
+.funnel .s1{flex:0 0 34.9%;background:var(--ext-bg);color:var(--ext)}
+.funnel .s2{flex:0 0 34.9%;background:var(--sched-bg);color:var(--sched)}
+.funnel .s3{flex:1;background:var(--store-bg);color:var(--store)}
+.funnel .fkey{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:10px}
+.funnel .fkey div{font-size:12.5px;color:var(--ink-2);border-top:2px solid var(--rule);padding-top:7px}
+.funnel .fkey b{display:block;color:var(--ink);font-size:13px;margin-bottom:2px}
+.funnel .fkey.a div:nth-child(1){border-top-color:var(--ext)}
+.funnel .fkey.a div:nth-child(2){border-top-color:var(--sched)}
+.funnel .fkey.a div:nth-child(3){border-top-color:var(--store)}
+
 /* filemap */
 .fm{display:grid;grid-template-columns:132px 1fr;gap:0;border:1px solid var(--rule);background:var(--panel)}
 .fm dt{font-family:var(--mono);font-size:12.5px;font-weight:600;padding:11px 14px;border-bottom:1px solid var(--rule-2);color:var(--ink)}
@@ -250,6 +305,9 @@ tbody tr:hover{background:var(--ground)}
   .toc ol{columns:1}
   .relay,.life{grid-template-columns:1fr}
   .relay .ar,.life .ar{transform:rotate(90deg);padding:6px 0}
+  .tline .stop{grid-template-columns:1fr;gap:3px}
+  .tline .stop .tbl{justify-self:start;padding:3px 9px}
+  .funnel .fkey{grid-template-columns:1fr}
   h3{font-size:22px}
 }
 @media print{body{background:#fff}.toc{display:none}}
@@ -1436,6 +1494,23 @@ tbody tr:hover{background:var(--ground)}
   <h2><span class="n">11</span> &nbsp;Record</h2>
   <h3>Four passes fill one row, and a fifth books a trade beside it</h3>
 
+  <div class="why">
+    <h4>Start here: what is this whole chapter for?</h4>
+    <p>Every morning this system puts a number on a stock. It says ACME scores 7.0, conviction
+    green, and here is the price it would have to clear. <b>Nothing about that number has been
+    earned.</b> The thresholds behind it were copied from a stranger and have never been tested on
+    this data. So the obvious question, and the only one that matters in the long run, is:
+    <b>does that score actually separate the good mornings from the bad ones, or is it decoration?</b></p>
+    <p>You cannot answer that by remembering. You need, for every stock the system ever named, a
+    written record of <b>what it claimed</b>, then <b>what was really true</b>, then <b>what the
+    stock actually did</b>, all three side by side and none of them able to quietly overwrite
+    another. That record is what this chapter builds. Five programs write it, at five different
+    moments, and everything below is the mechanics of those five.</p>
+    <p><b>It is not a trading log and it is not tracking your money.</b> No trade is ever placed.
+    The one rule played over the record exists to turn a claim into a number you can argue with,
+    and its profit and loss is the measuring instrument, not the goal.</p>
+  </div>
+
   <div class="plain">
     <span class="tag">In plain words</span>
     <p>Pick one stock on one morning and follow it through the database. It is the clearest way to
@@ -1453,11 +1528,131 @@ tbody tr:hover{background:var(--ground)}
     would it have bought, at what price, and what would the result have been. That answer goes into
     its own separate table, one row per stock per version of the rule, so a record of what the
     system CLAIMED and a record of what a RULE would have done never get mixed into one number.</p>
-    <p>So the first thing written about a stock is a claim, and the last is what happened.
-    Everything this project is ultimately for lives in the distance between the two, and until a few
-    hundred of these rows exist the report should be read as a formatted list rather than as a
-    judgement.</p>
+    <p>Until a few hundred of these rows exist, the report they feed should be read as a
+    formatted list of names rather than as a judgement about any of them.</p>
   </div>
+
+  <h4 style="margin:30px 0 0;font-size:16px">When the five run, and which of them writes where</h4>
+  <p style="margin-top:6px">Three of the five fire within seconds of each other inside the same
+  nightly job, which is the part a list of programs hides. The order they fire in is not
+  arbitrary: each one needs what the one before it wrote.</p>
+
+  <div class="tline">
+    <div class="zone m">
+      <span class="clock">08:45, on the stock's own morning, 45 minutes before the open</span>
+      <div class="stops">
+        <span class="stop"><span class="who">scan.py</span><span class="does">Writes down the
+        CLAIM. The price, the gap, the score, the conviction, and the two levels the rule will
+        later be judged against.</span><span class="tbl">picks row</span></span>
+      </div>
+    </div>
+    <div class="zone n">
+      <span class="clock">22:15 that night, one job, in this order, and the order is the argument</span>
+      <div class="stops">
+        <span class="stop"><span class="who">backfill_premarket.py</span><span class="does">Writes
+        what the premarket levels REALLY were, now that the vendor has published the full session.
+        The morning only heard about an eighth of the tape.</span><span class="tbl">same picks row</span></span>
+        <span class="stop"><span class="who">true_volume.py</span><span class="does">Writes what the
+        volume really was, from a second vendor's complete tape, and answers the question that
+        decides everything after it: <b>was that level a price anyone could actually have traded
+        at?</b></span><span class="tbl">same picks row</span></span>
+        <span class="stop"><span class="who">paper_ledger.py</span><span class="does">Plays ONE
+        fixed rule over the corrected levels and records what it would have done. It runs last
+        because every level it uses was written by the two steps above.</span><span class="tbl led">ledger row</span></span>
+      </div>
+    </div>
+    <div class="zone l">
+      <span class="clock">once 1 and 5 trading sessions have passed</span>
+      <div class="stops">
+        <span class="stop"><span class="who">fill_outcomes.py</span><span class="does">Returns to
+        the old row and writes what the stock went on to do afterwards. A different horizon from
+        the ledger's, kept separate on purpose.</span><span class="tbl">same picks row</span></span>
+      </div>
+    </div>
+  </div>
+
+  <h4 style="margin:30px 0 0;font-size:16px">One stock, all the way through</h4>
+  <p style="margin-top:6px">ACME is invented and its numbers are invented, but the SHAPE of what
+  happens to it is the most common outcome in the real table. Read the right hand column down the
+  page: it is the same stock getting less impressive at every step, and that is the chapter
+  working.</p>
+
+  <table class="trace">
+    <thead><tr><th>When</th><th>What gets written</th><th>What you would believe if you stopped reading here</th></tr></thead>
+    <tbody>
+      <tr><td class="w">Tue 08:45<br>the claim</td>
+        <td>Score 7.0, conviction green, day eligible. Entry 18.90, which was the highest price seen
+        before the open. Stop 17.60.</td>
+        <td class="said">A strong candidate. If it clears 18.90 it is worth watching.</td></tr>
+      <tr><td class="w">Tue 22:15<br>backfill</td>
+        <td>With the vendor's complete premarket now published, the real high was 18.72, not 18.90.
+        Both numbers are kept, side by side.</td>
+        <td class="said">The level published that morning was slightly above anything that actually
+        traded.</td></tr>
+      <tr><td class="w">Tue 22:15<br>truth</td>
+        <td>Across the whole premarket, only 990 shares changed hands anywhere near 18.90. That is
+        about 13,900 dollars.</td>
+        <td class="said"><b>That level was a print, not a market.</b> There was nobody there to
+        trade with, so any conclusion drawn from it would be arithmetic about a price that was not
+        really available.</td></tr>
+      <tr><td class="w">Tue 22:15<br>the rule</td>
+        <td>No trade booked. The row is written anyway, carrying that exact sentence as its
+        reason.</td>
+        <td class="said">ACME is excluded from the record visibly and with its reason attached,
+        rather than quietly dropped.</td></tr>
+      <tr><td class="w">Wed, and<br>the next Tue</td>
+        <td>What ACME did over the following session and the following week.</td>
+        <td class="said">A separate fact about later days. It is deliberately NOT what the rule was
+        judged on, and the two are never added together.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note"><p><b>That fourth step is the one people find strange, so it is worth saying
+  plainly.</b> A system built to look good would have booked ACME at 18.90 and reported the result.
+  This one refuses, because a level nobody could have traded at produces a number that is not about
+  the market at all. About a third of every batch of picks is refused this way, and the refusals are
+  written down rather than deleted, so the size of the hole is always visible.</p></div>
+
+  <h4 style="margin:30px 0 0;font-size:16px">So what happens to a whole batch of picks?</h4>
+  <p style="margin-top:6px">Real figures, over the 43 live picks on file at 2026-09-06. Only the
+  green slice ever becomes a number anybody can read.</p>
+
+  <div class="funnel">
+    <div class="fbar">
+      <span class="fseg s1">15 refused</span>
+      <span class="fseg s2">15 never triggered</span>
+      <span class="fseg s3">13 traded</span>
+    </div>
+    <div class="fkey a">
+      <div><b>Refused before trading</b>The entry level was not a price anyone could have got. All
+      15 failed on that same test.</div>
+      <div><b>Never reached the entry</b>The stock simply never got to the price. No position, so
+      the stop is never even read.</div>
+      <div><b>Actually booked</b>9 were held to the closing bell, 4 hit their stop first.</div>
+    </div>
+  </div>
+
+  <div class="note"><p><b>What can be read off this today is almost nothing, and that is the design
+  working rather than failing.</b> To ask whether the score separates outcomes, those 13 trades have
+  to be split by conviction, which gives green 6, yellow 5, red 2. The floor for publishing any
+  group is 10 trades across 3 sessions, so <b>every group is below it and every group is
+  withheld</b>. The page prints that a group is too small rather than printing a number with a
+  warning beside it, because a number with a warning gets quoted and the warning does not. CRITERIA
+  [Paper] fixed the judging point at 200 trades across 60 sessions before any of this code existed,
+  precisely so that the moment of deciding cannot be chosen once the numbers are in view.</p></div>
+
+  <div class="note"><p><b>The one thing the record has said so far, and it is about shape rather
+  than money.</b> Of the trades that made their best price within ten minutes of entry, every one
+  went on to close below where it was bought. Of those still making new highs an hour and a half in,
+  every one closed above. That is six trades and four trades. It is on the Record screen because it
+  survives not knowing a single ticker, and it is nowhere near a sample size. REPORT_TEMPLATE.md
+  forbids the model turning it into an instruction and bans the words pattern, signal, edge and
+  tendency outright, because six observations written as advice is a strategy nobody validated
+  wearing the authority of a generated document.</p></div>
+
+  <h4 style="margin:30px 0 0;font-size:16px">Which pass owns which column</h4>
+  <p style="margin-top:6px">Reference, for anyone who needs to know where a given field came from.
+  Everything this chapter actually argues is above this figure.</p>
 
   <p>The clearest way to see the system is to follow a single database row. FOUR PASSES WRITE TO IT
   and each is a scheduled step you can point at: <code>scan.py</code> creates the row at 08:45,
