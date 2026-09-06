@@ -12171,6 +12171,17 @@ _DOC_CAP_EXEMPT = {
                               "produces it, it cost 297 intraday calls against "
                               "a shared quota, and it is the provenance a claim "
                               "traces the shipped capture rate to.",
+    "ArchitecturePremarketdesk.html": "one self contained page, so its own "
+                                      "stylesheet and the 70 row component "
+                                      "catalogue are counted as prose here. It "
+                                      "sat at 1,478 with no room left, and the "
+                                      "2026-09-06 layering added a plain "
+                                      "language tier for readers who trade "
+                                      "nothing and read no code. Splitting it "
+                                      "is the one thing that would break it: "
+                                      "two files describing one architecture "
+                                      "drift, and this is the file a stranger "
+                                      "opens first.",
 }
 
 # The only machine written payloads that may stay committed. Both carry a

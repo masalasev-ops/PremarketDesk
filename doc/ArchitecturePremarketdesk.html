@@ -208,6 +208,42 @@ tbody tr:hover{background:var(--ground)}
 .note p{margin:0;font-size:13.5px}
 .note b{color:var(--ink)}
 
+/* ---- plain language layer -------------------------------------------
+   The primary reading path. Every section opens here, and a reader who
+   reads only these blocks and nothing else has the whole system. */
+.plain{background:var(--found-bg);padding:20px 22px 16px;margin:0 0 24px;border:1px solid #CFE2E0}
+.plain .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--found);display:block;margin-bottom:9px;font-weight:600}
+.plain p{margin:0 0 11px;font-size:16.5px;line-height:1.58;color:var(--ink);max-width:68ch}
+.plain p:last-child{margin-bottom:0}
+.plain strong{font-weight:600}
+.plain .aside{font-size:14px;color:var(--ink-2);max-width:72ch}
+
+/* glossary */
+.gloss{columns:2;column-gap:36px;margin:24px 0 0}
+.gloss .g{break-inside:avoid;background:var(--panel);border:1px solid var(--rule);padding:13px 16px;margin:0 0 12px}
+.gloss .g h5{margin:0 0 4px;font-size:14.5px;font-weight:600;letter-spacing:-.005em}
+.gloss .g h5 span{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);font-weight:500;margin-left:7px}
+.gloss .g p{margin:0;font-size:13.5px;line-height:1.55;max-width:none}
+
+/* reference band: sections that are lookup tables, not reading */
+.deep{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin:0 0 14px;padding:9px 14px;background:var(--sched-bg);border-left:3px solid var(--sched)}
+.deep b{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--sched)}
+.deep span{font-size:13px;color:var(--ink-2)}
+
+/* toc grouping: the groups ARE the columns, so a group never splits across one */
+.toc .cols{display:grid;grid-template-columns:auto auto auto;gap:0 44px;justify-content:start}
+.toc .cols ol{columns:1;margin:0}
+.toc .grp{font-family:var(--mono);font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+@media (max-width:860px){
+  .toc .cols{grid-template-columns:1fr;gap:20px 0}
+}
+
+/* component ids, demoted out of the reading path */
+.rail .c .ids,.fm dd span[style]{opacity:.62}
+@media (max-width:860px){
+  .gloss{columns:1}
+}
+
 @media (max-width:860px){
   .wrap{padding:0 18px 80px}
   .mast h1{font-size:32px}
@@ -225,50 +261,224 @@ tbody tr:hover{background:var(--ground)}
 <header class="mast">
   <div class="eyebrow">doc / architecture</div>
   <h1>PremarketDesk</h1>
-  <p class="sub">There is no server, no queue, and no service. PremarketDesk is seven Windows Task Scheduler
-  job scripts on one machine, registered as seven tasks, one per job, and a task carries every
-  trigger its job has: the nightly fires three times (22:15 on weekdays for the whole night, 07:00 on
-  weekdays as the catch-up, and Sunday 21:00 for the weekly universe rebuild) and the watchdog three
-  times (07:25, repeating every 30 minutes for two hours; 12:25, repeating every 30 minutes for one
-  hour; and once at 22:45), with each .bat telling its firings apart by the clock. Five of the
-  scripts wake on their clock time, read the files the earlier jobs left behind, and leave files for
-  the next: discover, the collector, the morning chain, the 12:00 midday pass, and the nightly, whose
-  Sunday firing is the universe rebuild. The sixth is the watchdog, which reads the others'
-  dated logs and Task Scheduler's own record, then relaunches the .bat of whatever is safe to rerun.
-  The seventh is the quota meter sampler, which is not a step at all: it takes one reading of the
-  shared vendor counter every thirty minutes of every day, weekends included, because the job trail
-  can say which step spent what and cannot say when, and the overnight silence between 22:45 and
-  07:00 is exactly where a sibling project draining the shared key would hide.
-  The two counts on the line below are read off <code>register_tasks.ps1</code>, the one file
-  that decides them, rather than remembered. The schedule is the architecture.</p>
+  <p class="sub">A program that watches the American stock market in the hours before it opens, and
+  emails one page at 08:46 naming the shares that have already moved overnight and what is behind
+  each move. It runs on a single Windows PC. There is no server, no website and no company: seven
+  scheduled tasks wake on their own clock times, each doing one job and leaving files behind for the
+  next. The schedule is the architecture.</p>
+  <p class="sub" style="margin-top:12px;color:var(--ink-3);font-size:14.5px">This page describes how
+  it is built. Sections 01 and 02 assume nothing and are written for a reader who has never traded a
+  share or read a line of code. Everything from 03 on gets progressively more technical, and the
+  last four sections are lookup tables rather than reading.</p>
   <div class="meta">
     <span>70 components</span><span>7 job scripts, 7 tasks</span><span>1 data vendor</span><span>2 model calls per day</span>
   </div>
 </header>
 
 <nav class="toc">
-  <ol>
-    <li><span class="n">01</span><a href="#s1">What this is for</a></li>
-    <li><span class="n">02</span><a href="#s2">The weekday, end to end</a></li>
-    <li><span class="n">03</span><a href="#s3">Layers and component catalogue</a></li>
-    <li><span class="n">04</span><a href="#s4">The morning relay</a></li>
-    <li><span class="n">05</span><a href="#s5">Inside the scan</a></li>
-    <li><span class="n">06</span><a href="#s6">Inside the analyst pass</a></li>
-    <li><span class="n">07</span><a href="#s7">The blind window and the night</a></li>
-    <li><span class="n">08</span><a href="#s8">One picks row, four passes, one ledger row</a></li>
-    <li><span class="n">09</span><a href="#s9">Data store read and write matrix</a></li>
-    <li><span class="n">10</span><a href="#s10">Failure behaviour</a></li>
-    <li><span class="n">11</span><a href="#s11">Load-bearing rules</a></li>
-    <li><span class="n">12</span><a href="#s12">File map</a></li>
-  </ol>
+  <div class="cols">
+    <div>
+      <div class="grp">Start here, nothing assumed</div>
+      <ol>
+        <li><span class="n">01</span><a href="#s1">What this actually does</a></li>
+        <li><span class="n">02</span><a href="#s2">The words you need</a></li>
+      </ol>
+    </div>
+    <div>
+      <div class="grp">How it works</div>
+      <ol>
+        <li><span class="n">03</span><a href="#s3">What this is for</a></li>
+        <li><span class="n">04</span><a href="#s4">The weekday, end to end</a></li>
+        <li><span class="n">05</span><a href="#s5">The morning relay</a></li>
+        <li><span class="n">06</span><a href="#s6">Inside the scan</a></li>
+        <li><span class="n">07</span><a href="#s7">Inside the analyst pass</a></li>
+        <li><span class="n">08</span><a href="#s8">The blind window and the night</a></li>
+        <li><span class="n">09</span><a href="#s9">One picks row, four passes, one ledger row</a></li>
+        <li><span class="n">10</span><a href="#s10">Load-bearing rules</a></li>
+      </ol>
+    </div>
+    <div>
+      <div class="grp">Reference, for looking up</div>
+      <ol>
+        <li><span class="n">11</span><a href="#s11">Layers and component catalogue</a></li>
+        <li><span class="n">12</span><a href="#s12">Data store read and write matrix</a></li>
+        <li><span class="n">13</span><a href="#s13">Failure behaviour</a></li>
+        <li><span class="n">14</span><a href="#s14">File map</a></li>
+      </ol>
+    </div>
+  </div>
 </nav>
 
 <!-- 1 -->
 <section id="s1">
-  <h2><span class="n">01</span> &nbsp;Purpose</h2>
+  <h2><span class="n">01</span> &nbsp;Plain words</h2>
+  <h3>What this actually does</h3>
+
+  <div class="plain">
+    <span class="tag">The problem</span>
+    <p>The American stock market trades from 09:30 to 16:00 New York time. But shares do not sit
+    still overnight. A company reports its results at 07:00, or gets taken over, or a regulator
+    approves its drug, and by the time the market opens its shares are worth fifteen percent more
+    than they were at yesterday's close. That jump is called a <strong>gap</strong>.</p>
+    <p>Roughly forty or fifty shares gap meaningfully on an ordinary morning, out of several
+    thousand. Finding out which ones, and why each one moved, is the hour between about 07:00 and
+    09:30 that people who trade spend clicking through screens and news feeds.</p>
+  </div>
+
+  <div class="plain">
+    <span class="tag">What it does about it</span>
+    <p>At <strong>08:46</strong>, forty four minutes before the market opens, an email arrives. It
+    names the shares that have moved, quotes the headline behind each one, and says whether the
+    buying and selling behind the move is unusually heavy for that particular share or perfectly
+    ordinary. Then it says where the price sits against a few reference levels that matter to
+    someone deciding whether to act.</p>
+    <p class="aside">That last distinction is most of the value. A share up eight percent on
+    ordinary volume and a share up eight percent on forty times its usual volume look identical on
+    a list of movers and are not remotely the same event.</p>
+  </div>
+
+  <div class="plain">
+    <span class="tag">What it is not</span>
+    <p>It does not buy or sell anything, and it never has. It gives no advice and makes no
+    recommendation. It does not predict which way a share will go. Nothing about it is connected to
+    a broker or to any money.</p>
+    <p>It is also not a trading signal, and could not be one: the setups it describes resolve within
+    the first fifteen minutes after the open, and the email is read at nine o'clock. It is a
+    briefing that replaces an hour of manual searching, and that is the whole claim.</p>
+  </div>
+
+  <div class="plain">
+    <span class="tag">What it physically is</span>
+    <p>One Windows PC in a house. Seven scheduled tasks, the same mechanism that runs a backup or a
+    virus scan overnight. Each one wakes at its own time, does a single job, writes what it found
+    into a file, and exits. The next one along reads that file. Nothing calls anything else, and
+    nothing waits.</p>
+    <p>That sounds primitive and is deliberate. If a step fails, the file it should have written is
+    simply not there, and the next step says so in plain language rather than crashing. A missing
+    file is an easy thing to notice. A silently wrong number is not.</p>
+  </div>
+
+  <div class="plain">
+    <span class="tag">The part that matters most</span>
+    <p>Every morning the system writes down what it claimed. Every night it goes back and writes
+    down what actually happened. Those two records sit side by side and never on top of each other.</p>
+    <p>This is the real project. The rules it screens on today were copied from a third party and
+    have never been tested on this data, so at the moment the email is a well formatted list of
+    shares that met a stranger's rules. Only after enough recorded mornings can anyone ask whether
+    those rules are worth anything at all. The daily briefing exists partly to be useful and partly
+    to keep the thing running long enough for that record to become large enough to answer the
+    question.</p>
+    <p class="aside">Which is why nothing here is ever quietly corrected. When the night finds that
+    the morning was wrong about a level, it writes the true value in a new column beside the old
+    one. The distance between the two is not a mistake to be tidied away, it is the measurement.</p>
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2><span class="n">02</span> &nbsp;Vocabulary</h2>
+  <h3>The words you need</h3>
+  <p>Everything below this section uses these words without stopping to explain them. There are
+  about twenty, and they are the whole vocabulary. The report the system emails carries its own
+  version of this list at the bottom of the page, generated from one file so a word cannot come to
+  mean two things in two places.</p>
+
+  <div class="gloss">
+    <div class="g"><h5>Premarket</h5><p>The hours before the market officially opens, from 04:00 to
+    09:30 New York time. Trading does happen, in much smaller amounts and by fewer people. This is
+    the window the whole system listens to.</p></div>
+
+    <div class="g"><h5>The open, the bell</h5><p>09:30 New York time, when normal trading starts. The
+    close is 16:00. A session is one such day.</p></div>
+
+    <div class="g"><h5>Gap</h5><p>The difference between where a share finished yesterday and where
+    it is trading this morning, as a percentage. A share that closed at 100 and is at 112 before the
+    open has gapped up twelve percent.</p></div>
+
+    <div class="g"><h5>Prior close</h5><p>Yesterday's final price. Every gap is measured against it,
+    which is why getting the right one, from the right day, matters more than it sounds.</p></div>
+
+    <div class="g"><h5>Volume</h5><p>How many shares changed hands. High volume means a lot of people
+    acted; low volume means the price moved on very little trading and may not hold.</p></div>
+
+    <div class="g"><h5>Relative volume <span>RVOL</span></h5><p>Today's premarket volume divided by
+    what that same share normally does by the same time of morning. A value of 1 is a typical
+    morning for it. A value of 40 means something is happening. This is the single most useful number
+    the report carries, because it is the one that separates a real event from a twitch.</p></div>
+
+    <div class="g"><h5>Catalyst</h5><p>The reason a share moved: an earnings report, a takeover, a
+    drug approval, an analyst upgrade. If no news explains a move, the report says so rather than
+    inventing a reason.</p></div>
+
+    <div class="g"><h5>Earnings</h5><p>A company's quarterly results announcement. The most common
+    reason a share gaps, and scheduled in advance, which is why the system can look tomorrow's
+    reporters up rather than waiting to be surprised.</p></div>
+
+    <div class="g"><h5>Market capitalisation <span>market cap</span></h5><p>What the whole company is
+    worth: share price times the number of shares. Used here mainly to tell a large stable company
+    from a tiny volatile one.</p></div>
+
+    <div class="g"><h5>Float</h5><p>How many shares are actually available to trade, as opposed to
+    locked up with founders and insiders. A small float means a modest amount of buying can move the
+    price a long way.</p></div>
+
+    <div class="g"><h5>The universe</h5><p>The roughly 2,750 shares this system will consider at all,
+    rebuilt every Sunday. Ordinary company shares only, above a minimum size and price, with enough
+    trading history to measure anything about. Everything else is out of scope permanently.</p></div>
+
+    <div class="g"><h5>The pool, the watchlist</h5><p>The much shorter list, built at 03:55 and again
+    at 07:15, of names worth listening to this particular morning. It is a guess made before any of
+    today's prices exist, from who reports today, what was in the news overnight, and who moved
+    yesterday.</p></div>
+
+    <div class="g"><h5>The collector</h5><p>The part that sits and listens to live trades from 04:00
+    to 09:25 and writes down a summary of each minute. It is the only source of today's premarket
+    prices, and what it fails to hear is gone permanently, because a live market cannot be replayed
+    afterwards.</p></div>
+
+    <div class="g"><h5>Candidate</h5><p>A share that made the pool, was listened to, and turned out to
+    have actually moved. Twelve of these reach the report each morning.</p></div>
+
+    <div class="g"><h5>Premarket high and low <span>pm_high, pm_low</span></h5><p>The highest and
+    lowest prices seen during the premarket. The report prints them because they are the obvious
+    levels a trader would watch, not because it suggests acting on them.</p></div>
+
+    <div class="g"><h5>Entry and stop reference</h5><p>Two levels printed beside each name: where a
+    trade would begin if someone took it, and where they would abandon it. They are recorded so the
+    system can grade itself later against what it actually said. They are not advice.</p></div>
+
+    <div class="g"><h5>Conviction score</h5><p>A number from 0 to 10 assembled from the gap size, the
+    relative volume, the kind of catalyst, and where the price sits. Bucketed green, yellow or red.
+    Every component is stored separately, so the score can be argued with later rather than
+    trusted.</p></div>
+
+    <div class="g"><h5>Paper trade</h5><p>A trade recorded on paper only, with no money involved, so
+    the rule behind it can be judged after a few hundred of them. The rule was written down before
+    any of the code existed, which is what stops it being quietly reshaped to flatter the results.</p></div>
+
+    <div class="g"><h5>Backfill</h5><p>Going back at night to fill in what was not knowable in the
+    morning. The data vendor publishes complete records of the premarket hours only several hours
+    after they happen.</p></div>
+
+    <div class="g"><h5>The vendor <span>EODHD</span></h5><p>The company this system buys its market
+    data from. Every number that reaches the email comes from them, so there is never a question of
+    which source a figure came from. A second vendor is used at night, but only to check the record
+    afterwards, and it can never reach a report.</p></div>
+  </div>
+
+  <div class="note"><p><b>About the C-numbers.</b> From section 04 onward you will see codes like
+  <code>C16</code> and <code>C59</code>. They are just names for the seventy moving parts, used
+  consistently so that a diagram, a table and a paragraph can all refer to the same thing without
+  ambiguity. Section 11 lists every one of them. You can ignore them entirely and lose nothing.</p></div>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2><span class="n">03</span> &nbsp;Purpose</h2>
   <h3>What this is for</h3>
-  <p class="lede">PremarketDesk has two goals that live on different timescales, and most of the
-  confusion about it comes from reading one and expecting the other.</p>
+  <p class="lede">The same thing section 01 said, stated precisely. PremarketDesk has two goals that
+  live on different timescales, and most of the confusion about it comes from reading one and
+  expecting the other.</p>
   <p><strong>The daily goal is orientation before the bell.</strong> Between 08:46 and 08:49 an email arrives naming
   the stocks that gapped overnight, the headline behind each one, whether the premarket volume behind
   the move is unusual for that ticker or ordinary, and where price sits against the prior high, the
@@ -297,9 +507,23 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 2 -->
-<section id="s2">
-  <h2><span class="n">02</span> &nbsp;Timeline</h2>
+<section id="s4">
+  <h2><span class="n">04</span> &nbsp;Timeline</h2>
   <h3>The weekday, end to end</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>A day in the life. Sunday night the system decides which few thousand shares it will consider
+    all week. At four in the morning it starts listening to live trading. At quarter to nine it
+    stops, works out what it heard, and decides which twelve names are worth writing about. At
+    twelve it checks how the morning's names actually did. At ten past ten at night, once the data
+    provider has finally published the complete record of the morning, it goes back and writes down
+    what was really true.</p>
+    <p>Seven jobs, none of which ever speaks to another. Each leaves files behind and the next one
+    picks them up. The only exception is a watchdog that checks whether the others ran and restarts
+    the ones that are safe to restart.</p>
+  </div>
+
   <p>Each job wakes on its clock time, does one thing, and exits. No job in the data path calls
   another. What passes between them is files on disk, which is why a dead job shows up downstream as
   a missing file with a stated reason rather than as a crash.</p>
@@ -515,118 +739,22 @@ tbody tr:hover{background:var(--ground)}
   </figure>
 </section>
 
-<!-- 3 -->
-<section id="s3">
-  <h2><span class="n">03</span> &nbsp;Catalogue</h2>
-  <h3>Layers and component catalogue</h3>
-  <p>Every component carries an identifier used consistently in every figure and table on this page.
-  Eight layers, colour-coded by the left or top accent wherever a component appears.</p>
-
-  <div class="legend">
-    <span class="lg sched">Scheduler</span>
-    <span class="lg found">Foundation</span>
-    <span class="lg morn">Morning pipeline</span>
-    <span class="lg mid">Midday pipeline</span>
-    <span class="lg night">Night pipeline</span>
-    <span class="lg conf">Authored input</span>
-    <span class="lg store">Data store</span>
-    <span class="lg ext">External</span>
-  </div>
-
-  <div class="tw">
-  <table>
-    <thead><tr><th>ID</th><th>Component</th><th>Layer</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
-    <tbody>
-      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46, C48, C67</td></tr>
-      <tr><td class="id">C02</td><td class="nm">job_nightly.bat, Sunday firing</td><td><span class="lay sched">Scheduler</span></td><td>Sun 21:00, the third trigger of the nightly task (C06). The .bat reads a Sunday clock as universe mode and runs under PMD_JOB universe with its own log, exactly as job_universe.bat did under its own task until 2026-09-02</td><td>none</td><td>C12, C40, C34</td></tr>
-      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 03:55 and 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
-      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 04:00</td><td>none</td><td>C15, C34</td></tr>
-      <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
-      <tr><td class="id">C67</td><td class="nm">job_midday.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 12:00</td><td>none</td><td>C50, C68, C69, C34</td></tr>
-      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>One task, three triggers, told apart by the clock inside the .bat: weekdays 22:15 (the full night), weekdays 07:00 (the catch-up, which runs C62, C20 and C21 only) and Sunday 21:00 (the universe rebuild, C02)</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C70, C63, C61, C53, C34</td></tr>
-      <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, 12:25 every 30m for 1h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
-      <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, and C34. Never C67, which it watches and reports on only</td></tr>
-      <tr><td class="id">C48</td><td class="nm">job_meter_sampler.bat</td><td><span class="lay sched">Scheduler</span></td><td>Every day 00:00, every 30m for 24h</td><td>none</td><td>C49, C34</td></tr>
-      <tr><td class="id">C49</td><td class="nm">meter_sampler.py</td><td><span class="lay sched">Scheduler</span></td><td>With C48. An instrument, not a step: it writes no C56 record</td><td>C35 /api/user</td><td>C34 meter-&lt;date&gt;.log</td></tr>
-      <tr><td class="id">C50</td><td class="nm">market_today.py</td><td><span class="lay sched">Scheduler</span></td><td>First step of every weekday job. Exit 3 stops that job cleanly</td><td>C58, C35</td><td>C58, C56, C34</td></tr>
-
-      <tr><td class="id">C07</td><td class="nm">config.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>.env, paths</td><td>none</td></tr>
-      <tr><td class="id">C08</td><td class="nm">ettime.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>System clock</td><td>none</td></tr>
-      <tr><td class="id">C09</td><td class="nm">criteria.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C23</td><td>none</td></tr>
-      <tr><td class="id">C10</td><td class="nm">eodhd.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C35, C36</td><td>Call counter</td></tr>
-      <tr><td class="id">C11</td><td class="nm">store.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C30, C31, C41, C64</td><td>C30, C31, C41, C64</td></tr>
-      <tr><td class="id">C51</td><td class="nm">job_status.py</td><td><span class="lay found">Foundation</span></td><td>Wraps every scheduled step</td><td>C23, C56</td><td>C56</td></tr>
-      <tr><td class="id">C52</td><td class="nm">artifacts.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C32</td><td>Resolves a path, writes nothing itself</td></tr>
-      <tr><td class="id">C45</td><td class="nm">conftest.py</td><td><span class="lay found">Foundation</span></td><td>Imported by C44</td><td>C07 paths</td><td>A temporary sandbox</td></tr>
-      <tr><td class="id">C44</td><td class="nm">run_tests.py</td><td><span class="lay found">Foundation</span></td><td>By hand</td><td>C45, the whole test suite</td><td>Console</td></tr>
-
-      <tr><td class="id">C12</td><td class="nm">universe.py</td><td><span class="lay morn">Morning</span></td><td>Weekly</td><td>C35</td><td>C26</td></tr>
-      <tr><td class="id">C40</td><td class="nm">gap_stats.py</td><td><span class="lay morn">Morning</span></td><td>Sun 21:00</td><td>C26, C35</td><td>C41</td></tr>
-      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
-      <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15, after C13 on each pass</td><td>C27, C30, C35</td><td>C30</td></tr>
-      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>04:00-09:25</td><td>C27, C36</td><td>C28</td></tr>
-      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35, C64 (counts only, via C60)</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
-      <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
-      <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
-      <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, when C17 returns</td><td>C32</td><td>C32</td></tr>
-      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, and by hand</td><td>C29, C31, C32, C33</td><td>Console, C33 under --arm</td></tr>
-      <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49</td><td>C32, C33, C38</td><td>C34</td></tr>
-
-      <tr><td class="id">C68</td><td class="nm">scan_midday.py</td><td><span class="lay mid">Midday</span></td><td>12:00</td><td>C23, C26, C27, C28's subscriptions sidecar, C29, C31, C35</td><td>C32 midday_packet.json. Never C31, never C64</td></tr>
-      <tr><td class="id">C69</td><td class="nm">render_midday.py</td><td><span class="lay mid">Midday</span></td><td>12:00, after C68</td><td>C23, C32 midday_packet.json</td><td>C32 report_midday.md and report_midday.html</td></tr>
-
-      <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
-      <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
-      <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C26, C27, C35</td><td>C32</td></tr>
-      <tr><td class="id">C53</td><td class="nm">desk/render.py</td><td><span class="lay night">Night</span></td><td>22:15, and as the last step of the morning and midday chains</td><td>C29, C32</td><td>C54</td></tr>
-      <tr><td class="id">C70</td><td class="nm">desk/compact.py</td><td><span class="lay night">Night</span></td><td>22:15, between C42 and C63, and inside C53 on the morning and midday chains, which invoke desk/render without --no-compact</td><td>C32, and premarketdesk.db research_outcomes through desk/precedent</td><td>C32</td></tr>
-      <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td><span class="lay night">Night</span></td><td>22:15, after C21</td><td>C31, C32, C66</td><td>C31</td></tr>
-      <tr><td class="id">C60</td><td class="nm">paper_ledger.py</td><td><span class="lay night">Night</span></td><td>22:15, after C59</td><td>C23, C31, C66</td><td>C64</td></tr>
-      <tr><td class="id">C61</td><td class="nm">weekly_page.py</td><td><span class="lay night">Night</span></td><td>22:15, after every step that writes</td><td>C29, C31, C32, C34, C56, C57, C64</td><td>C65</td></tr>
-      <tr><td class="id">C62</td><td class="nm">backup_evidence.py</td><td><span class="lay night">Night</span></td><td>22:15, first step after the calendar</td><td>C28, C29</td><td>[Backup] root, outside the tree</td></tr>
-      <tr><td class="id">C63</td><td class="nm">prune_data.py</td><td><span class="lay night">Night</span></td><td>22:15, after C42</td><td>data\universe-closes-&lt;date&gt;.json by filename date</td><td>Deletes only that one file class. It touches no store on this page</td></tr>
-      <tr><td class="id">C43</td><td class="nm">backtest_pool.py</td><td><span class="lay night">Night</span></td><td>By hand</td><td>C26, C35, C41</td><td>data\backtest\ cache, a JSON report on request</td></tr>
-
-      <tr><td class="id">C55</td><td class="nm">quantifier_flags.py</td><td><span class="lay night">Night</span></td><td>By hand, to judge what the guard flagged</td><td>C57</td><td>C57</td></tr>
-
-      <tr><td class="id">C23</td><td class="nm">CRITERIA.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C24</td><td class="nm">prompt_analyst.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C25</td><td class="nm">REPORT_TEMPLATE.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
-
-      <tr><td class="id">C26</td><td class="nm">universe.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C27</td><td class="nm">watchlist.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C28</td><td class="nm">premarket/&lt;date&gt;.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C29</td><td class="nm">packet.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C30</td><td class="nm">db: baseline table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C31</td><td class="nm">db: picks table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C41</td><td class="nm">db: gap_stats table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C64</td><td class="nm">db: paper_trades table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>Rewritten by C16 on a vintage violation, deleted by hand</td></tr>
-      <tr><td class="id">C54</td><td class="nm">site/PremarketDesk.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>The desk since 2026-09-04, when build_archive was retired and C53 took its filename</td></tr>
-      <tr><td class="id">C65</td><td class="nm">site/Weekly.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C56</td><td class="nm">data/job-status.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C57</td><td class="nm">data/quantifier-flags.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C58</td><td class="nm">data/exchange-details.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C34</td><td class="nm">logs/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
-
-      <tr><td class="id">C35</td><td class="nm">EODHD REST</td><td><span class="lay ext">External</span></td><td>none</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C66</td><td class="nm">Alpaca market data REST</td><td><span class="lay ext">External</span></td><td>Night only. The free plan serves the sip feed for a session that is OVER and refuses a running one with 403, which is why C59 and C60 are night steps and could not be morning ones</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C36</td><td class="nm">EODHD trades socket</td><td><span class="lay ext">External</span></td><td>04:00-20:00</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C37</td><td class="nm">claude CLI</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
-      <tr><td class="id">C38</td><td class="nm">Resend</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p style="margin-top:14px;font-size:13px;color:var(--ink-3)">The foundation layer is imported by
-  everything and scheduled by nothing. One clock module means one answer to what time it is, which
-  matters on a machine outside the exchange's timezone crossing two daylight saving boundaries a year.</p>
-</section>
-
 <!-- 4 -->
-<section id="s4">
-  <h2><span class="n">04</span> &nbsp;Morning flow</h2>
+<section id="s5">
+  <h2><span class="n">05</span> &nbsp;Morning flow</h2>
   <h3>The morning relay</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>The morning is a relay race, and the baton is a file. One stage writes a file and finishes.
+    The next stage picks that file up. No stage knows or cares what happened before it beyond what
+    is written down.</p>
+    <p>The diagram below shows the handoffs. The top row is the programs, the row beneath it is the
+    file each one leaves behind. The last arrow on the right is the only one that crosses days: at
+    night the system comes back to the database rows the 08:45 stage created, hours after the email
+    has already been sent and read.</p>
+  </div>
+
   <p>Each stage writes one artifact and the next stage reads it. Nothing talks to anything else at
   runtime. If a stage dies, its file is simply absent and the next stage records the absence in the
   packet's <code>gaps_to_fill</code> list rather than raising.</p>
@@ -675,9 +803,26 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 5 -->
-<section id="s5">
-  <h2><span class="n">05</span> &nbsp;Opened up</h2>
+<section id="s6">
+  <h2><span class="n">06</span> &nbsp;Opened up</h2>
   <h3>Inside the scan</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>At 08:45 everything the system knows arrives in one place and every decision gets made. This
+    is the only part that decides anything at all. Nothing before it judges, and nothing after it
+    changes a judgement.</p>
+    <p>It works through eight steps in a fixed order, and the order is the point. It establishes
+    where each price came from before it calculates anything from it, and calculates before it
+    scores, so a number that could not be worked out honestly stays blank instead of quietly
+    becoming a zero that looks like a real measurement.</p>
+    <p>Between step seven and step eight sits a check that can kill the whole morning. It asks
+    whether the prices really are from today. If any of them are not, the system writes down exactly
+    which rows failed, sends nothing, and stops. There is deliberately no middle option: a stale
+    price is not weak evidence to be hedged around, it is a wrong number wearing the costume of a
+    right one.</p>
+  </div>
+
   <p>The scan does more work than anything else in the system and it is the only place where a
   decision is made. Eight ordered steps, no model involved in any of them, and between the seventh
   step and the eighth an assertion that can end the run outright. After every price and prior close
@@ -741,9 +886,28 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 6 -->
-<section id="s6">
-  <h2><span class="n">06</span> &nbsp;Opened up</h2>
+<section id="s7">
+  <h2><span class="n">07</span> &nbsp;Opened up</h2>
   <h3>Inside the analyst pass</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>An AI writes the readable prose in this report, and this section is about the fence built
+    around it.</p>
+    <p>By the time the model is called, every decision has already been made and written down:
+    which shares appear, what each number is, how confident the system is. The model is handed all
+    of that and asked only to explain it in English. It cannot add a share, change a number, or
+    raise a confidence rating, because those are not things it is asked for and the finished text is
+    checked against the data afterwards. If it mentions a company that is not in the data, the whole
+    run fails rather than shipping.</p>
+    <p>One rule is worth singling out. The sentence describing what would prove a trade wrong has to
+    be written in words with the digits left out. The reason is blunt: nothing in this system checks
+    a number the model writes. So on the one line where an invented figure would do real damage, the
+    opportunity is removed rather than policed. A sentence with no digits in it cannot invent one.</p>
+    <p class="aside">If the model fails or takes too long, the system writes the report itself as
+    plain tables and says at the top that the narrative is missing and why. An email always goes.</p>
+  </div>
+
   <p>This is the boundary the whole design is built around. Everything to the left of it is
   deterministic and reproducible. Everything to the right is prose. The model never chooses a name,
   never sets a number, and never changes a conviction.</p>
@@ -894,9 +1058,26 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 7 -->
-<section id="s7">
-  <h2><span class="n">07</span> &nbsp;Coverage</h2>
+<section id="s8">
+  <h2><span class="n">08</span> &nbsp;Coverage</h2>
   <h3>The blind window and the night</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>The morning report is written from an incomplete picture, and this section is about being
+    honest regarding how incomplete.</p>
+    <p>Two gaps cause it. The report is written at 08:45 but the premarket runs until 09:30, so the
+    last forty five minutes are simply not in it. And the data provider does not publish the full,
+    corrected record of those hours until late the same evening, so nobody, anywhere, can know the
+    complete truth at breakfast time.</p>
+    <p>So at night the system fetches the complete record and writes the true figures in fresh
+    columns beside the morning's estimates, never over them. It then does it a second time using a
+    <strong>different data provider entirely</strong>, as a cross check, and labels which columns
+    came from which. The gap between what the morning thought and what was actually true is not
+    noise to be cleaned up. It is the measurement, and it is what paid for the change that made the
+    system start listening at 04:00 instead of 07:20.</p>
+  </div>
+
   <p>Two facts force the night pipeline to exist. The morning's premarket high describes a window
   that is still not the whole session. Until 2026-09-02 that was the large hole: the session opens at
   04:00 and the collector only started listening at 07:20. It now opens with the session, and what
@@ -1020,9 +1201,24 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 8 -->
-<section id="s8">
-  <h2><span class="n">08</span> &nbsp;Record</h2>
+<section id="s9">
+  <h2><span class="n">09</span> &nbsp;Record</h2>
   <h3>One picks row, four passes, one ledger row</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>Follow one share, on one morning, through the database. It is the clearest way to see the
+    whole system, because four separate passes touch the same record at four different times and
+    none of them overwrites the last.</p>
+    <p>The morning pass writes what the system claimed: the price, the gap, how confident it was.
+    The same night, two more passes write what was actually true, from two different data providers.
+    Then, one day later and five days later, a final pass returns to write what the share actually
+    went on to do.</p>
+    <p>The first column is a claim. The last column is what happened. Everything this project is
+    ultimately for lives in the distance between them, and until a few hundred of these rows exist
+    the report should be read as a formatted list rather than as a judgement.</p>
+  </div>
+
   <p>The clearest way to see the system is to follow a single database row. The scan creates it in the
   morning, the backfill and the truth pass widen it the same night, and the outcomes pass returns one
   and five sessions later to record what the market actually did. A fifth pass writes to a
@@ -1150,10 +1346,202 @@ tbody tr:hover{background:var(--ground)}
   pulls no HTTP client into that window.</p></div>
 </section>
 
+<!-- 11 -->
+<section id="s10">
+  <h2><span class="n">10</span> &nbsp;Rules</h2>
+  <h3>Load-bearing rules</h3>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>Seven decisions that everything else rests on. If you read nothing else technical on this
+    page, read these: they are the shortest honest description of how the system thinks.</p>
+    <p>Changing any one of them would not be a settings tweak, it would be a different system.</p>
+  </div>
+
+  <p>Seven decisions that shape everything above. Changing any of them changes the architecture rather
+  than the configuration.</p>
+
+  <div class="rules">
+    <div class="rule-c" style="border-left-color:var(--ext)">
+      <span class="tag">One vendor</span>
+      <h5>EODHD is the only vendor a published number comes from</h5>
+      <p>REST for quotes, history, news, and calendars. The trades websocket for live premarket.
+      Nothing in selection, collect or morning calls a second vendor, so there is never a question of
+      which feed a number in the report came from.</p>
+      <p><b>The rule is about a PUBLISHED number and not about the tree as a whole, and that
+      distinction is the whole of it.</b> C59 and C60 are scheduled night steps and both read
+      Alpaca. What neither can do is reach a report. Alpaca measures the RECORD, after the fact,
+      into columns that carry
+      <code>truth_source</code> and sit beside the morning's values rather than over them. It cannot
+      reach a report, and it could not if someone wanted it to: the free plan refuses a running
+      session with 403, so there is no version of this that runs at 08:45.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--conf)">
+      <span class="tag">One place</span>
+      <h5>Every threshold lives in CRITERIA.md</h5>
+      <p>No Python file contains a screening number. The reader raises on anything missing, so a
+      threshold cannot quietly exist in two places and drift.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--morn)">
+      <span class="tag">The boundary</span>
+      <h5>Python decides, the model narrates</h5>
+      <p>Membership, eligibility, scores, and conviction are all computed before the packet is piped
+      to the CLI. A containment check fails the run if the report names a ticker the packet does not
+      carry.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--night)">
+      <span class="tag">No guessing</span>
+      <h5>Missing evidence is null with a reason</h5>
+      <p>A relative volume that cannot be computed honestly is null plus a reason string, never a
+      substituted proxy. The disclaimer line names every such candidate by ticker.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--store)">
+      <span class="tag">No overwriting</span>
+      <h5>Corrections sit beside the original</h5>
+      <p>The night writes true premarket columns next to the morning's live values and never over
+      them. The distance between them is a measurement the project needs, not an error to clean up.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--night)">
+      <span class="tag">One rule</span>
+      <h5>The paper rule is written in CRITERIA before it is written in code</h5>
+      <p>Entry, stop, exit, size and every refusal live in CRITERIA [Paper], and C60 applies them. ONE
+      rule, not a family: no target, because a target is a free parameter that sixteen trades will fit
+      any value of, and a rule with something to tune is a rule that cannot be wrong. Versions are
+      booked side by side over the same trades, each differing from the last in exactly one thing, so
+      a change that helps can be told from a change that happened. And the verdict is pre-registered
+      at 200 trades across 60 sessions, in the same file, before the count gets there.</p>
+    </div>
+    <div class="rule-c" style="border-left-color:var(--sched)">
+      <span class="tag">Human gate</span>
+      <h5>No email until a real morning is verified</h5>
+      <p>While <code>data/UNVERIFIED</code> exists, sending is refused regardless of configuration.
+      Only a person who has checked a live morning's numbers against a reference deletes it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section id="s11">
+  <h2><span class="n">11</span> &nbsp;Catalogue</h2>
+  <h3>Layers and component catalogue</h3>
+
+  <div class="deep"><b>Reference</b><span>A lookup table for the seventy C-numbers used elsewhere on
+  this page. Nothing here explains anything; skip it unless you came looking for a specific
+  part.</span></div>
+
+  <p>Every component carries an identifier used consistently in every figure and table on this page.
+  Eight layers, colour-coded by the left or top accent wherever a component appears.</p>
+
+  <div class="legend">
+    <span class="lg sched">Scheduler</span>
+    <span class="lg found">Foundation</span>
+    <span class="lg morn">Morning pipeline</span>
+    <span class="lg mid">Midday pipeline</span>
+    <span class="lg night">Night pipeline</span>
+    <span class="lg conf">Authored input</span>
+    <span class="lg store">Data store</span>
+    <span class="lg ext">External</span>
+  </div>
+
+  <div class="tw">
+  <table>
+    <thead><tr><th>ID</th><th>Component</th><th>Layer</th><th>Runs</th><th>Reads</th><th>Writes</th></tr></thead>
+    <tbody>
+      <tr><td class="id">C01</td><td class="nm">Task Scheduler</td><td><span class="lay sched">Scheduler</span></td><td>Always</td><td>Task definitions</td><td>C02-C06, C46, C48, C67</td></tr>
+      <tr><td class="id">C02</td><td class="nm">job_nightly.bat, Sunday firing</td><td><span class="lay sched">Scheduler</span></td><td>Sun 21:00, the third trigger of the nightly task (C06). The .bat reads a Sunday clock as universe mode and runs under PMD_JOB universe with its own log, exactly as job_universe.bat did under its own task until 2026-09-02</td><td>none</td><td>C12, C40, C34</td></tr>
+      <tr><td class="id">C03</td><td class="nm">job_discover.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 03:55 and 07:15</td><td>none</td><td>C13, C14, C34</td></tr>
+      <tr><td class="id">C04</td><td class="nm">job_collector.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 04:00</td><td>none</td><td>C15, C34</td></tr>
+      <tr><td class="id">C05</td><td class="nm">job_morning_chain.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 08:45</td><td>none</td><td>C50, C16-C19, C22, C53, C34</td></tr>
+      <tr><td class="id">C67</td><td class="nm">job_midday.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 12:00</td><td>none</td><td>C50, C68, C69, C34</td></tr>
+      <tr><td class="id">C06</td><td class="nm">job_nightly.bat</td><td><span class="lay sched">Scheduler</span></td><td>One task, three triggers, told apart by the clock inside the .bat: weekdays 22:15 (the full night), weekdays 07:00 (the catch-up, which runs C62, C20 and C21 only) and Sunday 21:00 (the universe rebuild, C02)</td><td>none</td><td>C50, C62, C20, C21, C59, C60, C42, C70, C63, C61, C53, C34</td></tr>
+      <tr><td class="id">C46</td><td class="nm">job_monitor.bat</td><td><span class="lay sched">Scheduler</span></td><td>Weekdays 07:25 every 30m for 2h, 12:25 every 30m for 1h, and 22:45</td><td>none</td><td>C47, C34</td></tr>
+      <tr><td class="id">C47</td><td class="nm">monitor_jobs.py</td><td><span class="lay sched">Scheduler</span></td><td>With C46</td><td>Task Scheduler's record, C26, C34, C56, C57</td><td>Relaunches C02-C06, and C34. Never C67, which it watches and reports on only</td></tr>
+      <tr><td class="id">C48</td><td class="nm">job_meter_sampler.bat</td><td><span class="lay sched">Scheduler</span></td><td>Every day 00:00, every 30m for 24h</td><td>none</td><td>C49, C34</td></tr>
+      <tr><td class="id">C49</td><td class="nm">meter_sampler.py</td><td><span class="lay sched">Scheduler</span></td><td>With C48. An instrument, not a step: it writes no C56 record</td><td>C35 /api/user</td><td>C34 meter-&lt;date&gt;.log</td></tr>
+      <tr><td class="id">C50</td><td class="nm">market_today.py</td><td><span class="lay sched">Scheduler</span></td><td>First step of every weekday job. Exit 3 stops that job cleanly</td><td>C58, C35</td><td>C58, C56, C34</td></tr>
+
+      <tr><td class="id">C07</td><td class="nm">config.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>.env, paths</td><td>none</td></tr>
+      <tr><td class="id">C08</td><td class="nm">ettime.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>System clock</td><td>none</td></tr>
+      <tr><td class="id">C09</td><td class="nm">criteria.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C23</td><td>none</td></tr>
+      <tr><td class="id">C10</td><td class="nm">eodhd.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C35, C36</td><td>Call counter</td></tr>
+      <tr><td class="id">C11</td><td class="nm">store.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C30, C31, C41, C64</td><td>C30, C31, C41, C64</td></tr>
+      <tr><td class="id">C51</td><td class="nm">job_status.py</td><td><span class="lay found">Foundation</span></td><td>Wraps every scheduled step</td><td>C23, C56</td><td>C56</td></tr>
+      <tr><td class="id">C52</td><td class="nm">artifacts.py</td><td><span class="lay found">Foundation</span></td><td>Imported</td><td>C32</td><td>Resolves a path, writes nothing itself</td></tr>
+      <tr><td class="id">C45</td><td class="nm">conftest.py</td><td><span class="lay found">Foundation</span></td><td>Imported by C44</td><td>C07 paths</td><td>A temporary sandbox</td></tr>
+      <tr><td class="id">C44</td><td class="nm">run_tests.py</td><td><span class="lay found">Foundation</span></td><td>By hand</td><td>C45, the whole test suite</td><td>Console</td></tr>
+
+      <tr><td class="id">C12</td><td class="nm">universe.py</td><td><span class="lay morn">Morning</span></td><td>Weekly</td><td>C35</td><td>C26</td></tr>
+      <tr><td class="id">C40</td><td class="nm">gap_stats.py</td><td><span class="lay morn">Morning</span></td><td>Sun 21:00</td><td>C26, C35</td><td>C41</td></tr>
+      <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
+      <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15, after C13 on each pass</td><td>C27, C30, C35</td><td>C30</td></tr>
+      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>04:00-09:25</td><td>C27, C36</td><td>C28</td></tr>
+      <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35, C64 (counts only, via C60)</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
+      <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
+      <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
+      <tr><td class="id">C18</td><td class="nm">render_report.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, when C17 returns</td><td>C32</td><td>C32</td></tr>
+      <tr><td class="id">C22</td><td class="nm">verify_morning.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49, and by hand</td><td>C29, C31, C32, C33</td><td>Console, C33 under --arm</td></tr>
+      <tr><td class="id">C19</td><td class="nm">deliver.py</td><td><span class="lay morn">Morning</span></td><td>08:46-08:49</td><td>C32, C33, C38</td><td>C34</td></tr>
+
+      <tr><td class="id">C68</td><td class="nm">scan_midday.py</td><td><span class="lay mid">Midday</span></td><td>12:00</td><td>C23, C26, C27, C28's subscriptions sidecar, C29, C31, C35</td><td>C32 midday_packet.json. Never C31, never C64</td></tr>
+      <tr><td class="id">C69</td><td class="nm">render_midday.py</td><td><span class="lay mid">Midday</span></td><td>12:00, after C68</td><td>C23, C32 midday_packet.json</td><td>C32 report_midday.md and report_midday.html</td></tr>
+
+      <tr><td class="id">C20</td><td class="nm">backfill_premarket.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31, C32</td></tr>
+      <tr><td class="id">C21</td><td class="nm">fill_outcomes.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C31, C35</td><td>C31</td></tr>
+      <tr><td class="id">C42</td><td class="nm">pool_recall.py</td><td><span class="lay night">Night</span></td><td>22:15</td><td>C26, C27, C35</td><td>C32</td></tr>
+      <tr><td class="id">C53</td><td class="nm">desk/render.py</td><td><span class="lay night">Night</span></td><td>22:15, and as the last step of the morning and midday chains</td><td>C29, C32</td><td>C54</td></tr>
+      <tr><td class="id">C70</td><td class="nm">desk/compact.py</td><td><span class="lay night">Night</span></td><td>22:15, between C42 and C63, and inside C53 on the morning and midday chains, which invoke desk/render without --no-compact</td><td>C32, and premarketdesk.db research_outcomes through desk/precedent</td><td>C32</td></tr>
+      <tr><td class="id">C59</td><td class="nm">true_volume.py</td><td><span class="lay night">Night</span></td><td>22:15, after C21</td><td>C31, C32, C66</td><td>C31</td></tr>
+      <tr><td class="id">C60</td><td class="nm">paper_ledger.py</td><td><span class="lay night">Night</span></td><td>22:15, after C59</td><td>C23, C31, C66</td><td>C64</td></tr>
+      <tr><td class="id">C61</td><td class="nm">weekly_page.py</td><td><span class="lay night">Night</span></td><td>22:15, after every step that writes</td><td>C29, C31, C32, C34, C56, C57, C64</td><td>C65</td></tr>
+      <tr><td class="id">C62</td><td class="nm">backup_evidence.py</td><td><span class="lay night">Night</span></td><td>22:15, first step after the calendar</td><td>C28, C29</td><td>[Backup] root, outside the tree</td></tr>
+      <tr><td class="id">C63</td><td class="nm">prune_data.py</td><td><span class="lay night">Night</span></td><td>22:15, after C42</td><td>data\universe-closes-&lt;date&gt;.json by filename date</td><td>Deletes only that one file class. It touches no store on this page</td></tr>
+      <tr><td class="id">C43</td><td class="nm">backtest_pool.py</td><td><span class="lay night">Night</span></td><td>By hand</td><td>C26, C35, C41</td><td>data\backtest\ cache, a JSON report on request</td></tr>
+
+      <tr><td class="id">C55</td><td class="nm">quantifier_flags.py</td><td><span class="lay night">Night</span></td><td>By hand, to judge what the guard flagged</td><td>C57</td><td>C57</td></tr>
+
+      <tr><td class="id">C23</td><td class="nm">CRITERIA.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C24</td><td class="nm">prompt_analyst.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C25</td><td class="nm">REPORT_TEMPLATE.md</td><td><span class="lay conf">Authored</span></td><td>none</td><td>none</td><td>none</td></tr>
+
+      <tr><td class="id">C26</td><td class="nm">universe.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C27</td><td class="nm">watchlist.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C28</td><td class="nm">premarket/&lt;date&gt;.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C29</td><td class="nm">packet.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C30</td><td class="nm">db: baseline table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C31</td><td class="nm">db: picks table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C41</td><td class="nm">db: gap_stats table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C64</td><td class="nm">db: paper_trades table</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>Rewritten by C16 on a vintage violation, deleted by hand</td></tr>
+      <tr><td class="id">C54</td><td class="nm">site/PremarketDesk.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>The desk since 2026-09-04, when build_archive was retired and C53 took its filename</td></tr>
+      <tr><td class="id">C65</td><td class="nm">site/Weekly.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C56</td><td class="nm">data/job-status.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C57</td><td class="nm">data/quantifier-flags.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C58</td><td class="nm">data/exchange-details.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C34</td><td class="nm">logs/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+
+      <tr><td class="id">C35</td><td class="nm">EODHD REST</td><td><span class="lay ext">External</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C66</td><td class="nm">Alpaca market data REST</td><td><span class="lay ext">External</span></td><td>Night only. The free plan serves the sip feed for a session that is OVER and refuses a running one with 403, which is why C59 and C60 are night steps and could not be morning ones</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C36</td><td class="nm">EODHD trades socket</td><td><span class="lay ext">External</span></td><td>04:00-20:00</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C37</td><td class="nm">claude CLI</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C38</td><td class="nm">Resend</td><td><span class="lay ext">External</span></td><td>On call</td><td>none</td><td>none</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="margin-top:14px;font-size:13px;color:var(--ink-3)">The foundation layer is imported by
+  everything and scheduled by nothing. One clock module means one answer to what time it is, which
+  matters on a machine outside the exchange's timezone crossing two daylight saving boundaries a year.</p>
+</section>
+
 <!-- 9 -->
-<section id="s9">
-  <h2><span class="n">09</span> &nbsp;Stores</h2>
+<section id="s12">
+  <h2><span class="n">12</span> &nbsp;Stores</h2>
   <h3>Data store read and write matrix</h3>
+
+  <div class="deep"><b>Reference</b><span>Which part reads and which part writes each file, as a
+  grid. The one idea worth taking from it without reading the grid: almost every file has exactly
+  one writer, which is what makes a missing file unambiguous rather than a mystery.</span></div>
+
   <p>Every store has exactly one writer in the morning path, which is what makes a missing file
   unambiguous. The picks table is the single exception and is written by four components at three
   different times, always to different columns of the same row: C16 at 08:45, C20 and C59 the same
@@ -1244,9 +1632,26 @@ tbody tr:hover{background:var(--ground)}
 </section>
 
 <!-- 10 -->
-<section id="s10">
-  <h2><span class="n">10</span> &nbsp;Failure</h2>
+<section id="s13">
+  <h2><span class="n">13</span> &nbsp;Failure</h2>
   <h3>Failure behaviour</h3>
+
+  <div class="deep"><b>Reference</b><span>What happens when each part breaks, one row per
+  part.</span></div>
+
+  <div class="plain">
+    <span class="tag">In plain words</span>
+    <p>Every way this system can fail was worked out in advance, and the table below is that list.
+    The question asked of each one is the same: what goes missing, what does the next stage do about
+    it, and does the email still go out.</p>
+    <p>Almost everything either degrades gracefully, meaning the email arrives with a section
+    missing and a sentence saying why, or fixes itself on the next run. <strong>Exactly one failure
+    is permanent.</strong> If the 08:45 stage dies, that morning is lost for good, because live
+    premarket trading cannot be fetched again afterwards. That asymmetry is why the 08:45 stage
+    swallows every missing field it meets and refuses on only one thing: evidence that the prices
+    are not from today.</p>
+  </div>
+
   <p>No job in the data path retries another and no job waits on one. The watchdog
   (<code>src/ops/monitor_jobs.py</code>, fired every 30 minutes for two hours from 07:25, again every
   30 minutes for one hour from 12:25, and once at
@@ -1293,76 +1698,13 @@ tbody tr:hover{background:var(--ground)}
   meaning.</p></div>
 </section>
 
-<!-- 11 -->
-<section id="s11">
-  <h2><span class="n">11</span> &nbsp;Rules</h2>
-  <h3>Load-bearing rules</h3>
-  <p>Seven decisions that shape everything above. Changing any of them changes the architecture rather
-  than the configuration.</p>
-
-  <div class="rules">
-    <div class="rule-c" style="border-left-color:var(--ext)">
-      <span class="tag">One vendor</span>
-      <h5>EODHD is the only vendor a published number comes from</h5>
-      <p>REST for quotes, history, news, and calendars. The trades websocket for live premarket.
-      Nothing in selection, collect or morning calls a second vendor, so there is never a question of
-      which feed a number in the report came from.</p>
-      <p><b>The rule is about a PUBLISHED number and not about the tree as a whole, and that
-      distinction is the whole of it.</b> C59 and C60 are scheduled night steps and both read
-      Alpaca. What neither can do is reach a report. Alpaca measures the RECORD, after the fact,
-      into columns that carry
-      <code>truth_source</code> and sit beside the morning's values rather than over them. It cannot
-      reach a report, and it could not if someone wanted it to: the free plan refuses a running
-      session with 403, so there is no version of this that runs at 08:45.</p>
-    </div>
-    <div class="rule-c" style="border-left-color:var(--conf)">
-      <span class="tag">One place</span>
-      <h5>Every threshold lives in CRITERIA.md</h5>
-      <p>No Python file contains a screening number. The reader raises on anything missing, so a
-      threshold cannot quietly exist in two places and drift.</p>
-    </div>
-    <div class="rule-c" style="border-left-color:var(--morn)">
-      <span class="tag">The boundary</span>
-      <h5>Python decides, the model narrates</h5>
-      <p>Membership, eligibility, scores, and conviction are all computed before the packet is piped
-      to the CLI. A containment check fails the run if the report names a ticker the packet does not
-      carry.</p>
-    </div>
-    <div class="rule-c" style="border-left-color:var(--night)">
-      <span class="tag">No guessing</span>
-      <h5>Missing evidence is null with a reason</h5>
-      <p>A relative volume that cannot be computed honestly is null plus a reason string, never a
-      substituted proxy. The disclaimer line names every such candidate by ticker.</p>
-    </div>
-    <div class="rule-c" style="border-left-color:var(--store)">
-      <span class="tag">No overwriting</span>
-      <h5>Corrections sit beside the original</h5>
-      <p>The night writes true premarket columns next to the morning's live values and never over
-      them. The distance between them is a measurement the project needs, not an error to clean up.</p>
-    </div>
-    <div class="rule-c" style="border-left-color:var(--night)">
-      <span class="tag">One rule</span>
-      <h5>The paper rule is written in CRITERIA before it is written in code</h5>
-      <p>Entry, stop, exit, size and every refusal live in CRITERIA [Paper], and C60 applies them. ONE
-      rule, not a family: no target, because a target is a free parameter that sixteen trades will fit
-      any value of, and a rule with something to tune is a rule that cannot be wrong. Versions are
-      booked side by side over the same trades, each differing from the last in exactly one thing, so
-      a change that helps can be told from a change that happened. And the verdict is pre-registered
-      at 200 trades across 60 sessions, in the same file, before the count gets there.</p>
-    </div>
-    <div class="rule-c" style="border-left-color:var(--sched)">
-      <span class="tag">Human gate</span>
-      <h5>No email until a real morning is verified</h5>
-      <p>While <code>data/UNVERIFIED</code> exists, sending is refused regardless of configuration.
-      Only a person who has checked a live morning's numbers against a reference deletes it.</p>
-    </div>
-  </div>
-</section>
-
 <!-- 12 -->
-<section id="s12">
-  <h2><span class="n">12</span> &nbsp;Reference</h2>
+<section id="s14">
+  <h2><span class="n">14</span> &nbsp;Reference</h2>
   <h3>File map</h3>
+
+  <div class="deep"><b>Reference</b><span>Where everything lives on disk, for someone reading the
+  source code.</span></div>
 
   <dl class="fm">
     <dt>src\</dt>
