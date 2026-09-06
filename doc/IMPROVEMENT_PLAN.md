@@ -38,11 +38,9 @@ Breaking one is a failed package, not a style note.
    render_midday run end to end on fixtures).
 7. Run the suite before and after: `set PYTHONPATH=%CD%\src` then
    `.venv\Scripts\python.exe -m tests.run_tests`. It takes about 40 seconds.
-   [corrected 2026-09-06: this told you to re-run when the photograph failed
-   on an mtime only change to `.git/gk/config` or a `.db-shm` sidecar. Do not.
-   It now hashes every file at or under 64 KB, so an mtime that moved with the
-   bytes identical is not a difference and neither case fails a run. A
-   photograph failure is a real finding now: investigate rather than re-run.]
+   [corrected 2026-09-06: this said to re-run when the photograph failed on an
+   mtime only change. Do not. It hashes files at or under 64 KB now, so that
+   is not a difference; a photograph failure is a real finding, investigate.]
 8. Line endings are mixed per file and git has no autocrlf. Edit with the
    Edit tool, not with a Python script using write_text. Check
    `git diff --stat` before committing: a line count far larger than the
@@ -981,6 +979,11 @@ pre-registration. Delegable: yes; the two stage pattern and the fences exist.
 
 ### 5.5 Test the Alpaca premarket sweep as a fifth discovery prior, offline
 
+DONE 2026-09-06, the largest result in this file: ten of forty five slots
+given to observed premarket movers take big gap recall 0.3242 to 0.5923 over
+239 sessions, twenty times that morning's cap move, and it cannot be built on
+the current Alpaca plan. See doc/research/PREMARKET_PRIOR_RESULT.md.
+
 File: new src/research/premarket_prior_test.py.
 
 For the nine live sessions: sweep 04:00 to 07:00 of the completed tape, rank
@@ -1019,6 +1022,8 @@ motivates it, and stop.
    1 at 07:15 while leaving the published path EODHD only. Needs its own
    DECISIONS entry and a CRITERIA [Pool tiers] source with 403 recorded as
    not_fetched.
+   5.5 PASSED 2026-09-06, so this is priced in two parts now: a plan that
+   serves a running session, and the bend. The bend is the smaller half.
 
 A fifth item, the disposition of `data/UNVERIFIED`, stood here until
 2026-09-02 and was dropped from the plan at the owner's word (DECISIONS
@@ -1243,21 +1248,17 @@ indistinguishable from the shipped rule. news_fresh_hours stays at 6, now
 measured rather than seeded. CRITERIA's freshness note carries the table and
 doc/research/TIER6_MEASURED.md the reasoning.
 
-### 6.10 The cap is the binding constraint, and it is a ceiling not a choice
+### 6.10 The cap is a ceiling not a choice, and it is not the binding constraint
 
-Recall is still climbing at the cap and the marginal subscription is worth
-about 0.0043 of big gap recall, more than the entire slot floor question of
-6.1. The cap is the socket's 50 less the context tickers, and EODHD does not
-allow more than 50, confirmed by the owner 2026-09-05, so it is a hard ceiling.
-
-NOTHING IS BROKEN BY IT. The collector is built for the limit and the overflow
-path is claimed. The value looked mostly NEGATIVE at first: the floor, the
-freshness split and the tier 2 ordering are rearrangements INSIDE the cap,
-which is why measuring all three moved none of them. Do not spend more on tier
-boundaries. But pricing the context tickers is what made anyone read them one
-at a time, and DONE 2026-09-06, three of the eight fed no report row at all.
-They came off and the cap is 45. Reasoning in CRITERIA's cap note and the
-context ticker note under it, and in doc/research/TIER6_MEASURED.md.
+TITLE CORRECTED 2026-09-06: it read "the cap is the binding constraint" and
+5.5 disproved that the same day. The cap is the socket's 50 less the context
+tickers and EODHD allows no more, so it is a hard ceiling. Nothing is broken
+by it: the overflow path is claimed. The floor, the freshness split and the
+tier 2 ordering are rearrangements INSIDE the cap, which is why measuring all
+three moved none of them, and 5.5 says why none of them ever could. Pricing
+the context tickers is what made anyone read them one at a time, and three of
+the eight fed no report row, so they came off and the cap is 45. Reasoning in
+CRITERIA's cap note and its context ticker note, and TIER6_MEASURED.md.
 
 ### 6.3 There is no discovery pass after 07:15
 

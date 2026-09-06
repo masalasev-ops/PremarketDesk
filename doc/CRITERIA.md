@@ -650,6 +650,19 @@ crossing both point at from different directions.
 
 ### The cap note, measured 2026-09-05
 
+[SUPERSEDED IN ITS FIRST CLAIM, 2026-09-06, and left standing because the
+tables under it are sound and were measured honestly. The cap is NOT the
+binding constraint. Package 5.5 ran the same day over the same 240 sessions:
+giving ten of the forty five slots to names an Alpaca premarket sweep says are
+already moving at 07:00 takes big gap recall from 0.3242 to 0.5923, twenty
+times what raising the cap from 42 to 45 bought. The constraint was never the
+number of slots, it is WHICH NAMES fill them, and every rearrangement measured
+below moved nothing because all of them reorder a prior that cannot see the
+morning it is choosing for. It cannot be built on the current Alpaca plan,
+which refuses a running session; the whole result and its two part price are
+in doc/research/PREMARKET_PRIOR_RESULT.md. Read what follows as an accurate
+measurement of the wrong lever.]
+
 THE CAP IS THE BINDING CONSTRAINT, and nothing had measured it. Three separate
 questions today ended up pointing here: 6.1 found the slot floor's benefit
 reverses between the two denominators, the after close crossing found three in
