@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty one claims, a count read off
+and the two pages. It now carries two hundred and twenty two claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -17401,6 +17401,59 @@ def claim_a_sidecar_touch_is_not_a_write(failures: list[str]) -> None:
           "sidecar, a moved database and any other path are not")
 
 
+def claim_an_mtime_with_no_bytes_behind_it_is_not_a_change(failures: list[str]) -> None:
+    """The photograph hashes small files, so an external toucher is not a failure.
+
+    On 2026-09-06 a git GUI rewrote .git/gk/config with the same 106 bytes
+    while the suite ran, and the run FAILED with all fourteen modules green.
+    The old message said so in as many words, that an external toucher and a
+    same size overwrite look identical from there, which left the reader to
+    decide between two things the check could not. A gate that fails at
+    random teaches its reader to stop reading it, which is the argument the
+    sampler and fetch exemptions were already written on.
+
+    So the snapshot carries a digest for every file at or under
+    conftest.HASH_MAX_BYTES and the question stops being a guess. This claim
+    holds both directions, because the widening is only safe with the
+    tightening: identical bytes are forgiven, and DIFFERENT bytes at the same
+    size are caught, which the old check could only describe.
+    """
+    from tests import conftest
+
+    p = "E:/x/data/thing.json"
+    same = ("file", 1.0, 106, "aaa"), ("file", 2.0, 106, "aaa")
+    if conftest.differences({p: same[0]}, {p: same[1]}):
+        failures.append("an mtime touch with identical bytes was still reported")
+
+    rewritten = ("file", 2.0, 106, "bbb")
+    diffs = conftest.differences({p: same[0]}, {p: rewritten})
+    if not diffs:
+        failures.append("a same size rewrite with different bytes was forgiven, "
+                        "which is the escape mode the cap exists to catch")
+    elif "SAME SIZE, DIFFERENT BYTES" not in diffs[0]:
+        failures.append(f"a same size rewrite was reported as something else: {diffs}")
+
+    # Past the cap nothing is hashed, so the old ambiguity survives and the
+    # message has to SAY it is unresolved rather than repeat the old sentence
+    # as though the bytes had been read.
+    big = ("file", 1.0, conftest.HASH_MAX_BYTES + 1), ("file", 2.0, conftest.HASH_MAX_BYTES + 1)
+    diffs = conftest.differences({p: big[0]}, {p: big[1]})
+    if not diffs or "not compared" not in diffs[0]:
+        failures.append(f"past the cap the report does not say the bytes were "
+                        f"never compared: {diffs}")
+
+    # And the cap has to be a real number the snapshot honours, or the two
+    # halves above are testing a constant nothing reads.
+    source = (config.PROJECT_ROOT / "src" / "tests" / "conftest.py").read_bytes().decode("utf-8")
+    if "if stat.st_size > HASH_MAX_BYTES:" not in source:
+        failures.append("snapshot_tree no longer gates hashing on HASH_MAX_BYTES, "
+                        "so the cap in this claim is not the one that runs")
+
+    print(f"  toucher      identical bytes under the {conftest.HASH_MAX_BYTES:,} byte cap "
+          "are forgiven, a same size rewrite is caught, and past the cap the "
+          "report says the bytes were never read")
+
+
 def claim_the_schema_owns_every_picks_column_once(failures: list[str]) -> None:
     """store.py declares the night's columns and stamps a schema version, so the
     source backfill runs once per database and not on every connection.
@@ -18441,6 +18494,7 @@ def main() -> int:
     run_claim(failures, claim_criteria_check_reads_what_the_code_asks_for, failures)
     run_claim(failures, claim_a_raising_claim_does_not_end_its_module, failures)
     run_claim(failures, claim_a_sidecar_touch_is_not_a_write, failures)
+    run_claim(failures, claim_an_mtime_with_no_bytes_behind_it_is_not_a_change, failures)
     run_claim(failures, claim_the_schema_owns_every_picks_column_once, failures)
     run_claim(failures, claim_the_weekly_page_groups_by_the_keys_a_trader_asks_for, failures)
     run_claim(failures, claim_the_backfill_writes_the_split_it_computed, failures)

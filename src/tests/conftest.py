@@ -310,6 +310,31 @@ def _digest(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+# Files at or under this size carry a digest in the snapshot, so an mtime that
+# moved can be asked whether any byte moved with it. Above it a file keeps
+# mtime and size only and an mtime-only change stays ambiguous, which is the
+# behaviour every file had before 2026-09-06.
+#
+# 64 KB is where the cost stops being free rather than a natural boundary in
+# the data. Measured on this tree: 2,479 of 3,501 files sit at or under it and
+# hash in 0.16s a snapshot; raising it to 1 MB takes in 776 more files and 174
+# more megabytes for them. The three files this was written for are 106 bytes,
+# 106 bytes and 32,768.
+HASH_MAX_BYTES = 65_536
+
+
+def _same_bytes(was: Any, now: Any) -> bool:
+    """True when both snapshots hashed this file and nothing in it moved.
+
+    The mtime is deliberately not compared: this answers "did the CONTENT
+    change", and a differing mtime with an identical digest is the whole case
+    it exists to clear.
+    """
+    return (len(was) == 4 and len(now) == 4
+            and was[0] == "file" and now[0] == "file"
+            and was[2] == now[2] and was[3] == now[3])
+
+
 def _sampler_kind(path: Path, logs_root: Path) -> str | None:
     """trail, stdout, or None for everything else including the rest of logs/."""
     if path.parent != logs_root:
@@ -429,13 +454,34 @@ def snapshot_tree(root: Path | None = None,
             except OSError:
                 continue
             if _sampler_kind(path, logs) is None:
-                out[str(path)] = ("file", stat.st_mtime, stat.st_size)
+                # EVERY SMALL FILE IS HASHED TOO, since 2026-09-06. The
+                # comment below used to say the digest was taken for the two
+                # sampler paths alone because hashing the tree would cost
+                # more than the check is worth. That was true when it was
+                # written and is not any more: measured on this tree, the
+                # 2,479 files at or under HASH_MAX_BYTES hash in 0.16 seconds
+                # a snapshot, 0.32 a run, against a suite that runs for nine
+                # minutes. What the digest buys is in the differences() note:
+                # an mtime that moved with no byte behind it stops being a
+                # guess. Files past the cap keep mtime and size, so the
+                # ambiguity survives exactly where reading the bytes would
+                # cost something, and the message says which kind it is.
+                if stat.st_size > HASH_MAX_BYTES:
+                    out[str(path)] = ("file", stat.st_mtime, stat.st_size)
+                    continue
+                try:
+                    payload = path.read_bytes()
+                    out[str(path)] = ("file", stat.st_mtime, len(payload),
+                                      _digest(payload))
+                except OSError:
+                    out[str(path)] = ("file", stat.st_mtime, stat.st_size)
                 continue
             # The two sampler files carry a fourth element, a digest of their
             # whole contents. It is what makes "every byte that was there
-            # before is still there" checkable rather than assumed, and it is
-            # taken only for these two paths because hashing the tree would
-            # cost more than the check is worth.
+            # before is still there" checkable rather than assumed, and they
+            # are hashed WHATEVER their size, because the append check needs
+            # the digest and a trail that grew past the cap must not silently
+            # stop being checkable.
             #
             # The SIZE recorded here is the length of the bytes that were
             # hashed, not stat's. The sampler is appending to these files
@@ -464,6 +510,27 @@ def differences(before: dict[str, Any], after: dict[str, Any],
     same size overwrite is a real escape mode and the check must not start
     guessing which is which.
 
+    [amended 2026-09-06: it no longer has to guess, for a file at or under
+    HASH_MAX_BYTES. The snapshot carries a digest for those, so an mtime that
+    moved with every byte identical is KNOWN to be a touch and is not a
+    difference at all, and a same size overwrite is caught by its digest
+    rather than described as indistinguishable from one. The paragraph above
+    still holds above the cap and its message says so there.
+
+    This is a widening and a tightening at once, which is why it is safe. It
+    stops the run failing on an external toucher: on 2026-09-06 a git GUI
+    rewrote .git/gk/config with the same 106 bytes mid run and failed a suite
+    in which every one of the fourteen modules had passed. And it closes the
+    hole the paragraph above admits, because a same size overwrite used to
+    reach the reader as the same sentence as a harmless touch, leaving them to
+    tell apart two things the check itself could not.
+
+    The 2026-08-14 lesson below survives this unchanged and is the reason the
+    cap exists rather than a blanket trust of identical bytes: an INTERNAL
+    cause must still be exhausted before an external one is assumed. What the
+    digest removes is the class of report that cannot be investigated at all,
+    not the obligation to investigate.]
+
     [corrected 2026-08-14: this note previously offered "a virus scanner or an
     indexer" as the likely cause of an mtime-only change, and the session that
     wrote it attributed an observed intermittent failure to exactly that. The
@@ -487,6 +554,8 @@ def differences(before: dict[str, Any], after: dict[str, Any],
         was, now = before[path], after[path]
         if was == now:
             continue
+        if _same_bytes(was, now):
+            continue  # the mtime moved and not one byte did
         if sampler_append_allowed(Path(path), was, now, logs_root):
             continue  # the scheduled sampler ticked mid run, appending only
         if _external_fetch_marker(Path(path)):
@@ -494,9 +563,17 @@ def differences(before: dict[str, Any], after: dict[str, Any],
         if _sqlite_sidecar_touch(Path(path), was, now, before, after):
             continue  # another process holds the live database open
         if was[:1] == ("file",) and now[:1] == ("file",) and was[2] == now[2]:
-            out.append(f"modified {path}  mtime only, size unchanged at {now[2]} "
-                       "bytes (an external toucher looks like this; so does a "
-                       "same size overwrite)")
+            if len(was) == 4 and len(now) == 4:
+                out.append(f"modified {path}  SAME SIZE, DIFFERENT BYTES at "
+                           f"{now[2]} bytes. Both snapshots hashed it and the "
+                           "digests disagree, so this is a rewrite and not a "
+                           "toucher")
+            else:
+                out.append(
+                    f"modified {path}  mtime only, size unchanged at {now[2]} "
+                    f"bytes, and past the {HASH_MAX_BYTES:,} byte hashing cap "
+                    "so the bytes were not compared (an external toucher looks "
+                    "like this; so does a same size overwrite)")
         else:
             out.append(f"modified {path}  {was} -> {now}")
     return out

@@ -189,6 +189,27 @@ def claim_the_appended_bytes_must_parse(tmp: Path, failures: list[str]) -> None:
     # this claim passed alone and failed inside the full suite, because there
     # the mtime happened to land on the same value and the snapshot saw no
     # change at all rather than a change the exemption refused.
+    #
+    # [amended 2026-09-06. This asserted the OPPOSITE until today: that a pure
+    # touch is reported, proving the sampler exemption demands a real append.
+    # differences() now clears an mtime that moved with every byte identical,
+    # one layer above the exemption, so the touch never reaches it.
+    #
+    # The assertion was changed rather than the rule, and the reason is that
+    # the intent behind it is untouched. What this claim defends is that
+    # sampler_append_allowed cannot be a blanket pass for anything under
+    # logs/, and the cases above still prove exactly that: a truncation, a
+    # same length rewrite and a rewritten prefix are each refused, and each of
+    # those is a real change to the bytes. What this probe uniquely asserted
+    # was that a NO-OP is also a failure, and that is the false positive the
+    # digest exists to remove: a log viewer or an indexer touching a sampler
+    # file is the same event as the git GUI that rewrote .git/gk/config with
+    # its own 106 bytes and failed a suite in which every module passed.
+    #
+    # A test changed to match the code it tests is usually the code winning an
+    # argument it should have lost, so the direction is worth stating plainly:
+    # the check is STRICTER after this change than before it. It gained the
+    # ability to catch a same size rewrite it previously could only describe.]
     import os
     logs = build(tmp)
     target = logs / "meter-2026-08-19.log"
@@ -197,13 +218,27 @@ def claim_the_appended_bytes_must_parse(tmp: Path, failures: list[str]) -> None:
     def touch() -> None:
         os.utime(target, (stamp + 120, stamp + 120))
 
-    found = changes(tmp, logs, touch)
-    if not found:
-        failures.append("an mtime touch adding no bytes passed the sampler "
-                        "exemption, so an append is not actually required")
+    if changes(tmp, logs, touch):
+        failures.append("an mtime touch that added no byte was reported as a "
+                        "change, so the digest is not reaching a sampler file")
+
+    # And the same file, same length, different bytes, is still refused. This
+    # is the half that must not move: it is what says the forgiveness above is
+    # about CONTENT and not about the path being a sampler log.
+    logs = build(tmp)
+    target = logs / "meter-2026-08-19.log"
+    original = target.read_bytes()
+
+    def rewrite() -> None:
+        target.write_bytes(bytes(b ^ 0x20 for b in original))
+
+    if not changes(tmp, logs, rewrite):
+        failures.append("a same length rewrite of a sampler file was forgiven, "
+                        "so the digest is not being compared at all")
     if not failures:
         print(f"  claim parse    {len(cases)} appends the sampler would not have "
-              "written are refused, and so is an mtime touch that appends nothing")
+              "written are refused, an mtime touch that changes no byte is not "
+              "a change, and a same length rewrite still is")
 
 
 def claim_a_test_writing_to_logs_still_fails(tmp: Path, failures: list[str]) -> None:
