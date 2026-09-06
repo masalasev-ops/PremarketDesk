@@ -15,6 +15,46 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty seventh: four surfaces counted trades and none of them named the trader
+
+THE OWNER READ THE NEW FUNNEL, SAW "13 TRADED", AND ASKED WHO IS TRADING.
+Nobody is. No order has ever been placed by any part of this project, and not
+one of the four places that print this count said so.
+
+WHAT EACH ONE SAID. The morning report, which is the document a human reads
+every day: "The ledger holds 43 picks across 4 sessions, of which 13 WERE
+TRADED across 3." The desk's Record screen labelled the same figure "closed
+POSITIONS in the paper ledger", which is worse, because a position is something
+somebody holds with money and nobody held anything. The architecture page's new
+funnel said "13 traded" beside a key reading "Actually booked". README quoted
+the report. Every one of them is a count of trades with no actor and no mood
+beside it, and a count of trades with no actor reads as a count of trades
+somebody took.
+
+IT IS THE PROJECT'S OWN RECURRING DEFECT WEARING DIFFERENT CLOTHES. Hard rule 4
+exists because a missing answer has a falsy value that reads as an answer. This
+is the same shape one level up in the language: a conditional with the
+conditional dropped reads as an indicative. "Would have bought" and "was
+bought" differ by two words and by everything.
+
+FIXED IN ALL FOUR, and the wording is the same everywhere so the surfaces
+cannot drift: the count is preceded by "No order was ever placed", the actor is
+named as one written rule from CRITERIA [Paper] replayed over the record after
+the fact, and the verb keeps its conditional mood. The desk's Record section
+gained a standing sentence saying the same and adding what the section is FOR,
+that its profit and loss is the instrument and not the goal. REPORT_TEMPLATE.md
+carries the instruction with the reason under it, so the next writer of that
+sentence knows why the mood is load bearing.
+
+TWO NEW ASSERTIONS INSIDE THE EXISTING FALLBACK CLAIM, not a new claim, so no
+count moved. One reads that the disclaimer is present and one reads that the
+booked count is in the conditional. The old assertion pinned the whole sentence
+including the words being removed, which is why it had to move rather than
+merely pass.
+
+Suite green. The tracked reports under runs/ keep the old sentence, because
+they are what was published on those mornings and are not rewritten.
+
 ## 2026-09-06, eighty sixth: the record chapter explained why it exists, in pictures
 
 THE OWNER READ THE REWRITTEN SECTION 11 AND SAID THE MORE IMPORTANT QUESTION

@@ -2240,6 +2240,12 @@ DECK_JS = r"""
     return '<section><div class="shead"><h2>What the record says</h2>' +
       '<span class="note">' + R.picks.rows + " picks over " + R.picks.sessions +
       " recorded sessions</span></div>" +
+      // The section had no sentence saying what it is, so every figure under
+      // it read as a trading result. Nothing here was traded by anybody.
+      '<p class="snote">NO ORDER WAS EVER PLACED. Every figure below is one written rule ' +
+      "from CRITERIA [Paper], replayed over the record after the fact, and what that rule " +
+      "would have done. It exists to answer whether the score separates outcomes, so its " +
+      "profit and loss is the instrument and not the goal.</p>" +
       '<div class="cols2"><div class="card pad">' +
       '<div class="panel-title">Where the median pick ends up</div>' + div +
       '<p class="snote" style="margin:12px 0 0">The gap between the two is the whole problem: ' +
@@ -2251,7 +2257,10 @@ DECK_JS = r"""
         { l: "Triggered", v: R.triggered_total, s: (R.triggered_within_30_min || 0) + " inside 30 minutes" },
         { l: "Never triggered", v: (R.never_triggered || {}).rows, s: "entry was never reached" },
         { l: "Skipped", v: (R.skipped || {}).rows, s: "a screen or a guard cut them" },
-        { l: "Booked", v: (R.booked || {}).rows, s: "closed positions in the paper ledger" }
+        // "closed positions in the paper ledger" until 2026-09-06. A position
+        // is something somebody holds with money, and nobody held anything:
+        // this is a written rule replayed over the record after the fact.
+        { l: "The rule would have bought", v: (R.booked || {}).rows, s: "on paper, no order placed" }
       ]) + "</section>";
   }
 

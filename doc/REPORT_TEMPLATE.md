@@ -700,10 +700,19 @@ without its denominator is the thing this whole section is designed not to be.
 
 Open with the size of the record, because it governs how much weight anything
 after it carries: `record_so_far.picks.rows` picks across
-`record_so_far.picks.sessions` sessions, of which `record_so_far.booked.rows`
-were traded across `record_so_far.booked.sessions`. Then say, in one sentence,
-that the sample unit is the SESSION and not the pick, so this rests on that
-many observations rather than on the row count.
+`record_so_far.picks.sessions` sessions.
+
+SAY THAT NO ORDER WAS EVER PLACED, in the same breath and before any count of
+trades. This said "of which N were traded", and on 2026-09-06 a reader asked
+who was doing the trading. Nobody is, and nothing in the section said so: a
+count of trades with no actor beside it reads as a count of trades somebody
+took, and that is the single most damaging way this report can be misread. The
+ledger replays one written rule from CRITERIA [Paper] over the record after the
+fact, so the count is `record_so_far.booked.rows` picks that rule WOULD HAVE
+BOUGHT, across `record_so_far.booked.sessions` sessions. Keep the conditional
+mood on the verb. Then say, in one sentence, that the sample unit is the
+SESSION and not the pick, so this rests on that many observations rather than
+on the row count.
 
 Then these five, each as a bare count over its denominator:
 

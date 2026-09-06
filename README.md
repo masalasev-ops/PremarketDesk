@@ -450,9 +450,11 @@ and section 10 of the report, from the paper ledger, which is what one written
 rule in `doc/CRITERIA.md [Paper]` would have done with every past pick.
 
 ```
-The ledger holds 43 picks across 4 sessions, of which 13 were traded across 3.
-The sample unit is the session and not the pick, so this rests on 3
-observations rather than on the row count.
+The ledger holds 43 picks across 4 sessions. No order was ever placed: the
+ledger replays one written rule from CRITERIA [Paper] over the record after the
+fact, and that rule would have bought 13 of those picks across 3 sessions. The
+sample unit is the session and not the pick, so this rests on 3 observations
+rather than on the row count.
 
 - 11 of 13 trades reached their trigger within thirty minutes of the open, at
   a median of 0 minutes.

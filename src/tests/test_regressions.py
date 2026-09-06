@@ -14801,9 +14801,22 @@ def claim_the_fallback_carries_every_template_section(failures: list[str]) -> No
         if heading not in headings:
             failures.append(f"the fallback report has no {heading!r} section while "
                             "REPORT_TEMPLATE.md requires it")
-    if "68 picks across 8 sessions, of which 17 were traded across 7" not in rendered:
+    if "68 picks across 8 sessions" not in rendered:
         failures.append("the fallback's record section does not quote the ledger "
                         "with its denominators")
+    # THE ACTOR AND THE MOOD, added 2026-09-06 after a reader read "of which 17
+    # were traded" and asked who was doing the trading. Nobody is. A count of
+    # trades with no actor beside it reads as a count of trades somebody took,
+    # so the disclaimer and the conditional verb are both load bearing and both
+    # are claimed here rather than left to whoever edits the sentence next.
+    if "No order was ever placed" not in rendered:
+        failures.append("the fallback's record section states a count of trades "
+                        "without saying that no order was ever placed, which is "
+                        "how a replayed rule gets read as a trading result")
+    if "would have bought 17 of those picks across 7 sessions" not in rendered:
+        failures.append("the fallback's record section does not put the booked "
+                        "count in the conditional, so the ledger reads as a "
+                        "record of trades that were taken")
     if "0 picks reached their trigger and the sizing rule declined" not in rendered:
         failures.append("the fallback's record section drops the zero count line")
     if "actual pending" not in rendered or "actual None" in rendered:

@@ -1668,11 +1668,18 @@ def fallback_report(
         booked_rows, booked_sessions = _pair("booked")
         never_rows, never_sessions = _pair("never_triggered")
         unsized_rows, unsized_sessions = _pair("triggered_but_unsized")
+        # "of which N were traded" is what this said until 2026-09-06, and a
+        # reader asked who was doing the trading. Nobody is: no order has ever
+        # been placed by any part of this project. The sentence has to name the
+        # actor and the mood, because a count of trades with no actor beside it
+        # reads as a count of trades somebody took.
         add(f"The ledger holds {picks_rows} picks across {picks_sessions} "
-            f"sessions, of which {booked_rows} were traded across "
-            f"{booked_sessions}. The sample unit is the session and not the "
-            f"pick, so this rests on {booked_sessions} observations rather than "
-            "on the row count.")
+            "sessions. No order was ever placed: the ledger replays one written "
+            "rule from CRITERIA [Paper] over the record after the fact, and "
+            f"that rule would have bought {booked_rows} of those picks across "
+            f"{booked_sessions} sessions. The sample unit is the session and "
+            f"not the pick, so this rests on {booked_sessions} observations "
+            "rather than on the row count.")
         add("")
         median_minutes = record.get("median_minutes_to_trigger")
         minutes_word = "minute" if median_minutes == 1 else "minutes"
