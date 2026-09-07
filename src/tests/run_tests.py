@@ -37,6 +37,13 @@ from typing import Any
 
 from tests import conftest
 
+# The wall clock this suite is expected to stay under, in seconds. Not a
+# threshold anything fails on and deliberately not in CRITERIA.md: that file
+# holds numbers the MARKET decisions read, and how long a test run takes is a
+# fact about this machine. Eight minutes leaves headroom under the ten a CI
+# step is usually given.
+BUDGET_SECONDS = 8 * 60
+
 SUITE = (
     "tests.test_store",
     "tests.test_scrub",
@@ -215,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
           f"{len(before) - enumerated} were the exposure.")
 
     failures: list[str] = []
+    started = time.monotonic()
+    took: list[tuple[float, str]] = []
     with conftest.activate() as sandbox:
         print(f"run_tests: sandbox at {sandbox}")
         if args.freeze:
@@ -224,13 +233,23 @@ def main(argv: list[str] | None = None) -> int:
             module = importlib.import_module(name)
             importlib.reload(module)
             skipped_live.extend(_live_claims(module))
+            module_started = time.monotonic()
             try:
                 code = module.main()
             except Exception:
                 traceback.print_exc()
                 code = 1
+            elapsed = time.monotonic() - module_started
+            took.append((elapsed, name))
             status = "ok" if code == 0 else f"EXIT {code}"
-            print(f"run_tests: {name:<18} {status}")
+            # THE CLOCK IS PRINTED BECAUSE IT CREPT ONCE WITHOUT ANYONE
+            # CHOOSING IT. On 2026-09-05 the 240 session backtest cache was
+            # refetched, activate() started copying 701 MB of rows no claim
+            # reads, and 90 activations turned a four minute suite into an
+            # eleven minute one with not one test having changed. Nothing in
+            # the output said so, and the first symptom was a timeout. A
+            # number nobody sees is a budget nobody keeps.
+            print(f"run_tests: {name:<18} {status}  {elapsed:6.1f}s")
             if code != 0:
                 failures.append(name)
         if args.prove_check:
@@ -241,6 +260,21 @@ def main(argv: list[str] | None = None) -> int:
     after = conftest.snapshot_tree()
     changes = conftest.differences(before, after)
     print(f"run_tests: {len(after)} paths after")
+
+    total = time.monotonic() - started
+    slowest = ", ".join(f"{name.split('.')[-1]} {secs:.0f}s"
+                        for secs, name in sorted(took, reverse=True)[:3])
+    print(f"run_tests: {total / 60:.1f} minutes, slowest {slowest}")
+    if total > BUDGET_SECONDS:
+        # A WARNING AND NOT A FAILURE, because the number this compares against
+        # is one machine's and a slower one is not a broken suite. It is here
+        # so the creep is announced the first time rather than discovered by a
+        # timeout, and so anyone wiring this into CI has a figure to set a
+        # timeout from.
+        print(f"run_tests: SLOW, that is over the {BUDGET_SECONDS / 60:.0f} minute "
+              "budget in BUDGET_SECONDS. Profile before adding claims: the last "
+              "time this moved it was activate() copying a directory no claim "
+              "reads, not the tests getting bigger.")
 
     if changes:
         print(f"run_tests: FAILED, the suite changed {len(changes)} path(s) under the "

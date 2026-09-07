@@ -796,13 +796,41 @@ def standalone(entry) -> int:
             return entry()
 
 
+# ------------------------------------------- what the sandbox does NOT copy
+#
+# One directory, named rather than matched by size, because a rule like "skip
+# anything over 100 MB" silently changes what the suite can see the day a file
+# grows.
+#
+# data/backtest/outcomes is 701 MB of the 816 MB backtest cache, it is written
+# only by a hand run of research/replay_outcomes.py, and NOTHING IN THE SUITE
+# READS IT: every reference to that module in tests/ reads its SOURCE with
+# read_text, to check what it writes and where, and none of them opens a file
+# under this directory.
+#
+# It costs about 3 seconds per copy, and activate() is called 90 times in a
+# run, once by run_tests and 89 times inside test_regressions. That is four
+# and a half minutes of copying a directory no claim opens, and it appeared on
+# 2026-09-05 when the 240 session cache was refetched: the suite went from
+# about four minutes to over eleven with no test having changed, which is the
+# shape of a cost nobody chose. The sessions and eod directories beside it ARE
+# copied, because test_backtest reads both through cached_sessions.
+#
+# If a claim ever needs these rows, copy them for that claim rather than
+# widening this: the whole point is that the exclusion is one named path a
+# reader can check.
+def _skip_bulk_research(dirpath: Any, names: list[str]) -> set[str]:
+    return {"outcomes"} if Path(dirpath).name == "backtest" else set()
+
+
 @contextlib.contextmanager
 def activate(copy_data: bool = True) -> Iterator[Path]:
     """Point every writable root at a temporary copy for the duration.
 
     data/ is copied rather than left empty because the suite reads real inputs
     from it: universe.json, the collector bar file, the backtest cache. Reads
-    stay honest, writes land in the copy.
+    stay honest, writes land in the copy. One directory is excluded and
+    _skip_bulk_research above says which and why.
     """
     global SANDBOX_ACTIVE
 
@@ -817,7 +845,7 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
     try:
         data_copy = sandbox / "data"
         if copy_data and REAL_DATA.exists():
-            shutil.copytree(REAL_DATA, data_copy)
+            shutil.copytree(REAL_DATA, data_copy, ignore=_skip_bulk_research)
         else:
             data_copy.mkdir(parents=True, exist_ok=True)
         runs_copy = sandbox / "runs"

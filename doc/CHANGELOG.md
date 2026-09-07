@@ -15,6 +15,60 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, eighty ninth: eleven minutes of the suite was copying a directory no claim reads
+
+THE SUITE WENT FROM ABOUT FOUR MINUTES TO OVER ELEVEN AND NOTHING SAID SO. The
+first symptom was a hand run hitting a ten minute timeout. The owner asked for
+it diagnosed, on the ground that a CI step cannot take that long.
+
+MEASURED, NOT GUESSED, AND THREE SUSPECTS DIED FIRST. The tree photograph's
+move to content hashing that morning: 0.19s over 3,140 paths, innocent. The
+`git ls-files` calls two claims make: 105ms each, innocent. Norton, which this
+project has a history of blaming: 0.2s of CPU over 15s of wall clock and up
+since 2026-08-19, not active. Reaching for the external explanation first is
+the mistake the sandbox note in conftest already records; the numbers were
+taken before any of them was believed.
+
+A PROFILE OF EVERY MODULE AND EVERY CLAIM found test_regressions at 445s of a
+460s total, 97 percent, with no single dominant claim: a long tail at seven and
+a half seconds each, which is the shape of a FIXED COST rather than of work.
+
+THE FIXED COST IS conftest.activate() COPYING data/. It copytrees the whole
+directory so reads stay honest and writes land in the copy, which is right. On
+2026-09-05 the 240 session backtest cache was refetched and data/ went to 911
+MB, of which data/backtest/outcomes is 701 MB. activate() is called NINETY
+times in a run, once by run_tests and 89 times inside test_regressions. Three
+seconds a copy, ninety copies, four and a half minutes of copying rows no test
+opens.
+
+NOTHING IN THE SUITE READS THAT DIRECTORY, checked rather than assumed: every
+reference to replay_outcomes in tests/ reads its SOURCE with read_text, to
+assert what it writes and where, and not one opens a file under outcomes/. The
+sessions and eod directories beside it are still copied because test_backtest
+reads both.
+
+ONE NAMED DIRECTORY IS EXCLUDED, not a size rule. "Skip anything over 100 MB"
+would silently change what the suite can see the day a file grows, and the
+whole value of this exclusion is that it is one path a reader can check.
+
+RESULT: 11+ minutes to 2.1 minutes, and test_regressions 445s to 117s. Coverage
+is unchanged and that was verified rather than asserted: the same 5 SKIP lines,
+the same 13 PASS lines, and claim 4 still reports 2026-08-13 from cache at 104
+gapped, pool 79 at 0.7596, subscribed 30 at 0.2885. A diff of the two runs'
+output is empty apart from temp paths, the commit hash and the quota day.
+
+THE CLOCK IS PRINTED NOW, per module and in total, with the slowest three
+named and a BUDGET_SECONDS of eight minutes that WARNS rather than fails. A
+slower machine is not a broken suite, and the number exists so the next creep
+is announced the first time instead of discovered by a timeout. It is
+deliberately not in CRITERIA.md: that file holds numbers the market decisions
+read, and how long a test run takes is a fact about this machine.
+
+WHAT IS STILL THE DOMINANT COST, so the next reader does not have to find it
+again: 89 activations at 0.85s each is about 75 of test_regressions' 117
+seconds. The suite spends most of its time copying data/ into a sandbox, and it
+will creep again if data/ grows. The budget line is what will say so.
+
 ## 2026-09-06, eighty eighth: a way to stand down, and a written answer on a second vendor
 
 THE OWNER ASKED TWO THINGS. Whether a subscription lapsing for months would
