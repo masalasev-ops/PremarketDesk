@@ -15,6 +15,142 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, ninety first: the day run arc page against the code, and the four things it had not been told about
+
+THE OWNER ASKED WHETHER THE ARC PAGE STILL DESCRIBES THE CODE, and whether the
+code does anything the page has missed. Read end to end against `src/`,
+`tasks/`, CRITERIA and the live database. Most of it holds: the paper rule's
+nine lines are the code line for line, the four midday verdicts and the three
+fill states are the constants, the twelve nightly steps are the .bat in order,
+the five watched jobs are `JOB_STATUS_NAMES`, the eleven report sections are
+REPORT_TEMPLATE's headings, the four notable legs of five and the seven fixed
+sentences are there, the single vendor boundary holds under grep (Alpaca
+appears in `selection`, `collect`, `morning` and `midday` only inside
+comments), and the analyst timeout to watchdog window coupling is machine
+checked by `claim_the_watchdog_outlasts_the_longest_healthy_analyst`.
+
+FOUR CLAIMS HAD STOPPED BEING TRUE.
+
+  THE OUTCOME COLUMNS DO NOT ALL DESCRIBE THE WRONG DAY, and this was the
+  page's own "the one that matters most". It said the session the report was
+  about is measured by none of them. `pick_day_open`, `pick_day_high`,
+  `pick_day_low`, `pick_day_close` and `pick_day_refused_reason` were added on
+  2026-09-02 under IMPROVEMENT_PLAN 5.3, are populated on 31 of the 43 live
+  rows, cost nothing because they come off the bar the outcome fill already
+  fetches, and are what the score watch reads to ask its question without the
+  reference confound riding along. The off by one is unchanged and still
+  governs every column that carries it; it is no longer the whole row.
+
+  THE CAP IS 45, NOT 42. It moved this morning in the eighty seventh entry
+  when three of the eight context tickers turned out to be subscribed every
+  session and read by nothing. The page was edited three times after that
+  commit and carried 42 through all three.
+
+  THE 04:00 COLLECTOR FIRST RAN ON 2026-09-03, NOT 2026-09-02. The clock in
+  CRITERIA moved on the second; no session ran under it until the third, which
+  is why `[Collector] two_phase_first_session` exists as a key. The collector
+  logs settle it: 2026-09-01 and -02 open at 07:15, -03 and -04 at 03:55 and
+  04:00. The 2026-09-02 session is in the live record and ran on the old
+  window. The architecture page and `register_tasks.ps1` carried the same
+  conflation and are corrected with it.
+
+  THE RESEARCH WRITE UPS ARE THIRTEEN, NOT NINE, on a line whose own claim was
+  that it had been counted off the directory rather than remembered.
+  LATE_NEWS_RESULT, TIER6_MEASURED and the premarket prior pre-registration
+  and result were missing. The same paragraph named 21 of the 23 research
+  modules while asserting 23.
+
+  And the timeline SVG still labelled the morning chain "scan, analyst,
+  render, deliver, archive", against prose four screens down on the same page
+  saying the archive was retired on 2026-09-04.
+
+FOUR THINGS THE CODE DOES THAT THE PAGE HAD NOT BEEN TOLD ABOUT. Three of the
+four shipped after its last edit, which is the ordinary way this happens and
+the reason to check rather than assume.
+
+  THE STAND DOWN. `data/DORMANT`, exit 4, honoured by all nine .bat files and
+  by the quota sampler, which is the one job that otherwise runs on closed
+  days. Shipped at 19:01 today and mentioned in neither HTML page, including
+  in the degradation table, where it is now the only entry that is not a
+  failure, and in the `data/` file map.
+
+  PROVIDERS.md AND `core/provider.py`, from the same commit. PROVIDERS.md was
+  the only file in `doc/` absent from the page's `doc/` map. `provider` and
+  `lookalike` were the only two modules in `core/` absent from a `core/`
+  enumeration that reads as complete.
+
+  `night/pool_recall.py`, 810 lines, named twice and explained nowhere. It is
+  the job that PRICES the discovery prior: which universe names actually
+  gapped, how many the pool held, and which source would have caught each
+  miss. The page argues at length that the unsubscribed tail is written to
+  watchlist.json so the cut is auditable, and never said what audits it. It is
+  also the nightly's whole bulk spend, 200 credits.
+
+  THE LEDGER'S REFUSALS. The rule table had nine rows and no row for a size
+  the rule cannot express: a stop at or above the entry, refused in every mode
+  because such a row would book a phantom win wearing the name of a loss; a
+  budget that does not cover one whole share; and a trade still open at the
+  end of the data. `record_so_far` counts three outcomes and the page named
+  two, though the report prints `triggered_but_unsized` on every edition. And
+  v2 ships two parameters, the 750 dollar risk budget and the 25,000 dollar
+  position cap, under a heading saying it changes exactly one thing.
+
+NO ORDER WAS EVER PLACED, which four surfaces were corrected to say at 14:05
+today and which this page, the fifth and the longest of them, was not. It
+leans harder on the indicative than the four that were fixed: "every trade the
+rule took", "the one you are in is done". The sentence is now in the ledger
+chapter before any count.
+
+TWO DEFECTS IN THE CODE, both found by running the suite rather than by
+reading.
+
+  `conftest.activate` COPIED SQLITE'S WAL SIDECARS. `_skip_bulk_research`
+  excluded one directory and nothing else, so `premarketdesk.db-wal` and
+  `-shm` were copied into every sandbox. They exist only while a connection is
+  open and vanish on a clean close, so `copytree` lists them and then fails to
+  read them: `shutil.Error`, and the claim dies, whenever anything else
+  touches the database while the copy runs. Reproduced today by running read
+  only queries against the database during a suite run;
+  `claim_a_slot_keeps_its_shape` failed and the same claim passed alone
+  afterwards. Copying them is also wrong when it succeeds, because a `-wal`
+  captured out of step with the `.db` beside it gives the sandbox a database
+  whose committed state is not the working tree's. Both are now skipped.
+
+  `job_nightly.bat` STILL SAID TWO ARTIFACTS. `_ARTIFACTS` holds six and
+  `backup_evidence`'s own docstring carries a `[corrected 2026-09-01: this
+  said TWO and named two]`. The .bat comment beside the call was not part of
+  that correction and has been for five days the only place in the tree still
+  saying two.
+
+WHY THE RESEARCH COUNT COULD DRIFT AT ALL, which is the more useful half of
+that finding. `claim_the_documents_count_what_is_on_disk` already checks the
+write up count, and it greps for the literal phrase "thirteen write ups in
+all". The architecture page uses that wording and stayed right. The arc page
+said "nine in all" in its own words, so the phrase was absent, the grep found
+nothing to check, and the count sat wrong for three days under a sentence
+boasting it had been counted off the directory rather than remembered. A count
+is only checked in the wording the check reads. The page now uses the phrase
+and has been added to that claim's `checks` list, so the next drift fails the
+suite instead of waiting to be read.
+
+THE PAGE IS NOW OVER THE 1,500 LINE CAP and is named in `_DOC_CAP_EXEMPT` with
+its reason, which is the path the claim's own message offers and the one
+ArchitecturePremarketdesk.html took three days ago on the same grounds. It sat
+at 1,492 with eight lines of headroom; 376 of its lines are its own stylesheet
+and three inline SVGs, counted as prose by this cap. Writing down four false
+claims and four missing ones cost more than eight lines. Splitting it is the
+one thing that would break it: it is one narrative of one day in order, and
+half a day in each of two files is not the same document. Recorded here rather
+than left in the exempt list alone, because adding a name to that list is
+loosening a guard and should cost a paragraph.
+
+ONE LEFT UNFIXED AND NAMED HERE RATHER THAN CLOSED QUIETLY.
+`premarket_snapshot.superseded.jsonl`, which a quota thinned rerun leaves
+behind, is in neither `COMPRESSIBLE` nor the prune's snapshot drop, so it is
+never gzipped and never dropped. None exist on disk today. Deciding between
+gzip, drop under the same three interlocks, and leave is a retention question
+and belongs in RETENTION.md before it belongs in `prune_data.py`.
+
 ## 2026-09-06, ninetieth: the suite had abandoned 6 GB in TEMP and believed it cleaned up after itself
 
 THE OWNER ASKED FOR A CLEANUP, NOT SURE WHAT HAD BEEN COPIED WHERE. The working

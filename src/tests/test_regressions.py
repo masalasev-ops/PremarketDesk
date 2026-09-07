@@ -12184,6 +12184,22 @@ _DOC_CAP_EXEMPT = {
                                       "two files describing one architecture "
                                       "drift, and this is the file a stranger "
                                       "opens first.",
+    "Premarketdesk_ADayRunArc.html": "the same argument as its sibling above "
+                                     "and it sat at 1,492 with eight lines "
+                                     "left. 376 of its lines are its own "
+                                     "stylesheet and three inline SVGs, which "
+                                     "are counted as prose here. The "
+                                     "2026-09-06 read against the code found "
+                                     "four claims that had stopped being true "
+                                     "and four things the code does that the "
+                                     "page had never been told about, "
+                                     "including the stand down and "
+                                     "pool_recall, and writing them down cost "
+                                     "more than eight lines. Splitting it is "
+                                     "the one thing that would break it: it "
+                                     "is one narrative of one day in order, "
+                                     "and half a day in each of two files is "
+                                     "not the same document.",
 }
 
 # The only machine written payloads that may stay committed. Both carry a
@@ -13283,6 +13299,14 @@ def claim_the_documents_count_what_is_actually_here(failures: list[str]) -> None
         ("doc/Premarketdesk_ADayRunArc.html", "modules in all"),
         ("doc/ArchitecturePremarketdesk.html", ".bat files in all"),
         ("doc/ArchitecturePremarketdesk.html", "write ups in all"),
+        # THE ARC PAGE JOINED THIS ROW ON 2026-09-06 and the way it was missing
+        # is the finding. It carried the same count in its own words, "nine in
+        # all", so the phrase this claim greps for was absent and the count was
+        # unwatched. The sibling page stayed right at thirteen while this one
+        # sat at nine for three days, on a sentence whose own boast is that it
+        # was counted off the directory rather than remembered. A count is only
+        # checked in the wording the check reads, so the page now uses it.
+        ("doc/Premarketdesk_ADayRunArc.html", "write ups in all"),
     ]
     for rel, what in checks:
         path = root / rel

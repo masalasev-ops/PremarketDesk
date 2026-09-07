@@ -71,8 +71,13 @@ echo ===== calendar refresh started %DATE% %TIME% ===== >> "%LOG%"
 echo ===== calendar refresh finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 
 rem FIRST, before anything else touches the tree. It copies the day's premarket
-rem capture and packet outside the working tree, and those are the only two
-rem artifacts here that cannot be rebuilt. Never fails the chain: an unmade
+rem capture, its two sidecars, the packet and the report in both markdown and
+rem HTML outside the working tree, and those SIX are the only artifacts here
+rem that cannot be rebuilt, a report least of all because the same input does
+rem not produce the same words twice. [corrected 2026-09-06: this said two and
+rem named two, the same defect backup_evidence's own docstring records having
+rem carried until 2026-09-01. _ARTIFACTS is the list; read it there.]
+rem Never fails the chain: an unmade
 rem copy is not a reason to skip a night's work, and the step reports a
 rem disagreement rather than resolving one. See CRITERIA.md [Backup].
 echo ===== backup started %DATE% %TIME% ===== >> "%LOG%"

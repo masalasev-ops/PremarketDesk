@@ -926,8 +926,24 @@ def standalone(entry) -> int:
 # If a claim ever needs these rows, copy them for that claim rather than
 # widening this: the whole point is that the exclusion is one named path a
 # reader can check.
+#
+# AND SQLITE'S WAL SIDECARS, which is a different reason and a sharper one.
+# premarketdesk.db-wal and -shm exist only while a connection is open and
+# vanish on a clean close, so copytree can list them and then fail to read
+# them: shutil.Error, and the claim dies, whenever anything else touches the
+# database while the copy runs. A hand run script, an overlapping scheduled
+# job, a second suite. Observed 2026-09-06.
+#
+# Copying them is also wrong when it SUCCEEDS. A -wal captured a moment out of
+# step with the .db beside it gives the sandbox a database whose committed
+# state is not the one the working tree holds, and the suite then reads that.
+# The .db alone is a consistent snapshot of everything committed; the sidecars
+# are never wanted here.
 def _skip_bulk_research(dirpath: Any, names: list[str]) -> set[str]:
-    return {"outcomes"} if Path(dirpath).name == "backtest" else set()
+    skip = {n for n in names if n.endswith(("-wal", "-shm"))}
+    if Path(dirpath).name == "backtest":
+        skip.add("outcomes")
+    return skip
 
 
 @contextlib.contextmanager

@@ -58,7 +58,10 @@ $everyday = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 # array and compares it, trigger by trigger, against what schtasks reports.
 $jobs = @(
     # Discover runs TWICE, and the collector starts before the second one.
-    # From 2026-09-02 the socket opens at 04:00, because measuring 2026-08-29
+    # The socket opens at 04:00 from 2026-09-02 in CRITERIA and from 2026-09-03
+    # in the tape, a distinction CRITERIA keeps two_phase_first_session for,
+    # because a row either side of it was measured against a different window.
+    # It moved because measuring 2026-08-29
     # showed the published entry reference sitting a median 1.19 percent from
     # the true premarket high with nearly all of that gap being 04:00 to 07:20
     # going unheard. The collector cannot subscribe to a pool that does not
