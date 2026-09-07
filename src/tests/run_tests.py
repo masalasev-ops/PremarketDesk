@@ -211,6 +211,20 @@ def main(argv: list[str] | None = None) -> int:
               "remaining. Live claims are skipped; pass --live to run them.")
     if args.freeze:
         print(f"run_tests: clock frozen to {_freeze_clock(args.freeze)}")
+
+    # BEFORE the photograph, because it touches only TEMP and the photograph is
+    # of the working tree, and because a run that is about to copy data/ into a
+    # new sandbox should first give back the ones its predecessors abandoned. A
+    # killed run cannot clean up after itself, so its successor does it.
+    swept, freed, stuck = conftest.sweep_stale_sandboxes()
+    if swept:
+        print(f"run_tests: swept {swept} abandoned sandbox(es), "
+              f"{freed / 1024 / 1024:,.0f} MB, left by runs that ended before "
+              "their cleanup could run")
+    if stuck:
+        print(f"run_tests: {len(stuck)} abandoned sandbox(es) would not delete: "
+              f"{', '.join(stuck)}")
+
     before = conftest.snapshot_tree()
     enumerated = len([
         path for path in before

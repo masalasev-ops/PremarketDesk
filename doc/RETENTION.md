@@ -322,6 +322,18 @@ the name of a key.
   logs/ at 2.4 MB has no policy. It is small, it is not evidence, and it is
   the obvious next whitelist entry once these five steps are done.
 
+  %LOCALAPPDATA%\PremarketDesk\evidence has no policy either, and unlike
+  everything in the four tiers above it is not in the tree those tiers
+  describe, so nothing here was ever going to reach it. 15.6 MB across 17
+  session directories on 2026-09-06, about 0.9 MB a session, which is roughly
+  230 MB a year at 250 sessions. It holds the six artifacts with no route
+  back, and that is both the argument for leaving it alone and the argument
+  for naming it here: a directory nothing prunes and no document mentions
+  cannot be told apart from one that was forgotten. Named 2026-09-06, when a
+  cleanup went looking for every place this project copies data to. There are
+  exactly two, this and the suite's sandboxes in TEMP, and the second one had
+  6 GB of leftovers in it.
+
   Whether the backtest cache is ever refetched, and when. It is not needed
   until someone re fits the float rotation edges or reopens the subscription
   cap question, and test_backtest claim 4 is silently skipping until then.

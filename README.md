@@ -894,6 +894,11 @@ be rebuilt from 2026-09-01.
    uses the PowerShell ScheduledTasks module, which stores the path
    structurally. Details and caveats are in `tasks/README.md`.
 
+   Once these are armed the machine runs on its own every weekday. To stop it
+   for a while without unregistering anything, see
+   [Pausing the desk](#pausing-the-desk-and-starting-it-again): one command
+   puts every job to sleep and one wakes them.
+
 8. **Let a real morning run**, then read the gate table that
    `src/morning/verify_morning.py` prints into `logs\morning-chain-YYYY-MM-DD.log`.
    For the first three candidates it lays the evidence out on one line: the
@@ -1043,27 +1048,58 @@ Other documents:
   `analyst.py` falls back to a plain table report built from the packet and
   says so in the report itself.
 
-## If the subscription lapses, and if you want a different one
+## Pausing the desk, and starting it again
 
-**Stand the machine down rather than letting it fail politely for months:**
+**Stand it down rather than letting it fail politely for months.** The reason
+does not have to be a lapsed subscription. A month away, a laptop you are about
+to rebuild, and a vendor you have stopped paying all want the same command:
 
 ```
-.venv\Scripts\python.exe -m ops.market_today --dormant "EODHD paused"
+.venv\Scripts\python.exe -m ops.market_today --dormant "away until October"
 ```
 
-That writes `data\DORMANT`, the same shape as the delivery gate. While it
-exists every scheduled job logs one line and exits cleanly without calling the
-vendor, and the tasks stay registered so nothing has to be re-armed. The
-trading day guard returns exit 4 for this, a separate code from the 3 that
-means the market is shut, so a log read months later says which of the two
-happened. The meter sampler stands down too, and it is the one job that
+That writes `data\DORMANT`, the same shape as the delivery gate. Your reason
+and the date go on the first two lines and the way back goes on the rest, so
+the file explains itself to whoever opens it in three months, which is likely
+to be you having forgotten. While it exists every scheduled job logs one line
+and exits cleanly without calling the vendor, and **the tasks stay registered,
+so nothing has to be re-armed and there is no second thing to remember to
+undo**. The trading day guard returns exit 4 for this, a separate code from the
+3 that means the market is shut, so a log read months later says which of the
+two happened. The meter sampler stands down too, and it is the one job that
 deliberately runs on closed days: a day the market is shut is exactly a day a
 sibling project draining the shared key would go unrecorded, but a day there is
 no subscription is not.
 
+**To ask what state it is in**, run the guard with no arguments. It reads the
+marker before it reads the calendar, so it spends nothing and answers on the
+first line, whether the answer is dormant, shut or open:
+
+```
+.venv\Scripts\python.exe -m ops.market_today
+```
+
+**Starting it again is one command, and two more if you were gone longer than
+ten days:**
+
 ```
 .venv\Scripts\python.exe -m ops.market_today --wake
+.venv\Scripts\python.exe -m selection.universe
+.venv\Scripts\python.exe -m selection.gap_stats
 ```
+
+`--wake` removes the marker, and for a short pause it is the whole job. Past
+ten days `universe.json` is older than `[Universe] max_age_days`,
+`require_fresh_universe` refuses, and discover and the scan stand down until
+the last two commands have run. They are the same two as step 6 of Setup, they
+are the two `--wake` prints a reminder about, and running them when they were
+not needed costs one universe pull and does no harm.
+
+Everything else re-derives itself. The volume baseline re-warms from vendor
+history, gap propensity is a sweep over history, the calendar refreshes on the
+next nightly. All of it is retroactive, so all of it recovers. The only thing
+permanently missing is the premarket tape for the dormant days, and there was
+nothing to record.
 
 **Without the marker nothing breaks, it just gets loud.** A dead token returns
 401, which is not a retryable status, so no call storms. Every module gets a
@@ -1073,20 +1109,8 @@ scan refuse outright, so **no picks row is ever written from a dead vendor and
 the record has a gap in it rather than a lie**. What you are left with is
 months of failed calls, an overdue report from the watchdog every thirty
 minutes all morning, and a log directory to dig through on the day you come
-back.
-
-**Coming back takes two commands**, the same two as step 6 of Setup:
-
-```
-.venv\Scripts\python.exe -m selection.universe
-.venv\Scripts\python.exe -m selection.gap_stats
-```
-
-Everything else re-derives itself. The volume baseline re-warms from vendor
-history, gap propensity is a sweep over history, the calendar refreshes on the
-next nightly. All of it is retroactive, so all of it recovers. The only thing
-permanently missing is the premarket tape for the dormant days, and there was
-nothing to record.
+back. The marker buys you a quiet machine and a one line answer, not a working
+one.
 
 **A different vendor is possible and the code is the easy part.**
 `doc/PROVIDERS.md` is the specification: the twelve calls the published path

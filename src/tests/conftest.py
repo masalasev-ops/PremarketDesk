@@ -38,6 +38,7 @@ its import of this file will do the right thing.
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import hashlib
 import json
@@ -45,6 +46,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -92,6 +94,105 @@ REAL_LOGS = config.LOGS_DIR
 TREE_ROOT = config.PROJECT_ROOT
 
 
+# ------------------------------------------------ taking the sandbox back out
+#
+# On 2026-09-06 there were 246 abandoned directories in TEMP holding 6.0 GB,
+# built up over two days by a suite that believed it cleaned up after itself.
+# Two separate causes, and the same fix does not serve both:
+#
+#   ten were suite sandboxes, 5,983 MB of them, each a copy of data/. Six were
+#   whole trees, which is what a run that is KILLED leaves: a finally clause
+#   does not run in a process that was stopped. Nothing inside that process can
+#   ever clean them up, so the next run has to.
+#
+#   the rest were partial trees, and 236 were small scratch directories. Those
+#   were not killed. Their cleanup ran and quietly failed.
+#
+# Both were invisible because every removal here was rmtree(ignore_errors=True).
+
+# The two prefixes are the whole family of temporary directories this project
+# makes, and the sweep will delete a directory only if its name starts with one
+# of them. That makes the pattern load bearing: a new prefix has to be one of
+# these two or it will accumulate forever unswept.
+_TEMP_PREFIXES = ("premarketdesk-", "pmd-")
+TEMP_ROOT = Path(tempfile.gettempdir())
+
+# How old an abandoned sandbox has to be before the sweep will take it. A run
+# is two to three minutes and warns at eight. Six hours is not an estimate of
+# how long a run takes; it is wide enough that anything inside it is a run that
+# is genuinely still going, and a leaked directory loses nothing by waiting for
+# the next run to collect it. Deleting a sandbox out from under a suite running
+# beside this one is the only way this function can do harm, and the age is
+# what prevents it.
+STALE_AFTER_SECONDS = 6 * 60 * 60
+
+
+def _remove_tree(path: Path, attempts: int = 4) -> bool:
+    """Delete a directory tree, and SAY whether it actually went.
+
+    The bare rmtree(ignore_errors=True) this replaces is why the leftovers
+    above went unnoticed for two days. On Windows a file that has just been
+    written is briefly held open by the on access virus scanner, rmtree raises
+    on it, and ignore_errors turns that into silence. The evidence fits: what
+    survived in the partial trees was hundreds of megabytes of backtest JSON
+    that had just been copied in, and there was no .db-wal or .db-shm anywhere,
+    so sqlite had closed cleanly and a held database was not the cause.
+
+    Retrying with a short backoff clears the scanner case. Returning a bool
+    covers the rest. The caller decides whether a survivor is worth printing;
+    what it may no longer do is not know.
+    """
+    for attempt in range(attempts):
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return True
+        if attempt < attempts - 1:
+            time.sleep(0.25 * (attempt + 1))
+    return not path.exists()
+
+
+def sweep_stale_sandboxes(older_than: float = STALE_AFTER_SECONDS,
+                          root: Path | None = None,
+                          ) -> tuple[int, int, list[str]]:
+    """Collect sandboxes earlier runs abandoned. Returns (taken, bytes, stuck).
+
+    Narrow on purpose, and every clause of the test is a safety property: a
+    directory, not a symlink, sitting DIRECTLY in the root, named with one of
+    this project's prefixes, and older than `older_than`. Nothing recursive,
+    nothing pattern matched loosely, nothing outside the root.
+
+    `root` is a parameter rather than a patched global so the claim can aim
+    this at a scratch directory and watch what it takes. The prefix test is
+    absolute and does not depend on the root, so even pointed somewhere
+    unintended this can only ever delete a directory named for this project.
+
+    run_tests calls this once at startup. It is not called at import, because
+    importing this file to debug a single claim must not delete anything.
+    """
+    taken, freed, stuck = 0, 0, []
+    cutoff = time.time() - older_than
+    for entry in sorted((root or TEMP_ROOT).glob("*")):
+        if entry.is_symlink() or not entry.is_dir():
+            continue
+        if not entry.name.startswith(_TEMP_PREFIXES):
+            continue
+        try:
+            if entry.stat().st_mtime > cutoff:
+                continue
+            size = sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
+        except OSError:
+            # Gone, or unreadable, between the glob and the stat. Either way it
+            # is not this run's business and a sweep must never be the thing
+            # that fails a suite.
+            continue
+        if _remove_tree(entry):
+            taken += 1
+            freed += size
+        else:
+            stuck.append(entry.name)
+    return taken, freed, stuck
+
+
 # ---------------------------------------------------- isolation at IMPORT time
 
 def _redirect_config(root: Path) -> None:
@@ -134,6 +235,12 @@ def _redirect_config(root: Path) -> None:
 # and the tree photograph still guards the real working tree.
 _IMPORT_SANDBOX = Path(tempfile.mkdtemp(prefix="pmd-import-"))
 _redirect_config(_IMPORT_SANDBOX)
+# And taken back out when the process ends. EVERY process that imports this
+# file makes one of these, which is every suite run and every hand debugged
+# claim, and until this line none of them was ever removed: 28 were sitting in
+# TEMP when the sweep above was written. They are a few empty directories each,
+# which is exactly why a month of them went unnoticed.
+atexit.register(_remove_tree, _IMPORT_SANDBOX)
 
 # The only paths a test run may touch. Directory names, matched against any
 # component of a path, so src/__pycache__/scan.cpython-313.pyc is allowed and
@@ -305,7 +412,7 @@ def isolated_store() -> Iterator[Path]:
     finally:
         (config.DATA_DIR, config.RUNS_DIR, config.DB_PATH,
          config.PREMARKET_DIR, config.LOGS_DIR, config.STUDY_DIR) = saved
-        shutil.rmtree(box, ignore_errors=True)
+        _remove_tree(box)
 
 
 def _external_fetch_marker(path: Path, root: Path | None = None) -> bool:
@@ -886,7 +993,13 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
         for module, attribute, value in saved_modules:
             if value is not None:
                 setattr(module, attribute, value)
-        shutil.rmtree(sandbox, ignore_errors=True)
+        if not _remove_tree(sandbox):
+            # Said out loud rather than swallowed, because this directory holds
+            # a copy of data/ and is therefore close to a gigabyte. Two days of
+            # silence here cost 6 GB.
+            print(f"conftest: WARNING, the sandbox at {sandbox} could not be "
+                  "removed. It holds a copy of data/. The next run's sweep "
+                  "will collect it once it is six hours old.")
 
 
 # ------------------------------------------------------- the network boundary

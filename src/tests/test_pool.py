@@ -235,6 +235,7 @@ def claim_four(failures: list[str]) -> None:
                 failures.append("the most recent session was not weighted highest")
     finally:
         config.DB_PATH = original
+        conftest._remove_tree(sandbox)
     print("  claim 4 empty picks yields no runners without raising, and recency wins")
 
 

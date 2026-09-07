@@ -15,6 +15,109 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-06, ninetieth: the suite had abandoned 6 GB in TEMP and believed it cleaned up after itself
+
+THE OWNER ASKED FOR A CLEANUP, NOT SURE WHAT HAD BEEN COPIED WHERE. The working
+tree turned out to be clean: git reports nothing untracked, and everything
+large under it is generated, gitignored and live. `data/` is 907 MB of evidence
+the project reads, `runs/`, `logs/` and `site/` are outputs, and every loose
+file in `data/` is referenced by something in `src/` or `doc/`. Nothing in the
+repository was unwanted.
+
+TEMP HELD 246 DIRECTORIES AND 6.0 GB, accumulated over two days. Ten were suite
+sandboxes at 5,983 MB of that, each one a copy of `data/`; the other 236 were
+small per claim scratch directories. All of them were made by this project and
+named for it.
+
+TWO SEPARATE CAUSES, and one fix does not serve both.
+
+  SIX WERE WHOLE TREES, which is what a run that is KILLED leaves behind: a
+  `finally` clause does not run in a process that was stopped, and one of those
+  six was stopped by hand during the previous session's work. Nothing inside
+  that process can ever collect its own sandbox. Only a later run can.
+
+  THE REST WERE PARTIAL, and those had not been killed. Their cleanup ran and
+  failed. What survived in them was hundreds of megabytes of backtest JSON that
+  had just been copied in, and there was no `.db-wal` or `.db-shm` anywhere, so
+  sqlite had closed cleanly and a held database was not the cause. That points
+  at the on access virus scanner briefly holding freshly written files, which
+  makes `rmtree` raise.
+
+BOTH WERE INVISIBLE FOR THE SAME REASON: every removal in the suite was
+`shutil.rmtree(path, ignore_errors=True)`, which turns a failed cleanup into
+silence. This is the second finding in two days of the same shape as the
+eighty ninth entry below, a cost nobody was shown.
+
+THE NATURAL EXPERIMENT IS IN THE LEAK ITSELF. Every leaked prefix maps to a
+`tempfile.mkdtemp` call, and not one `tempfile.TemporaryDirectory` prefix
+appears among them, though the suite uses both about equally. The context
+manager cleans up; the bare call cleans up only if someone wrote the `finally`
+and only if it worked.
+
+THREE CHANGES, in `src/tests/conftest.py`:
+
+  `_remove_tree(path)` replaces the three bare `rmtree(ignore_errors=True)`
+  calls. It retries four times with a short backoff, which clears the scanner
+  case, and RETURNS whether the tree actually went. `activate()` now prints a
+  warning naming the directory when one survives, because that directory holds
+  a copy of `data/` and is close to a gigabyte.
+
+  `sweep_stale_sandboxes()` collects what earlier runs abandoned, and
+  `run_tests` calls it once at startup, before the tree photograph and before
+  it copies `data/` into a sandbox of its own. Deliberately narrow, and every
+  clause of its test is a safety property: a directory, not a symlink, sitting
+  directly in the temp root, named with one of this project's two prefixes, and
+  older than six hours. The age is not an estimate of how long a run takes. It
+  is what stops this from deleting the working directory of a suite running
+  beside it, which would be worse than the leak.
+
+  `atexit.register` now removes the import time sandbox. Every process that
+  imports conftest makes one, which is every suite run and every hand debugged
+  claim, and until now none was ever removed. 28 were sitting in TEMP.
+
+CLAIM 224, `claim_the_sweep_takes_only_this_projects_stale_sandboxes`, asserts
+the two things the sweep must NOT do alongside the one it must: it leaves a
+fresh directory with this project's prefix, it leaves a stale directory with a
+foreign one, and it counts the bytes it recovered rather than estimating them,
+since `run_tests` prints that figure. Both mutations, dropping the age test and
+dropping the prefix test, are caught.
+
+FOUR SITES ALSO STOPPED LITTERING, because adding a sweep and leaving the
+litter would be treating the symptom in the same commit that diagnosed the
+cause. `premarketdesk-pool-`, `premarketdesk-calendar-`, `premarketdesk-session-`
+and `premarketdesk-env-` created a directory per run and removed it never,
+which is why there were about fifty of each. The first three already had a
+`finally` restoring config paths and gained one line in it. The fourth had no
+`try` at all and became a `TemporaryDirectory`, which is the difference the
+leak itself pointed at.
+
+THE ONE TIME COLLECTION took 246 directories and 5,987 MB. TEMP now holds none.
+
+RETENTION.md GAINED THE ONE PLACE IT COULD NOT HAVE COVERED.
+`%LOCALAPPDATA%\PremarketDesk\evidence` is the nightly's backup of the six
+artifacts with no route back, it is outside the tree the four tiers describe,
+and nothing prunes it. 15.6 MB over 17 sessions, about 230 MB a year. Keeping
+it is right and leaving it unnamed was not: a directory nothing prunes and no
+document mentions cannot be told apart from one that was forgotten.
+
+THE PAUSE PROCEDURE WAS DOCUMENTED UNDER A HEADING NOBODY WOULD FIND. The owner
+asked whether stopping and restarting the project was written down anywhere. It
+was, in README.md, under "If the subscription lapses, and if you want a
+different one", which is one reason out of several and not the phrase anyone
+searches for. Worse, that section carried a real defect: `--wake` appeared as a
+bare code block with no sentence attached, and the paragraph headed "Coming
+back takes two commands" then listed `selection.universe` and
+`selection.gap_stats` WITHOUT it. A reader following that instruction literally
+would rebuild the universe while the machine was still stood down and every job
+still skipping.
+
+The section is now "Pausing the desk, and starting it again", it opens on the
+reasons rather than on one of them, it says how to ask the machine which state
+it is in, and coming back is one command with two more only if the pause ran
+past `[Universe] max_age_days`. Setup step 7 now points at it, since a person
+who has just armed eight scheduled tasks is exactly the person who will later
+want to know how to turn them off.
+
 ## 2026-09-06, eighty ninth: eleven minutes of the suite was copying a directory no claim reads
 
 THE SUITE WENT FROM ABOUT FOUR MINUTES TO OVER ELEVEN AND NOTHING SAID SO. The

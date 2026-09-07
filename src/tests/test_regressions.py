@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty three claims, a count read off
+and the two pages. It now carries two hundred and twenty four claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -4758,6 +4758,7 @@ def claim_a_missing_calendar_stands_the_vintage_gate_down(failures: list[str]) -
         market_today.ALLOW_NETWORK = saved_network
         verify_morning.UNVERIFIED_MARKER = saved_marker
         market_today.reset_memo()
+        conftest._remove_tree(scratch)
 
     print("  dark cal     a Monday packet with no exchange-details.json passes the "
           "vintage gate instead of failing every dated row in it, and the checks "
@@ -4840,6 +4841,7 @@ def claim_the_previous_session_helper_says_when_it_does_not_know(
         market_today.CACHE_PATH = saved_path
         market_today.ALLOW_NETWORK = saved_network
         market_today.reset_memo()
+        conftest._remove_tree(scratch)
 
     print("  prev session the guard still assumes open for the exit code, and the "
           "session walk reports unknown rather than handing a Monday the Sunday")
@@ -17002,11 +17004,14 @@ def claim_the_cli_environment_is_scrubbed_of_every_override(failures: list[str])
                 os.environ[key] = value
     if leaked:
         failures.append(f"{leaked} reach the claude CLI's environment")
-    env_file = pathlib.Path(tempfile.mkdtemp(prefix="premarketdesk-env-")) / ".env"
-    env_file.write_text("EODHD_API_TOKEN=abc\n" + "".join(f"{key}=x\n" for key in keys),
-                        encoding="utf-8")
-    with contextlib.redirect_stderr(io.StringIO()):
-        parsed = config.load_env(path=env_file)
+    # TemporaryDirectory rather than mkdtemp, which is the whole difference
+    # between the prefixes that leaked into TEMP and the ones that did not.
+    with tempfile.TemporaryDirectory(prefix="pmd-env-") as raw:
+        env_file = pathlib.Path(raw) / ".env"
+        env_file.write_text("EODHD_API_TOKEN=abc\n" + "".join(f"{key}=x\n" for key in keys),
+                            encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()):
+            parsed = config.load_env(path=env_file)
     kept = [key for key in keys if key in parsed]
     if kept or parsed.get("EODHD_API_TOKEN") != "abc":
         failures.append(f"the .env parser kept {kept} or lost the token: {parsed}")
@@ -18400,6 +18405,83 @@ def claim_the_provider_protocol_covers_what_production_calls(failures: list[str]
                     "or stop calling it from the published path")
 
 
+def claim_the_sweep_takes_only_this_projects_stale_sandboxes(
+        failures: list[str]) -> None:
+    """conftest.sweep_stale_sandboxes takes an abandoned sandbox, and leaves a
+    fresh one and a directory belonging to something else.
+
+    On 2026-09-06 there were 246 directories in TEMP holding 6.0 GB, built up
+    over two days. Six were whole copies of data/ left by runs that had been
+    KILLED, and no finally clause runs in a process that was stopped, so the
+    only thing that can ever collect them is the next run. That makes this
+    function a deletion loop over a shared directory, which is worth a claim
+    on its own terms rather than because it fixed something.
+
+    The two things it must not do are the two asserted here. Taking a FRESH
+    directory would delete the sandbox of a suite running beside this one, so
+    the age test is a safety property and not tidiness. Taking a foreign name
+    would make a test suite something that deletes other programs' files.
+
+    The size is asserted too: the caller prints it as megabytes recovered, and
+    a recovery figure that is not measured is decoration.
+    """
+    import time as _time
+
+    box = pathlib.Path(tempfile.mkdtemp(prefix="pmd-sweep-"))
+    try:
+        stale = _time.time() - 24 * 60 * 60
+        made = {}
+        for name, payload, age in (
+            ("premarketdesk-suite-abandoned", b"x" * 4096, stale),
+            ("pmd-import-abandoned", b"y" * 2048, stale),
+            ("premarketdesk-suite-running", b"z" * 512, None),
+            ("someone-elses-tool-abandoned", b"w" * 512, stale),
+        ):
+            where = box / name
+            where.mkdir()
+            (where / "payload.bin").write_bytes(payload)
+            if age is not None:
+                os.utime(where / "payload.bin", (age, age))
+                os.utime(where, (age, age))
+            made[name] = where
+
+        taken, freed, stuck = conftest.sweep_stale_sandboxes(
+            older_than=60 * 60, root=box)
+
+        for name in ("premarketdesk-suite-abandoned", "pmd-import-abandoned"):
+            if made[name].exists():
+                failures.append(f"the sweep left the abandoned {name} behind")
+        if not made["premarketdesk-suite-running"].exists():
+            failures.append(
+                "THE SWEEP TOOK A SANDBOX THAT WAS STILL FRESH. That is a "
+                "suite deleting the working directory of another suite "
+                "running beside it, which is worse than the leak it fixes")
+        if not made["someone-elses-tool-abandoned"].exists():
+            failures.append(
+                "the sweep deleted a directory that is not named for this "
+                "project. A test suite may not collect other programs' files")
+        if taken != 2:
+            failures.append(f"the sweep reported {taken} taken, not 2")
+        if freed != 4096 + 2048:
+            failures.append(
+                f"the sweep reported {freed} bytes recovered, not {4096 + 2048}. "
+                "run_tests prints this as megabytes and an unmeasured figure "
+                "there is decoration")
+        if stuck:
+            failures.append(f"the sweep could not remove {stuck}")
+
+        # And the other half of the fix: a removal that fails says so, where
+        # rmtree(ignore_errors=True) is what let two days of this go unseen.
+        gone = box / "premarketdesk-suite-abandoned"
+        if not conftest._remove_tree(gone):
+            failures.append("_remove_tree reported failure on an absent path")
+    finally:
+        conftest._remove_tree(box)
+    print("  temp sweep   an abandoned sandbox is collected, a fresh one and a "
+          "directory belonging to something else are left alone, and the bytes "
+          "recovered are counted rather than estimated")
+
+
 def main() -> int:
     failures: list[str] = []
     run_claim(failures, claim_the_november_transition, failures)
@@ -18631,6 +18713,8 @@ def main() -> int:
     run_claim(failures, claim_the_daily_bar_sections_are_a_separate_instrument,
               failures)
     run_claim(failures, claim_the_provider_protocol_covers_what_production_calls,
+              failures)
+    run_claim(failures, claim_the_sweep_takes_only_this_projects_stale_sandboxes,
               failures)
 
     if failures:
