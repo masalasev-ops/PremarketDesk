@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty six claims, a count read off
+and the two pages. It now carries two hundred and twenty seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18429,6 +18429,69 @@ def claim_the_provider_protocol_covers_what_production_calls(failures: list[str]
                     "or stop calling it from the published path")
 
 
+def claim_the_floors_filter_is_wired_to_the_table_it_filters(
+        failures: list[str]) -> None:
+    """The floors filter renders, is handled, and names the tbody it rewrites.
+
+    Twelve names per floor is twenty four rows in one table and the section
+    ran off the bottom of the screen, which is the one shape that stops a
+    table being read: the volume floor's names sat below the fold under twelve
+    move floor rows nobody had asked to see, so the comparison the section
+    exists to make was the thing hardest to do.
+
+    THE FAILURE MODE A FILTER HAS is not looking wrong. A chip row that
+    renders while nothing listens, or a handler that rewrites an id the markup
+    does not carry, both draw perfectly and simply do nothing when clicked,
+    and no screenshot shows it. Nothing else in this suite can see that,
+    because the desk's tables are built in the browser from an inlined payload
+    and there is no DOM here to build them in. So the three halves are checked
+    against each other in source: the control exists, something reads it, and
+    the id it writes to is the id the table declares.
+
+    The default is asserted too. "All" is the default because asking what a
+    floor COSTS means seeing both of them, and a filter that opens pre-narrowed
+    answers a question the reader did not ask.
+    """
+    import re
+
+    from core import config
+
+    src = (config.PROJECT_ROOT / "src" / "desk" / "assets.py").read_text(
+        encoding="utf-8", errors="replace")
+
+    if 'data-ff="' not in src:
+        failures.append("the floors section renders no filter control, so its "
+                        "twenty four rows are one undivided table again")
+    if 'closest("[data-ff]")' not in src:
+        failures.append(
+            "nothing handles the floors filter. The chips still render and "
+            "still highlight nothing, which is the one defect a screenshot of "
+            "this section cannot show")
+    if 'id="floorbody"' not in src or '$("floorbody")' not in src:
+        failures.append(
+            "the floors filter and the table it filters do not agree on an id, "
+            "so clicking a chip rewrites nothing and the control is decorative")
+    if 'state.floorFilter = "all"' not in src:
+        failures.append(
+            "the floors filter has no reset to All, so a chip remembered from a "
+            "session that had that floor renders an empty table in one that "
+            "does not, which reads as the floor having turned nothing down")
+    # The SELECTOR is not the rule. Matching ".scroll.capped" alone passes on
+    # the sticky header rule below, which shares the selector and sets no
+    # height at all, so the check would survive the ceiling being deleted.
+    if not re.search(r"\.scroll\.capped\s*\{[^}]*max-height", src):
+        failures.append(
+            "the floors table has no ceiling on its height, so a filter is the "
+            "only thing standing between the section and the bottom of the page")
+    if not re.search(r"\.scroll\.capped\s+thead\s+th\s*\{[^}]*position:\s*sticky", src):
+        failures.append(
+            "the capped table's header does not stay put, so scrolling it "
+            "leaves a numeric column of unlabelled figures")
+
+    print("  floors filter the chips render, a handler reads them, the id they "
+          "rewrite is the one the table declares, and the default is All")
+
+
 def claim_the_desk_prints_tickers_and_aligns_its_numbers(
         failures: list[str]) -> None:
     """No vendor suffix reaches a reader, and a number column has its header.
@@ -18929,6 +18992,7 @@ def main() -> int:
               failures)
     run_claim(failures, claim_a_failed_morning_says_so_on_the_desk, failures)
     run_claim(failures, claim_the_desk_prints_tickers_and_aligns_its_numbers, failures)
+    run_claim(failures, claim_the_floors_filter_is_wired_to_the_table_it_filters, failures)
 
     if failures:
         for failure in failures:

@@ -277,6 +277,13 @@ td.n { text-align: right; font-variant-numeric: tabular-nums;
 th.n { text-align: right; }
 td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .scroll { overflow-x: auto; }
+/* A table that is allowed to be as tall as its data is a table that pushes
+   everything under it off the screen. The header stays put while the body
+   scrolls, because a numeric column whose heading has scrolled away is a
+   column of unlabelled figures. --surface matches .card, which is what this
+   always sits inside. */
+.scroll.capped { max-height: 430px; overflow-y: auto; }
+.scroll.capped thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .reason { display: grid; grid-template-columns: 62px minmax(0,1fr); gap: 10px;
   align-items: baseline; padding: 6px 0; border-top: 1px solid var(--line);
   font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
@@ -1593,22 +1600,44 @@ DECK_JS = r"""
     // compact already carries, and nothing had ever displayed them.
     var fex = (mid.tally || {}).floor_examples || {};
     var fLabel = { below_move: "the move floor", below_rvol: "the volume floor" };
-    var fRows = ["below_move", "below_rvol"].reduce(function (acc, k) {
+    var fKeys = ["below_move", "below_rvol"];
+    var fRows = fKeys.reduce(function (acc, k) {
       return acc.concat((fex[k] || []).map(function (r) {
-        return { floor: fLabel[k] || k, sym: r.symbol,
+        return { key: k, floor: fLabel[k] || k, sym: r.symbol,
                  move: r.move_pct, rvol: r.day_rvol };
       }));
     }, []);
+    // A FILTER, AND A CEILING ON THE HEIGHT. Twelve names per floor is
+    // twenty four rows in one table, and the section ran off the bottom of
+    // the screen. That is the one shape that stops a table being read: the
+    // volume floor's names sat below the fold underneath twelve move floor
+    // rows nobody had asked to see, so the comparison the section exists to
+    // make was the thing hardest to do. The chips are the Morning screen's,
+    // down to the aria-pressed and the class, because a second filter idiom
+    // on the same page is a worse answer than a longer table.
+    //
+    // The ceiling is separate on purpose and not a fallback for the filter.
+    // All is still the default, since asking what a floor COSTS means seeing
+    // both, and a capped body means no choice among the chips can make the
+    // page longer than one screen again.
+    var floorBody = null;
     if (fRows.length) {
-      html += '<section><div class="shead"><h2>What the floors turned down</h2></div>' +
-        '<p class="snote">The biggest movers each floor refused, largest move first, ' +
-        "which is the only way to ask what a floor costs. Every name here was " +
-        "measured and rejected, which is what tells it apart from a name the pass " +
-        'could not price at all.</p><div class="card pad"><div class="scroll">' +
-        '<table class="ptable"><thead><tr><th>Turned down by</th><th>Name</th>' +
-        '<th class="n">Move</th><th class="n">Volume against its own average</th>' +
-        "</tr></thead><tbody>" +
-        fRows.map(function (r) {
+      var floorCounts = {};
+      fKeys.forEach(function (k) { floorCounts[k] = (fex[k] || []).length; });
+      var floorChips = [["all", "All", fRows.length]].concat(
+        fKeys.filter(function (k) { return floorCounts[k]; })
+          .map(function (k) { return [k, fLabel[k], floorCounts[k]]; }));
+      // A remembered choice must not survive into a session that has no such
+      // floor, which would render an empty table under a pressed chip and
+      // read as "this floor turned nothing down".
+      if (!state.floorFilter ||
+          (state.floorFilter !== "all" && !floorCounts[state.floorFilter])) {
+        state.floorFilter = "all";
+      }
+      floorBody = function (which) {
+        return fRows.filter(function (r) {
+          return which === "all" || r.key === which;
+        }).map(function (r) {
           // bare(), like every other ticker on this page. The vendor's
           // ".US" is an addressing detail of one feed and belongs nowhere a
           // reader looks; this was the last table still printing it.
@@ -1616,13 +1645,45 @@ DECK_JS = r"""
             '</td><td class="n ' + dirClass(r.move) + '">' + pct(r.move) +
             '</td><td class="n">' +
             (r.rvol == null ? NIL : n2(r.rvol) + "×") + "</td></tr>";
-        }).join("") + "</tbody></table></div></div></section>";
+        }).join("");
+      };
+      html += '<section><div class="shead"><h2>What the floors turned down</h2>' +
+        '<span class="note">' + fRows.length + " refused, filter by floor</span></div>" +
+        '<p class="snote">The biggest movers each floor refused, largest move first, ' +
+        "which is the only way to ask what a floor costs. Every name here was " +
+        "measured and rejected, which is what tells it apart from a name the pass " +
+        'could not price at all.</p>' +
+        '<div class="filters noprint" id="floorfilters">' +
+        floorChips.map(function (f) {
+          return '<button class="chip" type="button" data-ff="' + esc(f[0]) +
+            '" aria-pressed="' + (f[0] === state.floorFilter) + '">' +
+            esc(f[1]) + " " + f[2] + "</button>";
+        }).join("") + "</div>" +
+        '<div class="card pad"><div class="scroll capped">' +
+        '<table class="ptable"><thead><tr><th>Turned down by</th><th>Name</th>' +
+        '<th class="n">Move</th><th class="n">Volume against its own average</th>' +
+        '</tr></thead><tbody id="floorbody">' + floorBody(state.floorFilter) +
+        "</tbody></table></div></div></section>";
     }
     root.innerHTML = html;
     root.addEventListener("click", function (e) {
       var tr = e.target.closest("[data-goto]");
       if (tr) location.hash = "#/name/" + tr.dataset.goto;
     });
+
+    // Only the tbody is rewritten, so the scroll position, the header and the
+    // card around them all survive a change of chip.
+    var ff = $("floorfilters");
+    if (ff && floorBody) {
+      ff.addEventListener("click", function (e) {
+        var b = e.target.closest("[data-ff]"); if (!b) return;
+        state.floorFilter = b.dataset.ff;
+        Array.prototype.forEach.call(ff.children, function (ch) {
+          ch.setAttribute("aria-pressed", String(ch.dataset.ff === state.floorFilter));
+        });
+        $("floorbody").innerHTML = floorBody(state.floorFilter);
+      });
+    }
   }
 
   /* ---------- Precedent ----------
