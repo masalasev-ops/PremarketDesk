@@ -15,6 +15,54 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-08, ninety third: the morning the desk had nothing to say, and now says it
+
+THE OWNER OPENED THE DESK AT 09:10 AND SAW FRIDAY. The 08:45 chain had died at
+its first step at 08:45:21. Every record was correct: job-status.jsonl said
+failed, the chain log said rc=1 and named the two vintage violations, and the
+watchdog's 08:55 pass printed 0 problems. None of it was anywhere the owner
+looks, and the failure was found by noticing the absence of a report twenty
+minutes before the open.
+
+THREE THINGS HAD TO BE TRUE AT ONCE for that to happen and all three were.
+
+The .bat exits on the first failing step, so desk.render at the end of the
+chain never ran and the page was never redrawn. The one morning the page most
+needed to say something was the one morning it could not.
+
+The Health screen cannot answer this. It reads p.health out of the SESSION'S
+PACKET, and a morning whose scan died wrote no packet, so the session does not
+exist, the router has nothing to route to, and the desk opens on the last good
+day looking entirely normal.
+
+And the watchdog's chain window does not open until [monitor] chain_due, 09:00.
+Its passes are 07:25, 07:55, 08:25, 08:55 and 09:25, so 08:55 read NOT DUE
+against a job that had already failed. That threshold is right for the question
+it answers, because a healthy chain can still be running at 09:19:53.
+
+WHAT IS THERE NOW. desk.render draws an alert banner above every screen, read
+from data/job-status.jsonl, which every step appends to in a finally block as
+it exits and which is therefore the one record that survives the failure it
+describes. Rendered into the document at build time rather than by the page's
+router, because the router is a function of the sessions that exist. Two
+loudnesses by what the failure COST: a morning with no report on disk is the
+red one and says the screens below are not this session; a failure on a morning
+that still produced a report is amber.
+
+AND THE CHAIN REACHES THE DESK ON EVERY FAILURE, then exits with the failed
+step's code. Under its own log marker, which is the load bearing part rather
+than the tidy one: "===== desk finished rc=" is the watchdog's finish marker
+for this job, so drawing the desk on the failure path under that marker would
+make a chain that died at scan read as FINISHED and break log_verdict on
+exactly the runs it exists for.
+
+A WINDOWS TOAST AND A MODAL WERE BUILT FIRST and thrown away before they were
+committed. See DECISIONS.md, eighteenth.
+
+Claim 225 in test_regressions drives the banner both ways, asserts it is wired
+into body(), counts the four failing steps that route to the desk, and fails if
+the failure path ever writes the watchdog's finish marker.
+
 ## 2026-09-08, ninety second: a trillion dollar name could not enter the universe, and the reason was one endpoint
 
 THE OWNER ASKED HOW BRK-A AND BRK-B COULD HAVE NO MARKET CAP, reading the

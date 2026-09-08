@@ -33,19 +33,19 @@ echo ===== scan started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m morning.scan >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== scan finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-if %RC% neq 0 exit /b %RC%
+if %RC% neq 0 goto :failed
 
 echo ===== analyst started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m morning.analyst >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== analyst finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-if %RC% neq 0 exit /b %RC%
+if %RC% neq 0 goto :failed
 
 echo ===== render started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m morning.render_report >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== render finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-if %RC% neq 0 exit /b %RC%
+if %RC% neq 0 goto :failed
 
 rem The gate table is printed into the log every morning for the human to
 rem review. It does not stop the chain: deliver.py itself enforces the gate.
@@ -56,7 +56,7 @@ echo ===== deliver started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m morning.deliver >> "%LOG%" 2>&1
 set RC=%ERRORLEVEL%
 echo ===== deliver finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
-if %RC% neq 0 exit /b %RC%
+if %RC% neq 0 goto :failed
 
 rem The desk, so this morning's screens are there before the open. It reads
 rem and renders: no vendor call and no measurement of its own. Never fails the
@@ -66,3 +66,24 @@ echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render >> "%LOG%" 2>&1
 echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 exit /b 0
+
+rem A FAILED STEP STILL DRAWS THE DESK, and then exits with the failure. Until
+rem 2026-09-08 every failure above did exit /b here and the desk was never
+rem redrawn, so the one morning the owner most needed the page to say something
+rem was the one morning it silently showed the previous session. desk.render
+rem reads job-status.jsonl and puts today's failures at the top of the page.
+rem
+rem UNDER ITS OWN MARKER, which is load bearing rather than tidy. The watchdog
+rem reads "===== desk finished rc=" as this job's finish marker, so reusing it
+rem here would make a chain that died at scan report as finished, and the one
+rem check that catches a chain which never reached its end would stop working
+rem on the exact runs it exists for.
+rem
+rem The exit code is the FAILED step's, never the desk's. The scheduler, the
+rem watchdog and job-status all read it, and a chain that failed must not
+rem report success because the page that describes the failure drew correctly.
+:failed
+echo ===== desk after failure started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m desk.render >> "%LOG%" 2>&1
+echo ===== desk after failure finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+exit /b %RC%

@@ -18,6 +18,33 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-08, eighteenth: the failure goes on the desk, not into a Windows dialog
+
+THE CHOICE, AND IT WAS MADE TWICE. The first build of this raised a Windows
+toast for any failed step and a modal dialog for a failure that cost the
+report, fired from job_status.run, which is the one place that knows at the
+instant it happens. It worked, it was measured working, and the owner rejected
+it on sight: the alert belongs on the PremarketDesk page that already exists.
+
+WHY THAT IS THE BETTER ANSWER and not merely the preferred one. A dialog is
+read once and dismissed, and it is gone whether or not anything was done about
+it; a machine that runs at 03:55 raises it to an empty chair. The desk is the
+surface already opened every morning, so a banner there is read at the moment
+the question is being asked, and it is still there on the second look. It also
+survives being wrong about who is at the desk, which a modal does not.
+
+WHAT THE DIALOG WAS BUYING and how it is bought instead. Immediacy: job_status
+knows at 08:45:21 and the desk is redrawn seconds later on the same run of the
+same .bat, so the banner is on the page before anybody could have dismissed a
+dialog. What is genuinely lost is the case where nothing runs at all, a machine
+asleep through 08:45, because no process means no banner. That is the
+watchdog's job and it is not solved here.
+
+WHAT WOULD REVERSE IT. Evidence that a banner is being scrolled past. It is
+above every screen and outside the router for that reason, and if it turns out
+to be missed anyway the answer is to make the page louder rather than to move
+the message off it, because the page is where the question gets asked.
+
 ## 2026-09-08, seventeenth: the second cap source is asked for one absence and not the other two
 
 THE CHOICE. universe.py now has a fallback market cap source, and the part that

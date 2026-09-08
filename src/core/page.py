@@ -192,6 +192,25 @@ REPORT_CSS = """
 .report td.conv-red { color: var(--bad); font-weight: 600; }
 .report td.conv-unscored { color: var(--muted); font-style: italic; }
 
+/* The desk's failure banner. Above every screen and outside the router,
+   because the morning it matters is the morning there is no session for the
+   router to route to. Bordered rather than filled: it has to be impossible to
+   scroll past, and it is read at 08:45 beside numbers, so a solid red slab
+   would drag the eye off the page it is warning about. */
+.deskalert {
+  border: 1px solid var(--bad); border-left-width: 4px; border-radius: 3px;
+  padding: calc(var(--u) * 0.7) calc(var(--u) * 0.85);
+  margin: 0 0 calc(var(--u) * 0.8);
+}
+.deskalert.warn { border-color: var(--warn); }
+.deskalert h2 {
+  margin: 0 0 4px; font-size: 13px; letter-spacing: 0.01em; color: var(--bad);
+}
+.deskalert.warn h2 { color: var(--warn); }
+.deskalert p { margin: 0 0 4px; font-size: 12.5px; line-height: 1.5; }
+.deskalert ul { margin: 4px 0 0; padding-left: 18px; }
+.deskalert li { font-size: 12.5px; line-height: 1.55; }
+
 .report code {
   font-family: Consolas, "SF Mono", monospace; font-size: 0.9em;
   background: var(--raised); padding: 1px 5px; border-radius: 2px;

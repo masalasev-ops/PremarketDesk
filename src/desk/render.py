@@ -145,6 +145,60 @@ def _nav() -> str:
         for key, href, label in items) + "</nav>"
 
 
+def alert_banner(today: str | None = None) -> str:
+    """What failed today, drawn above every screen. Empty when nothing did.
+
+    WHY NOT THE HEALTH SCREEN. That screen already answers this question and
+    cannot answer it on the morning it counts. It reads p.health out of the
+    session's PACKET, and a morning whose scan died wrote no packet at all, so
+    the session does not exist, the router has nothing to route to, and the
+    desk opens on the last good day looking entirely normal. That is exactly
+    what happened on 2026-09-08: the chain died at 08:45:21, the desk showed
+    Friday, and the owner found out at 09:10 by noticing the absence of
+    something rather than the presence of anything.
+
+    So this reads data/job-status.jsonl instead, which every step appends to in
+    a finally block as it exits and which is therefore the one record that
+    survives the failure it describes. It is rendered into the document at
+    build time rather than drawn by the page's router, for the same reason:
+    the router is a function of the sessions that exist.
+
+    Two loudnesses, by what the failure COST rather than by what it was. A
+    morning with no report on disk is the red one, because that is the state
+    the owner would otherwise discover by going to look for a report. A
+    failure on a morning whose report was still written is a warning: the
+    screens are real, something on the way to them was not.
+    """
+    day = today or ettime.today_str()
+    on = ettime.parse_date(day)
+    rows = job_status.records()
+    failures = job_status.group_failures(job_status.failures_today(on, rows))
+    overdue = job_status.overdue(on, rows)
+    if not failures and not overdue:
+        return ""
+
+    report_missing = not (config.run_path(day) / "report.html").is_file()
+    items = [job_status.describe_failure(row) for row in failures]
+    items += [job_status.describe(row) for row in overdue]
+    lines = "".join(f"<li>{html.escape(text)}</li>" for text in items)
+
+    if report_missing:
+        klass, headline = "deskalert", f"No morning report for {day}"
+        lead = ("The chain stops on its first failure, so nothing after the "
+                "failed step ran and no report was written. The screens below "
+                "are the last session that completed, not this one.")
+    else:
+        klass, headline = "deskalert warn", f"Something failed on {day}"
+        lead = ("The report was written, so the screens below are this "
+                "session. These steps still failed on the way, and what they "
+                "produce may be missing or stale.")
+
+    return (f'<div class="{klass}" role="alert">'
+            f"<h2>{html.escape(headline)}</h2>"
+            f"<p>{html.escape(lead)}</p>"
+            f"<ul>{lines}</ul></div>")
+
+
 def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
     index_json = json.dumps(index, separators=(",", ":"))
     blob_json = json.dumps(blobs, separators=(",", ":"))
@@ -168,6 +222,7 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
   </div>
 </div>
 <div class="wrap">
+  {alert_banner()}
   <div class="eyebrow" id="stamp">
     <span><b class="mono" id="stamp-date">n/a</b> session</span>
     <span>&middot;</span>

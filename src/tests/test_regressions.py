@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty four claims, a count read off
+and the two pages. It now carries two hundred and twenty five claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18429,6 +18429,118 @@ def claim_the_provider_protocol_covers_what_production_calls(failures: list[str]
                     "or stop calling it from the published path")
 
 
+def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
+    """The desk names today's failures, and a dead chain still redraws it.
+
+    On 2026-09-08 the 08:45 chain died at its first step. The record was
+    written correctly, the log said so plainly, and the desk showed Friday,
+    because .bat exited on the failure and never reached desk.render. The
+    owner found out at 09:10 by noticing that no report had appeared, twenty
+    minutes before the open.
+
+    The Health screen could not have helped and this is why the banner does
+    not live there. That screen reads p.health out of the session's PACKET,
+    and a morning whose scan died wrote no packet, so the session does not
+    exist and the router has nothing to route to. The one record that survives
+    a failure is data/job-status.jsonl, which every step appends to in a
+    finally block as it exits, so that is what the banner reads.
+
+    THE MARKER IS THE LOAD BEARING HALF of the .bat change and the half that
+    would rot silently. The watchdog reads "===== desk finished rc=" as this
+    job's finish marker. Drawing the desk on the failure path under that same
+    marker would make a chain that died at scan report as FINISHED, which
+    would break log_verdict on exactly the runs it exists for, and it would
+    look like an improvement while doing it.
+    """
+    import inspect
+
+    from core import config
+    from desk import render
+    from ops import job_status, monitor_jobs
+
+    saved = job_status.records
+    def row(day: str, status: str, code: int) -> dict[str, Any]:
+        # Dated to the day under test. failures_today filters on the record's
+        # own date, so a fixture dated anywhere else tests the filter and
+        # nothing at all about the banner.
+        return {"job": "morning-chain", "step": "scan", "status": status,
+                "started_at": f"{day}T08:45:04-04:00", "exit_code": code}
+    try:
+        # A day where the step SUCCEEDED must not be accused of anything. Read
+        # for the failure phrase rather than for emptiness, because overdue()
+        # legitimately has opinions about a fixture this small and they are
+        # not what this claim is about.
+        job_status.records = lambda *a, **k: [row("2026-09-08", "ok", 0)]
+        if "scan failed" in render.alert_banner("2026-09-08"):
+            failures.append("the desk banner named a failure on a morning whose "
+                            "only record is a success. A banner that appears "
+                            "every day is a banner nobody reads")
+
+        # A failed step and NO report on disk: the loud one, and it has to say
+        # that the screens below are not this session.
+        job_status.records = lambda *a, **k: [row("1999-01-04", "failed", 1)]
+        red = render.alert_banner("1999-01-04")
+        if "scan failed at 08:45 ET" not in red:
+            failures.append(f"a failed step is not named on the desk: {red[:200]!r}")
+        if "No morning report" not in red:
+            failures.append(
+                "a morning with no report on disk does not say so on the desk. "
+                "That is the whole state the owner would otherwise discover by "
+                f"going to look for a report: {red[:200]!r}")
+        if "warn" in red:
+            failures.append("a morning with no report drew the quiet banner")
+
+        # The same failure with a report written IS a different fact. The
+        # screens are real; something on the way to them was not.
+        day = "1999-01-05"
+        job_status.records = lambda *a, **k: [row(day, "failed", 1)]
+        (config.run_dir(day) / "report.html").write_text("<html></html>",
+                                                         encoding="utf-8")
+        amber = render.alert_banner(day)
+        if "warn" not in amber or "No morning report" in amber:
+            failures.append(
+                "a failure on a morning that still produced a report drew the "
+                f"no report banner, which is not true of it: {amber[:200]!r}")
+    finally:
+        job_status.records = saved
+
+    # Wired, not orphaned. body() is where the page is assembled and a banner
+    # nothing calls is a banner that does not exist.
+    if "alert_banner()" not in inspect.getsource(render.body):
+        failures.append("desk.render.body does not draw the alert banner, so it "
+                        "is written and never shown")
+
+    # And the .bat reaches the desk on every failure, under its own marker.
+    bat = (config.PROJECT_ROOT / "tasks" / "job_morning_chain.bat").read_text(
+        encoding="utf-8", errors="replace")
+    before, _, after = bat.partition(chr(10) + ":failed" + chr(10))
+    if "exit /b %RC%" not in after:
+        failures.append("the morning chain's failure path does not exit with the "
+                        "failed step's code. The scheduler, the watchdog and "
+                        "job-status all read it, and a chain that failed must not "
+                        "report success because the page describing the failure "
+                        "drew correctly")
+    if "exit /b %RC%" in before:
+        failures.append("a step in the morning chain still exits straight out on "
+                        "failure, so the desk is never redrawn and the page shows "
+                        "the previous session on the morning it matters")
+    gotos = before.count("goto :failed")
+    if gotos != 4:
+        failures.append(f"{gotos} of the chain's failing steps route to the desk, "
+                        "expected 4 (scan, analyst, render, deliver)")
+    marker = monitor_jobs.JOBS["chain"][3].replace("\\", "")
+    if marker in after:
+        failures.append(
+            f"the failure path writes {marker!r}, which is the watchdog's finish "
+            "marker for this job. A chain that died at scan would then read as "
+            "finished, and log_verdict would stop working on exactly the runs it "
+            "exists for")
+
+    print("  desk banner today's failures are named on the desk above every "
+          "screen, a lost report is the loud one, and a failed chain still "
+          "redraws the page without ever claiming it finished")
+
+
 def claim_the_sweep_takes_only_this_projects_stale_sandboxes(
         failures: list[str]) -> None:
     """conftest.sweep_stale_sandboxes takes an abandoned sandbox, and leaves a
@@ -18740,6 +18852,7 @@ def main() -> int:
               failures)
     run_claim(failures, claim_the_sweep_takes_only_this_projects_stale_sandboxes,
               failures)
+    run_claim(failures, claim_a_failed_morning_says_so_on_the_desk, failures)
 
     if failures:
         for failure in failures:
