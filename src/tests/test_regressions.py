@@ -18639,6 +18639,39 @@ def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
             failures.append(
                 "a failure on a morning that still produced a report drew the "
                 f"no report banner, which is not true of it: {amber[:200]!r}")
+
+        # AND IT CLEARS ITSELF. The same failure, rerun green, with the report
+        # on disk, is not a state anybody needs telling about. A banner that
+        # stays up after the thing it describes was fixed is up every day by
+        # lunchtime, and a banner that is always up is furniture: the morning
+        # it means something is the morning it gets scrolled past. The morning
+        # REPORT still keeps the repaired failure, which is right for a record
+        # of a morning and wrong for a light that answers "is it broken now".
+        job_status.records = lambda *a, **k: [
+            row(day, "failed", 1),
+            {"job": "morning-chain", "step": "scan", "status": "ok",
+             "started_at": f"{day}T09:12:04-04:00", "exit_code": 0},
+        ]
+        repaired = render.alert_banner(day)
+        if repaired:
+            failures.append(
+                "a step that failed and was rerun green still shows on the "
+                f"desk: {repaired[:200]!r}. The banner reports state, not "
+                "history, and one that never clears is one nobody reads")
+
+        # The rerun does NOT clear a morning that still has no report, because
+        # that is the state itself rather than a report of one.
+        job_status.records = lambda *a, **k: [
+            row("1999-01-06", "failed", 1),
+            {"job": "morning-chain", "step": "scan", "status": "ok",
+             "started_at": "1999-01-06T09:12:04-04:00", "exit_code": 0},
+        ]
+        still_gone = render.alert_banner("1999-01-06")
+        if "No morning report" not in still_gone:
+            failures.append(
+                "a rerun that went green without producing a report cleared "
+                "the banner, so a morning with nothing to show looks healthy: "
+                f"{still_gone[:200]!r}")
     finally:
         job_status.records = saved
 

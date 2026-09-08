@@ -168,30 +168,57 @@ def alert_banner(today: str | None = None) -> str:
     the owner would otherwise discover by going to look for a report. A
     failure on a morning whose report was still written is a warning: the
     screens are real, something on the way to them was not.
+
+    AND IT REPORTS STATE, NOT HISTORY. A step that failed and was rerun green
+    is gone from here on the next render, because a banner that stays up after
+    the thing it describes was fixed is up every day by lunchtime, and a
+    banner that is always up is furniture. The morning report keeps the
+    repaired failure, which is right for a record OF a morning and wrong for a
+    light that answers "is something wrong now".
     """
     day = today or ettime.today_str()
     on = ettime.parse_date(day)
     rows = job_status.records()
-    failures = job_status.group_failures(job_status.failures_today(on, rows))
+
+    # STATE, NOT HISTORY, and that is the whole difference between this and
+    # the morning report's line. failures_today deliberately keeps a step that
+    # failed and was rerun, because the report is a record OF THE MORNING and
+    # a reader who is told only about what is still broken cannot tell a clean
+    # run from a repaired one. This banner answers a different question, asked
+    # at a glance and continuously: is something wrong RIGHT NOW. A repaired
+    # failure that stays on the page is a banner that is up every day by
+    # lunchtime, and a banner that is always up is furniture.
+    #
+    # So the recovered ones are dropped here and nowhere else. group_failures
+    # sets recovered when a later run of the same step succeeded, which is the
+    # same fact the report prints as "and a later run succeeded".
+    failures = [row for row in
+                job_status.group_failures(job_status.failures_today(on, rows))
+                if not row.get("recovered")]
     overdue = job_status.overdue(on, rows)
-    if not failures and not overdue:
+    report_missing = not (config.run_path(day) / "report.html").is_file()
+    if not failures and not overdue and not report_missing:
         return ""
 
-    report_missing = not (config.run_path(day) / "report.html").is_file()
     items = [job_status.describe_failure(row) for row in failures]
     items += [job_status.describe(row) for row in overdue]
     lines = "".join(f"<li>{html.escape(text)}</li>" for text in items)
 
     if report_missing:
+        # Unresolved by definition, whatever the step records say. A morning
+        # with no report is the state itself and not a report of one, so this
+        # stands even when every failed step was later rerun green: something
+        # rewrote the packet and no report came out of it.
         klass, headline = "deskalert", f"No morning report for {day}"
         lead = ("The chain stops on its first failure, so nothing after the "
                 "failed step ran and no report was written. The screens below "
                 "are the last session that completed, not this one.")
     else:
-        klass, headline = "deskalert warn", f"Something failed on {day}"
+        klass, headline = "deskalert warn", f"Still failing on {day}"
         lead = ("The report was written, so the screens below are this "
-                "session. These steps still failed on the way, and what they "
-                "produce may be missing or stale.")
+                "session. These steps failed and have NOT been rerun green, "
+                "so what they produce may be missing or stale. This clears "
+                "itself on the next desk render once they succeed.")
 
     return (f'<div class="{klass}" role="alert">'
             f"<h2>{html.escape(headline)}</h2>"
