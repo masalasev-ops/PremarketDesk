@@ -277,6 +277,17 @@ td.n { text-align: right; font-variant-numeric: tabular-nums;
 th.n { text-align: right; }
 td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .scroll { overflow-x: auto; }
+
+/* the base rate block on the card */
+.prior { margin-top: 18px; }
+.prior .pnote { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0 0 7px; }
+.priorrow { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+  padding: 6px 0; border-top: 1px solid var(--line); align-items: baseline; }
+.priorrow .pl { font-size: 12px; color: var(--ink-2); }
+.priorrow .pv { font-size: 13px; font-weight: 600; text-align: right;
+  font-family: Consolas, monospace; }
+.priorrow .ps { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+
 /* A table that is allowed to be as tall as its data is a table that pushes
    everything under it off the screen. The header stays put while the body
    scrolls, because a numeric column whose heading has scrolled away is a
@@ -945,6 +956,89 @@ DECK_JS = r"""
         esc(k.v) + '</div><div class="sub">' + esc(k.s) + "</div></div>";
     }).join("") + "</div>";
   }
+  // WHAT LOOKALIKES DID, ON THE CARD, AT THE MOMENT OF THE DECISION.
+  // The Precedent screen has computed this since 2026-09-05 and the reader
+  // had to leave the name to see it. That is the wrong place for it: the
+  // question "do I take this one" is asked here, in front of the entry and
+  // the stop, and a score of 10 out of 10 cannot answer it because a score
+  // is this desk's opinion and a base rate is a count of what happened to
+  // names it thought the same thing about.
+  //
+  // Two numbers do the work. How often the group REACHED the entry, because
+  // an entry that never trades is the commonest way a pick costs nothing and
+  // returns nothing; and where the group's result sat, as a median with its
+  // quartiles, because one number without a spread invites a reader to treat
+  // a coin flip as a forecast.
+  function priorBlock(c, session) {
+    var all = ((session || {}).precedent || {}).names || [];
+    var g = null;
+    for (var i = 0; i < all.length; i++) {
+      if (bare(all[i].sym) === bare(c.sym)) { g = all[i]; break; }
+    }
+    if (!g) return "";
+    if (g.held || !g.rows) {
+      return '<div class="prior"><div class="panel-title">What names like this did</div>' +
+        '<p class="pnote">Too few lookalikes to say anything, so nothing is said. ' +
+        esc(g.why || "") + "</p></div>";
+    }
+    var reach = Math.round(g.reached / g.rows * 100);
+    var rows = [
+      ["Reached the entry", g.reached + " of " + g.rows,
+       reach + "% of them traded through it"],
+      ["Median result", pct(g.median),
+       "quartiles " + pct(g.p25) + " to " + pct(g.p75)],
+    ];
+    if (g.peak != null) {
+      rows.push(["Median peak", g.peak + " min",
+                 "after the open, if it triggered"]);
+    }
+    var caveat = "";
+    if ((g.widened || []).length || (g.unmeasured || []).length) {
+      var bits = [];
+      if ((g.widened || []).length) {
+        bits.push("widened past " + esc(g.widened.join(", ").replace(/_/g, " ")));
+      }
+      if ((g.unmeasured || []).length) {
+        bits.push("not measured for this name, so the group ignores " +
+          esc(g.unmeasured.join(" and ")));
+      }
+      caveat = '<p class="pnote">' + bits.join("; ") + ".</p>";
+    }
+    return '<div class="prior"><div class="panel-title">What names like this did</div>' +
+      '<p class="pnote">' + g.rows + " lookalike" + (g.rows === 1 ? "" : "s") +
+      " over " + g.sessions + " session" + (g.sessions === 1 ? "" : "s") +
+      ", matched on " + esc((g.matched_on || []).join(" \u00b7 ") || "nothing measurable") +
+      ".</p>" +
+      rows.map(function (r) {
+        return '<div class="priorrow"><span class="pl">' + esc(r[0]) +
+          '</span><span class="pv num">' + r[1] + '</span>' +
+          '<span class="ps">' + esc(r[2]) + "</span></div>";
+      }).join("") + caveat + "</div>";
+  }
+
+  // THE MARGINAL POINT. Six components at 10 of 10 and a 7 of 10 look like
+  // different qualities of idea, and they are often one component apart. This
+  // names the biggest single contributor and the score without it, which is
+  // the question a reader actually has about a number out of ten: how much of
+  // it rests on one thing being right.
+  //
+  // No conviction band is mentioned, deliberately. The thresholds live in
+  // CRITERIA and are printed in the spine legend, and restating them here
+  // would be a second copy of a number that is allowed to move.
+  function marginalLine(c) {
+    var comps = (c.components || []).filter(function (x) { return x.p > 0; });
+    if (comps.length < 2) return "";
+    var top = comps[0];
+    for (var i = 1; i < comps.length; i++) if (comps[i].p > top.p) top = comps[i];
+    var without = 0;
+    for (var j = 0; j < comps.length; j++) if (comps[j] !== top) without += comps[j].p;
+    return '<p class="pnote" style="margin-top:9px">Take away ' +
+      esc(String(top.k).replace(/_/g, " ")) + " and this is " + n2(without, 0) +
+      " of 10. " + (top.p >= c.score / 2
+        ? "More than half the score rests on that one condition."
+        : "No single condition carries it.") + "</p>";
+  }
+
   function deckHTML(c, session) {
     var maxPts = Math.max.apply(null,
       c.components.map(function (x) { return x.p; }).concat([1]));
@@ -1038,10 +1132,10 @@ DECK_JS = r"""
       '<div><div class="panel-title">Levels</div>' + ladder(c) +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5">' +
       "Entry is the premarket high, stop the premarket low, both as published at " +
-      esc(session.run_at || "08:45") + ".</div></div>" +
+      esc(session.run_at || "08:45") + ".</div>" + priorBlock(c, session) + "</div>" +
       '<div><div class="panel-title">Premarket tape</div>' + tapePath(c) +
       '<div class="panel-title" style="margin-top:18px">Score, ' + n2(c.score, 0) +
-      " of 10</div>" + comps + "</div>" +
+      " of 10</div>" + comps + marginalLine(c) + "</div>" +
       '<div><div class="panel-title">Evidence</div>' + facts +
       '<div class="panel-title" style="margin-top:16px">Catalyst</div>' +
       '<div style="font-size:12.5px;color:var(--ink-2);margin-bottom:10px"><strong>' +
