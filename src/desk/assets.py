@@ -1770,7 +1770,13 @@ DECK_JS = r"""
       ' 26" aria-hidden="true">' + out + "</svg>";
   }
 
-  function precedentRow(n, dom, bare) {
+  // emptyTable, NOT bare. It was called bare until 2026-09-08, when the
+  // rule that every printed ticker goes through bare() reached the label
+  // below and found a boolean sitting on the helper's name. The page threw
+  // "bare is not a function" and the whole Precedent screen rendered as
+  // that one sentence. A local that shadows a global helper is only ever
+  // one edit away from this.
+  function precedentRow(n, dom, emptyTable) {
     var rule = (n.matched_on || []).join(" \u00b7 ") || "nothing measurable";
     var tag = "";
     if (n.held) tag = '<span class="ptag">too few</span>';
@@ -1795,15 +1801,15 @@ DECK_JS = r"""
       esc(bare(n.sym)) + "</a></span>" + tag +
       '<div class="prule">' + esc(rule) + "</div></td>";
     if (n.held) {
-      // BARE is the whole table being held for the same reason, which is what
-      // an unfilled research_outcomes looks like. Twelve identical paragraphs
-      // down a page is noise the reader has to read past to find the rules,
-      // and the rules are the only thing on the screen worth reading before
-      // the replay has run. The sentence is said once, above the table.
+      // emptyTable is the whole table being held for the same reason, which
+      // is what an unfilled research_outcomes looks like. Twelve identical
+      // paragraphs down a page is noise the reader reads past to find the
+      // rules, and the rules are the only thing on the screen worth reading
+      // before the replay has run. The sentence is said once, above the table.
       return "<tr>" + head +
         '<td class="n">' + n.rows + '<div class="sub">' + n.sessions +
         " session" + (n.sessions === 1 ? "" : "s") + "</div></td>" +
-        '<td colspan="4" class="empty">' + (bare ? "nothing replayed yet"
+        '<td colspan="4" class="empty">' + (emptyTable ? "nothing replayed yet"
           : "Too few to say anything, so nothing is said. " + esc(n.why || "") +
             ". The score on the Morning screen stands on its own here.") +
         "</td></tr>";

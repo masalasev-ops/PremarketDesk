@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty seven claims, a count read off
+and the two pages. It now carries two hundred and twenty eight claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18429,6 +18429,64 @@ def claim_the_provider_protocol_covers_what_production_calls(failures: list[str]
                     "or stop calling it from the published path")
 
 
+def claim_no_local_shadows_a_desk_helper(failures: list[str]) -> None:
+    """No function parameter reuses the name of a top level desk helper.
+
+    On 2026-09-08 the Precedent screen rendered as one sentence, "bare is not
+    a function", and nothing else. precedentRow(n, dom, bare) took a BOOLEAN
+    called bare, and the rule that every printed ticker goes through the
+    bare() helper reached the label inside it. Inside that function the name
+    was a flag, so calling it threw, and the whole screen was gone.
+
+    THREE THINGS EACH FAILED TO CATCH IT, which is why this is a claim and not
+    a note. node --check parses the broken file happily, because shadowing is
+    legal JavaScript. The claim on bare() only asked whether the call was
+    THERE, not whether it would resolve. And render() catches its own
+    rejection and writes err.message into the page, so nothing threw, nothing
+    was logged, and the desk looked like it had rendered a screen.
+
+    Checked in source rather than by running the page because that is what
+    this suite can do hermetically, and because the class is worth refusing
+    outright: a local that shadows a helper is legal, silent and one edit away
+    from this every time. tools/desk_smoke.js drives the real screens under a
+    DOM shim and catches the runtime half; it needs node, so it is not wired
+    into this suite.
+    """
+    import re
+
+    from core import config
+
+    src = (config.PROJECT_ROOT / "src" / "desk" / "assets.py").read_text(
+        encoding="utf-8", errors="replace")
+    start = src.find("DECK_JS")
+    js = src[start:] if start != -1 else src
+
+    # Declared at the IIFE's own indent, which is where the shared helpers live.
+    helpers = (set(re.findall(r"^  function (\w+)\(", js, re.M)) |
+               set(re.findall(r"^  var (\w+) = function", js, re.M)))
+    if len(helpers) < 20:
+        failures.append(
+            f"only {len(helpers)} top level desk helpers were found, so this "
+            "claim is reading the wrong text and is checking nothing")
+        return
+
+    shadowed = []
+    for match in re.finditer(r"function\s+(\w+)\s*\(([^)]*)\)", js):
+        owner = match.group(1)
+        for param in (p.strip() for p in match.group(2).split(",")):
+            if param and param in helpers and param != owner:
+                shadowed.append(f"{owner}() takes a parameter named {param!r}")
+    if shadowed:
+        failures.append(
+            "a desk helper is shadowed by a local, which is legal, silent, and "
+            "how the Precedent screen became the sentence 'bare is not a "
+            "function': " + "; ".join(sorted(set(shadowed))))
+
+    print(f"  desk shadowing no local shadows any of the {len(helpers)} top "
+          "level desk helpers, so a helper call inside a function still "
+          "reaches the helper")
+
+
 def claim_the_floors_filter_is_wired_to_the_table_it_filters(
         failures: list[str]) -> None:
     """The floors filter renders, is handled, and names the tbody it rewrites.
@@ -19026,6 +19084,7 @@ def main() -> int:
     run_claim(failures, claim_a_failed_morning_says_so_on_the_desk, failures)
     run_claim(failures, claim_the_desk_prints_tickers_and_aligns_its_numbers, failures)
     run_claim(failures, claim_the_floors_filter_is_wired_to_the_table_it_filters, failures)
+    run_claim(failures, claim_no_local_shadows_a_desk_helper, failures)
 
     if failures:
         for failure in failures:
