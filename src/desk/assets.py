@@ -278,6 +278,9 @@ th.n { text-align: right; }
 td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .scroll { overflow-x: auto; }
 
+.verdictcard { border-color: var(--line-strong); }
+.vbig { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
+
 /* the base rate block on the card */
 .prior { margin-top: 18px; }
 .prior .pnote { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0 0 7px; }
@@ -2365,6 +2368,72 @@ DECK_JS = r"""
       recordSection(p) + healthSection(p);
   }
 
+  // WHETHER ANY OF THIS MEANS ANYTHING YET, said first and in the reader's
+  // own interest. Every other figure on this screen describes the record;
+  // this one says whether the record can carry a conclusion, and without it a
+  // reader meeting nine confident cards a morning will reasonably decide the
+  // desk knows something and start sizing up. Thirteen trades cannot tell a
+  // method from a coin, and saying so is the screen's job rather than the
+  // reader's to infer.
+  //
+  // A sign test rather than anything cleverer: it needs no estimate of the
+  // size of an edge, which is exactly the quantity this record cannot supply,
+  // and one large winner does not move it the way a mean would.
+  function verdictBlock(R) {
+    if (!R.booked || !R.booked.rows) return "";
+    var n = R.booked.rows, w = R.booked_winners, p = R.coin_flip_p;
+    var need = R.booked_needed_for_a_verdict;
+    var reads = p == null ? "" : p > 0.2
+      ? "A fair coin produces a record at least this lopsided about " +
+        Math.round(p * 100) + " times in a hundred, so this one says nothing yet."
+      : "A fair coin produces a record at least this lopsided about " +
+        (p * 100).toFixed(1) + " times in a hundred.";
+    var more = need == null
+      ? "The wins and losses are level, and no sample size settles a question " +
+        "about an effect of zero."
+      : need > n
+        ? "At this rate it would take roughly " + commas(need) + " booked trades " +
+          "before the result stopped being explicable by chance, against " + n +
+          " so far."
+        : "That is already past the point where chance is a poor explanation.";
+    return '<div class="card pad verdictcard"><div class="panel-title">' +
+      "Can this record carry a conclusion</div>" +
+      '<div class="vbig">' + w + " of " + n + "</div>" +
+      '<p class="snote" style="margin:2px 0 0">booked trades closed green, over ' +
+      R.booked.sessions + " session" + (R.booked.sessions === 1 ? "" : "s") +
+      ". " + reads + " " + more + "</p></div>";
+  }
+
+  // ONE MISS IS LUCK AND TWELVE IS A RULE. Each card already says its own
+  // "came up 2.11 percent short" and a reader shrugs, correctly: a single
+  // miss carries no information about where the entry is set. The same
+  // sentence across every miss on file is a measurement of the entry rule,
+  // and the counterfactual beside it is what makes it actionable rather than
+  // merely annoying.
+  function nearMissBlock(R) {
+    var m = R.near_miss;
+    if (!m || !m.priced) return "";
+    if (!m.missed) {
+      return '<div class="card pad"><div class="panel-title">' +
+        "The entries that never traded</div>" +
+        '<p class="snote" style="margin:0">Every priced pick on file reached ' +
+        "its entry.</p></div>";
+    }
+    var caught = m.prior_high_would_have_caught;
+    return '<div class="card pad"><div class="panel-title">The entries that never traded</div>' +
+      '<div class="vbig">' + m.missed + " of " + m.priced + "</div>" +
+      '<p class="snote" style="margin:2px 0 0">picks whose entry the session high never ' +
+      "reached, missing by a median of " + n2(m.median_short_pct) + " percent" +
+      (m.p25_short_pct == null ? "" : " (quartiles " + n2(m.p25_short_pct) +
+        " to " + n2(m.p75_short_pct) + ")") + ". " +
+      "Setting the entry at the prior day high instead of the premarket high would " +
+      "have caught " + caught + " of them" +
+      (caught <= m.missed / 4
+        ? ", so the obvious alternative is not the fix: these are misses of the move, not of the level."
+        : ", which is enough to be worth testing properly.") +
+      "</p></div>";
+  }
+
   function recordSection(p) {
     var R = p.record || {};
     if (!R.picks) return "";
@@ -2432,7 +2501,12 @@ DECK_JS = r"""
         // is something somebody holds with money, and nobody held anything:
         // this is a written rule replayed over the record after the fact.
         { l: "The rule would have bought", v: (R.booked || {}).rows, s: "on paper, no order placed" }
-      ]) + "</section>";
+      ]) +
+      // Both of these are caveats on everything above them, so they sit under
+      // it rather than over it: a reader who has not yet seen the figures has
+      // nothing for the caveat to attach to.
+      '<div class="cols2" style="margin-top:16px">' + verdictBlock(R) +
+      nearMissBlock(R) + "</div></section>";
   }
 
   /* ---------- health, answered rather than dumped ----------

@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import math
 import statistics
 import sys
 from typing import Any
@@ -477,6 +478,76 @@ def write(result: dict[str, Any], dry_run: bool = False) -> int:
     return len(result["rows"])
 
 
+def _binomial_tail(wins: int, n: int) -> float:
+    """P(at least `wins` of n) under a fair coin, two sided. No scipy.
+
+    A SIGN TEST AND NOTHING CLEVERER, on purpose. It asks the only question
+    worth asking of a record this size: could a coin have produced it. It
+    needs no estimate of the size of an edge, which is the quantity 26 trades
+    cannot supply, and it is not fooled by one large winner the way a mean is.
+    """
+    if n <= 0:
+        return 1.0
+    tail = sum(math.comb(n, k) for k in range(wins, n + 1)) / (2 ** n)
+    return min(1.0, 2 * tail) if wins * 2 >= n else min(1.0, 2 * (1 - tail))
+
+
+def _trades_for_a_verdict(wins: int, n: int) -> int | None:
+    """Roughly how many trades before the observed rate stops being a coin.
+
+    n = (z / (2 * (p - 0.5)))^2 at 95 percent, the standard two sided sample
+    size for one proportion. Returns None when the observed rate IS a half,
+    because the honest answer there is not a big number, it is that no sample
+    size settles a question about an effect of zero.
+    """
+    if n <= 0:
+        return None
+    share = wins / n
+    if abs(share - 0.5) < 1e-9:
+        return None
+    return int(math.ceil((1.96 / (2 * (share - 0.5))) ** 2))
+
+
+def near_miss(connection: Any) -> dict[str, Any]:
+    """How far the entries that never traded came up short, and what would fix it.
+
+    ONE MISS IS LUCK AND TWENTY IS A RULE, and the desk could only ever show
+    one. Each card says its own "came up 2.11 percent short" and a reader
+    shrugs, because a single miss carries no information about the entry
+    level. The same sentence across every miss on file is a measurement of
+    where the entry is set, and it is the only version a reader can act on.
+
+    The counterfactual is the point of it. Aggregating the shortfall says the
+    rule might be wrong; re-running the picks against a DIFFERENT entry
+    reference says whether the obvious alternative would have been better. On
+    2026-09-08 it says no: of twelve entries never reached, the prior day high
+    would have caught two. That is worth knowing precisely because it refuses
+    the tempting change.
+
+    Fenced on source='live'. A replayed or backfilled pick has no bearing on
+    where this desk sets an entry today.
+    """
+    rows = [dict(r) for r in connection.execute(
+        "SELECT entry_ref, prior_high, pick_day_high FROM picks "
+        "WHERE source='live'")]
+    priced = [r for r in rows
+              if r["entry_ref"] and r["pick_day_high"] is not None]
+    missed = [r for r in priced if r["pick_day_high"] < r["entry_ref"]]
+    short = sorted((r["entry_ref"] - r["pick_day_high"]) / r["entry_ref"] * 100.0
+                   for r in missed)
+    rescued = [r for r in missed
+               if r["prior_high"] and r["pick_day_high"] >= r["prior_high"]]
+    quartiles = statistics.quantiles(short, n=4) if len(short) >= 4 else None
+    return {
+        "priced": len(priced),
+        "missed": len(missed),
+        "median_short_pct": statistics.median(short) if short else None,
+        "p25_short_pct": quartiles[0] if quartiles else None,
+        "p75_short_pct": quartiles[2] if quartiles else None,
+        "prior_high_would_have_caught": len(rescued),
+    }
+
+
 def record_so_far(rule: str | None = None) -> dict[str, Any]:
     """What the ledger has observed, as plain counts with their denominators.
 
@@ -500,6 +571,10 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
         store.init(connection)
         rows = [dict(r) for r in connection.execute(
             "SELECT * FROM paper_trades WHERE rule_version=?", (rule,))]
+        # The same open connection. near_miss reads picks rather than
+        # paper_trades, because an entry that never traded books no trade and
+        # is therefore invisible in the ledger by construction.
+        misses = near_miss(connection)
     booked = [r for r in rows if r["booked"] and r["pnl_pct"] is not None]
     timed = [r for r in booked if r["minutes_to_trigger"] is not None]
     peaked = [r for r in booked if r["minutes_to_peak"] is not None
@@ -582,6 +657,17 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
             if any(r["mfe_pct_held"] is not None for r in booked) else None),
         "median_booked_pct": (
             statistics.median(r["pnl_pct"] for r in booked) if booked else None),
+        # WHETHER ANY OF THE ABOVE MEANS ANYTHING YET, which is the one thing
+        # a record of this size owes its reader. Everything else here is a
+        # description; these three are the caveat, and they are computed
+        # rather than written as prose so they cannot go stale as the record
+        # grows.
+        "booked_winners": sum(1 for r in booked if r["pnl_pct"] > 0),
+        "coin_flip_p": _binomial_tail(
+            sum(1 for r in booked if r["pnl_pct"] > 0), len(booked)),
+        "booked_needed_for_a_verdict": _trades_for_a_verdict(
+            sum(1 for r in booked if r["pnl_pct"] > 0), len(booked)),
+        "near_miss": misses,
     }
 
 
