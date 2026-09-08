@@ -114,6 +114,17 @@ class MarketDataProvider(Protocol):
         equivalent is per symbol and unbatched turns one job into 2,751 calls.
         """
 
+    def fundamentals(self, symbol: str) -> Any:
+        """One symbol's fundamentals record, the universe's SECOND cap source.
+
+        Called only by the weekly rebuild, and only for names quote_delayed
+        answered with a null market cap, which is the hyphenated share classes
+        and the ADRs: eighteen of 2,928 on the 2026-09-06 build. A provider
+        with no per symbol fundamentals record can still serve this project.
+        The backfill then recovers nothing and those names stay out of the
+        universe, which is exactly where they were before it existed.
+        """
+
     def live_quotes(self, symbols: Iterable[str]) -> Any:
         """Batched live quotes. The collector's fallback when the socket is
         silent for a name."""

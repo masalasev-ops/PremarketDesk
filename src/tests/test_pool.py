@@ -959,6 +959,19 @@ def claim_fifteen(failures: list[str]) -> None:
     if gap_gates != 1:
         failures.append(f"gap_stats.build calls require_quota {gap_gates} times, "
                         "expected 1")
+    backfill_source = inspect.getsource(universe._backfill_market_caps)
+    if backfill_source.count("eodhd.require_quota") != 1:
+        failures.append("the market cap backfill does not gate itself on quota, so "
+                        "it would spend ten credits a name against a key that "
+                        "cannot pay")
+    if "except eodhd.QuotaRefusal" not in backfill_source:
+        failures.append("the market cap backfill lets QuotaRefusal out. Everything "
+                        "above it in the rebuild is already paid for and this step "
+                        "only ever ADDS names, so raising here trades a complete "
+                        "universe for a slightly larger one")
+    if "_backfill_market_caps(" not in inspect.getsource(universe.build):
+        failures.append("universe.build never calls the market cap backfill, so the "
+                        "hyphenated share classes are out of the file again")
     if "check_admissible(payload)" not in inspect.getsource(universe.build):
         failures.append("universe.build does not check its own payload before "
                         "writing, so a truncated build still replaces a good file")
@@ -1245,6 +1258,186 @@ def claim_seventeen(failures: list[str]) -> None:
           "stamped on its rows, as a list, beside the one the calendar asked for")
 
 
+def claim_eighteen(failures: list[str]) -> None:
+    """The second cap source is asked for one door and never for the other two.
+
+    us-quote-delayed prices a hyphenated share class correctly and returns its
+    marketCap, sharesOutstanding and sharesFloat all null. Measured against the
+    live endpoint on 2026-09-08: LEN is populated and LEN-B beside it is not,
+    while GOOG and GOOGL are both populated, so the hyphen is the trigger and
+    not the dual class listing. BRK-B is a trillion dollar name that was
+    structurally unable to enter this universe at any size, and the funnel
+    filed that as an absence in the vendor's data when it is an absence in ONE
+    endpoint of it.
+
+    The backfill that fixes it is dangerous in exactly one direction, which is
+    why the door boundary carries most of this claim. fundamentals answers for
+    tickers the quote endpoint will not: BBBY comes back with a 414M cap on a
+    ticker that has not traded in years. So a backfill scoped by "no cap yet"
+    rather than by WHICH silence produced it would quietly resurrect
+    delistings into a file built to be traded the next morning, and it would
+    look like a working feature while doing it, because the names it adds are
+    real companies with real numbers.
+
+    The third door is excluded for an unrelated reason and must not be folded
+    into the second: in_an_unanswered_batch is what max_unswept_fraction is
+    measured on, and paying past a vendor outage ten credits at a time would
+    defeat the one gate that stops a truncated universe overwriting a good one.
+
+    Both ways of spending nothing are also driven, because both are recoveries
+    rather than failures and a claim that only proved the happy path would let
+    either turn into a raise.
+    """
+    crit = criteria.load()
+    rule = crit.rule("universe", "market_cap")
+    batch = crit.integer("api", "quote_batch_size")
+
+    # Part one: who is asked. Through the real sweep, so the boundaries under
+    # test are the ones _attach_market_caps actually draws rather than ones
+    # restated here.
+    class _Quotes:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def quote_delayed(self, symbols: list[str]) -> Any:
+            self.calls += 1
+            codes = [s.split(".")[0] for s in symbols]
+            if self.calls == 1:                        # priced
+                return eodhd.ApiResult(
+                    {f"{c}.US": {"marketCap": 900_000_000} for c in codes}, None)
+            if self.calls == 2:                        # answered, NOCAP has a null
+                return eodhd.ApiResult(                # and ABSENT is not in the body
+                    {"NOCAP.US": {"marketCap": None}}, None)
+            return eodhd.ApiResult({}, None)           # nothing came back at all
+
+        def __getattr__(self, name: str) -> Any:
+            raise AssertionError(f"the sweep called {name}, which this stub does "
+                                 "not serve")
+
+    groups = [
+        ["BIG"] + [f"F{i:02d}" for i in range(batch - 1)],
+        ["NOCAP", "ABSENT"] + [f"G{i:02d}" for i in range(batch - 2)],
+        ["SILENT"] + [f"H{i:02d}" for i in range(batch - 1)],
+    ]
+    if any(len(group) != batch for group in groups) or batch < 2:
+        failures.append(f"quote_batch_size is {batch}, which this fixture cannot "
+                        "divide into whole batches")
+        return
+    flat = [code for group in groups for code in group]
+    staged = [{"code": code, "symbol": f"{code}.US"} for code in flat]
+    sweep = universe._attach_market_caps(_Quotes(), flat, [])
+
+    targets = universe.backfill_targets(staged, sweep)
+    if targets != ["NOCAP"]:
+        failures.append(f"the backfill would be asked for {targets}, expected only "
+                        "['NOCAP']. A name the vendor answered a batch WITHOUT is "
+                        "one it does not carry, and fundamentals answers for dead "
+                        "tickers, so widening this door resurrects delistings. A "
+                        "name nothing came back for at all is what "
+                        "max_unswept_fraction is measured on and must not be "
+                        "bought past.")
+
+    # Part two: what it does with them. One call per name, a null cap here is
+    # a real answer and leaves the name where it was, and a refusal is noted.
+    class _Fundamentals:
+        def __init__(self) -> None:
+            self.asked: list[str] = []
+
+        def fundamentals(self, symbol: str) -> Any:
+            self.asked.append(symbol)
+            if symbol == "RESCUED.US":
+                return eodhd.ApiResult(
+                    {"Highlights": {"MarketCapitalization": 900_000_000}}, None)
+            if symbol == "STILL.US":                   # a warrant or a preferred:
+                return eodhd.ApiResult(                # answered, and no cap exists
+                    {"Highlights": {"MarketCapitalization": None}}, None)
+            return eodhd.ApiResult(None, "stubbed transport failure")
+
+        def __getattr__(self, name: str) -> Any:
+            raise AssertionError(f"the backfill called {name}, which this stub "
+                                 "does not serve")
+
+    api = _Fundamentals()
+    notes: list[str] = []
+    caps = universe._backfill_market_caps(api, ["RESCUED", "STILL", "BROKEN"], notes)
+    if caps != {"RESCUED": 900_000_000.0}:
+        failures.append(f"the backfill recovered {caps}, expected only RESCUED. A "
+                        "null cap from fundamentals is a real answer, and it is "
+                        "what every warrant and preferred returns, which is why "
+                        "this needs no security type list of its own.")
+    if api.asked != ["RESCUED.US", "STILL.US", "BROKEN.US"]:
+        failures.append(f"the backfill asked for {api.asked}, expected one call per "
+                        "name in order")
+    if not any("BROKEN" in note for note in notes):
+        failures.append("a name fundamentals refused outright left no note, so a "
+                        "vendor fault and a name with genuinely no cap read the same")
+
+    # Part three: the ceiling. A door this wide is a fault across the endpoint,
+    # and confirming it costs ten credits a name.
+    ceiling = crit.integer("universe", "max_backfill_names")
+    api = _Fundamentals()
+    notes = []
+    over = [f"N{i:04d}" for i in range(ceiling + 1)]
+    if universe._backfill_market_caps(api, over, notes) or api.asked:
+        failures.append(f"{len(over)} names, one over the ceiling of {ceiling}, was "
+                        f"swept anyway and cost {eodhd.credit_cost(fundamentals=len(over)):,} "
+                        "credits to confirm a vendor fault")
+    if not any("max_backfill_names" in note for note in notes):
+        failures.append("the skipped backfill did not name the key that skipped it")
+
+    # Part four: a quota refusal is caught here and the rebuild goes on. Every
+    # call above this point is already paid for and this step only ever ADDS
+    # names, so raising would trade a complete file for a slightly larger one.
+    api = _Fundamentals()
+    notes = []
+    limit = conftest.HEALTHY_METER["dailyRateLimit"]
+    with conftest.meter_reading(apiRequests=limit - 1):
+        try:
+            starved = universe._backfill_market_caps(api, ["RESCUED"], notes)
+        except eodhd.QuotaRefusal as exc:
+            starved = None
+            failures.append(f"a starved backfill raised instead of standing down: "
+                            f"{exc}. universe.main turns that into a refusal and "
+                            "the whole rebuild is lost over its last 180 credits.")
+    if starved or api.asked:
+        failures.append("a starved backfill spent anyway")
+    if not any("continues" in note for note in notes):
+        failures.append("the starved backfill did not record that the rebuild went on")
+
+    # Part five: the notes, in the order that makes them readable. The no
+    # market cap door prints what SURVIVED the backfill, so a reader who meets
+    # that count first will read it as what the quote endpoint returned.
+    sweep = universe.CapSweep(
+        caps={"BIG": 900_000_000.0, "RESCUED": 900_000_000.0},
+        answered={"BIG", "RESCUED", "STILL"},
+        unanswered=set())
+    admitted, funnel = universe.market_cap_funnel(
+        [{"code": c, "symbol": f"{c}.US"} for c in ("BIG", "RESCUED", "STILL")],
+        sweep, rule)
+    funnel["backfilled_from_fundamentals"] = {
+        "asked": 2, "recovered": 1, "names": ["RESCUED"]}
+    if funnel["unaccounted"]:
+        failures.append("the funnel stopped closing once a backfilled cap was "
+                        "merged into it, which would make the provenance record a "
+                        "fourth door rather than a note beside three")
+    if sorted(row["code"] for row in admitted) != ["BIG", "RESCUED"]:
+        failures.append("a backfilled cap did not carry its name through the floor")
+    lines = universe.funnel_notes(funnel, rule)
+    joined = " ".join(lines)
+    if "RESCUED" not in joined:
+        failures.append("the backfill recovered a name and did not say which")
+    backfill_at = next((i for i, l in enumerate(lines) if "backfill:" in l), None)
+    funnel_at = next((i for i, l in enumerate(lines) if "funnel:" in l), None)
+    if backfill_at is None or funnel_at is None or backfill_at > funnel_at:
+        failures.append("the backfill line does not precede the funnel line, so the "
+                        "no market cap count is met before the fact that it is what "
+                        "survived a second source rather than what the first returned")
+
+    print(f"  claim 18 the cap backfill is asked only for names the quote endpoint "
+          f"answered WITHOUT a cap, stands down at the {ceiling} name ceiling and "
+          "on a starved meter, and says what it recovered before the door it shrank")
+
+
 def main() -> int:
     failures: list[str] = []
     run_claim(failures, claim_one, failures)
@@ -1263,6 +1456,7 @@ def main() -> int:
     run_claim(failures, claim_fifteen, failures)
     run_claim(failures, claim_sixteen, failures)
     run_claim(failures, claim_seventeen, failures)
+    run_claim(failures, claim_eighteen, failures)
 
     if failures:
         for failure in failures:

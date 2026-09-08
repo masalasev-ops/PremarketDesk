@@ -165,7 +165,19 @@ cost = news : 5
 cost = news-feed : 5
 cost = intraday-1m : 5
 cost = calendar-earnings : 1
+cost = fundamentals : 10
 cost = user : 0
+
+**fundamentals, added 2026-09-08, and it is the most expensive call in the
+table.** Measured the same way as the rest, five calls of one kind between two
+user reads: the shared counter moved 77 to 127, so ten credits each, and the
+two reads again moved it nothing, which pins the user endpoint at zero for a
+fifth independent time. Ten is worth saying out loud because it is ten times a
+delayed quote per symbol, and that changes what may be swept with it. The
+universe backfill is affordable only because it is scoped to names that came
+back with a NULL cap, eighteen of 2,928 on the 2026-09-06 build, which is 180
+credits. The same endpoint over the whole staged list would be 29,280, or six
+times the entire weekly rebuild.
 
 **calendar-earnings, added 2026-09-05, and it had no price at all until then.**
 Measured the same way as the rest: five calls of one kind between two user
@@ -433,6 +445,23 @@ max_unswept_fraction          = 0.02       # SEED, not measured. Names the marke
                                            # baseline here is zero and 0.02 of 2,942
                                            # is 58 names, which clears two lost
                                            # batches of twenty and trips on the third.
+max_backfill_names            = 100        # SEED, not measured. Ceiling on the
+                                           # market cap backfill, which calls
+                                           # fundamentals once per name at ten
+                                           # credits. It runs only for names
+                                           # us-quote-delayed answered WITH a null
+                                           # cap, and that door is structural rather
+                                           # than variable: 18 of 2,928 on 2026-09-06,
+                                           # being the hyphenated share classes, the
+                                           # ADRs and the odd listing whose
+                                           # fundamentals join is empty. If it ever
+                                           # arrives in the hundreds the cause is a
+                                           # fault across the endpoint and not a per
+                                           # name gap, and paying ten credits each to
+                                           # confirm that is the wrong response. Above
+                                           # this the backfill is skipped whole, with
+                                           # a note, and every name stays in the door
+                                           # it was already in.
 
 ### The exchange coverage note
 

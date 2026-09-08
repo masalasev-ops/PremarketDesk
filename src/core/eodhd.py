@@ -489,6 +489,35 @@ class EodhdClient:
             )
         return ApiResult(merged, None)
 
+    def fundamentals(self, symbol: str) -> ApiResult:
+        """One symbol's fundamentals record. Ten credits, the dearest call here.
+
+        Added 2026-09-08 for one narrow job. us-quote-delayed prices a
+        hyphenated share class correctly and returns marketCap,
+        sharesOutstanding and sharesFloat ALL null for it: BRK-A quotes at
+        763,022 with an empty fundamentals block, and LEN is populated while
+        LEN-B beside it is not. The hyphen is the trigger rather than the dual
+        class listing, which GOOG and GOOGL settle by both being populated.
+
+        Read the cap out of this with market_cap_from_fundamentals and take
+        nothing else from it without measuring that field the same way. In
+        particular SharesFloat on a class row is the PARENT's: LEN-B reports
+        30,389,139 outstanding against a float of 201,120,945, which is one
+        company's number filed under another company's line.
+
+        At ten credits this is ten times a delayed quote per symbol, so
+        nothing may sweep it over a list whose length the market decides.
+        """
+        code = str(symbol or "").strip().upper()
+        if not code:
+            return ApiResult(None, "fundamentals: no symbol was given")
+        result = self._request(f"fundamentals/{code}", endpoint="fundamentals")
+        if not result.ok:
+            return result
+        if not isinstance(result.data, dict):
+            return ApiResult(None, "fundamentals: the payload was not an object")
+        return ApiResult(result.data, None)
+
     def live_quotes(self, symbols: Iterable[str]) -> ApiResult:
         """Live v1 for a handful of named symbols, keyed by symbol.
 
@@ -859,6 +888,40 @@ def describe_preflight(record: dict[str, Any]) -> str:
     return (f"the shared API key had {record['remaining']:,} of "
             f"{record['daily_limit']:,} daily calls remaining at preflight "
             f"(quota day {record['quota_day']})")
+
+
+def market_cap_from_fundamentals(payload: Any) -> float | None:
+    """Highlights.MarketCapitalization, or None, and never a substitute.
+
+    The one field this project reads out of a fundamentals payload, kept here
+    beside the call rather than at the caller so the two facts about it stay
+    together. First, it is the CONSOLIDATED company cap and not the class:
+    LEN-B comes back 19,794,352,128 against LEN's 20,218,859,237, and for a
+    size floor the consolidated figure is the more correct of the two, since
+    the floor is a question about the company. Second, there is no computing
+    around it when it is missing. SharesOutstanding times price looks like the
+    obvious fallback and is not available: on every name measured on
+    2026-09-08 where the cap was null, outstanding was null in the same row.
+
+    A null here is a real answer and is left as one. It is what the warrants,
+    the depositary shares and the preferreds return, so it is also the reason
+    the backfill needs no security type guard of its own: ACHR-WS, INFQ-WS,
+    IONQ-WS and SMCIP all come back with no cap and stay out of the universe
+    on that alone.
+    """
+    if not isinstance(payload, dict):
+        return None
+    highlights = payload.get("Highlights")
+    if not isinstance(highlights, dict):
+        return None
+    raw = highlights.get("MarketCapitalization")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float, str)):
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def cost_table() -> dict[str, int]:

@@ -18,6 +18,49 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-08, seventeenth: the second cap source is asked for one absence and not the other two
+
+THE CHOICE. universe.py now has a fallback market cap source, and the part that
+could reasonably have gone the other way is which names it may be asked for.
+The tempting answer, every staged name that still has no cap, is wrong in the
+one direction that looks like a working feature while it happens.
+
+WHY NOT THAT. The funnel already separates three absences and they are not the
+same kind of fact. no_market_cap_in_row means the quote endpoint answered FOR
+the ticker and carried no cap, so the instrument is live and priced today and
+only its fundamentals join is empty. absent_from_answered_batch means the
+vendor answered the batch WITHOUT the name, which is the vendor saying it does
+not carry the ticker. fundamentals does not share that opinion: BBBY comes back
+with a 414M cap on a ticker that has not traded in years. A backfill scoped by
+"no cap yet" would quietly resurrect delistings into a file built to be traded
+the next morning, and the names it added would be real companies with real
+numbers, so nothing downstream would look wrong.
+
+THE THIRD IS EXCLUDED FOR AN UNRELATED REASON and must not be folded into the
+second. in_an_unanswered_batch is the door max_unswept_fraction is measured on.
+Buying past a vendor outage at ten credits a name would defeat the one gate
+that stops a truncated universe overwriting a good one, and it would do it
+while reporting success.
+
+WHY THIS VENDOR AND NOT A FREE ONE. Yahoo and Finviz were both considered, and
+both would work in the narrow sense, ticker convention included: they use the
+same hyphen. Yahoo has had no public API since 2017 and everything that reaches
+it scrapes an endpoint sitting behind a handshake the vendor changes without
+notice. Finviz forbids scraping on the free tier and sells the export as a
+monthly subscription, which is a poor trade for eighteen cells this key already
+answers. Either would have been the one call in this project outside the single
+chokepoint with its ledger, its retry budget and its circuit breaker, and the
+failure mode of an unsanctioned endpoint is silence on a Sunday night, which is
+the failure this project is built to refuse. SEC XBRL is the respectable free
+option and is genuinely authoritative, but multi class cover page tagging is
+the messiest corner of it, and that is real work to reproduce a number already
+priced at 180 credits a week.
+
+WHAT WOULD REVERSE THE SCOPE. A door that arrives in the hundreds rather than
+the teens. That is a fault across the endpoint rather than the handful of share
+classes this exists for, and max_backfill_names stands the whole step down
+above 100 rather than spending ten credits a name to confirm it.
+
 ## 2026-09-04, sixteenth: the base rate gets a screen of its own, and the replay does not
 
 TWO CHOICES, and the owner made the first one twice before it stuck.

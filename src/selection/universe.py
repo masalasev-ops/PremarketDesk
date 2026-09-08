@@ -29,6 +29,17 @@ So the largest job in this project reports 172 http calls and takes five
 percent of a shared daily hundred thousand. Sizing anything off the call count
 gets it wrong by a factor of twenty eight.
 
+Since 2026-09-08 a second cap source runs after that sweep, priced per name at
+ten credits rather than one:
+
+       18      180  fundamentals, one call each, ONLY for names the delayed
+                    quote answered WITH a null market cap
+
+which was 18 of the 2,928 staged on the 2026-09-06 build. Its narrow scope is
+the whole cost argument and most of the safety one. The same endpoint over
+every staged name would be 29,280 credits, six times the rest of the rebuild
+put together.
+
 Everything later in the day refuses to run against a stale universe. That gate
 lives here in require_fresh_universe so there is one definition of stale.
 """
@@ -401,6 +412,107 @@ def _attach_market_caps(
     return CapSweep(caps=caps, answered=answered, unanswered=unanswered)
 
 
+def backfill_targets(staged: list[dict[str, Any]], sweep: CapSweep) -> list[str]:
+    """The names the second cap source may be asked for, and only those.
+
+    ONE of the three absence doors: no_market_cap_in_row, which is a name the
+    quote endpoint answered FOR while carrying no cap, so the instrument is
+    live and priced today and only its fundamentals join is empty.
+
+    absent_from_answered_batch is excluded because it means the opposite. The
+    vendor answered the batch WITHOUT the name, which is it saying it does not
+    carry the ticker, and fundamentals will cheerfully answer for a dead one:
+    BBBY comes back with a 414M cap on a ticker that has not traded in years.
+    Backfilling that door would resurrect delistings into a file built to be
+    traded tomorrow morning.
+
+    in_an_unanswered_batch is excluded for a different reason again. It is the
+    door max_unswept_fraction is measured on, and buying past a vendor outage
+    at ten credits a name would defeat the one gate that stops a truncated
+    universe being written over a good one.
+
+    Lifted out of build() so those boundaries can be driven from a stub. Inline
+    they were three set operations no claim could reach without a live rebuild,
+    and the one that matters most is a call that must NOT be made.
+    """
+    return [row["code"] for row in staged
+            if row["code"] in sweep.answered and row["code"] not in sweep.caps]
+
+
+def _backfill_market_caps(
+    api: eodhd.EodhdClient,
+    codes: list[str],
+    notes: list[str],
+) -> dict[str, float]:
+    """The second cap source, for names us-quote-delayed answered without one.
+
+    Added 2026-09-08. That endpoint prices a hyphenated share class correctly
+    and returns marketCap null for it, so BRK-B was structurally unable to
+    enter this file at any size, and the funnel recorded as an absence in the
+    vendor's data what is an absence in ONE endpoint of it. Measured on the
+    2026-09-06 door of 18: twelve come back with a cap here, being the class
+    shares BF-B, BH-A, BRK-A, BRK-B, GEF-B, HEI-A, LEN-B, MOG-A and UHAL-B,
+    the ADRs FJIKY and GALDY, and one ordinary listing, BRVE, whose join was
+    simply empty.
+
+    The other six return no cap here either, and that is the reason this
+    function needs no security type guard of its own. ACHR-WS, INFQ-WS and
+    IONQ-WS are warrants, SMCIP is a depositary share and PSUS and SOMN are
+    not common equity, and the vendor has no company cap for any of them. They
+    stay out on the same evidence that admits the rest, rather than on a list
+    of suffixes maintained here that would go stale the first time a new one
+    was issued.
+
+    Two ways to spend nothing, and neither is fatal. Above max_backfill_names
+    the door is too wide to be the handful of share classes this is for, and a
+    fault across the endpoint should not be confirmed ten credits at a time.
+    And a quota refusal here is caught rather than raised: everything above
+    this point in the rebuild is already paid for, and this step only ever
+    ADDS names that were going to be absent anyway, so losing a whole file
+    over its last 180 credits would trade a complete universe for a slightly
+    larger one.
+    """
+    if not codes:
+        return {}
+    need = eodhd.credit_cost(fundamentals=len(codes))
+    subject = f"{len(codes):,} name" + ("" if len(codes) == 1 else "s")
+    ceiling = _CRIT.integer("universe", "max_backfill_names")
+    if len(codes) > ceiling:
+        notes.append(
+            f"market cap backfill skipped: {subject} came back from "
+            f"us-quote-delayed carrying a null market cap, above the ceiling of "
+            f"{ceiling:,} in CRITERIA.md [universe] max_backfill_names. That many "
+            "is a fault across the endpoint rather than the handful of share "
+            "classes and ADRs this backfill exists for, and confirming it one "
+            f"name at a time would cost {need:,} credits. Every name stays in the "
+            "door it was already in.")
+        print(f"universe: market cap backfill skipped, {len(codes)} names is above "
+              f"the ceiling of {ceiling}")
+        return {}
+    try:
+        eodhd.require_quota(
+            "universe", need, f"the market cap backfill of {subject}")
+    except eodhd.QuotaRefusal as exc:
+        notes.append(f"market cap backfill skipped, and the rebuild continues: {exc}")
+        print(f"universe: market cap backfill skipped, and the rebuild continues: "
+              f"{exc}")
+        return {}
+    print(f"universe: market cap backfill for {subject} the delayed quote "
+          "answered without a cap")
+    caps: dict[str, float] = {}
+    for code in codes:
+        payload, error = api.fundamentals(f"{code}.US")
+        if payload is None:
+            notes.append(
+                f"market cap backfill: fundamentals did not answer for {code}: "
+                f"{error or 'the response carried no object'}")
+            continue
+        cap = eodhd.market_cap_from_fundamentals(payload)
+        if cap is not None:
+            caps[code] = cap
+    return caps
+
+
 _FUNNEL_DOORS = (
     "admitted",
     "below_market_cap_floor",
@@ -478,6 +590,20 @@ def funnel_notes(funnel: dict[str, Any], market_cap_rule: Any) -> list[str]:
             f"the market cap funnel does not close: {funnel['unaccounted']} of "
             f"{funnel['examined']} names left by no recorded door, which is a "
             "defect in this accounting rather than in the data")
+    backfill = funnel.get("backfilled_from_fundamentals") or {}
+    # Before the funnel line rather than after it, because it changes how that
+    # line is to be read: the no market cap door below is what SURVIVED this,
+    # not what the delayed quote returned.
+    if backfill.get("asked"):
+        asked, got = backfill["asked"], backfill["recovered"]
+        short = asked - got
+        notes.append(
+            f"market cap backfill: {asked:,} "
+            f"{'name' if asked == 1 else 'names'} the delayed quote answered "
+            f"without a cap {'was' if asked == 1 else 'were'} asked of "
+            f"fundamentals, {got:,} came back with one, and the {short:,} that "
+            f"did not {'is' if short == 1 else 'are'} counted below in the no "
+            "market cap door")
     notes.append(
         f"market cap funnel: {funnel['examined']:,} examined, "
         f"{funnel['admitted']:,} admitted, "
@@ -497,6 +623,10 @@ def funnel_notes(funnel: dict[str, Any], market_cap_rule: Any) -> list[str]:
         names = funnel["names"].get(door) or []
         if names:
             notes.append(f"{len(names)} {label}: {', '.join(names)}")
+    recovered = backfill.get("names") or []
+    if recovered:
+        notes.append(f"{len(recovered)} recovered by the fundamentals backfill: "
+                     f"{', '.join(recovered)}")
     return notes
 
 
@@ -648,7 +778,37 @@ def build(write: bool = True, force: bool = False) -> dict[str, Any]:
         f"the market cap sweep of {len(staged):,} names")
 
     sweep = _attach_market_caps(api, [row["code"] for row in staged], notes)
+
+    # Stage three, and its scope is a decision about correctness before it is
+    # one about cost. It runs for ONE of the three absence doors:
+    # no_market_cap_in_row, which means the quote endpoint answered for this
+    # ticker and carried no cap, so the instrument is live and priced today and
+    # only its fundamentals join is empty.
+    #
+    # absent_from_answered_batch is excluded because it means the opposite: the
+    # vendor answered the batch WITHOUT the name, which is it saying it does not
+    # carry the ticker, and fundamentals will cheerfully answer for a dead one.
+    # BBBY comes back with a 414M cap on a ticker that has not traded in years.
+    # Backfilling that door would resurrect delistings into a file built to be
+    # traded tomorrow morning.
+    #
+    # in_an_unanswered_batch is excluded for a third reason again: it is the
+    # door max_unswept_fraction is measured on, and buying past a vendor outage
+    # at ten credits a name would defeat the one gate that stops a truncated
+    # universe from being written over a good one.
+    targets = backfill_targets(staged, sweep)
+    backfilled = _backfill_market_caps(api, targets, notes)
+    if backfilled:
+        sweep = sweep._replace(caps={**sweep.caps, **backfilled})
+
     admitted, funnel = market_cap_funnel(staged, sweep, market_cap_rule)
+    # Provenance, not a door. These names leave through admitted or through the
+    # floor like any other, and the funnel still has to close without them.
+    funnel["backfilled_from_fundamentals"] = {
+        "asked": len(targets),
+        "recovered": len(backfilled),
+        "names": sorted(backfilled),
+    }
     notes.extend(funnel_notes(funnel, market_cap_rule))
 
     admitted.sort(key=lambda row: row["symbol"])

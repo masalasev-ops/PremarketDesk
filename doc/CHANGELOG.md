@@ -15,6 +15,58 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-08, ninety second: a trillion dollar name could not enter the universe, and the reason was one endpoint
+
+THE OWNER ASKED HOW BRK-A AND BRK-B COULD HAVE NO MARKET CAP, reading the
+2026-09-06 universe log's funnel note. That note filed eighteen names under
+"answered with no market cap in the row" and it had been waved past here as
+preferreds and warrants that would not clear the screen anyway. The conclusion
+was right and the explanation was wrong, which is the worse half to get wrong.
+
+MEASURED AGAINST THE LIVE ENDPOINT. us-quote-delayed prices a hyphenated share
+class correctly and returns marketCap, sharesOutstanding and sharesFloat ALL
+null for it. BRK-A quotes at 763,022 with an empty fundamentals block. LEN is
+populated and LEN-B beside it is not, and GOOG and GOOGL are both populated, so
+the hyphen is the trigger rather than the dual class listing. It is a join gap
+in ONE endpoint, not a fact about the market, and market_cap_funnel's docstring
+already draws exactly that distinction while nothing acted on it.
+
+WHAT IT COST. universe.py had that field as its only cap source, so every
+hyphenated share class was structurally unable to enter the file at any size,
+and a note that reads as a weekly vendor hiccup was describing a permanent
+exclusion. BRK-B is a 1.08 trillion dollar name with no liquidity problem.
+
+THE SAME KEY ALREADY HAD IT. fundamentals/BRK-B.US returns
+Highlights.MarketCapitalization 1,083,263,352,832. Priced the house way, five
+calls of one kind between two user reads, 77 to 127: ten credits each, with the
+user endpoint pinned at zero for a fifth independent time. Eighteen names is
+180 credits against a rebuild that already spends 2,917.
+
+WHAT IT RECOVERS, MEASURED ON THAT DOOR OF EIGHTEEN. Twelve come back with a
+cap: the share classes BF-B, BH-A, BRK-A, BRK-B, GEF-B, HEI-A, LEN-B, MOG-A and
+UHAL-B, the ADRs FJIKY and GALDY, and BRVE, an ordinary common listing whose
+join was simply empty. The other six return no cap here either, and that is why
+this needs no security type guard of its own: ACHR-WS, INFQ-WS and IONQ-WS are
+warrants, SMCIP is a depositary share, and PSUS and SOMN are not common equity.
+They stay out on the same evidence that admits the rest, rather than on a list
+of suffixes maintained here that would go stale the first time a new one was
+issued.
+
+ONE DOOR, AND THE SCOPE IS A CORRECTNESS DECISION BEFORE IT IS A COST ONE. See
+DECISIONS.md, seventeenth, for why the other two absences are not asked and why
+this vendor rather than a free one.
+
+THE TWELFTH ENDPOINT. core/provider.py names it with its signature, so the
+claim that fails when the published path starts depending on an endpoint the
+written seam omits covers it. The count of ELEVEN in the eighty eighth entry
+below was right when it was written and stays.
+
+CLAIM 18 IN test_pool.py drives the door boundary from a stub, both ways of
+spending nothing, and the order of the notes. The selection was lifted out of
+build() into backfill_targets to make it reachable at all: inline it was three
+set operations no claim could get at without a live rebuild, and the assertion
+that matters most here is about a call that must NOT be made.
+
 ## 2026-09-06, ninety first: the day run arc page against the code, and the four things it had not been told about
 
 THE OWNER ASKED WHETHER THE ARC PAGE STILL DESCRIBES THE CODE, and whether the
