@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty five claims, a count read off
+and the two pages. It now carries two hundred and twenty six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18429,6 +18429,81 @@ def claim_the_provider_protocol_covers_what_production_calls(failures: list[str]
                     "or stop calling it from the published path")
 
 
+def claim_the_desk_prints_tickers_and_aligns_its_numbers(
+        failures: list[str]) -> None:
+    """No vendor suffix reaches a reader, and a number column has its header.
+
+    Both found by the owner reading the Midday screen on 2026-09-08, and both
+    the same kind of defect: the page showing its plumbing.
+
+    THE SUFFIX. ".US" is how ONE feed addresses a US listing. It is not part of
+    the ticker and no reader has ever wanted it. bare() has existed since the
+    desk was built and four call sites used it, so the rule was already the
+    project's; "What the floors turned down" simply never got it and printed
+    VECO.US, AAP.US and eighteen more down a column. Asserted as a blanket
+    rule rather than against that one table, because the next table added will
+    read the same packet fields and inherit the same mistake: every ticker
+    PRINTED on this page goes through bare(), and the only bare-less symbol
+    left is the one inside an href, which is a route key and not text.
+
+    THE HEADER. `th` is left aligned for every column and `td.n` right aligns
+    the numeric ones, so `.n` was answered by the cell and not by its heading
+    and all twenty five numeric headers on the page sat hard left above a
+    column of right aligned figures. One line of CSS, twenty five tables.
+    """
+    import re
+
+    from core import config
+
+    src = (config.PROJECT_ROOT / "src" / "desk" / "assets.py").read_text(
+        encoding="utf-8", errors="replace")
+
+    if not re.search(r"th\.n\s*\{[^}]*text-align:\s*right", src):
+        failures.append(
+            "the desk stylesheet right aligns td.n and not th.n, so every "
+            "numeric column on the page has its heading hard left above right "
+            "aligned figures")
+
+    # An ATTRIBUTE value is not text. data-sym, data-goto and href carry the
+    # whole symbol because they are route and lookup keys, and baring those
+    # would break every link on the page while looking like a tidy up. The
+    # test is whether the prefix ends inside an unclosed tag: class="tk">
+    # has a > in it and is therefore text, data-sym=" does not and is not.
+    attribute = re.compile(r"""=['"][^'">]*['"]\s*\+\s*$""")
+     # An ATTRIBUTE value is not text. data-sym, data-goto and href carry the
+    # WHOLE symbol because they are route and lookup keys, and baring those
+    # would break every link on the page while looking like a tidy up. The
+    # test is whether the prefix ends inside an unclosed tag: class="tk">
+    # carries a > and is therefore text, data-sym=" does not and is not.
+    attribute = re.compile(r"""=['"][^'">]*['"]\s*\+\s*$""")
+    naked = []
+    for number, line in enumerate(src.splitlines(), 1):
+        for match in re.finditer(r"esc\(\s*\w+\.(?:sym|symbol)\b", line):
+            prefix = line[:match.start()]
+            if attribute.search(prefix) or "bare(" in line:
+                continue
+            naked.append(f"line {number}: {line.strip()[:70]}")
+    if naked:
+        failures.append(
+            "the desk prints a symbol without bare(), so the vendor's .US "
+            "suffix reaches a reader: " + "; ".join(naked))
+
+    # AND THE OTHER DIRECTION, which is the one that looks like an improvement
+    # while it breaks the page. The name route is keyed on the whole symbol.
+    # Baring it inside the href sends every link to a name that does not
+    # resolve, and nothing about the rendered page looks wrong until a link is
+    # clicked, so no reader would report it as this defect.
+    if 'href="#/name/\' + esc(bare(' in src:
+        failures.append(
+            "the desk bares the symbol inside a #/name/ href. That is the "
+            "route key, not text: baring it points every link on the page at a "
+            "name that does not resolve, and the page still looks correct")
+
+    print("  desk tickers every ticker printed on the desk goes through bare(), "
+          "the route key keeps its suffix, and a numeric column's header is "
+          "right aligned over its numbers")
+
+
 def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
     """The desk names today's failures, and a dead chain still redraws it.
 
@@ -18853,6 +18928,7 @@ def main() -> int:
     run_claim(failures, claim_the_sweep_takes_only_this_projects_stale_sandboxes,
               failures)
     run_claim(failures, claim_a_failed_morning_says_so_on_the_desk, failures)
+    run_claim(failures, claim_the_desk_prints_tickers_and_aligns_its_numbers, failures)
 
     if failures:
         for failure in failures:

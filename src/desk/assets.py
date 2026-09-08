@@ -270,6 +270,11 @@ td { padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: mid
 tr:last-child td { border-bottom: 0; }
 td.n { text-align: right; font-variant-numeric: tabular-nums;
   font-family: Consolas, monospace; }
+/* AND ITS HEADER. th is left aligned for every other column and the .n class
+   was only ever answered by td, so all 25 numeric headers on this page sat
+   hard left above a column of right aligned figures. Same 9px horizontal
+   padding on both, so this is the whole fix. */
+th.n { text-align: right; }
 td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .scroll { overflow-x: auto; }
 .reason { display: grid; grid-template-columns: 62px minmax(0,1fr); gap: 10px;
@@ -693,7 +698,7 @@ DECK_JS = r"""
           (hasCatalyst(c) ? ". " + c.catalyst + ": " + (c.catalyst_why || "")
             : ". " + (c.catalyst_why || "nothing explains this move"))) + '">' +
         '<span class="stripe ' + esc(c.conv || "unscored") + '"></span>' +
-        '<span class="tk mono">' + esc(c.sym) + "</span>" +
+        '<span class="tk mono">' + esc(bare(c.sym)) + "</span>" +
         '<span class="nm">' + esc(c.name) + "</span>" +
         '<span class="cat">' + (hasCatalyst(c)
           ? '<span class="cchip">' + esc(c.catalyst) + "</span>"
@@ -818,7 +823,7 @@ DECK_JS = r"""
     if (b.length < KNOBS.path_min_bars) {
       return '<div class="empty" style="height:150px;display:flex;align-items:center;' +
         'justify-content:center;padding:0 20px">The collector recorded ' + b.length +
-        " minute" + (b.length === 1 ? "" : "s") + " of tape for " + esc(c.sym) +
+        " minute" + (b.length === 1 ? "" : "s") + " of tape for " + esc(bare(c.sym)) +
         ", too few to draw a path. The levels beside this are still measured, " +
         "from those minutes.</div>";
     }
@@ -1008,7 +1013,7 @@ DECK_JS = r"""
         'recorded no bars for this name">No collector coverage</span>' : "");
 
     return '<div class="deck"><div class="deck-head">' +
-      '<span class="tk mono">' + esc(c.sym) + "</span>" +
+      '<span class="tk mono">' + esc(bare(c.sym)) + "</span>" +
       '<span class="nm">' + esc(c.name) + "</span>" +
       '<span class="sector">' + esc(c.sector || "sector not on file") + "</span>" +
       '<span class="right">' + badges +
@@ -1166,7 +1171,7 @@ DECK_JS = r"""
         '<th style="text-align:right">Sigma</th><th style="text-align:right">Market cap</th>' +
         "</tr></thead><tbody>" + rows.map(function (r) {
           return '<tr class="clickable" data-goto="' + esc(r.sym) + '">' +
-            '<td class="tk">' + esc(r.sym) + "</td>" +
+            '<td class="tk">' + esc(bare(r.sym)) + "</td>" +
             '<td style="color:var(--muted);max-width:230px;overflow:hidden;' +
             'text-overflow:ellipsis;white-space:nowrap">' + esc(r.name || "") +
             (r.watch ? ' <span class="pill on">also a candidate</span>' : "") + "</td>" +
@@ -1415,7 +1420,7 @@ DECK_JS = r"""
         var screens = [c.day ? "day" : "", c.swing ? "swing" : ""]
           .filter(Boolean).join(" and ");
         return '<tr class="clickable" data-goto="' + esc(c.sym) + '">' +
-          '<td class="tk">' + esc(c.sym) + "</td>" +
+          '<td class="tk">' + esc(bare(c.sym)) + "</td>" +
           '<td><span class="pill ' + esc(c.conv || "") + '">' + convWord(c.conv) +
           "</span></td>" +
           '<td class="n ' + dirClass(c.gap) + '">' + pct(c.gap) + "</td>" +
@@ -1538,7 +1543,7 @@ DECK_JS = r"""
       rows.map(function (c) {
         var m = c.mid;
         return '<tr class="clickable" data-goto="' + esc(c.sym) + '">' +
-          '<td class="tk">' + esc(c.sym) + "</td>" +
+          '<td class="tk">' + esc(bare(c.sym)) + "</td>" +
           '<td><span class="pill ' + (m.state === "never_triggered" ? "" : "on") + '">' +
           esc(MID_WORD[m.state] || m.state) + "</span></td>" +
           '<td class="n ' + dirClass(m.move) + '">' + pct(m.move) + "</td>" +
@@ -1550,7 +1555,7 @@ DECK_JS = r"""
       '<div class="card pad" style="margin-top:13px">' +
       '<div class="panel-title">Why, in the packet\'s own words</div>' +
       rows.map(function (c) {
-        return '<div class="reason"><span class="mono rk">' + esc(c.sym) + "</span>" +
+        return '<div class="reason"><span class="mono rk">' + esc(bare(c.sym)) + "</span>" +
           "<span>" + esc(c.mid.why || "") +
           (c.mid.fill != null
             ? " Filled at " + n2(c.mid.fill) + ", best against the fill " +
@@ -1567,7 +1572,7 @@ DECK_JS = r"""
         '<th style="text-align:right">Move</th><th></th>' +
         '<th style="text-align:right">Last</th><th style="text-align:right">Day RVOL</th>' +
         "</tr></thead><tbody>" + mid.movers.slice(0, 20).map(function (r) {
-          return '<tr><td class="tk">' + esc(r.sym) + '</td>' +
+          return '<tr><td class="tk">' + esc(bare(r.sym)) + '</td>' +
             '<td style="color:var(--muted);max-width:260px;overflow:hidden;' +
             'text-overflow:ellipsis;white-space:nowrap">' + esc(r.name || "") + "</td>" +
             '<td class="n ' + dirClass(r.move) + '">' + pct(r.move) + "</td>" +
@@ -1604,7 +1609,10 @@ DECK_JS = r"""
         '<th class="n">Move</th><th class="n">Volume against its own average</th>' +
         "</tr></thead><tbody>" +
         fRows.map(function (r) {
-          return "<tr><td>" + esc(r.floor) + '</td><td class="tk">' + esc(r.sym) +
+          // bare(), like every other ticker on this page. The vendor's
+          // ".US" is an addressing detail of one feed and belongs nowhere a
+          // reader looks; this was the last table still printing it.
+          return "<tr><td>" + esc(r.floor) + '</td><td class="tk">' + esc(bare(r.sym)) +
             '</td><td class="n ' + dirClass(r.move) + '">' + pct(r.move) +
             '</td><td class="n">' +
             (r.rvol == null ? NIL : n2(r.rvol) + "×") + "</td></tr>";
@@ -1720,8 +1728,10 @@ DECK_JS = r"""
       tag += '<span class="ptag">not measured for this name, so the group '
         + 'ignores ' + esc(n.unmeasured.join(" and ")) + "</span>";
     }
+    // The href keeps the WHOLE symbol because it is the route key; only
+    // the label is bared. Getting that backwards silently breaks every link.
     var head = '<td><span class="tk"><a href="#/name/' + esc(n.sym) + '">' +
-      esc(n.sym) + "</a></span>" + tag +
+      esc(bare(n.sym)) + "</a></span>" + tag +
       '<div class="prule">' + esc(rule) + "</div></td>";
     if (n.held) {
       // BARE is the whole table being held for the same reason, which is what
