@@ -343,6 +343,27 @@ def market_snapshot(
         pass
 
     today = ettime.today_et()
+    # The vendor's index feed emits rows on days the US market was SHUT, and
+    # its own feeds do not agree about it. On 2026-09-08, the morning after
+    # Labour Day, VIX.INDX carried a 2026-09-07 close of 15.3 and DXY.INDX
+    # carried 99.176, which is Friday's 99.176 repeated; US10Y.GBOND had no
+    # 2026-09-07 row at all and went straight from the 4th to the 8th.
+    #
+    # Taking the latest row dated before today therefore dated both of those
+    # rows to a day the exchange was closed, and vintage rule (d) refused the
+    # whole 08:45 packet over it: the row is labelled prior_session_only, and
+    # the prior session was 2026-09-04. That refusal was correct twice over,
+    # because one of the two was a carry forward of a price already in the
+    # file, and the cost of it was the entire morning report for eight
+    # candidates that had cleared their floors. The bound belongs here, where
+    # the row is chosen, and not in the check that catches it afterwards.
+    #
+    # Bounded by the exchange calendar, not by today. An unknown calendar
+    # falls back to the old test rather than dropping every row, which is the
+    # rule the whole vintage module follows: a check that cannot run must not
+    # fail a run it did not examine.
+    prior_session = vintage.previous_trading_session(today)
+    non_session: list[str] = []
     rows: list[dict[str, Any]] = []
     for label in list(mapping):
         symbol = mapping[label]
@@ -361,9 +382,18 @@ def market_snapshot(
             row["proxy_note"] = proxies[label.lower()]
 
         bars, eod_error = api.eod(symbol, start=today - dt.timedelta(days=15), end=today)
-        completed = [
-            b for b in (bars or []) if ettime.parse_date(str(b.get("date"))) < today
-        ]
+        completed = []
+        for bar in bars or []:
+            try:
+                dated = ettime.parse_date(str(bar.get("date")))
+            except ValueError:
+                continue
+            if dated >= today:
+                continue
+            if prior_session is not None and dated > prior_session:
+                non_session.append(f"{label} {dated.isoformat()}")
+                continue
+            completed.append(bar)
         if eod_error or not completed:
             packet.gap(f"market snapshot {label} ({symbol}) unavailable: "
                        f"{eod_error or 'no completed end of day rows'}")
@@ -397,6 +427,16 @@ def market_snapshot(
                 (row["last"] - row["prior_close"]) / row["prior_close"] * 100.0, 4
             )
         rows.append(row)
+
+    if non_session:
+        packet.gap(
+            f"the end of day feed carried {len(non_session)} market snapshot "
+            f"row(s) dated AFTER the prior trading session "
+            f"{prior_session.isoformat() if prior_session else '?'}, on days the "
+            f"exchange was closed: {', '.join(non_session)}. Each was dropped and "
+            "the row below it used instead, so these rows are dated to a real "
+            "session. The vendor's index feed does this over US holidays while "
+            "its government bond feed does not.")
     return rows
 
 
