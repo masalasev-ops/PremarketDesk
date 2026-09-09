@@ -1318,7 +1318,14 @@ DECK_JS = r"""
       esc(session.run_at || "08:45") + ". These are observed extremes and not " +
       "levels to act on: the ledger books its paper trades against the high and " +
       "the low, which is all they were ever measured to be good for.</div>" +
-      priorBlock(c, session) + dailyStructure(c) + "</div>" +
+      // THE MAP SITS DIRECTLY UNDER THE LEVELS, and it was below the
+      // lookalikes until 2026-09-09. That put roughly 47,000 characters of
+      // card between the two numbers a reader is looking at and the context
+      // for reading them, which is far enough down that the owner reported the
+      // panel missing on the morning it shipped. The lookalikes answer a
+      // different question, what OTHER names in this shape went on to do, and
+      // they go last for the same reason they are a separate instrument.
+      dailyStructure(c) + priorBlock(c, session) + "</div>" +
       '<div><div class="panel-title">Premarket tape</div>' + tapePath(c) +
       '<div class="panel-title" style="margin-top:18px">Score, ' + n2(c.score, 0) +
       " of 10</div>" + comps + marginalLine(c) + "</div>" +
