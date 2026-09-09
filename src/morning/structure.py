@@ -522,29 +522,36 @@ def _gap_context(rows: list[dict[str, Any]], price: float | None,
     if call == "trend" and direction == trend_direction and run >= run_min:
         out["type"] = "exhaustion"
         out["type_why"] = (
-            f"the last {regime['sessions']} sessions travelled "
-            f"{regime['net_move_atr']} average ranges {trend_direction}, and this "
-            f"is the {run + 1} th straight session to gap at "
+            f"the last {regime['sessions']} days moved "
+            f"{regime['net_move_atr']} normal days {trend_direction}, and this "
+            f"is the {run + 1}th day running to gap at "
             f"{gap_rule.describe()} percent")
     elif call == "trend" and direction == trend_direction:
         out["type"] = "runaway"
         out["type_why"] = (
-            f"the last {regime['sessions']} sessions travelled "
-            f"{regime['net_move_atr']} average ranges {trend_direction} and "
+            f"the last {regime['sessions']} days moved "
+            f"{regime['net_move_atr']} normal days {trend_direction}, and "
             f"today's gap goes the same way")
     elif call == "consolidation" and where in ("above the range", "below the range"):
         out["type"] = "breakaway"
         out["type_why"] = (
-            f"the last {regime['sessions']} sessions held a range "
-            f"{regime['range_atr']} average ranges wide and today's price is "
+            f"the last {regime['sessions']} days held a range "
+            f"{regime['range_atr']} normal days wide, and today's price is "
             f"{where}")
     else:
         out["type"] = "common"
+        # ONE PHRASE PER CALL, because "neither" is a value call takes and
+        # "read as neither at 4.07" is not a sentence. This is the branch
+        # most mornings land in.
+        shape = {
+            "trend": f"trended {trend_direction}",
+            "consolidation": "held a range",
+        }.get(call, "neither held a range nor trended")
         out["type_why"] = (
-            f"the last {regime['sessions']} sessions read as {call} at "
-            f"{regime['range_atr']} average ranges wide and "
-            f"{regime['net_move_atr']} travelled, and today's gap {direction} "
-            f"sits {where or 'nowhere measurable against it'}")
+            f"the last {regime['sessions']} days {shape}, "
+            f"{regime['range_atr']} normal days wide with "
+            f"{regime['net_move_atr']} of net move, and today's gap "
+            f"{direction} sits {where or 'nowhere measurable against it'}")
     return out
 
 

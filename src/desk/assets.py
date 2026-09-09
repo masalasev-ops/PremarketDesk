@@ -308,6 +308,16 @@ td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .ds .dsline span.n { font-variant-numeric: tabular-nums; }
 .ds .dsnote { font-size: 10.5px; color: var(--muted); margin-top: 8px;
   line-height: 1.5; }
+/* The background readings, folded. They are the ones a reader consults
+   rather than reads, and open they made a panel of twelve measurements in
+   a 440px column that its owner twice said he could not take anything
+   from. beforeprint opens every fold, so a saved PDF still carries them. */
+.ds details.dsmore { margin-top: 10px; }
+.ds details.dsmore > summary { font-size: 10.5px; color: var(--muted);
+  cursor: pointer; padding: 3px 0; list-style: none; }
+.ds details.dsmore > summary::-webkit-details-marker { display: none; }
+.ds details.dsmore > summary::after { content: "  +"; }
+.ds details.dsmore[open] > summary::after { content: "  -"; }
 .verdictcard { border-color: var(--line-strong); }
 .vbig { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
 
@@ -800,51 +810,39 @@ DECK_JS = r"""
     if (!g || !g.pg || g.pg.c == null) return "";
     var p = g.pg;
     if (p.med == null) {
-      return '<div class="dsnote">When this name has gapped before: ' + p.c +
-        " of its last " + p.of + " sessions opened with a gap, and no open to " +
-        "close median is on file for them.</div>";
+      return '<div class="dsnote">This name gapped on ' + p.c +
+        " of its last " + p.of + " trading days. What those days did after " +
+        "the open is not on file.</div>";
     }
     return '<div class="dsnote" style="margin-bottom:2px">When this name has ' +
       "gapped before</div>" +
       '<div class="vbig">' + pct(p.med) + "</div>" +
-      '<p class="snote" style="margin:2px 0 10px">median open to close across ' +
-      "the " + p.n + " gap(s) in its last " + p.of + " sessions. That is what " +
-      "those days did after the open, and it is a description of them rather " +
-      "than a reading of this one.</p>";
+      '<p class="snote" style="margin:2px 0 10px">was the usual move from ' +
+      "the opening price to the close, across the " + p.n + " times it " +
+      "gapped in its last " + p.of + " trading days.</p>";
   }
 
   function gapContext(g) {
     if (!g) return "";
     var out = '<div class="dsline"><span>Gap in context</span><span class="n">' +
       esc(GAP_TYPE_WORD[g.t] || g.t || "Not classified") + "</span></div>";
-    if (g.rg) {
-      var word = g.rg.call === "consolidation" ? "held a range"
-        : g.rg.call === "trend" ? "trended " + esc(g.rg.dir || "")
-        : "neither coiled nor trending";
-      // ONE MEASUREMENT, ONE ROW. This width is the coil ratio, which
-      // printed again three rows above as "20 session range, in average
-      // ranges" until 2026-09-09, so the panel stated 4.07 twice and made
-      // a reader carry two rows to get one number.
-      out += '<div class="dsline"><span>The ' + g.rg.n +
-        ' sessions before today</span><span class="n">' + esc(word) +
-        ", " + n2(g.rg.ra) + " average days wide</span></div>";
-      // "travelled" named no unit and appeared nowhere else on the card.
-      out += '<div class="dsline"><span>Net move across them</span>' +
-        '<span class="n">' + n2(g.rg.na) + " average days</span></div>";
-    }
-    // "Price against that range" was dropped on 2026-09-09: it restated
-    // the one month track's own word, about the same window, four rows
-    // above it.
+    // THE TWO REGIME ROWS ARE GONE, not because they were wrong but
+    // because g.why below states both of their numbers AND says what they
+    // mean. The panel printed 4.07 as a row and again inside the
+    // sentence, then 0.62 the same way. The rule that a gap type never
+    // travels without its inputs is met by the sentence, which carries
+    // the width, the net move and where today sits against them.
     if (g.rc) {
-      out += '<div class="dsline"><span>Recent sessions gapping ' +
+      out += '<div class="dsline"><span>Days gapping ' +
         esc(g.thr || "") + " percent</span>" + '<span class="n">' + g.rc.c +
-        " of " + g.rc.of + ", " + g.rc.run + " in a row</span></div>";
+        " of the last " + g.rc.of + ", " + g.rc.run + " in a row</span></div>";
     }
     // g.pg is drawn by gapHistory at the top of the panel and not here.
     if (g.why) {
-      out += '<div class="dsnote">' + esc(g.why) +
-        ". This is a description of where the gap happened and not a reading " +
-        "of what it will do.</div>";
+      // The hedge that used to close this sentence is said once, at the
+      // foot of the panel. It was here, in the headline caption and in
+      // the provenance line: three disclaimers for one point.
+      out += '<div class="dsnote">' + esc(g.why) + ".</div>";
     }
     return out;
   }
@@ -888,10 +886,10 @@ DECK_JS = r"""
       // because a close cannot exceed its own bar's high, and a blank means no
       // close above it anywhere on file rather than a number nobody found.
       var above = w.sa == null
-        ? "not closed above it on file"
-        : "last closed above it " + w.sa + " sessions ago";
+        ? "has never closed above this on file"
+        : "last closed above this " + w.sa + " days ago";
       out += '<div class="dsrow"><div class="dslab"><b>' +
-        esc(dsWindowWord(w.n)) + "</b><span>" + w.n + " sessions \u00b7 " +
+        esc(dsWindowWord(w.n)) + "</b><span>last " + w.n + " days \u00b7 " +
         esc(where) + "</span></div>" +
         '<div class="dstrack">' + (clamped == null ? "" :
           '<i class="' + (p > 100 || p < 0 ? "out" : "") + '" style="left:calc(' +
@@ -902,17 +900,23 @@ DECK_JS = r"""
         "</div></div>";
     });
 
-    out += '<div class="dsnote" style="margin-top:10px">Reference readings</div>';
+    // FOLDED, and the gap context below is NOT. These five are background
+    // a reader consults; the gap type and where the name sits are what
+    // the panel is for.
+    out += '<details class="dsmore"><summary>Reference readings</summary>';
     (d.sma || []).forEach(function (s) {
-      out += '<div class="dsline"><span>' + s.n + " session average</span>" +
+      out += '<div class="dsline"><span>' + s.n + " day average</span>" +
         '<span class="n">' + n2(s.v) +
         (s.vs == null ? "" : '  <span class="' + dirClass(s.vs) + '">' +
           pct(s.vs) + "</span>") + "</span></div>";
     });
     if (d.atr != null) {
-      out += '<div class="dsline"><span>Average true range, ' + (d.atrn || 14) +
-        " sessions</span>" + '<span class="n">' + n2(d.atr) +
-        (d.atrp == null ? "" : "  " + n2(d.atrp) + "% of price") + "</span></div>";
+      // "Average true range" is the name of the calculation, not of the
+      // thing. What it measures is how far this share moves on an
+      // ordinary day, and that is what the row now says.
+      out += '<div class="dsline"><span>A normal day for it, over ' +
+        (d.atrn || 14) + " days</span>" + '<span class="n">' + n2(d.atr) +
+        (d.atrp == null ? "" : " (" + n2(d.atrp) + "% of price)") + "</span></div>";
     }
     // Only when the regime line is not already saying it, which it does
     // whenever a regime was callable at all.
@@ -926,18 +930,19 @@ DECK_JS = r"""
     }
     if (d.vol && d.vol.v != null) {
       out += '<div class="dsline"><span>Average daily volume</span>' +
-        '<span class="n">' + big(d.vol.v) + " over " + d.vol.n + " of " +
-        d.vol.of + "</span></div>";
+        '<span class="n">' + big(d.vol.v) + " over " + d.vol.n +
+        " days</span></div>";
     }
     if (d.up) {
-      out += '<div class="dsline"><span>Sessions closing up</span>' +
+      out += '<div class="dsline"><span>Days that closed up</span>' +
         '<span class="n">' + d.up.u + " of " + d.up.of + "</span></div>";
     }
+    out += "</details>";
     out += gapContext(d.gc);
 
-    out += '<div class="dsnote">Where this name sits in its own history, from ' +
-      (d.n || 0) + " completed session(s) to " + esc(d.last || "?") +
-      ". Levels are back adjusted onto today's basis." +
+    out += '<div class="dsnote">Measured from ' + (d.n || 0) +
+      " trading days of history up to " + esc(d.last || "?") +
+      ", restated in today's prices so a past split does not distort it." +
       // LABELLED, because a map this morning never had is a different thing
       // from one it published. Computed from bars dated up to that session
       // only, so it is what the morning COULD have drawn and not what the
@@ -949,8 +954,12 @@ DECK_JS = r"""
         ? " A price adjustment of more than 10 percent lands on " +
           esc(d.adj.join(", ")) + ", so a raw chart will disagree here."
         : "") +
-      " No entry, stop or target is drawn: nothing in this project's record " +
-      "supports publishing one.</div></div>";
+      // The permitted phrase stays in ONE string literal. Reflowing it
+      // across two split it in half and the guard caught that, which is
+      // what it is for: a disclaimer assembled from fragments is one a
+      // future edit can take apart without failing anything.
+      " It describes where this name stands and predicts nothing. " +
+      "No entry, stop or target is drawn.</div></div>";
     return out;
   }
 
@@ -3445,6 +3454,14 @@ DECK_JS = r"""
   });
   window.addEventListener("beforeprint", function () {
     if (window.__buildPrint) window.__buildPrint();
+  });
+
+  // A folded section that vanishes from a saved PDF is a section the
+  // reader cannot get back. This opens every fold on the page before the
+  // print, which the debug folds needed too and never had.
+  window.addEventListener("beforeprint", function () {
+    var folds = document.querySelectorAll("details");
+    for (var i = 0; i < folds.length; i++) { folds[i].open = true; }
   });
 
   window.addEventListener("hashchange", render);

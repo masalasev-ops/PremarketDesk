@@ -15,6 +15,47 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and first: the daily map said too much, in the wrong words
+
+The owner read the panel a second time, after the rows had been reordered, and
+said it was still a lot of words packed into a tiny section and the words were
+still not friendly. Reordering had not been the whole problem.
+
+**A sentence that was not English.** gap_context builds type_why from the
+regime call, and call takes three values: trend, consolidation and NEITHER. The
+template read "the last {n} sessions read as {call} at {range} average ranges
+wide", so the ordinary case rendered "the last 20 sessions read as neither at
+4.07 average ranges wide and 0.62 travelled". That is the branch most mornings
+land in. Each branch now uses a phrase chosen for its call, and the exhaustion
+branch no longer writes "the 4 th straight session".
+
+**Three disclaimers for one point.** The headline caption ended "it is a
+description of them rather than a reading of this one", the gap sentence ended
+"this is a description of where the gap happened and not a reading of what it
+will do", and the provenance line ended "nothing in this project's record
+supports publishing one". Said once, at the foot.
+
+**A paragraph that repeated two rows.** type_why states the range width, the
+net move and where today sits against them, and the panel printed the first two
+again as their own rows immediately above it. The rows are gone; the sentence
+carries the inputs, so the rule that a gap type never travels without them
+still holds.
+
+**Words a reader has met.** sessions became trading days, "Average true range,
+14 sessions" became "A normal day for it, over 14 days", "Sessions closing up"
+became "Days that closed up", "average ranges" became "normal days" to match
+the report's own column, "last closed above it" became "last closed above
+this", and "session(s)" is gone.
+
+**And the five background readings are folded.** Words alone took the panel from
+247 to 208; the rest of the density was real, twelve measurements in a column
+440 pixels wide. The averages, the normal day, the volume and the up closes now
+sit behind a summary line, which leaves 173 words visible: what days like this
+did to this name, where it stands in its month, quarter and year, and what kind
+of gap this is. A beforeprint handler opens every fold on the page, so a saved
+PDF still carries them, which the debug folds had needed since they were built
+and never had.
+
 ## 2026-09-09, one hundredth: the socket was extended past the open and the packet was not told
 
 [Collector] stop_time moved from 09:25 to 10:30 on 2026-09-08 so the ladder
