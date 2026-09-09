@@ -678,6 +678,7 @@ mode (plan 0.7 to 0.9, CHANGELOG thirty ninth, DECISIONS eighth).]**
 
 **[2026-09-04: the screens are specified in doc/SCREENS.md and none of them
 are built. Read it first. The freeze was lifted for it. CHANGELOG fifty seventh.]**
+**[2026-09-09: the daily context map is typed columns on picks now, backfilled over the whole record; doc/STRUCTURAL_MAP.md is its note and this file has no room for more. CHANGELOG ninety sixth, DECISIONS twenty first and second.]**
 
 WHAT IS ACTUALLY STILL OPEN, in one place, so a new session does not have to
 reconstruct it from the numbered items below:

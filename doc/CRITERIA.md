@@ -469,14 +469,190 @@ max_adjustment_step           = 0.10       # THE ONE THRESHOLD HERE, and it deci
                                            # its date is named on the card, because the
                                            # correction is already applied and a reader whose raw
                                            # chart disagrees is owed the reason
-history_calendar_days         = 400        # calendar days of daily history attach_daily_history
+history_calendar_days         = 1100       # calendar days of daily history attach_daily_history
                                            # asks for. 250 trading sessions span about 362
-                                           # calendar days and this leaves a month of margin for
-                                           # holidays. IT COSTS NOTHING TO WIDEN: [Quota costs]
+                                           # calendar days, so 400 reached the longest window and
+                                           # nothing behind it. Widened 2026-09-09 for the
+                                           # since_close_above readings below, which look for the
+                                           # last session that CLOSED above an N session high and
+                                           # can only ever find one OLDER than N sessions: over
+                                           # 400 days the 250 session answer had thirty sessions
+                                           # to search in and came back null on almost every name.
+                                           # 1100 days is about 760 sessions, which leaves five
+                                           # hundred behind the longest window.
+                                           # IT COSTS NOTHING TO WIDEN: [Quota costs]
                                            # prices eod at one credit FLAT PER CALL and not per
                                            # row, so the same one call per candidate the morning
-                                           # already made now returns a trading year instead of
-                                           # the five weeks it used to
+                                           # already made now returns three trading years instead
+                                           # of the five weeks it used to
+avg_volume_sessions           = 20         # sessions in the average daily volume the map
+                                           # publishes. The count it was ACTUALLY taken over rides
+                                           # beside it in ds_avg_volume_sessions, for the reason
+                                           # avg_volume_20d carries one: a field named for twenty
+                                           # sessions that averaged three asserts a denominator it
+                                           # does not have. Volume is NOT back adjusted, because a
+                                           # share count is not a price and the correction that
+                                           # makes a pre split high comparable makes a pre split
+                                           # volume wrong by the same factor the other way
+consolidation_sessions        = 20         # sessions in the range that consolidation_ratio
+                                           # divides by the average true range
+
+**The last close above a level, added 2026-09-09.** A level on its own says
+only where a line is. "60 session high 54.20, last closed above it 118 sessions
+ago" says the name has been under it for half a year, and "no close above it in
+the 760 sessions on file" says something stronger again, and the card could
+print neither. The arithmetic has a floor worth knowing: the level is the
+highest HIGH over the last N sessions and a close never exceeds its own bar's
+high, so no session inside the window can close above it and the answer is
+never smaller than N. A name that has just made a new high comes back with NO
+answer rather than with a zero, which is the strongest of the three readings
+and the one a zero would destroy.
+
+**The gap context readings, added 2026-09-09, and the two lines in them are
+SEED.** A gap out of a four week base and a gap on the fifth straight up
+session are opposite objects, and until this landed the report described them
+identically: same gap percent, same RVOL band, same catalyst class, same card.
+Every reading below is measured off the same bars the rest of this section
+uses. gap_type is a reading of those readings against the two SEED lines, and
+it is written into [Picks] WITH the numbers that produced it, so a reader who
+would put a line elsewhere can move it over the record instead of taking the
+word. That is the rule catalyst_class is published under, applied to a second
+field. Nothing here admits, refuses or scores anything.
+
+gap_regime_sessions           = 20         # sessions of behaviour BEFORE today that gap_type
+                                           # reads. The same span as lookback_sessions_short so
+                                           # the regime and the short window describe one period
+gap_regime_range_atr_max      = 3          # SEED, not measured. At or below this many average
+                                           # true ranges wide, the window is called a
+                                           # consolidation. Crabel's 1990 work on narrow range
+                                           # days, which found a compressed range precedes a large
+                                           # trending session about two thirds of the time, is why
+                                           # a coiled name is worth separating from an extended
+                                           # one at all. It is not why this number is 3: that is a
+                                           # guess, and the reading it is taken against sits on
+                                           # every row so it can be moved over the record
+gap_regime_net_move_atr_min   = 4          # SEED, not measured. At or beyond this many average
+                                           # true ranges of NET travel across the window, the
+                                           # window is called a trend. It sits above the
+                                           # consolidation ceiling on purpose and the two can
+                                           # never both fire: net travel cannot exceed the range
+                                           # that contains it, so a window three ranges wide
+                                           # cannot have travelled four. Between them is
+                                           # "neither", which is most windows and is reported as
+                                           # itself rather than forced into one of the two
+gap_recent_sessions           = 5          # sessions the recent gap count is taken over. Both the
+                                           # COUNT in the window and the RUN ending at the last
+                                           # session are recorded: three gaps scattered through a
+                                           # week is a busy name, three in a row is the sequence
+                                           # every source calls exhaustion, and a count alone
+                                           # cannot tell them apart
+gap_run_exhaustion_sessions   = 3          # SEED, not measured. A run of this many sessions
+                                           # gapping at the [Day setup] gap_pct line, in the
+                                           # direction of a window this section already calls a
+                                           # trend, reads as exhaustion rather than continuation.
+                                           # Three is the number the literature names and nothing
+                                           # in this record has tested it
+prior_gap_sessions            = 250        # sessions this name's OWN past gaps are counted over,
+                                           # and the window the median open to close on those is
+                                           # taken on, with its n. A different question from
+                                           # gap_recent_sessions: that one asks what the name has
+                                           # been doing this week, this one asks what gapping has
+                                           # historically done to it. The only reading in the
+                                           # block that is evidence about THIS name rather than
+                                           # about gapping names, which is what [Precedent]
+                                           # answers
+
+The four types, and what each needs. unknown whenever the regime cannot be
+called or the gap has no direction, which is what a short history produces and
+is never folded into common. exhaustion when the window is a trend, the gap
+runs with it, and the run reaches gap_run_exhaustion_sessions. runaway when the
+window is a trend and the gap runs with it. breakaway when the window is a
+consolidation and the price is outside its range. common otherwise, which
+includes every gap AGAINST a trend: that is neither a continuation nor an
+exhaustion of a move it opposes, and a fifth word for it would name something
+this record has never measured.
+
+**Where a level is written down, added 2026-09-09.** Until then the map was
+drawn on a card and kept nowhere, which made it a decoration: no query could
+ask whether a name that gapped out of a base behaved differently from one that
+gapped inside it, because no row said which it was. Every reading here is now a
+typed column on [Picks], written for the live morning by scan.write_picks and
+for every session already in the record by night/backfill_structure.py, both
+through morning/structure.py columns() so the two cannot drift apart. Columns
+are named by ROLE and not by session count, ds_high_medium and not ds_high_60,
+because the counts above are knobs and a column named for one starts lying the
+day it moves; each row carries the window it was measured over beside the level
+it produced, on the fill_band_pct precedent.
+
+**A PAST SESSION'S LEVEL IS COMPUTED FROM BARS DATED UP TO THAT SESSION ONLY**,
+and this is the one way the backfill could have corrupted the record in
+silence. Today's bars make every historical level better than it was: a 60
+session high that has seen the following month knows where the name actually
+went, and a ledger grouped on it would be reading the future. The backfill
+slices each symbol's series by the row's own date before measuring anything,
+and a claim in the suite fails if a row's numbers change when later bars are
+appended to the series it is given. Levels are also restated in the money of
+the mapped session rather than of the fetch date, since the pm_high and
+prior_close on the same row are in that session's money and a split since then
+would otherwise leave one row carrying two scales.
+
+**Too little history gives a null and a reason, never a zero.** A backfilled
+row from the first weeks of the record has a few sessions behind it, draws the
+short window and nothing else, and says so in ds_short_reason. The source
+column is untouched by the backfill, live, test and reconstructed rows are
+computed identically, and no aggregate may pool them.
+
+## Short interest
+
+CONTEXT, NOT SIGNAL, and the label is the point of the section. Short interest
+is fetched for the candidates a morning already prices, written beside the
+daily map, and read by NOTHING: not [Day setup], not [Swing setup], not any
+score component, not the pool ordering. The academic record is why. The raw
+short interest ratio's relation to future returns largely disappears once the
+information short sellers are acting on is controlled for, so the number is
+evidence about who is positioned rather than about what happens next, and it
+belongs beside a map of where a stock is and nowhere near a rank.
+
+It is also SLOW, and the vendor will not say how slow. Exchanges publish twice
+a month on a settlement lag, so the figure a morning reads describes a position
+taken up to three weeks earlier. The payload carries no settlement date to
+measure that with: on 2026-09-09 over QCOM, BE and NOK, SharesStats.SharesShort
+was null on all three and the figure came from Technicals, which dates nothing.
+So short_interest_as_of is null unless the vendor ever populates it, and the
+column beside it says how long ago THIS PROJECT fetched the number. That is a
+LOWER BOUND on the figure's age and is named for what it measures rather than
+for what a reader would want it to measure. A reader comparing a short interest
+of unknown but substantial age against this morning's premarket volume is
+comparing two different weeks and is owed at least the part of the distance
+that can be seen.
+
+Days to cover is computed HERE, from the shares short the vendor reports over
+the twenty session average volume this project already measures, rather than
+taken from the vendor's own ratio. One denominator, ours, stated on the row.
+The percent of float uses the same sharesFloat [Float rotation] divides by, for
+the same reason, and premarket volume as a percent of float is that same
+rotation said in percent so the two sit on one row in one unit.
+
+That is not a preference. Measured on QCOM on 2026-09-09, the vendor reports
+33,274,306 shares short, a SharesFloat of 1,048,101,946 and a ShortPercentFloat
+of 0.0348. Its own two fields do not divide into its own third: the figure
+implies a float near 956 million, so the vendor's percentage is taken over some
+other denominator it does not publish. Computed here it is 3.175 percent, which
+is a number a reader can check against the two beside it.
+
+NOT BACKFILLED, and refusing to is the honest half of this. The fundamentals
+endpoint answers with today's short interest and carries no history, so a 2025
+row could only be given a 2026 figure. Writing one would put a number in a
+column that reads as a measurement of that session and is not. Backfilled rows
+carry null with that reason.
+
+max_age_days                  = 20         # SEED, not measured. A cached record older than this
+                                           # is refetched. Exchanges publish twice a month, so
+                                           # twenty days is a little over one cycle and a name
+                                           # looked at on consecutive mornings costs one call
+                                           # rather than two. [Quota costs] prices fundamentals at
+                                           # ten credits, the dearest call in the table, which is
+                                           # why this is cached at all
 
 ## Universe
 

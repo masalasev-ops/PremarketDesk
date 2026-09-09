@@ -190,6 +190,36 @@ TERMS: tuple[tuple[str, str], ...] = (
      "50 and 200 days, and how much it moves in a normal day. It describes the "
      "ground the share is standing on. It recommends nothing, because nothing "
      "measured here would justify a recommendation."),
+    # Added 2026-09-09 with the readings themselves. Each of these is a word a
+    # card now prints, and the rule this module exists for is that a term a
+    # reader meets on a page is explained on the same page rather than looked
+    # up somewhere they do not have.
+    ("Last closed above",
+     "How long ago the share last finished a day above a level. A high on its "
+     "own says only where a line is. Knowing the share has not closed above it "
+     "since the spring says whether that line is somewhere it keeps failing or "
+     "somewhere it has simply not been."),
+    ("Range in average ranges",
+     "How wide the last month has been, counted in days. A share that moves "
+     "about a dollar a day and has spent the month inside a three dollar band "
+     "is coiled; one that has covered fifteen dollars in the same month is "
+     "stretched. Both can sit in the middle of their band and look identical "
+     "without this."),
+    ("Gap in context",
+     "What the share was doing BEFORE it gapped, and where the gap sits in "
+     "that. A jump out of a month of quiet and a jump on the fifth busy day in "
+     "a row are different situations that look the same in a percentage. The "
+     "readings that produced the label are printed beside it, so a reader who "
+     "would call it something else can see why."),
+    ("Short interest",
+     "How many shares people have borrowed and sold, betting the price falls, "
+     "as a share of the shares actually available to trade. It is published "
+     "twice a month, so it describes a position taken up to three weeks ago. "
+     "It is shown as context and nothing here is ranked or chosen on it."),
+    ("Days to cover",
+     "How many normal days of trading it would take for everybody betting "
+     "against the share to buy back what they borrowed. A large number means "
+     "those bets cannot be closed quickly."),
     ("Fill",
      "The price a position actually started at. It can differ from the entry, "
      "because a share that jumps straight past the intended price starts at "
@@ -248,6 +278,21 @@ COLUMNS: dict[str, str] = {
     "On watchlist": "whether the morning screen also selected it",
     "Price time": "the clock time the price was taken",
     "Price age s": "how many seconds old that price was when this was written",
+    "Gap in context": "what the share was doing before today, and where this "
+                      "gap sits in that",
+    "Before today": "the shape of the last month: how wide it was and how far "
+                    "it actually travelled, both counted in normal days",
+    "Price against that range": "whether the price is above, inside or below "
+                                "the band the last month was held in",
+    "Its own past gaps": "how often this share has gapped before, and what it "
+                         "typically did between the open and the close on "
+                         "those days",
+    "Average daily volume": "how many shares change hands on a normal day, and "
+                            "how many days that average was taken over",
+    "Short interest": "shares sold by people betting the price falls, as a "
+                      "share of the shares available to trade",
+    "Days to cover": "how many normal trading days it would take to buy back "
+                     "every one of those bets",
     "Report date": "the date the company is due to report its profits",
     "Session": "whether that report lands before or after the market is open",
     "Morning entry": "the reference level the morning froze for the record",

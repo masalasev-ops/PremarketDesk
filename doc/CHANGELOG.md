@@ -15,6 +15,120 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, ninety sixth: the map could describe a morning and never improve
+
+THE MAP LANDED THE EVENING BEFORE AND WAS WRITTEN TO NOTHING. It was computed
+at 08:45, drawn on a card, and stored nowhere, which made it a decoration
+rather than an instrument. The ledger could never book a rule against a
+structural level because no row recorded one, no query could ask whether a name
+that gapped out of a sixty session base behaved differently from one that
+gapped inside a broken one because no row said which it was, and the whole
+argument for a map instead of a level was that it could get better over time.
+
+**Every reading is now a typed column on `picks`**, sixty six of them, declared
+in `store._PICKS_LATER_COLUMNS` and filled by one flattener,
+`morning/structure.py columns()`, which both writers call: `scan.write_picks`
+for the live morning and `night/backfill_structure.py` for every session
+already in the record. Not a JSON blob: the ledger filters and groups on these
+and SQLite cannot index inside a string. Named by role and not by session
+count, `ds_high_medium` and never `ds_high_60`, because the counts are CRITERIA
+knobs and a column named for one starts lying the day it moves; each row
+carries the window it was measured over beside the level it produced.
+
+**THE TRAP, and it would have corrupted the record in silence.** A level for a
+past session must be computed from bars dated up to THAT session only. Today's
+bars make every historical level better than it was: a sixty session high that
+has seen the following month knows where the name actually went, a base that
+broke is no longer a base, and a range position measured through the move is a
+position inside the answer. Every one of those numbers still looks entirely
+plausible in the column, because the arithmetic is right and only the inputs
+are from the future, and nothing downstream could catch it.
+
+    `rows_for_symbol()` takes the whole fetched series and slices it by each
+    row's own date itself, so the slice cannot be forgotten at a call site. The
+    mapped session's OWN bar is excluded too, not merely the ones after it: it
+    carries the high and low of the day the row is about, and a map including
+    it would let the session explain itself.
+    `claim_a_backfilled_level_cannot_see_its_own_future` hands the function the
+    whole series and one truncated at the row's date and fails if a single
+    column moves, and then measures the same window WITHOUT the slice and
+    requires that to differ, so a run in which the guard is doing nothing fails
+    rather than reassures.
+
+    The page already backfilled to 2026-08-13 was checked against this and
+    needed no redraw: the desk compacts each session from that session's own
+    packet, and no packet before 2026-09-08 carries a map at all. There were no
+    historical maps drawn from today's bars because there were no historical
+    maps.
+
+**The levels are stated in the mapped session's money.** The vendor computes
+`adjusted_close` against its own latest data, so a series fetched today states
+every old bar in today's money. Right for the morning, whose price is also
+today's; wrong for a row dated last November, whose `pm_high` and `prior_close`
+are in last November's money, where a split since would leave one row carrying
+two scales. The backfill passes the adjustment factor of the mapped session's
+own bar and `ds_basis_factor` records it. Reading that one bar is not a look
+into the future: it answers what that session's prices were quoted in, which is
+the same question the `pm_high` on the row already answers.
+
+**What it cost.** One `eod` call per DISTINCT symbol and not per row: 10,133
+rows over 1,590 names, about 1,590 credits against a shared daily 100,000, with
+`[Quota costs]` pricing `eod` at one credit flat per call. The series is cached
+gzipped under `data/backtest/structure-eod` so a re-run after a fix costs
+nothing, which is the split `research/backtest_pool.py` was built around.
+`source` is untouched; live, test and reconstructed rows are computed
+identically. Too little history gives a null and a reason, never a zero.
+
+**The gap context, which is what the columns are for.** A gap out of a four
+week base and a gap on the fifth straight up session are opposite objects and
+the report described them identically. The regime over the last twenty sessions
+is called consolidation, trend or neither from its range and its net travel,
+both said in average true ranges; `ds_gap_type` is common, breakaway, runaway,
+exhaustion or unknown, derived from that against two SEED lines, and it is
+written WITH every reading that produced it. A classification never travels
+without its inputs, which is the rule `catalyst_class` is published under.
+`ds_recent_gap_sessions` counts the last five sessions that gapped at the
+`[Day setup]` line and `ds_recent_gap_run` the run ending at the last of them,
+because three scattered through a week and three in a row are different facts.
+`ds_prior_gap_count` and `ds_prior_gap_median_otc_pct` are the only reading in
+the block that is evidence about the name rather than about gapping names.
+
+**Two base items that were missing.** `ds_since_above_short`, `_medium` and
+`_long`: how many sessions ago the name last CLOSED above each window high. A
+level says where a line is; this says whether the name keeps failing there or
+has simply not been near it. The arithmetic has a floor worth knowing, since a
+close cannot exceed its own bar's high and no session inside the window can
+close above it, so the answer is never smaller than the window and a name at a
+new high comes back with NO answer rather than a zero. That is also why
+`history_calendar_days` widened from 400 to 1,100: over 400 days the 250
+session answer had thirty sessions to search in and was null on almost every
+name, and widening costs nothing at one credit flat per call. And
+`ds_avg_volume` with `ds_avg_volume_sessions`, the count travelling with the
+mean as it does on `avg_volume_20d`.
+
+**`ds_consolidation_ratio`**, the twenty session range over ATR(14). A coiled
+name and an extended name read alike on the range tracks: two names sit at the
+same position inside ranges four apart. Crabel's 1990 work on narrow range days
+is why the reading is worth separating; it is not why the line sits at 3, which
+is a SEED on a row so it can be moved over the record.
+
+**Float and short interest, labelled context and read by nothing.**
+`shares_float`, `pm_volume_pct_float`, `short_interest_pct_float` on one
+denominator, days to cover computed here from the twenty session average volume
+rather than the vendor's ratio, and how long ago this project fetched the
+figure on the row. That last is a LOWER BOUND and is named as one: exchanges
+publish twice a month on a settlement lag and the payload dates nothing, since
+`SharesStats.SharesShort` came back null over QCOM, BE and NOK and the figure
+is in `Technicals`, which carries no settlement date. A hyphenated share class
+is refused outright, since `eodhd.fundamentals` records that the float on a
+class row is the parent's. NOT backfilled: the endpoint answers with today's
+figure and carries no history, so a 2025 row could only be handed a 2026
+number, and it carries the reason instead. CRITERIA `[Short interest]` records
+why none of it goes near a rank.
+
+Claims 233 to 236. doc/STRUCTURAL_MAP.md is the note; BUILD_PLAN, which is at
+its line cap, carries one line pointing to it.
+
 ## 2026-09-08, ninety fifth: two premarket extremes were being read as a trading plan
 
 THE OWNER ASKED WHY A NAME MEANT TO BE HELD BEYOND TODAY CARRIES AN ENTRY

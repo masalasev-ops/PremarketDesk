@@ -18,6 +18,81 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-09, twenty first: the basis a backfilled level is stated in
+
+**The question.** A backfilled map for a session last November is computed from
+a series fetched today. The vendor's `adjusted_close` is computed against its
+own latest data, so every bar in that series is stated in TODAY's money. Should
+the levels written onto a November row stay in today's money, or be restated in
+November's?
+
+**Why it is not obvious.** Today's money is the better basis for comparing one
+session's map against another's, which a study over the record would want.
+November's money is the better basis for comparing the map against the rest of
+its own row, which the ledger would want: `pm_high`, `prior_close`,
+`entry_ref` and `stop_ref` on that row are raw prices as of that November
+session and nothing restates them.
+
+**What decided it.** The row is the unit. These columns exist so the ledger can
+book a rule against a structural level, and every rule it could write compares
+a level to another number ON THE SAME ROW. A split between the mapped session
+and the fetch date would leave one row carrying two scales with nothing saying
+so, and the failure would be silent in the direction that matters: a name that
+split two for one would read as sitting at half its own range.
+
+    The cost is that two rows a year apart are on two bases, which a study
+    comparing absolute levels across sessions has to handle. It does not have
+    to handle it for the ratios, which are basis free: `position_pct`, the
+    average distances, `atr_pct`, the consolidation ratio and every reading in
+    the gap context are unchanged by a rescaling. So the cost falls on
+    comparisons of raw prices across sessions, which is not a comparison this
+    record has any use for, and the benefit falls on every comparison inside
+    one row, which is all of them.
+
+`ds_basis_factor` carries what each row was restated by, so the choice is
+recoverable rather than assumed.
+
+**One thing this is NOT.** Reading the mapped session's own bar for its
+adjustment factor is not a look into the future, which is the objection to
+answer given the point in time rule this pass is built around. The factor
+answers what that session's prices were quoted in. It is the same question the
+`pm_high` already on the row answers, and it says nothing about where the price
+went. No high, low, close or volume from that bar reaches any window.
+
+## 2026-09-09, twenty second: why gap_type is derived rather than measured, and published anyway
+
+**The question.** The gap type vocabulary, common, breakaway, runaway,
+exhaustion, is from the literature. Nothing in this record has tested that the
+four separate anything. Publish it, or wait until they have been tested?
+
+**The case for waiting.** It is the case CRITERIA makes everywhere: a threshold
+this project has not measured is a seed, and a seed wearing a label reads as a
+finding. `gap_regime_range_atr_max` at 3 and `gap_regime_net_move_atr_min` at 4
+are guesses, and a card that prints "Breakaway gap" is printing a guess in a
+word that sounds like a measurement.
+
+**What decided it.** The classification is published WITH every reading it was
+derived from, which is the rule `catalyst_class` has been published under since
+it existed. A reader who would put the line at 2.5 rather than 3 can see the
+range in average ranges, the net travel in average ranges, the regime window,
+the gap direction and the threshold the counts were taken at, all on the same
+row and the same card, and re-derive the call. That is the difference between
+a verdict and a summary of measurements, and it is the same difference the map
+itself rests on: descriptive, and wrong only in the way a description can be.
+
+    The alternative considered was publishing the readings and NOT the word.
+    Rejected because the word is what makes the readings legible: "held a range
+    3.0 ranges wide and today's price is above it" is the breakaway, and asking
+    every reader to assemble that themselves gets it assembled inconsistently
+    or not at all. `claim_a_gap_type_never_travels_without_its_inputs` is what
+    keeps the word and the readings from being separable.
+
+**And the fifth word that was not added.** A gap AGAINST an established trend
+is neither a continuation nor an exhaustion of a move it opposes. It comes out
+`common`, which is the honest answer: naming it would be naming something this
+record has never measured, and the regime columns beside it already say the
+trend was there and the gap went the other way.
+
 ## 2026-09-08, twentieth: a map instead of a level, and the ledger keeps its two numbers
 
 **The question.** Having established that `pm_high` and `pm_low` are not levels

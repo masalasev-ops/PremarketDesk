@@ -2313,6 +2313,207 @@ def attach_float_rotation(candidates: list[dict[str, Any]], packet: Packet) -> N
         )
 
 
+def short_interest_cache_path():
+    """Resolved at CALL time, never captured at import.
+
+    A module level Path built from config.DATA_DIR is frozen at import and the
+    test sandbox cannot redirect it, which is why conftest keeps a list of the
+    modules that did it anyway. Reading the attribute here means there is
+    nothing to add to that list.
+    """
+    return config.DATA_DIR / "short-interest.json"
+
+
+def _short_interest_from(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Shares short and the date it was taken, out of a fundamentals record.
+
+    TECHNICALS IS WHERE IT ACTUALLY IS, measured rather than assumed. On
+    2026-09-09 over QCOM, BE and NOK, SharesStats.SharesShort came back null on
+    all three while Technicals.SharesShort carried 33,274,306, 18,260,304 and
+    43,163,877. SharesStats is still read first, because it is the block the
+    field belongs in and the vendor may populate it, and because reading a
+    populated block first costs nothing.
+
+    NEITHER BLOCK CARRIES A DATE on any of the three, so as_of comes back None
+    and the row's age column says how long ago this project fetched the figure
+    rather than how old the figure is. See store's note on that column.
+
+    Nothing is computed here: the ratio and the days to cover are worked out at
+    the caller against denominators this project already publishes, so there is
+    one float and one average volume in play rather than the vendor's and ours.
+    """
+    for block_name in ("SharesStats", "Technicals"):
+        block = payload.get(block_name)
+        if not isinstance(block, dict):
+            continue
+        shares = _as_float(block.get("SharesShort"))
+        if shares is None or shares < 0:
+            continue
+        return {
+            "shares_short": shares,
+            "as_of": (str(block.get("SharesShortDate") or "").strip() or None),
+            "dated": bool(str(block.get("SharesShortDate") or "").strip()),
+            "source": f"fundamentals {block_name}.SharesShort",
+        }
+    return None
+
+
+def attach_short_interest(api: eodhd.EodhdClient, candidates: list[dict[str, Any]],
+                          packet: Packet, thin: bool = False) -> None:
+    """Short interest beside the map, LABELLED CONTEXT AND READ BY NOTHING.
+
+    Not a screen, not a score component, not a tiebreak. CRITERIA [Short
+    interest] carries the reason: the relation between the raw short interest
+    ratio and future returns largely disappears once what short sellers know is
+    controlled for, so this is evidence about who is positioned and not about
+    what happens next. It sits next to the daily map because both answer "what
+    is the ground here", and it is kept away from the rank for the same reason
+    the map publishes no entry.
+
+    THE THREE FLOAT READINGS ARE PUT IN ONE UNIT ON ONE ROW. shares_float is
+    the denominator [Float rotation] already divides by, recorded so the ratio
+    beside it can be checked rather than trusted. pm_volume_pct_float is that
+    same rotation said in percent. short_interest_pct_float divides the
+    vendor's shares short by the SAME float, never by the vendor's own percent
+    field, so all three sit on one denominator.
+
+    DAYS TO COVER IS COMPUTED HERE from avg_volume_20d rather than read out of
+    the vendor's ShortRatio, for the same reason: this project already measures
+    a twenty session average volume and carries its session count, and a vendor
+    ratio taken over some other window would look like the same statistic.
+
+    A HYPHENATED CLASS IS REFUSED OUTRIGHT. eodhd.fundamentals records that
+    SharesFloat on a class row is the PARENT company's, LEN-B reporting a float
+    six times its own shares outstanding, and a shares short figure filed under
+    the same line cannot be trusted to be this class either. Null with that
+    reason beats a number from another security.
+
+    TEN CREDITS A CALL, the dearest in [Quota costs], so it is cached with an
+    age and skipped whole on the thin quota path. Exchanges publish twice a
+    month, so a cached record inside [Short interest] max_age_days is not stale
+    evidence, it is the same fortnightly figure the vendor would answer with.
+    """
+    max_age = _CRIT.integer("short_interest", "max_age_days")
+    today = ettime.today_et()
+    path = short_interest_cache_path()
+    cache: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            cache = json.loads(path.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError) as exc:
+            packet.gap(f"the short interest cache at {path.name} could not be read "
+                       f"({exc}), so every name is refetched or left null")
+            cache = {}
+    fetched = 0
+
+    for candidate in candidates:
+        symbol = candidate["symbol"]
+        quote = candidate.get("quote") or {}
+        share_float = _as_float(quote.get("sharesFloat"))
+        rotation = candidate.get("pm_float_rotation")
+        candidate["shares_float"] = share_float
+        candidate["pm_volume_pct_float"] = (
+            None if rotation is None else round(rotation * 100.0, 4))
+        candidate["short_interest"] = None
+        candidate["short_interest_reason"] = None
+
+        if "-" in symbol.split(".")[0]:
+            candidate["short_interest_reason"] = (
+                "this is a hyphenated share class, and the vendor files the "
+                "parent company's share counts under a class row: no figure "
+                "here would be about this security")
+            continue
+        if share_float is None or share_float <= 0:
+            candidate["short_interest_reason"] = (
+                "there is no sharesFloat on the delayed quote, so short "
+                "interest has no denominator to be a percentage of")
+            continue
+
+        record = cache.get(symbol) or cache.get(symbol.split(".")[0])
+        age = _cache_age_days((record or {}).get("fetched_at"), today)
+        # A STALE FIGURE IS NOT NOTHING, and throwing it away for being stale
+        # would be this project's own mistake in reverse. The age is a column,
+        # so a reader can judge a fortnight old reading for themselves; what
+        # they cannot judge is a blank. So a failed or skipped refresh keeps
+        # whatever was cached and says why it was not refreshed, and only a
+        # name with NO cached record at all comes back null.
+        if record is None or age is None or age > max_age:
+            how_old = "an unreadable number of" if age is None else str(age)
+            stale = None if record is None else (
+                f"the cached figure is {how_old} day(s) old, past the "
+                f"{max_age} day age this file allows, and is published with "
+                "its age rather than dropped")
+            if thin:
+                candidate["short_interest_reason"] = (
+                    "the fundamentals call was skipped on the thin quota path. "
+                    + (stale or "There is no cached record for this name."))
+                if record is None:
+                    continue
+            else:
+                payload, error = api.fundamentals(symbol)
+                fetched += 1
+                found = _short_interest_from(payload or {}) if not error else None
+                if found:
+                    record = dict(found)
+                    record["fetched_at"] = today.isoformat()
+                    cache[symbol] = record
+                    age = 0
+                    candidate["short_interest_reason"] = None
+                else:
+                    why = (f"the fundamentals call for {symbol} did not answer: "
+                           f"{error}" if error else
+                           "the fundamentals record carried no shares short figure")
+                    candidate["short_interest_reason"] = (
+                        why + ". " + (stale or "There is no cached record for "
+                                      "this name."))
+                    if record is None:
+                        continue
+
+        shares_short = _as_float(record.get("shares_short"))
+        if shares_short is None:
+            candidate["short_interest_reason"] = (
+                "the cached record carried no shares short figure")
+            continue
+        average_volume = candidate.get("avg_volume_20d")
+        candidate["short_interest"] = {
+            "shares": shares_short,
+            "pct_float": round(shares_short / share_float * 100.0, 3),
+            "days_to_cover": (round(shares_short / average_volume, 2)
+                              if average_volume else None),
+            "days_to_cover_basis": (
+                f"shares short over the {candidate.get('avg_volume_20d_sessions') or 0} "
+                "session average volume measured by this scan"
+                if average_volume else
+                "no average volume was measured, so there is no days to cover"),
+            "as_of": record.get("as_of"),
+            "fetched_days_ago": age,
+            "source": record.get("source"),
+        }
+
+    if fetched:
+        # Named as spend, because ten credits a call is the dearest line in
+        # [Quota costs] and a reader of the packet should see what it bought.
+        packet.gap(f"short interest: {fetched} fundamentals call(s) at ten credits "
+                   f"each, for names with no cached figure inside {max_age} days. "
+                   "It is context beside the map and is read by no screen, no "
+                   "score and no ranking.")
+    if cache:
+        try:
+            files.write_json_atomically(path, cache)
+        except OSError as exc:
+            packet.gap(f"the short interest cache could not be written ({exc}), so "
+                       "tomorrow will refetch what today already paid for")
+
+
+def _cache_age_days(stamp: Any, today) -> int | None:
+    """Whole days between a cached fetch date and today, or None if unreadable."""
+    try:
+        when = ettime.parse_date(str(stamp))
+    except (TypeError, ValueError):
+        return None
+    return (today - when).days
+
+
 # ---------------------------------------------------------- 6. catalyst news
 
 def _publisher_from(link: str | None) -> str | None:
@@ -5987,6 +6188,10 @@ def build_packet() -> dict[str, Any]:
         # After the quotes, which carry sharesFloat, and after the RVOL pass,
         # whose reason string this one quotes when it has to stand in.
         attach_float_rotation(candidates, packet)
+        # After the rotation, whose ratio it restates in percent, and after
+        # attach_daily_history, whose average volume is the days to cover
+        # denominator. Context only: no screen, no score and no rank reads it.
+        attach_short_interest(api, candidates, packet, thin)
         if not thin:
             attach_catalysts(api, candidates, packet)
         # After the catalysts, whose headlines it weighs, and after attach_gap,
@@ -6537,6 +6742,28 @@ def write_packet(payload: dict[str, Any], overwrite: bool = False) -> Any:
     return path
 
 
+def _short_interest_columns(candidate: dict[str, Any]) -> dict[str, Any]:
+    """The float and short interest context, flattened for one picks row.
+
+    EVERY COLUMN ON EVERY ROW, to None where there is nothing to say, for the
+    reason structure.columns() sets all of its: a partial dict leaves whatever
+    a previous run wrote in place, and a reading that got worse would read as
+    one that never changed.
+    """
+    found = candidate.get("short_interest") or {}
+    return {
+        "shares_float": candidate.get("shares_float"),
+        "pm_volume_pct_float": candidate.get("pm_volume_pct_float"),
+        "short_interest_shares": found.get("shares"),
+        "short_interest_pct_float": found.get("pct_float"),
+        "short_interest_days_to_cover": found.get("days_to_cover"),
+        "short_interest_as_of": found.get("as_of"),
+        "short_interest_fetched_days_ago": found.get("fetched_days_ago"),
+        "short_interest_source": found.get("source"),
+        "short_interest_reason": candidate.get("short_interest_reason"),
+    }
+
+
 def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
     """One picks row per candidate, upserted on (date, ticker).
 
@@ -6563,6 +6790,7 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
         print(f"scan: picks rows will carry source='test' ({why})")
 
     written = 0
+    computed_at = ettime.now_et().isoformat()
     with store.session() as connection:
         store.init(connection)
         for candidate in payload.get("candidates", []):
@@ -6617,6 +6845,14 @@ def write_picks(payload: dict[str, Any], force_test: bool = False) -> int:
                 "score_unavailable": ", ".join(candidate.get("score_unavailable") or []) or None,
                 "pool_source": ", ".join(candidate.get("pool_source") or []) or None,
                 "pool_tier": candidate.get("pool_tier"),
+                **structure.columns(
+                    candidate.get("daily_structure"),
+                    reason=None if candidate.get("daily_structure") else
+                    "no end of day history arrived for this name, so no map "
+                    "was drawn"),
+                "ds_computed_at": computed_at,
+                "ds_computed_by": "scan",
+                **_short_interest_columns(candidate),
             })
             written += 1
         connection.commit()

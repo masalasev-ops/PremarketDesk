@@ -521,6 +521,168 @@ _PICKS_LATER_COLUMNS = (
     # project has now confused them under four other names.
     ("fill_plausible", "TEXT"),
     ("fill_plausible_reason", "TEXT"),
+    # THE DAILY CONTEXT MAP, one column per reading, added 2026-09-09.
+    #
+    # WHY COLUMNS AND NOT ONE JSON BLOB. The map existed from 2026-09-08 and
+    # was drawn on a card and kept nowhere, which made it a decoration rather
+    # than an instrument: nothing could ask whether a name that gapped out of a
+    # 60 session base behaved differently from one that gapped inside it,
+    # because no row recorded which of those it was. A blob would store the
+    # same bytes and answer none of those questions, since the ledger filters
+    # and groups on these and SQLite cannot index inside a string.
+    #
+    # NAMED BY ROLE AND NOT BY SESSION COUNT. ds_high_medium, never ds_high_60.
+    # The counts are [Daily structure] knobs, and a column named for one starts
+    # lying the day it moves while every historical row keeps the old meaning.
+    # ds_medium_sessions carries the window each row was actually measured
+    # over, which is the fill_band_pct precedent: a row says what it was
+    # measured by rather than inheriting whatever the file says today.
+    #
+    # WRITTEN BY TWO PASSES THROUGH ONE FLATTENER. scan.write_picks for the
+    # live morning and night/backfill_structure.py for every session already in
+    # the record, both through morning/structure.py columns(). Two flatteners
+    # would eventually disagree about what ds_pos_medium means, and a column
+    # whose meaning depends on which pass wrote it cannot be grouped on.
+    # test_regressions asserts the two lists are the same list.
+    #
+    # NULL IS NEVER ZERO HERE either. ds_short_reason carries why a map was not
+    # drawn, and each window nulls itself independently: a row with 40 sessions
+    # of history behind it has a short window, no long one, and no lie.
+    ("ds_sessions", "INTEGER"),
+    ("ds_first_session", "TEXT"),
+    ("ds_last_session", "TEXT"),
+    ("ds_short_reason", "TEXT"),
+    ("ds_adjustment_steps", "TEXT"),
+    # What the levels were restated by, and the price they were read against.
+    # 1.0 or NULL means the vendor's own basis, which for the morning is this
+    # morning. A backfilled row carries the adjustment factor of its own
+    # session's bar, because the pm_high beside it is in that session's money
+    # and a split since then would leave one row holding two scales.
+    ("ds_basis_factor", "REAL"),
+    ("ds_price", "REAL"),
+    # Why a map that WAS drawn has nothing to read against itself. A separate
+    # absence from ds_short_reason: a row with a year of bars and no price
+    # still carries every level it measured, and folding the two together
+    # would throw those away to report the wrong one.
+    ("ds_price_reason", "TEXT"),
+    ("ds_atr", "REAL"),
+    ("ds_atr_pct", "REAL"),
+    ("ds_atr_sessions", "INTEGER"),
+    ("ds_up_closes", "INTEGER"),
+    ("ds_up_closes_of", "INTEGER"),
+    # The count travels with the mean, as it does on avg_volume_20d. `of` is
+    # how wide the window was, `sessions` how many of those carried a volume.
+    ("ds_avg_volume", "REAL"),
+    ("ds_avg_volume_sessions", "INTEGER"),
+    ("ds_avg_volume_of", "INTEGER"),
+    # The window's whole range in units of one normal day's range. A coiled
+    # name and an extended name are different objects and position_pct alone
+    # cannot tell them apart: two names sit at the same position inside ranges
+    # four apart.
+    ("ds_consolidation_sessions", "INTEGER"),
+    ("ds_consolidation_range", "REAL"),
+    ("ds_consolidation_range_pct", "REAL"),
+    ("ds_consolidation_ratio", "REAL"),
+    # THE GAP CONTEXT, and the classification never travels without the
+    # readings it was derived from. ds_gap_type is a reading of the six columns
+    # under it against two SEED lines in [Daily structure]; a reader who would
+    # put a line elsewhere re-derives it from those columns rather than taking
+    # the word, which is how catalyst_class is published.
+    ("ds_gap_pct", "REAL"),
+    ("ds_gap_direction", "TEXT"),
+    ("ds_gap_threshold_pct", "REAL"),
+    ("ds_regime", "TEXT"),
+    ("ds_regime_sessions", "INTEGER"),
+    ("ds_regime_direction", "TEXT"),
+    ("ds_regime_range_pct", "REAL"),
+    ("ds_regime_range_atr", "REAL"),
+    ("ds_regime_net_move_pct", "REAL"),
+    ("ds_regime_net_move_atr", "REAL"),
+    ("ds_gap_vs_regime", "TEXT"),
+    ("ds_gap_type", "TEXT"),
+    ("ds_gap_type_why", "TEXT"),
+    # How many of the last five sessions gapped at the [Day setup] line, and
+    # the RUN ending at the last of them. Different facts: three scattered
+    # through a week is a busy name, three in a row is the sequence the
+    # literature calls exhaustion, and a count alone cannot tell them apart.
+    ("ds_recent_gap_sessions", "INTEGER"),
+    ("ds_recent_gap_of", "INTEGER"),
+    ("ds_recent_gap_window", "INTEGER"),
+    ("ds_recent_gap_run", "INTEGER"),
+    # What gapping has historically done to THIS name, with its n. The one
+    # reading in the block that is evidence about the name rather than about
+    # gapping names, which is what desk/precedent.py answers.
+    ("ds_prior_gap_count", "INTEGER"),
+    ("ds_prior_gap_of", "INTEGER"),
+    ("ds_prior_gap_window", "INTEGER"),
+    ("ds_prior_gap_median_otc_pct", "REAL"),
+    ("ds_prior_gap_n", "INTEGER"),
+    # The three windows. ds_since_above_* is how many completed sessions ago
+    # this name last CLOSED above that window's high, which is what turns a
+    # level into a fact. It is never smaller than the window itself, because a
+    # close cannot exceed its own bar's high; NULL means no close above it
+    # anywhere in the history on file, which is the strongest of the readings
+    # and the one a zero would destroy.
+    ("ds_short_sessions", "INTEGER"),
+    ("ds_high_short", "REAL"),
+    ("ds_low_short", "REAL"),
+    ("ds_pos_short", "REAL"),
+    ("ds_since_above_short", "INTEGER"),
+    ("ds_since_above_short_date", "TEXT"),
+    ("ds_medium_sessions", "INTEGER"),
+    ("ds_high_medium", "REAL"),
+    ("ds_low_medium", "REAL"),
+    ("ds_pos_medium", "REAL"),
+    ("ds_since_above_medium", "INTEGER"),
+    ("ds_since_above_medium_date", "TEXT"),
+    ("ds_long_sessions", "INTEGER"),
+    ("ds_high_long", "REAL"),
+    ("ds_low_long", "REAL"),
+    ("ds_pos_long", "REAL"),
+    ("ds_since_above_long", "INTEGER"),
+    ("ds_since_above_long_date", "TEXT"),
+    ("ds_sma_fast_sessions", "INTEGER"),
+    ("ds_sma_fast", "REAL"),
+    ("ds_sma_fast_vs_pct", "REAL"),
+    ("ds_sma_slow_sessions", "INTEGER"),
+    ("ds_sma_slow", "REAL"),
+    ("ds_sma_slow_vs_pct", "REAL"),
+    # When the map on this row was computed, and by which pass. 'scan' is the
+    # morning writing its own; 'backfill' is night/backfill_structure.py
+    # rebuilding a session from bars dated up to that session only.
+    ("ds_computed_at", "TEXT"),
+    ("ds_computed_by", "TEXT"),
+    # FLOAT AND SHORT INTEREST, CONTEXT AND NOT SIGNAL, added 2026-09-09.
+    # Nothing screens or scores on any of these; see CRITERIA [Short interest]
+    # for the academic reason the relation between short interest and future
+    # returns is not one this desk will rank on.
+    #
+    # shares_float is the denominator [Float rotation] already divides by,
+    # recorded so the ratio beside it can be checked rather than trusted.
+    # pm_volume_pct_float is pm_float_rotation said in percent, on the row so
+    # the three float readings sit in one unit.
+    ("shares_float", "REAL"),
+    ("pm_volume_pct_float", "REAL"),
+    # NEVER BACKFILLED. The fundamentals endpoint answers with today's short
+    # interest and carries no history, so a 2025 row could only be handed a
+    # 2026 figure, and a column that reads as a measurement of that session
+    # would not be one. Backfilled rows carry NULL and the reason.
+    ("short_interest_shares", "REAL"),
+    ("short_interest_pct_float", "REAL"),
+    ("short_interest_days_to_cover", "REAL"),
+    # WHAT THE VENDOR DATES AND WHAT IT DOES NOT. short_interest_as_of is the
+    # settlement date, when the payload carries one. Measured on 2026-09-09
+    # over QCOM, BE and NOK it carries none: SharesStats.SharesShort is null on
+    # all three and Technicals holds the figure with no date beside it. So the
+    # column below is how long ago THIS PROJECT fetched the number, which is a
+    # LOWER BOUND on its age and not its age: exchanges publish twice a month
+    # on a settlement lag, so the reading is that many days old plus up to
+    # about three weeks nobody here can see. Named for what it measures rather
+    # than for what a reader would want it to measure.
+    ("short_interest_as_of", "TEXT"),
+    ("short_interest_fetched_days_ago", "INTEGER"),
+    ("short_interest_source", "TEXT"),
+    ("short_interest_reason", "TEXT"),
 )
 
 

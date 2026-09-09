@@ -780,6 +780,50 @@ DECK_JS = r"""
   function dsWindowWord(n) {
     return n >= 200 ? "One year" : n >= 60 ? "One quarter" : "One month";
   }
+  /* The gap in the context of what the name was already doing. The TYPE is
+     never printed without the readings it came out of: it is derived from two
+     SEED lines in CRITERIA, and a one word verdict with its inputs hidden is
+     exactly what this desk does not publish. */
+  var GAP_TYPE_WORD = {
+    common: "Common gap", breakaway: "Breakaway gap",
+    runaway: "Continuation gap", exhaustion: "Exhaustion gap",
+    unknown: "Not classified"
+  };
+  function gapContext(g) {
+    if (!g) return "";
+    var out = '<div class="dsline"><span>Gap in context</span><span class="n">' +
+      esc(GAP_TYPE_WORD[g.t] || g.t || "Not classified") + "</span></div>";
+    if (g.rg) {
+      var word = g.rg.call === "consolidation" ? "held a range"
+        : g.rg.call === "trend" ? "trended " + esc(g.rg.dir || "")
+        : "was neither coiled nor trending over";
+      out += '<div class="dsline"><span>Before today</span><span class="n">' +
+        esc(word) + " " + g.rg.n + " sessions, " + n2(g.rg.ra) +
+        " ranges wide, " + n2(g.rg.na) + " travelled</span></div>";
+    }
+    if (g.vs) {
+      out += '<div class="dsline"><span>Price against that range</span>' +
+        '<span class="n">' + esc(g.vs) + "</span></div>";
+    }
+    if (g.rc) {
+      out += '<div class="dsline"><span>Recent sessions gapping ' +
+        esc(g.thr || "") + " percent</span>" + '<span class="n">' + g.rc.c +
+        " of " + g.rc.of + ", " + g.rc.run + " in a row</span></div>";
+    }
+    if (g.pg && g.pg.c != null) {
+      out += '<div class="dsline"><span>Its own past gaps</span>' +
+        '<span class="n">' + g.pg.c + " in " + g.pg.of + " sessions" +
+        (g.pg.med == null ? "" : ", median open to close " + pct(g.pg.med) +
+          " on " + g.pg.n) + "</span></div>";
+    }
+    if (g.why) {
+      out += '<div class="dsnote">' + esc(g.why) +
+        ". This is a description of where the gap happened and not a reading " +
+        "of what it will do.</div>";
+    }
+    return out;
+  }
+
   function dailyStructure(c) {
     var d = c.ds;
     if (!d) {
@@ -788,6 +832,13 @@ DECK_JS = r"""
         "there is no map. That is an absence and not an empty range.</div></div>";
     }
     var head = '<div class="ds"><div class="panel-title">Daily structure</div>';
+    if (d.pre) {
+      // Not the vendor's silence. This session ran before the map existed, so
+      // its packet carries none; the map itself is on the picks row for it.
+      return head + '<div class="empty">This session ran before the daily map ' +
+        "was built, so its packet carries none. The map for it is in the " +
+        "record, put there from bars dated up to that session only.</div></div>";
+    }
     if (d.short) {
       return head + '<div class="empty">' + esc(d.short) + "</div></div>";
     }
@@ -803,6 +854,13 @@ DECK_JS = r"""
         : p > 100 ? "above the high"
         : p < 0 ? "below the low"
         : p.toFixed(0) + "% of the range";
+      // WHEN IT LAST CLOSED ABOVE THE HIGH, which is what turns the level
+      // into a fact. It can never be fewer sessions than the window itself,
+      // because a close cannot exceed its own bar's high, and a blank means no
+      // close above it anywhere on file rather than a number nobody found.
+      var above = w.sa == null
+        ? "not closed above it on file"
+        : "last closed above it " + w.sa + " sessions ago";
       out += '<div class="dsrow"><div class="dslab"><b>' +
         esc(dsWindowWord(w.n)) + "</b><span>" + w.n + " sessions \u00b7 " +
         esc(where) + "</span></div>" +
@@ -810,7 +868,9 @@ DECK_JS = r"""
           '<i class="' + (p > 100 || p < 0 ? "out" : "") + '" style="left:calc(' +
           clamped.toFixed(1) + '% - 1px)"></i>') + "</div>" +
         '<div class="dsends"><span>' + n2(w.lo) + "</span><span>" +
-        n2(w.hi) + "</span></div></div>";
+        n2(w.hi) + "</span></div>" +
+        '<div class="dsnote" style="margin-top:3px">' + esc(above) +
+        "</div></div>";
     });
 
     (d.sma || []).forEach(function (s) {
@@ -824,10 +884,24 @@ DECK_JS = r"""
         " sessions</span>" + '<span class="n">' + n2(d.atr) +
         (d.atrp == null ? "" : "  " + n2(d.atrp) + "% of price") + "</span></div>";
     }
+    if (d.coil && d.coil.r != null) {
+      // The window's whole range said in units of one normal day's range. A
+      // coiled name and an extended one read alike on the tracks above: both
+      // show a position inside a range and neither says how wide it is.
+      out += '<div class="dsline"><span>' + d.coil.n +
+        " session range, in average ranges</span>" +
+        '<span class="n">' + n2(d.coil.r) + "</span></div>";
+    }
+    if (d.vol && d.vol.v != null) {
+      out += '<div class="dsline"><span>Average daily volume</span>' +
+        '<span class="n">' + big(d.vol.v) + " over " + d.vol.n + " of " +
+        d.vol.of + "</span></div>";
+    }
     if (d.up) {
       out += '<div class="dsline"><span>Sessions closing up</span>' +
         '<span class="n">' + d.up.u + " of " + d.up.of + "</span></div>";
     }
+    out += gapContext(d.gc);
 
     out += '<div class="dsnote">Where this name sits in its own history, from ' +
       (d.n || 0) + " completed session(s) to " + esc(d.last || "?") +

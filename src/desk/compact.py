@@ -160,13 +160,26 @@ def _frozen_run_bars(session_date: str,
     return out
 
 
-def _structure(block: dict[str, Any] | None) -> dict[str, Any] | None:
+def _structure(candidate: dict[str, Any]) -> dict[str, Any] | None:
     """The daily context map, shortened for the payload.
 
     Short keys for the same reason every other block here has them: the whole
     payload is gzipped and base64 inlined into one static file, and a name
     repeated once per candidate per window is paid for on every load.
+
+    TWO ABSENCES AND THEY ARE NOT THE SAME SENTENCE. A packet written before
+    2026-09-08 has no daily_structure key at all, because the map did not
+    exist; a packet written after it carries the key set to None when the
+    vendor's end of day history did not arrive. The card said the second thing
+    for both until 2026-09-09, so every archived session on the desk blamed the
+    vendor for an absence that was this project's own release date. The map for
+    those sessions IS on the picks rows, put there point in time by
+    night/backfill_structure.py; what is missing is the packet, and the card
+    now says so.
     """
+    if "daily_structure" not in candidate:
+        return {"pre": True}
+    block = candidate.get("daily_structure")
     if not block:
         return None
     out: dict[str, Any] = {
@@ -182,14 +195,53 @@ def _structure(block: dict[str, Any] | None) -> dict[str, Any] | None:
         "atr": block.get("atr"),
         "atrp": block.get("atr_pct"),
         "atrn": block.get("atr_sessions"),
+        # sa is how many sessions ago this name last CLOSED above the window's
+        # high. Null means no close above it anywhere in the history on file,
+        # which is a stronger reading than a large number and not a missing one.
         "w": [{"n": w["sessions"], "hi": w["high"], "lo": w["low"],
-               "pos": w["position_pct"], "from": w["from"]}
+               "pos": w["position_pct"], "from": w["from"],
+               "sa": w.get("since_close_above"),
+               "sad": w.get("since_close_above_date")}
               for w in (block.get("windows") or [])],
         "sma": [{"n": s["sessions"], "v": s["value"], "vs": s["price_vs_pct"]}
                 for s in (block.get("sma") or [])],
     })
     if block.get("up_closes"):
         out["up"] = {"u": block["up_closes"]["up"], "of": block["up_closes"]["of"]}
+    if block.get("average_volume"):
+        volume = block["average_volume"]
+        out["vol"] = {"v": volume["value"], "n": volume["sessions"],
+                      "of": volume["of"]}
+    if block.get("consolidation"):
+        coil = block["consolidation"]
+        out["coil"] = {"n": coil["sessions"], "r": coil["ratio"],
+                       "rng": coil["range"], "rp": coil["range_pct"]}
+    context = block.get("gap_context") or {}
+    if context:
+        regime = context.get("regime") or {}
+        recent = context.get("recent_gaps") or {}
+        prior = context.get("prior_gaps") or {}
+        # THE TYPE NEVER TRAVELS WITHOUT ITS INPUTS, on the card as in the
+        # table. A one word classification with the readings behind it hidden
+        # is a verdict, and this project publishes those only where something
+        # measured them.
+        out["gc"] = {
+            "t": context.get("type"), "why": context.get("type_why"),
+            "gap": context.get("gap_pct"), "dir": context.get("gap_direction"),
+            "thr": context.get("threshold_rule"),
+            "vs": context.get("gap_vs_regime"),
+            "rg": ({"n": regime.get("sessions"), "call": regime.get("call"),
+                    "dir": regime.get("direction"),
+                    "ra": regime.get("range_atr"),
+                    "na": regime.get("net_move_atr"),
+                    "rp": regime.get("range_pct"),
+                    "np": regime.get("net_move_pct")} if regime else None),
+            "rc": ({"c": recent.get("count"), "of": recent.get("of"),
+                    "run": recent.get("run")} if recent else None),
+            "pg": ({"c": prior.get("count"), "of": prior.get("of"),
+                    "med": prior.get("median_open_to_close_pct"),
+                    "n": prior.get("n")} if prior else None),
+        }
     return out
 
 
@@ -392,7 +444,7 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             # support. See CRITERIA.md [Daily structure].
             "lref_hi": c.get("entry_ref"), "lref_lo": c.get("stop_ref"),
             # The daily context map. Describes, prescribes nothing.
-            "ds": _structure(c.get("daily_structure")),
+            "ds": _structure(c),
             "rvol": c.get("pm_rvol"), "pm_vol": c.get("pm_volume"),
             "sigma": c.get("move_sigma"),
             "score": c.get("score"), "conv": c.get("conviction"),

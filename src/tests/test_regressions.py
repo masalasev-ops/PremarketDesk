@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and thirty two claims, a count read off
+and the two pages. It now carries two hundred and thirty six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13217,6 +13217,14 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         230: "two hundred and thirty",
         231: "two hundred and thirty one",
         232: "two hundred and thirty two",
+        233: "two hundred and thirty three",
+        234: "two hundred and thirty four",
+        235: "two hundred and thirty five",
+        236: "two hundred and thirty six",
+        237: "two hundred and thirty seven",
+        238: "two hundred and thirty eight",
+        239: "two hundred and thirty nine",
+        240: "two hundred and forty",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -13947,6 +13955,18 @@ def claim_every_production_read_of_picks_is_fenced(failures: list[str]) -> None:
         # source as a parameter rather than leaving it open.
         ("research/replay_daily.py", "SELECT ticker FROM picks"),
         ("research/replay_daily.py", "SELECT COUNT(*) FROM picks"),
+        # The structural map backfill, which has to see EVERY source for a
+        # different reason from the three above, and the difference is what
+        # makes it safe. It is not a reader that answers a question over a
+        # population; it is a WRITER that measures one row from that row's own
+        # daily history and puts the result back on the same row. Nothing is
+        # pooled, nothing is counted across sources, and a source filter would
+        # simply leave live, test or reconstructed rows without a map while the
+        # other two had one, which is the state that would make a later
+        # aggregate wrong rather than the state that prevents it. The source
+        # column is not written and --source narrows the pass when a caller
+        # wants one kind. See CRITERIA [Daily structure] and doc/STRUCTURAL_MAP.
+        ("night/backfill_structure.py", "SELECT date, ticker, source, gap_pct"),
     }
 
     unfenced: list[str] = []
@@ -19214,6 +19234,274 @@ def claim_the_sweep_takes_only_this_projects_stale_sandboxes(
           "recovered are counted rather than estimated")
 
 
+def _map_bars(count: int, start: str = "2024-01-01") -> list[dict[str, Any]]:
+    """A synthetic daily series that MOVES, so a look at the future would show.
+
+    A flat series would pass every point in time claim below without measuring
+    anything: if the last hundred sessions look like the first hundred, a
+    window that includes them is the same window. The second half here trends
+    hard and widens, so a map that saw one extra bar reports a different high,
+    a different range and a different position.
+    """
+    import datetime as dt
+
+    out: list[dict[str, Any]] = []
+    day = dt.date.fromisoformat(start)
+    price = 40.0
+    while len(out) < count:
+        if day.weekday() < 5:
+            step = 0.02 if len(out) < count // 2 else 0.35
+            price += step * (1 if (len(out) % 7) else -2)
+            opened = price - 0.1
+            out.append({"date": day.isoformat(), "open": round(opened, 4),
+                        "high": round(price + 0.9, 4), "low": round(opened - 0.8, 4),
+                        "close": round(price, 4), "adjusted_close": round(price, 4),
+                        "volume": 1_000_000 + len(out)})
+        day += dt.timedelta(days=1)
+    return out
+
+
+def claim_a_backfilled_level_cannot_see_its_own_future(failures: list[str]) -> None:
+    """A past session's map is computed from bars dated up to that session only.
+
+    THE ONE WAY THIS BACKFILL COULD HAVE CORRUPTED THE RECORD IN SILENCE, and
+    it leaves no trace to find later. Today's bars make every historical level
+    better than it was: a 60 session high that has seen the following month
+    knows where the name actually went, a base that broke is no longer a base,
+    and a range position measured through the move is a position inside the
+    answer. Every one of those numbers still looks entirely plausible in the
+    column, because the arithmetic is right; only the inputs are from the
+    future, and no downstream check can see that.
+
+    So: rows_for_symbol takes the WHOLE series and slices it itself, and this
+    hands it the whole series and one truncated at the row's own date and fails
+    if a single column moves between them.
+
+    IT ALSO CHECKS THE CLAIM HAS TEETH. A test that compares two identical
+    computations passes when the slicing is deleted, if the extra bars happen
+    not to matter. The last assertion measures the same window WITHOUT the
+    slice and requires it to differ, so a run in which the guard is doing
+    nothing fails rather than reassures.
+
+    AND THE SESSION'S OWN BAR IS OUT. It carries the high and low of the day
+    the row is about, and a map including it would let the session explain
+    itself: a name that ran to a new high would show a position at the top of a
+    window that contains the run.
+    """
+    from morning import structure
+    from night import backfill_structure
+
+    bars = _map_bars(320)
+    session = bars[200]["date"]
+    row = {"date": session, "ticker": "MAP.US", "gap_pct": 5.0}
+
+    whole = backfill_structure.rows_for_symbol(bars, [row])[session]
+    sliced = backfill_structure.rows_for_symbol(
+        [b for b in bars if b["date"] <= session], [row])[session]
+    moved = sorted(k for k in whole if whole[k] != sliced.get(k))
+    if moved:
+        failures.append(
+            f"{len(moved)} column(s) on a backfilled 2024 row change when later "
+            f"bars are appended to the series: {', '.join(moved[:6])}. The map "
+            "for a past session is reading the future, which is undetectable "
+            "downstream because every number stays plausible")
+
+    # The session's own bar is excluded, so its high cannot reach the window.
+    loud = [dict(b) for b in bars if b["date"] <= session]
+    loud[-1] = dict(loud[-1], high=9_999.0)
+    if backfill_structure.rows_for_symbol(loud, [row])[session]["ds_high_short"] \
+            == 9_999.0:
+        failures.append(
+            "the mapped session's own bar reached its own 20 session high, so "
+            "the map describes the gap rather than the ground it happened on")
+
+    # And the guard is doing something: the unsliced measurement differs.
+    naive = structure.measure(bars, 100.0)
+    naive_high = (naive.get("windows") or [{}])[0].get("high")
+    if naive_high == whole["ds_high_short"]:
+        failures.append(
+            "measuring over the whole series gives the same 20 session high as "
+            "measuring over the slice, so this claim would pass with the "
+            "slicing removed and is checking nothing")
+
+    print(f"  point in time  a 2024 row's map is unchanged by 119 later "
+          f"sessions, and its own session's bar is out of every window")
+
+
+def claim_the_map_columns_are_one_list(failures: list[str]) -> None:
+    """One flattener writes the map, and the table declares exactly what it emits.
+
+    TWO WRITERS, ONE MAPPING. scan.write_picks fills these columns for the live
+    morning and night/backfill_structure.py fills them for every session
+    already in the record. If each built its own dictionary they would drift,
+    and a column whose meaning depends on which pass wrote it cannot be grouped
+    on, which is the entire reason the map was moved out of a card and into the
+    table. Both go through morning/structure.py columns().
+
+    AND THE TABLE HAS TO HOLD WHAT THEY WRITE. store.upsert builds its INSERT
+    from the record's keys, so a column emitted here and not declared in
+    _PICKS_LATER_COLUMNS does not degrade, it raises on the first write. The
+    two provenance columns are the only declared names columns() does not
+    emit, because a pure flattener has no clock and no name for itself.
+    """
+    import inspect
+
+    from core import store
+    from morning import scan
+    from morning import structure
+    from night import backfill_structure
+
+    emitted = set(structure.columns(None))
+    declared = {name for name, _ in store._PICKS_LATER_COLUMNS if name.startswith("ds_")}
+    missing = sorted(emitted - declared)
+    if missing:
+        failures.append(
+            f"{len(missing)} map column(s) are emitted and never declared on "
+            f"picks, so the first write raises: {', '.join(missing[:6])}")
+    spare = sorted(declared - emitted - {"ds_computed_at", "ds_computed_by"})
+    if spare:
+        failures.append(
+            f"{len(spare)} map column(s) are declared on picks and written by "
+            f"nothing: {', '.join(spare[:6])}")
+
+    short = set(scan._short_interest_columns({}))
+    short_declared = {name for name, _ in store._PICKS_LATER_COLUMNS
+                      if name.startswith("short_interest")
+                      or name in ("shares_float", "pm_volume_pct_float")}
+    if short - short_declared:
+        failures.append(
+            "the short interest flattener emits column(s) picks does not "
+            f"declare: {', '.join(sorted(short - short_declared))}")
+
+    for name, function in (("scan.write_picks", scan.write_picks),
+                           ("backfill_structure.rows_for_symbol",
+                            backfill_structure.rows_for_symbol)):
+        if "structure.columns(" not in inspect.getsource(function):
+            failures.append(
+                f"{name} does not go through structure.columns(), so the live "
+                "morning and the backfill can disagree about what a column on "
+                "one row means")
+
+    print(f"  map columns  {len(emitted)} emitted, all declared, both writers "
+          f"through one flattener")
+
+
+def claim_a_gap_type_never_travels_without_its_inputs(failures: list[str]) -> None:
+    """The classification is written with the readings it was derived from.
+
+    gap_type is a reading of measured numbers against two SEED lines, and a one
+    word verdict with those numbers hidden is a claim this record cannot back.
+    catalyst_class is published under exactly this rule, so a reader who would
+    draw the line elsewhere re-derives the call from the row rather than taking
+    the word.
+
+    THE ABSENCES DO NOT SHARE A SENTENCE either. Until they did not, a row with
+    a perfectly good year of bars and no price reported itself as one with no
+    history, which is a different thing to go and fix. Below the map's own
+    minimum there is no gap type at all rather than an "unknown" one, because
+    a name with fifteen sessions on file has no map to hang a classification
+    off; claim_the_daily_map_refuses_to_mislabel_short_history is where that
+    boundary is checked.
+    """
+    from core import criteria
+    from morning import structure
+
+    bars = _map_bars(300)
+    block = structure.measure(bars, bars[-1]["close"] * 1.09)
+    row = structure.columns(block)
+    if row["ds_gap_type"] in (None, "unknown"):
+        failures.append(
+            "a 300 session series with a nine percent gap classified as "
+            f"{row['ds_gap_type']!r}, so this claim is checking an empty case")
+    else:
+        needed = ("ds_regime", "ds_regime_sessions", "ds_regime_range_atr",
+                  "ds_regime_net_move_atr", "ds_gap_direction",
+                  "ds_gap_threshold_pct", "ds_gap_type_why")
+        blank = [key for key in needed if row[key] is None]
+        if blank:
+            failures.append(
+                f"ds_gap_type is {row['ds_gap_type']!r} with "
+                f"{', '.join(blank)} empty, so the card and the table publish a "
+                "classification whose inputs a reader cannot check")
+
+    minimum = criteria.load().integer("daily_structure", "min_sessions")
+    short = structure.columns(structure.measure(bars[:minimum - 1], 100.0))
+    if short["ds_gap_type"] is not None:
+        failures.append(
+            f"{minimum - 1} sessions of history, below the map's own minimum, "
+            f"produced gap type {short['ds_gap_type']!r}. There is no map to "
+            "classify against and the row should carry its reason instead")
+    if not short["ds_short_reason"]:
+        failures.append(
+            "a row below the map's minimum carries no reason for the blank, so "
+            "a name with no history reads as one nobody measured")
+
+    priceless = structure.columns(structure.measure(bars, None))
+    why = (priceless["ds_gap_type_why"] or "").lower()
+    if priceless["ds_gap_type"] != "unknown" or "no price" not in why:
+        failures.append(
+            "a map with a full history and no price does not say the price is "
+            f"what is missing: {priceless['ds_gap_type']!r}, "
+            f"{priceless['ds_gap_type_why']!r}")
+    if "not enough completed history" in why:
+        failures.append(
+            "a map with a full history and no price explains itself as one "
+            f"with no history: {priceless['ds_gap_type_why']!r}")
+
+    print("  gap type     never printed without its regime, its direction and "
+          "its threshold, and a missing price says so by name")
+
+
+def claim_no_context_column_reaches_eligibility_or_the_score(
+        failures: list[str]) -> None:
+    """The map and the short interest are described and never acted on.
+
+    THE WHOLE BOUNDARY THIS SECTION SITS BEHIND. The map exists because nothing
+    in this project's record supports publishing a level, and short interest is
+    carried because CRITERIA [Short interest] records that its relation to
+    future returns largely disappears once what short sellers know is
+    controlled for. Both are context. The failure mode is not that somebody
+    argues for scoring them, it is that a field on the candidate is convenient
+    and gets read by a function two screens away from this argument.
+
+    So the screens and the scorers are read for the names, in the file rather
+    than in a design note, because prose has never once stopped an addition.
+    """
+    import inspect
+
+    from core import criteria
+    from morning import scan
+
+    watched = ("daily_structure", "ds_", "short_interest", "gap_type",
+               "consolidation", "pm_volume_pct_float", "shares_float")
+    for name in ("evaluate_eligibility", "score_candidate", "score_roll",
+                 "stamp_all", "rank_by_measured_gap"):
+        function = getattr(scan, name, None)
+        if function is None:
+            failures.append(f"scan.{name} is gone, so this claim reads nothing")
+            continue
+        body = inspect.getsource(function).lower()
+        found = [word for word in watched if word in body]
+        if found:
+            failures.append(
+                f"scan.{name} reads {', '.join(found)}. The daily map and the "
+                "short interest are context: they describe where a name is and "
+                "are not evidence this record can admit, refuse or rank on")
+
+    crit = criteria.load()
+    for section in ("day_setup", "swing_setup"):
+        keys = [key for key in crit.section(section).singles()
+                if any(word.strip("_") in key for word in watched)]
+        if keys:
+            failures.append(
+                f"CRITERIA [{section}] has gained {', '.join(keys)}, so a "
+                "context reading has become a line a candidate passes or fails")
+
+    print("  context only  neither screen, neither scorer and no ranking reads "
+          "the map or the short interest")
+
+
+
 def main() -> int:
     failures: list[str] = []
     run_claim(failures, claim_the_november_transition, failures)
@@ -19456,6 +19744,11 @@ def main() -> int:
     run_claim(failures, claim_no_screen_prints_a_reference_level_as_advice, failures)
     run_claim(failures, claim_the_daily_map_refuses_to_mislabel_short_history, failures)
     run_claim(failures, claim_no_local_shadows_a_desk_helper, failures)
+    run_claim(failures, claim_a_backfilled_level_cannot_see_its_own_future, failures)
+    run_claim(failures, claim_the_map_columns_are_one_list, failures)
+    run_claim(failures, claim_a_gap_type_never_travels_without_its_inputs, failures)
+    run_claim(failures,
+              claim_no_context_column_reaches_eligibility_or_the_score, failures)
 
     if failures:
         for failure in failures:
