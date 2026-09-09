@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty claims, a count read off
+and the two pages. It now carries two hundred and forty one claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13225,6 +13225,9 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         238: "two hundred and thirty eight",
         239: "two hundred and thirty nine",
         240: "two hundred and forty",
+        241: "two hundred and forty one",
+        242: "two hundred and forty two",
+        243: "two hundred and forty three",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -19786,6 +19789,116 @@ def claim_a_stored_map_draws_the_same_card(failures: list[str]) -> None:
 
 
 
+
+def claim_the_documents_state_the_collector_window_the_code_runs(
+        failures: list[str]) -> None:
+    """README and both architecture pages name the window CRITERIA sets.
+
+    [Collector] stop_time moved from 09:25 to 10:30 on 2026-09-08 so the ladder
+    could watch the open. NINETEEN statements across four files went on saying
+    the socket closes at 09:25, and nobody noticed for a day, because the only
+    thing anyone checks in these documents is their COUNTS: how many test
+    modules, how many .bat files, how many write ups. A count is checked and a
+    time was not.
+
+    TWO OF THE NINETEEN WERE REASONS RATHER THAN DESCRIPTIONS, which is why
+    this is a claim and not a tidy up. tasks/register_tasks.ps1 armed the
+    socket cost probe at 10:00 BECAUSE that was "past the collector's 09:25
+    stop, so the account wide 50 symbol cap is free and this cannot starve the
+    morning it exists to make possible". After 2026-09-08 that sentence was
+    false and the schedule it justified would have taken symbols off the cap
+    the morning needs. The probe is armed by hand and none was armed in
+    between, so nothing ran; the reasoning had simply been overtaken while
+    still reading as current.
+
+    A document that describes a window the code does not run is worse than one
+    that describes none, because a reader checks it instead of the code.
+    """
+    import re
+
+    from core import config, criteria
+
+    crit = criteria.load()
+    start = crit.clock_text("collector", "start_time")
+    stop = crit.clock_text("collector", "stop_time")
+
+    for rel in ("README.md", "doc/ArchitecturePremarketdesk.html",
+                "doc/Premarketdesk_ADayRunArc.html"):
+        path = config.PROJECT_ROOT / rel
+        if not path.is_file():
+            failures.append(f"{rel} is gone, and it is one of the documents a "
+                            "reader uses to learn what the collector does")
+            continue
+        body = path.read_text(encoding="utf-8", errors="replace")
+        # THE PHRASINGS THAT ACTUALLY WENT STALE, and only those. A check that
+        # read every "04:00 to ..." near the word collector fails on prose that
+        # is not about the window at all: "the 04:00 to 07:20 stretch it never
+        # heard" is a measurement, and the 04:00 to 09:30 premarket session is
+        # not the socket's window either. A guard that cries on those gets
+        # switched off. What went wrong was narrower and is worth naming: every
+        # sentence that called a clock time the collector's STOP.
+        for line in body.split(chr(10)):
+            low = line.lower()
+            if "collector" not in low and "socket" not in low:
+                continue
+            # "its 09:25 stop", "the collector's 09:25 stop time", "until its
+            # 09:25 stop". A looser rule that also read "stop ... 08:45" caught
+            # "the morning's stops at the 08:45 cutoff", which is prose about
+            # something else entirely.
+            for found in re.findall(r"(\d\d:\d\d)\s*(?:et\s+)?stop", low):
+                if found != stop:
+                    failures.append(
+                        f"{rel} calls {found} the collector's stop, and "
+                        f"[Collector] stop_time is {stop}. A document "
+                        "describing a window the code does not run is worse "
+                        "than one describing none, because a reader checks it "
+                        "instead of the code")
+        # AND EVERY RANGE THE COLLECTOR IS NAMED IN FRONT OF. The stop
+        # phrasing above misses a bare label, "collector: live websocket minute
+        # bars, 04:00 to 09:25", which is how the arc page draws it and how a
+        # mutation run got past the first version of this claim. The collector
+        # word has to come BEFORE the range and close to it: one aria label
+        # carries "The premarket session runs 04:00 to 09:30" and "the
+        # collector covers 04:00 to 10:30" in the same sentence, and only the
+        # second is a claim about the socket.
+        # WHAT THIS DELIBERATELY DOES NOT REACH. The architecture page's module
+        # table heads its collector row with the file name, collect_premarket.py,
+        # and puts the range three table cells later. Widening the gap to cross
+        # that markup also lets the pattern run from a collector sentence into
+        # the quota day's own "04:00 to 20:00" and fail a clean tree, and a
+        # guard that cries on a correct document is one that gets switched off.
+        # A mutation run on 2026-09-09 caught three of four edits and left that
+        # cell: the cost of the fourth was the other three.
+        near = (r"(?:collector|socket)[^.<]{0,60}?" + re.escape(start) +
+                r"\s*(?:to|-)\s*(\d\d:\d\d)")
+        for found in sorted(set(re.findall(near, body, re.I))):
+            if found != stop:
+                failures.append(
+                    f"{rel} states a collector window of {start} to {found}, "
+                    f"and [Collector] stop_time is {stop}")
+
+        if (f"{start} to {stop}" not in body) and (f"{start}-{stop}" not in body):
+            failures.append(
+                f"{rel} never states the collector window, {start} to {stop}. "
+                "This claim then guards nothing in it, which is how the 09:25 "
+                "wording survived a day of being wrong")
+
+    # And the one off probe that is scheduled AGAINST that window.
+    ps1 = (config.PROJECT_ROOT / "tasks" / "register_tasks.ps1").read_text(
+        encoding="utf-8", errors="replace")
+    armed = re.search(r'\$socketCostStart\s*=\s*"(\d\d:\d\d)"', ps1)
+    if not armed:
+        failures.append("tasks/register_tasks.ps1 no longer sets "
+                        "$socketCostStart, so the socket cost probe's clock is "
+                        "not checked against the collector window it must clear")
+    elif armed.group(1) <= stop:
+        failures.append(
+            f"the socket cost probe is armed at {armed.group(1)} and the "
+            f"collector holds the socket until {stop}. Its own comment says it "
+            "is scheduled past the stop so the account wide 50 symbol cap is "
+            "free; armed inside the window it takes symbols off the morning it "
+            "exists to make possible")
+
 def claim_a_premarket_price_is_never_a_regular_session_one(failures: list[str]) -> None:
     """The packet prices from inside the window its own check enforces.
 
@@ -20311,6 +20424,7 @@ def main() -> int:
     run_claim(failures, claim_the_report_says_where_a_name_stands, failures)
     run_claim(failures, claim_no_fixed_report_text_names_a_listed_company, failures)
     run_claim(failures, claim_a_premarket_price_is_never_a_regular_session_one, failures)
+    run_claim(failures, claim_the_documents_state_the_collector_window_the_code_runs, failures)
 
     if failures:
         for failure in failures:

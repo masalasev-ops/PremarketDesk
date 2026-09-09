@@ -22,8 +22,14 @@
 # Arm the one off socket cost probe for a chosen weekday with:
 #   ... -File tasks\register_tasks.ps1 -SocketCost 2026-09-01
 # Same shape again: ONE task, ONE trigger, nothing else touched. It fires at
-# 10:00, inside regular hours and clear of both the collector's 09:25 stop and
-# the 12:00 midday job, and measures the ONE number the websocket still owes.
+# 10:45, inside regular hours and clear of both the collector's stop and the
+# 12:00 midday job, and measures the ONE number the websocket still owes.
+# [corrected 2026-09-09: this said 10:00 and "the collector's 09:25 stop".
+# stop_time moved to 10:30 on 2026-09-08, so 10:00 is now INSIDE the socket
+# window and arming this there would take symbols off the cap the morning
+# needs. The probe is armed by hand and none was armed between, so nothing
+# ran inside the window; the start moved rather than the reasoning, which
+# was right and had simply been overtaken.]
 # Connecting, subscribing and reconnecting were measured at exactly zero twice
 # on 2026-08-13, but both of those runs rode the quiet evening tape, and the
 # one window that ever streamed a heavy live tape straddled the counter's
@@ -188,7 +194,7 @@ $retired = @("nightly-catchup", "universe", "monitor-midday", "monitor-night")
 # SINCE 2026-09-02 THIS CLOCK IS INSIDE THE COLLECTOR'S WINDOW. [Collector]
 # start_time is 04:00, so a task armed at 06:30 fires, the probe reads the
 # window, prints its refusal and exits without measuring anything. The arm is
-# kept as a record and $probeStart has to move past the 09:25 stop, which is
+# kept as a record and $probeStart has to move past the 10:30 stop, which is
 # the regular hours tape the cap half of the question needs anyway, before
 # -Probe is useful again.
 $probeName = "probe-socket-cap"
@@ -319,14 +325,15 @@ if ($Capture) {
 # The one off socket cost probe. NOT in $jobs, for the same reason as the two
 # above: it is meant to be deleted once DECISIONS.md carries its answer.
 #
-# 10:00 is chosen and the reasons are all constraints. Past the collector's
-# 09:25 stop, so the account wide 50 symbol cap is free and this cannot starve
-# the morning it exists to make possible. Inside regular hours, because the
+# 10:45 is chosen and the reasons are all constraints. Past the collector's
+# stop, which [Collector] stop_time puts at 10:30 since 2026-09-08 and put at
+# 09:25 before it, so the account wide 50 symbol cap is free and this cannot
+# starve the morning it exists to make possible. Inside regular hours, because the
 # heavy tape is the whole question and the quiet evening tape has already been
 # measured twice at zero. Clear of the 12:00 midday job, which spends REST
 # credits and would land inside the delta this reads.
 $socketCostName = "probe-socket-cost"
-$socketCostStart = "10:00"
+$socketCostStart = "10:45"
 if ($SocketCost) {
     $bat = Join-Path (Join-Path $root "tasks") "job_probe_socket_cost.bat"
     if (-not (Test-Path $bat)) {

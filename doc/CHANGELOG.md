@@ -15,6 +15,49 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and third: the desk had a glossary and never read it
+
+The owner said the site had become a jargon filled page rather than something a
+new investor could use, and asked what "the record fills at the open" meant and
+who was filling what. Counted before anything was built: about **one term a new
+investor would not know every 24 words** of visible desk text, 316 hits in
+7,701 words. session 89, gap 55, median 24, reference level 22, tape 19, fill
+15, catalyst 13, booked 12.
+
+**core/glossary.py has carried 28 plain English terms and 61 column
+descriptions since it was written, and the desk had never read one of them.**
+They reached the emailed report only. So the screens carried the vocabulary and
+the explanations sat in a module beside them. The glossary now ships inside the
+page as its own JSON block, and one MutationObserver marks every table header
+on every screen: wiring gloss() into each screen would mean remembering to do
+it in the next one, and several screens paint asynchronously after a session
+loads, so there is no single moment after render() when all the headers exist.
+
+**The definitions themselves explained jargon with jargon**, which would have
+made the wiring worthless. "Ref high" read "the higher of the two levels the
+record books against". Nine of the 61 columns and three of the 28 terms were
+rewritten: no notebook is a record that books, nothing is filled, and a session
+is a trading day.
+
+**Ladder became Open and Precedent became Similar.** A ladder is a trading
+price ladder and named nothing a reader could see; Precedent is a word about
+the screen rather than about what it shows. The first three now read as the
+order the morning happens: Morning before the bell, Open for the first hour,
+Midday after. The owner asked for renames but shorter, because they sit in a
+menu bar.
+
+**And two cards on the Record screen described a paper notebook in the language
+of a trading desk.** "The entries that never traded" is now "Prices the share
+never reached", because nobody traded anything: the share never rose to the
+price being watched, and "traded" there described a price being reached rather
+than a person acting. "booked trades closed green" is gone the same way.
+
+WHAT THIS DOES NOT YET DO. The count went from 316 to 333 as the new legend
+added words, so the density fell only from one in 24 to one in 27. session and
+gap are 144 of the total between them and both are load bearing. The screens
+have not each been read end to end by someone who does not already know what
+they say, which is the only test that settles this.
+
 ## 2026-09-09, one hundred and second: the ladder used two trading words and defined neither
 
 The owner asked what Triggered and Stopped mean on the ladder. Nothing on the
@@ -81,8 +124,11 @@ this", and "session(s)" is gone.
 sit behind a summary line, which leaves 173 words visible: what days like this
 did to this name, where it stands in its month, quarter and year, and what kind
 of gap this is. A beforeprint handler opens every fold on the page, so a saved
-PDF still carries them, which the debug folds had needed since they were built
-and never had.
+PDF still carries them. [corrected 2026-09-09: this first said the debug
+folds had needed that since they were built and never had it. They had it,
+through the Save as PDF button, which has always opened every fold before
+calling print. The handler adds only the browser native Ctrl+P path, which
+does not go through that button.]
 
 ## 2026-09-09, one hundredth: the socket was extended past the open and the packet was not told
 

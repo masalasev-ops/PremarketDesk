@@ -36,6 +36,7 @@ from core import config
 from core import criteria
 from core import ettime
 from core import files
+from core import glossary
 from core import page
 from core import store
 from desk import assets
@@ -122,6 +123,11 @@ def payloads(dates: list[str]) -> tuple[dict[str, str], int, int]:
 
 
 def _nav() -> str:
+    # SHORT, because these sit in a menu bar. "Ladder" is a trading price
+    # ladder and named nothing a reader could see; "Precedent" is a word
+    # about the screen rather than about what it shows. Open and Similar
+    # also put the first three in the order the morning happens: Morning
+    # before the bell, Open for the first hour, Midday after.
     items = [("morning", "#/", "Morning"),
              # Sits beside Morning and not after Record, because it is about
              # the SAME session and is read at the same hour. It is a separate
@@ -133,8 +139,8 @@ def _nav() -> str:
              # hour AFTER the one Morning publishes, on the same session, and
              # a reader at 09:35 should not have to pass Precedent to reach
              # the only screen that is moving.
-             ("ladder", "#/", "Ladder"),
-             ("precedent", "#/", "Precedent"),
+             ("ladder", "#/", "Open"),
+             ("precedent", "#/", "Similar"),
              ("midday", "#/", "Midday"),
              ("report", "#/", "Report"),
              ("sessions", "#/sessions", "Sessions"),
@@ -275,9 +281,29 @@ def alert_banner(today: str | None = None) -> str:
             f"<ul>{lines}</ul></div>")
 
 
+def glossary_json() -> str:
+    """Every term and column the glossary defines, keyed for lookup.
+
+    ONE GLOSSARY, TWO SURFACES. These definitions were written for the
+    emailed report and the desk never read them, so the screens carried the
+    vocabulary and the plain English sat in a module beside them. A reader
+    counted about one unexplained term every 24 words of visible desk text
+    on 2026-09-09, which is what a second source would have cost anyway.
+
+    COLUMNS entries are written to follow their own name ("Ticker is the
+    short code..."), so the popover prints the name and then the text and
+    both shapes read as one sentence.
+    """
+    entries = {name.lower(): text for name, text in glossary.COLUMNS.items()}
+    # TERMS last: they are the fuller of the two where a word is in both.
+    entries.update({name.lower(): text for name, text in glossary.TERMS})
+    return json.dumps(entries, separators=(",", ":"))
+
+
 def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
     index_json = json.dumps(index, separators=(",", ":"))
     blob_json = json.dumps(blobs, separators=(",", ":"))
+    gloss_json = glossary_json()
     return f"""
 <div class="bar">
   <div class="bar-in">
@@ -315,6 +341,7 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
     thresholds are unvalidated seed values. Nothing here is advice.
   </p>
 </div>
+<script id="desk-glossary" type="application/json">{gloss_json}</script>
 <script id="desk-index" type="application/json">{index_json}</script>
 <script id="desk-payloads" type="application/json">{blob_json}</script>
 """

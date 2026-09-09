@@ -175,11 +175,12 @@ TERMS: tuple[tuple[str, str], ...] = (
     # between them ran from 0.14 to 2.44 of it across one morning's ten names.
     # The words survive because pages already in the archive print them.
     ("Entry, stop",
-     "Two reference levels the paper record books against: the highest and the "
-     "lowest price seen before the market opened. They are a measuring stick "
-     "that lets every morning be scored the same way, and not prices anyone "
-     "was told to act on. How far apart they are depends on how much the share "
-     "happened to move before the open, which is not a fact about the share."),
+     "Two prices worked out before the market opens: the highest and the "
+     "lowest this share traded at beforehand. Nothing is bought or sold at "
+     "either one. They are a measuring stick, so that every morning can be "
+     "scored the same way, and not prices anyone was told to act on. How far "
+     "apart they are depends on how much the share happened to move before "
+     "the open, which is not a fact about the share."),
     ("Reference high, reference low",
      "The same two levels under the names now printed on the screens. The "
      "record needs a fixed level to measure each morning against; these are "
@@ -221,9 +222,10 @@ TERMS: tuple[tuple[str, str], ...] = (
      "against the share to buy back what they borrowed. A large number means "
      "those bets cannot be closed quickly."),
     ("Fill",
-     "The price a position actually started at. It can differ from the "
-     "reference level the record books against, because a share that jumps "
-     "straight past that level starts at wherever it was actually trading."),
+     "The price the notebook records a position as having started at. "
+     "Nobody bought anything: it is a written down number. It can differ "
+     "from the price being watched, because a share that jumps straight "
+     "past that price starts at wherever it happened to be trading."),
     ("Trap",
      "A share that is rising while the news written about it is mostly "
      "negative. It is flagged because the rise and the reporting disagree."),
@@ -243,8 +245,9 @@ TERMS: tuple[tuple[str, str], ...] = (
 COLUMNS: dict[str, str] = {
     "Ticker": "the short code that identifies the company",
     "Name": "the company's name",
-    "Leg": "which sweep found it, premarket or the previous session",
-    "As of": "the trading session the figures describe",
+    "Leg": "which search found it: the one before the market opened, or "
+           "the one over the previous full trading day",
+    "As of": "the trading day the figures describe",
     "Gap %": "how far it moved overnight against yesterday's closing price",
     "Move %": "how far it moved, against the closing price named beside it",
     "Move": "how far it has moved today against yesterday's closing price",
@@ -267,12 +270,13 @@ COLUMNS: dict[str, str] = {
     # scan.reference_levels, which reads the field names out of CRITERIA
     # [Picks], so a reader comparing the report against the record is looking
     # at one number rather than two that happen to agree today.
-    "Entry": "an old name for the higher of the two reference levels the "
-             "record books against, the highest price seen before the open. "
-             "Reports written from 2026-09-08 head this column Ref high",
-    "Stop": "an old name for the lower of the two, the lowest price seen "
-            "before the open. Reports written from 2026-09-08 head this "
-            "column Ref low",
+    "Entry": "an old name for the higher of the two prices the notebook "
+             "watches, the highest this share traded at before the market "
+             "opened. Reports written from 2026-09-08 head this column "
+             "Ref high",
+    "Stop": "an old name for the lower of the two, the lowest this share "
+            "traded at before the market opened. Reports written from "
+            "2026-09-08 head this column Ref low",
     "200d avg": "the average closing price over the last 200 trading days",
     "Score": "this system's own 0 to 10 rating, which is not a prediction",
     "Conviction": "the score's band: green is highest, red is lowest",
@@ -325,29 +329,37 @@ COLUMNS: dict[str, str] = {
     # describe a price crossing a level, which is what is actually measured.
     # The old keys stay above and below because the archive still carries
     # pages that print them.
-    "Entry reached": "whether the session's own prices ever reached the "
-                     "reference level the morning froze, and when",
-    "Reference reached": "whether the session's own prices ever reached the "
-                         "reference level the morning froze, and when",
-    "Against reference": "whether the session's own prices ever reached the "
-                         "reference level the morning froze, and when",
-    "Ref high": "the higher of the two levels the record books against, the "
-                "highest price seen before the open",
-    "Ref low": "the lower of the two, the lowest price seen before the open",
+    "Entry reached": "whether the share's price ever got up to the level "
+                     "set that morning, and when",
+    "Reference reached": "whether the share's price ever got up to the "
+                         "level set that morning, and when",
+    "Against reference": "whether the share's price ever got up to the "
+                         "level set that morning, and when",
+    # THE DEFINITION HAD THE SAME PROBLEM AS THE COLUMN. "the two levels the
+    # record books against" explains a term nobody knows with a phrase
+    # nobody knows. A reader tapping this on the desk gets one sentence and
+    # it has to land on its own.
+    "Ref high": "the highest price this share traded at before the market "
+                "opened. Nothing is bought or sold at it: it is one of two "
+                "prices a paper notebook watches, so that every morning "
+                "can be scored the same way",
+    "Ref low": "the lowest price this share traded at before the market "
+               "opened, the other of the two the notebook watches",
     "Start price": "the price a position would have begun at had somebody "
                    "acted on the level, which is not a price anybody paid",
     "Now vs start": "where the price is now against that start price",
     "Best vs start": "the best the price got against that start price",
-    "Stop reached": "whether the session traded down to the stop, and whether "
-                    "a daily high and low can say when",
+    "Stop reached": "whether the price ever fell to the lower of the two "
+                    "levels, and whether a day's high and low alone can "
+                    "say when",
     # NOT a second "Stop". The midday table carried two columns both headed
     # Stop until 2026-09-02, the stop price and whether it was reached, and
     # this dict carried the key twice, so the second definition silently
     # replaced the first and the morning's Stop column was explained as the
     # midday's. A dict literal with a repeated key is legal Python and the
     # suite now refuses one here.
-    "Stop state": "whether the stop price was reached during the session, and "
-                  "whether a daily quote can even say so",
+    "Stop state": "whether the price reached the lower level during the "
+                  "day, and whether a daily figure can even tell",
     "What happened": "whether the reference level was ever reached",
     "Now vs fill": "where the price is now against the price it started at",
     "Best vs fill": "the best the position was worth against where it started",

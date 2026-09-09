@@ -446,6 +446,17 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 
 .picker-wrap { position: relative; }
 #session-btn { display: inline-flex; align-items: center; gap: 7px; }
+/* A LABEL A READER CAN ASK ABOUT. A dotted underline is the only thing that
+   marks it, because a screen where every other word is a button is noisier
+   than the jargon was. */
+.gl { border-bottom: 1px dotted var(--muted); cursor: help; }
+.gl:hover, .gl:focus { border-bottom-color: var(--accent); color: var(--ink); }
+.glpop { position: absolute; z-index: 200; max-width: 300px;
+  background: var(--raised); border: 1px solid var(--line-strong);
+  border-radius: 6px; padding: 9px 11px; font-size: 11.5px; line-height: 1.55;
+  color: var(--ink-2); box-shadow: var(--shadow); }
+.glpop b { color: var(--ink); }
+
 .cal-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60;
   width: 296px; box-shadow: var(--shadow); }
 .cal-pop .cal { border-color: var(--line-strong); }
@@ -491,7 +502,8 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 
 @media print {
   .bar { position: static; border-bottom: 2px solid var(--ink); }
-  .bar-actions, .filters, nav, .noprint, .seg { display: none !important; }
+  .bar-actions, .filters, nav, .noprint, .seg, .glpop { display: none !important; }
+  .gl { border-bottom: 0; }
   .cal { break-inside: avoid; }
   .wrap { max-width: none; padding: 0; }
   body { font-size: 10.5pt; }
@@ -523,6 +535,14 @@ DECK_JS = r"""
   var INDEX = JSON.parse(document.getElementById("desk-index").textContent);
   var BLOBS = JSON.parse(document.getElementById("desk-payloads").textContent);
   var KNOBS = INDEX.knobs;
+  // The same definitions the emailed report prints under its tables, which
+  // the desk had never read. An absent or broken block leaves every label
+  // plain rather than taking a screen down.
+  var GLOSSARY = {};
+  try {
+    GLOSSARY = JSON.parse(
+      document.getElementById("desk-glossary").textContent) || {};
+  } catch (e) { GLOSSARY = {}; }
   var cache = {};
 
   var $ = function (id) { return document.getElementById(id); };
@@ -532,6 +552,19 @@ DECK_JS = r"""
   // never a bare hyphen, which in a column of signed numbers reads as a
   // minus. A missing measurement and a measured zero must never look alike.
   var NIL = "n/a";
+  /* Mark a label as askable, when the glossary has something to say about
+     it. Returns the plain escaped label when it does not, so a caller never has
+     to know which words are defined and a definition added later needs no
+     change at the call site. */
+  function gloss(label, shown) {
+    var key = String(label).toLowerCase();
+    var word = shown === undefined ? label : shown;
+    if (!GLOSSARY[key]) return esc(word);
+    return '<span class="gl" data-gl="' + esc(key) + '" role="button" ' +
+      'tabindex="0" aria-label="' + esc(label) +
+      ', tap for a plain description">' + esc(word) + "</span>";
+  }
+
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
       return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c];
@@ -2126,13 +2159,14 @@ DECK_JS = r"""
       names.map(function (r) { return ladderRow(r, maxAway); }).join("") +
       "</tbody></table></div></div>" +
       '<p class="snote"><b>What the states mean.</b> ' +
-      "<b>Not reached</b>: the tape has not touched the ref high, and the " +
-      "paper record books nothing for this name. <b>Reached</b>: it traded " +
-      "at or through the ref high, and the record books a fill there. " +
-      "<b>Opened above it</b>: the ref high was already passed at the " +
-      "opening bell, so the record fills at the open. <b>Reached, then " +
-      "fell back</b>: after that fill the tape reached the ref low, and the " +
-      "record closes the position there. <b>To ref high</b> is how far the " +
+      "<b>Not reached</b>: the share has not got up to the ref high, so the " +
+      "notebook records nothing for it. <b>Reached</b>: it did, and the " +
+      "notebook writes that price down as where it would have started. " +
+      "<b>Opened above it</b>: the share was already past the ref high at " +
+      "the opening bell, so the notebook starts it at the opening price. " +
+      "<b>Reached, then fell back</b>: after that, the price came back down " +
+      "to the ref low, and the notebook closes it there. <b>To ref high</b> " +
+      "is how far the " +
       "last price is from it, and the bar draws the same distance with its " +
       "right hand edge as the ref high.</p>" +
       '<p class="snote">These are the ledger\'s two reference levels, frozen at ' +
@@ -2772,8 +2806,13 @@ DECK_JS = r"""
     return '<div class="card pad verdictcard"><div class="panel-title">' +
       "Can this record carry a conclusion</div>" +
       '<div class="vbig">' + w + " of " + n + "</div>" +
-      '<p class="snote" style="margin:2px 0 0">booked trades closed green, over ' +
-      R.booked.sessions + " session" + (R.booked.sessions === 1 ? "" : "s") +
+      // NOT "booked trades closed green". Nothing is bought or sold: a
+      // paper notebook writes down what would have happened, and "booked"
+      // and "green" are a trading desk describing its own ledger.
+      '<p class="snote" style="margin:2px 0 0">of the picks the notebook ' +
+      "followed, the share was worth more at the close than where the " +
+      "notebook started it, over " +
+      R.booked.sessions + " morning" + (R.booked.sessions === 1 ? "" : "s") +
       ". " + reads + " " + more + "</p></div>";
   }
 
@@ -2788,19 +2827,25 @@ DECK_JS = r"""
     if (!m || !m.priced) return "";
     if (!m.missed) {
       return '<div class="card pad"><div class="panel-title">' +
-        "The entries that never traded</div>" +
-        '<p class="snote" style="margin:0">Every priced pick on file reached ' +
-        "its entry.</p></div>";
+        "Prices the share never reached</div>" +
+        '<p class="snote" style="margin:0">Every pick on file did reach the ' +
+        "price the notebook was watching for.</p></div>";
     }
     var caught = m.prior_high_would_have_caught;
-    return '<div class="card pad"><div class="panel-title">The entries that never traded</div>' +
+    // NOT "the entries that never traded". The owner read that and asked
+    // who traded what. Nobody: the share simply never rose to the price
+    // the notebook was watching, and "traded" there described a PRICE
+    // being reached rather than a person doing anything.
+    return '<div class="card pad"><div class="panel-title">Prices the share ' +
+      "never reached</div>" +
       '<div class="vbig">' + m.missed + " of " + m.priced + "</div>" +
-      '<p class="snote" style="margin:2px 0 0">picks whose entry the session high never ' +
-      "reached, missing by a median of " + n2(m.median_short_pct) + " percent" +
-      (m.p25_short_pct == null ? "" : " (quartiles " + n2(m.p25_short_pct) +
-        " to " + n2(m.p75_short_pct) + ")") + ". " +
-      "Setting the entry at the prior day high instead of the premarket high would " +
-      "have caught " + caught + " of them" +
+      '<p class="snote" style="margin:2px 0 0">picks where the share never rose ' +
+      "to the price the notebook was watching for, falling short by " +
+      n2(m.median_short_pct) + " percent in the middle case" +
+      (m.p25_short_pct == null ? "" : ", and between " + n2(m.p25_short_pct) +
+        " and " + n2(m.p75_short_pct) + " percent for the middle half") + ". " +
+      "Watching for yesterday's high instead of the highest price before " +
+      "the open would have caught " + caught + " of them" +
       (caught <= m.missed / 4
         ? ", so the obvious alternative is not the fix: these are misses of the move, not of the level."
         : ", which is enough to be worth testing properly.") +
@@ -3479,13 +3524,85 @@ DECK_JS = r"""
     if (window.__buildPrint) window.__buildPrint();
   });
 
+  /* ONE POPOVER, DELEGATED. The screens are rebuilt wholesale on every route
+     change, so a listener bound to each label would have to be rebound by
+     every screen that ever draws one. This reads the click on the way up
+     instead and needs nothing from a screen but the class. */
+  function closeGloss() {
+    var open = document.getElementById("glpop");
+    if (open && open.parentNode) open.parentNode.removeChild(open);
+  }
+
+  function openGloss(el) {
+    var text = GLOSSARY[el.getAttribute("data-gl")];
+    if (!text) return;
+    var pop = document.createElement("div");
+    pop.id = "glpop";
+    pop.className = "glpop";
+    pop.innerHTML = "<b>" + esc(el.textContent) + "</b> " + esc(text);
+    document.body.appendChild(pop);
+    var box = el.getBoundingClientRect();
+    var wide = pop.offsetWidth || 300;
+    pop.style.top = (box.bottom + window.scrollY + 6) + "px";
+    pop.style.left = Math.max(8, Math.min(box.left + window.scrollX,
+      (window.innerWidth || 1024) - wide - 10)) + "px";
+  }
+
+  document.addEventListener("click", function (e) {
+    var node = e.target;
+    while (node && node !== document.body &&
+           !(node.getAttribute && node.getAttribute("data-gl"))) {
+      node = node.parentNode;
+    }
+    var hit = node && node.getAttribute && node.getAttribute("data-gl");
+    closeGloss();
+    if (hit) { openGloss(node); e.stopPropagation(); }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var live = document.activeElement;
+    if (e.key === "Escape") { closeGloss(); return; }
+    if ((e.key === "Enter" || e.key === " ") && live && live.getAttribute &&
+        live.getAttribute("data-gl")) {
+      e.preventDefault();
+      closeGloss();
+      openGloss(live);
+    }
+  });
+
   // A folded section that vanishes from a saved PDF is a section the
-  // reader cannot get back. This opens every fold on the page before the
-  // print, which the debug folds needed too and never had.
+  // reader cannot get back. The Save as PDF button above ALREADY opens
+  // every fold; this covers the other way out, a browser native Ctrl+P,
+  // which does not go through that button.
+  // [corrected 2026-09-09: the comment here first said the debug folds
+  // had never had this. They had, through the button, since they were
+  // built. What they lacked was the Ctrl+P path.]
   window.addEventListener("beforeprint", function () {
     var folds = document.querySelectorAll("details");
     for (var i = 0; i < folds.length; i++) { folds[i].open = true; }
   });
+
+  /* EVERY TABLE HEADER ON THE DESK, in one place. Wiring gloss() into each
+     screen would mean touching every table and remembering to do it in the
+     next one; several screens also paint asynchronously, after a session
+     loads, so there is no single moment after render() when all the headers
+     exist. An observer marks them whenever they arrive, and skips a header it
+     has already marked, so its own writes settle after one further pass. */
+  function markHeaders() {
+    var cells = document.getElementsByTagName("th");
+    for (var i = 0; i < cells.length; i++) {
+      var cell = cells[i];
+      if (cell.getElementsByClassName("gl").length) continue;
+      var label = (cell.textContent || "").replace(/^\s+|\s+$/g, "");
+      if (!label || !GLOSSARY[label.toLowerCase()]) continue;
+      cell.innerHTML = gloss(label);
+    }
+  }
+
+  if (window.MutationObserver) {
+    new MutationObserver(markHeaders).observe(
+      document.body, { childList: true, subtree: true });
+  }
 
   window.addEventListener("hashchange", render);
   render();

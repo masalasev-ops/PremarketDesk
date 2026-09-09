@@ -471,7 +471,7 @@ tbody tr:hover{background:var(--ground)}
     yesterday.</p></div>
 
     <div class="g"><h5>The collector</h5><p>The part that sits and listens to live trades from 04:00
-    to 09:25 and writes down a summary of each minute. It is the only source of today's premarket
+    to 10:30 and writes down a summary of each minute. It is the only source of today's premarket
     prices, and what it fails to hear is gone permanently, because a live market cannot be replayed
     afterwards.</p></div>
 
@@ -633,14 +633,14 @@ tbody tr:hover{background:var(--ground)}
         <div class="ids">C03 fires C13 and C14 &rarr; writes C27, C30</div>
       </div>
 
-      <div class="t"><b>04:00</b>to 09:25</div>
+      <div class="t"><b>04:00</b>to 10:30</div>
       <div class="c morn">
         <h5>Listen to live trades</h5>
         <p>Opens the trades websocket with the extended session itself, subscribes to the five fixed
         context tickers plus the names discover marked subscribed, at most 45, which is the socket's
         50 subscription cap less the context tickers, and aggregates incoming prints into one-minute
         bars on disk. This is the only source of today's premarket price path.</p>
-        <p>It opens on the pool the 03:55 pass wrote. From 07:20 until its 09:25 stop time it rereads
+        <p>It opens on the pool the 03:55 pass wrote. From 07:20 until its 10:30 stop time it rereads
         <code>watchlist.json</code> every 30 seconds and, when the <code>generated_at</code> changes,
         reconnects on the pool discover has just written, logging what was added, dropped and kept.
         That is what makes a discover rerun free all morning: a rewrite while the run is still
@@ -820,7 +820,7 @@ tbody tr:hover{background:var(--ground)}
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C13</span><span class="nm">discover.py</span><span class="dt">03:55 and 07:15. Four priors unioned, ranked by tier then gap propensity, 45 subscribed with 4 slots floored per tier.</span></div>
       <div class="ar">&rarr;</div>
-      <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">04:00-09:25. Websocket trades to 1m bars.</span></div>
+      <div class="box morn"><span class="cid">C15</span><span class="nm">collector</span><span class="dt">04:00-10:30. Websocket trades to 1m bars.</span></div>
       <div class="ar">&rarr;</div>
       <div class="box morn"><span class="cid">C16</span><span class="nm">scan.py</span><span class="dt">08:45. All decisions made here.</span></div>
 
@@ -1308,7 +1308,7 @@ tbody tr:hover{background:var(--ground)}
     </div>
     <div class="rule-c" style="border-left-color:var(--night)">
       <span class="tag">#/session/&lt;date&gt;/precedent</span>
-      <h5>9. Precedent</h5>
+      <h5>9. Similar</h5>
       <p><b>Answers: what happened the last time a share looked like each of these.</b> The newest
       screen, and the one closest to the point of the whole project. It matches each of this
       morning's names against every comparable name in the record and reports what those did. What
@@ -1332,7 +1332,7 @@ tbody tr:hover{background:var(--ground)}
     whether that headline is about the company itself or its sector, and the traps. <b>Midday</b>
     says in words whether the entry was reached and by how much it missed if not. <b>Session</b>
     puts the morning's estimated volume beside what the night measured from the other data provider,
-    so the size of the morning's error is visible rather than corrected away. <b>Precedent</b> says
+    so the size of the morning's error is visible rather than corrected away. <b>Similar</b> says
     what happened the other times a name gapped like this on earnings with volume like this.
     <b>Name</b> says whether SNOW itself has been here before, and what followed. <b>Record</b> says
     whether green names as a class have been outperforming red ones at all yet, and refuses to
@@ -1459,7 +1459,7 @@ tbody tr:hover{background:var(--ground)}
   straddled the counter's daily reset (20:00 ET, midnight UTC, also learned here), so the per
   message cost on a heavy live tape is the one number still owed. That window used to be 04:00 to
   07:15, before the scheduled jobs woke. From 2026-09-03 there is no such gap on a weekday: discover
-  runs at 03:55 and the collector holds the socket from 04:00 to 09:25, and a second live subscription
+  runs at 03:55 and the collector holds the socket from 04:00 to 10:30, and a second live subscription
   on the same key would contend with the session capture rather than sit beside it. Measuring it now
   means a weekend or a holiday, when nothing is scheduled and no live tape is running, which is the
   wrong tape for the question, or an instrumented weekday run under
@@ -1930,7 +1930,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C40</td><td class="nm">gap_stats.py</td><td><span class="lay morn">Morning</span></td><td>Sun 21:00</td><td>C26, C35</td><td>C41</td></tr>
       <tr><td class="id">C13</td><td class="nm">discover.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15</td><td>C26, C31, C35, C41</td><td>C27</td></tr>
       <tr><td class="id">C14</td><td class="nm">baseline.py</td><td><span class="lay morn">Morning</span></td><td>03:55, 07:15, after C13 on each pass</td><td>C27, C30, C35</td><td>C30</td></tr>
-      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>04:00-09:25</td><td>C27, C36</td><td>C28</td></tr>
+      <tr><td class="id">C15</td><td class="nm">collect_premarket.py</td><td><span class="lay morn">Morning</span></td><td>04:00-10:30</td><td>C27, C36</td><td>C28</td></tr>
       <tr><td class="id">C16</td><td class="nm">scan.py</td><td><span class="lay morn">Morning</span></td><td>08:45</td><td>C23, C26, C27, C28, C30, C35, C64 (counts only, via C60)</td><td>C29, C31, C32 (C33 on a vintage violation)</td></tr>
       <tr><td class="id">C39</td><td class="nm">vintage.py</td><td><span class="lay morn">Morning</span></td><td>Inside C16</td><td>C16 in memory, the exchange calendar</td><td>C33 on violation</td></tr>
       <tr><td class="id">C17</td><td class="nm">analyst.py</td><td><span class="lay morn">Morning</span></td><td>08:46</td><td>C24, C25, C29, C37</td><td>C32</td></tr>
@@ -2127,7 +2127,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C12 universe.py<br><span style="font-family:var(--sans);color:var(--ink-3)">Sunday rebuild</span></td><td>Nothing immediately. Last week's C26 is still on disk.</td><td>C13 and C16 run against the stale file until it passes ten days old, then refuse and name the age.</td><td>Yes, until day 10</td></tr>
       <tr><td class="nm">C13 discover.py<br><span style="font-family:var(--sans);color:var(--ink-3)">03:55 and 07:15</span></td><td>C27 absent or stale, baselines not warmed.</td><td>Which pass failed decides the cost. A failed 03:55 pass leaves no watchlist when C15 starts, so it prints that discover.py must be run first and exits 1, and the session opens unheard until the watchdog rebuilds the file and restarts it. A failed 07:15 pass costs nothing already recorded: C15 keeps the 03:55 pool, every refusal inside the handover returns stay put, and what is lost is the names that only became discoverable after 03:55 plus the warmed baselines. If both fail: C16 builds no candidate list of its own any more: membership is exactly the names discover marked subscribed, because the collector is the only source of today's premarket tape and it holds bars only for the names on the 03:55 pool from 04:00 and the names on the 07:15 pool from the 07:20 handover. So an absent <code>watchlist.json</code> leaves the packet with no candidates at all rather than degraded ones, and that morning's tape is gone for good, because nobody listened to it. Baselines are not fetched inline either: CRITERIA [baseline] forbids fetching during the morning run and the warm step lives in job_discover.bat, so the scan reads the cache and publishes a null <code>pm_rvol</code> naming the reason when the cached row is missing or unusable. A watchlist that is not today's is refused outright, at the start and again at the handover, with no override outside the monitor's last resort branch: C15 prints what date the file carries and exits rather than listening perfectly to another session's pool, which is the 2026-08-24 defect this refusal exists for. A watchlist that is PRESENT and subscribes nobody says so in <code>gaps_to_fill</code> in its own words, because an empty pool and an absent file are different failures and a report with empty tables and no sentence explaining them is the worst of both. Both routes into the no-candidate path are held by claims in the suite, for a reason worth stating: a degrade path is only a degrade path if the code actually takes it. Every per candidate stage sits inside one branch of C16, so an empty pool reaching code outside that branch ends the scan with an exception rather than with a thin packet, and because the chain stops on the first non-zero exit the documented degrade would in fact be the total loss, no packet, no report, no email.</td><td>Yes, no candidates</td></tr>
       <tr><td class="nm">C50 market_today.py<br><span style="font-family:var(--sans);color:var(--ink-3)">the calendar refresh, 22:15</span></td><td>Nothing, now. C58 keeps whatever it already held.</td><td>Every weekday job runs this guard first, and its failure direction is deliberate: an unknown calendar reads as OPEN, because a false closed silently loses a real morning where a false open produces one honestly thin report. That trade is only safe while "unknown" is rare, so the refresh writes over the cache only once the vendor has answered. Deleting the cache and then fetching would let a single vendor outage at 22:15 leave no holiday list at all, and on the night before a holiday every job the next morning would assume the market was open, build a watchlist from stale quotes, collect nothing, and report on a session that does not exist.</td><td>Yes, unaffected</td></tr>
-      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">04:00 to 09:25</span></td><td>C28 absent or short.</td><td>C16 prices every candidate from that file and nowhere else, so a name the collector recorded no bars for has no price at all: it is removed into <code>dropped_no_coverage</code> with its reason rather than published at a stale price, and it never reaches picks. An absent file drops the whole subscribed list, so the packet is written with no candidates and the drop list is the record of who was lost. A short file drops only the uncovered names, and a name whose bars start after the window opened is kept with <code>pm_window_starts_late</code> set, which is what the disclaimer line names. That is the ordinary state for a name subscribed only at the 07:20 handover, and <code>window_open_at</code> records the window the session actually ran, so the night passes measure each morning against the window it had rather than against the one in CRITERIA today.</td><td>Yes, degraded</td></tr>
+      <tr><td class="nm">C15 collector<br><span style="font-family:var(--sans);color:var(--ink-3)">04:00 to 10:30</span></td><td>C28 absent or short.</td><td>C16 prices every candidate from that file and nowhere else, so a name the collector recorded no bars for has no price at all: it is removed into <code>dropped_no_coverage</code> with its reason rather than published at a stale price, and it never reaches picks. An absent file drops the whole subscribed list, so the packet is written with no candidates and the drop list is the record of who was lost. A short file drops only the uncovered names, and a name whose bars start after the window opened is kept with <code>pm_window_starts_late</code> set, which is what the disclaimer line names. That is the ordinary state for a name subscribed only at the 07:20 handover, and <code>window_open_at</code> records the window the session actually ran, so the night passes measure each morning against the window it had rather than against the one in CRITERIA today.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C35 EODHD REST<br><span style="font-family:var(--sans);color:var(--ink-3)">any call</span></td><td>Whichever field that call supplies.</td><td>C10 retries with backoff, then returns null plus an error note. C16 records it in <code>gaps_to_fill</code> and continues. Nothing raises.</td><td>Yes, degraded</td></tr>
       <tr><td class="nm">C16 scan.py<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45</span></td><td>C29 absent, no picks rows for the day.</td><td>C17 exits immediately with a logged reason. There is no report to render. The day is lost to the record and cannot be reconstructed, because live premarket state is not retrievable later.</td><td>No</td></tr>
       <tr><td class="nm">C16 vintage check<br><span style="font-family:var(--sans);color:var(--ink-3)">08:45, by design</span></td><td>C29 and the day's picks rows, deliberately.</td><td>C16 runs vintage.py after pricing and before scoring. On any violation it rewrites C33 naming every failing row, stamps nothing, writes no packet, and exits non-zero, so the chain stops before C17 is called. There is no degrade path: a stale price is not thin evidence a report can hedge around, it is a wrong number wearing the costume of a right one. The case it exists for is a chain that exits zero at every step and publishes a report describing the previous session. That has happened, and check (b) alone, six candidates carrying a <code>prior_high</code> below their own <code>prior_close</code>, would have caught it without one vendor call.</td><td>No, intentionally</td></tr>
@@ -2218,7 +2218,7 @@ tbody tr:hover{background:var(--ground)}
     two .bat files are deliberately absent from the schedule, both one off probes
     armed a day at a time: job_probe_socket_cap, the instrument for the collector volume question,
     armed with <code>register_tasks.ps1 -Probe YYYY-MM-DD</code> at 06:30, a clock that has fallen
-    inside the collector's 04:00 to 09:25 window since 2026-09-02, so the probe reads that window
+    inside the collector's 04:00 to 10:30 window, 09:25 until 2026-09-08, so the probe reads that window
     from CRITERIA and refuses itself if armed there; and job_probe_capture,
     the Alpaca live capture test, armed with <code>-Capture YYYY-MM-DD</code> at 08:45, which is
     [Scan] run_time rather than a chosen number. Both have run and both answers are in
