@@ -15,6 +15,75 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and seventh: the screens stopped explaining themselves in their own vocabulary
+
+The jargon work on 2026-09-09 defined the WORDS. Sixty six column headers got
+a plain description behind a tap, and the definitions that were themselves
+jargon were rewritten. What it did not touch was the sentences, and the
+sentences were the larger half. "the ledger books its paper trades against the
+high and the low" defines every word in it and tells a reader nothing, because
+the reader does not know there is a ledger. Asked to rewrite them, the owner
+said rewrite them.
+
+ONE RULE, EVERYWHERE: NAME THE ACTOR. Almost every sentence on this desk was
+written in a voice with no subject, so a reader could not tell whether a thing
+had happened, would happen, or was being recommended. The ledger sentence
+became "this system keeps a paper notebook of pretend trades and marks itself
+against these two numbers". "The pipeline from the watchlist to the names that
+cleared a screen" became "every name this system looked at overnight, and how
+many survived each step". "Concentration is the thing a list of names hides"
+became "a list of eleven names can be eleven different bets or one bet made
+eleven times, and reading down the list will not tell you which".
+
+Rewritten across all nine screens: the gap spine's caption, the two prices
+under the chart, the daily map's provenance and its six rows, the lookalike
+panel and its median and quartile lines, the score's marginal line, four
+section captions on Morning, both paragraphs on Open, five captions on
+Similar, three on Midday and Record, four readings on Health, the two list
+pills, the five funnel stages, and the footer that sits under every screen.
+src/morning/structure.py writes four of them into the packet rather than the
+page, and those change with tomorrow's 08:45 run rather than with this build.
+
+THE FIGURES STAYED. A description with the numbers taken out is a verdict, and
+the daily map exists because this project's record cannot support publishing
+one. "over the last 20 trading days this share neither settled into a band nor
+moved steadily one way. Top to bottom it covered about 3.21 times as much
+ground as it usually moves in one day, but it ended the stretch only 1.2 of
+those days' worth from where it began: a lot of movement and little progress."
+That is the sentence the owner quoted back as a bunch of numbers. It carries
+the same three numbers.
+
+Two things found by reading rather than by editing. The Open screen's heading
+still said "The ladder", which is the word the navigation stopped using six
+hours earlier, so a reader clicked Open and arrived at a screen called
+something else. And "gapped", the word this whole project is built on, had
+never been said in full on any screen: it now reads "opened away from the
+previous day's closing price" where a reader meets it first.
+
+AND THE GLOSSARY DID NOT REACH THE CARD. markHeaders walks <th> elements, and
+the nine densest labels on the most read screen are not table headers: the
+Evidence panel is a grid of divs. PREMARKET RVOL, MOVE IN SIGMA and FLOAT
+ROTATION sat beside a number with nothing to tap, which for a reader is the
+same as not having built the glossary. Both halves fixed: the labels say what
+they measure, and the marker walks the panel's cells as well.
+
+claim_no_screen_explains_itself_in_this_projects_own_words, 244th, over 347
+sentences. It bans two vocabularies. Ledger, pool, tier, collector, socket and
+discover are the names of parts of this machine, right in the code and empty
+on a screen. RVOL, VWAP, sigma, ATR, quartile and float rotation are the
+trade's names for measurements the screens now say in English. It reads the
+SENTENCES and not the code, because a field called c.sigma is fine and a label
+reading MOVE IN SIGMA is not, and it refuses to pass on an empty set: an
+extractor that has stopped matching fails the claim rather than reporting
+nothing to report. It does not read the evidence section, which quotes what
+the morning wrote about its own evidence exactly as written.
+
+Mutation tested at 4 of 4, after the first version of the marker check was
+caught passing: it asked whether getElementsByClassName appeared anywhere in
+markHeaders, and the function already contains one on the line that skips a
+cell it has marked before, so taking the card's labels back out went straight
+through it. It now asks for the collection the marker has to make.
+
 ## 2026-09-09, one hundred and sixth: what a reader saves is the page they are looking at
 
 Save as PDF built every candidate's card into a hidden block before printing,

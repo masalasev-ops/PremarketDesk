@@ -338,11 +338,14 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
   </div>
   <div id="screen"></div>
   <p class="foot">
-    Prices are premarket and unofficial. Premarket volume, and so every RVOL and
-    float rotation on these screens, is an estimate scaled from the collector's
-    socket capture and not a consolidated tape measurement; the truth pass writes
-    the measured figure beside it overnight and never over it. The screen
-    thresholds are unvalidated seed values. Nothing here is advice.
+    These are prices from the hours before the market opens, when far fewer
+    shares change hands than during the day. They are unofficial. Wherever a
+    screen says how busy a share's trading has been, that figure is an
+    estimate: this system hears only a fraction of what trades before the
+    open and scales up from the part it heard. Overnight it fetches the real
+    figure and writes it beside the estimate, never over it. The conditions a
+    name has to pass to reach a list are starting values that nobody has yet
+    shown to work. Nothing here is advice.
   </p>
 </div>
 <script id="desk-glossary" type="application/json">{gloss_json}</script>

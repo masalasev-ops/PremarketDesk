@@ -435,9 +435,10 @@ def _gap_context(rows: list[dict[str, Any]], price: float | None,
             else:
                 regime["call"] = "neither"
             if price is not None:
-                regime_where = ("above the range" if price > high else
-                                "below the range" if price < low else
-                                "inside the range")
+                regime_where = (
+                    "above everything it traded at in that time" if price > high
+                    else "below everything it traded at in that time"
+                    if price < low else "inside that band")
                 out["gap_vs_regime"] = regime_where
     out["regime"] = regime
 
@@ -504,16 +505,17 @@ def _gap_context(rows: list[dict[str, Any]], price: float | None,
         out["type"] = "unknown"
         if regime is None or regime.get("call") is None:
             out["type_why"] = (
-                "there is not enough completed history to say what this name "
-                "was doing before today")
+                "this share has not traded on enough days for anything below "
+                "to be worked out")
         elif price is None:
             out["type_why"] = (
-                "no price was available to measure a gap from, so the history "
-                "below is drawn and nothing is read against it")
+                "no price for this share reached the system this morning, so "
+                "the history below is drawn but nothing is measured against "
+                "it")
         else:
             out["type_why"] = (
-                "the price is level with the last close, so the gap has no "
-                "direction to read against anything")
+                "this share is opening at the same price it closed at "
+                "yesterday, so there is no move to read against anything")
         return out
 
     call, trend_direction = regime["call"], regime["direction"]
@@ -522,21 +524,24 @@ def _gap_context(rows: list[dict[str, Any]], price: float | None,
     if call == "trend" and direction == trend_direction and run >= run_min:
         out["type"] = "exhaustion"
         out["type_why"] = (
-            f"the last {regime['sessions']} days moved "
-            f"{regime['net_move_atr']} normal days {trend_direction}, and this "
-            f"is the {run + 1}th day running to gap at "
-            f"{gap_rule.describe()} percent")
+            f"over the last {regime['sessions']} trading days this share has "
+            f"drifted {trend_direction} by about {regime['net_move_atr']} "
+            "times as far as it usually moves in a single day, and this is "
+            f"the {run + 1}th morning in a row that it has opened more than "
+            f"{gap_rule.describe()} percent away from the day before")
     elif call == "trend" and direction == trend_direction:
         out["type"] = "runaway"
         out["type_why"] = (
-            f"the last {regime['sessions']} days moved "
-            f"{regime['net_move_atr']} normal days {trend_direction}, and "
-            f"today's gap goes the same way")
+            f"over the last {regime['sessions']} trading days this share has "
+            f"moved {trend_direction} by about {regime['net_move_atr']} times "
+            "as far as it usually moves in a single day, and this morning it "
+            "has opened further in that same direction")
     elif call == "consolidation" and where in ("above the range", "below the range"):
         out["type"] = "breakaway"
         out["type_why"] = (
-            f"the last {regime['sessions']} days held a range "
-            f"{regime['range_atr']} normal days wide, and today's price is "
+            f"for the last {regime['sessions']} trading days this share has "
+            f"stayed inside a band about {regime['range_atr']} times as wide "
+            "as it usually moves in a single day, and this morning's price is "
             f"{where}")
     else:
         out["type"] = "common"
@@ -544,14 +549,17 @@ def _gap_context(rows: list[dict[str, Any]], price: float | None,
         # "read as neither at 4.07" is not a sentence. This is the branch
         # most mornings land in.
         shape = {
-            "trend": f"trended {trend_direction}",
-            "consolidation": "held a range",
-        }.get(call, "neither held a range nor trended")
+            "trend": f"drifted {trend_direction} without settling",
+            "consolidation": "stayed in one band",
+        }.get(call, "neither settled into a band nor moved steadily one way")
         out["type_why"] = (
-            f"the last {regime['sessions']} days {shape}, "
-            f"{regime['range_atr']} normal days wide with "
-            f"{regime['net_move_atr']} of net move, and today's gap "
-            f"{direction} sits {where or 'nowhere measurable against it'}")
+            f"over the last {regime['sessions']} trading days this share "
+            f"{shape}. Top to bottom it covered about {regime['range_atr']} "
+            "times as much ground as it usually moves in one day, but it "
+            f"ended the stretch only {regime['net_move_atr']} of those days' "
+            "worth from where it began: a lot of movement and little "
+            f"progress. This morning it has opened {direction}, "
+            f"{where or 'with nothing measurable to place it against'}")
     return out
 
 

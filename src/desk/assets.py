@@ -938,16 +938,18 @@ DECK_JS = r"""
     if (!g || !g.pg || g.pg.c == null) return "";
     var p = g.pg;
     if (p.med == null) {
-      return '<div class="dsnote">This name gapped on ' + p.c +
-        " of its last " + p.of + " trading days. What those days did after " +
-        "the open is not on file.</div>";
+      return '<div class="dsnote">This share opened away from the previous ' +
+        "day's closing price on " + p.c + " of its last " + p.of +
+        " trading days. What those days went on to do after the market " +
+        "opened is not on file.</div>";
     }
-    return '<div class="dsnote" style="margin-bottom:2px">When this name has ' +
-      "gapped before</div>" +
+    return '<div class="dsnote" style="margin-bottom:2px">On the other ' +
+      "mornings this share opened away from the day before</div>" +
       '<div class="vbig">' + pct(p.med) + "</div>" +
-      '<p class="snote" style="margin:2px 0 10px">was the usual move from ' +
-      "the opening price to the close, across the " + p.n + " times it " +
-      "gapped in its last " + p.of + " trading days.</p>";
+      '<p class="snote" style="margin:2px 0 10px">is the middle result from ' +
+      "the opening bell to the closing bell on those days, so half of them " +
+      "did better than this and half did worse. It counts the " + p.n +
+      " times it happened in the last " + p.of + " trading days.</p>";
   }
 
   function gapContext(g) {
@@ -961,9 +963,12 @@ DECK_JS = r"""
     // travels without its inputs is met by the sentence, which carries
     // the width, the net move and where today sits against them.
     if (g.rc) {
-      out += '<div class="dsline"><span>Days gapping ' +
-        esc(g.thr || "") + " percent</span>" + '<span class="n">' + g.rc.c +
-        " of the last " + g.rc.of + ", " + g.rc.run + " in a row</span></div>";
+      // g.thr arrives as "> 3", so the word more is already in it once.
+      out += '<div class="dsline"><span>Days it opened more than ' +
+        esc(String(g.thr || "").replace(/^[><]=?\s*/, "")) +
+        " percent away from the day before</span>" +
+        '<span class="n">' + g.rc.c + " of the last " + g.rc.of + ", " +
+        g.rc.run + " in a row</span></div>";
     }
     // g.pg is drawn by gapHistory at the top of the panel and not here.
     if (g.why) {
@@ -1005,17 +1010,18 @@ DECK_JS = r"""
       // are the most interesting thing the row can say. The marker is clamped
       // so it stays on the track; the words are not.
       var p = w.pos, clamped = p == null ? null : Math.max(0, Math.min(100, p));
-      var where = p == null ? "range is flat"
-        : p > 100 ? "above the high"
-        : p < 0 ? "below the low"
-        : p.toFixed(0) + "% of the range";
+      var where = p == null ? "it barely moved over this stretch"
+        : p > 100 ? "higher than at any point in it"
+        : p < 0 ? "lower than at any point in it"
+        : "higher than " + p.toFixed(0) + "% of that stretch";
       // WHEN IT LAST CLOSED ABOVE THE HIGH, which is what turns the level
       // into a fact. It can never be fewer sessions than the window itself,
       // because a close cannot exceed its own bar's high, and a blank means no
       // close above it anywhere on file rather than a number nobody found.
       var above = w.sa == null
-        ? "has never closed above this on file"
-        : "last closed above this " + w.sa + " days ago";
+        ? "it has never finished a day above this price, in all the history "
+          + "on file"
+        : "it last finished a day above this price " + w.sa + " days ago";
       out += '<div class="dsrow"><div class="dslab"><b>' +
         esc(dsWindowWord(w.n)) + "</b><span>last " + w.n + " days \u00b7 " +
         esc(where) + "</span></div>" +
@@ -1031,7 +1037,8 @@ DECK_JS = r"""
     // FOLDED, and the gap context below is NOT. These five are background
     // a reader consults; the gap type and where the name sits are what
     // the panel is for.
-    out += '<details class="dsmore"><summary>Reference readings</summary>';
+    out += '<details class="dsmore"><summary>The background numbers this ' +
+      "is measured against</summary>";
     (d.sma || []).forEach(function (s) {
       out += '<div class="dsline"><span>' + s.n + " day average</span>" +
         '<span class="n">' + n2(s.v) +
@@ -1052,25 +1059,28 @@ DECK_JS = r"""
       // The window's whole range said in units of one normal day's range. A
       // coiled name and an extended one read alike on the tracks above: both
       // show a position inside a range and neither says how wide it is.
-      out += '<div class="dsline"><span>' + d.coil.n +
-        " session range, in average ranges</span>" +
+      out += '<div class="dsline"><span>How wide those ' + d.coil.n +
+        " days were, counted in usual days</span>" +
         '<span class="n">' + n2(d.coil.r) + "</span></div>";
     }
     if (d.vol && d.vol.v != null) {
-      out += '<div class="dsline"><span>Average daily volume</span>' +
-        '<span class="n">' + big(d.vol.v) + " over " + d.vol.n +
-        " days</span></div>";
+      out += '<div class="dsline"><span>Shares changing hands on a ' +
+        "normal day</span>" + '<span class="n">' + big(d.vol.v) + " over " +
+        d.vol.n + " days</span></div>";
     }
     if (d.up) {
-      out += '<div class="dsline"><span>Days that closed up</span>' +
-        '<span class="n">' + d.up.u + " of " + d.up.of + "</span></div>";
+      out += '<div class="dsline"><span>Days it finished higher than it ' +
+        "started</span>" + '<span class="n">' + d.up.u + " of " + d.up.of +
+        "</span></div>";
     }
     out += "</details>";
     out += gapContext(d.gc);
 
-    out += '<div class="dsnote">Measured from ' + (d.n || 0) +
-      " trading days of history up to " + esc(d.last || "?") +
-      ", restated in today's prices so a past split does not distort it." +
+    out += '<div class="dsnote">Worked out from ' + (d.n || 0) +
+      " days of this share's own past, up to " + esc(d.last || "?") +
+      ". Older prices are restated in today's money, so a share split, where " +
+      "a company divides each share into several smaller ones, does not show " +
+      "up here as a crash that never happened." +
       // LABELLED, because a map this morning never had is a different thing
       // from one it published. Computed from bars dated up to that session
       // only, so it is what the morning COULD have drawn and not what the
@@ -1220,7 +1230,8 @@ DECK_JS = r"""
         '" y2="' + sc.Y(c.pm_vwap) +
         '" stroke="var(--r3)" stroke-width="1.5" stroke-dasharray="5 4"/>';
       s += '<text x="' + (PATH.W - PATH.R) + '" y="' + (sc.Y(c.pm_vwap) - 5) +
-        '" font-size="9.5" fill="var(--r3)" text-anchor="end">VWAP ' + n2(c.pm_vwap) + "</text>";
+        '" font-size="9.5" fill="var(--r3)" text-anchor="end">Avg so far ' +
+        n2(c.pm_vwap) + "</text>";
     }
     var last = b[b.length - 1];
     s += '<circle cx="' + sc.X(toMin(last.t)) + '" cy="' + sc.Y(last.c) +
@@ -1331,7 +1342,8 @@ DECK_JS = r"""
     if (!g) return "";
     if (g.held || !g.rows) {
       return '<div class="prior"><div class="panel-title">What names like this did</div>' +
-        '<p class="pnote">Too few lookalikes to say anything, so nothing is said. ' +
+        '<p class="pnote">Too few past mornings like this one to say anything, ' +
+        "so nothing is said. " +
         esc(g.why || "") + "</p></div>";
     }
     var reach = Math.round(g.reached / g.rows * 100);
@@ -1342,30 +1354,42 @@ DECK_JS = r"""
       // of the paper rule in the past tense; here it is an instruction.
       ["Traded through the reference high", g.reached + " of " + g.rows,
        reach + "% of them reached it after the open"],
-      ["Median result", pct(g.median),
-       "quartiles " + pct(g.p25) + " to " + pct(g.p75)],
+      // MIDDLE AND NOT AVERAGE, and the screen says which. One enormous day
+      // drags an average and then describes that day instead of the group.
+      ["Middle result", pct(g.median),
+       "half of them did better than this and half did worse"],
+      ["The middle half", pct(g.p25) + " to " + pct(g.p75),
+       "a quarter did better than the top of this and a quarter did worse " +
+       "than the bottom"],
     ];
     if (g.peak != null) {
-      rows.push(["Median peak", g.peak + " min",
-                 "after the open, if it triggered"]);
+      rows.push(["Peaked after", g.peak + " min",
+                 "from the opening bell, on the days that price was reached"]);
     }
     var caveat = "";
     if ((g.widened || []).length || (g.unmeasured || []).length) {
       var bits = [];
       if ((g.widened || []).length) {
-        bits.push("widened past " + esc(g.widened.join(", ").replace(/_/g, " ")));
+        bits.push("the search had to be loosened on " +
+          esc(g.widened.join(", ").replace(/_/g, " ")) +
+          " before enough past mornings were found");
       }
       if ((g.unmeasured || []).length) {
-        bits.push("not measured for this name, so the group ignores " +
-          esc(g.unmeasured.join(" and ")));
+        bits.push("nothing could be measured for this name on " +
+          esc(g.unmeasured.join(" and ")) +
+          ", so those past mornings were matched without it, which makes the " +
+          "group wider than the list above looks");
       }
       caveat = '<p class="pnote">' + bits.join("; ") + ".</p>";
     }
     return '<div class="prior"><div class="panel-title">What names like this did</div>' +
-      '<p class="pnote">' + g.rows + " lookalike" + (g.rows === 1 ? "" : "s") +
-      " over " + g.sessions + " session" + (g.sessions === 1 ? "" : "s") +
-      ", matched on " + esc((g.matched_on || []).join(" \u00b7 ") || "nothing measurable") +
-      ".</p>" +
+      '<p class="pnote">On ' + g.sessions + " past morning" +
+      (g.sessions === 1 ? "" : "s") + ", " + g.rows + " other share" +
+      (g.rows === 1 ? "" : "s") + " started the day looking like this one, and " +
+      "this is what happened to them by the closing bell. To count, a share " +
+      "had to match on " +
+      esc((g.matched_on || []).join(", ") || "nothing measurable") +
+      ". It is a count of the past and not a forecast.</p>" +
       rows.map(function (r) {
         return '<div class="priorrow"><span class="pl">' + esc(r[0]) +
           '</span><span class="pv num">' + r[1] + '</span>' +
@@ -1389,11 +1413,30 @@ DECK_JS = r"""
     for (var i = 1; i < comps.length; i++) if (comps[i].p > top.p) top = comps[i];
     var without = 0;
     for (var j = 0; j < comps.length; j++) if (comps[j] !== top) without += comps[j].p;
-    return '<p class="pnote" style="margin-top:9px">Take away ' +
-      esc(String(top.k).replace(/_/g, " ")) + " and this is " + n2(without, 0) +
-      " of 10. " + (top.p >= c.score / 2
-        ? "More than half the score rests on that one condition."
-        : "No single condition carries it.") + "</p>";
+    return '<p class="pnote" style="margin-top:9px">Take away its strongest ' +
+      "reason, " + esc(componentWord(top.k)) + ", and the score is " +
+      n2(without, 0) + " out of 10. " + (top.p >= c.score / 2
+        ? "So more than half of it rests on that one thing being right."
+        : "So no single one of them is carrying the score by itself.") +
+      "</p>";
+  }
+
+  /* THE SIX PARTS OF THE SCORE, said in English. These are packet keys and
+     every screen that printed one printed the key with its underscores taken
+     out, so a card explaining a 9 out of 10 ended on "most of that from its
+     catalyst class". Anything not listed falls through to the old behaviour,
+     which is the key made readable rather than nothing at all. */
+  var COMPONENT_WORD = {
+    catalyst_class: "the kind of news behind the move",
+    premarket_float_rotation: "how much of the company changed hands this morning",
+    gap: "how far it opened from yesterday's close",
+    above_prior_high: "it is trading above yesterday's high",
+    above_premarket_vwap: "it is above its own average price this morning",
+    market_cap: "the size of the company",
+    premarket_rvol: "how busy its trading was against its own normal"
+  };
+  function componentWord(key) {
+    return COMPONENT_WORD[key] || String(key).replace(/_/g, " ");
   }
 
   function deckHTML(c, session) {
@@ -1410,22 +1453,26 @@ DECK_JS = r"""
     if (c.earn) {
       var beat = (c.earn.actual != null && c.earn.estimate != null)
         ? c.earn.actual - c.earn.estimate : null;
-      earn = '<div class="fact wide"><div class="k">EPS ACTUAL VS ESTIMATE</div>' +
+      earn = '<div class="fact wide"><div class="k">Profit per share, ' +
+        'reported against expected</div>' +
         '<div class="v num">' + (c.earn.actual == null ? "not yet" : n2(c.earn.actual)) +
         " / " + n2(c.earn.estimate) +
-        (beat == null ? "" : ' <small>' + (beat >= 0 ? "beat " : "miss ") +
+        (beat == null ? "" : ' <small>' + (beat >= 0 ? "above by " : "below by ") +
           n2(Math.abs(beat)) + "</small>") + "</div></div>";
     }
     var facts = '<div class="facts">' +
-      fact("PREMARKET RVOL", c.rvol == null
+      fact("Trading against its own normal", c.rvol == null
         ? NIL + ' <small>never measured</small>' : n2(c.rvol) + "×") +
-      fact("MOVE IN SIGMA", c.sigma == null ? NIL : n2(c.sigma, 1) + "σ") +
-      fact("PM VOLUME (est)", big(c.pm_vol) + " <small>sh</small>") +
-      fact("FLOAT ROTATION", c.float_rot == null ? NIL : (c.float_rot * 100).toFixed(3) + "%") +
-      fact("MARKET CAP", big(c.mcap)) +
-      fact("20D DOLLAR VOL", big(c.adv)) +
-      fact("NEWS IN WINDOW", (c.news == null ? NIL : c.news) + " <small>stories</small>") +
-      fact("POOL RANK", (c.rank == null ? NIL : "#" + c.rank) +
+      fact("Size of the move for this share", c.sigma == null
+        ? NIL : n2(c.sigma, 1) + "×") +
+      fact("Shares traded before the open", big(c.pm_vol) +
+        " <small>est</small>") +
+      fact("Share of the company traded", c.float_rot == null
+        ? NIL : (c.float_rot * 100).toFixed(3) + "%") +
+      fact("What the whole company is worth", big(c.mcap)) +
+      fact("Money traded on a normal day", big(c.adv)) +
+      fact("News stories found", (c.news == null ? NIL : c.news)) +
+      fact("Where it ranked overnight", (c.rank == null ? NIL : "#" + c.rank) +
         " <small>" + esc(c.tier_why || "") + "</small>") +
       earn + "</div>";
 
@@ -1445,30 +1492,37 @@ DECK_JS = r"""
       '<span class="pill ' + (m.state === "never_triggered" ? "" : "on") + '">' +
       esc(MID_WORD[m.state] || m.state) + "</span>" +
       '<span class="num ' + dirClass(m.move) + '">' + pct(m.move) + " from prior close</span>" +
-      '<span class="num" style="color:var(--muted)">day RVOL ' + n2(m.day_rvol) + "×</span>" +
+      '<span class="num" style="color:var(--muted)">trading ' +
+      n2(m.day_rvol) + "× its normal</span>" +
       '<span class="why">' + esc(m.why) + "</span></div>";
 
     var badges = '<span class="pill ' + esc(c.conv || "") + '">' + convWord(c.conv) + " " +
       n2(c.score, 0) + "</span>" +
       '<span class="pill' + (c.day ? " on" : "") + '" title="' +
-      esc(c.day ? "clears every day condition" : "fails " + (c.day_failed || []).join(", ")) +
-      '">Day ' + (c.day ? "eligible" : "no") + "</span>" +
+      esc(c.day ? "clears every condition on the same day list"
+        : "did not clear " + (c.day_failed || []).join(", ")) +
+      '">' + (c.day ? "On" : "Not on") + " the same day list</span>" +
       '<span class="pill' + (c.swing ? " on" : "") + '" title="' +
-      esc(c.swing ? "clears every swing condition" : "fails " + (c.swing_failed || []).join(", ")) +
-      '">Swing ' + (c.swing ? "eligible" : "no") + "</span>" +
+      esc(c.swing ? "clears every condition on the longer held list"
+        : "did not clear " + (c.swing_failed || []).join(", ")) +
+      '">' + (c.swing ? "On" : "Not on") + " the longer held list</span>" +
       // THREE STATES, not two. trap is true, false or null, and null means
       // the question could not be answered, which the report calls not a
       // verdict of safe. Drawing only the true case made those names look
       // exactly like the ones that were asked and cleared.
-      (c.trap === true ? '<span class="pill red">Trap flagged</span>'
+      (c.trap === true ? '<span class="pill red">Looks like a trap</span>'
         : c.trap == null ? '<span class="pill" title="' +
           esc(c.trap_why || "the trap question could not be answered for this name") +
-          '">Trap undecided</span>' : "") +
-      (c.band && c.band !== "not flagged" ? '<span class="pill yellow">Thin at the level</span>' : "") +
-      (c.window_late ? '<span class="pill yellow" title="its premarket window ' +
-        'opened late, so the path evidence is partial">Partial window</span>' : "") +
-      (c.covered === false ? '<span class="pill red" title="the collector ' +
-        'recorded no bars for this name">No collector coverage</span>' : "");
+          '">Trap: could not tell</span>' : "") +
+      (c.band && c.band !== "not flagged" ? '<span class="pill yellow" ' +
+        'title="hardly any shares changed hands near this price, so a real ' +
+        'buyer might have found nobody to buy from">Hardly traded there' +
+        "</span>" : "") +
+      (c.window_late ? '<span class="pill yellow" title="this system started ' +
+        'hearing prices for it late this morning, so it saw only part of the ' +
+        'move">Watched late</span>' : "") +
+      (c.covered === false ? '<span class="pill red" title="this system heard ' +
+        'no prices at all for this name">No prices heard</span>' : "");
 
     return '<div class="deck"><div class="deck-head">' +
       '<span class="tk mono">' + esc(bare(c.sym)) + "</span>" +
@@ -1477,11 +1531,12 @@ DECK_JS = r"""
       '<span class="right">' + badges +
       '<a class="pill" href="#/name/' + esc(c.sym) + '">Every appearance</a></span></div>' +
       (hasCatalyst(c)
-        ? '<div class="deck-why"><b>Why it gapped</b> ' + esc(c.catalyst) + ", " +
+        ? '<div class="deck-why"><b>Why it moved overnight</b> ' + esc(c.catalyst) + ", " +
           esc(c.catalyst_why || "") + "." +
           (c.news ? " " + c.news + " stor" + (c.news === 1 ? "y is" : "ies are") +
             " quoted below." : " No story carried the name in the window.") + "</div>"
-        : '<div class="deck-why"><b>Why it gapped</b> Nothing explains it. ' +
+        : '<div class="deck-why"><b>Why it moved overnight</b> Nothing found ' +
+          "explains it. " +
           esc(c.catalyst_why || "") + ", and it is on the list on its move and " +
           "its volume alone. An unexplained gap is a finding and not a gap in " +
           "the data.</div>") +
@@ -1494,10 +1549,12 @@ DECK_JS = r"""
       '<div class="deck-grid">' +
       '<div><div class="panel-title">Levels</div>' + ladder(c) +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5">' +
-      "The range the premarket actually traded, as at " +
-      esc(session.run_at || "08:45") + ". These are observed extremes and not " +
-      "levels to act on: the ledger books its paper trades against the high and " +
-      "the low, which is all they were ever measured to be good for.</div>" +
+      "The highest and lowest prices this share actually changed hands at " +
+      "this morning before the market opened, as at " +
+      esc(session.run_at || "08:45") + ". They are a record of what happened, " +
+      "not prices to act on. This system keeps a paper notebook of pretend " +
+      "trades and marks itself against these two numbers, which is the only " +
+      "thing they were ever measured to be good for.</div>" +
       // THE MAP SITS DIRECTLY UNDER THE LEVELS, and it was below the
       // lookalikes until 2026-09-09. That put roughly 47,000 characters of
       // card between the two numbers a reader is looking at and the context
@@ -1552,9 +1609,11 @@ DECK_JS = r"""
     var tally = p.tally || {};
     var rk = (p.prov.ranking || {});
 
-    var FILTERS = [["all", "All " + C.length], ["day", "Day eligible"],
-      ["swing", "Swing eligible"], ["green", "Green conviction"],
-      ["up", "Gapped up"], ["down", "Gapped down"]];
+    var FILTERS = [["all", "All " + C.length],
+      ["day", "Cleared the same day list"],
+      ["swing", "Cleared the longer held list"],
+      ["green", "Scored 7 or more"],
+      ["up", "Opened higher"], ["down", "Opened lower"]];
 
     var html = fixtureBanner(p) + tapeHTML(p.tape) + kpisHTML([
       { l: "Candidates kept", v: C.length,
@@ -1570,10 +1629,13 @@ DECK_JS = r"""
 
     html += '<section><div class="shead"><h2>The gap spine</h2>' +
       '<span class="note">click a row to load it below</span></div>' +
-      '<p class="snote">Every candidate on one axis. Distance from the centre line is the ' +
-      "premarket gap against the prior close; the side is direction. Conviction is the " +
-      "stripe and the word, never the bar colour, because the score is unsigned: a name " +
-      "falling hard and a name rising hard can tie.</p>" +
+      '<p class="snote">One row for each name this system kept overnight. The bar ' +
+      "measures how far the share has moved away from the price it finished at " +
+      "yesterday, in this morning's trading before the market opens: to the right " +
+      "if it is higher now, to the left if it is lower. The coloured stripe on the " +
+      "left and the number on the right are the same thing said twice, this " +
+      "system's score out of 10. That score ignores which way the share moved, so " +
+      "a name falling hard and a name rising hard can score the same.</p>" +
       '<div class="filters noprint" id="filters">' + FILTERS.map(function (f) {
         return '<button class="chip" type="button" data-f="' + f[0] + '" aria-pressed="' +
           (f[0] === state.filter) + '">' + esc(f[1]) + "</button>";
@@ -1677,10 +1739,12 @@ DECK_JS = r"""
       : "";
     return '<section><div class="shead"><h2>What else moved</h2>' +
       '<span class="note">not candidates</span></div>' +
-      '<p class="snote">Names outside this morning\'s pool that moved anyway, ranked ' +
-      "within one leg at a time so a premarket move never displaces a prior session " +
-      "one. Nothing here was screened; it is the context the watchlists cannot " +
-      "give you.</p>" + body + states + "</section>";
+      '<p class="snote">Shares that moved this morning and were never on this ' +
+      "system's list. Nothing here was tested against any condition, so these " +
+      "are not suggestions: they are here so the list above can be read against " +
+      "what the rest of the market was doing. Each list is ranked on its own, " +
+      "so a move made this morning is never ranked against one made during " +
+      "yesterday's trading.</p>" + body + states + "</section>";
   }
 
   /* Section 9. Tomorrow's setup, today. */
@@ -1770,12 +1834,15 @@ DECK_JS = r"""
 
     return '<section><div class="shead"><h2>What the evidence is worth</h2>' +
       '<span class="note">read this before the watchlists</span></div>' +
-      '<p class="snote">Every sentence the packet resolved about its own ' +
-      "evidence, quoted as it wrote them. A line that names nobody is printed " +
-      "as readily as one that does, because a missing line and a clean one look " +
-      "identical and only one of them is good news. None of this is a verdict: " +
-      "the fill warning in particular fires in one direction, so a name it does " +
-      "not mention has not passed anything.</p>" +
+      '<p class="snote">What this system knows about the quality of its own ' +
+      "evidence this morning, in its own words, quoted exactly as it wrote them " +
+      "rather than tidied up here. Some of it is technical, and that is the " +
+      "point: it is the working, kept so that a figure can be argued with. A " +
+      "line that names nobody is printed just as readily as one that does, " +
+      "because a check that found nothing and a check that never ran look " +
+      "identical on a screen and only one of them is good news. None of it is a " +
+      "verdict on a name. The thin trading warning in particular only ever " +
+      "speaks up, so a name it does not mention has not passed anything.</p>" +
       '<div class="card pad">' + lines + "</div>" + gapBlock + "</section>";
   }
 
@@ -1783,14 +1850,15 @@ DECK_JS = r"""
     var rk = p.prov.ranking || {};
     var tally = p.tally || {};
     var stages = [
-      ["Pool assembled", p.prov.pool_size, p.prov.pool_size,
-        "earnings, overnight news, prior movers, recent runners"],
-      ["Subscribed", p.prov.subscribed, p.prov.pool_size,
-        "the socket cannot carry the pool, so discover picks"],
-      ["Ranked on gap", rk.subscribed_considered, p.prov.subscribed,
-        "measured from the collector, not the tier"],
-      ["Cleared floors", rk.cleared_floors, rk.subscribed_considered,
-        (rk.below_floor || 0) + " below the price or gap floor"],
+      ["Names found overnight", p.prov.pool_size, p.prov.pool_size,
+        "companies reporting results, overnight news, big movers yesterday, " +
+        "and names that have been running"],
+      ["Prices watched", p.prov.subscribed, p.prov.pool_size,
+        "this system can only listen to so many at once, so it picks"],
+      ["Priced this morning", rk.subscribed_considered, p.prov.subscribed,
+        "ranked on how far each one opened from yesterday's close"],
+      ["Moved far enough", rk.cleared_floors, rk.subscribed_considered,
+        (rk.below_floor || 0) + " were too cheap or had not moved far enough"],
       ["Kept", rk.kept, rk.cleared_floors,
         (rk.capped_out || 0) + " cut by the cap of " + (rk.cap || NIL) + ", not by a screen"],
       ["Day eligible", (tally.day || {}).eligible, rk.kept, "cleared every day condition"],
@@ -1824,9 +1892,11 @@ DECK_JS = r"""
       }).join("");
     }
     return '<section><div class="shead"><h2>How the list was cut</h2></div>' +
-      '<p class="snote">The pipeline from the watchlist to the names that cleared a screen. ' +
-      "The bar in each stage is the share carried forward, against that stage's own " +
-      "predecessor and not a shared scale.</p>" + pipe +
+      '<p class="snote">Every name this system looked at overnight, and how many ' +
+      "survived each step, from the first long list down to the few that cleared " +
+      "every condition. The bar in each step shows what fraction of the step " +
+      "BEFORE it got through, so the bars are not on one shared scale and a full " +
+      "bar late in the row is not the same as a full bar early in it.</p>" + pipe +
       '<div class="cols2" style="margin-top:15px">' +
       '<div class="card pad"><div class="panel-title">Day screen, condition by condition</div>' +
       condBars(tally.day) + "</div>" +
@@ -1852,7 +1922,10 @@ DECK_JS = r"""
   function compositionSection(p) {
     var sh = p.shape || {};
     return '<section><div class="shead"><h2>What kind of morning this is</h2></div>' +
-      '<p class="snote">Concentration is the thing a list of names hides.</p>' +
+      '<p class="snote">A list of eleven names can be eleven different bets or ' +
+      "one bet made eleven times, and reading down the list will not tell you " +
+      "which. This groups the same names by industry, by what moved them and by " +
+      "which way they moved, so that is visible.</p>" +
       '<div class="cols2"><div class="card pad"><div class="panel-title">Sector</div>' +
       groupBars(sh.sectors) + "</div>" +
       '<div class="card pad"><div class="panel-title">Catalyst class</div>' +
@@ -2007,7 +2080,7 @@ DECK_JS = r"""
     var html = kpisHTML([
       { l: "Picks carried", v: rows.length, s: "published at " + esc(p.run_at || "08:45") },
       { l: "Reference reached", v: states.triggered || 0,
-        s: "the ledger's level was tradeable" },
+        s: "the share got up to the price being watched" },
       { l: "Opened past it", v: states.gapped_through || 0, s: "the open was already through" },
       { l: "Never reached", v: states.never_triggered || 0, s: "the session high fell short" },
       { l: "Read at", v: (mid.generated || "").slice(11, 16) || NIL, s: "ET, from the vendor sweep" }
@@ -2015,9 +2088,11 @@ DECK_JS = r"""
 
     html += '<section><div class="shead"><h2>Against the levels the morning published</h2>' +
       '<span class="note">' + esc(p.session) + "</span></div>" +
-      '<p class="snote">Each bar is the move from the prior close as of noon. The chip says ' +
-      "whether the reference level the ledger books against was ever reachable, and the " +
-      "sentence is the packet's own reason.</p>" +
+      '<p class="snote">Where each name stood at noon, measured from the price ' +
+      "it finished at yesterday. The word beside it says whether the share ever " +
+      "got up to the price this system was watching for, and the sentence after " +
+      "that is the system's own account of what happened, quoted rather than " +
+      "summarised.</p>" +
       '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Against reference</th>' +
       '<th style="text-align:right">Move</th><th></th>' +
       '<th style="text-align:right">Open</th><th style="text-align:right">High</th>' +
@@ -2041,8 +2116,9 @@ DECK_JS = r"""
         return '<div class="reason"><span class="mono rk">' + esc(bare(c.sym)) + "</span>" +
           "<span>" + esc(c.mid.why || "") +
           (c.mid.fill != null
-            ? " Filled at " + n2(c.mid.fill) + ", best against the fill " +
-              pct(c.mid.best) + ", now " + pct(c.mid.now) + "."
+            ? " The paper record starts it at " + n2(c.mid.fill) +
+              ". Measured from there, the best it reached was " +
+              pct(c.mid.best) + " and it now stands at " + pct(c.mid.now) + "."
             : "") + "</span></div>";
       }).join("") + "</div></section>";
 
@@ -2125,10 +2201,12 @@ DECK_JS = r"""
       };
       html += '<section><div class="shead"><h2>What the floors turned down</h2>' +
         '<span class="note">' + fRows.length + " refused, filter by floor</span></div>" +
-        '<p class="snote">The biggest movers each floor refused, largest move first, ' +
-        "which is the only way to ask what a floor costs. Every name here was " +
-        "measured and rejected, which is what tells it apart from a name the pass " +
-        'could not price at all.</p>' +
+        '<p class="snote">Every condition this system applies throws some ' +
+        "shares away, and a condition can only be judged by what it threw away. " +
+        "These are the names each one refused, biggest mover first, so the cost " +
+        "of a condition is visible rather than assumed. Every share here was " +
+        "measured and then turned down, which is what makes it different from " +
+        'one the system could not price at all.</p>' +
         '<div class="filters noprint" id="floorfilters">' +
         floorChips.map(function (f) {
           return '<button class="chip" type="button" data-ff="' + esc(f[0]) +
@@ -2219,8 +2297,16 @@ DECK_JS = r"""
         ", and this list asks for more than " + m[2];
     }
     if ((m = s.match(/^premarket_rvol was never measured: (.+)$/))) {
+      var inner = m[1];
+      var thin = inner.match(/baseline median volume ([\d,.]+) shares? is below/);
+      if (thin) {
+        return "how busy its trading was this morning could not be judged: " +
+          "on an ordinary morning only about " + thin[1] + " of its shares " +
+          "change hands before the open, which is too few to measure this " +
+          "morning against";
+      }
       return "how busy its trading was against its own normal could not be " +
-        "worked out, because " + m[1];
+        "worked out, because " + inner;
     }
     if ((m = s.match(/^premarket price ([\d.]+) is not above the 200 day average ([\d.]+)/))) {
       return "at " + m[1] + " it is still below its average price over the last " +
@@ -2260,8 +2346,8 @@ DECK_JS = r"""
     })[0];
     bits.push("It opened " + pct(c.gap) + " away from where it finished " +
       "yesterday, and this system scores it " + n2(c.score, 0) + " out of 10" +
-      (!top || !top.p ? "." : ", most of that from its " +
-        esc(String(top.k).replace(/_/g, " ")) + "."));
+      (!top || !top.p ? "." : ", and the biggest single reason for that is " +
+        esc(componentWord(top.k)) + "."));
 
     var lists = [];
     if (c.day) lists.push("the same day list");
@@ -2326,10 +2412,13 @@ DECK_JS = r"""
   function screenLadder(p, root) {
     var L = p.ladder || {};
     var names = L.names || [];
-    var head = '<section><div class="shead"><h2>The ladder</h2>' +
+    // NAMED WHAT THE MENU BAR NAMES IT. The navigation stopped saying
+    // Ladder on 2026-09-09 and this heading did not, so a reader clicked
+    // Open and arrived at a screen called something else.
+    var head = '<section><div class="shead"><h2>The first hour</h2>' +
       '<span class="note">' + esc(L.open_time || "09:30") + " to " +
       esc(L.close_time || "10:30") +
-      ", closest to its ref high first</span></div>";
+      ", nearest its ref high first</span></div>";
 
     if (!names.length) {
       root.innerHTML = head + '<div class="card pad empty">' +
@@ -2378,23 +2467,32 @@ DECK_JS = r"""
       '<th class="n">To ref high</th><th class="n">Ref low</th>' + '</tr></thead><tbody>' +
       names.map(function (r) { return ladderRow(r, maxAway); }).join("") +
       "</tbody></table></div></div>" +
-      '<p class="snote"><b>What the states mean.</b> ' +
-      "<b>Not reached</b>: the share has not got up to the ref high, so the " +
-      "notebook records nothing for it. <b>Reached</b>: it did, and the " +
-      "notebook writes that price down as where it would have started. " +
-      "<b>Opened above it</b>: the share was already past the ref high at " +
-      "the opening bell, so the notebook starts it at the opening price. " +
-      "<b>Reached, then fell back</b>: after that, the price came back down " +
-      "to the ref low, and the notebook closes it there. <b>To ref high</b> " +
-      "is how far the " +
-      "last price is from it, and the bar draws the same distance with its " +
-      "right hand edge as the ref high.</p>" +
-      '<p class="snote">These are the ledger\'s two reference levels, frozen at ' +
-      esc(p.run_at || "08:45") + " and never recomputed. This screen says where the " +
-      "tape is against them and nothing more: it is how the paper record will book " +
-      "today, not a level to trade. A stop reached in the same minute as the fill is " +
-      "reported as reached and never as a stop out, because a minute bar carries a " +
-      "high and a low and no order between them.</p></section>";
+      '<p class="snote">Two prices were written down for each name at ' +
+      esc(p.run_at || "08:45") + ", before the market opened: the <b>ref high</b>, " +
+      "which is the highest price it had traded at this morning, and the " +
+      "<b>ref low</b>, the lowest. Nothing is bought or sold at either. They " +
+      "are the two marks this system keeps a paper score against, so that " +
+      "every morning is judged the same way. This screen says where each " +
+      "share's price is against its own two marks, and nothing more.</p>" +
+      '<p class="snote"><b>What the four words in the table mean.</b> ' +
+      "<b>Not reached</b>: the price has not got up to the ref high, so the " +
+      "paper record has nothing to say about it. <b>Reached</b>: it did, and " +
+      "the paper record notes that price as where a pretend trade would have " +
+      "started. <b>Opened above it</b>: the share was already past the ref " +
+      "high when the market opened, so the paper record uses the opening " +
+      "price instead. <b>Reached, then fell back</b>: it got there, and then " +
+      "the price came back down as far as the ref low, and the paper record " +
+      "closes the pretend trade there. <b>To ref high</b> is how far the " +
+      "latest price is from that mark, and the bar shows the same distance, " +
+      "with its right hand edge standing for the ref high.</p>" +
+      '<p class="snote">The two marks were fixed at ' +
+      esc(p.run_at || "08:45") + " and are never moved afterwards, whatever the " +
+      "price does. This is how the paper score will read for today. It is not " +
+      "a price to trade at and no order was placed anywhere. One limit of the " +
+      "measurement is worth knowing: prices are recorded a minute at a time, " +
+      "and a minute holds a high and a low with no record of which came " +
+      "first, so when both marks are touched inside the same minute this " +
+      "screen calls it reached and never calls it a fall back.</p></section>";
 
     root.addEventListener("click", function (e) {
       var tr = e.target.closest("[data-goto]");
@@ -2562,11 +2660,14 @@ DECK_JS = r"""
     var html = fixtureBanner(p) +
       '<section><div class="shead"><h2>What history says about this list</h2>' +
       '<span class="note">a count of the past, not a forecast</span></div>' +
-      '<p class="snote">For each name the Morning screen ranked, this searches ' +
-      'every REPLAYED session for names that looked like it at the scan, and ' +
-      'reports what those did by the close. It does not change the ranking and ' +
-      'it is not an instruction. Where the past holds too few similar mornings, ' +
-      'it says so and stops.</p>';
+      '<p class="snote">Take each name on this morning\'s list. Go back ' +
+      'through a year of past trading days, find the shares that started their ' +
+      'day looking like this one, and see what happened to them by the closing ' +
+      'bell. That is all this screen is: a count of what happened before, to ' +
+      'other shares, in a similar position. It is not a forecast, it does not ' +
+      'change this morning\'s ranking, and where the past does not hold enough ' +
+      'similar mornings to count, it says so and stops rather than showing you ' +
+      'a number built on three days.</p>';
 
     if (!cover.rows) {
       // THE EMPTY STATE IS A STATE AND NOT AN ERROR. A screen that draws
@@ -2621,10 +2722,14 @@ DECK_JS = r"""
     if (peaks.length) {
       html += '<section><div class="shead"><h2>When a winner stopped going up</h2>' +
         '<span class="note">across every replayed session, not this list</span>' +
-        '</div><p class="snote">How the whole replayed population ended, split ' +
-        'by how long after the buy it reached its best price. If the early ' +
-        'group ends below zero, the finding is about when to sell and not ' +
-        'about which names the desk picks, and those are different repairs.</p>' +
+        '</div><p class="snote">The same past shares again, this time sorted ' +
+        'by how quickly each one hit its best price of the day. This asks a ' +
+        'different question from the table above. If the shares that peaked ' +
+        'within minutes went on to finish the day down, the problem is that ' +
+        'the pretend trades are held too long, which is a question about when ' +
+        'to sell. That is a separate thing from whether the right names are ' +
+        'being picked in the first place, and the two need different ' +
+        'repairs.</p>' +
         '<div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Minutes to the high</th><th class="n">Trades</th>' +
         '<th class="n">Sessions</th><th class="n">Middle result</th>' +
@@ -2650,12 +2755,14 @@ DECK_JS = r"""
     if (fl && fl.conditions && fl.conditions.length) {
       html += '<section><div class="shead"><h2>What each floor turned down</h2>' +
         '<span class="note">mirrors How the list was cut</span></div>' +
-        '<p class="snote">Every day screen condition, the names it refused ' +
-        'across the whole replay, and what those names did anyway. A floor ' +
-        'whose refusals went on to do nothing is earning its place; one whose ' +
-        'refusals ran is costing something. ' + esc(fl.overlap || "") + ', and ' +
-        'a condition the replay could not evaluate says so instead of ' +
-        'printing a zero.</p>' +
+        '<p class="snote">A condition can only be judged by what it threw ' +
+        'away. This takes each condition a name has to pass, finds every share ' +
+        'it refused across the whole year, and shows what those shares went on ' +
+        'to do anyway. A condition whose rejects went nowhere is doing its ' +
+        'job. One whose rejects went up is costing something. ' +
+        esc(fl.overlap || "") + ', and where a condition could not be worked ' +
+        'out at all for a share, it says so rather than printing a zero, ' +
+        'because those are different facts.</p>' +
         '<div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Condition</th><th class="n">Refused</th>' +
         '<th class="n">Sessions</th><th class="n">Never measured</th>' +
@@ -2748,13 +2855,16 @@ DECK_JS = r"""
     if (ms && ms.bands && ms.bands.length) {
       html += '<section><div class="shead"><h2>What the desk missed</h2>' +
         '<span class="note">mirrors What else moved</span></div>' +
-        '<p class="snote">Every name that cleared a replayed session\'s gap ' +
-        'floor, whether or not the pool subscribed it, grouped by how far it ' +
-        'gapped at the open. ' + esc(ms.caveat || "") + '. ' +
+        '<p class="snote">Shares that moved far enough overnight to have ' +
+        'been worth a look on a past morning, whether or not this system was ' +
+        'watching them, grouped by how far they moved. It is the question ' +
+        'every screen owes an answer to: not what it caught, but what it went ' +
+        'past. ' + esc(ms.caveat || "") + '. ' +
         esc(ms.survivorship || "") + '.' +
         (ms.unknown_sessions ? " " + commas(ms.unknown_sessions) +
-          " gapper(s) sit on sessions the replay has not screened, so whether " +
-          "the pool subscribed them is unknown and they are left out." : "") +
+          " of these moved on days this replay never screened, so whether " +
+          "this system would have been watching them cannot be known, and they " +
+          "are left out." : "") +
         '</p><div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Gapped</th><th class="n">Names</th>' +
         '<th class="n">Pool had it</th><th class="n">Missed</th>' +
@@ -2784,9 +2894,10 @@ DECK_JS = r"""
     if (evt && evt.tiers && evt.tiers.length) {
       html += '<section><div class="shead"><h2>How these events have resolved ' +
         'before</h2><span class="note">mirrors Coming up</span></div>' +
-        '<p class="snote">Every name the calendar placed between a close and ' +
-        'the next open, by the kind of report and by whether it beat the ' +
-        'vendor\'s estimate. ' + esc(evt.caveat || "") + '.</p>' +
+        '<p class="snote">Every company that published its results in the ' +
+        'hours between one day\'s close and the next day\'s open, sorted by ' +
+        'when it reported and by whether the figure came in above or below ' +
+        'what analysts had expected. ' + esc(evt.caveat || "") + '.</p>' +
         '<div class="cols2"><div class="card pad">' +
         '<div class="panel-title">By when it reported</div>' +
         '<div class="scroll"><table class="ptable"><thead><tr>' +
@@ -2970,8 +3081,9 @@ DECK_JS = r"""
       { l: "Vendor calls", v: p.api_calls == null ? NIL : p.api_calls, s: "on the morning pass" }
     ]) +
       '<section><div class="shead"><h2>This session</h2></div>' +
-      '<p class="snote">The morning published the levels; the midday pass read them back. ' +
-      "Both are below, and the tape the bars were drawn from is recorded as <span " +
+      '<p class="snote">The morning wrote the two marks down and the midday ' +
+      "pass read them back afterwards. Both are below. The minute by minute " +
+      "prices the pictures were drawn from came from <span " +
       'class="mono">' + esc(p.bars_source || "unknown") + "</span>.</p>" +
       '<div class="cols2">' +
       '<a class="card pad" style="text-decoration:none;display:block" href="#/session/' + esc(d) + '/morning">' +
@@ -3120,14 +3232,19 @@ DECK_JS = r"""
       " recorded sessions</span></div>" +
       // The section had no sentence saying what it is, so every figure under
       // it read as a trading result. Nothing here was traded by anybody.
-      '<p class="snote">NO ORDER WAS EVER PLACED. Every figure below is one written rule ' +
-      "from CRITERIA [Paper], replayed over the record after the fact, and what that rule " +
-      "would have done. It exists to answer whether the score separates outcomes, so its " +
-      "profit and loss is the instrument and not the goal.</p>" +
+      '<p class="snote">NO MONEY WAS EVER INVOLVED AND NO ORDER WAS EVER ' +
+      "PLACED. Every figure below comes from a written rule applied to the " +
+      "record afterwards, on paper, to work out what that rule would have done " +
+      "if somebody had followed it. Its gains and losses are here as a way of " +
+      "asking one question, whether this system's score tells good mornings " +
+      "from bad ones. They are not a result and they are not anybody's " +
+      "money.</p>" +
       '<div class="cols2"><div class="card pad">' +
       '<div class="panel-title">Where the median pick ends up</div>' + div +
-      '<p class="snote" style="margin:12px 0 0">The gap between the two is the whole problem: ' +
-      "the move is there, the exit is not taking it.</p></div>" +
+      '<p class="snote" style="margin:12px 0 0">The distance between those two ' +
+      "numbers is the whole problem. The first is how far the share got while " +
+      "the paper rule was holding it; the second is where the rule actually let " +
+      "go. The move is there and the rule is not taking it.</p></div>" +
       '<div class="card pad"><div class="panel-title">Time to the high, against how it closed</div>' +
       (peak || '<div class="empty">Not recorded yet.</div>') + "</div></div>" +
       kpisHTML([
@@ -3194,8 +3311,9 @@ DECK_JS = r"""
     if (cov.requested != null) {
       var silent = cov.silent || 0;
       out.push({ s: silent ? "watch" : "ok", t: "What the collector heard",
-        x: "It was listening to " + cov.requested + " names and built a minute by " +
-          "minute tape for " + cov.produced_bars + " of them. " +
+        x: "This system listened to " + cov.requested + " names this morning " +
+          "and got a minute by minute price history for " + cov.produced_bars +
+          " of them. " +
           (silent
             ? silent + " said nothing at all: " +
               esc((cov.silent_symbols || []).map(bare).join(", ")) + "."
@@ -3209,7 +3327,7 @@ DECK_JS = r"""
     if (w.scheduled_start_et) {
       var late = w.started_late_minutes || 0;
       out.push({ s: late > 2 ? "watch" : "ok", t: "The listening window",
-        x: "The socket was meant to run " + esc(w.scheduled_start_et) + " to " +
+        x: "This system was meant to listen from " + esc(w.scheduled_start_et) + " to " +
           esc(w.scheduled_stop_et) + " and started " +
           (late > 0.5 ? n2(late, 1) + " minutes late" : "on time") +
           ". The earliest minute it recorded is " + hhmm(w.first_bar_et) +
@@ -3226,14 +3344,16 @@ DECK_JS = r"""
       var measured = (cap.rows || []).filter(function (r) {
         return r.capture_minutes != null; }).length;
       out.push({ s: "note", t: "Premarket volume is an estimate",
-        x: "The socket hears roughly " + n2(cap.default_capture_share * 100, 1) +
-          " percent of what the consolidated tape prints before the open, so every " +
-          "premarket RVOL and float rotation on these screens is scaled up from what " +
-          "it heard rather than measured directly. Of the " + (cap.candidates || 0) +
-          " names the volume floor was applied to, " + measured +
-          " were scaled by that name's own measured share and the rest by the " +
-          "standing default. The truth pass writes the measured figure overnight, " +
-          "beside these and never over them." });
+        x: "Before the market opens, this system hears only about " +
+          n2(cap.default_capture_share * 100, 1) + " percent of the trades that " +
+          "actually happen. So wherever a screen says how busy a share's trading " +
+          "was, that figure has been scaled up from the part it heard rather " +
+          "than counted directly, and it is an estimate. Of the " +
+          (cap.candidates || 0) + " names judged on trading volume this morning, " +
+          measured + " were scaled using that name's own measured share of the " +
+          "trades and the rest by a standing average. Overnight, a second pass " +
+          "fetches the real figure and writes it beside the estimate, never over " +
+          "it." });
       var carried = cap.carried_across_the_floor || [];
       if (carried.length) {
         out.push({ s: "watch", t: "Cleared the floor on the estimate",
@@ -3246,14 +3366,15 @@ DECK_JS = r"""
     }
 
     out.push(p.bars_source === "run_snapshot"
-      ? { s: "ok", t: "The tape behind the pictures",
-          x: "Every tape path on this session's screens is drawn from the exact rows " +
-            "the morning saw, frozen alongside the packet." }
-      : { s: "watch", t: "The tape behind the pictures",
-          x: "This session's bars were rebuilt by clipping the collector's whole day " +
-            "to the window the packet recorded, which can carry one extra minute at " +
-            "the end. The shape is right; the last minute may not be the one the " +
-            "morning saw." });
+      ? { s: "ok", t: "Where the prices in the pictures came from",
+          x: "Every price chart on this session's screens is drawn from the " +
+            "exact minutes this system saw that morning, saved at the time and " +
+            "never touched since." }
+      : { s: "watch", t: "Where the prices in the pictures came from",
+          x: "This session's minutes were rebuilt afterwards, by cutting the " +
+            "whole day's recording back to the hours the morning covered. That " +
+            "can leave one extra minute on the end. The shape of the chart is " +
+            "right; its very last minute may not be one the morning saw." });
     return out;
   }
 
@@ -3547,9 +3668,11 @@ DECK_JS = r"""
       var ev = h.evidence || {};
       if (ev.band_thin && ev.band_thin.length) {
         out += '<section><div class="shead"><h2>Thin at the level</h2></div>' +
-          '<p class="snote">Names whose published entry sits where very little ' +
-          "traded. The level is not wrong; there may be nothing there to fill " +
-          "against.</p><div class=\"card pad\">" + ev.band_thin.map(function (r) {
+          '<p class="snote">For these names, hardly any shares changed hands ' +
+          "anywhere near the price this system wrote down. The price itself is " +
+          "not wrong: it is what the market showed. But so little was traded " +
+          "there that a real buyer might have found nobody to buy " +
+          "from.</p><div class=\"card pad\">" + ev.band_thin.map(function (r) {
             return '<div class="reason"><span class="mono rk">' +
               esc(bare(r.symbol)) + "</span><span>" + esc(r.why) + "</span></div>";
           }).join("") + "</div></section>";
@@ -3560,7 +3683,7 @@ DECK_JS = r"""
         "are the point and these are the working. Nothing here is computed by this " +
         "page.</p>" + fold("What the schedule reported", h.job) +
         fold("The vendor budget as the morning read it", h.quota) +
-        fold("What the collector was listening to", h.coverage) +
+        fold("Which names it was listening to", h.coverage) +
         fold("The window it actually ran", h.window) +
         fold("The scaling applied to premarket volume", h.capture) + "</section>";
       root.innerHTML = out;
@@ -3825,7 +3948,14 @@ DECK_JS = r"""
      exist. An observer marks them whenever they arrive, and skips a header it
      has already marked, so its own writes settle after one further pass. */
   function markHeaders() {
-    var cells = document.getElementsByTagName("th");
+    // TABLE HEADERS AND THE CARD'S OWN LABELS. The Evidence panel is a grid
+    // of divs and not a table, so until 2026-09-09 the glossary reached none
+    // of the nine labels on it, which are the densest on the whole desk.
+    var cells = [];
+    var th = document.getElementsByTagName("th");
+    for (var t = 0; t < th.length; t++) cells.push(th[t]);
+    var keys = document.getElementsByClassName("k");
+    for (var f = 0; f < keys.length; f++) cells.push(keys[f]);
     for (var i = 0; i < cells.length; i++) {
       var cell = cells[i];
       if (cell.getElementsByClassName("gl").length) continue;

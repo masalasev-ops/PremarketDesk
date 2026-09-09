@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty three claims, a count read off
+and the two pages. It now carries two hundred and forty four claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13228,6 +13228,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         241: "two hundred and forty one",
         242: "two hundred and forty two",
         243: "two hundred and forty three",
+        244: "two hundred and forty four",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -19901,6 +19902,101 @@ def claim_the_documents_state_the_collector_window_the_code_runs(
 
 
 
+
+def claim_no_screen_explains_itself_in_this_projects_own_words(
+        failures: list[str]) -> None:
+    """The sentences on the screens are written for somebody who has not read
+    this repository.
+
+    On 2026-09-09 the owner said the site had become financial jargon rather
+    than help for a new investor. The first pass answered that by defining the
+    WORDS: a glossary behind every column header, tap for a plain description.
+    He then asked for the sentences, and the sentences were the larger half.
+    "the ledger books its paper trades against the high and the low" defines
+    every word in it and still tells a reader nothing, because the reader does
+    not know there is a ledger.
+
+    WHAT THIS BANS IS A PRIVATE VOCABULARY AND NOT A TECHNICAL ONE. Ledger,
+    pool, tier, collector, socket and discover are the names of parts of this
+    machine. They are the right words in the code and in doc/, and on a screen
+    they tell a reader that something happened without saying what. RVOL,
+    VWAP, sigma, ATR, quartile and float rotation are the trade's words for
+    measurements the screens now name in English. Both kinds are here.
+
+    IT READS THE SENTENCES AND NOT THE CODE. A field called c.sigma is fine
+    and a label reading MOVE IN SIGMA is not, so the scan takes string
+    literals of five words or more, drops the JavaScript comments, and drops
+    the fragments that are markup or half of a concatenation. That is a
+    deliberately loose net: it will miss a sentence assembled from three
+    pieces. It catches a sentence somebody typed.
+
+    IT DOES NOT READ THE PACKET'S OWN WORDS. The evidence section quotes what
+    the morning wrote about its own evidence, exactly as written, and that
+    section says so. Those sentences are the working, kept so a figure can be
+    argued with, and tidying them here would break the quotation.
+    """
+    import re
+
+    from desk import assets
+
+    # The private vocabulary, then the trade's. Every one of these was on a
+    # screen on the morning of 2026-09-09.
+    BANNED = ("ledger", "the pool", "the tier", "the collector", "socket",
+              "discover picks", "subscribed", "rvol", "premarket rvol",
+              "vwap", "sigma", "atr", "quartile", "float rotation",
+              "denominator", "consolidated tape", "stop out", "unsigned",
+              "the fill", "the tape", "cohort", "lookalike", "regime",
+              "basis point", "gapped")
+
+    source = assets.DECK_JS
+    source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
+    source = re.sub(r"(?m)^\s*//.*$", " ", source)
+
+    found = 0
+    for match in re.finditer(r'"((?:[^"\\\n]|\\.){24,})"', source):
+        literal = match.group(1)
+        # markup and half a concatenation are not sentences somebody typed
+        if "=" in literal or "' +" in literal or "+ " in literal:
+            continue
+        plain = re.sub(r"<[^>]*>", " ", literal)
+        plain = re.sub(r"\s+", " ", plain).strip()
+        if len(plain.split()) < 5:
+            continue
+        found += 1
+        for word in BANNED:
+            if re.search(r"\b" + re.escape(word) + r"\b", plain.lower()):
+                failures.append(
+                    f"a screen says {word!r} to a reader who has never been "
+                    f"told what one is: {plain[:110]!r}")
+
+    # The net has to be over something. An extractor that silently matches
+    # nothing passes this claim on an empty set, which is the way a check
+    # like this rots.
+    if found < 200:
+        failures.append(
+            f"only {found} sentences were found in the application, which is "
+            "far fewer than it draws. The extractor has stopped matching and "
+            "the vocabulary check above is running over almost nothing")
+
+    # AND THE GLOSSARY REACHES THE CARD. It walked <th> elements only until
+    # 2026-09-09, and the nine densest labels on the most read screen are in
+    # the Evidence panel, which is a grid of divs. For a reader that is the
+    # same as not having built a glossary.
+    marker = assets.DECK_JS[assets.DECK_JS.index("function markHeaders"):]
+    marker = marker[:marker.index(chr(10) + "  }")]
+    # THE COLLECTION AND NOT THE METHOD. This first read "if
+    # getElementsByClassName not in marker", which the function already
+    # satisfies on the line that skips a cell it has marked before, so the
+    # mutation that took the card's labels back out went straight through.
+    if 'getElementsByClassName("k")' not in marker:
+        failures.append(
+            "the glossary marker walks table headers only, so the card's "
+            "Evidence panel carries no definitions: it is a grid of divs and "
+            "its labels are the densest on the desk")
+
+    print("  plain words  no screen explains itself in this project's own "
+          f"vocabulary, over {found} sentences")
+
 def claim_a_saved_pdf_keeps_what_the_screen_drew(failures: list[str]) -> None:
     """Save as PDF hands back the page, not the page with its drawing removed.
 
@@ -20661,6 +20757,7 @@ def main() -> int:
     run_claim(failures, claim_the_documents_state_the_collector_window_the_code_runs, failures)
     run_claim(failures, claim_a_card_says_why_the_name_is_on_it, failures)
     run_claim(failures, claim_a_saved_pdf_keeps_what_the_screen_drew, failures)
+    run_claim(failures, claim_no_screen_explains_itself_in_this_projects_own_words, failures)
 
     if failures:
         for failure in failures:

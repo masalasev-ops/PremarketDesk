@@ -244,6 +244,48 @@ TERMS: tuple[tuple[str, str], ...] = (
 # legend loudly at the test rather than quietly in front of a reader.
 COLUMNS: dict[str, str] = {
     "Ticker": "the short code that identifies the company",
+    "Profit per share, reported against expected": "what the company actually "
+                                                  "earned for each share it has "
+                                                  "issued, beside what analysts "
+                                                  "had expected it to earn. The "
+                                                  "difference between the two "
+                                                  "often moves the price more "
+                                                  "than the figure itself",
+    # ---- THE CARD'S EVIDENCE PANEL, renamed 2026-09-09 out of PREMARKET
+    # RVOL, MOVE IN SIGMA and FLOAT ROTATION. The panel is a grid of divs
+    # rather than a table, so none of these had ever been reachable through
+    # the glossary either.
+    "Trading against its own normal": "how many shares changed hands this "
+                                      "morning against what is normal for this "
+                                      "share at this hour. 1 is normal, 2 is "
+                                      "twice normal. It is an estimate",
+    "Size of the move for this share": "how big this morning's move is for this "
+                                       "particular share, counted in its own "
+                                       "usual daily swings. A 5 here means a "
+                                       "move five times the size of an ordinary "
+                                       "day for it, which is a different thing "
+                                       "from a big move in percent",
+    "Shares traded before the open": "roughly how many shares changed hands "
+                                     "this morning before the market opened. An "
+                                     "estimate: this system hears only part of "
+                                     "what trades and scales up from it",
+    "Share of the company traded": "what fraction of all the shares a company "
+                                   "has available to trade changed hands this "
+                                   "morning",
+    "What the whole company is worth": "the price of one share multiplied by "
+                                       "the number of shares there are",
+    "Money traded on a normal day": "how many dollars of this share change "
+                                    "hands on an ordinary day, averaged over "
+                                    "the last 20 trading days",
+    "News stories found": "how many news stories this system found about this "
+                          "company in the hours it searched",
+    "Where it ranked overnight": "this system sorts every name it finds "
+                                 "overnight into groups by why it is "
+                                 "interesting, and ranks within each group. "
+                                 "This is where this name came in its own group",
+    "Avg so far": "the average price this share has traded at this morning, "
+                  "weighted so that a minute with a lot of trading counts for "
+                  "more than a quiet one",
     # ---- THE DESK'S OWN HEADERS, added 2026-09-09. Wiring the glossary to the
     # screens reached 15 of the 66 fixed headers the desk draws; the other 51
     # were plain, which for a reader is the same as not having built it. These

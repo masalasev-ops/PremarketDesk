@@ -3261,9 +3261,13 @@ def earnings(
         )
     tomorrow.sort(key=lambda r: r.get("market_cap") or 0, reverse=True)
     out["notable_tomorrow"] = tomorrow[:15]
+    # SAID FOR A READER, not for the code that produced it. This sentence
+    # is printed under the notable movers table on the desk, where its
+    # audience is somebody deciding whether the table is worth reading.
     out["notable_definition"] = (
-        "in the weekly universe, which is already a liquidity and market cap screen, "
-        "ranked by market cap"
+        "any share on the list this system rebuilds each week, which already "
+        "leaves out the very small companies and the ones that barely trade. "
+        "The biggest companies are shown first"
     )
     return out
 
