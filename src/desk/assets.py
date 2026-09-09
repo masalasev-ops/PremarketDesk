@@ -2037,8 +2037,13 @@ DECK_JS = r"""
      of these is the better idea", which was settled at 08:45 and is on the
      card. This screen answers "which of them is about to happen".  */
 
-  var LADDER_WORD = { waiting: "Waiting", triggered: "Triggered",
-    gapped_through: "Opened through it", stopped: "Stopped" };
+  /* WHAT THE TAPE DID, not what a trader would call it. "Triggered" and
+     "Stopped" are trading words for a bookkeeping event: the paper record
+     noting that one of two frozen levels traded. The owner asked what they
+     meant and nothing on the screen said, which is the answer: they were
+     names for a rule the reader had not been told. */
+  var LADDER_WORD = { waiting: "Not reached", triggered: "Reached",
+    gapped_through: "Opened above it", stopped: "Reached, then fell back" };
 
   function ladderRow(r, maxAway) {
     var away = r.to_entry_pct;
@@ -2051,9 +2056,10 @@ DECK_JS = r"""
       '<td class="tk">' + esc(bare(r.sym)) + "</td>" +
       '<td><span class="lstate ' + cls + '">' +
       esc(LADDER_WORD[r.state] || r.state) + "</span>" +
-      (r.triggered_at ? '<span class="sub">' + esc(r.triggered_at) +
-        (r.stopped_at ? " \u2192 stop " + esc(r.stopped_at) +
-          (r.stop_sequence_unknown ? ", order in that minute unknown" : "") : "") +
+      (r.triggered_at ? '<span class="sub">at ' + esc(r.triggered_at) +
+        (r.stopped_at ? ", low at " + esc(r.stopped_at) +
+          (r.stop_sequence_unknown
+            ? " in the same minute, so which came first is unknown" : "") : "") +
         "</span>" : "") + "</td>" +
       '<td class="n">' + (r.last == null ? NIL : n2(r.last)) + "</td>" +
       '<td class="n">' + n2(r.entry) + "</td>" +
@@ -2070,7 +2076,7 @@ DECK_JS = r"""
     var head = '<section><div class="shead"><h2>The ladder</h2>' +
       '<span class="note">' + esc(L.open_time || "09:30") + " to " +
       esc(L.close_time || "10:30") +
-      ", closest to its reference first</span></div>";
+      ", closest to its ref high first</span></div>";
 
     if (!names.length) {
       root.innerHTML = head + '<div class="card pad empty">' +
@@ -2085,8 +2091,11 @@ DECK_JS = r"""
       ? "The session has not opened. These are the levels published this " +
         "morning, and nothing has traded against them yet."
       : L.window_over
+        // NOT A LITERAL. This read "after 10:15" while the heading three
+        // lines above read the real close_time, so the screen gave two
+        // different ends for one window.
         ? "The window is over and this is where it ended. What happened after " +
-          "10:15 is the midday pass's question."
+          esc(L.close_time || "10:30") + " is the midday pass's question."
         : "Live. This screen reloads itself every " +
           (KNOBS.ladder_refresh_s || 60) + " seconds while it is open.";
 
@@ -2099,19 +2108,33 @@ DECK_JS = r"""
       kpisHTML([
         { l: "Published", v: names.length, s: "levels frozen at " + esc(p.run_at || "08:45") },
         { l: "Reached", v: (counts.triggered || 0) + (counts.gapped_through || 0),
-          s: "traded through the reference" },
-        { l: "Stopped", v: counts.stopped || 0, s: "after the fill, in a later minute" },
-        { l: "Still waiting", v: counts.waiting || 0,
-          s: "the reference has not traded" },
+          s: "traded through the ref high" },
+        { l: "Fell back", v: counts.stopped || 0,
+          s: "reached the ref low in a later minute" },
+        { l: "Not reached", v: counts.waiting || 0,
+          s: "the ref high has not traded" },
         { l: "Read at", v: esc((L.generated || "").slice(11, 16) || NIL), s: "ET" }
       ]) +
       '<p class="snote">' + esc(state) + "</p>" +
       '<div class="card pad"><div class="scroll capped">' +
+      // Ref high and Ref low, the same two names the watchlist tables and
+      // the glossary use. This screen called them Reference and Stop ref,
+      // so one level had two names depending on which screen you were on.
       '<table class="ptable"><thead><tr><th>Name</th><th>State</th>' +
-      '<th class="n">Last</th><th class="n">Reference</th><th>Distance</th>' +
-      '<th class="n">To it</th><th class="n">Stop ref</th></tr></thead><tbody>' +
+      '<th class="n">Last</th><th class="n">Ref high</th><th>Distance</th>' +
+      '<th class="n">To ref high</th><th class="n">Ref low</th>' + '</tr></thead><tbody>' +
       names.map(function (r) { return ladderRow(r, maxAway); }).join("") +
       "</tbody></table></div></div>" +
+      '<p class="snote"><b>What the states mean.</b> ' +
+      "<b>Not reached</b>: the tape has not touched the ref high, and the " +
+      "paper record books nothing for this name. <b>Reached</b>: it traded " +
+      "at or through the ref high, and the record books a fill there. " +
+      "<b>Opened above it</b>: the ref high was already passed at the " +
+      "opening bell, so the record fills at the open. <b>Reached, then " +
+      "fell back</b>: after that fill the tape reached the ref low, and the " +
+      "record closes the position there. <b>To ref high</b> is how far the " +
+      "last price is from it, and the bar draws the same distance with its " +
+      "right hand edge as the ref high.</p>" +
       '<p class="snote">These are the ledger\'s two reference levels, frozen at ' +
       esc(p.run_at || "08:45") + " and never recomputed. This screen says where the " +
       "tape is against them and nothing more: it is how the paper record will book " +

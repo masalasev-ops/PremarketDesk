@@ -15,6 +15,34 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and second: the ladder used two trading words and defined neither
+
+The owner asked what Triggered and Stopped mean on the ladder. Nothing on the
+screen said. Both are trading words for a bookkeeping event, the paper record
+noting that one of two frozen levels traded, and a reader who has not been told
+the rule cannot recover it from the word.
+
+The states now say what the tape did. Waiting became **Not reached**, Triggered
+became **Reached**, "Opened through it" became **Opened above it**, and Stopped
+became **Reached, then fell back**. A legend under the table gives each one a
+sentence, and says what the distance bar draws.
+
+**One level had two names depending on the screen.** This one headed its
+columns Reference and Stop ref; the watchlist tables and the glossary have said
+Ref high and Ref low since 2026-09-08. They match now, and the column headed
+"To it", which never said what it was, is "To ref high".
+
+**The sub line said "09:33 -> stop 09:33, order in that minute unknown".** It
+now says "at 09:33, low at 09:33 in the same minute, so which came first is
+unknown". The caveat is the point: a minute bar carries a high and a low and no
+order between them, so the record reports the level as reached and refuses to
+call it a stop out. See claim_the_ladder_reads_a_sequence_and_not_an_aggregate.
+
+**And a literal that disagreed with its own heading.** The heading reads the
+configured window, "09:30 to 10:30". Three lines below, the sentence shown once
+the window closes read "what happened after 10:15", hardcoded. One screen, one
+window, two ends. It reads close_time now, like the heading above it.
+
 ## 2026-09-09, one hundred and first: the daily map said too much, in the wrong words
 
 The owner read the panel a second time, after the rows had been reordered, and
