@@ -324,6 +324,10 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
   </div>
 </div>
 <div class="wrap">
+  <div class="printhead printonly">
+    <h1 class="pagetitle" id="print-title">PremarketDesk</h1>
+    <p id="print-sub">Saved from the desk.</p>
+  </div>
   {alert_banner()}
   <div class="eyebrow" id="stamp">
     <span><b class="mono" id="stamp-date">n/a</b> session</span>

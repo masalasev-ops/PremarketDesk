@@ -265,6 +265,74 @@ REPORT_CSS = """
   .report .tablewrap { overflow: visible; }
   .report thead { display: table-header-group; }
   .report tr { break-inside: avoid; }
+  /* AND IT FITS THE PAGE. The tables in this report run to ten columns and
+     were 928 pixels wide against a 707 pixel page, so the last two columns
+     were cut off at the margin: overflow: visible above lets the box grow,
+     and nothing on paper scrolls it back. The width is nowrap, which is
+     right for a screen and not for a sheet. The headers wrap here and the
+     figures still do not, because a number broken over two lines is worse
+     than a narrow column. */
+  .report thead th { white-space: normal; }
+  .report table { font-size: 9.5pt; }
+  .report th, .report td { padding: 5px 6px; }
+}
+"""
+
+
+# WHAT A PRINTED PAGE GETS, and it is not what the screen gets. Two of the
+# browser's rules undo most of a design, and both of them are the browser's
+# and not this project's, so they are answered once here for the desk, the
+# morning report, the midday page, the archive and the weekly page rather
+# than five times.
+_LIGHT_ROOT_RE = re.compile(r":root\s*\{(.*?)\}", re.S)
+
+
+def light_print_block(stylesheet: str) -> str:
+    """The light :root of a stylesheet, restated for a printer.
+
+    A BROWSER KEEPS THE READER'S THEME WHEN IT PRINTS. Somebody reading this
+    desk at seven in the morning is reading it dark, and Save as PDF handed
+    them the dark theme on paper: a black page if they had ever ticked
+    background graphics, and near white text on white paper if they had not,
+    which is the default. The second is what the owner was given on
+    2026-09-09. It is not a formatting complaint, it is a blank document.
+
+    THE LIGHT VALUES ARE NOT RETYPED. They are lifted back out of the sheet
+    that declared them, so a token corrected on the screen cannot be left
+    wrong on paper, the way the conviction trio would have been by a second
+    copy taken before 2026-09-04. The selector names the dark attribute as
+    well because :root[data-theme="dark"] beats a bare :root on specificity
+    and would otherwise win from further up the sheet.
+    """
+    found = _LIGHT_ROOT_RE.search(stylesheet)
+    if not found:
+        return ""
+    return ("\n@media print {\n"
+            # :root:root AND NOT :root. Both dark rules in this sheet are two
+            # simple selectors, :root[data-theme="dark"] and the system one,
+            # :root:not([data-theme="light"]). A bare :root is one and loses
+            # to both, which would have left the printed page dark for every
+            # reader in system dark who never touched the theme button, and
+            # that is the common case. Doubled it ties and, coming later in
+            # the sheet, wins.
+            "  :root:root {"
+            + found.group(1).rstrip() + "\n  }\n}\n")
+
+
+# A BROWSER DROPS BACKGROUND COLOUR WHEN IT PRINTS, unless it is told not to,
+# and Chrome leaves "Background graphics" unticked in its own dialog. That
+# costs an ordinary document a tint. It costs this one the drawing: the
+# conviction stripe down the spine, every bar on every card, the ramp on the
+# gap plot and the separators between the stat tiles, which are not borders
+# but a 1px grid gap with the container colour showing through. Printed with
+# the backgrounds off, these pages are their writing with none of their
+# figures.
+PRINT_PAINT_CSS = """
+@media print {
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  html, body { background: var(--bg); }
 }
 """
 
@@ -300,7 +368,8 @@ def shell(title: str, body: str, extra_css: str = "", script: str = "",
     `script` is a complete <script>...</script> element or empty.
     """
     return _DOCUMENT.format(
-        lang=lang, title=title, mark=SHELL_MARK, tokens=TOKENS_CSS,
+        lang=lang, title=title, mark=SHELL_MARK,
+        tokens=TOKENS_CSS + light_print_block(TOKENS_CSS) + PRINT_PAINT_CSS,
         report_css=REPORT_CSS if include_report_css else "",
         extra_css=extra_css, body=body, script=script,
         body_class=f' class="{body_class}"' if body_class else "")

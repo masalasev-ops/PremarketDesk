@@ -15,6 +15,88 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and fifth: Save as PDF returned the writing without the drawing
+
+The owner asked whether the PDF could look like the Morning screen, because a
+file that gets sent to somebody else is the one copy of this work a reader sees
+without the desk around it. It could not, and for three reasons, two of which
+are the browser's own rules rather than anything this project chose.
+
+A BROWSER KEEPS THE READER'S THEME WHEN IT PRINTS. The desk is read before the
+bell and it is read dark. Save as PDF handed back the dark theme on paper: a
+black page for a reader who had ever ticked background graphics, and near white
+text on white paper for everybody else, which is Chrome's default. doc/SCREENS.md
+had said since it was written that "the print stylesheet forces the light
+tokens". No rule in the sheet did. The specification described the intention and
+nothing had ever compared it against the file.
+
+A BROWSER DROPS BACKGROUND COLOUR WHEN IT PRINTS, unless it is told not to.
+That costs an ordinary page a tint. It costs this one the drawing, because this
+design draws with background and not with borders: the conviction stripe down
+the spine, the gap bar on every row, the six score bars on every card, the
+condition tracks, and the separators between the stat tiles, which are a 1px
+grid gap with the container colour showing through. Printed with the
+backgrounds off, forty three pages of measurement arrived as text.
+
+Both are answered once, in core/page.py, because both are the browser's rules
+and this project has five pages that meet them: the desk, the morning report,
+the midday page, the archive and the weekly page. page.light_print_block reads
+the light :root back out of whichever stylesheet it is handed and restates it
+under @media print, so the values are never typed a second time. The selector
+is :root:root and not :root, which looks like a typo and is not: both dark
+rules in this sheet are two simple selectors, and a bare :root loses to them,
+which would have left the printed page dark for exactly the reader who never
+touched the theme button. desk/assets.py makes the same call on its own sheet
+for the four step amber ramp and the sunk track, which are the desk's alone and
+have a dark variant of their own.
+
+THE THIRD REASON IS THE DESK'S OWN. A card drawn in three columns for a 1260
+pixel screen goes onto a page about 700 wide, where the screen rule collapses
+it to one column. The levels chart is drawn 310 wide by 430 tall for a narrow
+column and, given the width of a page, scaled to a page and a half on its own:
+eleven names printed as 68 pages of mostly chart. On paper the card is two
+columns with the evidence under both, and the chart is capped. Forty three
+pages now, and the chart is a chart.
+
+Four more, each of them something a reader could not have got back:
+
+  A table capped at 430 pixels is a scroll box on a screen and a lie on paper.
+  Releasing the overflow without releasing the cap printed the four rows past
+  it on top of the paragraph below the table, which is what the Open screen did
+  on the first pass at this. Both are released now.
+
+  A table that ran past the page started its second page with figures under no
+  headings. thead is a table-header-group, which the report's own print block
+  had had since it was written and the desk's never did.
+
+  A table wider than the page was cropped to the page, and on paper there is
+  nothing to drag it back with. Both of the two cases were one nowrap that is
+  right on a screen: the report's header cells, which came to 928 pixels
+  against a 707 pixel page, and the Similar screen's pill saying a condition
+  was not measured for a name, which carries a whole sentence and made 646
+  pixels of unbreakable first column. Headers and pills wrap on paper. The
+  figures still do not, because a number broken over two lines is worse than a
+  narrow column. Every one of the nine routes was then measured against the
+  page width, and none of them now puts anything past the right margin.
+
+  The printed page did not say which of the nine screens it was. The navigation
+  is hidden when printing, correctly, and it was the only thing on the page
+  naming the screen. A PDF is saved in order to be sent to somebody who was not
+  at the desk, so it now opens with the screen and the session in its own line.
+
+Also renamed, for the same reason as the morning's other renames: the Record
+screen's TRIGGERED and NEVER TRIGGERED tiles, which are the two words the Open
+screen stopped using at 09:30 that morning. One surface renamed and the other
+left alone is worse than neither.
+
+claim_a_saved_pdf_keeps_what_the_screen_drew, 243rd. It checks that the light
+values are DERIVED and not merely present, because a hand copy would satisfy
+"a light block exists" just as happily, and a hand copy is what this is here to
+prevent: the conviction trio was corrected on 2026-09-04 in one place because
+there was only one place. Mutation tested at 9 of 9, including the specificity
+of the selector and a screen renamed in the navigation without being renamed in
+the print titles.
+
 ## 2026-09-09, one hundred and fourth: the card knew why the name was there and kept it in a tooltip
 
 The owner opened the ODD card, saw a green 9 beside "Day no" and "Swing no",

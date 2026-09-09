@@ -703,10 +703,22 @@ a link, because a link on a screen nobody can find is not a route.]
 Two paths, and they are for two different people.
 
 FOR A READER AT THE DESK: a button that calls the browser's print dialog. The
-print stylesheet forces the light tokens, opens every disclosure, and, before
-printing, renders EVERY candidate's deck rather than the selected one, so the
-printed file is the whole morning and not the one name that happened to be
-open. Ctrl+P gives the same result without the button.
+print stylesheet forces the light tokens, keeps the background colours a
+browser would otherwise drop, opens every disclosure, and, before printing,
+renders EVERY candidate's deck rather than the selected one, so the printed
+file is the whole morning and not the one name that happened to be open.
+Ctrl+P gives the same result without the button.
+
+The tokens are not restated for the printer, they are read back out of the
+stylesheet that declared them by page.light_print_block, so a colour corrected
+on the screen cannot be left wrong on paper. Keeping the backgrounds is the
+rule that matters most here and it is the one nobody would think to write:
+this design draws with background rather than with borders, so a default print
+returns the writing with none of the figures. Both were written on 2026-09-09,
+after the owner asked why a saved file looked nothing like the screen. Until
+then this paragraph described the first of them and no rule in the sheet did
+it, which is the risk a specification carries when nothing compares it against
+the file.
 
 FOR THE MAIL: a `morning/print_pdf.py` step after render_report in the morning
 chain. Headless Chrome print to PDF against the local file, no vendor, no new

@@ -18,6 +18,8 @@ that needs a second hue to be readable is the wrong chart.
 
 from __future__ import annotations
 
+from core import page
+
 DECK_CSS = """
 /* premarketdesk desk */
 :root {
@@ -408,6 +410,13 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 
 .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
   font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 86ch; }
+/* WHAT THE PRINTED FILE CALLS ITSELF. Nine screens print through one
+   header whose navigation is hidden, so a saved PDF said "PremarketDesk"
+   and left the reader to work out which screen they had been sent. */
+.printhead { margin: 4px 0 2px; }
+.printhead h1 { font-size: 21px; }
+.printhead p { margin: 3px 0 0; font-size: 11.5px; color: var(--muted); }
+
 .printonly { display: none; }
 
 /* the calendar. ONE component with two users: the sessions screen lays every
@@ -510,22 +519,93 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
+/* THE PRINTED DESK. The theme and the paint are core/page.py's, because
+   they are the browser's rules and every page in the project meets them.
+   What is left here is this page's own problem: nine screens and a three
+   column card drawn for 1260 pixels, going onto a page about 700 wide. */
 @media print {
   .bar { position: static; border-bottom: 2px solid var(--ink); }
   .bar-actions, .filters, nav, .noprint, .seg, .glpop { display: none !important; }
   .gl { border-bottom: 0; }
-  .cal { break-inside: avoid; }
   .wrap { max-width: none; padding: 0; }
   body { font-size: 10.5pt; }
   .printonly { display: block; }
-  section, .deck, .card, .spine, .pipe, .kpis { break-inside: avoid; }
   .interactive-deck { display: none; }
   .print-deck { break-before: page; }
   details { border: 0; } details .body { padding: 0 0 10px; }
   a { color: var(--ink); text-decoration: none; }
   @page { margin: 14mm 12mm; }
+
+  /* WHAT MAY NOT BE CUT IN HALF, and it is the small things. This list held
+     section, .deck and .card, all three of which are routinely taller than a
+     page: break-inside on a box that cannot fit is ignored, so those bought
+     nothing, while the rows and tiles that WERE being cut through the middle
+     went unnamed. */
+  .kpi, .tick, .stage, .fact, .cal, .hl, .comp, .cond, .sbar, .spine-row,
+  .whyhere, .outcome, .deck-head, .spine, .pipe, .kpis, .tape, tr
+    { break-inside: avoid; }
+  h1, h2, h3, .shead, .panel-title, .deck-head { break-after: avoid; }
+
+  /* A TABLE THAT RUNS PAST THE PAGE KEEPS ITS HEADER, and a table wider than
+     the page is not cropped to it. .scroll hides the overflow on a screen
+     because a reader can drag it back; on paper there is nothing to drag. */
+  thead { display: table-header-group; }
+  .scroll { overflow: visible !important; }
+  /* AND THE BOX THAT WAS CAPPED AT 430px, which on a screen is a scroll box
+     a reader drags. On paper there is nothing to drag: the four rows past
+     the cap were printed over the paragraph below the table, because the
+     content was let out of the box without the box being let go of. */
+  .scroll.capped { max-height: none; }
+  .scroll.capped thead th { position: static; }
+
+  /* THE THREE COLUMN CARD, at page width. The screen rule above collapses it
+     to one column below 1020px and a page is about 700, which stretched the
+     levels chart, drawn 310 wide by 430 tall for a narrow column, to a full
+     page on its own: eleven names came out as 68 pages of mostly chart. Two
+     columns with the evidence under both is the shape that fits. */
+  .deck-grid { grid-template-columns: 38% 62%; }
+  .deck-grid > div { border-right: 1px solid var(--line); border-bottom: 0; }
+  .deck-grid > div:nth-child(2) { border-right: 0; }
+  .deck-grid > div:nth-child(3) { grid-column: 1 / -1; border-right: 0;
+    border-top: 1px solid var(--line); }
+  .levelchart { max-height: 104mm; }
+
+  /* THE TILE STRIPS. Their separators are not borders: they are a 1px grid
+     gap with the container colour showing through. A row that does not fill
+     therefore leaves a bar of grey where the missing tiles would be, which
+     on the Morning screen is a fifth stat tile beside an empty block half
+     the width of the page. On paper the container is white and each tile
+     draws its own edge, which comes out the same and does not care how many
+     tiles there are. */
+  .kpis, .pipe, .facts { background: var(--surface); border: 0;
+    border-radius: 0; }
+
+  /* AND A TABLE FITS THE PAGE IT IS PRINTED ON. The Similar screen carries a
+     260 pixel result strip in a row of twelve columns, which came to 946
+     pixels against a page about 707 wide: the last two columns were printed
+     past the right margin and off the sheet. The strip is the widest thing
+     on the row and the one that loses least by being smaller, because it is
+     a position on a scale rather than a figure to be read off. */
+  .pstrip { width: 150px; }
+  .ptable { font-size: 11.5px; }
+  .ptable th, .ptable td { padding-left: 5px; padding-right: 5px; }
+  /* The pill that says a condition was not measured for this name carries a
+     whole sentence and is nowrap, which is right for a pill on a screen and
+     was 646 pixels of unbreakable first column on a 707 pixel page. */
+  .ptag { white-space: normal; }
+  .kpi, .stage, .fact { outline: 1px solid var(--line); }
 }
 """
+
+
+# THE DESK'S OWN TOKENS, FOR PAPER. page.shell does this for the shared set,
+# which is where the ink, the surface and the conviction trio live. The four
+# step amber ramp and the sunk track are the desk's alone and have a dark
+# variant of their own, so a dark reader printed the dark ramp: browns that
+# were chosen to carry on a near black card, laid on white paper. Same call
+# as page.shell's, on the same block, read back out of the sheet above rather
+# than typed a second time.
+DECK_CSS += page.light_print_block(DECK_CSS)
 
 DECK_JS = r"""
 /* premarketdesk desk application.
@@ -1023,7 +1103,8 @@ DECK_JS = r"""
     lo -= pad; hi += pad;
     var y = function (v) { return TOP + (hi - v) / (hi - lo) * (H - TOP - BOT); };
 
-    var s = '<svg viewBox="0 0 ' + W + " " + H + '" width="100%" role="img" aria-label="' +
+    var s = '<svg class="levelchart" viewBox="0 0 ' + W + " " + H +
+      '" width="100%" role="img" aria-label="' +
       esc("Price levels for " + c.sym) + '">';
     if (c.prior_close != null && c.price != null) {
       var ga = y(c.prior_close), gb = y(c.price);
@@ -3041,8 +3122,11 @@ DECK_JS = r"""
       (peak || '<div class="empty">Not recorded yet.</div>') + "</div></div>" +
       kpisHTML([
         { l: "Picks recorded", v: R.picks.rows, s: "over " + R.picks.sessions + " sessions" },
-        { l: "Triggered", v: R.triggered_total, s: (R.triggered_within_30_min || 0) + " inside 30 minutes" },
-        { l: "Never triggered", v: (R.never_triggered || {}).rows, s: "entry was never reached" },
+        // The same two words the ladder stopped using at 09:30, on the
+        // screen that counts the same events at the end of the day. One
+        // surface renamed and the other not is worse than neither.
+        { l: "Price reached", v: R.triggered_total, s: (R.triggered_within_30_min || 0) + " inside 30 minutes" },
+        { l: "Never reached", v: (R.never_triggered || {}).rows, s: "the price was never traded at" },
         { l: "Skipped", v: (R.skipped || {}).rows, s: "a screen or a guard cut them" },
         // "closed positions in the paper ledger" until 2026-09-06. A position
         // is something somebody holds with money, and nobody held anything:
@@ -3492,6 +3576,14 @@ DECK_JS = r"""
     return { screen: "sessions" };
   }
 
+  /* The names in the menu bar, for the printed page, which has no menu bar.
+     Kept beside the map above so a screen renamed in one is renamed in both:
+     Ladder and Precedent became Open and Similar on 2026-09-09 and a second
+     list would still be saying Ladder. */
+  var SCREEN_TITLE = { morning: "Morning", ladder: "Open", precedent: "Similar",
+    midday: "Midday", report: "Report", session: "Session",
+    sessions: "Sessions", record: "Record", health: "Health", name: "Name" };
+
   function setNav(route) {
     var map = { morning: "morning", ladder: "ladder", precedent: "precedent",
       midday: "midday", report: "report",
@@ -3524,6 +3616,16 @@ DECK_JS = r"""
     // Health and Name it is about all of them, and a dash beside the word
     // "session" reads as a session whose date went missing.
     $("stamp").style.display = scoped ? "" : "none";
+    // WHAT THE PRINTED FILE CALLS ITSELF. The navigation is hidden on paper,
+    // which is right, and it was the only thing on the page that said which
+    // of the nine screens this was. A PDF is saved in order to be sent to
+    // somebody who was not at the desk, so it says the screen and the
+    // session in its own first line.
+    $("print-title").textContent = "PremarketDesk " +
+      (SCREEN_TITLE[route.screen] || "Desk");
+    $("print-sub").textContent = route.date
+      ? "The " + route.date + " session, saved from the desk."
+      : "Saved from the desk.";
   }
 
   var TIMER = null;

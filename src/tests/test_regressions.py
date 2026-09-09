@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty two claims, a count read off
+and the two pages. It now carries two hundred and forty three claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -19900,6 +19900,133 @@ def claim_the_documents_state_the_collector_window_the_code_runs(
             "exists to make possible")
 
 
+
+def claim_a_saved_pdf_keeps_what_the_screen_drew(failures: list[str]) -> None:
+    """Save as PDF hands back the page, not the page with its drawing removed.
+
+    A browser prints under two rules that are its own and not this project's,
+    and both of them took this design apart on 2026-09-09.
+
+    IT KEEPS THE READER'S THEME. Somebody reading the desk before the bell is
+    reading it dark, and the saved file came out either as a black page or,
+    with background graphics off as Chrome ships them, as near white text on
+    white paper.
+
+    IT DROPS BACKGROUND COLOUR. That costs an ordinary page a tint. It costs
+    this one the drawing, because this design draws with background: the
+    conviction stripe down the spine, every bar on every card, and the
+    separators between the stat tiles, which are not borders but a 1px grid
+    gap with the container colour showing through.
+
+    THE LIGHT VALUES ARE READ BACK OUT OF THE SHEET rather than typed a
+    second time, and that is what the derivation check below is for. A second
+    copy is a failure this project has already paid for: the conviction trio
+    was corrected on 2026-09-04 in one place because there was only one
+    place, and a hand copy taken for the printer would have been left wrong.
+
+    The rest is layout, and the layout is the desk's own problem: a card
+    drawn in three columns for 1260 pixels, going onto a page about 700 wide.
+    A chart drawn 310 by 430 for a narrow column became a full page on its
+    own, and a table capped at 430 pixels printed the rows past the cap on
+    top of the paragraph below it, because the content was let out of the box
+    without the box being let go of.
+    """
+    import inspect
+    import re
+
+    from core import page
+    from desk import assets, render as desk_render
+
+    document = page.shell("t", "<p>x</p>")
+
+    # ---- the theme a printer gets is not the theme the reader was in
+    if ":root:root {" not in document:
+        failures.append(
+            "no print block restates the tokens at a specificity that beats "
+            "the dark rules. A bare :root is one simple selector and both dark "
+            "rules in this sheet are two, so a reader in system dark who never "
+            "touched the theme button prints the dark theme on white paper")
+    if not any("--bg: #FFFFFF" in block[:600]
+               for block in document.split("@media print")[1:]):
+        failures.append("the printed page does not force the light background, "
+                        "so Save as PDF returns the dark theme on paper")
+
+    # ---- and the drawing survives the trip
+    if "print-color-adjust: exact" not in document:
+        failures.append(
+            "nothing tells the browser to keep background colour when it "
+            "prints, and Chrome ships that box unticked. Every bar, the "
+            "conviction stripe and the tile separators are backgrounds: "
+            "without this the saved file is the writing with none of the "
+            "drawing")
+
+    # ---- THE LIGHT VALUES ARE DERIVED. Not "a light block exists", which a
+    # hand copy would satisfy just as happily, and a hand copy is the thing
+    # this is here to prevent.
+    if "--only-here: #123456" not in page.light_print_block(
+            ":root { --only-here: #123456; }"):
+        failures.append(
+            "light_print_block does not read the values out of the stylesheet "
+            "it was given, so the printed palette is a second copy of the "
+            "token set and the next correction reaches only one of them")
+    if page.light_print_block("body { color: red; }"):
+        failures.append("light_print_block invents a block for a sheet that "
+                        "declares no :root")
+
+    # ---- the desk does the same for the four tokens that are its own
+    ramp = re.search(r"--r3: (#[0-9A-Fa-f]{6})", assets.DECK_CSS)
+    tail = assets.DECK_CSS[assets.DECK_CSS.rindex("@media print"):]
+    if not ramp or ramp.group(1) not in tail:
+        failures.append(
+            "the desk's amber ramp is not restated for print. It has a dark "
+            "variant of its own, chosen to carry on a near black card, and "
+            "page.shell only knows about the shared tokens")
+
+    # ---- the layout rules, and every one of them was a defect on the page
+    for rule, why in (
+            (".scroll.capped { max-height: none; }",
+             "a table capped at 430px prints the rows past the cap on top of "
+             "whatever follows it, because on paper there is nothing to drag"),
+            ("thead { display: table-header-group; }",
+             "a table that runs past the page starts its second page with "
+             "figures under no headings"),
+            (".levelchart { max-height:",
+             "the levels chart is drawn 310 by 430 for a narrow column and "
+             "stretches to a full page when the card collapses to one"),
+            (".scroll { overflow: visible !important; }",
+             "a table wider than the page is cropped to it"),
+            (".ptag { white-space: normal; }",
+             "the pill saying a condition was not measured for a name holds "
+             "a whole sentence and is nowrap, which is right for a pill on a "
+             "screen and was 646 pixels of unbreakable first column on a 707 "
+             "pixel page, putting two columns off the right of the sheet")):
+        if rule not in assets.DECK_CSS:
+            failures.append(f"the print block is missing {rule!r}: {why}")
+    if ".report thead th { white-space: normal; }" not in page.REPORT_CSS:
+        failures.append(
+            "a report table keeps its headers on one line when printed. That "
+            "is what made them 928 pixels against a 707 pixel page, and a "
+            "column past the right margin is not on the sheet at all")
+    if "levelchart" not in assets.DECK_JS:
+        failures.append("no chart carries the class the print rule caps, so "
+                        "the rule matches nothing")
+
+    # ---- and the file says which of the nine screens it is
+    if 'id="print-title"' not in inspect.getsource(desk_render.body):
+        failures.append(
+            "the printed page carries no title. Its navigation is hidden, "
+            "which is right, and that was the only thing on the page naming "
+            "the screen: a PDF is saved in order to be sent to somebody who "
+            "was not at the desk")
+    titles = assets.DECK_JS[assets.DECK_JS.index("var SCREEN_TITLE"):]
+    titles = titles[:titles.index("};")]
+    for key, shown in re.findall(r'\("(\w+)", "[^"]*", "([^"]+)"\)',
+                                 inspect.getsource(desk_render._nav)):
+        if key + ":" not in titles:
+            failures.append(
+                f"the nav offers {shown!r} and SCREEN_TITLE has no {key!r}, so "
+                "that screen prints under the word Desk")
+
 def claim_a_card_says_why_the_name_is_on_it(failures: list[str]) -> None:
     """The reasons reach the page as reasons, not as the names of rules.
 
@@ -20498,6 +20625,7 @@ def main() -> int:
     run_claim(failures, claim_a_premarket_price_is_never_a_regular_session_one, failures)
     run_claim(failures, claim_the_documents_state_the_collector_window_the_code_runs, failures)
     run_claim(failures, claim_a_card_says_why_the_name_is_on_it, failures)
+    run_claim(failures, claim_a_saved_pdf_keeps_what_the_screen_drew, failures)
 
     if failures:
         for failure in failures:
