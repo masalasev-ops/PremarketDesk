@@ -390,6 +390,94 @@ require_open_above_200sma     = true       # premarket price above twoHundredDay
 require_catalyst              = true       # catalyst_found must be true
 require_fresh_price           = true       # as on the day setup: a print older than [Price age] max_price_age_seconds fails this line rather than removing the name
 
+## Daily structure
+
+The daily context map drawn on every candidate card, added 2026-09-08. It says
+where a name sits in its own recent history and prescribes NOTHING: no entry,
+no stop, no target, no horizon.
+
+**What it replaced, and the measurement that settled it.** The only two price
+levels this desk ever put in front of a reader were entry_ref and stop_ref, the
+premarket high and low, labelled Entry and Stop. Expressed in each stock's own
+ATR over the 2026-09-08 packet, the published stop sat between 0.14 and 2.44
+ATR below the published entry across ten names, a SEVENTEEN FOLD spread out of
+one rule. The premarket low measures how far the premarket happened to wobble,
+which is a function of how thin and how long that window was, and is not a
+property of the stock. Six of the ten stops were inside a quarter of one day's
+normal range, which past the opening minutes is not a stop but a near certain
+exit on noise.
+
+**Why no level is published to replace them.** The ledger stands at five wins
+in seventeen at a median of -1.70 percent, green ranks below yellow and red on
+excursion, and entry_ref is reached on 20 of 48 measured rows. An entry level
+published from that record is a seed wearing a label. Refusing a breakout rule
+for having no measured basis and then substituting an ATR multiple, an R
+multiple target and a holding horizon, none of which has one either, is the
+same unmeasured threshold in three pieces rather than the discipline this file
+describes. A map is descriptive and cannot be wrong in the way a level can: it
+holds the same boundary [Notable] has always held, saying where a stock is and
+not what to do. A validated entry rule, if there is ever one, comes from the
+ledger after the pre-registered judging point and not from a design decision.
+
+**entry_ref and stop_ref did not move and are not deleted.** They remain in
+[Picks], in the packet and in the database as INTERNAL LEDGER FIELDS, because
+paper_trades needs two numbers to book against and they are adequate for that,
+and because [Truth], [Outcomes] and the ladder all measure against them; giving
+them a new meaning would silently rewrite what every historical row asserts.
+What stopped is printing them to a reader as Entry and Stop. The ledger's
+reference and the reader's advice were the same two numbers only by an accident
+of naming, and the moment they were labelled and glossed they became a
+recommendation the record does not support.
+
+**These are REPORTING WINDOWS and not thresholds**, with one exception named as
+such below. Nothing here admits or refuses a candidate, and changing a window
+changes what is described rather than what passes. They are in this file
+because no Python file in this project may hold a literal, not because they
+gate anything.
+
+lookback_sessions_short       = 20         # about a trading month, and it matches [Universe]
+                                           # lookback_sessions and [Baseline] sessions so the
+                                           # three windows can be read against each other
+lookback_sessions_medium      = 60         # about a trading quarter. The window that separates a
+                                           # gap making a new high from a bounce inside a broken
+                                           # range: on 2026-09-08 eight of ten candidates sat
+                                           # BELOW their 60 session high and the desk said nothing
+                                           # about which of those two situations a reader was in
+lookback_sessions_long        = 250        # about one trading year, the same span as [Gap stats]
+                                           # lookback_sessions and named for the same reason
+sma_fast                      = 50         # sessions in the fast moving average
+sma_slow                      = 200        # sessions in the slow one. It is also the average
+                                           # [Swing setup] require_open_above_200sma screens on,
+                                           # so a reader can see the level that rule used
+atr_sessions                  = 14         # sessions in the average true range. TRUE range, so
+                                           # an overnight gap counts as movement; a plain high
+                                           # minus low cannot see the thing a gap screen is about
+min_sessions                  = 20         # completed sessions before any of the map is drawn.
+                                           # Below it the block carries its reason and no
+                                           # figures. Each window nulls itself independently as
+                                           # well: a 250 session high computed over 30 sessions
+                                           # is not a 250 session high, and a figure that quietly
+                                           # means something other than its label is worse than
+                                           # a blank
+max_adjustment_step           = 0.10       # THE ONE THRESHOLD HERE, and it decides a disclosure
+                                           # rather than an outcome. Every level is back adjusted
+                                           # onto today's basis by adjusted_close over close, so
+                                           # a high from before a two for one split is comparable
+                                           # to today's price instead of twice it. A single
+                                           # session step larger than this in that ratio is the
+                                           # signature of a split or a large special dividend and
+                                           # its date is named on the card, because the
+                                           # correction is already applied and a reader whose raw
+                                           # chart disagrees is owed the reason
+history_calendar_days         = 400        # calendar days of daily history attach_daily_history
+                                           # asks for. 250 trading sessions span about 362
+                                           # calendar days and this leaves a month of margin for
+                                           # holidays. IT COSTS NOTHING TO WIDEN: [Quota costs]
+                                           # prices eod at one credit FLAT PER CALL and not per
+                                           # row, so the same one call per candidate the morning
+                                           # already made now returns a trading year instead of
+                                           # the five weeks it used to
+
 ## Universe
 
 The weekly discovery population written by universe.py. The market cap floor

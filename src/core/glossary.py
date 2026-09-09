@@ -167,10 +167,29 @@ TERMS: tuple[tuple[str, str], ...] = (
      "how much it normally moves in a day. A 3 sigma move is far outside its "
      "usual range. It lets a 4 percent move in a calm share rank ahead of a 4 "
      "percent move in a wild one."),
+    # REWRITTEN 2026-09-08, and this entry is why. It said the entry was
+    # "the price at which the rules would have started a position" and the
+    # stop was "how a loss is kept to a known size", which describes a trading
+    # plan. No plan was ever measured: these are the premarket high and low,
+    # and expressed in each share's own average daily range the distance
+    # between them ran from 0.14 to 2.44 of it across one morning's ten names.
+    # The words survive because pages already in the archive print them.
     ("Entry, stop",
-     "The entry is the price at which the rules would have started a position. "
-     "The stop is the price at which they would have accepted the position was "
-     "wrong and closed it, which is how a loss is kept to a known size."),
+     "Two reference levels the paper record books against: the highest and the "
+     "lowest price seen before the market opened. They are a measuring stick "
+     "that lets every morning be scored the same way, and not prices anyone "
+     "was told to act on. How far apart they are depends on how much the share "
+     "happened to move before the open, which is not a fact about the share."),
+    ("Reference high, reference low",
+     "The same two levels under the names now printed on the screens. The "
+     "record needs a fixed level to measure each morning against; these are "
+     "it, and nothing more is claimed for them."),
+    ("Daily structure",
+     "Where a share sits in its own recent history: the highest and lowest it "
+     "has traded over the last month, quarter and year, its average price over "
+     "50 and 200 days, and how much it moves in a normal day. It describes the "
+     "ground the share is standing on. It recommends nothing, because nothing "
+     "measured here would justify a recommendation."),
     ("Fill",
      "The price a position actually started at. It can differ from the entry, "
      "because a share that jumps straight past the intended price starts at "
@@ -231,15 +250,22 @@ COLUMNS: dict[str, str] = {
     "Price age s": "how many seconds old that price was when this was written",
     "Report date": "the date the company is due to report its profits",
     "Session": "whether that report lands before or after the market is open",
-    "Morning entry": "the price the morning published as the intended entry",
+    "Morning entry": "the reference level the morning froze for the record",
     # The midday outcome table, reworded 2026-09-03. Its columns described a
     # trade that was never placed: What happened, Now vs fill, Best vs fill
     # and Stop state are the vocabulary of a position somebody holds. These
     # describe a price crossing a level, which is what is actually measured.
     # The old keys stay above and below because the archive still carries
     # pages that print them.
-    "Entry reached": "whether the session's own prices ever reached the entry "
-                     "the morning published, and when",
+    "Entry reached": "whether the session's own prices ever reached the "
+                     "reference level the morning froze, and when",
+    "Reference reached": "whether the session's own prices ever reached the "
+                         "reference level the morning froze, and when",
+    "Against reference": "whether the session's own prices ever reached the "
+                         "reference level the morning froze, and when",
+    "Ref high": "the higher of the two levels the record books against, the "
+                "highest price seen before the open",
+    "Ref low": "the lower of the two, the lowest price seen before the open",
     "Start price": "the price a position would have begun at had somebody "
                    "acted on the level, which is not a price anybody paid",
     "Now vs start": "where the price is now against that start price",
@@ -254,7 +280,7 @@ COLUMNS: dict[str, str] = {
     # suite now refuses one here.
     "Stop state": "whether the stop price was reached during the session, and "
                   "whether a daily quote can even say so",
-    "What happened": "whether the intended entry price was ever reached",
+    "What happened": "whether the reference level was ever reached",
     "Now vs fill": "where the price is now against the price it started at",
     "Best vs fill": "the best the position was worth against where it started",
     "Did the morning reach it": "whether the morning had this share on its list "

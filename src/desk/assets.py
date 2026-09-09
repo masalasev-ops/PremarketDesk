@@ -289,6 +289,25 @@ td.tk { font-weight: 600; font-family: Consolas, monospace; }
   border-radius: 4px; }
 .ltrack i.good { background: var(--good); }
 .ltrack i.bad { background: var(--bad); }
+/* the daily context map on the card. Describes, prescribes nothing. */
+.ds { margin-top: 18px; }
+.ds .dsrow { margin-bottom: 11px; }
+.ds .dslab { display: flex; justify-content: space-between; font-size: 10.5px;
+  color: var(--muted); margin-bottom: 3px; }
+.ds .dslab b { color: var(--ink-2); font-weight: 600; }
+.dstrack { position: relative; height: 6px; background: var(--raised);
+  border-radius: 3px; }
+.dstrack i { position: absolute; top: -3px; width: 2px; height: 12px;
+  background: var(--accent); border-radius: 1px; }
+.dstrack i.out { background: var(--r4); width: 3px; }
+.ds .dsends { display: flex; justify-content: space-between; font-size: 10px;
+  color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.ds .dsline { display: flex; justify-content: space-between; font-size: 11.5px;
+  color: var(--ink-2); padding: 3px 0; border-bottom: 1px solid var(--line); }
+.ds .dsline:last-child { border-bottom: 0; }
+.ds .dsline span.n { font-variant-numeric: tabular-nums; }
+.ds .dsnote { font-size: 10.5px; color: var(--muted); margin-top: 8px;
+  line-height: 1.5; }
 .verdictcard { border-color: var(--line-strong); }
 .vbig { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
 
@@ -558,9 +577,12 @@ DECK_JS = r"""
     var r = ["var(--r1)", "var(--r2)", "var(--r3)", "var(--r4)"];
     return r[Math.min(3, Math.floor(i / Math.max(1, of) * 4))];
   }
+  // THE LEDGER'S REFERENCE, in words. Not "entry": these say whether the
+  // level the paper ledger books against was reachable, which is a fact about
+  // the record and never a fact about what a reader should have done.
   var MID_WORD = {
-    triggered: "Entry reached", gapped_through: "Opened past the entry",
-    never_triggered: "Entry never reached", skipped: "Skipped"
+    triggered: "Reference reached", gapped_through: "Opened past it",
+    never_triggered: "Reference never reached", skipped: "Skipped"
   };
   // The three legs a notable mover can be ranked on, in words. The packet
   // spells them with underscores and no field name is printed as English on
@@ -751,16 +773,84 @@ DECK_JS = r"""
   }
 
   /* 2. level ladder */
+  /* ---- the daily context map -------------------------------------------
+     It draws where a name sits in its own history and NOTHING ELSE. No entry,
+     no stop, no target, no horizon. See CRITERIA.md [Daily structure] for why
+     the two levels this panel replaced were withdrawn rather than replaced. */
+  function dsWindowWord(n) {
+    return n >= 200 ? "One year" : n >= 60 ? "One quarter" : "One month";
+  }
+  function dailyStructure(c) {
+    var d = c.ds;
+    if (!d) {
+      return '<div class="ds"><div class="panel-title">Daily structure</div>' +
+        '<div class="empty">No end of day history arrived for this name, so ' +
+        "there is no map. That is an absence and not an empty range.</div></div>";
+    }
+    var head = '<div class="ds"><div class="panel-title">Daily structure</div>';
+    if (d.short) {
+      return head + '<div class="empty">' + esc(d.short) + "</div></div>";
+    }
+    var out = head;
+
+    (d.w || []).forEach(function (w) {
+      // position_pct is UNCAPPED on purpose. Above 100 means the last price is
+      // through the window's high and below 0 means through its low, and both
+      // are the most interesting thing the row can say. The marker is clamped
+      // so it stays on the track; the words are not.
+      var p = w.pos, clamped = p == null ? null : Math.max(0, Math.min(100, p));
+      var where = p == null ? "range is flat"
+        : p > 100 ? "above the high"
+        : p < 0 ? "below the low"
+        : p.toFixed(0) + "% of the range";
+      out += '<div class="dsrow"><div class="dslab"><b>' +
+        esc(dsWindowWord(w.n)) + "</b><span>" + w.n + " sessions \u00b7 " +
+        esc(where) + "</span></div>" +
+        '<div class="dstrack">' + (clamped == null ? "" :
+          '<i class="' + (p > 100 || p < 0 ? "out" : "") + '" style="left:calc(' +
+          clamped.toFixed(1) + '% - 1px)"></i>') + "</div>" +
+        '<div class="dsends"><span>' + n2(w.lo) + "</span><span>" +
+        n2(w.hi) + "</span></div></div>";
+    });
+
+    (d.sma || []).forEach(function (s) {
+      out += '<div class="dsline"><span>' + s.n + " session average</span>" +
+        '<span class="n">' + n2(s.v) +
+        (s.vs == null ? "" : '  <span class="' + dirClass(s.vs) + '">' +
+          pct(s.vs) + "</span>") + "</span></div>";
+    });
+    if (d.atr != null) {
+      out += '<div class="dsline"><span>Average true range, ' + (d.atrn || 14) +
+        " sessions</span>" + '<span class="n">' + n2(d.atr) +
+        (d.atrp == null ? "" : "  " + n2(d.atrp) + "% of price") + "</span></div>";
+    }
+    if (d.up) {
+      out += '<div class="dsline"><span>Sessions closing up</span>' +
+        '<span class="n">' + d.up.u + " of " + d.up.of + "</span></div>";
+    }
+
+    out += '<div class="dsnote">Where this name sits in its own history, from ' +
+      (d.n || 0) + " completed session(s) to " + esc(d.last || "?") +
+      ". Levels are back adjusted onto today's basis." +
+      (d.adj && d.adj.length
+        ? " A price adjustment of more than 10 percent lands on " +
+          esc(d.adj.join(", ")) + ", so a raw chart will disagree here."
+        : "") +
+      " No entry, stop or target is drawn: nothing in this project's record " +
+      "supports publishing one.</div></div>";
+    return out;
+  }
+
   function ladder(c) {
     var W = 310, H = 430, TOP = 18, BOT = 20, AX = 104;
     var pts = [];
     function add(v, label, kind) { if (v != null) pts.push({ v: v, label: label, kind: kind }); }
     add(c.prior_close, "Prior close", "ref");
     add(c.prior_high, "Prior high", "ref");
-    add(c.pm_low, "PM low · stop", "stop");
+    add(c.pm_low, "PM low", "range");
     add(c.pm_vwap, "VWAP", "mark");
     add(c.price, "Last", "last");
-    add(c.pm_high, "PM high · entry", "entry");
+    add(c.pm_high, "PM high", "range");
     if (!pts.length) return '<div class="empty">No level was measured for this name.</div>';
     var vs = pts.map(function (p) { return p.v; });
     var lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs);
@@ -804,8 +894,12 @@ DECK_JS = r"""
     }
     ordered.forEach(function (p) {
       var yy = y(p.v);
+      // NO GREEN AND NO RED HERE. Until 2026-09-08 the premarket high was
+      // drawn green with an up arrow and the low red with a down arrow, which
+      // is buy and sell iconography on two numbers that are the extremes of a
+      // few hours of thin trade. They are the ends of an observed range and
+      // are drawn as that.
       var col = p.kind === "ref" ? "var(--line-strong)"
-        : p.kind === "entry" ? "var(--good)" : p.kind === "stop" ? "var(--bad)"
         : p.kind === "last" ? "var(--accent)" : "var(--r3)";
       var dash = p.kind === "ref" ? ' stroke-dasharray="3 3"' : "";
       s += '<line x1="' + (AX - 22) + '" y1="' + yy + '" x2="' + (AX + 14) + '" y2="' + yy +
@@ -813,12 +907,6 @@ DECK_JS = r"""
       if (Math.abs(p.ly - yy) > 1.5) {
         s += '<path d="M' + (AX + 14) + " " + yy + " L" + (AX + 20) + " " + p.ly +
           '" stroke="var(--line)" stroke-width="1" fill="none"/>';
-      }
-      if (p.kind === "entry") {
-        s += '<path d="M' + (AX - 30) + " " + (yy + 5) + ' l5 -9 l5 9 z" fill="var(--good)"/>';
-      }
-      if (p.kind === "stop") {
-        s += '<path d="M' + (AX - 30) + " " + (yy - 5) + ' l5 9 l5 -9 z" fill="var(--bad)"/>';
       }
       if (p.kind === "last") {
         s += '<circle cx="' + AX + '" cy="' + yy +
@@ -1145,8 +1233,11 @@ DECK_JS = r"""
       '<div class="deck-grid">' +
       '<div><div class="panel-title">Levels</div>' + ladder(c) +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5">' +
-      "Entry is the premarket high, stop the premarket low, both as published at " +
-      esc(session.run_at || "08:45") + ".</div>" + priorBlock(c, session) + "</div>" +
+      "The range the premarket actually traded, as at " +
+      esc(session.run_at || "08:45") + ". These are observed extremes and not " +
+      "levels to act on: the ledger books its paper trades against the high and " +
+      "the low, which is all they were ever measured to be good for.</div>" +
+      priorBlock(c, session) + dailyStructure(c) + "</div>" +
       '<div><div class="panel-title">Premarket tape</div>' + tapePath(c) +
       '<div class="panel-title" style="margin-top:18px">Score, ' + n2(c.score, 0) +
       " of 10</div>" + comps + marginalLine(c) + "</div>" +
@@ -1524,13 +1615,15 @@ DECK_JS = r"""
     return '<section><div class="shead"><h2>What noon will grade</h2>' +
       '<span class="note">' + rows.length + " published at " +
       esc(p.run_at || "08:45") + "</span></div>" +
-      '<p class="snote">The entry and the stop the morning printed, exactly as ' +
-      "published. The pass reads each one back against the open and says whether it " +
-      "was ever reachable. It grades these levels and never the corrected ones the " +
-      "night writes later.</p>" +
+      '<p class="snote">The two reference levels the ledger books against, ' +
+      "exactly as frozen at the scan. The pass reads each one back against the open " +
+      "and says whether it was ever reachable. It grades these levels and never the " +
+      "corrected ones the night writes later. They are a measuring instrument and " +
+      "not a recommendation: the map on each card is what describes where a name " +
+      "sits.</p>" +
       '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Conviction</th>' +
       '<th style="text-align:right">Gap</th><th style="text-align:right">Prior close</th>' +
-      '<th style="text-align:right">Entry</th><th style="text-align:right">Stop</th>' +
+      '<th class="n">Ref high</th><th class="n">Ref low</th>' +
       '<th>Screens</th></tr></thead><tbody>' + rows.map(function (c) {
         var screens = [c.day ? "day" : "", c.swing ? "swing" : ""]
           .filter(Boolean).join(" and ");
@@ -1540,7 +1633,8 @@ DECK_JS = r"""
           "</span></td>" +
           '<td class="n ' + dirClass(c.gap) + '">' + pct(c.gap) + "</td>" +
           '<td class="n">' + n2(c.prior_close) + '</td>' +
-          '<td class="n">' + n2(c.entry) + '</td><td class="n">' + n2(c.stop) + "</td>" +
+          '<td class="n">' + n2(c.lref_hi) + '</td><td class="n">' +
+          n2(c.lref_lo) + "</td>" +
           '<td style="color:var(--muted)">' + (screens || "neither") + "</td></tr>";
       }).join("") + "</tbody></table></div></section>";
   }
@@ -1639,7 +1733,8 @@ DECK_JS = r"""
 
     var html = kpisHTML([
       { l: "Picks carried", v: rows.length, s: "published at " + esc(p.run_at || "08:45") },
-      { l: "Entry reached", v: states.triggered || 0, s: "the level printed was tradeable" },
+      { l: "Reference reached", v: states.triggered || 0,
+        s: "the ledger's level was tradeable" },
       { l: "Opened past it", v: states.gapped_through || 0, s: "the open was already through" },
       { l: "Never reached", v: states.never_triggered || 0, s: "the session high fell short" },
       { l: "Read at", v: (mid.generated || "").slice(11, 16) || NIL, s: "ET, from the vendor sweep" }
@@ -1648,9 +1743,9 @@ DECK_JS = r"""
     html += '<section><div class="shead"><h2>Against the levels the morning published</h2>' +
       '<span class="note">' + esc(p.session) + "</span></div>" +
       '<p class="snote">Each bar is the move from the prior close as of noon. The chip says ' +
-      "whether the entry the morning printed was ever reachable, and the sentence is the " +
-      "packet's own reason.</p>" +
-      '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Entry status</th>' +
+      "whether the reference level the ledger books against was ever reachable, and the " +
+      "sentence is the packet's own reason.</p>" +
+      '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Against reference</th>' +
       '<th style="text-align:right">Move</th><th></th>' +
       '<th style="text-align:right">Open</th><th style="text-align:right">High</th>' +
       '<th style="text-align:right">Low</th><th style="text-align:right">Last</th>' +
@@ -1841,7 +1936,8 @@ DECK_JS = r"""
     var names = L.names || [];
     var head = '<section><div class="shead"><h2>The ladder</h2>' +
       '<span class="note">' + esc(L.open_time || "09:30") + " to " +
-      esc(L.close_time || "10:15") + ", closest to its entry first</span></div>";
+      esc(L.close_time || "10:30") +
+      ", closest to its reference first</span></div>";
 
     if (!names.length) {
       root.innerHTML = head + '<div class="card pad empty">' +
@@ -1869,24 +1965,26 @@ DECK_JS = r"""
     root.innerHTML = head +
       kpisHTML([
         { l: "Published", v: names.length, s: "levels frozen at " + esc(p.run_at || "08:45") },
-        { l: "Triggered", v: (counts.triggered || 0) + (counts.gapped_through || 0),
-          s: "traded through the entry" },
+        { l: "Reached", v: (counts.triggered || 0) + (counts.gapped_through || 0),
+          s: "traded through the reference" },
         { l: "Stopped", v: counts.stopped || 0, s: "after the fill, in a later minute" },
-        { l: "Still waiting", v: counts.waiting || 0, s: "the entry has not traded" },
+        { l: "Still waiting", v: counts.waiting || 0,
+          s: "the reference has not traded" },
         { l: "Read at", v: esc((L.generated || "").slice(11, 16) || NIL), s: "ET" }
       ]) +
       '<p class="snote">' + esc(state) + "</p>" +
       '<div class="card pad"><div class="scroll capped">' +
       '<table class="ptable"><thead><tr><th>Name</th><th>State</th>' +
-      '<th class="n">Last</th><th class="n">Entry</th><th>Distance</th>' +
-      '<th class="n">To entry</th><th class="n">Stop</th></tr></thead><tbody>' +
+      '<th class="n">Last</th><th class="n">Reference</th><th>Distance</th>' +
+      '<th class="n">To it</th><th class="n">Stop ref</th></tr></thead><tbody>' +
       names.map(function (r) { return ladderRow(r, maxAway); }).join("") +
       "</tbody></table></div></div>" +
-      '<p class="snote">Every level here was published at ' + esc(p.run_at || "08:45") +
-      " and is not recomputed. This screen only says where the tape is against " +
-      "them. A stop reached in the same minute as the fill is reported as " +
-      "reached and never as a stop out, because a minute bar carries a high " +
-      "and a low and no order between them.</p></section>";
+      '<p class="snote">These are the ledger\'s two reference levels, frozen at ' +
+      esc(p.run_at || "08:45") + " and never recomputed. This screen says where the " +
+      "tape is against them and nothing more: it is how the paper record will book " +
+      "today, not a level to trade. A stop reached in the same minute as the fill is " +
+      "reported as reached and never as a stop out, because a minute bar carries a " +
+      "high and a low and no order between them.</p></section>";
 
     root.addEventListener("click", function (e) {
       var tr = e.target.closest("[data-goto]");

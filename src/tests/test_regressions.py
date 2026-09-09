@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty nine claims, a count read off
+and the two pages. It now carries two hundred and thirty two claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -3314,7 +3314,7 @@ def claim_a_headline_says_why_it_is_under_this_ticker(
 
 
 def claim_seven_tasks_carry_every_trigger(failures: list[str]) -> None:
-    """The schedule is seven tasks, and every clock CRITERIA names is on one of them.
+    """The schedule is eight tasks, and every clock CRITERIA names is on one of them.
 
     Eleven tasks were the same seven .bat files registered under other names
     for their second and third firings: nightly-catchup, universe,
@@ -3383,7 +3383,7 @@ def claim_seven_tasks_carry_every_trigger(failures: list[str]) -> None:
         if needle not in nightly_bat:
             failures.append(f"job_nightly.bat lacks {needle!r}, so the Sunday firing "
                             "would not rebuild the universe under its own name")
-    print("  seven tasks  the schedule is seven tasks carrying every CRITERIA clock, "
+    print("  eight tasks  the schedule is eight tasks carrying every CRITERIA clock, "
           "the retired names are removed, and the nightly's Sunday mode is the universe")
 
 
@@ -13215,6 +13215,8 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         228: "two hundred and twenty eight",
         229: "two hundred and twenty nine",
         230: "two hundred and thirty",
+        231: "two hundred and thirty one",
+        232: "two hundred and thirty two",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -15056,7 +15058,12 @@ def claim_the_page_opens_at_a_glance(failures: list[str]) -> None:
         return
     strip = lines[strip_at]
     for needle in ("Day eligible 1 of 2", "swing eligible 0 of 2", "1 gapped up and 1 gapped down",
-                   "AAA 7.0 green, up", "AAA entry 10.40, stop 9.90", "SPY -0.66%"):
+                   "AAA 7.0 green, up",
+                   # NOT "entry 10.40, stop 9.90". The fallback strip said that
+                   # until 2026-09-08, which is a sentence of instruction on
+                   # the one morning the narrative already failed and nobody
+                   # reads closely. See CRITERIA.md [Daily structure].
+                   "AAA premarket range 9.90 to 10.40", "SPY -0.66%"):
         if needle not in strip:
             failures.append(f"the strip lacks {needle!r}: {strip!r}")
     if "QQQ" in strip or "VIX" in strip:
@@ -18520,6 +18527,245 @@ def claim_no_local_shadows_a_desk_helper(failures: list[str]) -> None:
           "reaches the helper")
 
 
+def claim_the_daily_map_prescribes_nothing(failures: list[str]) -> None:
+    """It says where a share is. It never says what to do about it.
+
+    THE BOUNDARY IS THE WHOLE POINT. This project's record does not support
+    publishing a level: the paper ledger stands at five wins in seventeen at a
+    median of -1.70 percent, green ranks BELOW yellow and red on excursion, and
+    entry_ref is reached on 20 of 48 measured rows. A map is descriptive and
+    cannot be wrong in the way a level can, which is the only reason it was
+    allowed onto a card at all.
+
+    The tempting failure is not a bad map, it is a helpful one. An average true
+    range invites a stop at some multiple of it, a stop invites a target at
+    some multiple of the risk, and each step reads as arithmetic on a number
+    already on the page rather than as the new unmeasured threshold it is.
+    CRITERIA.md [Daily structure] says so in the file, and this says so in the
+    suite, because prose in a design document has never once stopped a helpful
+    addition.
+
+    So: no key this module emits may name an entry, a stop, a target or a
+    holding horizon, and no multiple of the range may be computed anywhere in
+    it. The map may carry the range itself. It may not carry a fraction of it.
+    """
+    import inspect
+
+    from morning import structure
+
+    bars = [{"date": f"2026-0{1 + i // 28}-{1 + i % 28:02d}",
+             "open": 100 + i * 0.1, "high": 101 + i * 0.1, "low": 99 + i * 0.1,
+             "close": 100 + i * 0.1, "adjusted_close": 100 + i * 0.1,
+             "volume": 1_000_000} for i in range(60)]
+    block = structure.measure(bars, 105.0)
+
+    def keys(node, seen=None):
+        seen = seen if seen is not None else []
+        if isinstance(node, dict):
+            for key, value in node.items():
+                seen.append(str(key))
+                keys(value, seen)
+        elif isinstance(node, list):
+            for item in node:
+                keys(item, seen)
+        return seen
+
+    FORBIDDEN = ("entry", "stop", "target", "horizon", "risk", "reward",
+                 "buy", "sell", "signal")
+    for key in keys(block):
+        for word in FORBIDDEN:
+            if word in key.lower():
+                failures.append(
+                    f"the daily map emits a key named {key!r}, which names a "
+                    f"decision ({word}) and not a description. The map exists "
+                    "because this project's record cannot support publishing "
+                    "one; see CRITERIA.md [Daily structure]")
+
+    # And the arithmetic. A multiple of the average range is the first step
+    # from a map to a stop, and it is one line long.
+    source = inspect.getsource(structure)
+    body = "\n".join(line for line in source.splitlines()
+                      if not line.strip().startswith("#"))
+    body = body.split('"""')
+    body = "".join(body[::2])          # drop the docstrings, keep the code
+    # A MULTIPLE of the range makes a price out of it, which is a stop. A
+    # RATIO of it against the price does not: atr / price is the range said as
+    # a percentage, which is the same fact in different units and is exactly
+    # what makes two shares comparable. So the products are refused and that
+    # one quotient is not.
+    for pattern in ("atr *", "atr*", "* atr", "*atr", "atr_multiple",
+                    "multiple", "target", "r_multiple"):
+        if pattern in body.lower():
+            failures.append(
+                f"the daily map's code contains {pattern!r}. A multiple of the "
+                "average range is a stop with the label filed off, and it is "
+                "exactly the unmeasured threshold this module's header refuses")
+
+    # The map must still SAY the things it exists to say, or the check above
+    # passes over an empty dict. This is the mutation that would otherwise slip.
+    for wanted in ("atr", "windows", "sma", "up_closes"):
+        if block.get(wanted) in (None, [], {}):
+            failures.append(
+                f"the daily map drew nothing for {wanted!r} on sixty clean "
+                "sessions, so the claim above is checking an empty block")
+
+    print("  daily map describes where a share sits and names no entry, stop, "
+          "target or horizon, and computes no multiple of its own range")
+
+
+def claim_no_screen_prints_a_reference_level_as_advice(
+        failures: list[str]) -> None:
+    """entry_ref and stop_ref stayed. Printing them as Entry and Stop stopped.
+
+    THESE ARE TWO DIFFERENT THINGS AND THEY HAD ONE PAIR OF NAMES. The ledger
+    genuinely needs two fixed numbers to book every morning against, and the
+    premarket high and low are adequate for that: [Truth], [Outcomes], the
+    midday pass and the live ladder all measure against them, and giving them a
+    new meaning would silently rewrite what every historical row asserts.
+
+    What they were never adequate for is being read as a plan. Measured across
+    the 2026-09-08 packet in each share's own ATR(14), the distance between
+    them ran from 0.14 to 2.44 of it, a seventeen fold spread out of one rule,
+    because the premarket low measures how far the premarket happened to wobble
+    and not anything about the share. Six of ten sat inside a QUARTER of one
+    day's normal range. The glossary then explained the pair as the price the
+    rules "would have started a position" at and the price that keeps "a loss
+    to a known size", and at that point a measuring stick was a recommendation.
+
+    So both halves are asserted here, and the second is the one that rots. A
+    screen is one careless header away from Entry, and nothing else in this
+    suite would notice.
+    """
+    from core import criteria
+    from core import glossary
+
+    src = (config.PROJECT_ROOT / "src" / "desk" / "assets.py").read_text(
+        encoding="utf-8", errors="replace")
+
+    # ---- 1. no reader-facing label says Entry or Stop.
+    for label in (">Entry<", ">Stop<", ">Entry</th>", ">Stop</th>",
+                  "PM high \u00b7 entry", "PM low \u00b7 stop",
+                  '"Entry"', "Entry status", "To entry"):
+        if label in src:
+            failures.append(
+                f"a desk screen prints {label!r} at a reader. entry_ref and "
+                "stop_ref are the ledger's reference levels and this project's "
+                "record does not support publishing either as advice; see "
+                "CRITERIA.md [Daily structure]")
+
+    # ---- 2. the ledger's two fields are still there, still fed, still named
+    #         in CRITERIA. Withdrawing the label must not have withdrawn the
+    #         measurement, which every outcome pass on the record depends on.
+    crit = criteria.load()
+    for key, wanted in (("entry_ref_field", "pm_high"), ("stop_ref_field", "pm_low")):
+        if crit.text("picks", key) != wanted:
+            failures.append(
+                f"[Picks] {key} is no longer {wanted}. The label came off these "
+                "levels on 2026-09-08; the levels themselves feed every outcome "
+                "measurement on the record and were not meant to move")
+
+    scan_src = (config.PROJECT_ROOT / "src" / "morning" / "scan.py").read_text(
+        encoding="utf-8", errors="replace")
+    for wanted in ('candidate["entry_ref"] = entry', 'candidate["stop_ref"] = stop'):
+        if wanted not in scan_src:
+            failures.append(
+                f"the scan no longer writes {wanted!r}, so the paper ledger has "
+                "nothing to book against and [Outcomes] has nothing to measure")
+
+    # ---- 3. the glossary no longer explains them as a trading plan
+    # THE DEFINITIONS THEMSELVES, not the file. A comment recording what the
+    # old wording said is history and reaches no reader; reading the source
+    # whole would fail on this module's own note about the change.
+    defined = " ".join(body for _term, body in glossary.TERMS)
+    defined += " " + " ".join(str(v) for v in glossary.COLUMNS.values())
+    for phrase in ("would have started a position",
+                   "loss is kept to a known size"):
+        if phrase in defined:
+            failures.append(
+                f"the glossary still explains the reference levels as {phrase!r}, "
+                "which describes a trading plan. No plan was measured here")
+
+    print("  reference levels no screen prints entry_ref or stop_ref to a "
+          "reader as Entry or Stop, and both still feed the ledger they were "
+          "always for")
+
+
+def claim_the_daily_map_refuses_to_mislabel_short_history(
+        failures: list[str]) -> None:
+    """A 250 session high over 30 sessions is not a 250 session high.
+
+    A window that quietly falls back to whatever history it has is the failure
+    mode that cannot be seen on the page: the label says a trading year, the
+    number is five weeks, and it is the label a reader trusts. Every window
+    here nulls itself independently and the card simply omits it, which is why
+    a name with 242 sessions on file shows a month and a quarter and no year.
+
+    THE SPLIT CASE IS THE OTHER HALF, and it is worse because the number stays
+    plausible. A two for one split inside the window leaves the raw high at
+    twice today's basis, and a map that reported it would say a share is 50
+    percent below a high it never traded at. Levels are back adjusted through
+    adjusted_close over close before anything is measured, and a single session
+    step larger than [Daily structure] max_adjustment_step is DISCLOSED by
+    date, because the correction is already applied and a reader whose raw
+    chart disagrees is owed the reason.
+    """
+    from core import criteria
+    from morning import structure
+
+    crit = criteria.load()
+    short_n = crit.integer("daily_structure", "lookback_sessions_short")
+    long_n = crit.integer("daily_structure", "lookback_sessions_long")
+
+    def bar(i, close, factor=1.0):
+        return {"date": f"2026-01-{1 + i:02d}", "open": close, "high": close + 1,
+                "low": close - 1, "close": close,
+                "adjusted_close": close * factor, "volume": 1_000_000}
+
+    # ---- 1. thirty sessions draws the short window and NOT the long one
+    block = structure.measure([bar(i, 100 + i) for i in range(30)], 130.0)
+    drawn = {w["sessions"] for w in block["windows"]}
+    if long_n in drawn:
+        failures.append(
+            f"a {long_n} session window was drawn over 30 sessions of history. "
+            "The label is the part a reader trusts and it would be false")
+    if short_n not in drawn:
+        failures.append(
+            f"no {short_n} session window was drawn over 30 sessions, so this "
+            "claim is reading an empty block and checking nothing")
+
+    # ---- 2. the split is corrected and disclosed
+    #         Raw closes double at the midpoint, which is what a 1 for 2 split
+    #         looks like from the wrong side; adjusted_close does not.
+    split = [bar(i, 100 if i < 15 else 200, 1.0 if i >= 15 else 0.5)
+             for i in range(30)]
+    corrected = structure.measure(split, 200.0)
+    window = next((w for w in corrected["windows"] if w["sessions"] == short_n), None)
+    if window is None:
+        failures.append("no short window survived the split case")
+    elif window["high"] > 250:
+        failures.append(
+            f"the {short_n} session high reads {window['high']} across a "
+            "doubling of the raw close, so the split was never adjusted out "
+            "and the map claims a high the share never traded at")
+    if not corrected.get("adjustment_steps"):
+        failures.append(
+            "a 50 percent single session adjustment step was not disclosed. "
+            "The correction is applied silently and a reader's raw chart will "
+            "disagree with the card with nothing on it saying why")
+
+    # ---- 3. the fetch window can actually reach the longest one
+    days = crit.integer("daily_structure", "history_calendar_days")
+    if days < long_n * 7 / 5:
+        failures.append(
+            f"[Daily structure] history_calendar_days is {days}, which cannot "
+            f"span {long_n} trading sessions at five a week. The longest window "
+            "would silently never draw")
+
+    print(f"  daily map omits a window it has no history for, adjusts a split "
+          f"out of its levels and names the date, and asks for enough days to "
+          f"reach {long_n} sessions")
+
+
 def claim_the_ladder_reads_a_sequence_and_not_an_aggregate(
         failures: list[str]) -> None:
     """A stop after a fill is a stop out; before it, or beside it, is not.
@@ -19206,6 +19452,9 @@ def main() -> int:
     run_claim(failures, claim_the_desk_prints_tickers_and_aligns_its_numbers, failures)
     run_claim(failures, claim_the_floors_filter_is_wired_to_the_table_it_filters, failures)
     run_claim(failures, claim_the_ladder_reads_a_sequence_and_not_an_aggregate, failures)
+    run_claim(failures, claim_the_daily_map_prescribes_nothing, failures)
+    run_claim(failures, claim_no_screen_prints_a_reference_level_as_advice, failures)
+    run_claim(failures, claim_the_daily_map_refuses_to_mislabel_short_history, failures)
     run_claim(failures, claim_no_local_shadows_a_desk_helper, failures)
 
     if failures:

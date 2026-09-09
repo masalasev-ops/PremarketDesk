@@ -18,6 +18,52 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-08, twentieth: a map instead of a level, and the ledger keeps its two numbers
+
+**The question.** Having established that `pm_high` and `pm_low` are not levels
+for anything held past the open, what replaces them on the card.
+
+**What was proposed and rejected.** An entry anchored at the day's price, a
+stop at a multiple of ATR, targets at R multiples, over the five session
+horizon `[Outcomes] horizon_sessions_long` already names. The owner refused it
+on its own justification, correctly: it declines a breakout rule for having no
+measured basis and then introduces an ATR multiple, an R multiple and a holding
+horizon, none of which has one either. Refusing one unmeasured threshold by
+adding three is not the discipline CRITERIA describes.
+
+A structural breakout entry, the highest high over N sessions, was rejected on
+the same ground and would additionally have declined to give a level on eight
+of that morning's ten names.
+
+**What decided it.** Nothing in this project's record supports publishing any
+entry. The paper ledger stands at five wins in seventeen at a median of -1.70
+percent, green ranks BELOW yellow and red on excursion, and `entry_ref` is
+reached on 20 of 48 measured rows. A level published from that record is a seed
+wearing a label, and a label is exactly what makes it dangerous.
+
+A map is descriptive and cannot be wrong in the way a level can. It says where
+the share is, not what to do, which is the boundary `[Notable]` has always
+held. If a validated entry rule is ever published it comes from the ledger
+after the pre-registered judging point, and not from a design decision taken
+while building a screen.
+
+**The separation that makes it clean, and it is the load bearing half.** The
+ledger's reference and the reader's advice were the same two numbers only by an
+accident of naming. `paper_trades` genuinely needs two numbers to book against
+and `pm_high` and `pm_low` are adequate for that, because every morning is
+measured the same way against them and nothing about that requires them to be
+tradeable. They stop being adequate the moment they are labelled Entry and Stop
+and glossed as a position and a loss limit. So the fields stay and the labels
+go, rather than the fields being redefined, which would have silently changed
+what every historical row means.
+
+**The one honest cost.** The map is described as adding no CRITERIA knobs and
+that is not quite true. It adds eight, of which seven are REPORTING WINDOWS
+that change what is described rather than what passes, and one,
+`max_adjustment_step`, is a genuine threshold deciding whether a split is
+disclosed. That is a smaller surface than any rejected option and it is stated
+rather than glossed over.
+
 ## 2026-09-08, nineteenth: the ladder window is a whole hour because the scheduler counts in whole hours
 
 THE CHOICE. The ladder needed 09:30 to about 10:15, which is where the evidence

@@ -1098,7 +1098,11 @@ def claim_the_graded_table_is_not_an_execution_record(
              "that a rejected row was never a recommendation"),
             ("AAA on the day and swing screens",
              "which screen a picked name was on"),
-            ("| Entry reached | Start price | Now vs start | Best vs start "
+            # RENAMED 2026-09-08. The two level columns were headed Entry and
+            # Stop, which made the ledger's reference levels read as advice;
+            # the legend has to follow the header or it explains columns that
+            # are no longer there. See CRITERIA.md [Daily structure].
+            ("| Reference reached | Start price | Now vs start | Best vs start "
              "| Stop reached |",
              "what each outcome column measures")):
         if wanted not in text:
@@ -1115,10 +1119,13 @@ def claim_the_graded_table_is_not_an_execution_record(
             failures.append(f"the page still describes a trade nobody placed, "
                             f"{banned!r} in: {line.strip()[:110]!r}")
 
-    # One legend for two tables of the same columns, not two.
+    # One legend for two tables of the same columns, not two. The column it
+    # looks for is named RATHER THAN ANY LINE, so a legend for some other
+    # table cannot stand in for this one; renaming the column on 2026-09-08
+    # therefore had to be tracked here, which is the whole point of naming it.
     legends = [line for line in text.splitlines()
                if line.startswith(glossary.LEGEND_PREFIX)
-               and "Entry reached" in line]
+               and "Reference reached" in line]
     if len(legends) != 1:
         failures.append(f"{len(legends)} copies of the graded table's column "
                         "legend, where two tables of one shape need one")

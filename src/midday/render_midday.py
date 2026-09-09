@@ -223,8 +223,13 @@ def _sentence(text: Any) -> str:
     return out
 
 
-CARRY_HEADER = ("| Ticker | Score | Conviction | Entry | Stop | Entry reached "
-                "| Start price | Now vs start | Best vs start | Stop reached |")
+# NOT "Entry" and "Stop". These two columns are entry_ref and stop_ref, the
+# premarket high and low, which the paper ledger books against; printing them
+# under those two words made a measuring stick read as a recommendation. See
+# CRITERIA.md [Daily structure].
+CARRY_HEADER = ("| Ticker | Score | Conviction | Ref high | Ref low "
+                "| Reference reached | Start price | Now vs start "
+                "| Best vs start | Stop reached |")
 _CARRY_RULE = "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
 

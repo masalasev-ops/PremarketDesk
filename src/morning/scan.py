@@ -44,6 +44,7 @@ from night import paper_ledger
 from ops import job_status
 from core import store
 from selection import universe
+from morning import structure
 from morning import vintage
 
 _CRIT = criteria.load()
@@ -757,8 +758,18 @@ def attach_quotes(
 
 def attach_daily_history(
     api: eodhd.EodhdClient, candidates: list[dict[str, Any]], packet: Packet
-) -> None:
+) -> dict[str, list[dict[str, Any]]]:
     """Prior session close, high and 20 day average volume, from the end of day feed.
+
+    IT ALSO FEEDS [Daily structure], and that is why the window is a trading
+    year rather than the five weeks prior_close needs. [Quota costs] prices eod
+    at ONE CREDIT FLAT PER CALL and not per row, measured twice; the from date
+    changes the size of the payload and not the price of it. So the context map
+    on every card is paid for by a call this function was already making, and
+    narrowing the window again would save nothing while blanking the 60 and 250
+    session panels. The bars are returned rather than discarded for the same
+    reason: fetching them twice would cost a second credit per name to learn
+    what the first call already said.
 
     prior_close and prior_high are read from THE SAME record and cannot be
     sourced separately. When they came from different places, one from the bulk
@@ -771,7 +782,13 @@ def attach_daily_history(
     """
     lookback = _CRIT.integer("universe", "lookback_sessions")
     today = ettime.today_et()
-    start = today - dt.timedelta(days=lookback * 2 + 10)
+    # The LONGER of what prior_close needs and what the context map needs. Kept
+    # as a max rather than replaced outright so that shortening the map's
+    # window can never quietly starve the prior close of history.
+    start = today - dt.timedelta(days=max(
+        lookback * 2 + 10,
+        _CRIT.integer("daily_structure", "history_calendar_days")))
+    completed_by_symbol: dict[str, list[dict[str, Any]]] = {}
 
     def unknown(candidate: dict[str, Any]) -> None:
         candidate["prior_close"] = None
@@ -796,6 +813,7 @@ def attach_daily_history(
             unknown(candidate)
             continue
 
+        completed_by_symbol[candidate["symbol"]] = completed
         prior = completed[-1]
         candidate["prior_close"] = _as_float(prior.get("close"))
         candidate["prior_high"] = _as_float(prior.get("high"))
@@ -841,6 +859,8 @@ def attach_daily_history(
         # truth pass through true_bars. This one did not.
         candidate["avg_volume_20d"] = round(sum(volumes) / len(volumes), 2) if volumes else None
         candidate["avg_volume_20d_sessions"] = len(volumes)
+
+    return completed_by_symbol
 
 
 # The three states the morning's fill warning may carry. Named rather than
@@ -5766,6 +5786,10 @@ def build_packet() -> dict[str, Any]:
 
     packet = Packet()
     api = eodhd.client()
+    # Completed daily bars per symbol, kept from the one eod call per
+    # candidate attach_daily_history makes, so [Daily structure] costs no
+    # second call. Both branches below fill it; only one of them runs.
+    daily_history: dict[str, list[dict[str, Any]]] = {}
 
     # The shared key preflight, before anything is spent. Below the refuse
     # floor the exception ends the run. Below the degrade threshold the run
@@ -5910,7 +5934,7 @@ def build_packet() -> dict[str, Any]:
                 "make them rankable. A watchlist written before the pool rewrite, or "
                 "a morning where the movers source failed, both look like this."
             )
-            attach_daily_history(api, unpriced, packet)
+            daily_history.update(attach_daily_history(api, unpriced, packet))
             for candidate in unpriced:
                 candidate["pool_prior_close"] = candidate.get("prior_close")
 
@@ -5952,7 +5976,7 @@ def build_packet() -> dict[str, Any]:
                 candidate["headlines"] = []
         else:
             attach_quotes(api, candidates, packet)
-            attach_daily_history(api, candidates, packet)
+            daily_history.update(attach_daily_history(api, candidates, packet))
         attach_gap(candidates)
         # Before both ratio measures, because both divide the estimate it
         # attaches rather than the shares the socket saw.
@@ -6006,6 +6030,20 @@ def build_packet() -> dict[str, Any]:
 
     if candidates:
         stamp_all(candidates, earnings_block)
+
+    # The daily context map, from bars attach_daily_history already paid for.
+    # AFTER stamp_all only so that a card carries its conviction beside its
+    # map; the map itself reads no score and no eligibility and changes
+    # neither. It prescribes no entry, no stop and no target: see the header
+    # of morning/structure.py and CRITERIA.md [Daily structure] for why the
+    # two levels this desk used to print were withdrawn rather than replaced.
+    mapped = structure.attach(candidates, daily_history)
+    if candidates and mapped < len(candidates):
+        packet.gap(
+            f"daily structure: {len(candidates) - mapped} of {len(candidates)} "
+            "candidate(s) have no daily context map, because their end of day "
+            "history did not arrive. The card shows the absence and its reason "
+            "rather than an empty map.")
 
     # AFTER stamp_all, because evaluate_eligibility runs inside it and the
     # section is assembled before vintage.enforce. See mark_notable_watchlist.

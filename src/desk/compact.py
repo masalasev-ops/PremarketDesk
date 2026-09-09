@@ -160,6 +160,39 @@ def _frozen_run_bars(session_date: str,
     return out
 
 
+def _structure(block: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The daily context map, shortened for the payload.
+
+    Short keys for the same reason every other block here has them: the whole
+    payload is gzipped and base64 inlined into one static file, and a name
+    repeated once per candidate per window is paid for on every load.
+    """
+    if not block:
+        return None
+    out: dict[str, Any] = {
+        "n": block.get("sessions"),
+        "last": block.get("last_session"),
+        "short": block.get("short"),
+    }
+    if block.get("adjustment_steps"):
+        out["adj"] = block["adjustment_steps"]
+    if block.get("short"):
+        return out
+    out.update({
+        "atr": block.get("atr"),
+        "atrp": block.get("atr_pct"),
+        "atrn": block.get("atr_sessions"),
+        "w": [{"n": w["sessions"], "hi": w["high"], "lo": w["low"],
+               "pos": w["position_pct"], "from": w["from"]}
+              for w in (block.get("windows") or [])],
+        "sma": [{"n": s["sessions"], "v": s["value"], "vs": s["price_vs_pct"]}
+                for s in (block.get("sma") or [])],
+    })
+    if block.get("up_closes"):
+        out["up"] = {"u": block["up_closes"]["up"], "of": block["up_closes"]["of"]}
+    return out
+
+
 def _headlines(candidate: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for head in candidate.get("headlines") or []:
@@ -350,7 +383,16 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             "gap": c.get("gap_pct"), "dir": c.get("gap_direction"),
             "pm_high": c.get("pm_high"), "pm_low": c.get("pm_low"),
             "pm_vwap": c.get("pm_vwap"),
-            "entry": c.get("entry_ref"), "stop": c.get("stop_ref"),
+            # THE LEDGER'S REFERENCE, and named so it cannot be mistaken for
+            # advice on the way to a screen. These are entry_ref and stop_ref,
+            # which paper_trades books against and [Truth] and [Outcomes]
+            # measure against; they were carried here as "entry" and "stop"
+            # until 2026-09-08 and drawn under those two words, which made a
+            # premarket high into a recommendation the record does not
+            # support. See CRITERIA.md [Daily structure].
+            "lref_hi": c.get("entry_ref"), "lref_lo": c.get("stop_ref"),
+            # The daily context map. Describes, prescribes nothing.
+            "ds": _structure(c.get("daily_structure")),
             "rvol": c.get("pm_rvol"), "pm_vol": c.get("pm_volume"),
             "sigma": c.get("move_sigma"),
             "score": c.get("score"), "conv": c.get("conviction"),

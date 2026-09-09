@@ -1271,8 +1271,14 @@ def fallback_report(
     # omitted table takes its Ticker header with it, and that header is what
     # the containment guard locates ticker claims by, so an empty screen used
     # to switch the guard off for the whole report. See REPORT_TEMPLATE.md.
+    # NOT "Entry" and "Stop". These two columns are entry_ref and stop_ref,
+    # the premarket high and low, which exist so the paper ledger can book
+    # every morning the same way. Printed under those two words they read as a
+    # plan, and no plan was measured: across the 2026-09-08 packet the gap
+    # between them ran from 0.14 to 2.44 of each share's own average daily
+    # range. See CRITERIA.md [Daily structure].
     add("| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP "
-        "| Entry | Stop | Score | Conviction |")
+        "| Ref high | Ref low | Score | Conviction |")
     add("|---|---|---|---|---|---|---|---|---|---|")
     if day:
         for c in day:
@@ -2553,7 +2559,7 @@ NOTABLE_HEADER = (
 _REQUIRED_TABLES = {
     "day watchlist": (
         "| Ticker | Gap % | Price | Premarket RVOL | Premarket high | "
-        "Premarket VWAP | Entry | Stop | Score | Conviction |"
+        "Premarket VWAP | Ref high | Ref low | Score | Conviction |"
     ),
     "swing watchlist": (
         "| Ticker | Gap % | Price | Prior high | 200d avg | Catalyst | "
@@ -2974,7 +2980,12 @@ def summary_strip(packet: dict[str, Any]) -> str | None:
         stop = candidate.get("stop_ref")
         if entry is None or stop is None:
             continue
-        parts.append(f"{_bare(candidate['symbol'])} entry {_f(entry)}, stop {_f(stop)}.")
+        # "entry X, stop Y" is a sentence of instruction and this is the
+        # fallback summary, which runs on the morning the narrative already
+        # failed and nobody reads closely. Said as what it is instead.
+        parts.append(f"{_bare(candidate['symbol'])} premarket range "
+                     f"{_f(stop)} to {_f(entry)}, the levels the record books "
+                     "against.")
 
     if day_tally.get("eligible") == 0 and day_tally.get("failed_summary"):
         parts.append(f"Day screen failed on: {day_tally['failed_summary']}.")

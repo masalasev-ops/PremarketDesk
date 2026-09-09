@@ -119,18 +119,39 @@ const routes = ["#/", "#/sessions", "#/record", "#/health", `#/health/${day}`,
   `#/name/QCOM`, "#/nonsense"]
   .concat(screens.map((s) => `#/session/${day}/${s === "session" ? "" : s}`));
 
+// A REAL wait, on the host's timer and not the sandbox's. The shim's
+// setTimeout runs its callback at once and ignores the delay, which is right
+// for driving the page and useless for waiting on it.
+const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A screen that only ever said this never decompressed its payload. It is not
+// a screen that rendered nothing worth checking; it is a screen that was still
+// being cancelled when the harness looked at it.
+const PLACEHOLDER = /^\s*(<[^>]*>|\s)*Reading[^<]*(<[^>]*>|\s)*$/;
+
 (async () => {
   for (const route of routes) {
+    const before = written.length;
     location.hash = route;
     try {
       if (hashHandler) hashHandler();
-      await new Promise((r) => setImmediate(r));
-      await new Promise((r) => setImmediate(r));
+      // EACH ROUTE SETTLES BEFORE THE NEXT ONE STARTS. render() cancels a run
+      // that is no longer the current hash, so driving routes back to back
+      // measures the placeholder of every screen and the content of none.
+      await settle(250);
     } catch (e) {
       errors.push(`${route}: ${e.message}`);
     }
+    const drawn = written.slice(before);
+    const last = drawn.length ? drawn[drawn.length - 1] : "";
+    if (!drawn.length) {
+      errors.push(`${route}: rendered nothing at all`);
+    } else if (PLACEHOLDER.test(last)) {
+      errors.push(`${route}: never got past its placeholder, so nothing on ` +
+        `this screen was checked (last write was ${JSON.stringify(last.slice(0, 60))})`);
+    }
   }
-  await new Promise((r) => setTimeout(r, 150));
+  await settle(250);
 
   // render() catches its own rejection and writes err.message into the page,
   // which is why nothing throws and why the first version of this harness

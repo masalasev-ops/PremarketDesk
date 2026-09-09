@@ -322,7 +322,7 @@ DECISIONS.md 2026-09-01 tenth and eleventh and are not repeated here.}
 header row is fixed and is reproduced exactly as this line, character for
 character, because the containment guard locates ticker columns by it:
 
-| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Entry | Stop | Score | Conviction |
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Ref high | Ref low | Score | Conviction |
 
 A candidate whose score is null gets the word unscored in the conviction
 column, never a bucket color. Membership is decided by the day_eligible
@@ -371,7 +371,7 @@ same defect wearing a disclosure.
 If none are eligible the table is still written, header and separator and one
 row, exactly like this:
 
-| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Entry | Stop | Score | Conviction |
+| Ticker | Gap % | Price | Premarket RVOL | Premarket high | Premarket VWAP | Ref high | Ref low | Score | Conviction |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | none | | | | | | | | | |
 

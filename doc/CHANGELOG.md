@@ -15,6 +15,84 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-08, ninety fifth: two premarket extremes were being read as a trading plan
+
+THE OWNER ASKED WHY A NAME MEANT TO BE HELD BEYOND TODAY CARRIES AN ENTRY
+DERIVED FROM THE PREMARKET. QCOM was the case: `swing_eligible` true, which is
+this project's own flag for a position held past the close, and printed beside
+it an entry of 187.44 and a stop of 169.66. Those are `pm_high` and `pm_low`,
+the extremes of a 45 minute window of thin trade that stops existing at 09:30.
+
+**The measurement that settled it.** Expressed in each share's own ATR(14),
+the distance from the published entry to the published stop across the ten
+names in that morning's packet:
+
+    NOK   0.14 ATR      ICHR  0.18 ATR      BE    0.26 ATR
+    ORCL  0.26 ATR      INTC  0.56 ATR      ASML  0.70 ATR
+    ASST  0.96 ATR      HOOD  1.43 ATR      QCOM  2.44 ATR
+
+A seventeen fold spread out of one rule, because `pm_low` measures how far the
+premarket happened to wobble, which is a function of how thin and how long that
+window was, and is not a property of the share. Six of ten sat inside a QUARTER
+of one normal day's range. Past the opening minutes those are not stops.
+
+The entry was wrong in the other direction. QCOM at 187 was below its 60
+session high of 259.92 and sitting on its 50 session average: a bounce inside a
+broken range with resistance overhead, not a breakout. Eight of the ten were
+below their 60 session high. The desk printed one number for both situations.
+
+**What was withdrawn, and what was not.** `entry_ref` and `stop_ref` did not
+move. They stay in `[Picks]`, in the packet and in the database, because
+`paper_trades` needs two fixed numbers to book against and `[Truth]`,
+`[Outcomes]`, the midday pass and the live ladder all measure against them;
+changing their meaning would silently rewrite what every historical row
+asserts. What stopped is printing them to a reader as Entry and Stop. On the
+desk they are now Ref high and Ref low, on the midday table Reference reached,
+and the premarket levels chart draws them as the ends of an observed range
+rather than in green and red with a buy arrow and a sell arrow.
+
+The glossary is where the pair actually became advice. It explained the entry
+as "the price at which the rules would have started a position" and the stop as
+"how a loss is kept to a known size". That is a trading plan, and no plan was
+ever measured here.
+
+**What replaced them: a daily context map, on every card.** The highest and
+lowest the share has traded over 20, 60 and 250 sessions with where the last
+price sits between them, the 50 and 200 session averages, the average true
+range in points and as a share of price, and how many of the last 20 sessions
+closed up. It prescribes no entry, no stop, no target and no horizon.
+
+**It costs nothing.** `attach_daily_history` already called `eod` once per
+candidate and `[Quota costs]` prices that call at one credit FLAT PER CALL, not
+per row. The from date moved from five weeks back to 400 days and the price did
+not change. The compacted payload grew 1.1 KB across ten names.
+
+Every level is back adjusted through `adjusted_close / close` before anything
+is measured, so a high from before a split is comparable to today's price
+rather than twice it, and a single session adjustment step above
+`max_adjustment_step` is disclosed by date on the card.
+
+**A window with too little history draws nothing rather than falling back.** A
+250 session high computed over 30 sessions is not a 250 session high, and the
+label is the part a reader trusts.
+
+Three claims, 230 through 232, each mutation tested: eight breakages introduced
+and eight caught, including a map that emits an entry, a map that sizes a stop
+at two ATR, a screen that prints Entry again, and a split left uncorrected.
+
+**A separate defect, found while verifying this.** `tools/desk_smoke.js` was
+reporting twelve clean routes over placeholders. Every desk screen decompresses
+its payload asynchronously and the driver yielded twice with `setImmediate`,
+then waited once at the very end, after every route had already been driven.
+Because `render()` cancels a stale run, each route cancelled the one before it,
+so the harness was scanning the word "Reading" twelve times over for JavaScript
+error strings, and a screen that renders nothing cannot contain "is not a
+function" either. The settle is now real and per route, and a screen still
+showing a placeholder when its turn ends is an error rather than a pass. The
+captured output went from 89 KB to 276 KB. The ladder verification recorded in
+the ninety fourth entry rested partly on this harness and was weaker than it
+was stated to be.
+
 ## 2026-09-08, ninety fourth: the desk was dark through the half hour that decides it
 
 THE OWNER ASKED HOW A SCREEN WHOSE OUTCOME IS ONLY KNOWN AT NOON HELPS ANYBODY.
