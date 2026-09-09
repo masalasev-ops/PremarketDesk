@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and thirty seven claims, a count read off
+and the two pages. It now carries two hundred and thirty eight claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18655,9 +18655,26 @@ def claim_no_screen_prints_a_reference_level_as_advice(
     So both halves are asserted here, and the second is the one that rots. A
     screen is one careless header away from Entry, and nothing else in this
     suite would notice.
+
+    THE FIRST VERSION OF THIS CLAIM READ ONE FILE, src/desk/assets.py, and that
+    scope is why the whole thing survived on the surface that mattered most.
+    The desk was cleaned on 2026-09-08 and the REPORT was not: prompt_analyst
+    still offered the model "its entry, its stop" as levels it could name,
+    REPORT_TEMPLATE still asked each write up for "the entry and stop as the
+    levels they are", and the glossary still defined an Entry column as "the
+    price at which these rules would start a position". The 2026-09-08 report
+    duly told its reader "Entry is set at the premarket high and the stop at
+    the premarket low", and the owner found it by reading the report on
+    2026-09-09 while this claim was green.
+
+    So the check moved to THE DOCUMENT A READER GETS. It builds the
+    deterministic report out of a packet and scans that, which is the only
+    text that settles the question, and which cannot be fooled by a file that
+    argues against advice in prose containing the word.
     """
     from core import criteria
     from core import glossary
+    from morning import analyst
 
     src = (config.PROJECT_ROOT / "src" / "desk" / "assets.py").read_text(
         encoding="utf-8", errors="replace")
@@ -18705,9 +18722,82 @@ def claim_no_screen_prints_a_reference_level_as_advice(
                 f"the glossary still explains the reference levels as {phrase!r}, "
                 "which describes a trading plan. No plan was measured here")
 
-    print("  reference levels no screen prints entry_ref or stop_ref to a "
-          "reader as Entry or Stop, and both still feed the ledger they were "
-          "always for")
+    # ---- 4. AND THE REPORT ITSELF. Rendered, not grepped: this is the text
+    #         that reaches a reader, and it is the one this claim missed.
+    # The record block is ON, because the sentence that survived longest lives
+    # in it: "trades that made their best price within ten minutes of entry
+    # went on to close below their entry". A fixture without it renders no
+    # record section, and this check would pass over the defect it exists for.
+    packet = dict(_slots_packet())
+    packet["record_so_far"] = {
+        "picks_rows": 48, "picks_sessions": 7, "booked_rows": 17,
+        "booked_sessions": 6, "triggered_within_30_min": 13,
+        "triggered_total": 20, "median_minutes_to_trigger": 0,
+        "never_triggered_rows": 28, "never_triggered_sessions": 7,
+        "unsized_rows": 3, "unsized_sessions": 2,
+        "peaked_within_10_min": 6, "peaked_within_10_min_closed_red": 6,
+        "peaked_after_100_min": 4, "peaked_after_100_min_closed_green": 4,
+        "median_best_while_held": 1.9, "median_booked_pct": -1.7,
+    }
+    with conftest_activate():
+        report = analyst.fallback_report(packet, "the claim asked for it")
+        report = analyst.annotate_column_legends(report)
+    if "best price within ten minutes" not in report:
+        failures.append(
+            "the rendered report carries no record section, so the phrase scan "
+            "below cannot see the sentence that survived on the desk's cleanup "
+            "and this claim is weaker than it reads")
+
+    for phrase in ("would start a position", "would have started a position",
+                   "accept the position was wrong", "Entry is set at",
+                   "the entry and stop", "its entry, its stop",
+                   "loss is kept to a known size",
+                   # The record section, which said "within ten minutes of
+                   # entry went on to close below their entry" until
+                   # 2026-09-09. That is the ledger's own fill and calling it
+                   # an entry told a reader the record books a plan.
+                   "minutes of entry", "below their entry", "after entry"):
+        if phrase.lower() in report.lower():
+            failures.append(
+                f"the report a reader gets contains {phrase!r}. entry_ref and "
+                "stop_ref are the ledger's reference levels and this project's "
+                "record supports publishing neither as a plan; the desk was "
+                "cleaned of this on 2026-09-08 and the report was not")
+
+    for header in ("| Entry |", "| Stop |"):
+        if header in report:
+            failures.append(
+                f"a report table still heads a column {header.strip('| ')!r}. "
+                "The watchlist columns are Ref high and Ref low since "
+                "2026-09-08, and a header is what a legend is written against")
+    if "| Ref high | Ref low |" not in report:
+        failures.append(
+            "no report table heads its two reference columns Ref high and Ref "
+            "low, so this claim is scanning a document that does not carry "
+            "them and is checking nothing")
+
+    # ---- 5. AND THE TWO FILES THAT INSTRUCT THE MODEL, which no rendering
+    #         can reach: the model writes prose from them and the prose is
+    #         what a reader gets. Only instruction shaped ASKS are refused,
+    #         never the bare word, because both files have to be able to say
+    #         what they are forbidding and this claim must not fail the
+    #         sentence that does the forbidding.
+    for name in ("REPORT_TEMPLATE.md", "prompt_analyst.md"):
+        instructions = (config.PROJECT_ROOT / "doc" / name).read_text(
+            encoding="utf-8", errors="replace")
+        for ask in ("the entry and stop as the levels",
+                    "its entry, its stop",
+                    "give the entry", "state the entry", "name the entry"):
+            if ask in instructions:
+                failures.append(
+                    f"doc/{name} asks the narrative pass for {ask!r}. The model "
+                    "writes what it is asked for, and on 2026-09-08 it was "
+                    "asked for this and wrote \"Entry is set at the premarket "
+                    "high and the stop at the premarket low\"")
+
+    print("  reference levels neither a screen, the rendered report, nor the "
+          "two files instructing the model puts entry_ref or stop_ref to a "
+          "reader as a plan, and both still feed the ledger")
 
 
 def claim_the_daily_map_refuses_to_mislabel_short_history(
@@ -19589,6 +19679,95 @@ def claim_a_stored_map_draws_the_same_card(failures: list[str]) -> None:
 
 
 
+def claim_the_report_says_where_a_name_stands(failures: list[str]) -> None:
+    """The emailed report carries the daily map, deterministically and with its caveat.
+
+    THE MAP SHIPPED TO THE DESK AND NOT TO THE REPORT, and the report is the
+    document that actually reaches a reader every morning. For a day it said
+    where a share traded before the open and nothing about where that sits in
+    its own year: on 2026-09-08 eight of ten candidates were below their 60
+    session high and the report said so nowhere. That distinction, a breakout
+    against a bounce inside a broken range, is the reason the two published
+    levels were withdrawn in the first place, so shipping the replacement to
+    one surface and not the other left the argument half made.
+
+    PYTHON WRITES IT AND THE MODEL DOES NOT TOUCH IT. No slot, no narration.
+    The section is therefore identical on the morning the narrative pass fails,
+    which is exactly when a reader needs the ground under a name most.
+
+    AND THE CAVEAT IS PART OF THE SECTION. A table of ranges next to a word
+    like breakaway reads as a call unless the page says otherwise, and a note
+    in a design document is not the page.
+    """
+    from morning import analyst
+
+    packet = dict(_slots_packet())
+    bars, price = [], 40.0
+    for index in range(300):
+        price += 0.07 if index % 4 else -0.15
+        bars.append({"date": f"2025-{1 + index // 28:02d}-{1 + index % 28:02d}",
+                     "open": round(price - 0.1, 3), "high": round(price + 0.6, 3),
+                     "low": round(price - 0.7, 3), "close": round(price, 3),
+                     "adjusted_close": round(price, 3), "volume": 900_000})
+    from morning import structure
+    mapped = list(packet["candidates"])
+    mapped[0] = dict(mapped[0], daily_structure=structure.measure(bars, price * 1.08))
+    # The second name gets a history too short to draw a map, because a null
+    # that prints as a zero is the failure this project keeps finding.
+    mapped[1] = dict(mapped[1], daily_structure=structure.measure(bars[:8], price))
+    packet["candidates"] = mapped
+
+    with conftest_activate():
+        report = analyst.fallback_report(packet, "the claim asked for it")
+        report = analyst.annotate_column_legends(report)
+
+    if "## Daily structure" not in report:
+        failures.append(
+            "the report carries no Daily structure section, so the document a "
+            "reader actually gets says where a share traded this morning and "
+            "nothing about where that sits in its own year")
+        return
+
+    section = report.split("## Daily structure", 1)[1].split(chr(10) + "## ", 1)[0]
+    header = ("| Ticker | Month | Quarter | Year | Last close above the quarter "
+              "high | Range in ATR | Gap in context |")
+    if header not in section:
+        failures.append(
+            "the Daily structure table's header row is not the one "
+            "REPORT_TEMPLATE.md reproduces character for character, so the "
+            "legend written against it explains columns that are not there")
+
+    for symbol in (str(c["symbol"]).split(".")[0] for c in packet["candidates"]):
+        if f"| {symbol} |" not in section:
+            failures.append(
+                f"{symbol} is a candidate this morning and has no row in the "
+                "Daily structure table. One row per candidate, in packet order")
+
+    if "too little history" not in section:
+        failures.append(
+            "a candidate with 8 sessions of history did not print too little "
+            "history. A short history must never render as a position of zero, "
+            "which reads as a share sitting on its own low")
+
+    for phrase in ("no entry", "no stop", "recommends nothing"):
+        if phrase not in section.lower():
+            failures.append(
+                f"the Daily structure section does not say {phrase!r}. The "
+                "caveat is part of the section, because a table of ranges "
+                "beside a word like breakaway reads as a call without it")
+
+    if analyst.markers_in(section):
+        failures.append(
+            "the Daily structure section carries a slot marker, so the model "
+            "writes part of it. It is measured readings and the model narrates "
+            "rather than defines; a slot here would also blank the section on "
+            "the morning the narrative pass fails")
+
+    print("  report map   the emailed report carries the daily map for every "
+          "candidate, with its caveat, and the model writes none of it")
+
+
+
 def main() -> int:
     failures: list[str] = []
     run_claim(failures, claim_the_november_transition, failures)
@@ -19837,6 +20016,7 @@ def main() -> int:
     run_claim(failures,
               claim_no_context_column_reaches_eligibility_or_the_score, failures)
     run_claim(failures, claim_a_stored_map_draws_the_same_card, failures)
+    run_claim(failures, claim_the_report_says_where_a_name_stands, failures)
 
     if failures:
         for failure in failures:

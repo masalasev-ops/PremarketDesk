@@ -197,17 +197,21 @@ each part below is one thing you either did or did not do.
     says you decide nothing; here you decide which level's violation would
     say the setup is wrong. The exception is bounded and the bound is the rule:
     the level you name must be one already printed for that ticker in the
-    watchlist table above, which is to say its entry, its stop, its premarket
-    high, its premarket low, its premarket volume weighted average, its prior
-    day high, or its 200 day average. You may choose among those. You may not
-    introduce a level that is not among them, and you may not derive one.
+    watchlist table above, which is to say its premarket high, its premarket
+    low, its premarket volume weighted average, its prior day high, or its
+    200 day average. You may choose among those. You may not introduce a level
+    that is not among them, and you may not derive one.
+
+    The list once also offered "its entry" and "its stop". Those were the
+    same two numbers as the premarket high and low under names that read as a
+    plan, and naming a level as an entry is the one thing rule 1 forbids.
 
     State the level, never restate its figure: "a break back under the
     premarket VWAP", not "a break back under 103.80".
-    The figures are in the watchlist table above, and Entry and Stop there are
-    the two numbers the paper ledger books against, so a sentence restating
-    one of them in another rounding reads as a second opinion about a level
-    with one value. This is also the only place the no invented number rule is
+    The figures are in the watchlist table above, and Ref high and Ref low
+    there are the two numbers the paper ledger books against, so a sentence
+    restating one of them in another rounding reads as a second opinion about
+    a level with one value. This is also the only place the no invented number rule is
     enforced rather than instructed: a numeric containment check was measured
     on 2026-09-01 and refused, because it flags 32 to 49 numbers a report and
     effectively all of them are legitimate unit conversions or arithmetic the

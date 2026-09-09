@@ -586,9 +586,12 @@ watchlist this morning.
 
 Each paragraph gives, in words: where price sits against the premarket high,
 low and VWAP, the prior day high and the 200 day average; which score
-components fired, read from score_components; and the entry and stop as the
-levels they are (the premarket high and the premarket low) without restating
-their figures, which sit in the watchlist table. Where the premarket window
+components fired, read from score_components. NOT an entry and NOT a stop:
+this paragraph asked for both until 2026-09-09 and the model duly wrote
+"Entry is set at the premarket high and the stop at the premarket low" on
+QCOM the morning before, which is a trading plan and not a description. The
+figures sit in the watchlist table under Ref high and Ref low. Where the
+premarket window
 behind a level is partial, say so; where pm_window_thin is true, give the
 minutes and shares from pm_window_thin_reason, because the count is what the
 reader needs and the bare word partial is not enough. Where
@@ -669,6 +672,49 @@ large disagreement, an empty day watchlist is an instrument reading rather
 than a quiet market, and the reader has to be told which tickers the
 instrument cost. Write it in counts, never in a quantifier.}
 
+## Daily structure
+
+WRITTEN BY PYTHON, NOT NARRATED, and it carries no slot. It is a table of
+measured readings, and the model narrates rather than defines; the same
+argument annotate_score_bands and the column legends are written under. It is
+therefore identical on the morning the model fails, which is when a reader most
+needs to know where a name is standing.
+
+WHY THE REPORT CARRIES IT. The map shipped on 2026-09-08 as a desk panel and
+the report never had it, so the document that actually reaches a reader each
+morning said where a share traded before the open and nothing about where that
+sits in its own year. On the 2026-09-08 report eight of ten candidates were
+below their 60 session high and the report said so nowhere. That is the whole
+difference between a breakout and a bounce inside a broken range, and it was
+the reason the two published levels were withdrawn in the first place.
+
+The header row is fixed and is reproduced exactly as this line:
+
+| Ticker | Month | Quarter | Year | Last close above the quarter high | Range in ATR | Gap in context |
+
+One row per candidate, in packet order. Month, Quarter and Year give where the
+last price sits between the high and the low of the 20, 60 and 250 session
+windows, UNCAPPED: above the high and below the low are the two most
+interesting readings and a clamp would hide them. A window with no range says
+range flat. A candidate whose history is below [Daily structure] min_sessions
+prints too little history in the last column and nulls the rest, never zeros.
+
+Last close above the quarter high is how many sessions since the share last
+CLOSED above the 60 session high. It can never be fewer than 60, because a
+close cannot exceed its own bar's high; not on file means no close above it
+anywhere in the history fetched, which is a stronger reading than a large
+number and not a missing one.
+
+Gap in context is one of common, breakaway, runaway, exhaustion or unknown,
+derived from two SEED thresholds in CRITERIA [Daily structure] over readings
+that are on the desk card for each name.
+
+CLOSE THE SECTION WITH THE FIXED CAVEAT, which is part of the section and not
+a note in a design document. A table of ranges beside a word like breakaway
+invites being read as a call, and this record cannot support one. It states
+that no entry, no stop, no target and no holding period is drawn from any of
+it.
+
 ## Economic data and rates
 
 {The economic events from the packet with their ET times, plus the 10Y, 3M,
@@ -733,10 +779,10 @@ Then these five, each as a bare count over its denominator:
   that never reached their trigger at all.
 - `record_so_far.peaked_within_10_min_closed_red` of
   `record_so_far.peaked_within_10_min` trades that made their best price
-  within ten minutes of entry went on to close below their entry.
+  within ten minutes of the fill went on to close below that fill.
 - `record_so_far.peaked_after_100_min_closed_green` of
   `record_so_far.peaked_after_100_min` trades that made their best price more
-  than a hundred minutes after entry closed above it.
+  than a hundred minutes after the fill closed above it.
 
 Then the two medians: `record_so_far.median_best_while_held` percent was the
 best a position was worth while open, against

@@ -221,9 +221,9 @@ TERMS: tuple[tuple[str, str], ...] = (
      "against the share to buy back what they borrowed. A large number means "
      "those bets cannot be closed quickly."),
     ("Fill",
-     "The price a position actually started at. It can differ from the entry, "
-     "because a share that jumps straight past the intended price starts at "
-     "wherever it was actually trading."),
+     "The price a position actually started at. It can differ from the "
+     "reference level the record books against, because a share that jumps "
+     "straight past that level starts at wherever it was actually trading."),
     ("Trap",
      "A share that is rising while the news written about it is mostly "
      "negative. It is flagged because the rise and the reporting disagree."),
@@ -267,10 +267,12 @@ COLUMNS: dict[str, str] = {
     # scan.reference_levels, which reads the field names out of CRITERIA
     # [Picks], so a reader comparing the report against the record is looking
     # at one number rather than two that happen to agree today.
-    "Entry": "the price at which these rules would start a position, which is "
-             "the premarket high: the move has to carry on, not merely hold",
-    "Stop": "the price at which these rules would accept the position was "
-            "wrong and close it, which is the premarket low",
+    "Entry": "an old name for the higher of the two reference levels the "
+             "record books against, the highest price seen before the open. "
+             "Reports written from 2026-09-08 head this column Ref high",
+    "Stop": "an old name for the lower of the two, the lowest price seen "
+            "before the open. Reports written from 2026-09-08 head this "
+            "column Ref low",
     "200d avg": "the average closing price over the last 200 trading days",
     "Score": "this system's own 0 to 10 rating, which is not a prediction",
     "Conviction": "the score's band: green is highest, red is lowest",
@@ -278,6 +280,20 @@ COLUMNS: dict[str, str] = {
     "On watchlist": "whether the morning screen also selected it",
     "Price time": "the clock time the price was taken",
     "Price age s": "how many seconds old that price was when this was written",
+    # The Daily structure table in the report, added 2026-09-09.
+    "Month": "where the price sits between the highest and lowest of the "
+             "last 20 trading days",
+    "Quarter": "the same over the last 60 trading days, about three months",
+    "Year": "the same over the last 250 trading days, about one year",
+    "Last close above the quarter high": "how long since the share last "
+                                         "finished a day above the highest "
+                                         "price of the last 60 days. It says "
+                                         "whether that level is one the share "
+                                         "keeps failing at or one it has "
+                                         "simply not been near",
+    "Range in ATR": "how wide the last 20 days have been, counted in normal "
+                    "days. A small number means the share has been coiled, a "
+                    "large one that it has been travelling",
     "Gap in context": "what the share was doing before today, and where this "
                       "gap sits in that",
     "Before today": "the shape of the last month: how wide it was and how far "

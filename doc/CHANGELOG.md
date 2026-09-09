@@ -15,6 +15,61 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, ninety eighth: the desk was cleaned of a trading plan and the report was not
+
+THE OWNER READ THE 2026-09-08 REPORT AND SAID THE OLD SUGGESTION WAS STILL
+THERE. It was. The ninety fifth entry withdrew the entry and the stop from the
+desk, the midday table and the glossary, and left every instruction that
+produces the REPORT untouched. That report is the document a reader actually
+gets each morning, and on 2026-09-08 it said, of QCOM:
+
+    Entry is set at the premarket high and the stop at the premarket low.
+
+**Four live defects, none of them in the desk.** `doc/prompt_analyst.md` still
+offered the narrative pass "its entry, its stop" among the levels it could name
+for the invalidation sentence, and still told it the watchlist columns were
+headed Entry and Stop when they had been renamed Ref high and Ref low.
+`doc/REPORT_TEMPLATE.md` still asked each write up for "the entry and stop as
+the levels they are", which is the sentence above, written to order.
+`analyst.py` still printed the ledger's own record as "trades that made their
+best price within ten minutes of entry went on to close below their entry",
+which calls a fill an entry and tells a reader the record books a plan. And
+`glossary.py` still defined an Entry column as "the price at which these rules
+would start a position".
+
+**THE CLAIM THAT WAS MEANT TO CATCH THIS READ ONE FILE.**
+claim_no_screen_prints_a_reference_level_as_advice scanned
+`src/desk/assets.py` and nothing else, so it was green through all four. It now
+scans the DOCUMENT A READER GETS: it builds the deterministic report from a
+packet, with the record block on, and refuses the advice phrases in the
+rendered text and the Entry and Stop headers in its tables. Rendering cannot
+reach the two files that instruct the model, so those are read for
+instruction shaped ASKS only, never for the bare word, because both files have
+to be able to say what they are forbidding. Mutation tested: all four defects
+put back one at a time, all four caught.
+
+**And the map is in the report now, which is what was asked for.** A new
+`## Daily structure` section, written by Python with no slot and no narration,
+one row per candidate:
+
+| Ticker | Month | Quarter | Year | Last close above the quarter high | Range in ATR | Gap in context |
+
+On the 2026-09-08 packet it reads QCOM as above its 20 session high, at 48
+percent of its 60 session range, 47 of its 250, last closed above the quarter
+high 64 sessions ago, a 20 session range 2.99 average ranges wide, and a
+breakaway gap. Eight of the ten candidates that morning were below their 60
+session high and the report said so nowhere. The caveat is part of the section
+rather than a note in this file: a table of ranges beside a word like breakaway
+reads as a call unless the page says otherwise.
+
+The section is deterministic on purpose, so it is identical on the morning the
+narrative pass fails, which is when a reader most needs the ground under a
+name. Claim 238.
+
+**runs/2026-09-08/report.html was NOT rewritten.** It is what was produced that
+morning and it keeps saying so. The rebuilt copy sits beside it as
+report-preview-2026-09-09.html and names itself in its own disclaimer line.
+
 ## 2026-09-09, ninety seventh: every archived card explained why it had no map
 
 THE OWNER ASKED TO SEE THE MAP ON YESTERDAY'S SESSION. It was not there. The

@@ -970,6 +970,95 @@ def open_lists_with_a_blank_line(text: str) -> str:
     return "\n".join(out)
 
 
+
+def _map_position(window: dict[str, Any] | None) -> str:
+    """Where the price sits in one window, in words rather than as a bare number.
+
+    UNCAPPED ON PURPOSE, like the desk's own track. Above 100 means the price
+    is through the window's high and below 0 means through its low, and those
+    are the two most interesting things the row can say. A flat window has no
+    position inside a range of zero and says so.
+    """
+    if not window:
+        return "null"
+    position = window.get("position_pct")
+    if position is None:
+        return "range flat"
+    if position > 100:
+        return "above the high"
+    if position < 0:
+        return "below the low"
+    return f"{position:.0f}% of range"
+
+
+def _daily_structure_section(add, candidates: list[dict[str, Any]]) -> None:
+    """The daily context map, one row per candidate, written by Python.
+
+    NOT A SLOT AND NOT NARRATED. It is a table of measured readings, and the
+    model narrates rather than defines; the same argument annotate_score_bands
+    and the legends are written under. It also means the section is identical
+    on the morning the model fails, which is when a reader most needs to know
+    where a name is standing.
+
+    WHY IT IS IN THE EMAILED REPORT AT ALL. The map shipped on 2026-09-08 as a
+    desk panel and the report never carried it, so the document that actually
+    reaches a reader each morning said where a share traded before the open and
+    nothing about where that sits in its own year. On the 2026-09-08 report
+    eight of ten candidates were below their 60 session high and the report
+    said so nowhere, which is the difference between a breakout and a bounce
+    inside a broken range.
+
+    IT PRESCRIBES NOTHING, and the caveat under it says so in the report rather
+    than only in this docstring. See CRITERIA [Daily structure] and
+    doc/STRUCTURAL_MAP.md.
+    """
+    mapped = [c for c in candidates if c.get("daily_structure")]
+    add("## Daily structure")
+    add("")
+    if not mapped:
+        add(f"No daily context map was drawn for any of the {len(candidates)} "
+            "candidate(s) this morning, because no end of day history arrived. "
+            "That is an absence and not a flat history.")
+        add("")
+        return
+
+    add("| Ticker | Month | Quarter | Year | Last close above the quarter high "
+        "| Range in ATR | Gap in context |")
+    add("|---|---|---|---|---|---|---|")
+    for c in candidates:
+        block = c.get("daily_structure") or {}
+        short_note = block.get("short")
+        if short_note:
+            add(f"| {_bare(c['symbol'])} | null | null | null | null | null | "
+                "too little history |")
+            continue
+        windows = {w.get("sessions"): w for w in (block.get("windows") or [])}
+        ordered = sorted(windows)
+        month = windows.get(ordered[0]) if len(ordered) > 0 else None
+        quarter = windows.get(ordered[1]) if len(ordered) > 1 else None
+        year = windows.get(ordered[2]) if len(ordered) > 2 else None
+        since = None if not quarter else quarter.get("since_close_above")
+        since_text = ("not on file" if quarter and since is None
+                      else "null" if not quarter else f"{since} sessions ago")
+        coil = block.get("consolidation") or {}
+        context = block.get("gap_context") or {}
+        add(f"| {_bare(c['symbol'])} | {_map_position(month)} "
+            f"| {_map_position(quarter)} | {_map_position(year)} "
+            f"| {since_text} | {_f(coil.get('ratio'))} "
+            f"| {glossary.in_words(context.get('type') or 'null')} |")
+    add("")
+    # THE CAVEAT IS PART OF THE SECTION, not a note in a design document. A
+    # table of ranges and a word like breakaway invites being read as a call,
+    # and the record cannot support one.
+    add("Where each share sits in its own recent history, measured from daily "
+        "bars dated up to yesterday. It describes the ground and recommends "
+        "nothing: no entry, no stop, no target and no holding period is drawn "
+        "from it, because nothing in this project's record supports publishing "
+        "one. The gap type is read from the two thresholds in CRITERIA "
+        "[Daily structure], and the readings it was derived from are on the "
+        "desk card for each name.")
+    add("")
+
 def fallback_report(
     packet: dict[str, Any], reason: str, cause: str = CAUSE_UNAVAILABLE,
     slots: bool = False,
@@ -1503,6 +1592,11 @@ def fallback_report(
                                        "them was not written; their levels are in "
                                        "the table above."))
         add("")
+    # WHERE THOSE LEVELS SIT, immediately after the levels themselves. The
+    # section above says what the premarket did; this one says whether that
+    # happened at the top of a year or in the middle of a broken range, which
+    # the report could not say at all until 2026-09-09.
+    _daily_structure_section(add, candidates)
     # The measured worth of every RVOL above, from the nightly check. Its one
     # home since 2026-09-02, on the template's word: the Summary and Skips
     # sections used to carry it too, and the 2026-09-01 hand run printed the
@@ -1701,11 +1795,12 @@ def fallback_report(
             "screen.")
         add(f"- {_n(record.get('peaked_within_10_min_closed_red'))} of "
             f"{_n(record.get('peaked_within_10_min'))} trades that made their "
-            "best price within ten minutes of entry went on to close below "
-            "their entry.")
+            "best price within ten minutes of the fill went on to close "
+            "below that fill.")
         add(f"- {_n(record.get('peaked_after_100_min_closed_green'))} of "
             f"{_n(record.get('peaked_after_100_min'))} trades that made their "
-            "best price more than a hundred minutes after entry closed above it.")
+            "best price more than a hundred minutes after the fill closed "
+            "above it.")
         add("")
         add(f"The best a position was worth while open was a median "
             f"{_f(record.get('median_best_while_held'))} percent, against a "
@@ -1983,8 +2078,8 @@ def invalidation_violations(report: str) -> list[dict[str, Any]]:
 
     So the invention surface is REMOVED on this one line rather than watched.
     The invalidation sentence names a level in words and never restates its
-    figure, because the figure is in the watchlist table above it and Entry and
-    Stop there are the numbers the paper ledger books against. A sentence
+    figure, because the figure is in the watchlist table above it and Ref high
+    and Ref low there are the numbers the paper ledger books against. A sentence
     written with the digits left out cannot invent one, and that is cheap to
     check exactly.
 

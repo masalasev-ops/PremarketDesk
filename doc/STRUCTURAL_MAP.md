@@ -45,9 +45,14 @@ asserts the two, and that the table declares exactly what the flattener emits.
 
 ## Where it is drawn
 
-The desk card, and only the desk card. The emailed report has never carried the
-map and still does not; it is a panel on `site/PremarketDesk.html` under
-`#/session/<date>/`.
+Two surfaces since 2026-09-09. On the desk it is a panel on the candidate
+card, under Levels, at `site/PremarketDesk.html#/session/<date>/`. In the
+emailed report it is a `## Daily structure` section: one row per candidate,
+written by Python with no slot and no narration, so it is identical on the
+morning the narrative pass fails. It carried neither until 2026-09-08 and only
+the desk until 2026-09-09, which meant the document that actually reaches a
+reader each morning said where a share traded before the open and nothing about
+where that sits in its own year.
 
 A session whose packet predates the map, which is every session on file before
 2026-09-08, has the map on its `picks` rows anyway, and `desk/compact.py` reads

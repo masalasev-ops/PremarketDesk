@@ -18,6 +18,41 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-09, twenty fourth: a claim scoped to one file is a claim about one file
+
+**What happened.** The entry and stop were withdrawn from the desk on
+2026-09-08 and a claim was written to keep them withdrawn. It read
+`src/desk/assets.py`. The report kept publishing the plan for another day, in
+prose the model was still being asked for, and the claim was green throughout.
+
+**The tempting reading, and why it is wrong.** That this was an oversight in
+the 2026-09-08 pass: four files were missed and should have been edited. That
+is true and it is not the lesson. The lesson is that the claim's SCOPE was
+chosen to match the fix rather than the property. The property is "no reader is
+shown these levels as a plan". The fix was on the desk, so the claim read the
+desk, and from that moment the claim could only ever confirm the fix that had
+already been made.
+
+**What decided the new scope.** A claim should assert over the OUTPUT a
+property is about, not the input that happened to be edited. So it renders the
+report and scans that. Where rendering cannot reach, which is the two files
+that instruct a model, it reads them for instruction shaped asks and never for
+the bare word, because a file that forbids advice has to be able to name what
+it forbids and a claim that failed on the prohibition would be deleted within
+the month.
+
+    The cost is that the rendered check needs a fixture packet rich enough to
+    emit the sections being checked, and the first version of it silently did
+    not: the record block was absent from the fixture, so the sentence about
+    entries in the ledger record was never rendered and never scanned. That was
+    found by mutation testing rather than by reading, which is the argument for
+    mutation testing a claim before trusting it.
+
+**The general form, worth writing down.** When a defect is fixed on one surface
+and a claim is added, ask which surfaces the property covers before choosing
+what the claim reads. If the answer is more than one, the claim reads the
+output or it reads all of them.
+
 ## 2026-09-09, twenty third: one desk value that is not out of the packet
 
 **The question.** desk/compact.py opens by arguing that nothing on the desk is
