@@ -15,6 +15,88 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, ninety ninth: a column header cost the morning report
+
+THE 08:45 CHAIN WROTE A REPORT AND REFUSED TO DELIVER IT. The analyst produced
+53,957 characters, the containment check found a ticker presented as a ticker
+that the packet did not carry, and it withheld the report twenty minutes before
+the open. The ticker was ATR.
+
+No model invented it. ATR was a COLUMN HEADER added the evening before, in the
+ninety eighth entry above: "Range in ATR", in the new Daily structure table,
+and again in the legend generated under it. ATR.US is AptarGroup on the NYSE.
+The check read the report the way a reader would, found a listed company named
+in a report that carried no evidence about it, and was right to refuse. It
+would have refused every morning after.
+
+**The header is now "Range in normal days"**, which is the phrase the column's
+own legend already used to explain itself. The abbreviation is fine in
+STRUCTURAL_MAP.md and fatal in a report.
+
+**The guard moved to build time.** `check_report` is the last gate before
+delivery and it worked exactly as designed, but it runs on a report that costs
+a dollar and four minutes to produce, and it fails the MORNING rather than the
+change that caused it. `claim_no_fixed_report_text_names_a_listed_company`
+renders the report from a fixture and runs the same check over it, with ATR
+forced into the universe so the claim keeps its teeth on a machine that never
+fetched one. Fixed furniture is knowable now, for nothing.
+
+**Three things the desk banner said that were not true.** The red banner read
+"nothing after the failed step ran and no report was written. The screens below
+are the last session that completed, not this one." All three were false on the
+morning it fired. The desk step runs on the failure path on purpose and had
+run; a report had been written and was on disk; and the screens were this
+session, stamped with its own date and packet time. The banner had been written
+for the 2026-09-08 shape, where the SCAN died and there was no packet at all,
+and it printed that one reading for every no-report morning.
+
+The red state now has three readings, chosen by whether `packet.json` exists
+and whether a draft is on disk: no packet and the screens are genuinely the
+last good day; a packet and no report at all; a packet and a withheld draft,
+which is the only one of the three with something to go and read. Each says
+where to look next.
+
+**And the desk still said entry.** The lookalikes panel beside every candidate
+read "Reached the entry", eight days after that word was withdrawn from the
+watchlist tables. `claim_no_screen_prints_a_reference_level_as_advice` reads
+`assets.py` and checks a list of the labels already withdrawn, so a phrasing
+nobody had thought of passed it. That is the SECOND widening of this claim in
+two days. It now extracts the card renderers and fails on the words themselves,
+and the line it draws is by what the panel is attached to: a screen reporting
+what the paper ledger DID may say entry, because there the word names a
+mechanic of the recorded rule in the past tense; a panel beside a name the
+reader is looking at this morning may not.
+
+**A note on how the guard was proved, because proving it broke something.**
+The mutation harness written to test these claims deleted `core`, `desk` and
+`morning` out of `sys.modules` so the mutated source would be re-imported, and
+then called `conftest.activate()`. That leaves TWO `core.config` module
+objects: the one activate patched to sandbox paths, and the fresh one each
+claim imports. The claims wrote through the fresh one, so their fixtures landed
+in the real tree. `claim_no_fixed_report_text_names_a_listed_company` wrote its
+fixture universe over `data/universe.json`, stripping `generated_at` and every
+other key off it, and the morning chain then refused to start on a universe of
+unknown age. Three 1999 run directories were left behind by the banner claim.
+
+Both are repaired: the universe was rebuilt (2,751 names, 1,620 credits) rather
+than hand patched, because inventing a `generated_at` is exactly the
+substituted value this project refuses everywhere else. The harness now runs
+each claim in a FRESH PROCESS, where activate() is the only binding there is.
+And the claim no longer writes that path at all: it substitutes
+`analyst._universe_bare_symbols`, the function that READS the universe, because
+a claim that writes a production path is one bad rebinding away from being the
+outage it was written to prevent. Five mutations, five caught, baseline quiet.
+
+**The panel was also unreadable, which the owner said plainly.** Sixteen rows
+at one weight, with the only row that is evidence about the share itself sitting
+last and smallest: its own past gaps, and the median open to close across them.
+That row is now the panel's headline, above the tracks. "Price against that
+range" is gone, having restated the one month track's own word about the same
+window four rows above it. The coil ratio is gone as a separate row, having
+printed the same number as the regime line. "0.62 travelled" now says "net move
+across them, 0.62 average days", because "travelled" named no unit and appeared
+nowhere else on the card.
+
 ## 2026-09-09, ninety eighth: the desk was cleaned of a trading plan and the report was not
 
 THE OWNER READ THE 2026-09-08 REPORT AND SAID THE OLD SUGGESTION WAS STILL

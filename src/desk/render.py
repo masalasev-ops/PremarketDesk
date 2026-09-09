@@ -177,6 +177,15 @@ def alert_banner(today: str | None = None) -> str:
     failure on a morning whose report was still written is a warning: the
     screens are real, something on the way to them was not.
 
+    THE RED ONE HAS THREE READINGS and printed one of them until 2026-09-09.
+    "No report" says nothing about whether the screens under it are this
+    morning, because the desk step runs on the failure path on purpose. A
+    dead scan writes no packet and the screens are genuinely the last good
+    day; a step that died after the scan leaves a packet, and the screens
+    are this morning. A withheld draft is a third state again, and the only
+    one where there is something to go and read. Each says where to look
+    next, and they are not interchangeable.
+
     AND IT REPORTS STATE, NOT HISTORY. A step that failed and was rerun green
     is gone from here on the next render, because a banner that stays up after
     the thing it describes was fixed is up every day by lunchtime, and a
@@ -204,7 +213,27 @@ def alert_banner(today: str | None = None) -> str:
                 job_status.group_failures(job_status.failures_today(on, rows))
                 if not row.get("recovered")]
     overdue = job_status.overdue(on, rows)
-    report_missing = not (config.run_path(day) / "report.html").is_file()
+    run_dir = config.run_path(day)
+    report_missing = not (run_dir / "report.html").is_file()
+    # TWO FACTS, NOT ONE, and this banner conflated them until 2026-09-09.
+    # Whether a report exists and whether the SCREENS BELOW are this session
+    # are independent. The chain does NOT stop dead at a failure: the desk
+    # step is deliberately run on the failure path, under its own marker, so
+    # that a morning which lost its report still draws its screens. On
+    # 2026-09-09 that worked exactly as designed and this banner then told
+    # the reader they were looking at the previous session, of screens
+    # stamped with that morning's own date and packet time. A reader who
+    # believes it goes looking for figures already in front of them.
+    #
+    # The packet is the right thing to read for it, and for the same reason
+    # the docstring gives for reading job-status: a session exists on the
+    # desk if and only if its packet was written.
+    screens_are_this_session = (run_dir / "packet.json").is_file()
+    # A report written and then withheld is not the same state as no report
+    # written, and the difference is entirely where the reader should look
+    # next. The 2026-09-09 analyst produced 53,957 characters and refused to
+    # deliver them, and the banner called that "no report was written".
+    draft_on_disk = (run_dir / "report.md").is_file()
     if not failures and not overdue and not report_missing:
         return ""
 
@@ -218,9 +247,21 @@ def alert_banner(today: str | None = None) -> str:
         # stands even when every failed step was later rerun green: something
         # rewrote the packet and no report came out of it.
         klass, headline = "deskalert", f"No morning report for {day}"
-        lead = ("The chain stops on its first failure, so nothing after the "
-                "failed step ran and no report was written. The screens below "
-                "are the last session that completed, not this one.")
+        if not screens_are_this_session:
+            lead = ("No packet was written for this session, so the screens "
+                    "below are the last session that completed, not this "
+                    "one. Every figure on them is that earlier morning.")
+        elif draft_on_disk:
+            lead = ("A report was written and then withheld, so there is "
+                    "nothing to deliver for this session. The screens below "
+                    "ARE this session, drawn from its own packet by the "
+                    "steps that ran after the failure. The draft is on disk "
+                    f"at runs/{day}/report.md and the step's line below "
+                    "says what stopped it.")
+        else:
+            lead = ("No report was written for this session. The screens "
+                    "below ARE this session, drawn from its own packet by "
+                    "the steps that ran after the failure.")
     else:
         klass, headline = "deskalert warn", f"Still failing on {day}"
         lead = ("The report was written, so the screens below are this "

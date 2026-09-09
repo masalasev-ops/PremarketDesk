@@ -18,6 +18,34 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-09, twenty fifth: which screens may say entry, and which may not
+
+The word came off the watchlist tables on 2026-09-08 and was found again on
+2026-09-09, on the lookalikes panel, reading "Reached the entry". The obvious
+fix is to ban the word everywhere. It is the wrong one.
+
+THE RECORD SCREENS HAVE TO SAY IT. `nearMissBlock` measures how often the paper
+rule's entry was never reached, and "picks whose entry the session high never
+reached" is the only accurate way to name that. `research_outcomes` books
+against `entry_ref` and the near miss figure is a measurement OF the entry rule.
+A screen describing what a recorded rule did, in the past tense, is not
+advising anybody, and renaming its mechanic would make the record harder to
+read without making anything safer.
+
+What decides it is what the panel is attached to. Beside TODAY's candidate,
+"entry" is an instruction: the reader is looking at a share this morning and
+the word tells them they have a level to act on. On a screen reporting the
+record, it is a noun naming part of a rule that already ran. The guard is
+scoped accordingly, to the card renderers, and the record screens are left
+alone deliberately rather than by oversight.
+
+The measurement behind this, made the same day: over 240 sessions and 812 day
+eligible opportunities, waiting for the premarket high beat buying the open
+with the same stop by 0.14 points a trade, t = +1.15, which is not
+distinguishable from zero. The stop was worth 132 points and the entry was not
+separable from noise. There is less reason than ever to publish that level as
+a plan, and no reason at all to stop measuring it.
+
 ## 2026-09-09, twenty fourth: a claim scoped to one file is a claim about one file
 
 **What happened.** The entry and stop were withdrawn from the desk on

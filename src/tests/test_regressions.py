@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and thirty eight claims, a count read off
+and the two pages. It now carries two hundred and thirty nine claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -18690,6 +18690,58 @@ def claim_no_screen_prints_a_reference_level_as_advice(
                 "record does not support publishing either as advice; see "
                 "CRITERIA.md [Daily structure]")
 
+    # ---- 1b. THE PROPERTY, not a list of spellings. The check above names
+    #      the labels this project has already had to withdraw, one at a time,
+    #      as each was found. On 2026-09-09 the owner opened a card and found
+    #      "Reached the entry" still on the lookalikes panel, a phrasing nobody
+    #      had thought to add to that list. A guard built out of known wordings
+    #      only ever catches the wording that was already caught: this is the
+    #      SECOND time this same claim has been widened after missing a live
+    #      defect, the first being on 2026-09-08 when it read one file.
+    #
+    #      THE LINE IS DRAWN BY WHAT THE PANEL IS ATTACHED TO. A screen that
+    #      reports what the paper ledger DID may say entry, because there the
+    #      word names a mechanic of the recorded rule in the past tense and the
+    #      record is the thing being described. A panel drawn beside TODAY's
+    #      candidate may not, because there the same word is an instruction to
+    #      a reader about a share they are looking at this morning.
+    import re
+
+    def js_function(name: str) -> str:
+        start = src.find(chr(10) + "  function " + name + "(")
+        if start < 0:
+            return ""
+        end = src.find(chr(10) + "  }" + chr(10), start)
+        return src[start:end] if end > 0 else src[start:]
+
+    # The one sentence allowed to use both words, because it is the panel
+    # saying it draws neither.
+    permitted = "No entry, stop or target is drawn"
+    for name in ("dailyStructure", "gapContext", "gapHistory", "priorBlock"):
+        body = js_function(name)
+        if not body:
+            failures.append(
+                f"the desk has no {name}() for this guard to read, so it is "
+                "scanning nothing. A renamed or deleted card renderer takes "
+                "the guard off the panel without failing anything")
+            continue
+        prose = body.replace(permitted, "")
+        # Comments carry the reasoning and reach no reader.
+        visible = chr(10).join(
+            line for line in prose.split(chr(10))
+            if not line.lstrip().startswith(("//", "*", "/*")))
+        for quoted in re.findall(r'"([^"]*)"', visible):
+            for word in ("entry", "stop"):
+                if re.search(r"\b" + word + r"\b", quoted, re.I):
+                    failures.append(
+                        f"the card renderer {name}() prints {quoted[:70]!r} "
+                        "beside this morning's candidate. entry_ref and "
+                        "stop_ref are the ledger's reference levels, and a "
+                        "panel attached to a name a reader is looking at now "
+                        "must not put either to them as a plan. The record "
+                        "screens may: there the word describes what the paper "
+                        "rule did, in the past tense")
+
     # ---- 2. the ledger's two fields are still there, still fed, still named
     #         in CRITERIA. Withdrawing the label must not have withdrawn the
     #         measurement, which every outcome pass on the record depends on.
@@ -19194,6 +19246,59 @@ def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
                 f"desk: {repaired[:200]!r}. The banner reports state, not "
                 "history, and one that never clears is one nobody reads")
 
+        # A REPORT THAT DIED AFTER THE SCAN IS NOT A STALE DESK, and saying
+        # so was the 2026-09-09 defect. The analyst wrote 53,957 characters,
+        # containment refused to deliver them, and the desk step ran on the
+        # failure path exactly as designed and drew that morning's own
+        # screens. The banner then told the reader those screens were the
+        # previous session, over a stamp carrying that morning's date and
+        # packet time. A reader who believes it goes looking for figures that
+        # are already in front of them.
+        draft_day = "1999-01-07"
+        job_status.records = lambda *a, **k: [
+            {"job": "morning-chain", "step": "analyst", "status": "failed",
+             "started_at": f"{draft_day}T08:45:30-04:00", "exit_code": 2}]
+        run = config.run_dir(draft_day)
+        (run / "packet.json").write_text('{"candidates": []}', encoding="utf-8")
+        (run / "report.md").write_text("# withheld", encoding="utf-8")
+        withheld = render.alert_banner(draft_day)
+        if "No morning report" not in withheld:
+            failures.append(
+                "a morning whose report was written and then withheld does not "
+                f"say there is no report to deliver: {withheld[:200]!r}")
+        if "last session that completed" in withheld:
+            failures.append(
+                "the desk told the reader the screens below are the previous "
+                "session on a morning whose packet exists and whose screens "
+                "ARE that morning. The desk step runs on the failure path on "
+                "purpose; a banner that denies it sends the reader looking for "
+                f"figures already in front of them: {withheld[:300]!r}")
+        if "report.md" not in withheld:
+            failures.append(
+                "a withheld draft is on disk and the banner does not say where. "
+                "That is the one no-report state with something to go and read")
+
+        # THE THIRD RED STATE: a packet, and no report at all, not even a
+        # withheld one. Also not a stale desk, and mutating the branch that
+        # says so was MISSED by this claim on 2026-09-09 because every fixture
+        # here wrote a draft and drove the other branch.
+        bare_day = "1999-01-08"
+        job_status.records = lambda *a, **k: [
+            {"job": "morning-chain", "step": "render", "status": "failed",
+             "started_at": f"{bare_day}T08:49:00-04:00", "exit_code": 1}]
+        (config.run_dir(bare_day) / "packet.json").write_text(
+            '{"candidates": []}', encoding="utf-8")
+        no_draft = render.alert_banner(bare_day)
+        if "No morning report" not in no_draft:
+            failures.append(
+                "a morning that wrote a packet and no report does not say "
+                f"there is no report: {no_draft[:200]!r}")
+        if "last session that completed" in no_draft:
+            failures.append(
+                "the desk called the screens the previous session on a morning "
+                "whose packet exists. Only a morning with NO packet has stale "
+                f"screens, because the desk draws from the packet: {no_draft[:300]!r}")
+
         # The rerun does NOT clear a morning that still has no report, because
         # that is the state itself rather than a report of one.
         job_status.records = lambda *a, **k: [
@@ -19679,6 +19784,115 @@ def claim_a_stored_map_draws_the_same_card(failures: list[str]) -> None:
 
 
 
+
+def claim_no_fixed_report_text_names_a_listed_company(failures: list[str]) -> None:
+    """A word in the report's own furniture must not be a tradeable symbol.
+
+    On 2026-09-09 the morning report was written, failed the containment
+    check and was withheld, twenty minutes before the open. The invented
+    ticker was ATR and no model wrote it: it was a column header this project
+    had added the evening before, "Range in ATR". ATR is AptarGroup on the
+    NYSE. The header carried it and so did the legend generated underneath,
+    the check read the report the way a reader would, and it was right to
+    refuse. It would have refused every morning after.
+
+    THE GUARD BELONGS HERE AND NOT ONLY AT 08:45. check_report is the last
+    gate before delivery and it did its job, but it runs on a report that
+    costs a dollar and four minutes to make, and it fails the MORNING rather
+    than the change that caused it. Fixed furniture is knowable at build time:
+    every header this file can render, it can render now, for nothing.
+
+    ATR is forced into the universe the check reads rather than trusted to be
+    in it, so this claim tests the property on any machine and keeps its teeth
+    on one where data/universe.json was never fetched. When the real file is
+    there the check also covers every other listing, which is the point: the
+    next collision will not be ATR.
+    """
+    import json
+    import re
+
+    from core import config
+    from morning import analyst, structure
+
+    packet = dict(_slots_packet())
+    bars, price = [], 40.0
+    for index in range(300):
+        price += 0.07 if index % 4 else -0.15
+        bars.append({"date": f"2025-{1 + index // 28:02d}-{1 + index % 28:02d}",
+                     "open": round(price - 0.1, 3), "high": round(price + 0.6, 3),
+                     "low": round(price - 0.7, 3), "close": round(price, 3),
+                     "adjusted_close": round(price, 3), "volume": 900_000})
+    mapped = list(packet["candidates"])
+    mapped[0] = dict(mapped[0], daily_structure=structure.measure(bars, price * 1.08))
+    packet["candidates"] = mapped
+
+    with conftest_activate():
+        report = analyst.fallback_report(packet, "the claim asked for it")
+        report = analyst.annotate_column_legends(report)
+
+        try:
+            universe = json.loads(config.UNIVERSE_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            universe = {"symbols": []}
+        rows = list(universe.get("symbols") or [])
+        # The defect itself, guaranteed present. A claim that passes because
+        # the fixture happens to be empty is not a claim.
+        rows.append({"symbol": "ATR.US", "code": "ATR", "name": "AptarGroup Inc"})
+        known = {str(row.get("symbol", "")).split(".")[0].upper()
+                 for row in rows if row.get("symbol")}
+        # SUBSTITUTE THE READER, NEVER THE FILE. The first version of this
+        # claim wrote its fixture universe over config.UNIVERSE_PATH. Inside
+        # run_tests that is a sandbox copy and harmless; run any other way it
+        # is data/universe.json, and on 2026-09-09 it was, stripping
+        # generated_at and every other key off the real file and leaving the
+        # morning chain refusing to start on a universe of unknown age. A
+        # claim that writes a production path is one bad rebinding away from
+        # being the outage it was written to prevent.
+        saved = analyst._universe_bare_symbols
+        analyst._universe_bare_symbols = lambda: known
+        try:
+            invented, _, _ = analyst.check_report(report, json.dumps(packet))
+        finally:
+            analyst._universe_bare_symbols = saved
+        # AND THE HEADER ROWS, WHICH check_report DOES NOT READ. It takes
+        # claims from the ticker column and from prose, so "Range in ATR"
+        # reached it through the LEGEND generated under the table and not
+        # through the header itself. A mutation run on 2026-09-09 proved it:
+        # restoring the header alone was MISSED, because breaking the header's
+        # link to its glossary entry stops the legend being written at all.
+        #
+        # So a header word with no glossary entry carries a listed ticker past
+        # the delivery gate. That hole cannot be closed from here, and widening
+        # check_report itself is not free: it is the last gate before delivery
+        # and a false positive there costs a morning. A build time check costs
+        # an afternoon, so this one is deliberately the wider of the two.
+        allowed = analyst._packet_uppercase_tokens(json.dumps(packet))
+        in_headers = []
+        for line in report.split(chr(10)):
+            if not line.startswith("|") or not set(line.strip()) - set("|- "):
+                continue
+            for cell in line.strip("|").split("|"):
+                for token in re.findall(r"\b[A-Z][A-Z0-9]{0,5}\b", cell):
+                    if token in known and token not in allowed:
+                        in_headers.append(token + " in " + cell.strip()[:40])
+        if in_headers:
+            failures.append(
+                "a table cell in the report names a listed company the packet "
+                "does not carry: " + "; ".join(sorted(set(in_headers))[:4]) +
+                ". A reader scanning the table sees a ticker, and so would the "
+                "containment check the moment that column gains a glossary "
+                "entry and a legend is written from it")
+
+    if invented:
+        failures.append(
+            "the report's own fixed text presents "
+            + ", ".join(invented) + " as a ticker, and every one of those is a "
+            "listed company that this morning's packet does not carry. The "
+            "containment check refuses to deliver a report like this, so the "
+            "morning is lost at 08:45 for a word chosen the evening before. No "
+            "abbreviation that is also a listed symbol belongs in a header, a "
+            "legend or any other fixed furniture")
+
 def claim_the_report_says_where_a_name_stands(failures: list[str]) -> None:
     """The emailed report carries the daily map, deterministically and with its caveat.
 
@@ -19730,7 +19944,7 @@ def claim_the_report_says_where_a_name_stands(failures: list[str]) -> None:
 
     section = report.split("## Daily structure", 1)[1].split(chr(10) + "## ", 1)[0]
     header = ("| Ticker | Month | Quarter | Year | Last close above the quarter "
-              "high | Range in ATR | Gap in context |")
+              "high | Range in normal days | Gap in context |")
     if header not in section:
         failures.append(
             "the Daily structure table's header row is not the one "
@@ -20017,6 +20231,7 @@ def main() -> int:
               claim_no_context_column_reaches_eligibility_or_the_score, failures)
     run_claim(failures, claim_a_stored_map_draws_the_same_card, failures)
     run_claim(failures, claim_the_report_says_where_a_name_stands, failures)
+    run_claim(failures, claim_no_fixed_report_text_names_a_listed_company, failures)
 
     if failures:
         for failure in failures:

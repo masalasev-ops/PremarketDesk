@@ -690,7 +690,7 @@ the reason the two published levels were withdrawn in the first place.
 
 The header row is fixed and is reproduced exactly as this line:
 
-| Ticker | Month | Quarter | Year | Last close above the quarter high | Range in ATR | Gap in context |
+| Ticker | Month | Quarter | Year | Last close above the quarter high | Range in normal days | Gap in context |
 
 One row per candidate, in packet order. Month, Quarter and Year give where the
 last price sits between the high and the low of the 20, 60 and 250 session

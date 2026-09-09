@@ -789,6 +789,30 @@ DECK_JS = r"""
     runaway: "Continuation gap", exhaustion: "Exhaustion gap",
     unknown: "Not classified"
   };
+  /* WHAT THIS NAME'S OWN GAPS HAVE DONE, first and largest on the panel,
+     because it is the only reading here that is evidence about THIS share
+     rather than about where it happens to be standing today. It sat LAST and
+     smallest until 2026-09-09, the sixteenth row of sixteen at equal weight,
+     and the owner read the card and said he could not tell what to take from
+     it. He was right: the answer was on it, in the last line, in the smallest
+     type, written as a field dump. */
+  function gapHistory(g) {
+    if (!g || !g.pg || g.pg.c == null) return "";
+    var p = g.pg;
+    if (p.med == null) {
+      return '<div class="dsnote">When this name has gapped before: ' + p.c +
+        " of its last " + p.of + " sessions opened with a gap, and no open to " +
+        "close median is on file for them.</div>";
+    }
+    return '<div class="dsnote" style="margin-bottom:2px">When this name has ' +
+      "gapped before</div>" +
+      '<div class="vbig">' + pct(p.med) + "</div>" +
+      '<p class="snote" style="margin:2px 0 10px">median open to close across ' +
+      "the " + p.n + " gap(s) in its last " + p.of + " sessions. That is what " +
+      "those days did after the open, and it is a description of them rather " +
+      "than a reading of this one.</p>";
+  }
+
   function gapContext(g) {
     if (!g) return "";
     var out = '<div class="dsline"><span>Gap in context</span><span class="n">' +
@@ -796,26 +820,27 @@ DECK_JS = r"""
     if (g.rg) {
       var word = g.rg.call === "consolidation" ? "held a range"
         : g.rg.call === "trend" ? "trended " + esc(g.rg.dir || "")
-        : "was neither coiled nor trending over";
-      out += '<div class="dsline"><span>Before today</span><span class="n">' +
-        esc(word) + " " + g.rg.n + " sessions, " + n2(g.rg.ra) +
-        " ranges wide, " + n2(g.rg.na) + " travelled</span></div>";
+        : "neither coiled nor trending";
+      // ONE MEASUREMENT, ONE ROW. This width is the coil ratio, which
+      // printed again three rows above as "20 session range, in average
+      // ranges" until 2026-09-09, so the panel stated 4.07 twice and made
+      // a reader carry two rows to get one number.
+      out += '<div class="dsline"><span>The ' + g.rg.n +
+        ' sessions before today</span><span class="n">' + esc(word) +
+        ", " + n2(g.rg.ra) + " average days wide</span></div>";
+      // "travelled" named no unit and appeared nowhere else on the card.
+      out += '<div class="dsline"><span>Net move across them</span>' +
+        '<span class="n">' + n2(g.rg.na) + " average days</span></div>";
     }
-    if (g.vs) {
-      out += '<div class="dsline"><span>Price against that range</span>' +
-        '<span class="n">' + esc(g.vs) + "</span></div>";
-    }
+    // "Price against that range" was dropped on 2026-09-09: it restated
+    // the one month track's own word, about the same window, four rows
+    // above it.
     if (g.rc) {
       out += '<div class="dsline"><span>Recent sessions gapping ' +
         esc(g.thr || "") + " percent</span>" + '<span class="n">' + g.rc.c +
         " of " + g.rc.of + ", " + g.rc.run + " in a row</span></div>";
     }
-    if (g.pg && g.pg.c != null) {
-      out += '<div class="dsline"><span>Its own past gaps</span>' +
-        '<span class="n">' + g.pg.c + " in " + g.pg.of + " sessions" +
-        (g.pg.med == null ? "" : ", median open to close " + pct(g.pg.med) +
-          " on " + g.pg.n) + "</span></div>";
-    }
+    // g.pg is drawn by gapHistory at the top of the panel and not here.
     if (g.why) {
       out += '<div class="dsnote">' + esc(g.why) +
         ". This is a description of where the gap happened and not a reading " +
@@ -843,6 +868,10 @@ DECK_JS = r"""
       return head + '<div class="empty">' + esc(d.short) + "</div></div>";
     }
     var out = head;
+    // THE EVIDENCE FIRST, then where the name is standing, then the
+    // reference readings it was all measured from. Sixteen rows at one
+    // weight is a dump and not a panel.
+    out += gapHistory(d.gc);
 
     (d.w || []).forEach(function (w) {
       // position_pct is UNCAPPED on purpose. Above 100 means the last price is
@@ -873,6 +902,7 @@ DECK_JS = r"""
         "</div></div>";
     });
 
+    out += '<div class="dsnote" style="margin-top:10px">Reference readings</div>';
     (d.sma || []).forEach(function (s) {
       out += '<div class="dsline"><span>' + s.n + " session average</span>" +
         '<span class="n">' + n2(s.v) +
@@ -884,7 +914,9 @@ DECK_JS = r"""
         " sessions</span>" + '<span class="n">' + n2(d.atr) +
         (d.atrp == null ? "" : "  " + n2(d.atrp) + "% of price") + "</span></div>";
     }
-    if (d.coil && d.coil.r != null) {
+    // Only when the regime line is not already saying it, which it does
+    // whenever a regime was callable at all.
+    if (d.coil && d.coil.r != null && !(d.gc && d.gc.rg)) {
       // The window's whole range said in units of one normal day's range. A
       // coiled name and an extended one read alike on the tracks above: both
       // show a position inside a range and neither says how wide it is.
@@ -1166,8 +1198,12 @@ DECK_JS = r"""
     }
     var reach = Math.round(g.reached / g.rows * 100);
     var rows = [
-      ["Reached the entry", g.reached + " of " + g.rows,
-       reach + "% of them traded through it"],
+      // NOT "Reached the entry". This panel sits beside TODAY's candidate,
+      // and naming the level an entry there tells the reader they have one.
+      // The record screens may say entry, because there it names a mechanic
+      // of the paper rule in the past tense; here it is an instruction.
+      ["Traded through the reference high", g.reached + " of " + g.rows,
+       reach + "% of them reached it after the open"],
       ["Median result", pct(g.median),
        "quartiles " + pct(g.p25) + " to " + pct(g.p75)],
     ];

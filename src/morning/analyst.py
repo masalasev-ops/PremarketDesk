@@ -1023,7 +1023,7 @@ def _daily_structure_section(add, candidates: list[dict[str, Any]]) -> None:
         return
 
     add("| Ticker | Month | Quarter | Year | Last close above the quarter high "
-        "| Range in ATR | Gap in context |")
+        "| Range in normal days | Gap in context |")
     add("|---|---|---|---|---|---|---|")
     for c in candidates:
         block = c.get("daily_structure") or {}

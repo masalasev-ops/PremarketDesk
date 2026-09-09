@@ -291,9 +291,16 @@ COLUMNS: dict[str, str] = {
                                          "whether that level is one the share "
                                          "keeps failing at or one it has "
                                          "simply not been near",
-    "Range in ATR": "how wide the last 20 days have been, counted in normal "
-                    "days. A small number means the share has been coiled, a "
-                    "large one that it has been travelling",
+    # NOT "Range in ATR". ATR is AptarGroup on the NYSE, so that header put a
+    # bare listed ticker into every report and into the legend generated
+    # under it. The containment check reads a report the way a reader does,
+    # saw a ticker the packet never carried, and correctly refused to deliver
+    # the 2026-09-09 report. No abbreviation that is also a listed symbol
+    # belongs in fixed report furniture.
+    "Range in normal days": "how wide the last 20 days have been, counted in "
+                            "normal days. A small number means the share has "
+                            "been coiled, a large one that it has been "
+                            "travelling",
     "Gap in context": "what the share was doing before today, and where this "
                       "gap sits in that",
     "Before today": "the shape of the last month: how wide it was and how far "
