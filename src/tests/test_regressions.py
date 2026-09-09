@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and twenty eight claims, a count read off
+and the two pages. It now carries two hundred and twenty nine claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -2783,7 +2783,13 @@ def claim_a_rewrite_is_free_while_the_collector_rereads(failures: list[str]) -> 
             if not free:
                 failures.append(f"a rewrite at {hhmm} with a sidecar present is "
                                 "refused, so a failed 07:15 pass is never rerun")
-        free, _why = monitor_jobs._rewriting_the_watchlist_is_free(day, 9 * 60 + 30)
+        # DERIVED, not 09:30. This read a hardcoded half past nine, which was
+        # five minutes past the stop until 2026-09-08 and an hour inside it
+        # afterwards, so the claim went from asserting the refusal to
+        # asserting nothing without a word.
+        past_stop = monitor_jobs._minutes(
+            monitor_jobs._CRIT.clock("collector", "stop_time")) + 5
+        free, _why = monitor_jobs._rewriting_the_watchlist_is_free(day, past_stop)
         if free:
             failures.append("a rewrite after the collector stop reads free")
     print("  rerun gate   a watchlist rewrite is free at every pass while the "
@@ -3326,7 +3332,7 @@ def claim_seven_tasks_carry_every_trigger(failures: list[str]) -> None:
     if error:
         failures.append(f"the register script could not be read: {error}")
         return
-    wanted = {"discover", "collector", "morning-chain", "midday", "nightly",
+    wanted = {"discover", "collector", "morning-chain", "ladder", "midday", "nightly",
               "monitor", "meter-sampler"}
     if set(spec) != wanted:
         failures.append(f"the script registers {sorted(spec)}, wanted {sorted(wanted)}")
@@ -5061,7 +5067,12 @@ def claim_a_previous_session_watchlist_reruns_discover(failures: list[str]) -> N
             failures.append("the pass rewrote the watchlist without saying the "
                             f"collector will pick it up: {printed!r}")
         (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
-        now = ettime.now_et().replace(hour=9, minute=30, second=0, microsecond=0)
+        # Past the stop, whatever the stop currently is. Hardcoding 09:30 made
+        # this assertion vacuous the moment stop_time moved past it.
+        stop_m = monitor_jobs._minutes(
+            monitor_jobs._CRIT.clock("collector", "stop_time")) + 5
+        now = ettime.now_et().replace(hour=stop_m // 60, minute=stop_m % 60,
+                                      second=0, microsecond=0)
         launched, printed = one_pass(now, asleep)
         if "job_discover.bat" in launched:
             failures.append("discover was rerun after the collector stop, when "
@@ -5962,8 +5973,17 @@ def claim_a_hold_needs_a_pass_that_can_act(failures: list[str]) -> None:
             (config.LOGS_DIR / f"discover-{day}.log").unlink(missing_ok=True)
             (config.DATA_DIR / "monitor-reruns.json").write_text("{}", encoding="utf-8")
 
+        # A HOLD IS LEGITIMATE ONLY WHERE A LATER PASS IS STILL INSIDE THE
+        # WINDOW, and extending [Collector] stop_time to 10:30 on 2026-09-08
+        # moved that line rather than changing the rule. 08:55 and 09:05 used
+        # to be the end of the road, because the 09:25 pass fell outside a
+        # window that shut at 09:25; now 09:25 is comfortably inside it and
+        # deferring to it is the right answer at both. 10:25 is the new end of
+        # the road: the next pass after it is 12:25, which is past the stop,
+        # so a pass there must start the collector itself or nothing will.
         for clock, hold_expected in (((7, 25), True), ((8, 25), True),
-                                     ((8, 55), False), ((9, 5), False)):
+                                     ((8, 55), True), ((9, 5), True),
+                                     ((10, 25), False)):
             missed_morning()
             now = ettime.now_et().replace(hour=clock[0], minute=clock[1],
                                           second=0, microsecond=0)
@@ -14555,14 +14575,21 @@ def claim_a_watchlist_from_another_session_never_reaches_the_socket(
             return seen
 
         base = ettime.now_et()
-        last_resort = one_pass(base.replace(hour=8, minute=55, second=0,
+        # THE LAST RESORT IS THE LAST PASS INSIDE THE COLLECTOR WINDOW, and
+        # which clock that is moves with [Collector] stop_time. It was 08:55
+        # while the window shut at 09:25; extending it to 10:30 on 2026-09-08
+        # made 08:55 an ordinary pass with 09:25 still ahead of it, which is
+        # exactly the state that DEFERS rather than starting anything, so the
+        # hardcoded clock turned this half of the claim into a check that the
+        # override never fires.
+        last_resort = one_pass(base.replace(hour=10, minute=25, second=0,
                                             microsecond=0))
         early = one_pass(base.replace(hour=7, minute=25, second=0,
                                       microsecond=0))
 
         collector_calls = [a for bat, a in last_resort if bat == "job_collector.bat"]
         if not collector_calls:
-            failures.append("the 08:55 last-resort pass launched no collector, so "
+            failures.append("the 10:25 last-resort pass launched no collector, so "
                             "this half proved nothing about the override")
         elif ("stale-watchlist-ok",) not in collector_calls:
             failures.append(
@@ -15998,12 +16025,12 @@ def claim_every_screen_can_be_reached(failures: list[str]) -> None:
     screens = set(re.findall(r'route\.screen === "(\w+)"', app))
     screens.update(re.findall(r'screen: "(\w+)"', app))
     screens.discard("")
-    if len(screens) < 8:
+    if len(screens) < 9:
         failures.append(f"only {len(screens)} screens were found in the router, "
-                        f"which is fewer than the eight that exist: {sorted(screens)}")
+                        f"which is fewer than the nine that exist: {sorted(screens)}")
 
     default = "morning"  # parse() with an empty hash
-    in_nav = ("morning", "precedent", "midday", "report", "sessions",
+    in_nav = ("morning", "ladder", "precedent", "midday", "report", "sessions",
               "record", "health")
     # from -> to -> the markup that draws the link
     draws = {
@@ -16018,6 +16045,12 @@ def claim_every_screen_can_be_reached(failures: list[str]) -> None:
         # never counts.
         "precedent": {"name": "<a href=\"#/name/' + esc(n.sym)",
                       "record": '<a href="#/record">Record</a>'},
+        # The ladder routes to a name the way the other tables do, and is
+        # reached from the navigation like every other screen. It draws no
+        # onward link of its own on purpose: it is read while a decision is
+        # live and sending the reader somewhere else is the one thing it
+        # must not do.
+        "ladder": {"name": '"#/name/" + tr.dataset.goto'},
         "midday": {"name": '"#/name/" + tr.dataset.goto'},
         "session": {"morning": '/morning">', "midday": '/midday">',
                     "report": '/report">'},
@@ -18487,6 +18520,94 @@ def claim_no_local_shadows_a_desk_helper(failures: list[str]) -> None:
           "reaches the helper")
 
 
+def claim_the_ladder_reads_a_sequence_and_not_an_aggregate(
+        failures: list[str]) -> None:
+    """A stop after a fill is a stop out; before it, or beside it, is not.
+
+    THIS IS THE WHOLE REASON THE SOCKET WINDOW MOVED. CRITERIA's midday state
+    table has said since it was written that a TRIGGERED row cannot say
+    whether the session low came before or after the fill, because a daily
+    high and low carry no order, and that "the third case is the whole
+    argument for extending [Collector] stop_time past the open: minute bars
+    with timestamps turn it into the second case's certainty". Past the open
+    the collector writes exactly those bars, and walking them in order is the
+    only thing that turns the certainty into a screen.
+
+    It would be shorter to take a max and a min over the window and compare
+    both to the levels. That is precisely the arithmetic the midday pass is
+    stuck with, and it gets the third case wrong in the direction that reads
+    worst: a low that happened BEFORE the entry ever traded stops nothing,
+    because nothing was held under it, and reporting it as a stop out would
+    invent a loss out of a session that never took the trade.
+
+    The same minute is the case that must NOT be decided. A minute bar carries
+    a high and a low and no order between them, so a stop level touched in the
+    minute of the fill is reported as reached with the sequence unknown, which
+    is what the midday table already says about its own third case. The
+    pessimistic guess is still a guess.
+    """
+    import inspect
+
+    from core import criteria
+    from morning import ladder
+
+    def bar(minute, o, h, low, c):
+        return {"minute_epoch": 1_000 + minute, "o": o, "h": h, "l": low, "c": c,
+                "minute_et": f"2026-09-08T09:{30 + minute:02d}:00-04:00"}
+
+    cases = (
+        ("a low before the trigger stops nothing",
+         [bar(0, 95, 96, 88, 95), bar(1, 96, 101, 96, 100)],
+         {"state": ladder.STATE_TRIGGERED, "stopped_at": None}),
+        ("a low in a later minute is a stop out",
+         [bar(0, 95, 96, 94, 95), bar(1, 96, 101, 96, 100), bar(2, 100, 100, 89, 90)],
+         {"state": ladder.STATE_STOPPED, "stop_sequence_unknown": False}),
+        ("a low in the trigger's own minute is not knowable",
+         [bar(0, 95, 96, 94, 95), bar(1, 96, 101, 89, 95)],
+         {"state": ladder.STATE_STOPPED, "stop_sequence_unknown": True}),
+        ("an open already through the entry fills at the open",
+         [bar(0, 105, 106, 104, 105)],
+         {"state": ladder.STATE_GAPPED_THROUGH, "fill": 105}),
+        ("an entry the tape never reaches is still waiting",
+         [bar(0, 95, 96, 94, 95), bar(1, 95, 97, 94, 96)],
+         {"state": ladder.STATE_WAITING, "triggered_at": None}),
+    )
+    for label, bars, wanted in cases:
+        got = ladder.walk(bars, 100.0, 90.0)
+        for key, value in wanted.items():
+            if got.get(key) != value:
+                failures.append(
+                    f"{label}: walk reported {key}={got.get(key)!r}, expected "
+                    f"{value!r}. The full row was {got!r}")
+
+    # THE LEVELS ARE THE PUBLISHED ONES. Re-deriving an entry here would put a
+    # different number on the screen from the one in the reader's hand, and it
+    # would do it silently, which is worse than showing none.
+    source = inspect.getsource(ladder)
+    if "entry_ref" not in source or "packet.json" not in source:
+        failures.append("the ladder does not read its levels out of the frozen "
+                        "packet, so the screen can disagree with what was "
+                        "published at 08:45 without saying so")
+    for forbidden in ("record_pick", "store.session(", "INSERT INTO"):
+        if forbidden in source:
+            failures.append(
+                f"the ladder writes to the record ({forbidden}). A figure "
+                "measured at 09:41 against a moving tape is not the record of "
+                "a session and must never be mistaken for one")
+
+    # And its window cannot outrun the tape it reads.
+    crit = criteria.load()
+    if crit.clock("ladder", "close_time") > crit.clock("collector", "stop_time"):
+        failures.append(
+            "the ladder window closes after the collector stops, so the screen "
+            "would go on drawing while the tape behind it had stopped moving, "
+            "with nothing on it saying so")
+
+    print("  ladder a stop after the fill is a stop out, one before it is not, one "
+          "in the same minute is reported as unknowable, and the levels are the "
+          "packet's own")
+
+
 def claim_the_floors_filter_is_wired_to_the_table_it_filters(
         failures: list[str]) -> None:
     """The floors filter renders, is handled, and names the tbody it rewrites.
@@ -19084,6 +19205,7 @@ def main() -> int:
     run_claim(failures, claim_a_failed_morning_says_so_on_the_desk, failures)
     run_claim(failures, claim_the_desk_prints_tickers_and_aligns_its_numbers, failures)
     run_claim(failures, claim_the_floors_filter_is_wired_to_the_table_it_filters, failures)
+    run_claim(failures, claim_the_ladder_reads_a_sequence_and_not_an_aggregate, failures)
     run_claim(failures, claim_no_local_shadows_a_desk_helper, failures)
 
     if failures:

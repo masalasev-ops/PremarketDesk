@@ -18,6 +18,36 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-08, nineteenth: the ladder window is a whole hour because the scheduler counts in whole hours
+
+THE CHOICE. The ladder needed 09:30 to about 10:15, which is where the evidence
+puts the decision: 85 percent of triggers are in by 10:00. It runs 09:30 to
+10:30 instead.
+
+WHY. Task Scheduler's repetition duration is expressed in whole hours, and
+register_tasks.ps1's trigger schema carries RepeatHours rather than a
+TimeSpan. A 45 minute window needed one of three things: a fractional duration
+the schema does not have, firings between 10:15 and 10:30 doing nothing thirty
+times a week, or a second knob describing a window the scheduler cannot
+express. The first is a change to the registration schema and the monitor's
+parser that reconciles against it, for fifteen minutes of a screen; the second
+puts a lie in the schedule; the third puts a lie in CRITERIA.
+
+Fifteen minutes on the end of a window whose evidence is "85 percent are in by
+10:00" is not worth a schema change. The clock moved to fit the machine, and
+the note beside the key says so rather than implying 10:30 was measured.
+
+WHAT THIS COST. [Collector] stop_time had to move with it, because the ladder
+cannot see past the tape it reads, so the socket runs an extra hour and five
+minutes over 09:25. That is real: it is an hour more of a websocket and a
+larger capture file every session. It buys the ladder and it buys a knowable
+stop out, and neither was available at any shorter window.
+
+WHAT WOULD REVERSE IT. Evidence that the second half of the window is dead. The
+ladder writes its own file every two minutes, so the question "how many
+triggers landed after 10:00" is answerable from the record in a few weeks
+rather than from an argument now.
+
 ## 2026-09-08, eighteenth: the failure goes on the desk, not into a Windows dialog
 
 THE CHOICE, AND IT WAS MADE TWICE. The first build of this raised a Windows

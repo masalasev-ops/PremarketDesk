@@ -249,6 +249,28 @@ def _rendered(run_dir: Path, name: str) -> str | None:
         return None
 
 
+def _ladder_for(day: str) -> dict[str, Any]:
+    """The live ladder for this session, or nothing.
+
+    Missing is the ordinary case and not a fault: it is missing before 09:30,
+    missing on every session before 2026-09-08, and missing all day on a
+    holiday. The screen says which of those it is from the payload's own
+    fields, so this returns the file as written and invents no empty shape to
+    stand in for one.
+    """
+    path = config.DATA_DIR / f"ladder-{day}.json"
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        # A half written ladder is a screen that lies for two minutes, and the
+        # writer is atomic precisely so this cannot happen. Reported as absent
+        # rather than raised: the desk has eight other screens.
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 def compact_session(session_date: str) -> dict[str, Any] | None:
     """The payload for one session, or None when that session has no packet.
 
@@ -443,6 +465,14 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
                   for k in ("sectors", "catalyst_classes", "gap_direction")},
         "criteria": packet.get("criteria_summary") or {},
         "record": packet.get("record_so_far") or {},
+        # THE LADDER IS NOT FROM THE PACKET, and it is the only block here that
+        # is not. Everything else on a session payload was measured once at
+        # 08:45 and frozen; the ladder is measured every two minutes between
+        # 09:30 and 10:15 against a tape that is still moving, which is the
+        # whole point of it. Read from its own file for that reason, so a
+        # reader never has to wonder whether a figure beside it aged the same
+        # way, and absent entirely on every session that predates it.
+        "ladder": _ladder_for(packet.get("session_date") or session_date),
         "movers": movers,
         "mover_lists": mover_lists,
         # Section 9 of the report, which no screen could draw because this

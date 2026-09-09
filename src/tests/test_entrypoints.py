@@ -72,6 +72,10 @@ SCHEDULED = [
     ("weekly", "night.weekly_page", []),
     ("prune", "night.prune_data", []),
     ("monitor", "ops.monitor_jobs", ["--dry-run"]),
+    # The live ladder. Two file reads and no vendor call, so it runs here
+    # exactly as it runs at 09:32, and --dry-run keeps it from writing a
+    # ladder file into the sandbox that a later claim would read as real.
+    ("ladder", "morning.ladder", ["--dry-run"]),
     ("midday", "midday.scan_midday", []),
     ("midday_render", "midday.render_midday", []),
 ]

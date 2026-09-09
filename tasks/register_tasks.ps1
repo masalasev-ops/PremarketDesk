@@ -76,14 +76,29 @@ $jobs = @(
     @{ Name = "discover";      Bat = "job_discover.bat";      Triggers = @(
         @{ Days = $weekdays; Start = "03:55" },
         @{ Days = $weekdays; Start = "07:15" }) },
-    # Six hours, not the default four. 04:00 to 09:25 is five and a half, and
-    # a four hour limit would have Task Scheduler kill the collector at 08:00,
-    # forty five minutes before the scan reads its tape, on a job whose data
-    # cannot be fetched afterwards from any vendor on this plan.
-    @{ Name = "collector";     Bat = "job_collector.bat";     LimitHours = 6; Triggers = @(
+    # SEVEN hours, and the number tracks [Collector] stop_time rather than
+    # being a round one. 04:00 to 09:25 was five and a half and six was the
+    # margin; 04:00 to 10:30 is six and a half, and leaving the limit at six
+    # would have Task Scheduler kill the socket at 10:00, halfway through the
+    # ladder window and on a job whose data cannot be fetched afterwards from
+    # any vendor on this plan. A four hour default would have killed it at
+    # 08:00, forty five minutes before the scan reads its tape, which is why
+    # this was ever spelled out.
+    @{ Name = "collector";     Bat = "job_collector.bat";     LimitHours = 7; Triggers = @(
         @{ Days = $weekdays; Start = "04:00" }) },
     @{ Name = "morning-chain"; Bat = "job_morning_chain.bat"; Triggers = @(
         @{ Days = $weekdays; Start = "08:45" }) },
+    # Every two minutes for the hour after the open, which is the only window
+    # this desk has ever had that is worth watching while it happens: 77
+    # percent of the entries that ever trigger do so within five minutes of
+    # 09:30 and the median time to trigger is zero. Two minutes is well inside
+    # the minute bar resolution and the pass is two file reads and no vendor
+    # call, so the cost is the desk rebuild beside it.
+    #
+    # It reads the collector's file, so its window and [Collector] stop_time
+    # are the same clock and must move together.
+    @{ Name = "ladder";        Bat = "job_ladder.bat";        Triggers = @(
+        @{ Days = $weekdays; Start = "09:30"; RepeatMin = 2; RepeatHours = 1 }) },
     # 12:00, and the hour is the point. us-quote-delayed's REGULAR hours
     # behaviour is what was measured, its premarket behaviour is untested, and
     # its previousClosePrice rolls at an hour nobody has pinned down, which is

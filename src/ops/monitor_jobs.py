@@ -103,6 +103,19 @@ JOBS = {
     # scan that succeeded and a render that failed is still a failed job.
     "midday": ("\\PremarketDesk\\midday", "job_midday.bat", "midday",
                r"===== midday render finished rc=0"),
+    # The live ladder, every two minutes from 09:30 to 10:30. The marker is
+    # the desk, the last step its .bat writes, and like the chain and the
+    # nightly it does not ask for rc=0 for the same reason: a ladder that
+    # measured correctly is not undone by a page that did not draw.
+    #
+    # NOT RELAUNCHED and it has no due time. Every other job here runs once
+    # or twice and a missed firing is worth chasing; this one fires thirty
+    # times in an hour, so a single miss is two minutes of a moving screen and
+    # the next firing fixes it, while a relaunch would race the firing already
+    # due. What IS worth reading is a step of it that RECORDED a failure,
+    # which steps_ok sees through the status records without a due time.
+    "ladder": ("\\PremarketDesk\\ladder", "job_ladder.bat", "ladder",
+               r"===== desk finished rc="),
 }
 
 # This module's job key -> the PMD_JOB name the .bat stamps on every status
@@ -116,6 +129,7 @@ JOB_STATUS_NAMES = {
     "chain": "morning-chain",
     "nightly": "nightly",
     "midday": "midday",
+    "ladder": "ladder",
 }
 
 # What Task Scheduler puts in the Last Result column while a task is still
@@ -1267,6 +1281,16 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             problems += 1
             report("collector", "FAILED", f"window over, log says {verdict}. "
                    "Nothing to rerun; tonight's backfill still writes the true window.")
+
+    # ---- the ladder. No due time and no relaunch: see the JOBS note. It is
+    # here so a step of it that recorded a failure is seen, and silent
+    # otherwise, because a line printed thirty times an hour is a line nobody
+    # reads.
+    ladder_broken, _ladder_seen = failed_steps("ladder", day)
+    if ladder_broken:
+        problems += 1
+        for line in ladder_broken:
+            report("ladder", "STEP FAILED", line)
 
     # ---- morning chain
     chain_due = _minutes(_CRIT.clock("monitor", "chain_due"))

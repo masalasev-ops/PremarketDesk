@@ -65,6 +65,9 @@ _KNOB_KEYS = (
     # Read from the sections that own them rather than restated under
     # [Screens], so the page counts down to the minute the scheduler actually
     # fires and moving either one reaches the screen without a second edit.
+    ("ladder", "open_time", "text", "ladder_open"),
+    ("ladder", "close_time", "text", "ladder_close"),
+    ("ladder", "refresh_seconds", "integer", "ladder_refresh_s"),
     ("midday", "run_time", "text", "midday_run_time"),
     ("monitor", "midday_due", "text", "midday_due"),
 )
@@ -126,6 +129,11 @@ def _nav() -> str:
              # the desk's opinion and a base rate is a count of what lookalikes
              # did, and folding one into the other hides the case where they
              # disagree, which is the only case either gets corrected by.
+             # Between Morning and Precedent because it is read in the
+             # hour AFTER the one Morning publishes, on the same session, and
+             # a reader at 09:35 should not have to pass Precedent to reach
+             # the only screen that is moving.
+             ("ladder", "#/", "Ladder"),
              ("precedent", "#/", "Precedent"),
              ("midday", "#/", "Midday"),
              ("report", "#/", "Report"),

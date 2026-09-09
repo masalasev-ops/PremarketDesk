@@ -278,6 +278,17 @@ th.n { text-align: right; }
 td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .scroll { overflow-x: auto; }
 
+/* the ladder */
+.lstate { font-size: 12px; }
+.lstate.good { color: var(--good); font-weight: 600; }
+.lstate.bad { color: var(--bad); font-weight: 600; }
+.lbar { width: 34%; min-width: 120px; }
+.ltrack { display: block; height: 7px; background: var(--raised); border-radius: 4px;
+  position: relative; overflow: hidden; }
+.ltrack i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent);
+  border-radius: 4px; }
+.ltrack i.good { background: var(--good); }
+.ltrack i.bad { background: var(--bad); }
 .verdictcard { border-color: var(--line-strong); }
 .vbig { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
 
@@ -1783,6 +1794,114 @@ DECK_JS = r"""
     }
   }
 
+  /* ---------- Ladder ----------
+
+     THE ONLY SCREEN ON THIS DESK THAT MOVES. Everything else draws a session
+     that is over; this one draws the forty five minutes that decide it.
+     Measured over the 86 paper trades on file, 77 percent of the entries that
+     ever trigger do so within five minutes of the open and the median time to
+     trigger is zero: the entry is taken at the open or not at all. A reader
+     with ten cards cannot watch ten tickers, and this is the one question
+     worth answering while they could still act on the answer.
+
+     SORTED BY DISTANCE TO THE ENTRY and nothing else, closest first. Not by
+     score, not by conviction, not by the pool rank: those all answer "which
+     of these is the better idea", which was settled at 08:45 and is on the
+     card. This screen answers "which of them is about to happen".  */
+
+  var LADDER_WORD = { waiting: "Waiting", triggered: "Triggered",
+    gapped_through: "Opened through it", stopped: "Stopped" };
+
+  function ladderRow(r, maxAway) {
+    var away = r.to_entry_pct;
+    // The bar is distance from the entry, drawn from the right hand edge
+    // because that edge IS the entry. A name touching it is a name trading.
+    var w = away == null ? 0 : Math.max(2, (1 - Math.min(1, Math.abs(away) / maxAway)) * 100);
+    var cls = r.state === "stopped" ? "bad"
+      : (r.state === "triggered" || r.state === "gapped_through") ? "good" : "";
+    return '<tr class="clickable" data-goto="' + esc(r.sym) + '">' +
+      '<td class="tk">' + esc(bare(r.sym)) + "</td>" +
+      '<td><span class="lstate ' + cls + '">' +
+      esc(LADDER_WORD[r.state] || r.state) + "</span>" +
+      (r.triggered_at ? '<span class="sub">' + esc(r.triggered_at) +
+        (r.stopped_at ? " \u2192 stop " + esc(r.stopped_at) +
+          (r.stop_sequence_unknown ? ", order in that minute unknown" : "") : "") +
+        "</span>" : "") + "</td>" +
+      '<td class="n">' + (r.last == null ? NIL : n2(r.last)) + "</td>" +
+      '<td class="n">' + n2(r.entry) + "</td>" +
+      '<td class="lbar"><span class="ltrack"><i class="' + cls + '" style="width:' +
+      w.toFixed(1) + '%"></i></span></td>' +
+      '<td class="n ' + (away == null ? "" : dirClass(away)) + '">' +
+      (away == null ? NIL : pct(away)) + "</td>" +
+      '<td class="n">' + (r.stop == null ? NIL : n2(r.stop)) + "</td></tr>";
+  }
+
+  function screenLadder(p, root) {
+    var L = p.ladder || {};
+    var names = L.names || [];
+    var head = '<section><div class="shead"><h2>The ladder</h2>' +
+      '<span class="note">' + esc(L.open_time || "09:30") + " to " +
+      esc(L.close_time || "10:15") + ", closest to its entry first</span></div>";
+
+    if (!names.length) {
+      root.innerHTML = head + '<div class="card pad empty">' +
+        esc(L.why || "No ladder was written for this session. It runs on weekdays " +
+          "between the two times above, and sessions before 2026-09-08 predate it.") +
+        "</div></section>";
+      return;
+    }
+
+    var live = !L.before_open && !L.window_over;
+    var state = L.before_open
+      ? "The session has not opened. These are the levels published this " +
+        "morning, and nothing has traded against them yet."
+      : L.window_over
+        ? "The window is over and this is where it ended. What happened after " +
+          "10:15 is the midday pass's question."
+        : "Live. This screen reloads itself every " +
+          (KNOBS.ladder_refresh_s || 60) + " seconds while it is open.";
+
+    var maxAway = Math.max.apply(null, names
+      .map(function (r) { return Math.abs(r.to_entry_pct || 0); }).concat([1]));
+    var counts = {};
+    names.forEach(function (r) { counts[r.state] = (counts[r.state] || 0) + 1; });
+
+    root.innerHTML = head +
+      kpisHTML([
+        { l: "Published", v: names.length, s: "levels frozen at " + esc(p.run_at || "08:45") },
+        { l: "Triggered", v: (counts.triggered || 0) + (counts.gapped_through || 0),
+          s: "traded through the entry" },
+        { l: "Stopped", v: counts.stopped || 0, s: "after the fill, in a later minute" },
+        { l: "Still waiting", v: counts.waiting || 0, s: "the entry has not traded" },
+        { l: "Read at", v: esc((L.generated || "").slice(11, 16) || NIL), s: "ET" }
+      ]) +
+      '<p class="snote">' + esc(state) + "</p>" +
+      '<div class="card pad"><div class="scroll capped">' +
+      '<table class="ptable"><thead><tr><th>Name</th><th>State</th>' +
+      '<th class="n">Last</th><th class="n">Entry</th><th>Distance</th>' +
+      '<th class="n">To entry</th><th class="n">Stop</th></tr></thead><tbody>' +
+      names.map(function (r) { return ladderRow(r, maxAway); }).join("") +
+      "</tbody></table></div></div>" +
+      '<p class="snote">Every level here was published at ' + esc(p.run_at || "08:45") +
+      " and is not recomputed. This screen only says where the tape is against " +
+      "them. A stop reached in the same minute as the fill is reported as " +
+      "reached and never as a stop out, because a minute bar carries a high " +
+      "and a low and no order between them.</p></section>";
+
+    root.addEventListener("click", function (e) {
+      var tr = e.target.closest("[data-goto]");
+      if (tr) location.hash = "#/name/" + tr.dataset.goto;
+    });
+
+    // A SCREEN THAT OWNS ITS CLOCK. render() clears TIMER on every route
+    // change, so this cannot outlive the screen that started it and cannot
+    // reload a page the reader has navigated away from.
+    if (live) {
+      TIMER = setInterval(function () { location.reload(); },
+        Math.max(15, KNOBS.ladder_refresh_s || 60) * 1000);
+    }
+  }
+
   /* ---------- Precedent ----------
 
      A SEPARATE SCREEN AND NOT A SECTION OF MORNING, which is the whole design
@@ -2946,7 +3065,7 @@ DECK_JS = r"""
   }
 
   function setNav(route) {
-    var map = { morning: "morning", precedent: "precedent",
+    var map = { morning: "morning", ladder: "ladder", precedent: "precedent",
       midday: "midday", report: "report",
       session: "sessions", sessions: "sessions", record: "record",
       health: "health", name: "" };
@@ -2960,6 +3079,7 @@ DECK_JS = r"""
     // the newest.
     var at = route.date || LAST;
     var link = { morning: "#/session/" + at + "/morning",
+      ladder: "#/session/" + at + "/ladder",
       precedent: "#/session/" + at + "/precedent",
       midday: "#/session/" + at + "/midday",
       report: "#/session/" + at + "/report",
@@ -3027,7 +3147,8 @@ DECK_JS = r"""
       }
       $("stamp-date").textContent = p.session;
       $("stamp-run").textContent = p.run_at || NIL;
-      if (route.screen === "midday") screenMidday(p, root);
+      if (route.screen === "ladder") screenLadder(p, root);
+      else if (route.screen === "midday") screenMidday(p, root);
       else if (route.screen === "precedent") screenPrecedent(p, root);
       else if (route.screen === "report") screenReport(p, root);
       else if (route.screen === "session") screenSession(p, root);

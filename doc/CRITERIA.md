@@ -976,7 +976,7 @@ selection again, the dedup and the age drop have to come back with it.
 
 ## Collector
 
-The 04:00 to 09:25 websocket run that is the only source of today's premarket
+The 04:00 to 10:30 websocket run that is the only source of today's premarket
 price path.
 
 ### The two phase note, 2026-09-02
@@ -1033,7 +1033,7 @@ start_time                    = 04:00      # [corrected 2026-09-02: was 07:20. S
 two_phase_first_session       = 2026-09-03 # the first session the 04:00 start ran. A session before this is measured against start_time_before_two_phase whatever its sidecar says, because those sidecars carry no window_open_at and their subscribed_at is the LAST rewrite of the day, a watchdog restart on 2026-08-19 and 2026-08-24
 start_time_before_two_phase   = 07:20      # the clock every session before two_phase_first_session ran under. Read by window_open_hhmm for those sessions and nothing else; never move it
 resubscribe_time              = 07:20      # ET. The handover: the run rereads the watchlist and moves onto the pool discover wrote at 07:15. See the two phase note. A run that starts after this, a watchdog restart, rereads from its own start, so a rerun of discover lands whenever it happens
-stop_time                     = 09:25
+stop_time                     = 10:30      # [corrected 2026-09-08: was 09:25. See the extension note below: the ladder needs the open, and minute bars past it make a stop out knowable]
 context_symbols               = SPY, QQQ, IWM, DIA, USO   # exactly the five the market snapshot draws. TLT, UUP and VIXY sat here until 2026-09-06, subscribed every morning and read by nothing: see the context ticker note under the cap note
 max_subscriptions             = 50         # hard socket cap including the 5 context tickers, so 45 candidate slots. Overflow comes off the tail of discover's ranked list, the collector does not reorder
 bar_seconds                   = 60
@@ -1362,6 +1362,26 @@ published with a lag of a few hours, so the definitive check runs in the
 evening: --verify-intraday compares every collected minute against the
 intraday bar for that exact minute, and the nightly backfill runs the same
 comparison for the record. Same window, same units, per minute.
+
+**The 2026-09-08 extension to 10:15, and the two things it buys.** stop_time
+was 09:25 from the two phase rebuild until this date, which put the whole of
+the socket window before the open. The first thing the extension buys is the
+ladder above: a desk that goes quiet at 09:25 is quiet through the half hour
+that decides 85 percent of its outcomes.
+
+The second is worth more and was written down in this file long before it could
+be acted on. The midday state table says a TRIGGERED row cannot say whether the
+session low came before or after the fill, because a daily high and low carry
+no order, and that "the third case is the whole argument for extending
+[Collector] stop_time past the open: minute bars with timestamps turn it into
+the second case's certainty". Past the open the collector writes exactly that,
+so a stop reached AFTER a trigger is a stop out and can be reported as one.
+
+It does NOT move any premarket measurement. Everything the 08:45 packet
+publishes is taken from the snapshot scan freezes at its own clock, not from
+the collector's file at the collector's stop, so a longer socket window adds
+minutes after the open to the raw capture and none of them to a premarket
+figure. That separation already existed and is what makes this change small.
 
 ## Baseline
 
@@ -2791,6 +2811,38 @@ is the mistake this whole section exists to undo. It spends no vendor call: the
 capture and the packet are files, and the point of holding them is that neither
 can be asked for again.
 
+## Ladder
+
+The live ladder, added 2026-09-08. It runs between the two clocks below and
+answers one question: which of this morning's published names is closest to its
+entry, right now.
+
+Measured over the 86 paper trades on file, 77 percent of the entries that ever
+trigger do so within five minutes of the open, the median time to trigger is
+ZERO minutes, and the median time to peak is 17. So the decision this desk
+exists to support is made between 09:30 and roughly 09:47, and until this
+existed the desk went dark at the collector's stop and said nothing again until
+the 12:00 midday pass. The noon reading was never late; it is a scorecard for a
+trade that was over before ten.
+
+open_time                     = 09:30      # the regular session open. Nothing before it is on
+                                           # this screen: a premarket print is not a fill and the
+                                           # entry is a level for the session
+close_time                    = 10:30      # ET, and it matches [Collector] stop_time on purpose.
+                                           # The ladder cannot see past the tape it reads, so a
+                                           # ladder window longer than the socket window would
+                                           # draw a screen that silently stops updating. A WHOLE
+                                           # HOUR from the open, because Task Scheduler's
+                                           # repetition duration is expressed in whole hours: a
+                                           # 45 minute window would need either a fractional
+                                           # duration this project's registration schema does not
+                                           # carry, or firings past the close doing nothing. 85
+                                           # percent of triggers are in by 10:00 either way
+refresh_seconds               = 60         # SEED, not measured. How often the ladder screen
+                                           # reloads itself while it is the open screen and the
+                                           # window is open. A minute is the bar resolution, so
+                                           # anything faster redraws the same figures
+
 ## Job status
 
 Every scheduled step appends one line to data/job-status.jsonl as it exits,
@@ -2850,6 +2902,7 @@ prune                         = 1
 truth                         = 1
 paper                         = 1          # the [Paper] ledger, run in the nightly right after truth because it reads entry_ref_true, stop_ref_true and fill_plausible and every one of those is written by that step
 midday                        = 1          # the 12:00 pass, see [Midday]
+ladder                        = 1          # the live ladder, 09:30 to 10:15 on weekdays
 midday_render                 = 1          # rendered from the packet the step above wrote, no model and no vendor call
 weekly                        = 1
 backup                        = 1
@@ -2871,7 +2924,7 @@ is listening and there is nothing to desync, or the collector is still
 rereading the watchlist, which it does from resubscribe_time until
 [Collector] stop_time, so a rewrite is picked up rather than desynced. The
 subscription list is the only thing a rewritten watchlist could desync and the
-clock was only ever a proxy for it; since the collector rereads until 09:25 a
+clock was only ever a proxy for it; since the collector rereads until its stop a
 rerun is free all morning, and the universe is
 rebuilt on a weekday only when the Sunday build was missed. Each job gets at most
 max_reruns_per_job_per_day so a hard failure cannot loop.

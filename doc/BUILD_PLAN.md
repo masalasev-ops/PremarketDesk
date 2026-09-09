@@ -163,7 +163,7 @@ at the root and is gitignored along with .env.
   2026-08-21 is what that costs when it is not done
   [corrected 2026-09-02: this put every payload under doc/research; the
   directory listing is the authority and the split above is read off it]
-- tasks/: nine job .bat files, register_tasks.ps1, README.md. Seven of them
+- tasks/: ten job .bat files, register_tasks.ps1, README.md. Eight of them
   register as seven scheduled tasks, one per job, each carrying every trigger
   its job has, with the .bat telling the firings apart by the clock:
   job_nightly on THREE triggers, 22:15 and 07:00 on weekdays (the 07:00 one

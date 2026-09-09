@@ -15,6 +15,70 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-08, ninety fourth: the desk was dark through the half hour that decides it
+
+THE OWNER ASKED HOW A SCREEN WHOSE OUTCOME IS ONLY KNOWN AT NOON HELPS ANYBODY.
+Measured against the 86 paper trades on file, the answer was that the noon
+reading was never late: 77 percent of the entries that ever trigger do so
+within FIVE MINUTES of the open, the median time to trigger is ZERO minutes,
+and the median time to peak is 17. The trade is decided between 09:30 and about
+09:47. The noon bar is a scorecard for something that finished two hours
+earlier.
+
+So the question was the wrong way round, and the real gap was sharper than the
+one asked about. The collector stopped at 09:25 and the midday pass ran at
+12:00, so the desk went completely dark across the exact half hour that decides
+85 percent of its outcomes.
+
+THE LADDER, every two minutes from 09:30 to 10:30, is the screen that was
+missing. One row per published name, sorted by distance to its own entry,
+closest first: not by score, not by conviction, not by pool rank, because those
+answer "which of these is the better idea", which was settled at 08:45 and is
+on the card. This one answers "which of them is about to happen", and it is the
+only screen on this desk that moves.
+
+IT RECOMPUTES NOTHING. Every level on it was published at 08:45 and is read
+back out of the frozen packet, because re-deriving an entry would put a
+different number on the screen from the one in the reader's hand and would do
+it silently.
+
+THE SECOND THING THE WINDOW BUYS was written in this file long before it could
+be acted on. The midday state table says a TRIGGERED row cannot say whether the
+session low came before or after the fill, because a daily high and low carry
+no order, and that "the third case is the whole argument for extending
+[Collector] stop_time past the open: minute bars with timestamps turn it into
+the second case's certainty". Past the open the collector writes exactly those
+bars. A stop reached in a LATER minute than the fill is a stop out and is
+reported as one; a low before the trigger stops nothing, because nothing was
+held under it; and a low in the trigger's own minute is reported as reached
+with the sequence unknown, because a minute bar carries a high and a low and no
+order between them and the pessimistic guess is still a guess.
+
+WHAT THE EXTENSION DID NOT MOVE. Everything the 08:45 packet publishes comes
+from the snapshot scan freezes at its own clock, not from the collector's file
+at the collector's stop, so a longer socket window adds minutes after the open
+to the raw capture and none of them to any premarket figure. That separation
+already existed and is what made this change small.
+
+THE COLLECTOR'S EXECUTION LIMIT WENT WITH IT, and would have been the quiet
+failure. 04:00 to 09:25 is five and a half hours and the limit was six; 04:00
+to 10:30 is six and a half, so an unchanged limit would have had Task Scheduler
+kill the socket at 10:00, halfway through the ladder window, on a job whose
+data cannot be fetched afterwards from any vendor on this plan.
+
+AN EIGHTH TASK, and the watchdog knows it. It has no due time and is never
+relaunched, deliberately: it fires thirty times an hour, so a missed firing is
+two minutes of a moving screen and the next one fixes it, while a relaunch
+would race the firing already due. What IS watched is a step of it that
+recorded a failure, which needs no due time to see.
+
+FIVE CLAIMS MOVED WITH THE CLOCK and every one of them had been asserting the
+right invariant against a hardcoded time. Three now derive the clock from
+CRITERIA, so the next move of stop_time will not need this edit again. The
+worst of them read a hardcoded 09:30 as "after the collector stop", which was
+five minutes past it before this change and an hour inside it afterwards: the
+assertion would have gone on passing while checking nothing.
+
 ## 2026-09-08, ninety third: the morning the desk had nothing to say, and now says it
 
 THE OWNER OPENED THE DESK AT 09:10 AND SAW FRIDAY. The 08:45 chain had died at
