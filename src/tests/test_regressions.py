@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and thirty nine claims, a count read off
+and the two pages. It now carries two hundred and forty claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -19785,6 +19785,84 @@ def claim_a_stored_map_draws_the_same_card(failures: list[str]) -> None:
 
 
 
+
+def claim_a_premarket_price_is_never_a_regular_session_one(failures: list[str]) -> None:
+    """The packet prices from inside the window its own check enforces.
+
+    [Collector] stop_time was 09:25 from the two phase rebuild until
+    2026-09-08. The socket therefore stopped before the open, the last bar in
+    the collector file was always a premarket bar, and _collector_last could
+    take the maximum minute and be right BY ACCIDENT. On 2026-09-08 stop_time
+    moved to 10:30 so the ladder could watch the half hour that decides most
+    outcomes, and those two stopped being the same thing.
+
+    From that day, any packet built after 09:30 priced its candidates off
+    regular session bars, and vintage rule (a) refused the whole packet for
+    prices "outside the premarket window 04:00 to 09:30". That is every suite
+    run after the open, which is how it was found, and it is also any morning
+    rerun late enough to matter: the 2026-09-09 monitor rerun fired at 09:25
+    and the next one would have been refused.
+
+    TWO SETTINGS MOVED APART AND NOTHING HELD THEM TOGETHER. That is what this
+    claim is: the collector's window and the packet's window are allowed to
+    differ, and the packet must still only ever price inside its own.
+    """
+    from core import criteria
+    from morning import scan, vintage
+
+    start, end = scan._premarket_window()
+    if (start, end) != vintage._window():
+        failures.append(
+            "scan and vintage read different premarket windows, so the packet "
+            "can select a bar the check then refuses. One window, two readings, "
+            "is how they drift")
+
+    day = ettime.today_et()
+    def minute(clock: str) -> int:
+        hour, mins = clock.split(":")
+        return ettime.epoch_s(ettime.at(day, int(hour), int(mins)))
+
+    # A file that spans the open, which is exactly what [Collector] stop_time
+    # now produces every morning.
+    bars = [
+        {"minute_epoch": minute("08:10"), "c": 10.0},
+        {"minute_epoch": minute("09:20"), "c": 11.0},
+        {"minute_epoch": minute("10:01"), "c": 99.0},
+    ]
+    price, at = scan._collector_last(bars)
+    if price != 11.0:
+        failures.append(
+            f"the premarket price came back {price} from a collector file that "
+            "spans the open. 99.0 is the 10:01 bar, a regular session print "
+            "published as a premarket one, and vintage rule (a) refuses the "
+            "packet carrying it")
+    if at and not (start <= at[11:16] <= end):
+        failures.append(
+            f"the premarket price is stamped {at}, outside {start} to {end}")
+
+    # And the bars past the open are REAL, not hypothetical: the collector is
+    # configured to keep running past the window. If this ever stops being
+    # true the bound above is harmless, but the claim should stop implying a
+    # risk that is no longer there.
+    stop = criteria.load().clock_text("collector", "stop_time")
+    if stop <= end:
+        failures.append(
+            f"[Collector] stop_time is {stop}, at or before the premarket "
+            f"window's {end}. That is not itself a defect, but this claim's "
+            "reasoning assumes the socket runs past the open and the comment "
+            "in _collector_last should be corrected rather than left saying "
+            "something that stopped being true")
+
+    # A file with nothing inside the window prices nothing, rather than
+    # reaching past it for something to publish.
+    only_after = [{"minute_epoch": minute("10:01"), "c": 99.0}]
+    price, at = scan._collector_last(only_after)
+    if price is not None:
+        failures.append(
+            f"a collector file holding only regular session bars published "
+            f"{price} as a premarket price. No premarket coverage is an "
+            "absence, and the candidate is dropped for it")
+
 def claim_no_fixed_report_text_names_a_listed_company(failures: list[str]) -> None:
     """A word in the report's own furniture must not be a tradeable symbol.
 
@@ -20232,6 +20310,7 @@ def main() -> int:
     run_claim(failures, claim_a_stored_map_draws_the_same_card, failures)
     run_claim(failures, claim_the_report_says_where_a_name_stands, failures)
     run_claim(failures, claim_no_fixed_report_text_names_a_listed_company, failures)
+    run_claim(failures, claim_a_premarket_price_is_never_a_regular_session_one, failures)
 
     if failures:
         for failure in failures:

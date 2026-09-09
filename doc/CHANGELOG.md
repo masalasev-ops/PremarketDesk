@@ -15,6 +15,40 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundredth: the socket was extended past the open and the packet was not told
+
+[Collector] stop_time moved from 09:25 to 10:30 on 2026-09-08 so the ladder
+could watch the half hour that decides most outcomes. Nothing else moved.
+
+_collector_last takes the last bar in the collector file. That was correct for
+as long as the socket stopped before the open, because the last bar was then
+always a premarket bar and taking the maximum minute was the same thing as
+taking the last premarket minute. From 2026-09-08 they were different things,
+and any packet built after 09:30 priced its candidates off regular session
+bars. Vintage rule (a) refused the whole packet: seventeen violations on
+2026-09-09, twelve candidate prices stamped 10:01 and five notable movers rows
+on a premarket leg they were not on.
+
+It cost every suite run after the open from that day, which is how it was
+found. It would also have cost a morning: the monitor's rerun on 2026-09-09
+fired at 09:25 and got under the wire, and the next one would have been
+refused, for a reason unrelated to the two failures before it.
+
+THE BOUND IS WHERE THE BAR IS CHOSEN, not in the check that catches it. The
+check is the thing that worked, and a check relaxed to admit its own caller
+has stopped being one. _collector_last now reads the same two CRITERIA keys
+vintage._window() reads, so the packet cannot select a bar the check would
+then refuse, and a file holding nothing inside the window prices nothing
+rather than reaching past the open for something to publish. The ladder and
+every other consumer that WANTS the bars past the open read the collector file
+directly and never came through here.
+
+claim_a_premarket_price_is_never_a_regular_session_one pins the relationship
+rather than either number: the two windows are allowed to differ, and the
+packet must still only ever price inside its own. It also fails if stop_time
+returns to before the open, not because that would be wrong but because the
+reasoning written into _collector_last would have stopped being true.
+
 ## 2026-09-09, ninety ninth: a column header cost the morning report
 
 THE 08:45 CHAIN WROTE A REPORT AND REFUSED TO DELIVER IT. The analyst produced

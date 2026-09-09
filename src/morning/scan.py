@@ -107,11 +107,42 @@ class Packet:
 
 # ------------------------------------------------------- 1. market snapshot
 
+def _premarket_window() -> tuple[str, str]:
+    """The window a premarket price may be stamped inside, as vintage reads it.
+
+    Read from the same two CRITERIA keys vintage._window() reads, so the packet
+    cannot select a bar the check would then refuse. Two readings of one window
+    is how they drift apart.
+    """
+    return (
+        _CRIT.clock_text("baseline", "session_start"),
+        _CRIT.clock_text("backfill", "market_open"),
+    )
+
+
 def _collector_last(bars: list[dict[str, Any]]) -> tuple[float | None, str | None]:
-    """The last premarket trade price the collector recorded, and its minute.
+    """The last PREMARKET trade price the collector recorded, and its minute.
 
     The bar is stamped at the minute it opens, so the timestamp returned is the
     start of the last minute that carried a trade, never a wall clock read.
+
+    BOUNDED TO THE PREMARKET WINDOW, which this used to get for free. Until
+    2026-09-08 the socket stopped at 09:25, so the last bar in the file was
+    always a premarket bar and taking the maximum minute was the same thing as
+    taking the last premarket minute. That day [Collector] stop_time moved to
+    10:30 so the ladder could watch the open, and these two stopped being the
+    same thing: from then on any packet built after 09:30 priced its candidates
+    off regular session bars, and vintage rule (a) refused the whole packet for
+    prices "outside the premarket window 04:00 to 09:30". It cost every suite
+    run after the open from 2026-09-08, and it would cost any morning rerun
+    late enough to matter.
+
+    The bound belongs here rather than in the check, for the same reason the
+    Labour Day bound sits in the snapshot builder above: the check exists to
+    catch what this function got wrong, and a check that has to be relaxed to
+    admit its own caller is not a check any more. Callers that WANT the bars
+    past the open, the ladder above all, read the collector file directly and
+    never came through here.
     """
     if not bars:
         return None, None
@@ -121,7 +152,17 @@ def _collector_last(bars: list[dict[str, Any]]) -> tuple[float | None, str | Non
     # symbol, so one malformed line in the collector file would raise KeyError
     # out of build_packet and stop the morning chain rather than costing one
     # symbol its row.
-    dated = [b for b in bars if b.get("minute_epoch") is not None]
+    start, end = _premarket_window()
+    dated = []
+    for bar in bars:
+        epoch = bar.get("minute_epoch")
+        if epoch is None:
+            continue
+        # Inclusive at both ends, exactly as vintage compares it, so this
+        # never drops a bar the check would have accepted.
+        if not start <= ettime.hhmm(ettime.from_epoch_s(epoch)) <= end:
+            continue
+        dated.append(bar)
     if not dated:
         return None, None
     last = max(dated, key=lambda b: b["minute_epoch"])
