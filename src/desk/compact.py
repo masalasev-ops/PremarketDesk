@@ -14,6 +14,14 @@ the midday packet as it was written. If a number is wrong on a screen it is
 wrong in the packet, and the fix is upstream in scan.py where the measurement
 lives. That is what makes this file safe to change.
 
+    ONE EXCEPTION, added 2026-09-09 and named so it stays one. A session whose
+    packet predates the daily map has that map on its picks rows anyway, put
+    there by night/backfill_structure.py from bars dated up to that session
+    only, and _stored_structures reads it. The packet still wins wherever it
+    has a map, so nothing a morning published can be replaced by a later
+    measurement; the fallback only fills a blank, and the card labels what it
+    filled. See _structure.
+
 The minute bars are the one thing read from outside the packet, because the
 tape path is drawn from them and the packet carries only the aggregates. They
 come from the run's own snapshot where it still exists and from the
@@ -29,6 +37,7 @@ import argparse
 import collections
 import json
 import re
+import sqlite3
 import statistics
 import sys
 from pathlib import Path
@@ -41,6 +50,7 @@ from core import files
 from core import lookalike
 from core import store
 from desk import precedent
+from morning import structure
 from morning import render_report
 
 _CRIT = criteria.load()
@@ -172,13 +182,28 @@ def _structure(candidate: dict[str, Any]) -> dict[str, Any] | None:
     exist; a packet written after it carries the key set to None when the
     vendor's end of day history did not arrive. The card said the second thing
     for both until 2026-09-09, so every archived session on the desk blamed the
-    vendor for an absence that was this project's own release date. The map for
-    those sessions IS on the picks rows, put there point in time by
-    night/backfill_structure.py; what is missing is the packet, and the card
-    now says so.
+    vendor for an absence that was this project's own release date.
+
+    THE ONE VALUE ON THIS PAGE THAT IS NOT OUT OF THE PACKET, and it is here
+    rather than at the top of the file because it is the only one. A session
+    whose packet predates the map has the map on its picks rows anyway, put
+    there by night/backfill_structure.py from bars dated up to that session
+    only. Drawing it is worth the exception: the alternative is five archived
+    sessions showing a panel that explains why it is empty. It is LABELLED
+    `bf` with the date it was computed, because a map the morning itself never
+    had is a different thing from one it published, and the card says which.
+
+    The packet still WINS whenever it has one, so nothing a morning published
+    can be quietly replaced by a later measurement. The fallback only ever
+    fills a blank.
     """
     if "daily_structure" not in candidate:
-        return {"pre": True}
+        stored = candidate.get("_stored_structure")
+        if not stored:
+            return {"pre": True}
+        out = _structure({"daily_structure": stored["block"]}) or {"pre": True}
+        out["bf"] = stored["computed_at"]
+        return out
     block = candidate.get("daily_structure")
     if not block:
         return None
@@ -198,8 +223,14 @@ def _structure(candidate: dict[str, Any]) -> dict[str, Any] | None:
         # sa is how many sessions ago this name last CLOSED above the window's
         # high. Null means no close above it anywhere in the history on file,
         # which is a stronger reading than a large number and not a missing one.
+        # The window's own start date is in the packet's block and NOT here.
+        # No mark draws it, it is one string per window per candidate per
+        # session on every page load, and it is the one field a stored picks
+        # row cannot give back, so carrying it would make the map drawn from
+        # the record differ from the map drawn from the packet in a field
+        # nobody reads. See block_from_columns.
         "w": [{"n": w["sessions"], "hi": w["high"], "lo": w["low"],
-               "pos": w["position_pct"], "from": w["from"],
+               "pos": w["position_pct"],
                "sa": w.get("since_close_above"),
                "sad": w.get("since_close_above_date")}
               for w in (block.get("windows") or [])],
@@ -356,6 +387,45 @@ def _ladder_for(day: str) -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+def _stored_structures(session_date: str,
+                       symbols: list[str]) -> dict[str, dict[str, Any]]:
+    """The backfilled daily map for one session, keyed by symbol.
+
+    FENCED ON source='live' like every other production read of picks, and
+    here that fence does real work rather than satisfying a claim: the desk
+    draws a session out of its run directory, and a date can also hold test or
+    reconstructed rows written by a replay. A reconstructed map drawn onto the
+    card of a morning that actually ran would be two different mornings on one
+    screen.
+
+    Returns nothing rather than raising when the table cannot be read. A desk
+    build must not fail over a panel, and a missing entry falls back to the
+    sentence saying the packet predates the map, which is true either way.
+    """
+    if not symbols:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    try:
+        with store.session() as connection:
+            store.init(connection)
+            rows = connection.execute(
+                "SELECT * FROM picks WHERE date = ? AND source = 'live'",
+                (session_date,)).fetchall()
+    except sqlite3.Error:
+        return {}
+    wanted = set(symbols)
+    for row in rows:
+        record = dict(row)
+        if record.get("ticker") not in wanted:
+            continue
+        block = structure.block_from_columns(record)
+        if block is None:
+            continue
+        out[record["ticker"]] = {"block": block,
+                                 "computed_at": record.get("ds_computed_at")}
+    return out
+
+
 def compact_session(session_date: str) -> dict[str, Any] | None:
     """The payload for one session, or None when that session has no packet.
 
@@ -380,6 +450,8 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
     mid_by_ticker = _midday_rows(midday)
 
     raw_candidates = packet.get("candidates") or []
+    stored_maps = _stored_structures(
+        session_date, [c["symbol"] for c in raw_candidates if c.get("symbol")])
     windows = {
         c["symbol"]: (c.get("pm_window_start") or "", c.get("pm_window_end") or "")
         for c in raw_candidates if c.get("symbol")
@@ -424,6 +496,8 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
 
     candidates = []
     for c in raw_candidates:
+        if "daily_structure" not in c and c.get("symbol") in stored_maps:
+            c["_stored_structure"] = stored_maps[c["symbol"]]
         quote = c.get("quote") or {}
         symbol = c.get("symbol")
         candidates.append({

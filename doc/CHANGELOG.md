@@ -15,6 +15,54 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, ninety seventh: every archived card explained why it had no map
+
+THE OWNER ASKED TO SEE THE MAP ON YESTERDAY'S SESSION. It was not there. The
+2026-09-08 packet was written at 08:45 and the map landed that evening, so the
+card carried the sentence added six hours earlier saying the packet predates
+it. True, and useless: the map for that session IS in the record, put on its
+picks rows point in time by the backfill, and the desk was refusing to draw a
+measurement it was sitting on.
+
+**compact now reads it, and that is the ONE value on the desk that does not
+come out of the packet.** It is named as one in the file's opening argument
+rather than quietly added under it, because "if a number is wrong on a screen
+it is wrong in the packet" is what makes that file safe to change and it now
+has an exception. Two rules keep the exception small. The packet WINS wherever
+it has a map, so nothing a morning published can be restated by a later
+measurement; the fallback only ever fills a blank. And the card LABELS what it
+filled, with the date it was measured and the fact that it came from bars dated
+up to that session only, because a map a morning never had is a different thing
+from one it drew.
+
+**The round trip needed the inverse, and the inverse went where the flattener
+is.** `structure.block_from_columns()` sits beside `columns()` in
+morning/structure.py, not in desk/compact.py, for the reason there is one
+flattener at all: a second opinion about what `ds_pos_medium` means is exactly
+what a round trip through 67 columns invites.
+`claim_a_stored_map_draws_the_same_card` walks a full map, a history too short
+to draw one and a full history with no price out to columns and back, and
+requires the PAYLOAD to be identical rather than close.
+
+**One column added and one dropped to make it lossless.**
+`ds_gap_threshold_rule` carries the [Day setup] rule the gap counts were taken
+at, because "> 3" and ">= 3" give different counts at exactly 3 and a bare
+number cannot say which was used; it also means a stored row draws the same
+card next year when that line has moved. And the payload stopped carrying each
+window's start date, which no mark draws, which cost one string per window per
+candidate per session on every page load, and which was the one field a stored
+row could not give back.
+
+All 53 cards across the five sessions on the desk now draw a map. QCOM on
+2026-09-08 is the case the ninety fifth entry argued from, and it now reads as
+that argument: 193.8 percent of its 20 session range and 47.5 of its 60 session
+one, last closed above the 20 session high 32 sessions ago and above the 60
+session high 64 sessions ago, never above its 250 session high in the 754 on
+file, a 20 session range 2.99 average ranges wide, and a breakaway gap out of
+it. The desk could previously say only that the price was 187.44.
+
+Claim 237.
+
 ## 2026-09-09, ninety sixth: the map could describe a morning and never improve
 
 THE MAP LANDED THE EVENING BEFORE AND WAS WRITTEN TO NOTHING. It was computed

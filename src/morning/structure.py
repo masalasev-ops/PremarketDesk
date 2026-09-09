@@ -657,7 +657,8 @@ def columns(block: dict[str, Any] | None,
         "ds_avg_volume_of": None,
         "ds_consolidation_sessions": None, "ds_consolidation_range": None,
         "ds_consolidation_range_pct": None, "ds_consolidation_ratio": None,
-        "ds_gap_pct": None, "ds_gap_direction": None, "ds_gap_threshold_pct": None,
+        "ds_gap_pct": None, "ds_gap_direction": None,
+        "ds_gap_threshold_pct": None, "ds_gap_threshold_rule": None,
         "ds_regime": None, "ds_regime_sessions": None, "ds_regime_direction": None,
         "ds_regime_range_pct": None, "ds_regime_range_atr": None,
         "ds_regime_net_move_pct": None, "ds_regime_net_move_atr": None,
@@ -732,6 +733,7 @@ def columns(block: dict[str, Any] | None,
         out["ds_gap_pct"] = context.get("gap_pct")
         out["ds_gap_direction"] = context.get("gap_direction")
         out["ds_gap_threshold_pct"] = context.get("threshold_pct")
+        out["ds_gap_threshold_rule"] = context.get("threshold_rule")
         out["ds_gap_vs_regime"] = context.get("gap_vs_regime")
         out["ds_gap_type"] = context.get("type")
         out["ds_gap_type_why"] = context.get("type_why")
@@ -755,6 +757,112 @@ def columns(block: dict[str, Any] | None,
         out["ds_prior_gap_median_otc_pct"] = prior.get("median_open_to_close_pct")
         out["ds_prior_gap_n"] = prior.get("n")
     return out
+
+
+def block_from_columns(row: dict[str, Any]) -> dict[str, Any] | None:
+    """A stored picks row, back into the shape measure() returns.
+
+    WHY THE INVERSE LIVES HERE, beside columns() and not at the caller that
+    wanted it. desk/compact.py draws the map for a session whose PACKET
+    predates it out of the picks row the backfill wrote, and it has to turn
+    those columns back into a block to do it. A second mapping written over
+    there would be a second opinion about what ds_pos_medium means, which is
+    the exact failure putting one flattener here was meant to prevent. The
+    round trip is asserted by claim_a_stored_map_draws_the_same_card.
+
+    NOTHING IS RECOMPUTED and no threshold is read. Every value comes off the
+    row, including the [Day setup] rule the gap counts were taken at, so a
+    stored map draws the same card next year when that rule has moved.
+
+    None when the row has no map, so a caller can tell "not measured" from
+    "measured and short". A row with only ds_short_reason comes back as a
+    block carrying that reason and no figures, which is what measure() itself
+    returns for a name with too little history.
+    """
+    if row.get("ds_sessions") is None and not row.get("ds_short_reason"):
+        return None
+    steps = str(row.get("ds_adjustment_steps") or "")
+    block: dict[str, Any] = {
+        "sessions": row.get("ds_sessions"),
+        "last_session": row.get("ds_last_session"),
+        "first_session": row.get("ds_first_session"),
+        "basis_factor": row.get("ds_basis_factor"),
+        "price": row.get("ds_price"),
+        "adjustment_steps": [s.strip() for s in steps.split(",") if s.strip()],
+        "short": row.get("ds_short_reason"),
+    }
+    if block["short"]:
+        block.update({"atr": None, "atr_pct": None, "windows": [], "sma": [],
+                      "up_closes": None, "average_volume": None,
+                      "consolidation": None, "gap_context": None})
+        return block
+
+    block["atr"] = row.get("ds_atr")
+    block["atr_pct"] = row.get("ds_atr_pct")
+    block["atr_sessions"] = row.get("ds_atr_sessions")
+    block["windows"] = [
+        {"sessions": row.get(f"ds_{role}_sessions"),
+         "high": row.get(f"ds_high_{role}"), "low": row.get(f"ds_low_{role}"),
+         "position_pct": row.get(f"ds_pos_{role}"),
+         "from": None,
+         "since_close_above": row.get(f"ds_since_above_{role}"),
+         "since_close_above_date": row.get(f"ds_since_above_{role}_date"),
+         "since_close_above_reason": None}
+        for role in _WINDOW_ROLES if row.get(f"ds_{role}_sessions") is not None]
+    block["sma"] = [
+        {"sessions": row.get(f"ds_sma_{role}_sessions"),
+         "value": row.get(f"ds_sma_{role}"),
+         "price_vs_pct": row.get(f"ds_sma_{role}_vs_pct")}
+        for role in _SMA_ROLES if row.get(f"ds_sma_{role}") is not None]
+    block["up_closes"] = ({"up": row["ds_up_closes"], "of": row["ds_up_closes_of"]}
+                          if row.get("ds_up_closes") is not None else None)
+    block["average_volume"] = (
+        {"value": row["ds_avg_volume"], "sessions": row.get("ds_avg_volume_sessions"),
+         "of": row.get("ds_avg_volume_of")}
+        if row.get("ds_avg_volume") is not None else None)
+    block["consolidation"] = (
+        {"sessions": row.get("ds_consolidation_sessions"),
+         "range": row.get("ds_consolidation_range"),
+         "range_pct": row.get("ds_consolidation_range_pct"),
+         "ratio": row["ds_consolidation_ratio"]}
+        if row.get("ds_consolidation_ratio") is not None else None)
+
+    if row.get("ds_gap_type") is None:
+        block["gap_context"] = None
+        return block
+    regime = None
+    if row.get("ds_regime"):
+        regime = {"sessions": row.get("ds_regime_sessions"),
+                  "call": row.get("ds_regime"),
+                  "direction": row.get("ds_regime_direction"),
+                  "high": None, "low": None,
+                  "range_pct": row.get("ds_regime_range_pct"),
+                  "range_atr": row.get("ds_regime_range_atr"),
+                  "net_move_pct": row.get("ds_regime_net_move_pct"),
+                  "net_move_atr": row.get("ds_regime_net_move_atr")}
+    block["gap_context"] = {
+        "threshold_pct": row.get("ds_gap_threshold_pct"),
+        "threshold_rule": row.get("ds_gap_threshold_rule"),
+        "gap_pct": row.get("ds_gap_pct"),
+        "gap_direction": row.get("ds_gap_direction"),
+        "regime": regime,
+        "gap_vs_regime": row.get("ds_gap_vs_regime"),
+        "recent_gaps": ({"count": row.get("ds_recent_gap_sessions"),
+                         "of": row.get("ds_recent_gap_of"),
+                         "window": row.get("ds_recent_gap_window"),
+                         "run": row.get("ds_recent_gap_run")}
+                        if row.get("ds_recent_gap_of") is not None else None),
+        "prior_gaps": ({"count": row.get("ds_prior_gap_count"),
+                        "of": row.get("ds_prior_gap_of"),
+                        "window": row.get("ds_prior_gap_window"),
+                        "median_open_to_close_pct":
+                            row.get("ds_prior_gap_median_otc_pct"),
+                        "n": row.get("ds_prior_gap_n")}
+                       if row.get("ds_prior_gap_of") is not None else None),
+        "type": row.get("ds_gap_type"),
+        "type_why": row.get("ds_gap_type_why"),
+    }
+    return block
 
 
 def attach(candidates: list[dict[str, Any]],

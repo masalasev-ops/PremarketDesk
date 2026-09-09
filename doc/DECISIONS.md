@@ -18,6 +18,40 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-09, twenty third: one desk value that is not out of the packet
+
+**The question.** desk/compact.py opens by arguing that nothing on the desk is
+recomputed, every value is copied out of the packet, and therefore a wrong
+number on a screen is a wrong number in the packet with the fix upstream. Five
+archived sessions have a map in `picks` and no map in their packets. Draw it,
+or leave the cards explaining their own emptiness?
+
+**The case for leaving it.** The invariant is load bearing. It is what makes
+compact safe to edit, and it is what makes a screen debuggable: one source, one
+place to fix. An exception invites a second, and the second will not be as
+carefully argued as the first.
+
+**What decided it.** The alternative was a panel that exists to describe where
+a name sits, permanently showing a sentence about this project's release dates
+instead. And the thing being drawn is not a recomputation: it is a stored
+measurement, taken from bars dated up to that session only, which the morning
+could have drawn from the same vendor data. Refusing to show it would not be
+discipline about provenance, it would be discipline about which FILE the number
+happened to land in.
+
+    Two bounds keep the exception from growing. The packet wins wherever it has
+    a map, so this can only ever fill a blank and can never restate what a
+    morning published; and what it fills is labelled on the card with the date
+    it was measured. Both are asserted by
+    claim_a_stored_map_draws_the_same_card rather than left to the comment.
+
+**What was rejected outright.** Writing the map into the archived
+runs/2026-09-08/packet.json. It is the frozen evidence of what that morning
+produced, it is stamped with a run time and a call count that would no longer
+describe it, and a field added a day later would make the packet a record of
+something that did not happen. The map is not a lie about what was knowable
+that morning; it would be a lie about what the morning did.
+
 ## 2026-09-09, twenty first: the basis a backfilled level is stated in
 
 **The question.** A backfilled map for a session last November is computed from

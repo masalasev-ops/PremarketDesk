@@ -906,6 +906,13 @@ DECK_JS = r"""
     out += '<div class="dsnote">Where this name sits in its own history, from ' +
       (d.n || 0) + " completed session(s) to " + esc(d.last || "?") +
       ". Levels are back adjusted onto today's basis." +
+      // LABELLED, because a map this morning never had is a different thing
+      // from one it published. Computed from bars dated up to that session
+      // only, so it is what the morning COULD have drawn and not what the
+      // following month knows.
+      (d.bf ? " This session's packet predates the map, so this was measured " +
+        "into the record afterwards, on " + esc(String(d.bf).slice(0, 10)) +
+        ", from bars dated up to that session only." : "") +
       (d.adj && d.adj.length
         ? " A price adjustment of more than 10 percent lands on " +
           esc(d.adj.join(", ")) + ", so a raw chart will disagree here."

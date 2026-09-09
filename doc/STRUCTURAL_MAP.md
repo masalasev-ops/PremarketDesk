@@ -43,6 +43,23 @@ about what `ds_pos_medium` means, and a column whose meaning depends on which
 pass wrote it cannot be grouped on. `claim_the_map_columns_are_one_list`
 asserts the two, and that the table declares exactly what the flattener emits.
 
+## Where it is drawn
+
+The desk card, and only the desk card. The emailed report has never carried the
+map and still does not; it is a panel on `site/PremarketDesk.html` under
+`#/session/<date>/`.
+
+A session whose packet predates the map, which is every session on file before
+2026-09-08, has the map on its `picks` rows anyway, and `desk/compact.py` reads
+it from there. That is the ONE value on the desk not copied out of the packet,
+named as one in that file's opening argument. The packet wins wherever it has a
+map, so the fallback only ever fills a blank, and the card labels what it filled
+with the date it was measured. `structure.block_from_columns()` is the inverse
+of `columns()` and lives beside it, so the round trip through 67 columns has one
+opinion about what a field means rather than two;
+`claim_a_stored_map_draws_the_same_card` requires the payload out of the record
+to be identical to the payload out of a packet.
+
 ## The trap, and how it is held shut
 
 A level for a past session must be computed from bars dated up to THAT session

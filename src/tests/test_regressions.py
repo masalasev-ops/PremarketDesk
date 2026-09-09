@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and thirty six claims, a count read off
+and the two pages. It now carries two hundred and thirty seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -19502,6 +19502,93 @@ def claim_no_context_column_reaches_eligibility_or_the_score(
 
 
 
+def claim_a_stored_map_draws_the_same_card(failures: list[str]) -> None:
+    """A map read back out of picks draws the card the packet's own map draws.
+
+    THE DESK HAS ONE VALUE THAT IS NOT OUT OF THE PACKET. A session whose
+    packet predates the daily map, which is every session on file before
+    2026-09-08, has that map on its picks rows anyway, and compact reads it so
+    those cards show a map rather than a sentence explaining why they do not.
+
+    That is a round trip through 67 columns, and a round trip is exactly the
+    place a second opinion about what a field means gets in. So the inverse
+    lives beside the flattener in morning/structure.py rather than at the
+    caller, and this walks a real block out to columns and back and requires
+    the PAYLOAD to be identical: not merely present, not merely close, the
+    same dictionary the packet's own block produces.
+
+    Three shapes, because they take three different paths through both
+    functions: a full map, a history too short to draw one, and a full history
+    with no price to read it against.
+
+    AND THE PACKET WINS. The fallback fills a blank; it may never replace a
+    map a morning actually published, or the desk would quietly restate what
+    was said at 08:45 with what was measured the following night.
+    """
+    import datetime as dt
+
+    from desk import compact
+    from morning import structure
+
+    bars, price, day = [], 60.0, dt.date(2024, 1, 2)
+    while len(bars) < 400:
+        if day.weekday() < 5:
+            price += 0.11 if len(bars) % 5 else -0.3
+            bars.append({"date": day.isoformat(), "open": round(price - 0.2, 3),
+                         "high": round(price + 0.7, 3),
+                         "low": round(price - 0.9, 3), "close": round(price, 3),
+                         "adjusted_close": round(price, 3),
+                         "volume": 800_000 + len(bars)})
+        day += dt.timedelta(days=1)
+
+    shapes = {
+        "a full map": structure.measure(bars, price * 1.07),
+        "a history too short to draw one": structure.measure(bars[:12], 61.0),
+        "a full history with no price": structure.measure(bars, None),
+    }
+    for label, block in shapes.items():
+        stored = structure.block_from_columns(structure.columns(block))
+        if stored is None:
+            failures.append(
+                f"{label} came back out of picks as no map at all, so the card "
+                "for an archived session would say the history is missing when "
+                "the record holds it")
+            continue
+        live = compact._structure({"daily_structure": block})
+        again = compact._structure({"daily_structure": stored})
+        if live != again:
+            moved = sorted(k for k in set(live or {}) | set(again or {})
+                           if (live or {}).get(k) != (again or {}).get(k))
+            failures.append(
+                f"{label} does not survive the trip through picks: "
+                f"{', '.join(moved)} differ(s), so the desk draws one thing "
+                "from a packet and another from the record for the same "
+                "measurement")
+
+    # The label, and the packet winning.
+    full = shapes["a full map"]
+    fallback = compact._structure(
+        {"_stored_structure": {"block": full, "computed_at": "2026-09-09T21:00:00"}})
+    if not (fallback or {}).get("bf"):
+        failures.append(
+            "a map drawn from the record is not labelled, so a card claims the "
+            "morning published a panel it never had")
+    published = compact._structure(
+        {"daily_structure": full,
+         "_stored_structure": {"block": shapes["a full history with no price"],
+                               "computed_at": "2026-09-09T21:00:00"}})
+    if (published or {}).get("bf") or published != compact._structure(
+            {"daily_structure": full}):
+        failures.append(
+            "a later measurement replaced the map the packet actually carries. "
+            "The fallback may fill a blank and may never restate what a morning "
+            "published")
+
+    print("  stored map   a map read back out of picks draws the same card as "
+          "the packet's own, and never replaces one")
+
+
+
 def main() -> int:
     failures: list[str] = []
     run_claim(failures, claim_the_november_transition, failures)
@@ -19749,6 +19836,7 @@ def main() -> int:
     run_claim(failures, claim_a_gap_type_never_travels_without_its_inputs, failures)
     run_claim(failures,
               claim_no_context_column_reaches_eligibility_or_the_score, failures)
+    run_claim(failures, claim_a_stored_map_draws_the_same_card, failures)
 
     if failures:
         for failure in failures:

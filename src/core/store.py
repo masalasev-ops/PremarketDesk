@@ -590,7 +590,14 @@ _PICKS_LATER_COLUMNS = (
     # the word, which is how catalyst_class is published.
     ("ds_gap_pct", "REAL"),
     ("ds_gap_direction", "TEXT"),
+    # The [Day setup] line the gap counts were taken at, as a number AND as the
+    # rule that was applied. Both, because "> 3" and ">= 3" produce different
+    # counts at exactly 3 and a bare number cannot say which was used. It is
+    # also what lets a stored row be turned back into a drawable map without
+    # consulting today's CRITERIA, which is the whole point of a row saying
+    # what it was measured by.
     ("ds_gap_threshold_pct", "REAL"),
+    ("ds_gap_threshold_rule", "TEXT"),
     ("ds_regime", "TEXT"),
     ("ds_regime_sessions", "INTEGER"),
     ("ds_regime_direction", "TEXT"),
