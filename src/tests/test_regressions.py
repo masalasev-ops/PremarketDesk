@@ -20011,6 +20011,41 @@ def claim_a_saved_pdf_keeps_what_the_screen_drew(failures: list[str]) -> None:
         failures.append("no chart carries the class the print rule caps, so "
                         "the rule matches nothing")
 
+    # ---- WHAT PRINTS IS THE PAGE, AND THERE IS NO SECOND RENDERER OF IT.
+    # Printing used to build every candidate's card into a hidden block first,
+    # so that a saved file was the whole morning. Eleven names came to 43
+    # pages and the owner, asked on 2026-09-09, wanted the short document. The
+    # part worth keeping is that the print path is gone rather than shortened:
+    # a second copy of the card, drawn on a path nobody looks at, is exactly
+    # the renderer drift this project has paid for once already.
+    for gone, why in (("__buildPrint", "a build step that runs only when the "
+                       "reader prints, whose output nobody ever sees on a "
+                       "screen"),
+                      ("printdeck", "a hidden second copy of the cards"),
+                      ("print-deck", "a page break between printed cards"),
+                      ("interactive-deck", "a rule that hides the card on "
+                       "screen from the printer")):
+        if gone in assets.DECK_JS or gone in assets.DECK_CSS:
+            failures.append(
+                f"{gone!r} is back, so the printed page is no longer the page "
+                f"on the screen: {why}. What a reader saves has to be what "
+                "they are looking at, or the two drift")
+    # BOTH HALVES, because half of this is worse than neither: an id
+    # emitted under one spelling and written to under another leaves the
+    # note blank and throws where it is written, which takes the whole
+    # card down with it.
+    emitted = '<div id="decknote" class="printonly"></div>'
+    written = '("decknote").textContent'
+    if emitted not in assets.DECK_JS or written not in assets.DECK_JS:
+        failures.append(
+            "the printed file does not say it carries one name. On a "
+            "screen the card under the list is obviously the row the "
+            "reader clicked; in a file somebody else opens, a list of "
+            "eleven names above a single card reads as ten names the desk "
+            "had nothing to say about. The div and the write have to name "
+            "the same id: one of them alone leaves the note blank and "
+            "throws where it is written")
+
     # ---- and the file says which of the nine screens it is
     if 'id="print-title"' not in inspect.getsource(desk_render.body):
         failures.append(

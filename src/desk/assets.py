@@ -410,6 +410,13 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
 
 .foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--line);
   font-size: 12px; color: var(--muted); line-height: 1.6; max-width: 86ch; }
+/* A PRINTED FILE CARRIES ONE NAME AND A LIST OF ELEVEN, so it says so.
+   On the screen the card under the list is obviously the row you clicked. In
+   a file somebody else opens, a list of eleven names above a single card
+   reads as ten names the desk had nothing to say about. */
+.decknote { font-size: 11.5px; color: var(--muted); margin: 0 0 10px;
+  max-width: 84ch; }
+
 /* WHAT THE PRINTED FILE CALLS ITSELF. Nine screens print through one
    header whose navigation is hidden, so a saved PDF said "PremarketDesk"
    and left the reader to work out which screen they had been sent. */
@@ -530,8 +537,6 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
   .wrap { max-width: none; padding: 0; }
   body { font-size: 10.5pt; }
   .printonly { display: block; }
-  .interactive-deck { display: none; }
-  .print-deck { break-before: page; }
   details { border: 0; } details .body { padding: 0 0 10px; }
   a { color: var(--ink); text-decoration: none; }
   @page { margin: 14mm 12mm; }
@@ -1581,8 +1586,8 @@ DECK_JS = r"""
       KNOBS.spine_scale_pct + " percent</span></div></section>";
 
     html += '<section><div class="shead"><h2>The selected name</h2></div>' +
-      '<div id="deck" class="interactive-deck"></div>' +
-      '<div id="printdeck" class="printonly"></div></section>';
+      '<div id="decknote" class="printonly"></div>' +
+      '<div id="deck"></div></section>';
 
     html += pipelineSection(p) + evidenceSection(p) + compositionSection(p) +
       notableSection(p) + calendarSection(p) + comingUpSection(p);
@@ -1610,17 +1615,22 @@ DECK_JS = r"""
     });
     function drawDeck() {
       var c = C.filter(function (x) { return x.sym === state.selected; })[0];
-      if (!c) { $("deck").innerHTML = ""; return; }
+      if (!c) { $("deck").innerHTML = ""; $("decknote").textContent = ""; return; }
       $("deck").innerHTML = deckHTML(c, p);
+      // ONE NAME, WHICHEVER ONE IS OPEN. Until 2026-09-09 printing built
+      // every candidate's card into a hidden block first, on the argument
+      // that a saved file should be the whole morning. Eleven names came to
+      // forty three pages, and the owner, asked, wanted the short document:
+      // the tape, the list, and the name he was looking at. So there is now
+      // no print path at all. What prints is what is on the screen, which is
+      // also the only version of this that cannot drift away from it.
+      $("decknote").textContent = "This file carries one name, " + bare(c.sym) +
+        ". The list above is every name this morning kept, and each of them " +
+        "has a card like this one on the desk.";
       var w = $("deck").querySelector(".chart-wrap");
       if (w) wirePath(w, c);
     }
     drawDeck();
-    window.__buildPrint = function () {
-      $("printdeck").innerHTML = C.map(function (c) {
-        return '<div class="print-deck">' + deckHTML(c, p) + "</div>";
-      }).join("");
-    };
   }
 
   /* Section 5 of the report, which the desk carried in its payload and drew
@@ -3660,7 +3670,6 @@ DECK_JS = r"""
     var previous = $("screen");
     previous.parentNode.replaceChild(root, previous);
     setNav(route);
-    window.__buildPrint = null;
     if (route.screen === "sessions") { screenSessions(root); return; }
     if (route.screen === "record") { screenRecord(root); return; }
     if (route.screen === "health") { screenHealth(route.date, root); return; }
@@ -3745,14 +3754,10 @@ DECK_JS = r"""
   } catch (e) { /* private window */ }
 
   $("print-btn").addEventListener("click", function () {
-    if (window.__buildPrint) window.__buildPrint();
     Array.prototype.forEach.call(document.querySelectorAll("details"), function (d) {
       d.open = true;
     });
     setTimeout(function () { window.print(); }, 60);
-  });
-  window.addEventListener("beforeprint", function () {
-    if (window.__buildPrint) window.__buildPrint();
   });
 
   /* ONE POPOVER, DELEGATED. The screens are rebuilt wholesale on every route

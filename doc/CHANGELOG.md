@@ -15,6 +15,44 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and sixth: what a reader saves is the page they are looking at
+
+Save as PDF built every candidate's card into a hidden block before printing,
+on the argument recorded in doc/SCREENS.md that a saved file should be the
+whole morning and not the one name that happened to be open. Once the printing
+itself was fixed the argument could be priced: eleven names, forty three pages,
+912 KB. Asked which he wanted, the owner wanted the short document. A file is
+saved in order to be sent to somebody who was not at the desk, and forty three
+pages does not get read by that person.
+
+Thirteen pages now, and 355 KB.
+
+THE PRINT PATH IS GONE RATHER THAN SHORTENED, and that is the part worth
+keeping. It would have been one line to build the selected card into the
+hidden block instead of all eleven. That line would have left a second
+renderer of the same card, running only when somebody prints, whose output
+nobody looks at on a screen: the exact shape of the renderer drift this
+project has already paid for once. What prints is now the page, and the page
+is the only copy there is.
+
+Deleted with it: `.interactive-deck`, the rule that hid the on screen card
+from the printer; `.print-deck`, the page break between printed cards;
+`window.__buildPrint` and its three call sites, one of which existed only to
+null it on every route change.
+
+Added: one print only line under "The selected name", saying which name the
+file carries. On a screen the card under the list is obviously the row the
+reader clicked. In a file somebody else opens, a list of eleven names above a
+single card reads as ten names the desk had nothing to say about.
+
+claim_a_saved_pdf_keeps_what_the_screen_drew grew four checks that the four
+deleted names are still gone and one that both halves of the note agree on its
+id, an id emitted under one spelling and written to under another being worse
+than neither: the note comes out blank and the write throws, taking the card
+with it. That is not a hypothetical. The first version of the check looked for
+the id anywhere in the application, and the mutation that renamed it in the
+markup alone went straight through. Mutation tested at 13 of 13.
+
 ## 2026-09-09, one hundred and fifth: Save as PDF returned the writing without the drawing
 
 The owner asked whether the PDF could look like the Morning screen, because a

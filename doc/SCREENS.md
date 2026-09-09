@@ -704,10 +704,23 @@ Two paths, and they are for two different people.
 
 FOR A READER AT THE DESK: a button that calls the browser's print dialog. The
 print stylesheet forces the light tokens, keeps the background colours a
-browser would otherwise drop, opens every disclosure, and, before printing,
-renders EVERY candidate's deck rather than the selected one, so the printed
-file is the whole morning and not the one name that happened to be open.
-Ctrl+P gives the same result without the button.
+browser would otherwise drop, and opens every disclosure. What prints is what
+is on the screen: the tape, the list, and the one name that is open.
+
+That last part reverses this document's original decision, which was that
+printing should build EVERY candidate's deck first so the saved file was the
+whole morning rather than one name. It was built that way and it came to
+forty three pages for eleven names. Asked on 2026-09-09 whether he wanted the
+whole morning or the short document, the owner wanted the short one. A file
+that gets sent on is read by somebody who was not at the desk, and forty
+three pages is not read. The screen carries a print only line naming the one
+name, because a list of eleven above a single card otherwise reads as ten
+names the desk had nothing to say about.
+
+There is no print path left at all, which is the part worth keeping: what a
+reader saves is the page they are looking at, and a second renderer for the
+same card is the drift this project has already paid for once. Ctrl+P gives
+the same result without the button.
 
 The tokens are not restated for the printer, they are read back out of the
 stylesheet that declared them by page.light_print_block, so a colour corrected
