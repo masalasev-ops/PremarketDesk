@@ -15,6 +15,50 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and fourth: the card knew why the name was there and kept it in a tooltip
+
+The owner opened the ODD card, saw a green 9 beside "Day no" and "Swing no",
+and asked why the name had been selected. Both answers were on the card
+already. Both were inside a title= attribute: a hover tooltip, which does not
+exist on a phone and which a reader has to guess is there.
+
+The tooltip was also holding the wrong thing. compact sent
+`day_failed_conditions`, a list reading `["market_cap", "premarket_rvol"]`,
+which names the rule that refused and not the reason. "market_cap" tells a
+reader nothing. `market_cap 801644748.0 fails > 1B` carries the figure it was
+refused on and the floor it was refused against, which is what a reader needs
+to disagree with it. The card now gets the messages.
+
+**A Why this name is here block, in sentences, at the top of every card.** How
+it got looked at, what it scored and what drove the score, and then, if it
+reached neither list, exactly what it failed:
+
+    This system looked at it overnight because it reports its results this
+    morning, before trading opens, and it ranked #7 of that group. It opened
+    +32.05% away from where it finished yesterday, and this system scores it
+    9 out of 10, most of that from its catalyst class. It is on neither list.
+
+    For the same day list, it did not clear 2 conditions:
+      the whole company is worth about 801.6M, and this list asks for more
+      than 1B
+      how busy its trading was against its own normal could not be worked
+      out, because baseline median volume 850.0 shares is below the 1,000
+      share floor
+
+plainFail rewrites the eight message shapes that occur and passes anything else
+through unchanged. All 189 distinct failure messages in the packets on file are
+covered, but the fallback is the load bearing part: a condition added later
+will word its refusal a new way, and a raw sentence is a bad answer where
+nothing is not an answer at all.
+
+Two bugs found while building it, both silent. compact was sending the rule
+names, above. And whyHere read `.component` and `.points` off the score
+components, which compact writes as `.k` and `.p`, so the clause naming the
+biggest scorer vanished from every card without failing anything.
+
+claim_a_card_says_why_the_name_is_on_it guards the block, the fallback, and the
+fact that compact sends reasons rather than rule names.
+
 ## 2026-09-09, one hundred and third: the desk had a glossary and never read it
 
 The owner said the site had become a jargon filled page rather than something a

@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty one claims, a count read off
+and the two pages. It now carries two hundred and forty two claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -19899,6 +19899,78 @@ def claim_the_documents_state_the_collector_window_the_code_runs(
             "free; armed inside the window it takes symbols off the morning it "
             "exists to make possible")
 
+
+def claim_a_card_says_why_the_name_is_on_it(failures: list[str]) -> None:
+    """The reasons reach the page as reasons, not as the names of rules.
+
+    On 2026-09-09 the owner opened a card showing a green 9 beside "Day no" and
+    "Swing no" and asked why the name was selected. Both answers were already
+    on the card and both were inside a title= attribute: a hover tooltip, which
+    does not exist on a phone and which a reader has to guess is there.
+
+    The tooltip was also holding the wrong thing. compact sent
+    day_failed_conditions, a list like ["market_cap", "premarket_rvol"], which
+    names the rule that refused and not the reason it refused. "market_cap"
+    tells a reader nothing; "market_cap 801644748.0 fails > 1B" carries the
+    figure it was refused on and the floor it was refused against, which is
+    what a reader needs in order to disagree with it.
+
+    THE FALLBACK IS THE LOAD BEARING PART. plainFail rewrites the message
+    shapes that occur and returns anything else unchanged. Every one of the 189
+    distinct failure messages in the packets on file was covered when this was
+    written, but a condition added later will word its refusal a new way, and
+    the choice then is between showing a reader the raw sentence and showing
+    them nothing. A raw sentence is a bad answer; nothing is not an answer.
+    """
+    import inspect
+    import re
+
+    from desk import assets, compact
+
+    src = assets.DECK_JS
+
+    # ---- the block exists and the card draws it
+    if "function whyHere(" not in src:
+        failures.append("the desk has no whyHere(), so a card cannot say why "
+                        "the name is on it")
+        return
+    if "whyHere(c)" not in src:
+        failures.append("whyHere is written and never called, so it says "
+                        "nothing to anybody")
+
+    # ---- the fallback returns the input rather than dropping it
+    body = src[src.index("function plainFail("):]
+    body = body[:body.index(chr(10) + "  }")]
+    if "return s;" not in body:
+        failures.append(
+            "plainFail does not fall through to the original message. A "
+            "condition added later will word its refusal a new way, and a "
+            "reader is better served by a raw sentence than by a blank")
+
+    # ---- and compact sends the reasons, not the rule names
+    sent = inspect.getsource(compact)
+    if '"day_failed": c.get("day_failed_conditions")' in sent or \
+            '"swing_failed": c.get("swing_failed_conditions")' in sent:
+        failures.append(
+            "compact sends day_failed_conditions to the card, which is the "
+            "list of rule names. The card explains to a reader why the name "
+            "reached neither list, and \"market_cap\" is not a reason: the "
+            "message beside it carries the figure and the floor")
+    for key in ('"day_failed": c.get("day_failed")',
+                '"swing_failed": c.get("swing_failed")'):
+        if key not in sent:
+            failures.append(f"compact no longer sends {key.split(chr(34))[1]} "
+                            "as the reasons, so the card cannot say why")
+
+    # ---- the reasons are not only in a tooltip, which was the whole defect
+    where = src.index("function whyHere(")
+    drawn = src[where:src.index(chr(10) + "  }" + chr(10), where)]
+    if "day_failed" not in drawn or "swing_failed" not in drawn:
+        failures.append(
+            "whyHere does not read the failure lists, so the only place a "
+            "reader can find them is the title attribute on a pill, which a "
+            "phone cannot show and a reader has to guess is there")
+
 def claim_a_premarket_price_is_never_a_regular_session_one(failures: list[str]) -> None:
     """The packet prices from inside the window its own check enforces.
 
@@ -20425,6 +20497,7 @@ def main() -> int:
     run_claim(failures, claim_no_fixed_report_text_names_a_listed_company, failures)
     run_claim(failures, claim_a_premarket_price_is_never_a_regular_session_one, failures)
     run_claim(failures, claim_the_documents_state_the_collector_window_the_code_runs, failures)
+    run_claim(failures, claim_a_card_says_why_the_name_is_on_it, failures)
 
     if failures:
         for failure in failures:

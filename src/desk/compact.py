@@ -537,8 +537,16 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             # 2026-08-22 review found twenty three times.
             "catalyst_found": c.get("catalyst_found"),
             "day": bool(c.get("day_eligible")), "swing": bool(c.get("swing_eligible")),
-            "day_failed": c.get("day_failed_conditions") or [],
-            "swing_failed": c.get("swing_failed_conditions") or [],
+            # THE MESSAGES, NOT THE CONDITION NAMES. These carried
+            # day_failed_conditions, a list like ["market_cap",
+            # "premarket_rvol"], which names the rule and not the
+            # reason. The card now tells a reader why the name reached
+            # neither list, and "market_cap" does not tell anybody
+            # anything: "market_cap 801644748.0 fails > 1B" carries the
+            # figure it was refused on and the floor it was refused
+            # against, which is what a reader needs to disagree with it.
+            "day_failed": c.get("day_failed") or [],
+            "swing_failed": c.get("swing_failed") or [],
             "trap": c.get("trap"), "trap_why": c.get("trap_why"),
             "pol": c.get("headline_polarity"), "news": c.get("news_in_window"),
             "headlines": _headlines(c),

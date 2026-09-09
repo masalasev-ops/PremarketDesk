@@ -244,6 +244,77 @@ TERMS: tuple[tuple[str, str], ...] = (
 # legend loudly at the test rather than quietly in front of a reader.
 COLUMNS: dict[str, str] = {
     "Ticker": "the short code that identifies the company",
+    # ---- THE DESK'S OWN HEADERS, added 2026-09-09. Wiring the glossary to the
+    # screens reached 15 of the 66 fixed headers the desk draws; the other 51
+    # were plain, which for a reader is the same as not having built it. These
+    # are the ones a person who does not already know the answer would stop at.
+    "Packet": "the file this system writes each morning holding every "
+              "figure it gathered. Every screen is drawn from it, so a "
+              "number on a screen can always be traced back to one",
+    "Sessions": "trading days. Weekends and market holidays are not "
+                "sessions, so twenty sessions is about a calendar month",
+    "Distance": "how far the last price is from the price being watched, drawn "
+                "as a bar. The right hand edge is that price, so a bar running "
+                "the full width is a share trading at it",
+    "To ref high": "how far the last price is, as a percentage, from the "
+                   "highest price this share traded at before the market opened",
+    "State": "what the share's price has done today against the two prices the "
+             "notebook is watching. The words are spelled out under the table",
+    "Got to that price": "how many of these names ever traded at the price "
+                         "being watched. It counts the price being reached and "
+                         "nothing about whether that was a good thing",
+    "Price reached": "how many picks whose watched price the share actually got "
+                     "to that day",
+    "Best it offered": "the furthest the price got in your favour before the "
+                       "day ended, which is not what the notebook records: that "
+                       "is the closing price",
+    "Minutes to the high": "how long after the opening bell the share reached "
+                           "its best price of the day",
+    "Peaked after": "how long after the opening bell the best price came",
+    "Middle result": "the middle outcome of the group, so half did better and "
+                     "half did worse. The middle is used rather than the "
+                     "average because one enormous day would drag an average "
+                     "and tell you about that one day instead of the group",
+    "Middle day": "the middle day of the group, so half were better and half "
+                  "were worse",
+    "Middle day of the missed": "the middle one of the days where the share "
+                                "never reached the price being watched",
+    "Median morning": "the middle morning, so half were better and half worse",
+    "Usual range": "how far this share moves on an ordinary day, top to bottom",
+    "Volume against its own average": "how many shares changed hands today "
+                                      "against what is normal for this share. 1 "
+                                      "is normal and 2 is twice normal",
+    "Times seen": "how many separate mornings this name has appeared",
+    "Pool had it": "whether the name was in the list the overnight search built, "
+                   "before any of the morning's tests were applied",
+    "Turned down by": "which test the name failed, so it never reached the "
+                      "watchlist",
+    "Refused": "how many were turned away, and by what",
+    "Never measured": "how many could not be judged at all, because a figure "
+                      "they needed was missing",
+    "Noon said": "what the midday check made of it, hours after the morning "
+                 "published",
+    "At noon": "where the price stood at the midday check",
+    "Ranked on": "which figure the list was sorted by",
+    "Condition": "one of the tests a name has to pass to reach a watchlist",
+    "Screens": "which of the two lists it reached, the same day one or the "
+               "longer held one",
+    "Swing": "the longer held of the two lists, meant to be judged over days "
+             "rather than within one",
+    "Kind": "what sort of thing this row is",
+    "Split": "a company dividing each share into several smaller ones. The "
+             "price falls to match and nobody gains or loses, but a chart that "
+             "has not been corrected for it shows a crash that never happened",
+    "Gapped": "whether it opened away from where it finished the day before",
+    "Largest gap": "the name that moved furthest overnight, in either direction",
+    "Share of the list that": "what fraction of the names on the list did this",
+    "Estimate": "what analysts expected the company to earn",
+    "Actual": "what the company actually reported",
+    "Forecast": "what the company says it expects next, which often moves the "
+                "price more than the figure it just reported",
+    "Release": "when the news came out",
+    "When (ET)": "the time in New York, which is the clock this whole system "
+                 "runs on",
     "Name": "the company's name",
     "Leg": "which search found it: the one before the market opened, or "
            "the one over the previous full trading day",

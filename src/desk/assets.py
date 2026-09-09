@@ -321,6 +321,16 @@ td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .verdictcard { border-color: var(--line-strong); }
 .vbig { font-size: 30px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
 
+/* the plain answer to "why is this name on my screen" */
+.whyhere { border-bottom: 1px solid var(--line); padding: 14px 18px 12px; }
+.whyhere p { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6;
+  color: var(--ink-2); max-width: 78ch; }
+.whyhere .whymiss { margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+.whyhere .whymiss b { color: var(--ink); }
+.whyhere .whymiss ul { margin: 4px 0 0; padding-left: 18px; }
+.whyhere .whymiss li { margin: 2px 0; line-height: 1.55; }
+.whyhere .whyfoot { font-size: 11px; color: var(--muted); margin-top: 10px; }
+
 /* the base rate block on the card */
 .prior { margin-top: 18px; }
 .prior .pnote { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0 0 7px; }
@@ -1389,6 +1399,12 @@ DECK_JS = r"""
           esc(c.catalyst_why || "") + ", and it is on the list on its move and " +
           "its volume alone. An unexplained gap is a finding and not a gap in " +
           "the data.</div>") +
+      // WHY IT GAPPED answers what moved the price. It does not answer why the
+      // name is on the screen at all, which is a different question and the one
+      // the owner asked on 2026-09-09 of a card showing a green 9 beside "Day
+      // no" and "Swing no". Both reasons were on the card already, inside a
+      // title= attribute that a phone cannot show.
+      whyHere(c) +
       '<div class="deck-grid">' +
       '<div><div class="panel-title">Levels</div>' + ladder(c) +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5">' +
@@ -2078,6 +2094,115 @@ DECK_JS = r"""
   var LADDER_WORD = { waiting: "Not reached", triggered: "Reached",
     gapped_through: "Opened above it", stopped: "Reached, then fell back" };
 
+  /* WHY THIS NAME IS HERE, in sentences, at the top of the card.
+
+     Every reason below was already in the payload and every one of them was
+     in a title= attribute. A hover tooltip does not exist on a phone and a
+     reader has to guess it is there, so a card could show a green 9 next to
+     "Day no" and "Swing no" and never say how all three were true at once.
+     The owner asked exactly that question about ODD on 2026-09-09: a 9 of 10
+     that reached neither list, for two reasons the card was holding and not
+     printing. */
+  var TIER_WORD = {
+    earnings_before_open: "it reports its results this morning, before trading opens",
+    earnings_after_close: "it reported its results after trading closed yesterday",
+    news_fresh: "fresh news came out about it overnight",
+    news_stale: "news came out about it, though not recently",
+    prior_session_mover: "it moved a long way during the previous trading day",
+    recent_runner: "it has been moving a long way on several recent days"
+  };
+
+  /* The failure lines are written for the record, which names the rule that
+     refused and the number it refused on. That is right for a record and
+     unreadable as a sentence, so the shapes that actually occur are rewritten
+     and anything unrecognised is passed through unchanged rather than mangled. */
+  function plainFail(msg) {
+    var s = String(msg || "");
+    var m;
+    if ((m = s.match(/^gap_pct ([\d.]+) fails >=? ([\d.]+)/))) {
+      return "it moved " + m[1] + " percent overnight, and this list asks for " +
+        m[2] + " percent or more";
+    }
+    if ((m = s.match(/^market_cap ([\d.]+) fails > ?(\S+)/))) {
+      return "the whole company is worth about " + big(parseFloat(m[1])) +
+        ", and this list asks for more than " + m[2];
+    }
+    if ((m = s.match(/^premarket_rvol was never measured: (.+)$/))) {
+      return "how busy its trading was against its own normal could not be " +
+        "worked out, because " + m[1];
+    }
+    if ((m = s.match(/^premarket price ([\d.]+) is not above the 200 day average ([\d.]+)/))) {
+      return "at " + m[1] + " it is still below its average price over the last " +
+        "200 trading days, " + m[2];
+    }
+    if ((m = s.match(/^(?:premarket )?price ([\d.]+) is not above the prior day high ([\d.]+)/))) {
+      return "at " + m[1] + " it has not got above yesterday's high of " + m[2];
+    }
+    if ((m = s.match(/^premarket_rvol ([\d.]+) fails >=? ([\d.]+)/))) {
+      return "its trading before the open was " + m[1] + " times its own " +
+        "normal, and this list asks for " + m[2] + " times";
+    }
+    if (/^no catalyst was found/.test(s)) {
+      return "no news was found that would explain the move";
+    }
+    if ((m = s.match(/^the last collector print is ([\d,]+)s old/))) {
+      return "its most recent price is " +
+        Math.round(parseInt(m[1].replace(/,/g, ""), 10) / 60) +
+        " minutes old, too stale to judge it on";
+    }
+    return s;
+  }
+
+  function whyHere(c) {
+    var bits = [];
+    var found = TIER_WORD[c.tier_why];
+    if (found) {
+      bits.push("This system looked at it overnight because " + found +
+        (c.rank == null ? "" : ", and it ranked #" + c.rank + " of that group") +
+        ".");
+    }
+    // k and p, which is what compact writes them as. The first version of
+    // this read .component and .points, so the clause naming the biggest
+    // scorer silently vanished on every card.
+    var top = (c.components || []).slice().sort(function (a, b) {
+      return (b.p || 0) - (a.p || 0);
+    })[0];
+    bits.push("It opened " + pct(c.gap) + " away from where it finished " +
+      "yesterday, and this system scores it " + n2(c.score, 0) + " out of 10" +
+      (!top || !top.p ? "." : ", most of that from its " +
+        esc(String(top.k).replace(/_/g, " ")) + "."));
+
+    var lists = [];
+    if (c.day) lists.push("the same day list");
+    if (c.swing) lists.push("the longer held list");
+    if (lists.length) {
+      bits.push("It cleared every condition for " + lists.join(" and ") + ".");
+    }
+
+    var misses = "";
+    function missBlock(title, failed) {
+      if (!failed || !failed.length) return "";
+      return '<div class="whymiss"><b>' + title + "</b>, it did not clear " +
+        failed.length + (failed.length === 1 ? " condition:" : " conditions:") +
+        "<ul>" + failed.map(function (f) {
+          return "<li>" + esc(plainFail(f)) + "</li>";
+        }).join("") + "</ul></div>";
+    }
+    if (!c.day) misses += missBlock("For the same day list", c.day_failed);
+    if (!c.swing) misses += missBlock("For the longer held list", c.swing_failed);
+    if (!c.day && !c.swing && !misses) {
+      bits.push("It is on neither list, and no reason was recorded for it.");
+    } else if (!c.day && !c.swing) {
+      bits.push("It is on neither list.");
+    }
+
+    return '<div class="whyhere"><div class="panel-title">Why this name is ' +
+      "here</div><p>" + bits.join(" ") + "</p>" + misses +
+      '<p class="whyfoot">Being here is not a recommendation. It means this ' +
+      "name met the conditions to be looked at, and the conditions themselves " +
+      "are unproven starting values.</p></div>";
+  }
+
   function ladderRow(r, maxAway) {
     var away = r.to_entry_pct;
     // The bar is distance from the entry, drawn from the right hand edge
@@ -2089,11 +2214,15 @@ DECK_JS = r"""
       '<td class="tk">' + esc(bare(r.sym)) + "</td>" +
       '<td><span class="lstate ' + cls + '">' +
       esc(LADDER_WORD[r.state] || r.state) + "</span>" +
-      (r.triggered_at ? '<span class="sub">at ' + esc(r.triggered_at) +
+      // A DIV, like every other .sub on the desk. .ptable .sub carries
+      // margin-top, which does nothing at all to an inline span, so the state
+      // and its time ran together as "Reachedat 09:31". This was the one .sub
+      // in the file written as a span.
+      (r.triggered_at ? '<div class="sub">at ' + esc(r.triggered_at) +
         (r.stopped_at ? ", low at " + esc(r.stopped_at) +
           (r.stop_sequence_unknown
             ? " in the same minute, so which came first is unknown" : "") : "") +
-        "</span>" : "") + "</td>" +
+        "</div>" : "") + "</td>" +
       '<td class="n">' + (r.last == null ? NIL : n2(r.last)) + "</td>" +
       '<td class="n">' + n2(r.entry) + "</td>" +
       '<td class="lbar"><span class="ltrack"><i class="' + cls + '" style="width:' +
@@ -2383,7 +2512,7 @@ DECK_JS = r"""
     html += '<div class="card pad" style="margin-top:13px"><div class="scroll">' +
       '<table class="ptable"><thead><tr>' +
       "<th>Name and what it was matched on</th>" +
-      '<th class="n">Times seen</th><th class="n">Reached the buy</th>' +
+      '<th class="n">Times seen</th><th class="n">Got to that price</th>' +
       '<th class="n">Middle result</th>' +
       "<th>How they ended" + paxis(dom) + "</th>" +
       '<th class="n">Peaked after</th></tr></thead><tbody>' +
@@ -2439,7 +2568,7 @@ DECK_JS = r"""
         '<div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Condition</th><th class="n">Refused</th>' +
         '<th class="n">Sessions</th><th class="n">Never measured</th>' +
-        '<th class="n">Reached the buy</th><th class="n">Middle result</th>' +
+        '<th class="n">Got to that price</th><th class="n">Middle result</th>' +
         '</tr></thead><tbody>' +
         fl.conditions.map(function (c) {
           var head = '<td><span class="mono">' +
@@ -2480,7 +2609,7 @@ DECK_JS = r"""
         'being counted as good news. ' + esc(ev.unavailable || "") + '.</p>' +
         '<div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Split</th><th class="n">Names</th>' +
-        '<th class="n">Sessions</th><th class="n">Reached the buy</th>' +
+        '<th class="n">Sessions</th><th class="n">Got to that price</th>' +
         '<th class="n">Middle result</th></tr></thead><tbody>' +
         ev.splits.map(function (s) {
           var rows = s.sides.map(function (side, i) {
@@ -2651,7 +2780,7 @@ DECK_JS = r"""
           "no tape to grade and are left out." : "") +
         '</p><div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Noon said</th><th class="n">Names</th>' +
-        '<th class="n">Sessions</th><th class="n">Reached the buy by the close' +
+        '<th class="n">Sessions</th><th class="n">Got to that price by the close' +
         '</th><th class="n">Middle result</th><th>How they ended' + paxis(dom) +
         "</th></tr></thead><tbody>" +
         nn.states.map(function (s) {
@@ -3088,9 +3217,9 @@ DECK_JS = r"""
     }
     function listTable(rows) {
       return '<div class="card pad scroll"><table><thead><tr><th>Session</th>' +
-      '<th style="text-align:right">Cand</th><th style="text-align:right">Day</th>' +
+      '<th style="text-align:right">Names</th><th style="text-align:right">Day</th>' +
       '<th style="text-align:right">Swing</th><th>Conviction</th><th>Largest gap</th>' +
-      '<th></th><th style="text-align:right">Triggered</th><th>Packet</th>' +
+      '<th></th><th style="text-align:right">Price reached</th><th>Packet</th>' +
       "</tr></thead><tbody>" + rows.map(function (r) {
         var conv = ["green", "yellow", "red"].map(function (k) {
           return r[k] ? '<span class="sw ' + k + '" title="' + r[k] + " " + k +
