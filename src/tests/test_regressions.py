@@ -3129,7 +3129,10 @@ def claim_a_gapper_block_is_split_and_says_no_field_names(
     for wanted in (
             "Catalyst: earnings.",
             "News carrying this ticker in the window: 5 stories, 2 shown below.",
-            "How the class was decided: tagged EARNINGS.",
+            # RENAMED 2026-09-10. "How the class was decided" labelled a
+        # decision trace; the line under it now carries a sentence
+        # written for a reader, so the label says what it is.
+        "Why it moved overnight: tagged EARNINGS.",
             "Catalyst: merger or acquisition.",
             "News carrying this ticker in the window: not checked, because the "
             "news feed was never read this run."):
@@ -4086,7 +4089,8 @@ def claim_a_roundup_classifies_nobody(failures: list[str]) -> None:
 
     for candidate in candidates:
         symbol = candidate["symbol"]
-        got, why = scan.classify_catalyst(candidate, set())
+        got, why, provenance = scan.classify_catalyst(candidate, set())
+        why = provenance          # every check below is on the checkable half
         if got != expected[symbol]:
             failures.append(
                 f"{symbol} classified {got!r} from {len(feed[symbol])} "
@@ -4101,7 +4105,7 @@ def claim_a_roundup_classifies_nobody(failures: list[str]) -> None:
             failures.append(f"{symbol} carries a class with no reason")
 
     paid = next(c for c in candidates if c["symbol"] == "DQ.US")
-    _, why = scan.classify_catalyst(paid, set())
+    why = scan.classify_catalyst(paid, set())[2]
     if "DAQO" not in why:
         failures.append(f"the class DQ was paid does not name the headline that "
                         f"paid it: {why}")
@@ -4110,7 +4114,7 @@ def claim_a_roundup_classifies_nobody(failures: list[str]) -> None:
                         f"article was: {why}")
 
     refused = next(c for c in candidates if c["symbol"] == "MSTR.US")
-    _, why = scan.classify_catalyst(refused, set())
+    why = scan.classify_catalyst(refused, set())[2]
     if "46 tag(s)" not in why or "biggest moves premarket" not in why:
         failures.append(f"MSTR does not name the widest roundup it refused, nor "
                         f"how many issuers that article named: {why}")
@@ -4221,7 +4225,7 @@ def claim_a_market_piece_classifies_nobody(failures: list[str]) -> None:
 
     for candidate in candidates:
         symbol = candidate["symbol"]
-        got, why = scan.classify_catalyst(candidate, set())
+        got, why = scan.classify_catalyst(candidate, set())[0::2]
         scope = (candidate["headlines"][0].get("article_scope") or {})
         if symbol == "DQ.US":
             # The control. A company release must be untouched by all of this.
@@ -4263,7 +4267,7 @@ def claim_a_market_piece_classifies_nobody(failures: list[str]) -> None:
     # Every class names the tags behind it, the paid ones and the empty ones,
     # because a why that cannot be checked against the packet is not evidence.
     for candidate in candidates:
-        _, why = scan.classify_catalyst(candidate, set())
+        why = scan.classify_catalyst(candidate, set())[2]
         for tag in feed[candidate["symbol"]][0]["tags"]:
             if tag not in why:
                 failures.append(
@@ -6834,8 +6838,8 @@ def claim_the_sharing_count_names_the_set_it_was_taken_over(
         failures.append(f"the scope calls a floor something other than a floor: {why!r}")
 
     # The reason it matters: this is the sentence a reader audits the class from.
-    _, paid = scan.classify_catalyst(
-        next(c for c in candidates if c["symbol"] == "DQ.US"), set())
+    paid = scan.classify_catalyst(
+        next(c for c in candidates if c["symbol"] == "DQ.US"), set())[2]
     if f"of this morning's {len(answered)} candidates" not in paid:
         failures.append(
             f"the class DQ was paid quotes a denominator other than the "
@@ -20114,8 +20118,54 @@ def claim_no_screen_explains_itself_in_this_projects_own_words(
             "Evidence panel carries no definitions: it is a grid of divs and "
             "its labels are the densest on the desk")
 
+    # ---- AND NOT THE MACHINE EITHER. A reader who meets a config filename
+    # learns nothing about the share and is told, accurately, that this page
+    # was not written for them.
+    # md WAS MISSING FROM THIS LIST and the Similar screen was naming a
+    # markdown file straight through it. A pattern covers the cases whoever
+    # wrote it thought of, which is the third time that has been the defect
+    # in a guard written on this project in two days.
+    machine = re.compile(
+        r"\bEODHD\b|\bCRITERIA(?:\.md)?\b"
+        r"|\b[\w/-]+\.(?:py|json|jsonl|md|gz|db|csv)\b", re.I)
+    for match in re.finditer(r'"((?:[^"\\\n]|\\.){24,})"', source):
+        literal = match.group(1)
+        if "=" in literal or "' +" in literal or "+ " in literal:
+            continue
+        plain = re.sub(r"<[^>]*>", " ", literal)
+        plain = re.sub(r"\s+", " ", plain).strip()
+        if len(plain.split()) < 5:
+            continue
+        for hit in machine.findall(plain):
+            failures.append(
+                f"a screen shows {hit!r}, which names the machine and not the "
+                f"market: {plain[:100]!r}. The vendor, this project's own "
+                "filenames and its field names are for whoever maintains it")
+
+    # ---- the catalyst sentence, which is where this rule came from. Called
+    # rather than grepped, because the split is the whole fix: the reader gets
+    # one sentence and the packet keeps the other.
+    from morning import scan as _scan
+
+    article = {"title": "Acme reports a quarter", "tags": ["EARNINGS"],
+               "article_scope": {"tag_count": 1, "returned_for_candidates": 1,
+                                 "candidates_checked": 9,
+                                 "tags_seen": ["EARNINGS"]}}
+    probe = {"symbol": "ACME.US", "catalyst_found": True, "headlines": [article]}
+    why, provenance = _scan.classify_catalyst(probe, set())[1:]
+    for hit in machine.findall(why):
+        failures.append(
+            f"the catalyst sentence on the card says {hit!r}: {why!r}. That is "
+            "the sentence the owner asked about on 2026-09-10, and the answer "
+            "was to split it rather than to shorten it")
+    if "EARNINGS" not in provenance:
+        failures.append(
+            "the catalyst provenance no longer names the tag it was decided "
+            f"from: {provenance!r}. Splitting the sentence has to keep the "
+            "checkable half, or it is a deletion with a new name on it")
+
     print("  plain words  no screen explains itself in this project's own "
-          f"vocabulary, over {found} sentences")
+          f"vocabulary, names its vendor or its files, over {found} sentences")
 
 def claim_a_saved_pdf_keeps_what_the_screen_drew(failures: list[str]) -> None:
     """Save as PDF hands back the page, not the page with its drawing removed.

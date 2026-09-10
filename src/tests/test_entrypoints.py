@@ -1613,8 +1613,16 @@ def claim_scan_degrades_on_a_thin_meter(failures: list[str]) -> None:
                         f"{candidate['symbol']} records catalyst_class 'none' on a "
                         "degraded run. That says the window was checked and empty. "
                         "It was never checked.")
+                # THE PROPERTY, NOT THE WORD. This asked for the literal
+                # "unknown" until 2026-09-10, when the sentence was rewritten
+                # for a reader and began "the news was never searched for this
+                # name". What has to hold is that the sentence says the check
+                # did not happen, so nobody reads it as a check that came back
+                # empty.
                 why = str(candidate.get("catalyst_why") or "")
-                if "unknown" not in why.lower():
+                if not any(phrase in why.lower() for phrase in
+                           ("unknown", "never searched", "never checked",
+                            "not checked", "never read")):
                     failures.append(
                         f"{candidate['symbol']} catalyst_why does not say unknown: "
                         f"{why[:120]}")

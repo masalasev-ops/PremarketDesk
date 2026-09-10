@@ -896,10 +896,10 @@ def _catalyst_sentences(candidate: dict[str, Any], shown: int) -> list[str]:
         lines.append("News carrying this ticker in the window: found.")
     why = _cell(candidate.get("catalyst_why"))
     if why:
-        lines.append(f"How the class was decided: {why}"
+        lines.append(f"Why it moved overnight: {why}"
                      + ("" if why.endswith(".") else "."))
     else:
-        lines.append("How the class was decided: not recorded.")
+        lines.append("Why it moved overnight: not recorded.")
     return lines
 
 
@@ -1054,8 +1054,8 @@ def _daily_structure_section(add, candidates: list[dict[str, Any]]) -> None:
         "bars dated up to yesterday. It describes the ground and recommends "
         "nothing: no entry, no stop, no target and no holding period is drawn "
         "from it, because nothing in this project's record supports publishing "
-        "one. The gap type is read from the two thresholds in CRITERIA "
-        "[Daily structure], and the readings it was derived from are on the "
+        "one. The kind of gap is read from two written thresholds, and the "
+        "readings it was derived from are on the "
         "desk card for each name.")
     add("")
 
@@ -1116,8 +1116,8 @@ def fallback_report(
     add("")
     if slots:
         disclaimer = ("Nothing here is advice, the screen thresholds are unvalidated "
-                      "seed values, and every figure below was written by Python "
-                      "from packet.json")
+                      "seed values, and every figure below was measured by this "
+                      "system rather than written by the model")
     else:
         disclaimer = (
             "Nothing here is advice, the screen thresholds are unvalidated seed values, "
@@ -1659,8 +1659,8 @@ def fallback_report(
         add(f"RVOL denominators: {warmed} baseline(s) warmed this morning and "
             f"{len(aged)} reused from the cache"
             + (", " + ", ".join(parts) if parts else "")
-            + ". Reuse is the design under CRITERIA [Baseline] refresh_after_days, "
-            "stated so two ratios of different vintage are read as such.")
+            + ". Reusing them is how this is meant to work, and it is said here so "
+            "that two figures of different ages are read as such.")
         add("")
     coverage = packet.get("collector_coverage") or {}
     silent_nothing = coverage.get("silent_with_nothing") or []
@@ -1748,7 +1748,8 @@ def fallback_report(
     add("")
     record = packet.get("record_so_far") or {}
     if not record:
-        add("The packet carries no paper ledger block, so the record is not "
+        add("This morning's record carries no paper trading block, so the "
+            "record is not "
             "reported this morning. An absent record is not an empty one.")
     else:
         def _n(value: Any) -> str:
@@ -1773,9 +1774,9 @@ def fallback_report(
         # been placed by any part of this project. The sentence has to name the
         # actor and the mood, because a count of trades with no actor beside it
         # reads as a count of trades somebody took.
-        add(f"The ledger holds {picks_rows} picks across {picks_sessions} "
-            "sessions. No order was ever placed: the ledger replays one written "
-            "rule from CRITERIA [Paper] over the record after the fact, and "
+        add(f"The paper record holds {picks_rows} picks across "
+            f"{picks_sessions} sessions. No order was ever placed: this system "
+            "replays one written rule over the record after the fact, and "
             f"that rule would have bought {booked_rows} of those picks across "
             f"{booked_sessions} sessions. The sample unit is the session and "
             f"not the pick, so this rests on {booked_sessions} observations "
@@ -1791,8 +1792,8 @@ def fallback_report(
             f"{never_sessions} sessions.")
         add(f"- {unsized_rows} picks reached their trigger and the sizing rule "
             f"declined to buy anything, across {unsized_sessions} sessions. "
-            "That is a fact about CRITERIA [Paper] sizing and not about the "
-            "screen.")
+            "That is a fact about how the paper rule sizes a trade and not "
+            "about the screen.")
         add(f"- {_n(record.get('peaked_within_10_min_closed_red'))} of "
             f"{_n(record.get('peaked_within_10_min'))} trades that made their "
             "best price within ten minutes of the fill went on to close "
@@ -1807,7 +1808,7 @@ def fallback_report(
             f"median {_f(record.get('median_booked_pct'))} percent booked at "
             f"the exit. Rule version {record.get('rule_version') or 'unrecorded'}. "
             "These are counts over a small record and describe nothing beyond "
-            "what was observed. The ledger is as of last night: tonight's pass "
+            "what was observed. The paper record is as of last night: tonight's pass "
             "has not run, so today's picks are in no figure above.")
     add("")
     add("## Skips and traps")

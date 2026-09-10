@@ -460,8 +460,12 @@ def claim_a_move_sigma_is_null_with_its_reason_and_never_substituted(
         ("a null column on a long history",
          (5.0, {"return_stdev_20d": None, "sessions_used": 250}, 1),
          "written before it was computed"),
+        # THE PHRASE, NOT THE FIELD NAME. This needle was the key itself
+        # until 2026-09-10, when the reason was rewritten for a reader. What
+        # has to hold is that this absence is told apart from the other five,
+        # and "too small to divide by" is on this one alone.
         ("a stdev under the floor", (5.0, {"return_stdev_20d": floor / 2}, 1),
-         "min_return_stdev_pct"),
+         "too small to divide by"),
         ("a null move", (None, {"return_stdev_20d": 2.5}, 1), "no move"),
         ("an unreadable table",
          (5.0, None, 1, "the gap statistics table could not be read"),
@@ -934,8 +938,13 @@ def claim_a_stale_collector_print_is_not_a_notable_move(
                         f"{block.get('premarket_prices_too_old')} stale print(s) "
                         "where the fixture carries one. A silent drop reads "
                         "exactly like a symbol the collector never heard.")
-    if not any("price age" in note for note in packet.gaps):
-        failures.append(f"no packet gap names the price age floor: {packet.gaps}")
+    # The floor has to be NAMED WITH ITS NUMBER, so a reader can see what was
+    # applied. It used to be cited by its key; since 2026-09-10 it is said in
+    # words, and the number is what makes it checkable either way.
+    if not any("freshness limit" in note and "second" in note
+               for note in packet.gaps):
+        failures.append(f"no packet gap names the freshness limit that dropped "
+                        f"the stale prints: {packet.gaps}")
 
     # And the floor is the CRITERIA one, not a number written here. A print
     # exactly on the limit is inside it, the same way the candidate path reads

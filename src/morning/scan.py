@@ -213,9 +213,9 @@ def collector_coverage(
             "peak_trades_per_minute": _peak_trades_per_minute(bars_by_symbol),
             "late_trades": None,
             "late_trades_reason": (
-                "the late trade count is held by the running collector and written "
-                "when it stops at the CRITERIA.md [collector] stop_time, which is "
-                "after this packet is built"
+                "the count of late trades is held by the price recorder and only "
+                "written when it stops for the day, which is "
+                "after this record was built"
             ),
         }
 
@@ -257,9 +257,9 @@ def collector_coverage(
         "peak_trades_per_minute": _peak_trades_per_minute(bars_by_symbol),
         "late_trades": None,
         "late_trades_reason": (
-            "the late trade count is held by the running collector and written "
-            "when it stops at the CRITERIA.md [collector] stop_time, which is "
-            "after this packet is built"
+            "the count of late trades is held by the price recorder and only "
+            "written when it stops for the day, which is "
+            "after this record was built"
         ),
     }
 
@@ -570,16 +570,18 @@ def pool_candidates(
             generated_on = None
         if generated_on != ettime.today_et():
             packet.gap(
-                f"watchlist.json was written at {watchlist.get('generated_at')}, "
+                f"the overnight list of names to follow was written at "
+            f"{watchlist.get('generated_at')}, "
                 f"which is not today, {ettime.today_et().isoformat()}. The "
                 "collector subscribed to whatever that file named, so the names "
                 "with premarket coverage below may belong to another session and "
                 "today's real candidates may be absent entirely. A candidate "
                 "reported here as having no collector bars is NOT evidence the "
-                "tape was quiet. See CRITERIA [Monitor], the stale watchlist note.")
+                "tape was quiet.")
 
     if watchlist.get("missing"):
-        packet.gap("watchlist.json is missing, so there is no subscribed list and "
+        packet.gap("the overnight list of names to follow is missing, so nothing "
+                   "was being listened to and "
                    "no candidate can be built")
     elif not subscribed:
         # A watchlist that exists and subscribes nobody is not the same failure
@@ -589,7 +591,8 @@ def pool_candidates(
         # sentence explaining them, which is the one thing this project's
         # rule about missing evidence forbids.
         packet.gap(
-            f"watchlist.json was written at {watchlist.get('generated_at')} and "
+            f"the overnight list of names to follow was written at "
+            f"{watchlist.get('generated_at')} and "
             f"marks none of its {len(rows)} pool row(s) subscribed, so the "
             "collector was asked for nothing and there is no candidate to "
             "price. The report's tables are empty for that reason, not because "
@@ -625,6 +628,10 @@ def _empty_ranking() -> dict[str, Any]:
         "below_floor_symbols": [],
         "unrankable": 0,
         "cap": _CRIT.integer("scan", "candidate_count"),
+        # NOT REWORDED FOR A READER, because no reader sees it: this field
+        # is in the packet and on no screen, and naming the key is what
+        # makes it the audit trail. The 2026-09-10 sweep changed it by
+        # reflex and a claim caught it the same run.
         "cap_source": "CRITERIA.md [Scan] candidate_count",
         "capped_out": 0,
         "capped_out_symbols": [],
@@ -698,15 +705,13 @@ def rank_by_measured_gap(
                                    -abs(r["provisional_gap_pct"])))
         ranked_on = (
             "the premarket gap measured from the collector, not the pool tier: "
-            "gaps up first in descending order, then gaps down by size, per "
-            "CRITERIA.md [Scan] rank_up_gaps_first"
+            "gaps up first in descending order, then gaps down by size"
         )
     else:
         ranked.sort(key=lambda r: abs(r["provisional_gap_pct"]), reverse=True)
         ranked_on = (
             "the premarket gap measured from the collector, not the pool tier: "
-            "the absolute gap, direction blind, per CRITERIA.md [Scan] "
-            "rank_up_gaps_first = false"
+            "the absolute gap, whichever way it moved"
         )
     kept = ranked[:keep]
     # Named, not merely subtracted. "18 cleared the floors and 12 were kept" is
@@ -727,8 +732,7 @@ def rank_by_measured_gap(
     if capped_out:
         packet.gap(
             f"{len(capped_out)} name(s) cleared the price and gap floors and were "
-            f"then CUT BY THE RANK CAP of {keep} in CRITERIA.md [Scan] "
-            "candidate_count, not by any screen: "
+            f"then CUT BY THE RANK CAP of {keep}, not by any screen: "
             + ", ".join(f"{row['symbol']} at {row['gap_pct']:+.2f} percent"
                         for row in capped_out)
             + ". A reader comparing the cleared count against the kept count "
@@ -747,6 +751,10 @@ def rank_by_measured_gap(
         # Why cleared_floors and kept differ, which is the question those two
         # numbers raise and neither answers.
         "cap": keep,
+        # NOT REWORDED FOR A READER, because no reader sees it: this field
+        # is in the packet and on no screen, and naming the key is what
+        # makes it the audit trail. The 2026-09-10 sweep changed it by
+        # reflex and a claim caught it the same run.
         "cap_source": "CRITERIA.md [Scan] candidate_count",
         "capped_out": len(capped_out),
         "capped_out_symbols": capped_out,
@@ -1016,8 +1024,9 @@ def attach_premarket_path(
                 "about what traded near its premarket high")
             if not on_watchlist:
                 candidate["pm_reason"] = (
-                    "not on watchlist.json, so the collector never subscribed to it. "
-                    "It started gapping after the collector chose its symbols."
+                    "this system was not listening to it this morning: it "
+                    "began moving after the overnight search had already "
+                    "chosen which names to follow."
                 )
             else:
                 # LOWER CASE, and that is not a style choice. The template
@@ -1114,8 +1123,8 @@ def attach_premarket_path(
         if candidate["pm_window_thin"]:
             candidate["pm_window_thin_reason"] = (
                 f"{len(bars)} minute(s) carried a print, below the "
-                f"{MIN_BARS_FOR_FULL_WINDOW} in CRITERIA.md [Scan] "
-                "min_bars_for_full_window. Every premarket level for this name "
+                f"{MIN_BARS_FOR_FULL_WINDOW} this system asks for. Every premarket "
+                "level for this name "
                 "rests on those minutes."
             )
         else:
@@ -1212,13 +1221,13 @@ def flag_stale_prices(
         candidate["price_stale_reason"] = None
         if candidate["price_stale"]:
             candidate["price_stale_reason"] = (
-                f"the last collector print is {age:,.0f}s old at the scan "
-                f"clock, past the {limit:,.0f}s limit in "
-                f"{config.CRITERIA_PATH.name} [price age]. It is inside "
-                "today's premarket window, so the vintage check passes, "
-                "but it is not this morning's price, so it fails "
-                "require_fresh_price on both screens and is published "
-                "with its age.")
+                f"the most recent price for it is {age:,.0f} seconds old, "
+                f"past the {limit:,.0f} second limit for a price to count as "
+                "fresh. It was traded inside this morning's window, so it is "
+                "a real price and not a stale one from another day, but it is "
+                "not a price from the last few minutes, so it fails the "
+                "freshness condition on both lists and is published with its "
+                "age beside it.")
             stale.append({
                 "symbol": candidate["symbol"],
                 "reason": candidate["price_stale_reason"],
@@ -1522,8 +1531,7 @@ def _gap_for_subscription_divergence(
         "watchlist once, at subscribe time, so it was started on a different "
         "file from the one in this packet. Any of those names reported below "
         "as having no collector bars was never listened to, and that is NOT "
-        "evidence the tape was quiet. See CRITERIA [Monitor], the stale "
-        "watchlist note.")
+        "evidence the tape was quiet.")
 
 
 def _gap_for_stale_baselines(candidates: list[dict[str, Any]], packet: Packet) -> None:
@@ -1547,10 +1555,9 @@ def _gap_for_stale_baselines(candidates: list[dict[str, Any]], packet: Packet) -
     aged.sort(key=lambda row: (-(row[1] or 0), row[0]))
     packet.gap(
         f"{len(aged)} premarket RVOL denominator(s) were not computed this "
-        "morning and were reused from the baseline cache, which is the design "
-        "under CRITERIA.md [Baseline] refresh_after_days and is stated here "
-        "because the report otherwise sets them beside same-day ones with "
-        "nothing to tell them apart: "
+        "morning and were reused from an earlier one, which is how this is "
+        "meant to work and is said here because the figures otherwise sit "
+        "beside same day ones with nothing to tell them apart: "
         + ", ".join(f"{symbol} {age} day(s) old" for symbol, age in aged)
     )
 
@@ -1594,9 +1601,8 @@ def _gap_for_thin_baselines(candidates: list[dict[str, Any]], packet: Packet) ->
     thin.sort(key=lambda row: (row[1], row[0]))
     packet.gap(
         f"{len(thin)} premarket RVOL(s) rest on a THIN denominator: at or above "
-        f"the {baseline.MIN_BASELINE_VOLUME:,.0f} share floor in "
-        f"{config.CRITERIA_PATH.name} "
-        f"[Baseline] min_baseline_premarket_volume, and below the "
+        f"the {baseline.MIN_BASELINE_VOLUME:,.0f} share floor this system asks "
+        "for, and below the "
         f"{THIN_BASELINE_VOLUME:,.0f} shares that floor note measures as where a "
         "name's own ordinary sessions stop reaching the top band by construction. "
         "Measured 2026-08-28: under 10,000 shares, 15 to 30 percent of a name's own "
@@ -1773,10 +1779,10 @@ def volume_check(session_date: str, packet: Packet) -> dict[str, Any] | None:
     if check["stale"]:
         packet.gap(
             f"the collector volume check is {check['age_days']} days old, past "
-            f"the {check['max_age_days']} day limit in CRITERIA.md [collector], "
+            f"the {check['max_age_days']} day limit, "
             f"so the per symbol capture shares this morning's ratios are built "
             f"on are that old too, and a symbol it does not carry falls back to "
-            f"CRITERIA [Collector] premarket_capture_rate. Last reading: "
+            f"the standing average share instead. Last reading: "
             f"{detail}."
         )
     else:
@@ -1900,8 +1906,8 @@ def _consolidated_volume(candidate: dict[str, Any]) -> float | None:
     share = _CRIT.number("collector", "premarket_capture_rate")
     candidate["pm_capture_share"] = round(share, 6)
     candidate["pm_capture_basis"] = (
-        "CRITERIA [Collector] premarket_capture_rate, reached without a volume "
-        "check having been attached")
+        "the standing average share of trading this system hears, used because "
+        "no measurement of this name's own share was attached")
     estimated = round(volume / share, 2)
     candidate["pm_volume_consolidated"] = estimated
     return estimated
@@ -1995,13 +2001,12 @@ def attach_capture_estimate(
                          f"{minutes if minutes is not None else 'an unrecorded number of'} "
                          f"common minute(s)")
             else:
-                basis = ("CRITERIA [Collector] premarket_capture_rate, because "
-                         f"this symbol's measured share was refused: {thin}")
+                basis = ("the standing average share of trading this system hears, "
+                         f"because this name\'s own measurement was refused: {thin}")
         if share is None or share <= 0:
             if basis is None:
-                basis = ("CRITERIA [Collector] premarket_capture_rate, because "
-                         "the newest volume check carries no share for this "
-                         "symbol")
+                basis = ("the standing average share of trading this system hears, "
+                         "because the newest check carries no measurement for this name")
             share = default
 
         candidate["pm_capture_share"] = round(share, 6)
@@ -2080,8 +2085,7 @@ def capture_correction_report(
            if onto else ", and 0 of them reached the day watchlist")
         + ". Clearing the volume floor is one condition, not membership. Every "
           "row states the share used, how many common minutes backed it, and "
-          "where it came from. See CRITERIA [Collector] "
-          "premarket_capture_rate.")
+          "where it came from.")
     return block
 
 
@@ -3023,10 +3027,10 @@ def attach_traps(candidates: list[dict[str, Any]], packet: Packet) -> None:
             "positive_at_or_above": positive_at,
             "mean_polarity": counts["mean_polarity"],
             "rule": ("strictly more negative than positive headlines, not the "
-                     "single worst one. See the balance note in CRITERIA.md"),
-            "source": ("polarity as published by the EODHD news feed, which is "
-                       "unreliable per item and is read here in aggregate for "
-                       "that reason"),
+                     "single worst one"),
+            "source": ("how positive or negative each story reads, as scored by "
+                       "the news provider. It is unreliable story by story, which is "
+                       "why it is only read across all of them at once"),
         }
         candidate["trap_basis"] = basis
 
@@ -3158,8 +3162,8 @@ def economic_events(api: eodhd.EodhdClient, packet: Packet) -> dict[str, Any]:
         "country": country,
         "window": [today.isoformat(), end.isoformat()],
         "importance_source": (
-            "matched against the high importance list in CRITERIA.md, because the "
-            "EODHD economic events feed has no importance field"
+            "matched against a list of the releases that move markets, because "
+            "the calendar feed does not say which are which"
         ),
         "time_source": (
             "the vendor stamps this feed in UTC and every time_et above is a "
@@ -3276,8 +3280,20 @@ def earnings(
 
 def classify_catalyst(
     candidate: dict[str, Any], earnings_symbols: set[str]
-) -> tuple[str | None, str]:
-    """Catalyst class from structured data only. Returns (class, why).
+) -> tuple[str | None, str, str]:
+    """Catalyst class from structured data only.
+
+    Returns (class, why, provenance). TWO SENTENCES, because they have
+    two audiences. `why` is what a reader is shown on the card and in the
+    report: what kind of event, which story, and whether that story was
+    about this company or about the morning. `provenance` is the working:
+    the feed tag it was decided from, the mapping it went through, the
+    tags the article carried and how many names it was returned for. It
+    goes into the packet and onto no screen.
+
+    Until 2026-09-10 there was one string and it was the second one. It
+    named the data vendor and this project's own configuration file to a
+    reader who wanted the news, which is what the owner asked about.
 
     Two sources, in order. The earnings calendar, which is a fact rather than an
     interpretation. Then the EODHD news tags, mapped through the table in
@@ -3308,11 +3324,14 @@ def classify_catalyst(
     tag_map = _CRIT.pair_map("score_catalyst_tags", "tag")
 
     if candidate["symbol"] in earnings_symbols:
-        return "earnings", "on the earnings calendar in the window"
+        return ("earnings", "it reports its results in this window.",
+                "on the earnings calendar in the window")
 
     if candidate.get("catalyst_found") is None:
         reason = candidate.get("catalyst_error") or "the news feed was never checked"
-        return None, f"catalyst is unknown, not absent: {reason}"
+        return (None, "the news was never searched for this name, so nothing "
+                "is known either way.",
+                f"catalyst is unknown, not absent: {reason}")
 
     kept = candidate.get("headlines") or []
     best_class = "none"
@@ -3379,10 +3398,27 @@ def classify_catalyst(
                        f"this morning's {denominator} candidates")
         seen = list((scope.get("tags_seen") or article.get("tags") or []))
         carried = f". Its tags: {', '.join(str(tag) for tag in seen)}" if seen else ""
+        title = str(article.get("title") or "an untitled headline")
+        # HOW WIDELY THE STORY WAS SHARED IS THE READER'S HALF of the scope
+        # figures. A story returned for eleven of twelve names is a market
+        # roundup wearing a company's tag, and that changes what the class is
+        # worth. Said in words here and left as a ratio in the provenance.
+        shared = ""
+        returned, checked = (scope.get("returned_for_candidates"),
+                             scope.get("candidates_checked")
+                             or scope.get("candidates_in_packet"))
+        if returned == 1 and checked:
+            shared = (f" Of the {checked} names looked at this morning, that "
+                      "story came back for this one alone, so it is about this "
+                      "company.")
+        elif returned and checked:
+            shared = (f" That story also came back for {returned} of the "
+                      f"{checked} names looked at this morning, so it may be "
+                      "about the market rather than about this company.")
         return best_class, (
+            f"from the story {title!r}.{shared}"), (
             f"EODHD news tag {matched_tag!r} mapped through CRITERIA.md, from "
-            f"{str(article.get('title') or 'an untitled headline')!r}{breadth}"
-            f"{carried}")
+            f"{title!r}{breadth}{carried}")
     if roundups and candidate.get("catalyst_found"):
         detail = ""
         if widest:
@@ -3396,7 +3432,13 @@ def classify_catalyst(
                       f"{', '.join(macro_seen)}")
         carried = (f". The tags on the article(s) set aside: "
                    f"{', '.join(aside_seen)}" if aside_seen else "")
-        return "none", (
+        plain = ("nothing found says what kind of event this is. "
+                 f"{roundups} of the {len(kept)} stories kept are lists of "
+                 "several companies rather than news about this one")
+        if macro_pieces:
+            plain += (f", and {macro_pieces} of them are about the trading day "
+                      "rather than about any company")
+        return "none", plain + ".", (
             "no tag from an article about this name maps to a known class. "
             f"Articles set aside: {roundups} of the {len(kept)} kept article(s), "
             "whose tags name the issuers they list rather than this one"
@@ -3406,9 +3448,14 @@ def classify_catalyst(
                        for tag in (headline.get("tags") or [])})
         carried = (f". The tags it did carry: {', '.join(seen)}" if seen
                    else ". Its articles carried no tags at all")
-        return "none", ("news carries the symbol tag but no tag maps to a known "
-                        "class" + carried)
-    return "none", "no news carried the symbol tag in the window"
+        return "none", (
+            "stories were found that mention this company, but none of them "
+            "says what kind of event this is."), (
+            "news carries the symbol tag but no tag maps to a known class"
+            + carried)
+    return "none", ("no story mentioning this company was published in the "
+                    "hours searched."), (
+        "no news carried the symbol tag in the window")
 
 
 _REFERENCE_FIELDS = ("pm_high", "pm_low", "pm_vwap")
@@ -4191,7 +4238,7 @@ def screen_tally(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             # as a screen nobody ran. A condition with unmeasured failures says
             # so inline rather than hiding them inside its total.
             "failed_summary": ", ".join(
-                (f"{name} {n} of {examined}"
+                (f"{glossary.condition_words(name)}, {n} of {examined}"
                  + (f" ({unmeasured[name]} of those never measured)"
                     if unmeasured.get(name) else ""))
                 for name, n in ranked
@@ -4693,9 +4740,15 @@ def stamp_all(candidates: list[dict[str, Any]], earnings_block: dict[str, Any]) 
                      or earnings_block.get("skipped")
                      or "the call failed")
     for candidate in candidates:
-        catalyst_class, why = classify_catalyst(candidate, earnings_symbols)
+        catalyst_class, why, provenance = classify_catalyst(
+            candidate, earnings_symbols)
+        candidate["catalyst_provenance"] = provenance
         if unchecked and candidate["symbol"] not in earnings_symbols:
-            why = (f"{why}. The earnings calendar was NOT checked this run "
+            # The reason is a whole sentence since 2026-09-10, so it is not
+            # given a second full stop on the way past.
+            joined = why.rstrip()
+            joined = joined if joined.endswith((".", "!", "?")) else joined + "."
+            why = (f"{joined} The earnings calendar was NOT checked this run "
                    f"({unchecked_why}), so this class was decided without it and "
                    "a name reporting today would not be recognised")
         candidate["catalyst_class"] = catalyst_class
@@ -4919,8 +4972,7 @@ def move_sigma(move_pct: float | None,
                       "The Sunday 21:00 universe rebuild fills it.")
     if stdev < NOTABLE_MIN_RETURN_STDEV_PCT:
         return None, (f"daily return stdev {stdev:.4f} percent is below "
-                      f"{NOTABLE_MIN_RETURN_STDEV_PCT} in CRITERIA.md [Notable] "
-                      "min_return_stdev_pct, too small to divide by")
+                      f"the {NOTABLE_MIN_RETURN_STDEV_PCT} floor, too small to divide by")
     denominator = stdev * math.sqrt(span_sessions)
     return round(move_pct / denominator, 4), None
 
@@ -5723,8 +5775,8 @@ def notable_movers(
         packet.gap(
             f"notable movers: {stale} subscribed symbol(s) were left off the "
             f"premarket leg because their last collector print is older than "
-            f"the {price_age_limit:,.0f}s limit in {config.CRITERIA_PATH.name} "
-            "[price age]. The same floor drops them from the candidate path.")
+            f"the {price_age_limit:,.0f} second freshness limit. The same limit "
+                   "drops them from the candidate path.")
 
     # premarket_input is the same fork again. A collector file with no bars and
     # an unreadable sidecar are both inputs this leg never got; a collector that
@@ -6049,7 +6101,8 @@ def build_packet() -> dict[str, Any]:
         raise eodhd.QuotaRefusal(
             "quota exhausted by another consumer on the shared key: "
             f"{eodhd.describe_preflight(quota)}, below the refuse floor of "
-            f"{quota['refuse_below']:,} in CRITERIA.md [quota]"
+            f"{quota['refuse_below']:,} calls where this system stands down "
+                   "entirely"
         )
     thin = quota["degraded"]
     quota_clause = eodhd.describe_preflight(quota)
@@ -6107,7 +6160,8 @@ def build_packet() -> dict[str, Any]:
 
     if thin:
         packet.gap(f"market snapshot skipped: {quota_clause}, below the "
-                   f"{quota['degrade_below']:,} threshold in CRITERIA.md [quota]")
+                   f"{quota['degrade_below']:,} call threshold where this system starts "
+                   "cutting its optional work")
         snapshot = []
     else:
         snapshot = market_snapshot(api, packet, bars_by_symbol)

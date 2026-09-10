@@ -15,6 +15,76 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-10, one hundred and tenth: the screens stopped naming the machine
+
+The owner opened a card and read "earnings, EODHD news tag 'EARNINGS' mapped
+through CRITERIA.md, from 'Rackspace stock pops after joining Nvidia Cloud
+Partner Program', an article carrying 5 tag(s) and returned for 1 of this
+morning's 12 candidates. Its tags: AI, CLOUD-COMPUTING, EARNINGS,
+PARTNERSHIPS, TECH." His rule, stated three times that morning and now the
+standing one: these screens are for a NOVICE FINANCE READER and carry what is
+financially relevant. The data vendor, this project's own filenames and its
+field names are for whoever maintains it.
+
+THE PROVENANCE IS SPLIT OUT, NOT DELETED. The suite says out loud that "a why
+that cannot be checked against the packet is not evidence", and three claims
+were written against that string. classify_catalyst now returns two sentences:
+catalyst_why is what a reader is shown, catalyst_provenance is the tag, the
+mapping, the tag list and the breadth, and it goes into the packet and onto no
+screen. The claims moved to the second one, so their intent is unchanged. The
+one fact that crossed over is how widely the story was shared, because an
+article returned for eleven of twelve names is a market roundup wearing a
+company's tag and a reader needs that in words.
+
+THE FIVE RAW JSON FOLDS ON HEALTH ARE GONE. They printed packet sections
+through JSON.stringify: 47 field names, and every CRITERIA.md citation on the
+desk arrived through them. Folded is not absent, either, because the print
+handler opens every fold, so a saved PDF carried all of it. Nothing is lost
+that is not on disk: the sentences above them say the same things in English
+and the packet is the audit trail.
+
+Then about thirty strings, in scan.py and analyst.py, each keeping its NUMBER
+and losing the path to the file that holds it. That reverses the rule recorded
+on 2026-09-03 that a CRITERIA citation keeps its key. The number is what makes
+a figure checkable and the number stays.
+
+TODAY'S SCREENS TOO, WHICH IS THE PART WORTH RECORDING. The first answer given
+was that packets are frozen and only tomorrow's run could be clean. That was
+wrong and the owner said so. A packet is the evidence a morning was judged on
+and is never rewritten; runs/<date>/desk.json.gz is not that, it is the
+payload the desk inlines and the nightly rebuilds it every night anyway. So
+the reader's sentence is produced in desk/compact.py, out of the packet's own
+recorded fields, and the evidence roll and gap list are passed through the
+same substitution on the way into the payload. Every session on file was
+recompacted and reads like the ones after it. The packet keeps every word.
+
+The Morning screen no longer claims the roll is quoted "exactly as it wrote
+them", because after this it is not. It says the exact text is in the record
+and that what is shown has had the machine's own names taken out and nothing
+else, which is true.
+
+Today's report was corrected in place, on the owner's instruction, and that is
+a run artifact so it is said plainly here. Only the leaked phrases changed:
+every figure, every headline and every sentence the model wrote stands as
+delivered. The emailed copy went out at 08:45 and the file and the inbox now
+differ by those phrases.
+
+TWO DEFECTS OF MY OWN, both found by reading rather than by a test. Splitting
+classify_catalyst into a three tuple left two early returns handing back two
+tuples, the earnings path and the news-never-checked path, which would have
+raised at 08:45. And a shell quoting accident wrote a U+0001 into analyst.py,
+which the next import caught.
+
+The plain words claim grew a third class to ban and one hole of its own: its
+filename pattern listed py, json, jsonl, gz, db and csv and not md, so the
+Similar screen naming doc/research/PRECEDENT_PREREGISTRATION.md went straight
+through it. That is the third guard written on this project in two days whose
+defect was covering the cases its author thought of rather than the property
+he meant. The claim now also CALLS classify_catalyst and checks both halves:
+the reader's sentence carries neither the vendor nor a filename, and the
+provenance still carries the tag it was decided from, because a provenance
+that lost its detail is a deletion with a new name on it.
+
 ## 2026-09-09, one hundred and ninth: the data directory held forty two things and no order
 
 The owner said data/ had become disorganised. It had, and not by accident: it

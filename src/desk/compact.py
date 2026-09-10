@@ -426,6 +426,86 @@ def _stored_structures(session_date: str,
     return out
 
 
+
+# WHAT A READER IS TOLD MOVED THE PRICE, out of what the morning recorded.
+#
+# Packets written before 2026-09-10 carry one string that names the data
+# vendor, this project's configuration file and the feed's tag vocabulary:
+# "EODHD news tag 'EARNINGS' mapped through CRITERIA.md, from '...', an
+# article carrying 5 tag(s) and returned for 1 of this morning's 12
+# candidates". The owner asked for the news. Packets written after it carry
+# two strings, one for a reader and one for the record.
+#
+# The old ones cannot be corrected in place, because a packet is the evidence
+# a morning was judged on and this project does not rewrite those. They are
+# corrected HERE instead, on the way into the payload the desk reads, by
+# asking the classifier what it would say about the same candidate now. The
+# packet's own class is kept: only the wording is rebuilt.
+_MACHINE_IN_A_REASON = re.compile(
+    r"\bEODHD\b|\bCRITERIA(?:\.md)?\b|\b[\w-]+\.(?:py|json|jsonl)\b", re.I)
+
+
+def reader_catalyst_why(candidate: dict[str, Any]) -> str | None:
+    """The candidate's catalyst reason, said for a reader."""
+    stored = candidate.get("catalyst_why")
+    plain = candidate.get("catalyst_provenance") and stored
+    if plain:
+        # Written by a morning that already split the two. Nothing to do.
+        return stored
+    if not stored or not _MACHINE_IN_A_REASON.search(str(stored)):
+        return stored
+    try:
+        from morning import scan
+
+        rebuilt = scan.classify_catalyst(candidate, set())[1]
+    except Exception:
+        # A payload that loses one sentence is better than a desk that does
+        # not build. The stored string is still a true account of the call.
+        return stored
+    return rebuilt or stored
+
+
+# EVERY WAY THIS MACHINE NAMES ITSELF, and what a reader is given instead.
+# Applied to the evidence roll and the gap list on the way into the payload,
+# for the same reason as reader_catalyst_why above: packets already on file
+# cannot be corrected in place and their screens can.
+_PLAIN = (
+    (r" in CRITERIA\.md \[Scan\] candidate_count", ""),
+    (r" in CRITERIA\.md \[Baseline\] min_baseline_premarket_volume", ""),
+    (r", which is the design under CRITERIA\.md \[Baseline\] "
+     r"refresh_after_days and is stated here",
+     ", which is how this is meant to work and is said here"),
+    (r"Reuse is the design under CRITERIA \[Baseline\] refresh_after_days, "
+     r"stated so", "Reusing them is how this is meant to work, and it is said so"),
+    (r" in CRITERIA\.md \[collector\]", ""),
+    (r" in CRITERIA\.md \[price age\]", ""),
+    (r"\s*See CRITERIA \[Collector\] premarket_capture_rate\.?", ""),
+    (r"\s*See CRITERIA \[Monitor\], the stale watchlist note\.", ""),
+    (r"CRITERIA \[Collector\] premarket_capture_rate",
+     "the standing average share of trading this system hears"),
+    (r"\s*See the balance note in CRITERIA\.md", ""),
+    (r"on the watchlist but the collector recorded no bars",
+     "on the overnight list but no prices were recorded"),
+    (r"not on watchlist\.json, so the collector never subscribed to it",
+     "this system was not listening to it"),
+    (r"watchlist\.json", "the overnight list of names to follow"),
+    (r"EODHD", "the news provider"),
+)
+_PLAIN_RX = tuple((re.compile(p), r) for p, r in _PLAIN)
+
+
+def plain_for_a_reader(value):
+    """A packet sentence with the machine's own names taken out of it."""
+    if isinstance(value, str):
+        for rx, replacement in _PLAIN_RX:
+            value = rx.sub(replacement, value)
+        return value
+    if isinstance(value, list):
+        return [plain_for_a_reader(item) for item in value]
+    if isinstance(value, dict):
+        return {key: plain_for_a_reader(item) for key, item in value.items()}
+    return value
+
 def compact_session(session_date: str) -> dict[str, Any] | None:
     """The payload for one session, or None when that session has no packet.
 
@@ -526,7 +606,8 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
                 {"k": x.get("component"), "p": x.get("points"), "why": x.get("why")}
                 for x in (c.get("score_components") or [])
             ],
-            "catalyst": c.get("catalyst_class"), "catalyst_why": c.get("catalyst_why"),
+            "catalyst": c.get("catalyst_class"),
+            "catalyst_why": reader_catalyst_why(c),
             # TRI-STATE, NOT A BOOLEAN, and it was written through bool()
             # until 2026-09-04. catalyst_found is True, False or None, and
             # trap likewise: None means the question could not be answered,
@@ -669,12 +750,14 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
             "coverage": packet.get("collector_coverage") or {},
             "window": packet.get("collector_window_observed") or {},
             "capture": packet.get("capture_correction") or {},
-            "evidence": packet.get("evidence_roll") or {},
+            "evidence": plain_for_a_reader(
+                packet.get("evidence_roll") or {}),
             # Every gap the scan recorded, as the scan wrote it. The report
             # lists these in full under Skips and traps and the desk could
             # not, because they were never carried: 18 of them on the
             # 2026-09-04 packet. They are strings the scan already phrased.
-            "gaps": packet.get("gaps_to_fill") or [],
+            "gaps": plain_for_a_reader(
+                packet.get("gaps_to_fill") or []),
         },
         "midday": None if not midday else {
             "generated": midday.get("generated_at"),

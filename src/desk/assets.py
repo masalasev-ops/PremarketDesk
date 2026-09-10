@@ -1444,6 +1444,15 @@ DECK_JS = r"""
     return COMPONENT_WORD[key] || String(key).replace(/_/g, " ");
   }
 
+  /* A SENTENCE THAT ALREADY ENDS IS NOT GIVEN A SECOND FULL STOP. The
+     catalyst reason used to be a fragment the card punctuated; since
+     2026-09-10 it is a whole sentence, and the card was printing
+     "about this company.. 2 stories are quoted below." */
+  function sentence(text) {
+    var s = String(text || "").replace(/\s+$/, "");
+    return s && !/[.!?]$/.test(s) ? s + "." : s;
+  }
+
   function deckHTML(c, session) {
     var maxPts = Math.max.apply(null,
       c.components.map(function (x) { return x.p; }).concat([1]));
@@ -1478,7 +1487,7 @@ DECK_JS = r"""
       fact("Money traded on a normal day", big(c.adv)) +
       fact("News stories found", (c.news == null ? NIL : c.news)) +
       fact("Where it ranked overnight", (c.rank == null ? NIL : "#" + c.rank) +
-        " <small>" + esc(c.tier_why || "") + "</small>") +
+        " <small>" + esc(rankGroupWord(c.tier_why)) + "</small>") +
       earn + "</div>";
 
     var heads = (c.headlines || []).map(function (h) {
@@ -1537,7 +1546,7 @@ DECK_JS = r"""
       '<a class="pill" href="#/name/' + esc(c.sym) + '">Every appearance</a></span></div>' +
       (hasCatalyst(c)
         ? '<div class="deck-why"><b>Why it moved overnight</b> ' + esc(c.catalyst) + ", " +
-          esc(c.catalyst_why || "") + "." +
+          esc(sentence(c.catalyst_why)) +
           (c.news ? " " + c.news + " stor" + (c.news === 1 ? "y is" : "ies are") +
             " quoted below." : " No story carried the name in the window.") + "</div>"
         : '<div class="deck-why"><b>Why it moved overnight</b> Nothing found ' +
@@ -1842,8 +1851,10 @@ DECK_JS = r"""
     return '<section><div class="shead"><h2>What the evidence is worth</h2>' +
       '<span class="note">read this before the watchlists</span></div>' +
       '<p class="snote">What this system knows about the quality of its own ' +
-      "evidence this morning, in its own words, quoted exactly as it wrote them " +
-      "rather than tidied up here. Some of it is technical, and that is the " +
+      "evidence this morning, in its own words. The exact text it wrote is " +
+      "kept in the record beside the morning; what is shown here has had the " +
+      "machine's own names taken out of it and nothing else. Some of it is " +
+      "still technical, and that is the " +
       "point: it is the working, kept so that a figure can be argued with. A " +
       "line that names nobody is printed just as readily as one that does, " +
       "because a check that found nothing and a check that never ran look " +
@@ -2279,6 +2290,23 @@ DECK_JS = r"""
      The owner asked exactly that question about ODD on 2026-09-09: a 9 of 10
      that reached neither list, for two reasons the card was holding and not
      printing. */
+  /* THE GROUP A NAME WAS RANKED INSIDE, in words. The packet stores a key
+     and the card printed it raw beside the rank, so a reader met
+     "#7 earnings_before_open". TIER_WORD below already says these in English
+     for the "why this name is here" sentence; this is the short form, for a
+     label that has to fit on one line. */
+  var RANK_GROUP = {
+    earnings_before_open: "of the names reporting this morning",
+    earnings_after_close: "of the names that reported after yesterday's close",
+    news_fresh: "of the names with fresh news",
+    news_stale: "of the names carrying older news",
+    prior_session_mover: "of yesterday's big movers",
+    recent_runner: "of the names that have been running"
+  };
+  function rankGroupWord(key) {
+    return RANK_GROUP[key] || String(key || "").replace(/_/g, " ");
+  }
+
   var TIER_WORD = {
     earnings_before_open: "it reports its results this morning, before trading opens",
     earnings_after_close: "it reported its results after trading closed yesterday",
@@ -2416,6 +2444,49 @@ DECK_JS = r"""
       '<td class="n">' + (r.stop == null ? NIL : n2(r.stop)) + "</td></tr>";
   }
 
+  /* HOW LONG UNTIL A SCREEN HAS SOMETHING ON IT. A reader who opens the
+     first hour at seven in the morning is not asking why a file is missing,
+     they are asking when the answer arrives. */
+  function hhmmMins(value, fallback) {
+    var parts = String(value || "").split(":");
+    if (parts.length !== 2) return fallback;
+    var hh = parseInt(parts[0], 10), mm = parseInt(parts[1], 10);
+    return isNaN(hh) || isNaN(mm) ? fallback : hh * 60 + mm;
+  }
+
+  function inWords(mins) {
+    if (mins <= 0) return "any moment now";
+    if (mins < 60) return "in " + mins + " minute" + (mins === 1 ? "" : "s");
+    var hours = Math.floor(mins / 60), rest = mins % 60;
+    return "in " + hours + " hour" + (hours === 1 ? "" : "s") +
+      (rest ? " " + rest + " minute" + (rest === 1 ? "" : "s") : "");
+  }
+
+  /* The sentence under an empty first hour. Recomputed on a timer while it is
+     a countdown, so the number on the screen is the number now. */
+  function firstHourWait(L, session) {
+    var now = etNow();
+    var opens = hhmmMins(L.open_time, 9 * 60 + 30);
+    var closes = hhmmMins(L.close_time, 10 * 60 + 30);
+    if (session !== now.date) {
+      return "Nothing was recorded for this morning. This screen watches the " +
+        "first hour of trading on a weekday, and it has only been running " +
+        "since 8 September 2026.";
+    }
+    if (now.mins < opens) {
+      return "The market has not opened yet. This screen fills in from " +
+        esc(L.open_time || "09:30") + " New York time, " +
+        inWords(opens - now.mins) + ". Until then the morning list and the " +
+        "news behind it are on the Morning screen.";
+    }
+    if (now.mins <= closes) {
+      return "The market is open and this is filling in. It is read again " +
+        "every minute until " + esc(L.close_time || "10:30") + ".";
+    }
+    return "Nothing was recorded for this morning between " +
+      esc(L.open_time || "09:30") + " and " + esc(L.close_time || "10:30") + ".";
+  }
+
   function screenLadder(p, root) {
     var L = p.ladder || {};
     var names = L.names || [];
@@ -2428,10 +2499,17 @@ DECK_JS = r"""
       ", nearest its ref high first</span></div>";
 
     if (!names.length) {
-      root.innerHTML = head + '<div class="card pad empty">' +
-        esc(L.why || "No ladder was written for this session. It runs on weekdays " +
-          "between the two times above, and sessions before 2026-09-08 predate it.") +
-        "</div></section>";
+      root.innerHTML = head +
+        '<div class="card pad empty" id="fhwait">' +
+        esc(firstHourWait(L, p.session)) + "</div></section>";
+      // A countdown that does not count is a stopped clock. render() clears
+      // TIMER on every route change, so this cannot outlive the screen.
+      if (p.session === etNow().date) {
+        TIMER = setInterval(function () {
+          var box = $("fhwait");
+          if (box) box.textContent = firstHourWait(L, p.session);
+        }, 20000);
+      }
       return;
     }
 
@@ -3027,7 +3105,8 @@ DECK_JS = r"""
       esc(cover.survivorship || "") + '.</div>' +
       '<div class="pnote"><b>Not a measured rule.</b> Every band edge and both ' +
       'floors are seeds, chosen before any of this data existed and written ' +
-      'down in doc/research/PRECEDENT_PREREGISTRATION.md so they could not be ' +
+      'down in advance, before any of this data existed, so they could not ' +
+      'be ' +
       'chosen afterwards to flatter the desk. Changing one is an amendment ' +
       'there, not an edit.</div></div></section>';
 
@@ -3656,13 +3735,6 @@ DECK_JS = r"""
       $("stamp-run").textContent = p.run_at || NIL;
       var h = p.health || {};
       var list = healthChecks(p);
-      function fold(title, obj) {
-        if (!obj || !Object.keys(obj).length) return "";
-        return "<details><summary>" + esc(title) + "</summary>" +
-          '<div class="body"><pre class="mono" style="white-space:pre-wrap;' +
-          'font-size:11.5px;color:var(--ink-2);margin:0">' +
-          esc(JSON.stringify(obj, null, 2)) + "</pre></div></details>";
-      }
       var out = '<section><div class="shead"><h2>Was the machine right on ' +
         esc(p.session) + "</h2>" +
         '<span class="note">packet at ' + esc(p.run_at || NIL) + " ET</span></div>" +
@@ -3685,14 +3757,20 @@ DECK_JS = r"""
           }).join("") + "</div></section>";
       }
 
-      out += '<section><div class="shead"><h2>The figures behind the answers</h2>' +
-        '</div><p class="snote">Folded away because the sentences above ' +
-        "are the point and these are the working. Nothing here is computed by this " +
-        "page.</p>" + fold("What the schedule reported", h.job) +
-        fold("The vendor budget as the morning read it", h.quota) +
-        fold("Which names it was listening to", h.coverage) +
-        fold("The window it actually ran", h.window) +
-        fold("The scaling applied to premarket volume", h.capture) + "</section>";
+      // THE FIVE RAW JSON FOLDS ARE GONE, 2026-09-10. They printed packet
+      // sections through JSON.stringify, which put 47 field names and every
+      // CRITERIA.md citation on the desk onto a screen written for a reader
+      // who does not have this repository. Folded is not absent either: the
+      // print handler opens every fold, so a saved PDF carried all of it.
+      // The sentences above say the same things in English and the packet is
+      // the audit trail, frozen beside the morning and backed up nightly.
+      out += '<section><div class="shead"><h2>Where the working is</h2>' +
+        '</div><p class="snote">Every answer above was read out of the record ' +
+        "this system wrote at " + esc(p.run_at || "08:45") + " and froze. That " +
+        "record is kept exactly as written, so any figure on any screen can be " +
+        "traced back to it, and none of it is recomputed afterwards. This page " +
+        "shows the answers rather than the record, because the record is a " +
+        "file and this is a screen.</p></section>";
       root.innerHTML = out;
     });
   }

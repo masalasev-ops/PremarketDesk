@@ -590,3 +590,27 @@ def section(level: str = "##") -> list[str]:
         out.append(f"**{term}.** {meaning}")
         out.append("")
     return out
+
+# THE SCREEN CONDITIONS, said for a reader. in_words below takes the
+# underscores out of a name, which is right for a leg or a catalyst class and
+# not enough for these: "require above prior high" is the key with spaces in
+# it, and a reader who has never opened the packet is no better off. Added
+# 2026-09-10, when the report's at a glance sentence was found listing four of
+# them raw.
+CONDITIONS = {
+    "require_above_prior_high": "not yet above yesterday's high",
+    "require_open_above_200sma": "below its average price of the last 200 days",
+    "require_fresh_price": "no price recent enough to judge it on",
+    "premarket_rvol": "not enough trading against its own normal",
+    "market_cap": "the company is too small",
+    "gap_pct": "it did not move far enough overnight",
+    "price": "the share price is outside the range this looks at",
+    "premarket_float_rotation": "too little of the company changed hands",
+    "min_premarket_volume": "too few shares traded before the open",
+}
+
+
+def condition_words(name: object) -> str:
+    """A screen condition as a reader's phrase, or its own name tidied up."""
+    key = str(name or "")
+    return CONDITIONS.get(key, in_words(key))
