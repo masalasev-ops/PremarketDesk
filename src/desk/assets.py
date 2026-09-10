@@ -983,11 +983,13 @@ DECK_JS = r"""
   function dailyStructure(c) {
     var d = c.ds;
     if (!d) {
-      return '<div class="ds"><div class="panel-title">Daily structure</div>' +
+      return '<div class="ds"><div class="panel-title">Where this share ' +
+        "stands in its own history</div>" +
         '<div class="empty">No end of day history arrived for this name, so ' +
         "there is no map. That is an absence and not an empty range.</div></div>";
     }
-    var head = '<div class="ds"><div class="panel-title">Daily structure</div>';
+    var head = '<div class="ds"><div class="panel-title">Where this share ' +
+      "stands in its own history</div>";
     if (d.pre) {
       // Not the vendor's silence. This session ran before the map existed, so
       // its packet carries none; the map itself is on the picks row for it.
@@ -1105,12 +1107,15 @@ DECK_JS = r"""
     var W = 310, H = 430, TOP = 18, BOT = 20, AX = 104;
     var pts = [];
     function add(v, label, kind) { if (v != null) pts.push({ v: v, label: label, kind: kind }); }
-    add(c.prior_close, "Prior close", "ref");
-    add(c.prior_high, "Prior high", "ref");
-    add(c.pm_low, "PM low", "range");
-    add(c.pm_vwap, "VWAP", "mark");
-    add(c.price, "Last", "last");
-    add(c.pm_high, "PM high", "range");
+    // PM AND VWAP ARE NOT WORDS. This chart is the first thing on the card
+    // and its five labels were the trade's shorthand, on a picture that has
+    // no room for a glossary popover.
+    add(c.prior_close, "Yesterday close", "ref");
+    add(c.prior_high, "Yesterday high", "ref");
+    add(c.pm_low, "Low today", "range");
+    add(c.pm_vwap, "Avg so far", "mark");
+    add(c.price, "Latest", "last");
+    add(c.pm_high, "High today", "range");
     if (!pts.length) return '<div class="empty">No level was measured for this name.</div>';
     var vs = pts.map(function (p) { return p.v; });
     var lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs);
@@ -1443,7 +1448,7 @@ DECK_JS = r"""
     var maxPts = Math.max.apply(null,
       c.components.map(function (x) { return x.p; }).concat([1]));
     var comps = c.components.map(function (x, i) {
-      return '<div class="comp"><span class="ct">' + esc(String(x.k).replace(/_/g, " ")) +
+      return '<div class="comp"><span class="ct">' + esc(componentWord(x.k)) +
         '</span><span class="cb"><i style="width:' + (x.p / maxPts * 100) + "%;background:" +
         ramp(i, c.components.length) + '"></i></span><span class="cv num">' +
         n2(x.p, 0) + "</span></div>";
@@ -1547,7 +1552,8 @@ DECK_JS = r"""
       // title= attribute that a phone cannot show.
       whyHere(c) +
       '<div class="deck-grid">' +
-      '<div><div class="panel-title">Levels</div>' + ladder(c) +
+      '<div><div class="panel-title">This morning\'s prices, against ' +
+      "yesterday's</div>" + ladder(c) +
       '<div style="font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5">' +
       "The highest and lowest prices this share actually changed hands at " +
       "this morning before the market opened, as at " +
@@ -1563,7 +1569,8 @@ DECK_JS = r"""
       // different question, what OTHER names in this shape went on to do, and
       // they go last for the same reason they are a separate instrument.
       dailyStructure(c) + priorBlock(c, session) + "</div>" +
-      '<div><div class="panel-title">Premarket tape</div>' + tapePath(c) +
+      '<div><div class="panel-title">How the price moved before the ' +
+      "open</div>" + tapePath(c) +
       '<div class="panel-title" style="margin-top:18px">Score, ' + n2(c.score, 0) +
       " of 10</div>" + comps + marginalLine(c) + "</div>" +
       '<div><div class="panel-title">Evidence</div>' + facts +

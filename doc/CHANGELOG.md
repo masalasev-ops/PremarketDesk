@@ -67,6 +67,16 @@ ROTATION sat beside a number with nothing to tap, which for a reader is the
 same as not having built the glossary. Both halves fixed: the labels say what
 they measure, and the marker walks the panel's cells as well.
 
+Three more found afterwards, by photographing the card for the project wiki
+rather than by reading it. The four panel titles are two words each and a pass
+looking for sentences went past them: LEVELS, PREMARKET TAPE, DAILY STRUCTURE.
+The six score bars printed the packet's own keys, so a card explaining a 9 out
+of 10 listed "catalyst class" and "above premarket vwap" beside the bars that
+make up the number, COMPONENT_WORD having been wired into the two sentences
+underneath but not into the list itself. And the levels chart, which is the
+first thing on the card, labelled its five marks PM high, PM low, VWAP, Prior
+high and Prior close, on a picture that has no room for a glossary popover.
+
 claim_no_screen_explains_itself_in_this_projects_own_words, 244th, over 347
 sentences. It bans two vocabularies. Ledger, pool, tier, collector, socket and
 discover are the names of parts of this machine, right in the code and empty
