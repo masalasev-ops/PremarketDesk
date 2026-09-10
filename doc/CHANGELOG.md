@@ -15,6 +15,45 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-10, one hundred and eleventh: the record names its picks
+
+The two conclusion cards said "12 of 25" and "20 of 53" and nothing else. The
+owner asked which shares and what happened to them, which turns out to be worth
+more than the counts. Under them now: every pick the written rule bought, best
+first, with what it did, the best it ever offered, how much of that it handed
+back, and how it ended. Four filters, because a reader has three questions and
+the fourth is the whole list.
+
+What the rows show is uncomfortable. SNOW scored 10 of 10 and stopped out at
+-2.18. NTSK scored 10 and stopped out at -3.45. ODD scored 9, was up 4.60
+during the day and finished -6.41, eleven points of give back. Six of the seven
+worst results carry a score of 8 or higher, and the four picks scoring under 4
+have the best median of any band. On 25 picks that is well inside chance and
+the card above already says a fair coin produces a record this lopsided 69
+times in a hundred, but it is the question this screen exists to ask and it was
+invisible.
+
+gave_back_pct is worked out in paper_ledger and not on the page, because the
+page draws figures and does not make them. booked_rows is one builder with two
+callers, as with the catalyst sentence: record_so_far carries the rows from
+tomorrow, and compact fills them in for every packet already on file.
+
+And four tables on this desk carried data-goto rows that neither routed nor
+looked clickable. The Record screen handled only its view buttons, so the
+attribute was dead there; the rows now route to the name and carry a cursor.
+
+STILL OPEN, and it is a measurement question rather than a screen one. The
+tile says 21 entries were never reached and the card below says 20 of 53. They
+look like the same picks and they are not: 17 of about 29 rows disagree, and
+the near equal totals are a coincidence. near_miss reads picks where
+pick_day_high is below entry_ref; the ledger reads paper_trades for an exit
+reason of trigger never fired. ASO on 2026-09-09 is in the ledger and not the
+card, because picks has no day high for it. AGX on 2026-09-03 is in the card
+and not the ledger, because its ledger row carries no exit reason at all. And
+picks holds today while the ledger runs nightly, which is 76 live rows against
+64. Neither number is wrong alone. Stacked on one screen they invite a
+reconciliation that does not hold.
+
 ## 2026-09-10, one hundred and tenth: the screens stopped naming the machine
 
 The owner opened a card and read "earnings, EODHD news tag 'EARNINGS' mapped

@@ -506,6 +506,33 @@ def plain_for_a_reader(value):
         return {key: plain_for_a_reader(item) for key, item in value.items()}
     return value
 
+def record_with_rows(record: dict[str, Any]) -> dict[str, Any]:
+    """The morning's record block, with the per pick rows filled in.
+
+    record_so_far carries them from 2026-09-10, and every packet written
+    before that carries the counts alone. The Record screen is about the
+    whole record rather than about one morning, so the rows are read from the
+    ledger here for the packets that have none, which is the same shape as
+    reader_catalyst_why above: one builder, and the payload gets what the
+    packet could not carry.
+
+    A record block that is empty stays empty. That is a morning before the
+    ledger ran, and inventing rows for it would say the opposite.
+    """
+    if not record or record.get("picks_detail") is not None:
+        return record
+    try:
+        from night import paper_ledger
+
+        rows = paper_ledger.booked_rows()
+    except Exception:
+        return record
+    if not rows:
+        return record
+    filled = dict(record)
+    filled["picks_detail"] = rows
+    return filled
+
 def compact_session(session_date: str) -> dict[str, Any] | None:
     """The payload for one session, or None when that session has no packet.
 
@@ -721,7 +748,7 @@ def compact_session(session_date: str) -> dict[str, Any] | None:
         "shape": {k: (packet.get("list_shape") or {}).get(k)
                   for k in ("sectors", "catalyst_classes", "gap_direction")},
         "criteria": packet.get("criteria_summary") or {},
-        "record": packet.get("record_so_far") or {},
+        "record": record_with_rows(packet.get("record_so_far") or {}),
         # THE LADDER IS NOT FROM THE PACKET, and it is the only block here that
         # is not. Everything else on a session payload was measured once at
         # 08:45 and frozen; the ladder is measured every two minutes between

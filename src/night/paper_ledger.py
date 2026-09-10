@@ -548,6 +548,46 @@ def near_miss(connection: Any) -> dict[str, Any]:
     }
 
 
+
+def booked_rows(rule: str | None = None,
+                connection: Any = None) -> list[dict[str, Any]]:
+    """Every pick the rule actually bought, one row each, for the screen.
+
+    THE COUNTS WERE NOT ENOUGH. The Record screen carried "12 of 25 closed
+    above where they started" and nothing about which twelve. A reader cannot
+    tell from that whether the score is doing anything, and on this record it
+    is the highest scores that did worst: the six worst results carry scores
+    of 8, 9, 9, 9, 10 and 9. Twenty five picks is far too few to conclude
+    that, and the screen says so out loud; showing the rows is what lets a
+    reader see the question rather than take the answer.
+
+    Ordered by what the pick did, best first, because the two ends are what a
+    reader looks at and a date order buries both in the middle.
+    """
+    rule = rule or sorted(rule_versions())[0]
+    if connection is None:
+        with store.session() as fresh:
+            store.init(fresh)
+            return booked_rows(rule, fresh)
+    rows = [dict(r) for r in connection.execute(
+        "SELECT date, ticker, score, conviction, pnl_pct, mfe_pct_held, "
+        "       max_drawdown_pct, exit_reason, minutes_to_trigger, "
+        "       minutes_to_peak "
+        "FROM paper_trades "
+        "WHERE rule_version = ? AND booked = 1 AND pnl_pct IS NOT NULL",
+        (rule,))]
+    # HOW MUCH THE RULE HANDED BACK, worked out here and not on the page,
+    # because the page draws figures and does not make them. It is the whole
+    # of what the two medians above are pointing at: ODD offered 4.60 percent
+    # and booked minus 6.41.
+    for row in rows:
+        best = row.get("mfe_pct_held")
+        row["gave_back_pct"] = (
+            None if best is None else round(best - row["pnl_pct"], 4))
+    rows.sort(key=lambda r: r["pnl_pct"], reverse=True)
+    return rows
+
+
 def record_so_far(rule: str | None = None) -> dict[str, Any]:
     """What the ledger has observed, as plain counts with their denominators.
 
@@ -575,6 +615,9 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
         # paper_trades, because an entry that never traded books no trade and
         # is therefore invisible in the ledger by construction.
         misses = near_miss(connection)
+        # THE ROWS, not only the counts. The same open connection, and
+        # the same fence: booked trades of this rule version.
+        detail = booked_rows(rule, connection)
     booked = [r for r in rows if r["booked"] and r["pnl_pct"] is not None]
     timed = [r for r in booked if r["minutes_to_trigger"] is not None]
     peaked = [r for r in booked if r["minutes_to_peak"] is not None
@@ -630,6 +673,11 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
     return {
         "rule_version": rule,
         "picks": denom(rows), "booked": denom(booked),
+        # ONE ROW PER BOOKED PICK, so the Record screen can name them
+        # rather than counting them. The counts above answer how many;
+        # a reader asking whether the score is doing anything needs to
+        # see which.
+        "picks_detail": detail,
         "skipped": denom(skipped), "never_triggered": denom(never),
         # Named even at zero. A count that appears only when it is non zero
         # is a count nobody learns to read, and this one exists to be seen

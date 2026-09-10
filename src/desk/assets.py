@@ -279,6 +279,10 @@ td.n { text-align: right; font-variant-numeric: tabular-nums;
 th.n { text-align: right; }
 td.tk { font-weight: 600; font-family: Consolas, monospace; }
 .scroll { overflow-x: auto; }
+/* A ROW THAT ROUTES SAYS SO. Four tables carried data-goto and none
+   of them looked clickable, which is a link nobody finds. */
+tr[data-goto] { cursor: pointer; }
+tr[data-goto]:hover { background: var(--active); }
 
 /* the ladder */
 .lstate { font-size: 12px; }
@@ -1596,7 +1600,7 @@ DECK_JS = r"""
   }
 
   /* ---------- screens ---------- */
-  var state = { selected: null, filter: "all" };
+  var state = { selected: null, filter: "all", pickFilter: "all" };
 
   function fixtureBanner(p) {
     if (!p.fixture) return "";
@@ -3270,6 +3274,73 @@ DECK_JS = r"""
       "</p></div>";
   }
 
+  /* WHAT EACH PICK DID. The conclusion cards above answer "how many" and the
+     owner asked which, on 2026-09-10, looking at "12 of 25" with no name
+     beside it. The rows come from the ledger through the packet; nothing here
+     computes a figure, including the give back column, which paper_ledger
+     works out. */
+  var PICK_FILTERS = [
+    ["all", "All", function () { return true; }],
+    ["high", "Scored 7 or more", function (r) { return (r.score || 0) >= 7; }],
+    ["stopped", "Stopped out", function (r) {
+      return /stop/i.test(String(r.exit_reason || "")); }],
+    ["gaveback", "Gave the most back", function (r) {
+      return (r.gave_back_pct || 0) >= 2; }]
+  ];
+
+  function pickRow(r) {
+    var name = bare(r.ticker);
+    var ended = /stop/i.test(String(r.exit_reason || ""))
+      ? '<span class="lstate bad">stopped out</span>'
+      : '<span class="sub">held to the close</span>';
+    return '<tr data-goto="' + esc(r.ticker) + '">' +
+      "<td>" + esc(String(r.date || "")) + "</td>" +
+      '<td class="tk">' + esc(name) + "</td>" +
+      '<td class="n">' + (r.score == null ? NIL : n2(r.score, 0)) + "</td>" +
+      '<td class="n ' + dirClass(r.pnl_pct) + '">' + pct(r.pnl_pct) + "</td>" +
+      '<td class="n">' + (r.mfe_pct_held == null ? NIL : pct(r.mfe_pct_held)) +
+      "</td>" +
+      '<td class="n">' + (r.gave_back_pct == null ? NIL
+        : n2(r.gave_back_pct) + "%") + "</td>" +
+      "<td>" + ended + "</td></tr>";
+  }
+
+  function picksTable(R) {
+    var all = R.picks_detail || [];
+    if (!all.length) return "";
+    var chosen = PICK_FILTERS.filter(function (f) {
+      return f[0] === state.pickFilter; })[0] || PICK_FILTERS[0];
+    var shown = all.filter(chosen[2]);
+    var won = shown.filter(function (r) { return (r.pnl_pct || 0) > 0; }).length;
+    return '<section><div class="shead"><h2>What each pick did</h2>' +
+      '<span class="note">' + all.length + " on paper, best first</span></div>" +
+      '<p class="snote">Every pick the written rule actually bought, and what ' +
+      "happened to it by the closing bell. No money was involved in any of " +
+      "them. <b>Best it offered</b> is the most the share was ever worth " +
+      "while the rule held it, and <b>gave back</b> is the distance from " +
+      "there to where the rule let go, which is the gap the two figures above " +
+      "are pointing at.</p>" +
+      '<div class="filters noprint" id="pickfilters">' +
+      PICK_FILTERS.map(function (f) {
+        return '<button class="chip" type="button" data-pf="' + f[0] +
+          '" aria-pressed="' + (f[0] === chosen[0]) + '">' + esc(f[1]) +
+          "</button>";
+      }).join("") + "</div>" +
+      '<div class="card pad"><div class="scroll"><table class="ptable">' +
+      "<thead><tr><th>Day</th><th>Name</th><th class=\"n\">Score</th>" +
+      '<th class="n">Result</th><th class="n">Best it offered</th>' +
+      '<th class="n">Gave back</th><th>How it ended</th>' +
+      "</tr></thead><tbody>" +
+      (shown.map(pickRow).join("") ||
+        '<tr><td colspan="7" class="empty">No pick matches that.</td></tr>') +
+      "</tbody></table></div>" +
+      '<p class="snote" style="margin:12px 0 0">' + shown.length +
+      " pick" + (shown.length === 1 ? "" : "s") + " shown, " + won +
+      " of them worth more at the close than where the rule started them. " +
+      "A pick is one morning of one share, so this is a small number of " +
+      "observations however the rows are counted.</p></div></section>";
+  }
+
   function recordSection(p) {
     var R = p.record || {};
     if (!R.picks) return "";
@@ -3571,6 +3642,11 @@ DECK_JS = r"""
       if (tr) location.hash = "#/session/" + tr.dataset.date;
     });
     root.addEventListener("click", function (e) {
+      // A pick row routes to that name's own screen, the way the other four
+      // tables on the desk do. The attribute was on the rows from the start
+      // and nothing was reading it.
+      var go = e.target.closest("[data-goto]");
+      if (go) { location.hash = "#/name/" + go.dataset.goto; return; }
       var b = e.target.closest("button[data-view]");
       if (!b) return;
       var which = b.dataset.view;
@@ -3628,7 +3704,22 @@ DECK_JS = r"""
     if (newest) {
       var mine = EPOCH;
       loadSession(newest.date).then(function (p) {
-        if (p && !stale(mine)) $("record-detail").innerHTML = recordSection(p);
+        if (!p || stale(mine)) return;
+        // The table redraws itself on a chip, and the payload is captured in
+        // the closure rather than looked up again, so a reader filtering does
+        // not wait on a second inflate.
+        function paint() {
+          $("record-detail").innerHTML = recordSection(p) + picksTable(p.record || {});
+          var chips = $("pickfilters");
+          if (!chips) return;
+          chips.addEventListener("click", function (e) {
+            var b = e.target.closest("[data-pf]");
+            if (!b) return;
+            state.pickFilter = b.dataset.pf;
+            paint();
+          });
+        }
+        paint();
       });
     }
   }
