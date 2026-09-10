@@ -15,6 +15,33 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-10, one hundred and thirteenth: the picks table pages, and still prints whole
+
+Twenty five rows today and about twelve more every weekday, so within a month
+it is a page nobody scrolls. Twenty a page.
+
+EVERY ROW STAYS IN THE DOCUMENT and the ones off the current page are hidden
+with CSS rather than left unbuilt. A saved PDF cannot press Next, and the print
+rules were rewritten this same morning so that a reader who prints gets the
+whole thing, folds opened and all: a table that printed page one would have
+undone that quietly. Checked in print emulation at 25 rows, 25 visible, pager
+hidden, and the two rules are guarded in the PDF claim because that is what
+they are.
+
+THE SORT ORDER MAKES PAGING RISKY HERE, which is worth writing down rather
+than discovering later. The table is best first, so paging pushes the WORST
+results onto the last page, and on this record those are the informative ones:
+SNOW at 10 out of 10, NTSK at 10, ODD giving back eleven points. The pager
+says which page they are on and the last page is one click. Changing a filter
+resets to page one, so a filter with fewer rows than the current page does not
+strand a reader on an empty one.
+
+One comment corrected rather than left standing: the delegated click handler
+carried a note claiming that binding per repaint would stack listeners. It
+would not, because innerHTML discards the old element and its listeners with
+it. The real reason to delegate is that there are two sets of controls now and
+one box that outlives both.
+
 ## 2026-09-10, one hundred and twelfth: the record now says which days it covers
 
 Read at 15:53 on a trading day, the picks table said "25 on paper" and "what

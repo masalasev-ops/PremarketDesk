@@ -20336,6 +20336,16 @@ def claim_a_saved_pdf_keeps_what_the_screen_drew(failures: list[str]) -> None:
              "stretches to a full page when the card collapses to one"),
             (".scroll { overflow: visible !important; }",
              "a table wider than the page is cropped to it"),
+            # A PAGED TABLE PRINTS IN FULL. The picks table keeps every row
+            # in the document and hides the ones off the current page, so a
+            # saved PDF carries all of them: a reader with a PDF cannot press
+            # Next. Building only the current page would undo the whole of
+            # the print work done the same morning.
+            (".offpage { display: table-row !important; }",
+             "a paged table prints only the page the reader happened to be "
+             "on, and a PDF has no Next button"),
+            (".pager { display: none !important; }",
+             "the pager itself prints, as a row of dead buttons"),
             (".ptag { white-space: normal; }",
              "the pill saying a condition was not measured for a name holds "
              "a whole sentence and is nowrap, which is right for a pill on a "

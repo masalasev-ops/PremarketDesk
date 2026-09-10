@@ -282,6 +282,9 @@ td.tk { font-weight: 600; font-family: Consolas, monospace; }
 /* A ROW THAT ROUTES SAYS SO. Four tables carried data-goto and none
    of them looked clickable, which is a link nobody finds. */
 tr[data-goto] { cursor: pointer; }
+/* A ROW OFF THE CURRENT PAGE IS HIDDEN AND NOT ABSENT, so a printed
+   copy carries the whole table: a reader with a PDF cannot press Next. */
+.offpage { display: none; }
 tr[data-goto]:hover { background: var(--active); }
 
 /* the ladder */
@@ -541,6 +544,8 @@ details .body.prose { font-family: Georgia, "Times New Roman", serif; font-size:
   .wrap { max-width: none; padding: 0; }
   body { font-size: 10.5pt; }
   .printonly { display: block; }
+  .offpage { display: table-row !important; }
+  .pager { display: none !important; }
   details { border: 0; } details .body { padding: 0 0 10px; }
   a { color: var(--ink); text-decoration: none; }
   @page { margin: 14mm 12mm; }
@@ -1600,7 +1605,7 @@ DECK_JS = r"""
   }
 
   /* ---------- screens ---------- */
-  var state = { selected: null, filter: "all", pickFilter: "all" };
+  var state = { selected: null, filter: "all", pickFilter: "all", pickPage: 1 };
 
   function fixtureBanner(p) {
     if (!p.fixture) return "";
@@ -3288,12 +3293,13 @@ DECK_JS = r"""
       return (r.gave_back_pct || 0) >= 2; }]
   ];
 
-  function pickRow(r) {
+  function pickRow(r, offpage) {
     var name = bare(r.ticker);
     var ended = /stop/i.test(String(r.exit_reason || ""))
       ? '<span class="lstate bad">stopped out</span>'
       : '<span class="sub">held to the close</span>';
-    return '<tr data-goto="' + esc(r.ticker) + '">' +
+    return '<tr' + (offpage ? ' class="offpage"' : "") +
+      ' data-goto="' + esc(r.ticker) + '">' +
       "<td>" + esc(String(r.date || "")) + "</td>" +
       '<td class="tk">' + esc(name) + "</td>" +
       '<td class="n">' + (r.score == null ? NIL : n2(r.score, 0)) + "</td>" +
@@ -3303,6 +3309,30 @@ DECK_JS = r"""
       '<td class="n">' + (r.gave_back_pct == null ? NIL
         : n2(r.gave_back_pct) + "%") + "</td>" +
       "<td>" + ended + "</td></tr>";
+  }
+
+  var PICKS_PER_PAGE = 20;
+
+  /* The pager. The rows for every page are in the table already and the ones
+     off this page are hidden by CSS, so Next is instant and, more to the
+     point, a printed copy carries all of them: a reader with a PDF cannot
+     click anything. */
+  function pager(page, pages, total) {
+    if (pages < 2) return "";
+    var out = '<div class="filters noprint pager" style="margin:11px 0 0">';
+    out += '<button class="chip" type="button" data-pp="' + (page - 1) +
+      '"' + (page === 1 ? " disabled" : "") + ">Previous</button>";
+    for (var i = 1; i <= pages; i++) {
+      out += '<button class="chip" type="button" data-pp="' + i +
+        '" aria-pressed="' + (i === page) + '">' + i + "</button>";
+    }
+    out += '<button class="chip" type="button" data-pp="' + (page + 1) +
+      '"' + (page === pages ? " disabled" : "") + ">Next</button>";
+    // WORTH SAYING, because the table is sorted best first and the rows a
+    // reader most needs are therefore on the last page.
+    out += '<span class="lg" style="margin-left:auto;color:var(--muted)">' +
+      "sorted best first, so the worst are on page " + pages + "</span>";
+    return out + "</div>";
   }
 
   function picksTable(R) {
@@ -3325,6 +3355,10 @@ DECK_JS = r"""
       return f[0] === state.pickFilter; })[0] || PICK_FILTERS[0];
     var shown = all.filter(chosen[2]);
     var won = shown.filter(function (r) { return (r.pnl_pct || 0) > 0; }).length;
+    var pages = Math.max(1, Math.ceil(shown.length / PICKS_PER_PAGE));
+    var page = Math.min(Math.max(1, state.pickPage || 1), pages);
+    var from = (page - 1) * PICKS_PER_PAGE;
+    var upto = Math.min(from + PICKS_PER_PAGE, shown.length);
     return '<section><div class="shead"><h2>What each pick did</h2>' +
       '<span class="note">' + all.length + " on paper, best first</span></div>" +
       '<p class="snote">Every pick the written rule actually bought' + span +
@@ -3344,11 +3378,15 @@ DECK_JS = r"""
       '<th class="n">Result</th><th class="n">Best it offered</th>' +
       '<th class="n">Gave back</th><th>How it ended</th>' +
       "</tr></thead><tbody>" +
-      (shown.map(pickRow).join("") ||
+      (shown.map(function (r, i) {
+        return pickRow(r, i < from || i >= upto);
+      }).join("") ||
         '<tr><td colspan="7" class="empty">No pick matches that.</td></tr>') +
-      "</tbody></table></div>" +
-      '<p class="snote" style="margin:12px 0 0">' + shown.length +
-      " pick" + (shown.length === 1 ? "" : "s") + " shown, " + won +
+      "</tbody></table></div>" + pager(page, pages, shown.length) +
+      '<p class="snote" style="margin:12px 0 0">' +
+      (pages > 1 ? "Showing " + (from + 1) + " to " + upto + " of " +
+        shown.length + ". " : "") + shown.length +
+      " pick" + (shown.length === 1 ? "" : "s") + " match, " + won +
       " of them worth more at the close than where the rule started them. " +
       "A pick is one morning of one share, so this is a small number of " +
       "observations however the rows are counted.</p></div></section>";
@@ -3722,14 +3760,28 @@ DECK_JS = r"""
         // the closure rather than looked up again, so a reader filtering does
         // not wait on a second inflate.
         function paint() {
-          $("record-detail").innerHTML = recordSection(p) + picksTable(p.record || {});
-          var chips = $("pickfilters");
-          if (!chips) return;
-          chips.addEventListener("click", function (e) {
-            var b = e.target.closest("[data-pf]");
-            if (!b) return;
-            state.pickFilter = b.dataset.pf;
-            paint();
+          var box = $("record-detail");
+          box.innerHTML = recordSection(p) + picksTable(p.record || {});
+          // ONE HANDLER ON THE BOX, because there are two sets of controls
+          // now and both are rebuilt on every repaint. Binding to each after
+          // each paint works, since innerHTML replaces the elements and the
+          // old listeners go with them, but it is a line to remember in two
+          // places and one to forget in a third. The box outlives them all.
+          if (box.dataset.wired) return;
+          box.dataset.wired = "1";
+          box.addEventListener("click", function (e) {
+            var f = e.target.closest("[data-pf]");
+            if (f) {
+              state.pickFilter = f.dataset.pf;
+              state.pickPage = 1;   // a new filter starts at its own first page
+              paint();
+              return;
+            }
+            var pp = e.target.closest("[data-pp]");
+            if (pp && !pp.disabled) {
+              state.pickPage = parseInt(pp.dataset.pp, 10) || 1;
+              paint();
+            }
           });
         }
         paint();
