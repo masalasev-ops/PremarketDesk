@@ -3308,18 +3308,31 @@ DECK_JS = r"""
   function picksTable(R) {
     var all = R.picks_detail || [];
     if (!all.length) return "";
+    // WHICH DAYS THIS COVERS, and whether today is one of them. The rule is
+    // applied to a session after that session has closed, so on any trading
+    // afternoon the newest row is yesterday and the morning's own picks are
+    // not in it. Saying "25 picks" and nothing else let a reader at 15:53
+    // take the table for today's.
+    var days = R.booked_days || [];
+    var span = days.length
+      ? " between " + esc(days[0]) + " and " + esc(days[days.length - 1])
+      : "";
+    var pending = (days.length && days[days.length - 1] < etNow().date)
+      ? " Today is not in this yet: a morning's picks are scored against its "
+        + "own close and added tonight."
+      : "";
     var chosen = PICK_FILTERS.filter(function (f) {
       return f[0] === state.pickFilter; })[0] || PICK_FILTERS[0];
     var shown = all.filter(chosen[2]);
     var won = shown.filter(function (r) { return (r.pnl_pct || 0) > 0; }).length;
     return '<section><div class="shead"><h2>What each pick did</h2>' +
       '<span class="note">' + all.length + " on paper, best first</span></div>" +
-      '<p class="snote">Every pick the written rule actually bought, and what ' +
-      "happened to it by the closing bell. No money was involved in any of " +
-      "them. <b>Best it offered</b> is the most the share was ever worth " +
-      "while the rule held it, and <b>gave back</b> is the distance from " +
-      "there to where the rule let go, which is the gap the two figures above " +
-      "are pointing at.</p>" +
+      '<p class="snote">Every pick the written rule actually bought' + span +
+      ", and what happened to it by the closing bell of its own day. No money " +
+      "was involved in any of them. <b>Best it offered</b> is the most the " +
+      "share was ever worth while the rule held it, and <b>gave back</b> is " +
+      "the distance from there to where the rule let go, which is the gap the " +
+      "two figures above are pointing at." + pending + "</p>" +
       '<div class="filters noprint" id="pickfilters">' +
       PICK_FILTERS.map(function (f) {
         return '<button class="chip" type="button" data-pf="' + f[0] +

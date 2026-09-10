@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty five claims, a count read off
+and the two pages. It now carries two hundred and forty six claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -13241,6 +13241,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         243: "two hundred and forty three",
         244: "two hundred and forty four",
         245: "two hundred and forty five",
+        246: "two hundred and forty six",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -19916,6 +19917,80 @@ def claim_the_documents_state_the_collector_window_the_code_runs(
 
 
 
+
+def claim_the_record_says_which_days_it_covers(failures: list[str]) -> None:
+    """The picks table names its span and says today is not in it.
+
+    Read at 15:53 on a trading day, the table said "25 on paper" and "what
+    happened to it by the closing bell", and the market had not closed. Every
+    row in it was from a session that had closed, so no row was wrong; what
+    was missing was the span. Twelve picks made that morning were sitting in
+    the picks table waiting for the 22:15 run and nothing on the screen said
+    so, which is how a reader takes a record ending yesterday for one that is
+    up to date.
+
+    THE RULE IS APPLIED AFTER THE CLOSE, so on any trading afternoon the
+    newest row is yesterday. That is not a fault and it does not need fixing;
+    it needs saying.
+
+    Both halves are checked. The ledger has to publish the days, because a
+    screen cannot know them otherwise, and the migration in compact has to
+    fill them for the packets written before the field existed, or every
+    session already on file loses the sentence.
+    """
+    from desk import assets, compact
+    from night import paper_ledger
+
+    source = assets.DECK_JS
+    if "booked_days" not in source:
+        failures.append(
+            "the picks table does not read booked_days, so it cannot say "
+            "which days it covers and a reader on a trading afternoon takes "
+            "a record that ends yesterday for one that includes today")
+    for needed in ("etNow().date", "Today is not in this yet"):
+        if needed not in source:
+            failures.append(
+                f"the picks table has no {needed!r}, so it never says that "
+                "today's picks are missing from it. The rule is applied after "
+                "the close, so on any trading afternoon they are")
+
+    # ---- the ledger publishes the days
+    import inspect
+
+    ledger = inspect.getsource(paper_ledger.record_so_far)
+    if '"booked_days"' not in ledger:
+        failures.append(
+            "record_so_far does not carry booked_days, so tomorrow's packet "
+            "cannot tell a reader which days its record covers")
+
+    # ---- AND THE MIGRATION FILLS IT for everything already frozen. Without
+    # this the sentence appears only on packets written after the field, which
+    # is every session except the newest.
+    # STUBBED, not read from the live ledger. The first version of this asked
+    # the real one and skipped itself when it came back empty, which is how
+    # the mutation that dropped the line went through: a check that can pass
+    # on an empty set is not a check.
+    fake = [{"date": "2026-01-02", "ticker": "A.US", "pnl_pct": 1.0},
+            {"date": "2026-01-05", "ticker": "B.US", "pnl_pct": -1.0}]
+    real = paper_ledger.booked_rows
+    paper_ledger.booked_rows = lambda *a, **k: [dict(r) for r in fake]
+    try:
+        filled = compact.record_with_rows({"picks": {"rows": 2}})
+    finally:
+        paper_ledger.booked_rows = real
+    if [r["ticker"] for r in filled.get("picks_detail") or []] != ["A.US", "B.US"]:
+        failures.append(
+            "compact does not fill the pick rows for a packet written before "
+            f"they existed: {filled.get('picks_detail')!r}")
+    if filled.get("booked_days") != ["2026-01-02", "2026-01-05"]:
+        failures.append(
+            "compact fills the pick rows for an older packet and not the days "
+            "they cover, so those sessions draw the table with no span on it: "
+            f"{filled.get('booked_days')!r}")
+
+    print("  record span  the picks table names the days it covers and says "
+          "today is not among them")
+
 def claim_the_data_root_holds_one_of_each_thing(failures: list[str]) -> None:
     """Nothing writes a working file into data/ itself.
 
@@ -20929,6 +21004,7 @@ def main() -> int:
     run_claim(failures, claim_a_saved_pdf_keeps_what_the_screen_drew, failures)
     run_claim(failures, claim_no_screen_explains_itself_in_this_projects_own_words, failures)
     run_claim(failures, claim_the_data_root_holds_one_of_each_thing, failures)
+    run_claim(failures, claim_the_record_says_which_days_it_covers, failures)
 
     if failures:
         for failure in failures:

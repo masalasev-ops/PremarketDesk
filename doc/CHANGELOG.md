@@ -15,6 +15,32 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-10, one hundred and twelfth: the record now says which days it covers
+
+Read at 15:53 on a trading day, the picks table said "25 on paper" and "what
+happened to it by the closing bell", and the market had not closed. The owner
+asked why. Every row in the table was from a session that had closed, so no row
+was wrong: what was missing was the span. The rule is applied to a morning
+after that morning has closed, so the newest row is always yesterday, and the
+twelve picks made that same morning were sitting in the picks table waiting for
+the 22:15 run with nothing on the screen saying so.
+
+The note now names the days and says today is not among them. "By the closing
+bell OF ITS OWN DAY" removes the other half of the ambiguity.
+
+The span runs from 2026-09-02 and not 2026-09-01, because the first of
+September produced twelve picks and the rule bought none of them. It is the
+span of the BOOKED picks, which is the right one for a table of what each pick
+did.
+
+claim_the_record_says_which_days_it_covers, 246th, mutation tested at 4 of 4.
+The fourth mutation went through the first version of it: the check on the
+migration read "if there are rows and no days, complain", which passes quietly
+when there are no rows. It stubs the ledger with two known rows now. That is
+the fourth guard written in this project in three days whose defect was that it
+could pass on an empty set, and it is worth naming as a pattern rather than as
+four accidents.
+
 ## 2026-09-10, one hundred and eleventh: the record names its picks
 
 The two conclusion cards said "12 of 25" and "20 of 53" and nothing else. The

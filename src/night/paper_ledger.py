@@ -678,6 +678,11 @@ def record_so_far(rule: str | None = None) -> dict[str, Any]:
         # a reader asking whether the score is doing anything needs to
         # see which.
         "picks_detail": detail,
+        # THE DAYS THIS COVERS. The screen said "25 on paper" and a
+        # reader at ten to four on a trading day had no way to tell that
+        # the newest row was yesterday and that the picks made this
+        # morning are not booked until tonight.
+        "booked_days": sorted({row["date"] for row in detail}),
         "skipped": denom(skipped), "never_triggered": denom(never),
         # Named even at zero. A count that appears only when it is non zero
         # is a count nobody learns to read, and this one exists to be seen

@@ -531,6 +531,10 @@ def record_with_rows(record: dict[str, Any]) -> dict[str, Any]:
         return record
     filled = dict(record)
     filled["picks_detail"] = rows
+    # AND THE DAYS THEY COVER, from the same rows, because the note that says
+    # today is not in the record yet is built from this and a packet written
+    # before 2026-09-10 carries neither.
+    filled.setdefault("booked_days", sorted({r["date"] for r in rows}))
     return filled
 
 def compact_session(session_date: str) -> dict[str, Any] | None:
