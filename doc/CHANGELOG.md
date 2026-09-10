@@ -15,6 +15,54 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and eighth: the project has a wiki, and a tool that rebuilds its pictures
+
+Ten pages at github.com/masalasev-ops/PremarketDesk/wiki, one per screen, each
+with screenshots of the 2026-09-09 session and a plain description of what the
+screen answers. tools/wiki_screens.py is what produced them and is in the
+repository so they can be produced again: a screen that changes and a picture
+that does not is a wiki that lies slowly.
+
+ONE PICTURE PER SCREEN DOES NOT WORK, which is the whole reason the tool
+exists rather than a person taking fourteen screenshots. The Morning screen is
+6,800 pixels tall and a wiki scales an image to its content width, so the
+whole screen in one file arrives as a thumbnail with three pixel text. The
+tool captures sections instead, each about a screenful, bringing the wanted
+one to the top by shifting the body rather than by scrolling, because a
+headless capture takes the viewport at rest and a scroll may or may not have
+settled by then.
+
+It writes nothing inside the working tree. The suite photographs the whole
+tree and fails on any path it did not expect, so a tool that left fourteen
+PNGs and fourteen HTML copies beside the source would be one nobody could run
+while anything else was happening. Everything goes to the system temporary
+directory.
+
+THREE LABELS WERE FOUND BY PHOTOGRAPHING THE CARD rather than by reading it,
+and they are in the entry above this one. A picture is read differently from a
+paragraph: the four panel titles, the six score bars printing packet keys, and
+the levels chart's five marks all survived a pass that was looking for
+sentences.
+
+TWO THINGS ABOUT PUBLISHING TO A GITHUB WIKI, neither of them obvious.
+
+The wiki repository does not exist until somebody creates the first page in a
+browser. hasWikiEnabled reads true, the API has no endpoint for it, and a
+clone answers "Repository not found". Nothing automated can get past that
+step.
+
+And replacing a picture under its own name is not enough. The dark screenshots
+were pushed over the light ones and GitHub went on handing browsers the light
+copies from the same URL that curl answered correctly, which is an edge cache
+and not a failed push. images/ was renamed to screens/ so every URL was one
+nobody had cached. If a picture has to change immediately rather than
+eventually, rename it.
+
+The pages say what the project refuses to do as plainly as what it does: no
+price to buy at, no price to sell at, a missing figure printed as missing with
+its reason beside it, and a Record page that opens on the record currently
+being too small to conclude anything from.
+
 ## 2026-09-09, one hundred and seventh: the screens stopped explaining themselves in their own vocabulary
 
 The jargon work on 2026-09-09 defined the WORDS. Sixty six column headers got
