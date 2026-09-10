@@ -4942,7 +4942,7 @@ def load_universe_closes(session_date: str, packet: Packet) -> dict[str, Any] | 
     2026-08-19 file is stamped 08:21:27 rather than 07:15, so a rule derived
     from the scheduled time would refuse a legitimate file.
     """
-    path = config.DATA_DIR / f"universe-closes-{session_date}.json"
+    path = config.SESSION_DIR / f"universe-closes-{session_date}.json"
     if not path.is_file():
         packet.gap(
             f"{path.name} is absent, so the notable movers section lost both "
@@ -5526,7 +5526,8 @@ def notable_movers(
     by_symbol = {str(c.get("symbol") or "").upper(): c for c in candidates}
 
     if closes_payload is None:
-        lost = ("data/universe-closes-<date>.json is not readable for this "
+        lost = ("data/sessions/universe-closes-<date>.json is not readable "
+                "for this "
                 "session, so both universe legs were lost")
         block["skipped"] = lost
         block["legs"]["prior_session"] = _leg_report(False, lost, None, 0, False)

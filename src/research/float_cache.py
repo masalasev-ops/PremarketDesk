@@ -35,7 +35,7 @@ from night import pool_recall
 _CRIT = criteria.load()
 
 EOD_DIR = config.DATA_DIR / "backtest" / "eod"
-CACHE_PATH = config.DATA_DIR / "float_cache.json"
+CACHE_PATH = config.STUDY_DIR / "float_cache.json"
 
 # The fields kept per symbol. sharesOutstanding rides along because the ratio
 # of the two is the sanity check on a float that looks wrong: a float equal to

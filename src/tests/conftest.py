@@ -57,7 +57,7 @@ from core import config
 # added here; the mtime check below is what catches it if nobody remembers.
 _CONFIG_PATHS = (
     "DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR", "SITE_DIR",
-    "STUDY_DIR",
+    "STUDY_DIR", "SESSION_DIR",
     "DB_PATH", "UNIVERSE_PATH", "WATCHLIST_PATH", "CA_BUNDLE_PATH",
 )
 
@@ -981,6 +981,7 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
         config.DATA_DIR = data_copy
         config.PREMARKET_DIR = data_copy / "premarket"
         config.STUDY_DIR = data_copy / "research"
+        config.SESSION_DIR = data_copy / "sessions"
         config.RUNS_DIR = runs_copy
         config.LOGS_DIR = sandbox / "logs"
         config.SITE_DIR = sandbox / "site"

@@ -646,7 +646,11 @@ def write_universe_closes(
         "third_session_available": bool(third_by),
         "closes": rows,
     }
-    path = config.DATA_DIR / f"universe-closes-{today.isoformat()}.json"
+    path = config.SESSION_DIR / f"universe-closes-{today.isoformat()}.json"
+    # The writer makes its own directory. ensure_dirs covers the chain and
+    # nothing else: a fresh clone, a sandbox with its own temporary data
+    # root, or a machine where somebody deleted data/ all reach here first.
+    path.parent.mkdir(parents=True, exist_ok=True)
     files.write_json_atomically(path, payload, indent=2, sort_keys=True,
                                 attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     # Sessions that actually carried a close, not sessions asked for. This read

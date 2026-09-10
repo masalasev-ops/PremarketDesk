@@ -97,11 +97,11 @@ PATH_STEM = "probe-capture-live"
 
 
 def result_path(day: str) -> Path:
-    return config.DATA_DIR / f"{PATH_STEM}-{day}.json"
+    return config.STUDY_DIR / f"{PATH_STEM}-{day}.json"
 
 
 def page_path(day: str) -> Path:
-    return config.DATA_DIR / f"{PATH_STEM}-{day}.md"
+    return config.STUDY_DIR / f"{PATH_STEM}-{day}.md"
 
 
 def universe_codes() -> list[str]:

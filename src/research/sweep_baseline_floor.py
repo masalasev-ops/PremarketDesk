@@ -39,7 +39,7 @@ from core import criteria
 
 _CRIT = criteria.load()
 
-STUDY_PATH = config.DATA_DIR / "float_rotation_study.json"
+STUDY_PATH = config.STUDY_DIR / "float_rotation_study.json"
 
 # Boundaries for the report, not thresholds. Nothing reads them.
 DEFAULT_FLOORS = (1_000, 2_000, 5_000, 10_000, 25_000)

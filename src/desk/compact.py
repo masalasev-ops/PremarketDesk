@@ -374,7 +374,7 @@ def _ladder_for(day: str) -> dict[str, Any]:
     fields, so this returns the file as written and invents no empty shape to
     stand in for one.
     """
-    path = config.DATA_DIR / f"ladder-{day}.json"
+    path = config.SESSION_DIR / f"ladder-{day}.json"
     if not path.is_file():
         return {}
     try:

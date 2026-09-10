@@ -674,7 +674,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.compare:
         target = pathlib.Path(args.compare)
         if not target.exists():
-            target = config.DATA_DIR / args.compare
+            target = config.STUDY_DIR / args.compare
         if not target.exists():
             print(f"probe: no such probe result: {args.compare}")
             return 1
@@ -779,7 +779,7 @@ def main(argv: list[str] | None = None) -> int:
         # runs[] without the two refusals that decide what it means.
         "verdict": verdict,
     }
-    out = config.DATA_DIR / f"socket-cap-probe-{ettime.today_str()}.json"
+    out = config.STUDY_DIR / f"socket-cap-probe-{ettime.today_str()}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     files.write_text_atomically(
         out, json.dumps(payload, indent=2, sort_keys=True), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)

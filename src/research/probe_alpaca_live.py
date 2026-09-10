@@ -105,7 +105,8 @@ DOCUMENTED_LAG_MINUTES = _CRIT.number("truth", "documented_lag_minutes")
 
 
 def log_path(day: str | None = None) -> Path:
-    return config.DATA_DIR / f"probe-alpaca-live-{day or ettime.today_str()}.jsonl"
+    return (config.STUDY_DIR /
+            f"probe-alpaca-live-{day or ettime.today_str()}.jsonl")
 
 
 def universe_codes() -> list[str]:
@@ -317,7 +318,8 @@ BODY_CHARS = 4000
 
 
 def lagged_log_path(day: str | None = None) -> Path:
-    return config.DATA_DIR / f"{LAGGED_PATH_STEM}-{day or ettime.today_str()}.jsonl"
+    return (config.STUDY_DIR /
+            f"{LAGGED_PATH_STEM}-{day or ettime.today_str()}.jsonl")
 
 
 def lagged_once(
@@ -841,7 +843,7 @@ def write_table(records: list[dict[str, Any]], day: str) -> Path:
                 "because there were no trades to serve.",
                 "",
             ]
-    path = config.DATA_DIR / f"{TABLE_PATH_STEM}-{day}.md"
+    path = config.STUDY_DIR / f"{TABLE_PATH_STEM}-{day}.md"
     files.write_text_atomically(
         path, "\n".join(lines), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return path

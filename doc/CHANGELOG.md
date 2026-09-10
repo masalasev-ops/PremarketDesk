@@ -15,6 +15,73 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-09, one hundred and ninth: the data directory held forty two things and no order
+
+The owner said data/ had become disorganised. It had, and not by accident: it
+held 42 entries, and 25 of them were in the root because nobody had ever said
+where else they should go.
+
+EIGHTEEN WERE ONE OFF PROBE AND STUDY PAYLOADS from August. config.STUDY_DIR
+exists and four newer research modules write to it, dated, beside a note that
+carries the finding. Ten older ones were written before that constant existed
+and went on writing beside the database: addressable_sweep.json,
+cutoff-0830.json, float_rotation_study.json, ten probe files, two socket cap
+probes, float_cache.json. All ten now write to STUDY_DIR and the files have
+moved there. The three that carried no date at all got the date they were
+written, from their own mtime, because an undated payload cannot be told from
+its own rerun.
+
+One of them, data/float_rotation_study.json, was byte identical to
+data/research/float_rotation_study-2026-08-31-floor-sweep.json. Not a bug: the
+script writes a working file under a fixed name and a person archives it under
+a dated one. Both moved and both stayed, because the fixed name is what
+sweep_baseline_floor opens and the dated one is the record of that run.
+
+SEVEN WERE THE TWO PER SESSION WORKING FILES, one more of each every weekday
+forever. They are now in data/sessions/, behind a new config.SESSION_DIR.
+
+THE LADDER IS STILL NOT PRUNED, and that is a decision rather than an
+oversight. universe-closes carries a retention window because it is provably
+dead the moment its own chain closes: one writer at 07:15, one reader at 08:45
+on the same session, and no way to ask for a past one. The ladder is not dead
+that way. desk/render.payloads compacts a session on the spot when it has no
+frozen payload, which is any session whose nightly freeze failed, and compact
+reads the ladder file. PRUNABLE's own header demands that a new entry bring
+"its own argument for why nothing can read the file after that window", and
+that argument cannot honestly be made here. A directory costs nothing and does
+not require pretending. Five kilobytes a day is 1.2 MB a year.
+
+data/ now holds 15 entries: eleven files there is exactly one of, and four
+directories for the four classes that accumulate.
+
+THE FIRST VERSION OF THE MOVE BROKE THREE SUITES, and the claim written to
+guard it did not notice. Rebinding config.SESSION_DIR in the sandbox looked
+like the whole job. It is half: conftest._CONFIG_PATHS is the tuple that
+captures the real value on the way in and restores it on the way out, and
+without the name there the sandbox pointed the attribute at a temporary copy,
+deleted the copy, and left every later test writing into a directory that was
+gone. The claim asked whether conftest CONTAINED the string
+"config.SESSION_DIR = ", which the assignment satisfies on its own: the same
+shape of weak check as asking whether a method name appears anywhere in a
+function. It now imports the tuple and looks in it.
+
+Three more things the failures were right about. write_text_atomically does
+not create parents, which the chain never notices because ensure_dirs runs
+first and nothing else does, so both writers now make their own directory. The
+prune fixture builds its own data root and rebound only DATA_DIR, so it wrote
+its four files where nothing was looking. And eight test paths still named the
+old location.
+
+claim_the_data_root_holds_one_of_each_thing, 245th. A research module may
+still NAME the data root, for the universe every one of them scores against
+and the backtest cache, and those two are the allowlist. Anything else is a
+payload landing where the last ten landed. It also checks the thing that makes
+a new directory constant dangerous: that SESSION_DIR is in _ALL_DIR_NAMES so
+ensure_dirs creates it, and that the sandbox rebinds it, because a path the
+sandbox cannot redirect is a path a test writes into the real tree. This
+project has paid for that twice, once through ensure_dirs and once through
+build_archive. Mutation tested at 6 of 6, including both of those.
+
 ## 2026-09-09, one hundred and eighth: the project has a wiki, and a tool that rebuilds its pictures
 
 Ten pages at github.com/masalasev-ops/PremarketDesk/wiki, one per screen, each

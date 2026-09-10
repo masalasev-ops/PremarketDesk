@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty four claims, a count read off
+and the two pages. It now carries two hundred and forty five claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -5520,7 +5520,7 @@ def claim_ensure_dirs_follows_a_redirected_config(failures: list[str]) -> None:
     from tests import conftest
 
     watched = ("DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR",
-               "STUDY_DIR")
+               "STUDY_DIR", "SESSION_DIR")
     # PROJECT_ROOT is never redirected, so these are the real four whatever
     # sandbox this claim happens to be running inside.
     real = {config.PROJECT_ROOT / "data",
@@ -6930,7 +6930,7 @@ def claim_a_lost_second_bulk_call_keeps_the_first(failures: list[str]) -> None:
                             "prior sessions, so this claim cannot run at all")
             return
 
-        sidecar = config.DATA_DIR / f"universe-closes-{today.isoformat()}.json"
+        sidecar = config.SESSION_DIR / f"universe-closes-{today.isoformat()}.json"
 
         def run(api: _Bulk) -> dict[str, Any]:
             # The sandbox copies the real data/ in, and a live morning has
@@ -8313,8 +8313,14 @@ def claim_the_prune_deletes_only_what_its_whitelist_names(
             "it because the fixtures scale with the window")
     box = pathlib.Path(tempfile.mkdtemp())
     original = config.DATA_DIR
+    original_sessions = config.SESSION_DIR
     try:
         config.DATA_DIR = box
+        # The per session files moved to their own directory on 2026-09-09 and
+        # the prune reads THAT one. A fixture that rebinds only DATA_DIR writes
+        # its four files where nothing is looking.
+        config.SESSION_DIR = box / "sessions"
+        config.SESSION_DIR.mkdir()
         (box / "premarket").mkdir()
         (box / "backtest" / "eod").mkdir(parents=True)
 
@@ -8324,7 +8330,7 @@ def claim_the_prune_deletes_only_what_its_whitelist_names(
         today_file = f"universe-closes-{day}.json"
         undated = "universe-closes-.json"
         for name in (over, edge, today_file, undated):
-            (box / name).write_text("{}", encoding="utf-8")
+            (config.SESSION_DIR / name).write_text("{}", encoding="utf-8")
 
         # Everything else, all of it older than any window could ever be.
         bystanders = [
@@ -8343,30 +8349,30 @@ def claim_the_prune_deletes_only_what_its_whitelist_names(
         # reading the clock instead of the name gets both of them wrong.
         ancient = 1000000000.0
         fresh = 1900000000.0
-        os.utime(box / over, (fresh, fresh))
-        os.utime(box / today_file, (ancient, ancient))
+        os.utime(config.SESSION_DIR / over, (fresh, fresh))
+        os.utime(config.SESSION_DIR / today_file, (ancient, ancient))
 
         result = _prune.prune(today=day)
 
-        if (box / over).exists():
+        if (config.SESSION_DIR / over).exists():
             failures.append(
                 f"{over} is {window + 1} days old against a {window} day "
                 "window and survived. Nothing in the tree can read it: it is "
                 "written by discover for one session and read by that same "
                 "session's scan, and there is no way to ask for a past one")
-        if not (box / edge).exists():
+        if not (config.SESSION_DIR / edge).exists():
             failures.append(
                 f"{edge} is exactly {window} days old and was deleted. The "
                 "window is how many days are KEPT, so the boundary day is "
                 "inside it and a reader who counted back that far still finds "
                 "the file")
-        if not (box / today_file).exists():
+        if not (config.SESSION_DIR / today_file).exists():
             failures.append(
                 "this morning's own closes file was deleted. Its mtime is "
                 "ancient and its NAME is today, and the name is the session it "
                 "describes. Deleting it mid morning would take out the file "
                 "the 08:45 scan is about to read")
-        if not (box / undated).exists():
+        if not (config.SESSION_DIR / undated).exists():
             failures.append(
                 "a file matching the glob but carrying no readable date was "
                 "deleted on a guess. An unparseable name is a reason to leave "
@@ -8406,6 +8412,7 @@ def claim_the_prune_deletes_only_what_its_whitelist_names(
                 "idempotent")
     finally:
         config.DATA_DIR = original
+        config.SESSION_DIR = original_sessions
         shutil.rmtree(box, ignore_errors=True)
 
     if result["freed"] <= 0:
@@ -10900,7 +10907,7 @@ def claim_the_floor_sweep_fits_edges_the_way_the_study_does(
 
     # And the sweep must reproduce the shipped floor's own fit from the file,
     # or it is not measuring the same thing the study measured.
-    path = config.PROJECT_ROOT / "data" / "float_rotation_study.json"
+    path = config.STUDY_DIR / "float_rotation_study.json"
     if not path.is_file():
         print("  floor sweep  round_down agrees; no study payload on disk to "
               "reproduce against")
@@ -13229,6 +13236,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         242: "two hundred and forty two",
         243: "two hundred and forty three",
         244: "two hundred and forty four",
+        245: "two hundred and forty five",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -19903,6 +19911,118 @@ def claim_the_documents_state_the_collector_window_the_code_runs(
 
 
 
+
+def claim_the_data_root_holds_one_of_each_thing(failures: list[str]) -> None:
+    """Nothing writes a working file into data/ itself.
+
+    On 2026-09-09 the owner said data/ had become disorganised. It held 42
+    entries. Eighteen were one off probe and study payloads from August,
+    sitting in the root because config.STUDY_DIR was added later and only the
+    four newest research modules were written against it; ten older ones went
+    on writing beside the database. Seven more were the two per session
+    working files, one of each every weekday, with nowhere to go.
+
+    THE ROOT IS FOR THINGS THERE IS EXACTLY ONE OF. The database, the
+    universe, the two watchlists, the two markers, the three logs, the
+    certificate bundle. Anything a script produces goes to STUDY_DIR; anything
+    keyed by session date goes to SESSION_DIR. Both already existed as
+    conventions and neither was enforced, which is how the root filled up
+    without anybody deciding it should.
+
+    A RESEARCH MODULE MAY STILL READ FROM THE ROOT, and the allowlist below is
+    what it may read: the universe every one of them scores against, and the
+    backtest cache. Those are inputs. The check is on the names, not on
+    whether the line reads or writes, because a path built in one line and
+    written three hundred lines later is not something a source scan can
+    follow, and the point is that a study payload must not be NAMED there at
+    all.
+
+    AND SESSION_DIR HAS TO BE REBOUND BY THE SANDBOX. A path the sandbox does
+    not rebind is a path a test writes into the real tree, which this project
+    has already paid for twice: once when ensure_dirs recreated the real
+    directories from inside the sandbox, and once when build_archive rewrote
+    the real site/PremarketDesk.html. A new directory constant is exactly the
+    shape of that mistake, so it is checked here rather than discovered on a
+    morning when a test overwrites a real ladder.
+    """
+    import re
+
+    from core import config
+
+    # What a research module is allowed to name in the data root, because it
+    # reads them rather than producing them.
+    INPUTS = ("backtest", "universe.json")
+
+    research = config.PROJECT_ROOT / "src" / "research"
+    for module in sorted(research.glob("*.py")):
+        source = module.read_text(encoding="utf-8")
+        for line, hit in _data_root_uses(source):
+            if any(name in hit for name in INPUTS):
+                continue
+            failures.append(
+                f"research/{module.name} line {line} names "
+                f"{hit.strip()[:70]!r} in the data root. A payload a script "
+                "produces goes to config.STUDY_DIR, dated, beside the others: "
+                "ten modules wrote to the root and turned data/ into a list "
+                "nobody could read")
+
+    # ---- the two per session files are keyed by date and belong together
+    for rel, needle in (("src/morning/ladder.py", "ladder-"),
+                        ("src/desk/compact.py", "ladder-"),
+                        ("src/morning/scan.py", "universe-closes-"),
+                        ("src/selection/discover.py", "universe-closes-")):
+        source = (config.PROJECT_ROOT / rel).read_text(encoding="utf-8")
+        for match in re.finditer(r"config\.(\w+_DIR) / f?\"[^\"]*" +
+                                 re.escape(needle), source):
+            if match.group(1) != "SESSION_DIR":
+                failures.append(
+                    f"{rel} builds a {needle}<date> path from "
+                    f"config.{match.group(1)}, so one more of them lands in "
+                    "the data root every weekday")
+
+    # ---- and the sandbox has to be able to redirect it
+    if "SESSION_DIR" not in config._ALL_DIR_NAMES:
+        failures.append(
+            "SESSION_DIR is not in config._ALL_DIR_NAMES, so ensure_dirs does "
+            "not create it and a fresh clone has nowhere to write a ladder")
+    # THE SAVE LIST AND NOT THE ASSIGNMENT. This first asked whether
+    # conftest contained the string "config.SESSION_DIR = ", which the
+    # assignment satisfies on its own, and the assignment is only half of
+    # it: _CONFIG_PATHS is what captures the real value on the way in and
+    # puts it back on the way out. Without the name there the sandbox
+    # pointed the attribute at a temporary copy, deleted the copy, and
+    # left every later test writing into a directory that was gone. Three
+    # suites reported it and this claim did not.
+    from tests import conftest as _conftest
+
+    if "SESSION_DIR" not in _conftest._CONFIG_PATHS:
+        failures.append(
+            "SESSION_DIR is not in conftest._CONFIG_PATHS, so the sandbox "
+            "never restores it: it is left pointing at a temporary copy "
+            "that has been deleted, and every test after the first writes "
+            "into a directory that no longer exists")
+    if "config.SESSION_DIR = " not in (
+            config.PROJECT_ROOT / "src" / "tests" / "conftest.py").read_text(
+            encoding="utf-8"):
+        failures.append(
+            "the sandbox saves config.SESSION_DIR and never redirects it, "
+            "so a test that writes a ladder writes it into the real data "
+            "directory. That is the mistake ensure_dirs and build_archive "
+            "each made once")
+
+    print("  data root    every research payload goes to STUDY_DIR and every "
+          "per session file to SESSION_DIR, and the sandbox redirects both")
+
+
+def _data_root_uses(source: str) -> list[tuple[int, str]]:
+    """Every `config.DATA_DIR / ...` in a module, with its line number."""
+    import re
+
+    out = []
+    for match in re.finditer(r"config\.DATA_DIR\s*/\s*([^\n)]+)", source):
+        out.append((source[: match.start()].count(chr(10)) + 1, match.group(1)))
+    return out
+
 def claim_no_screen_explains_itself_in_this_projects_own_words(
         failures: list[str]) -> None:
     """The sentences on the screens are written for somebody who has not read
@@ -20758,6 +20878,7 @@ def main() -> int:
     run_claim(failures, claim_a_card_says_why_the_name_is_on_it, failures)
     run_claim(failures, claim_a_saved_pdf_keeps_what_the_screen_drew, failures)
     run_claim(failures, claim_no_screen_explains_itself_in_this_projects_own_words, failures)
+    run_claim(failures, claim_the_data_root_holds_one_of_each_thing, failures)
 
     if failures:
         for failure in failures:

@@ -205,7 +205,7 @@ def _write_closes(session: str = SESSION, stamped: str | None = None,
         payload["names_with_close"] = WRITTEN_COUNTS["names_with_close"]
         payload["names_with_both_closes_for_leg"] = \
             WRITTEN_COUNTS["names_with_both_closes_for_leg"]
-    path = config.DATA_DIR / f"universe-closes-{session}.json"
+    path = config.SESSION_DIR / f"universe-closes-{session}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -1339,7 +1339,7 @@ def claim_an_empty_list_says_which_empty_it_is(failures: list[str]) -> None:
 
     # 2. The input was never there: no sidecar at all. Both universe legs, and
     #    the premarket leg with them, lost the file rather than the market.
-    (config.DATA_DIR / f"universe-closes-{SESSION}.json").unlink(missing_ok=True)
+    (config.SESSION_DIR / f"universe-closes-{SESSION}.json").unlink(missing_ok=True)
     block, _packet, _rows = _run()
     for name, report in note(block).items():
         if report.get("state") != scan.LIST_UNCOMPUTABLE:
@@ -1457,7 +1457,7 @@ def claim_a_malformed_input_costs_the_section_and_not_the_run(
     reason rather than a caught traceback, and the wrapper's own generic reason
     is what the last two cases are allowed to fall back to.
     """
-    path = config.DATA_DIR / f"universe-closes-{SESSION}.json"
+    path = config.SESSION_DIR / f"universe-closes-{SESSION}.json"
     base = {
         "generated_at": f"{SESSION}T07:15:00-04:00",
         "session_date": SESSION,
@@ -1570,7 +1570,7 @@ def claim_a_missing_input_names_the_leg_it_lost(failures: list[str]) -> None:
     """
     # 1. No sidecar at all: both universe legs, and the premarket leg with them,
     #    because the premarket move is measured against c1 from the same file.
-    path = config.DATA_DIR / f"universe-closes-{SESSION}.json"
+    path = config.SESSION_DIR / f"universe-closes-{SESSION}.json"
     path.unlink(missing_ok=True)
     block, packet, _rows = _run()
     if block["rows"]:
@@ -1643,7 +1643,7 @@ def claim_an_undated_sidecar_costs_two_legs_and_not_the_morning(
     nothing else.
     """
     closes = {"QUIET.US": {"c1": 104.04, "c2": 102.0, "c3": 100.0}}
-    path = config.DATA_DIR / f"universe-closes-{SESSION}.json"
+    path = config.SESSION_DIR / f"universe-closes-{SESSION}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({
         "generated_at": f"{SESSION}T07:15:00-04:00",
@@ -2124,7 +2124,7 @@ def claim_the_sections_own_words_pass_the_quantifier_guard(
     block, packet, _rows = _run()
     seen += _section_prose(block, packet)
 
-    (config.DATA_DIR / f"universe-closes-{SESSION}.json").unlink(missing_ok=True)
+    (config.SESSION_DIR / f"universe-closes-{SESSION}.json").unlink(missing_ok=True)
     block, packet, _rows = _run()
     seen += _section_prose(block, packet)
 

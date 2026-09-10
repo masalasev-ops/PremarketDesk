@@ -74,6 +74,7 @@ from typing import Any
 
 from collect import collect_premarket
 from core import config
+from core import ettime
 from core import files
 from core import criteria
 
@@ -655,7 +656,7 @@ def main(argv: list[str] | None = None) -> int:
         "per_session": results,
     }
 
-    out = config.DATA_DIR / f"{PATH_STEM}.json"
+    out = config.STUDY_DIR / f"{PATH_STEM}-{ettime.today_str()}.json"
     files.write_text_atomically(
         out, json.dumps(payload, indent=1, sort_keys=True), attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
 

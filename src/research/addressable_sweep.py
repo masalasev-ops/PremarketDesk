@@ -247,7 +247,8 @@ def run(write: bool = True) -> dict[str, Any]:
         from core import ettime
 
         payload["generated_at"] = ettime.stamp(ettime.now_et())
-        path = config.DATA_DIR / "addressable_sweep.json"
+        path = (config.STUDY_DIR /
+                f"addressable_sweep-{ettime.today_str()}.json")
         files.write_json_atomically(path, payload, indent=2, sort_keys=True,
                                     attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
         print(f"sweep: wrote {path}")

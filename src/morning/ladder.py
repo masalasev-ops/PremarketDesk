@@ -66,7 +66,7 @@ STATE_STOPPED = "stopped"
 
 
 def ladder_path(day: str | None = None) -> Path:
-    return config.DATA_DIR / f"ladder-{day or ettime.today_str()}.json"
+    return config.SESSION_DIR / f"ladder-{day or ettime.today_str()}.json"
 
 
 def _bar_time(bar: dict[str, Any]) -> dt.datetime | None:
@@ -246,6 +246,9 @@ def build(day: str | None = None, now: dt.datetime | None = None) -> dict[str, A
 
 def write(payload: dict[str, Any]) -> Path:
     path = ladder_path(payload["session"])
+    # As in selection/discover: the writer makes its own directory,
+    # because ensure_dirs covers the chain and nothing else.
+    path.parent.mkdir(parents=True, exist_ok=True)
     files.write_json_atomically(path, payload, indent=1)
     return path
 

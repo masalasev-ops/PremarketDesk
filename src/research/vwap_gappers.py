@@ -65,12 +65,12 @@ _CRIT = criteria.load()
 
 EOD_DIR = config.DATA_DIR / "backtest" / "eod"
 BAR_CACHE_DIR = config.DATA_DIR / "backtest" / "bars"
-ASSETS_PATH = config.DATA_DIR / "alpaca_assets.json"
+ASSETS_PATH = config.STUDY_DIR / "alpaca_assets.json"
 REPORT_DIR = config.PROJECT_ROOT / "doc" / "research"
 REPORT_PATH = REPORT_DIR / "VWAP_GAPPERS.md"
 # Under data/, which is gitignored. Thirteen megabytes of per trade rows is
 # evidence to inspect locally, not something to carry in the repository.
-TRADES_PATH = config.DATA_DIR / "vwap_gappers_trades.csv"
+TRADES_PATH = config.STUDY_DIR / "vwap_gappers_trades.csv"
 
 # The trading API, NOT the data API. api.alpaca.markets answers 401 for these
 # credentials; paper-api serves the same asset records and needs no extra key.

@@ -1148,7 +1148,8 @@ def claim_sixteen(failures: list[str]) -> None:
                                 "expected c1 11.0 and c2 10.0 from the two maps "
                                 "already held")
 
-            written = sandbox / f"universe-closes-{today.isoformat()}.json"
+            written = (config.SESSION_DIR /
+                       f"universe-closes-{today.isoformat()}.json")
             if not written.is_file():
                 failures.append("no universe closes sidecar was written, so the "
                                 "briefing loses the prior session leg as well as the "

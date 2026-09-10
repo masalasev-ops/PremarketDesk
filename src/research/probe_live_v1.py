@@ -73,7 +73,8 @@ INTERVAL_S = 180
 
 
 def log_path(day: str | None = None) -> Path:
-    return config.DATA_DIR / f"probe-live-v1-{day or ettime.today_str()}.jsonl"
+    return (config.STUDY_DIR /
+            f"probe-live-v1-{day or ettime.today_str()}.jsonl")
 
 
 def sample(api: eodhd.EodhdClient) -> dict[str, Any]:

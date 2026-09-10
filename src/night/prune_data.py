@@ -103,7 +103,7 @@ def survey(today: dt.date | None = None) -> dict[str, Any]:
     kept: list[dict[str, Any]] = []
     for pattern, section, key in PRUNABLE:
         window = _CRIT.integer(section, key)
-        for path in sorted(config.DATA_DIR.glob(pattern)):
+        for path in sorted(config.SESSION_DIR.glob(pattern)):
             day = _session_date(path.name)
             if day is None:
                 kept.append({"name": path.name, "why": "no readable date in "

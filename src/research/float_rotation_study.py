@@ -101,7 +101,7 @@ import probe_alpaca
 _CRIT = criteria.load()
 
 EOD_DIR = config.DATA_DIR / "backtest" / "eod"
-OUT_PATH = config.DATA_DIR / "float_rotation_study.json"
+OUT_PATH = config.STUDY_DIR / "float_rotation_study.json"
 
 # Candidate band edges. These are NOT thresholds and nothing reads them to make
 # a decision. They exist so the edge finally written into CRITERIA is chosen
