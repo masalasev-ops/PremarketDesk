@@ -3079,14 +3079,19 @@ can be asked for again.
 
 ops/publish.py uploads the contents of site/ to Cloudflare Pages and nothing
 outside it. It runs after the desk in the morning chain, on both its paths,
-and in the full nightly, and never fails either chain. Before any upload it
+in the midday job and in the full nightly, and never fails any of them.
+Before any upload it
 reads every file and refuses, naming the file and the line, on a file past
 max_file_mb, on a file carrying a credential, an api_token query string or an
 absolute local path, and on an inline data block that does not parse, since
 what such a block carries cannot be stated. Every file's size and every
 inline data block's keys are printed on every run, refusal or not.
 
-Not in the midday chain or the ladder, which the owner did not ask for. The
+[amended 2026-09-11: the midday job publishes too. It was left out on the
+first day because the owner had named two chains, and the site then showed
+the morning's desk all afternoon; the owner asked for it the same day.]
+
+Not in the ladder. The
 ladder redraws the desk thirty times an hour, and a deployment every two
 minutes would put thirty versions of one morning online to publish a price
 ladder that is stale by the time anyone opens it. Whether Cloudflare counts
@@ -3178,7 +3183,7 @@ analyst                       = 1
 render                        = 1
 verify                        = 1
 deliver                       = 1
-publish                       = 1          # ops/publish.py, after the desk in the morning chain and the full nightly. Held by data/PUBLISH_HELD until the first hand run has been read, and a held or ungated run records success with its reason
+publish                       = 1          # ops/publish.py, after the desk in the morning chain, the midday job and the full nightly. Held by data/PUBLISH_HELD until the first hand run has been read, and a held or ungated run records success with its reason
 desk                          = 1          # rebuilds site/PremarketDesk.html from runs/. Replaced the archive step on 2026-09-04, when build_archive was retired and the desk took its filename; it runs in the morning chain, the midday chain and the nightly, and never fails any of them. The nightly runs desk.compact one step before the prune as well, under this same name
 backfill                      = 1
 outcomes                      = 1

@@ -108,6 +108,11 @@ JOBS = {
     # the NEXT morning's packet, about eighteen hours later, and never rerun.
     # The marker is the LAST step job_midday.bat writes, the render, because a
     # scan that succeeded and a render that failed is still a failed job.
+    # [corrected 2026-09-11: was "the LAST step". The desk has followed the
+    # render since 2026-09-04 and publish since 2026-09-11. The render stays
+    # the marker because it is the last step the job's success depends on;
+    # the two after it never fail the job, and either one failing is read
+    # from its own job status record.]
     "midday": ("\\PremarketDesk\\midday", "job_midday.bat", "midday",
                r"===== midday render finished rc=0"),
     # The live ladder, every two minutes from 09:30 to 10:30. The marker is

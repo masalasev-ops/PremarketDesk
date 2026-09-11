@@ -15,6 +15,22 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-11, one hundred and sixteenth: the midday job publishes too
+
+The first afternoon the site was live it showed the morning's desk: the one
+upload was the 11:47 hand run, the 12:00 midday job rebuilt the desk locally
+at 12:02, and job_midday.bat had no publish step because the owner had named
+the morning chain and the nightly. The owner noticed from a phone and asked
+for it. job_midday.bat now runs ops.publish after its desk, under its own
+finished line, never failing the job. The midday marker in monitor_jobs.JOBS
+stays the render's rc=0, the last step the job's success depends on, and a
+comment there that still called the render the last step is corrected.
+
+Published by hand at 13:20 to catch the site up: PremarketDesk.html 773,997
+bytes, 3.0 percent of the per file limit, no refusal, and the production URL
+served the new page about ten seconds after the deploy. The ladder still does
+not publish, for the reason CRITERIA [Publish] gives.
+
 ## 2026-09-11, one hundred and fifteenth: the desk is published to Cloudflare Pages, and only site/ goes
 
 ops/publish.py uploads the contents of site/ to the Cloudflare Pages project

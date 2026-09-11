@@ -52,4 +52,13 @@ rem wrote. Never fails the chain.
 echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render >> "%LOG%" 2>&1
 echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
+rem Upload site/ to Cloudflare Pages so the published desk carries the
+rem Midday screen, and the ladder the 09:30 to 10:30 pass left behind. The
+rem same step as the morning chain's and the nightly's; see ops/publish.py.
+rem Added 2026-09-11 at the owner's request, the first day the site was live
+rem and showed the morning's desk all afternoon. Never fails the job.
+echo ===== publish started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m ops.publish >> "%LOG%" 2>&1
+echo ===== publish finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 exit /b 0
