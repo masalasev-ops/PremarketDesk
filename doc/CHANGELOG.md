@@ -48,7 +48,9 @@ which a claim checks against the .bat. A failed upload is a STEP FAILED read
 by steps_ok, never a reason to relaunch a morning. Not in the midday chain or
 the ladder. Held by data/PUBLISH_HELD: a scheduled run skips while it exists,
 a hand run does not, and the owner deletes it once this entry's first run has
-been read.
+been read. [amended 2026-09-11: read the same afternoon, every page checked on
+a phone, and the hold lifted. The 22:15 nightly is the first scheduled
+publish.]
 
 THE FIRST HAND RUN, 11:47 ET. Three files, 804,396 bytes: PremarketDesk.html
 764,680 bytes, 2.9 percent of the limit; Weekly.html 39,690; _redirects 26.
