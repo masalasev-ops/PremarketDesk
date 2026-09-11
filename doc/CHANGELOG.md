@@ -15,6 +15,113 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-11, one hundred and seventeenth: the desk says nothing about the machine that built it
+
+The owner, on the live site that afternoon, over the stamp line "packet 08:45
+ET, every figure is read from that session's packet, drawn and not
+described": no such declarations anywhere, nothing about packets, sources or
+anything else of the machine's, and scrubbed from what had already been
+uploaded. Then, before anything was uploaded or committed, to review it first.
+
+MEASURED FIRST, NOT GREPPED. The literal scan in
+claim_no_screen_explains_itself_in_this_projects_own_words had passed that
+stamp line, which it could not see: the scan reads string literals of five
+words or more and the line is split across markup. So every route of the
+published page was driven through tools/desk_smoke.js with every write kept:
+55 routes, 1,852 distinct lines of text. The machine was talking in three
+places. The desk's own wording ("every session on file", "from the vendor
+sweep", "Why, in the packet's own words"). The packet's diagnostics, quoted
+word for word by the evidence section and the Health screen. And the two
+reports, whose fixed sections ("Evidence gaps recorded by the scan", "packet
+generated ... by PremarketDesk", "Collector volume check") and older catalyst
+sentences ("EODHD news tag 'EARNINGS' mapped through CRITERIA.md") reach the
+Report screen, and whose frozen copies sat inside every session payload that
+anyone can decode.
+
+SPLIT, NOT DELETE. core/reader.py is the one vocabulary and three tools. The
+record keeps every word: report.md, report_midday.md, packet.json and each
+frozen desk.json.gz are untouched. What passes through reader is the
+reader's copy: report.html and report_midday.html, which are the emailed and
+the local pages, the reports inlined on the desk, and every session payload
+as desk.render publishes it, frozen ones included, since render re-renders
+each session's reports and filters its payload on the way into the page.
+
+  reader_markdown   sentence by sentence, a sentence that names the machine
+                    goes and the rest of its paragraph stays; benign mentions
+                    ("on the collector", "packet window") are rewritten
+                    first so the market summary keeps its tape sentence; the
+                    Source column leaves every table; the pre 2026-09-10
+                    catalyst sentence becomes the reader's half of what
+                    classify_catalyst writes now; Skips and traps keeps only
+                    the blocks a reader acts on, partial windows, traps and
+                    the thin trading warning with its per name lines, because
+                    a sentence filter alone left orphans such as "These
+                    ratios are published, screened on and scored like the
+                    rest"; a heading left with nothing under it goes.
+  desk_payload      drops what no screen reads and only the machine used
+                    (health, vintage, api_calls, generated, bars_source,
+                    prov membership and selection method, the ranking's
+                    cap_source and ranked_on, each failed_summary, the midday
+                    notes, the precedent commands) and filters the prose a
+                    screen does read. The
+                    refusal lines are published in the words the card
+                    already draws them in, the catalyst class as words, and
+                    a test run's fixture reason as the plain fact.
+  machine_words     the pattern both use and the claims check against.
+
+THE DESK. The Health screen is gone from the published desk, on the owner's
+choice between removing it, keeping it only locally and rewording it: every
+line was the machine describing itself. The owner then asked for it back for
+themselves, so every build also writes local/PremarketDesk.html, the same desk
+plus Health at #/session/<date>/health, beside the Weekly page and never
+uploaded. The published copy carries neither its code nor its figures, and
+its script and styles are written without their comments, by a tokenizer
+that knows regex literals; every route drawn from it matches the original
+byte for byte. config.LOCAL_DIR is new so the sandbox redirects local/, which
+the Weekly page's move had left unredirected. The one screen string the
+routes never reached, "The collector recorded N minutes of tape", now says
+the share traded in only N minutes before the open. So is the morning's evidence section, whose one reader's
+fact, thin trading at the level, is already a pill on each card. The stamp
+reads "prices as of 08:45 ET". The footer no longer explains how the volume
+estimate is gathered. The failure banner keeps its three readings, say in
+words that name no step, exit code, packet or path. The Sessions list lost its
+Packet column and the index its file sizes. Sessions, Record, Name, Similar,
+Midday, Session and Report say "past mornings tested", "every session",
+"company size" and the like where they said "replayed", "on file" and
+"market_cap". Condition and split keys go through one CONDITION_WORD table,
+and a note the filter emptied prints nothing instead of ". .". The glossary
+leaves out the entries that defined the machine ("packet", "pool had it").
+The header is one word, Premarket then Desk in the accent, after the owner
+read the old name with its separate DESK tag as the word printed twice.
+What else moved keeps its "How each list came out" lines, "5 selected of
+35 qualified of 35 considered on the premarket leg": the first pass dropped
+them for the word leg and the owner asked for them back, so leg is not a
+machine word, and the older sessions' raw list keys are put in words.
+
+THE WEEKLY PAGE LEFT site/. Every line of it is the machine's account of its
+week, steps and exit codes, the socket against the vendor, the shared key's
+cost, the score's field names, and site/ is exactly what publish uploads. It
+is written to local/Weekly.html now, gitignored, and the morning report's
+footer links there.
+
+FOUND ON THE WAY. The Session screen printed "undefined of 13" in its verdict
+card for every session frozen before booked_winners existed; the card now
+draws only when the count is there.
+
+HELD. data/PUBLISH_HELD was recreated the moment the owner asked to review,
+so the midday and nightly publishes stand down until it is deleted. The two
+deployments already on Cloudflare still serve the old page at their own
+addresses and are to be deleted once the scrubbed one is live.
+
+Guarded by two claims in test_publish, the published page and its decoded
+sessions and glossary naming no machine, with the Health screen gone, and a
+report keeping its reader's half. Both were broken on purpose: the payload
+filter switched off gave 854 failures and the report filter 16. Four claims
+in test_regressions that pinned the old design were amended, with the reason
+beside each, and the plain words claim's banned list gained packet, on file,
+vendor, replayed and reconstructed. The first full run caught the fixture
+reason, which only a sandbox session carries.
+
 ## 2026-09-11, one hundred and sixteenth: the midday job publishes too
 
 The first afternoon the site was live it showed the morning's desk: the one

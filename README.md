@@ -3,7 +3,8 @@
 A single machine, single user premarket desk for US equities. Every weekday
 morning it builds a watchlist, listens to the live premarket tape, scores the
 candidates, and puts the morning in front of you two ways before the open: as
-nine screens you look at, and as one report you read. Every evening it goes
+nine screens you look at, eight of them published, and as one report you read.
+Every evening it goes
 back and checks itself against what the vendors published.
 
 The design has one brain and one voice: **Python decides, the model narrates.**
@@ -125,7 +126,7 @@ shapes are good at different things.
 
 | | The desk | The morning report | The midday report | The weekly page |
 | --- | --- | --- | --- | --- |
-| File | `site/PremarketDesk.html` | `runs/YYYY-MM-DD/report.html` | `runs/YYYY-MM-DD/report_midday.html` | `site/Weekly.html` |
+| File | `site/PremarketDesk.html` | `runs/YYYY-MM-DD/report.html` | `runs/YYYY-MM-DD/report_midday.html` | `local/Weekly.html` |
 | Written | End of the morning chain, the midday chain and the nightly | 08:46 to 08:49 | 12:00 | 22:15 |
 | Covers | Every session on file | This morning, except one section | Today's session so far | A rolling trailing 7 days |
 | It answers | Which name is worth your next forty five minutes, and what the evidence behind it is worth | What the setup is on a name, and what would prove it wrong. Two thirds of it is a copy of the screens; the prose is the third that is not | What the open did to the levels the morning published | Whether the machine itself is working, over a week rather than a morning |
@@ -272,19 +273,24 @@ eligible share inside each bar, the totals, and where the median pick ends up.
 score, conviction, catalyst and what noon made of it, then its deck for each.
 Reached by clicking a ticker anywhere.
 
-**Health** `#/health/<date>`. Was the machine right that morning. Every check
-as a sentence with a verdict chip: the scheduled steps, the vendor budget, what
-the collector heard, the listening window it actually ran, the standing caveat
-that premarket volume is scaled rather than measured, which names cleared a
-floor only because of that scaling, and which tape the pictures were drawn
-from. The packet's own figures are folded underneath, because the working
-should be checkable and should not be the first thing read.
+**Health** `#/session/<date>/health`, on `local/PremarketDesk.html` only.
+Was the machine right that morning. Every check as a sentence with a verdict
+chip: the scheduled steps, the vendor budget, what the collector heard, the
+listening window it actually ran, the standing caveat that premarket volume is
+scaled rather than measured, which names cleared a floor only because of that
+scaling, and which tape the pictures were drawn from. It left the published
+desk on 2026-09-11, when the owner asked for nothing public about the machine,
+and came back the same day on the copy built for this machine: every build
+writes both, and only `site/` is uploaded. Since the same day nothing on the
+published desk, in the reports a reader sees, in the data the page carries or
+in its source names a packet, a vendor, a file or a step; the record on disk
+keeps every word. See `src/core/reader.py`.
 
 ### Reading a morning at 08:50
 
-1. **What the evidence is worth**, and the verdict at the foot. Before anything
-   the morning concluded, find out what its evidence is worth. Anything not
-   green is one click to Health.
+1. **What the evidence is worth.** Before anything the morning concluded,
+   find out what its evidence is worth: the verdict at the foot of the local
+   desk's Session screen, and anything not green is one click to Health.
 2. **The stat strip and How the list was cut.** A morning where the cap cut six
    names is a different morning from one where it cut none.
 3. **The gap spine.** Which name to look at, with why it gapped already beside
@@ -504,7 +510,7 @@ generated document.
 MOST OF IT IS A COPY OF THE SCREENS. Measured on `runs/2026-09-04/report.md`,
 47,000 characters: Python wrote 30,343 of them and the model 16,657. Every one
 of Python's 30,343 is a table, a count, a level or a quoted figure that the
-Morning, Record and Health screens now draw, usually better, because a bar
+Morning and Record screens now draw, usually better, because a bar
 compares and a number does not.
 
 The 16,657 are the reason to open it. They are 32 marked slots the model fills,
@@ -950,9 +956,10 @@ destination is not in the tree at all, and is the last row for that reason:
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, which is 45 since 2026-09-06, the socket's hard 50 less the five context tickers. That is not simply the top 45: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
-| `site/PremarketDesk.html` | The desk: every session on file in one self contained document, nine screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended |
+| `site/PremarketDesk.html` | The desk: every session on file in one self contained document, eight screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended. This is the published copy, so its script and styles are written without their comments |
 | `runs/YYYY-MM-DD/desk.json.gz` | That session's compacted payload, frozen by `desk/compact.py` in the nightly. It is what the desk inlines, and the file `prune_data.py` requires before it will drop the duplicate premarket snapshot, because the run copy is the only exact record of the tape the morning saw |
-| `site/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own |
+| `local/PremarketDesk.html` | The same desk as `site/PremarketDesk.html` plus the Health screen and the figures it reads, with the script's comments kept. Written by the same render, every time, and never published: it is the one to open on this machine |
+| `local/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own. Under `local/` and not `site/` since 2026-09-11, because it is the machine's own account of its week and `site/` is what gets published |
 | `site/_redirects` | The one tracked file under `site/`: `/ /PremarketDesk.html 302`, which Cloudflare Pages reads so the bare project URL opens the desk. Nothing that renders writes it. `ops/publish.py` uploads the whole folder, and only this folder, to Cloudflare Pages |
 | `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the six artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, its stats and subscriptions sidecars, the frozen 08:45 packet a morning was judged on, and the report in markdown and HTML, because the same input does not produce the same words twice. A dated snapshot of `data/quantifier-flags.jsonl` sits beside them. See `doc/CRITERIA.md [Backup]` |
 

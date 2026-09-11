@@ -18,6 +18,61 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-11, twenty eighth: the reader's copy is filtered, the record is not
+
+The owner asked for nothing about the machine on the public desk, and for it
+scrubbed from what was already uploaded. Three ways to do that were weighed.
+
+Rewriting every generator at its source, render_report's fixed sections, the
+midday renderer, the scan's gap sentences and the precedent notes, was
+rejected as the whole answer. It fixes tomorrow and leaves every frozen
+session exactly as it was, and the frozen sessions are the ones already
+public. It would also have taken the working out of report.md, and the suite's
+claims about the evidence roll, the gaps and the containment guard read that
+file because it is the record.
+
+Filtering in the page's script was rejected because it hides and does not
+remove. The payload is published; anyone who decodes it reads what the screen
+declined to draw.
+
+So the filter sits where the copy for a reader is made, in one module used by
+all three places that make one: the report renderers for report.html, compact
+for the desk's reports, and desk.render for every payload on its way into the
+page. The record stays whole. That is the Screens memo's rule for the
+catalyst sentence, split rather than delete, applied to everything.
+
+A SENTENCE IS THE UNIT, not a paragraph and not a word. A paragraph dropped for
+one machine word lost the morning's market summary. A word dropped mid
+sentence leaves grammar nobody wrote. A sentence either names the machine or
+it does not, and the benign cases are rewritten before the test so they
+survive. The one place that was not enough is Skips and traps, which is
+mostly diagnostics: there the reader's blocks are named and the rest go.
+
+THE HEALTH SCREEN IS KEPT ON THIS MACHINE. It went from both desks first,
+the owner's choice, and the owner asked for it back the same day for
+themselves: it was important to them. So one render builds two desks. The one
+in site/ is published and carries neither the screen's code nor its figures;
+the one in local/, beside the Weekly page, is the same desk plus Health and
+the two payload keys it reads. The code sits in assets.HEALTH_JS and goes in
+at a marker inside the application, because it needs the helpers every other
+screen uses, and the published build puts nothing there. A copy of the page
+with the screen hidden by a flag was rejected for the reason filtering in the
+script was: the code and the figures would still be published. config gained
+LOCAL_DIR so the sandbox redirects the folder, as it does site/.
+
+THE SOURCE IS PUBLISHED TOO. The page's script and styles carried their
+reasons as comments, the packet, what was replayed, what is on file, one
+view-source away. The published copy is written without them, by a tokenizer
+that knows strings and regex literals: the script holds /^[><]=?\s*/, which
+closes a block comment for any stripper that does not. Every route drawn from
+the stripped script matches the original byte for byte. Field names in the
+code stay, because a page that reads data names its fields.
+
+WHAT IS NOT FILTERED. Headlines and company names are the market's words and
+pass whatever they say, since a company can be called Pool or Alpaca. The
+news source beside a headline (finance.yahoo.com) is attribution of a story
+and not a statement about this machine, and it stays.
+
 ## 2026-09-11, twenty seventh: publish rides the chains and is held by a marker, not a task
 
 The owner asked for a publish step shaped like deliver and registered the way

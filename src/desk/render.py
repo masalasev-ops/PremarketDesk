@@ -1,5 +1,6 @@
-"""Write site/PremarketDesk.html: one document, nine screens, every session
-inlined.
+"""Write site/PremarketDesk.html: one document, eight screens, every session
+inlined. And local/PremarketDesk.html beside it, the same desk with the Health
+screen as a ninth, for this machine only; see LOCAL_KEEP.
 
 A FULL REBUILD FROM WHAT IS ON DISK, never an append, so running it twice is
 the same as running it once and deleting the file costs nothing but the
@@ -38,6 +39,7 @@ from core import ettime
 from core import files
 from core import glossary
 from core import page
+from core import reader
 from core import store
 from desk import assets
 from desk import compact
@@ -51,6 +53,13 @@ _CRIT = criteria.load()
 # The desk carries the written reports for exactly that reason, so nothing the
 # old page did is lost with its name.
 DESK_FILE = "PremarketDesk.html"
+
+# TWO DESKS SINCE 2026-09-11. site/PremarketDesk.html is published by
+# ops.publish and says nothing about the machine. config.LOCAL_DIR's copy,
+# beside the Weekly page, is the same desk plus the Health screen, which the
+# owner took off the public site and wanted kept for themselves the same day.
+# These are the payload keys that screen reads and the published copy drops.
+LOCAL_KEEP = ("health", "bars_source")
 
 # The knobs the application reads. Passed in rather than restated in
 # JavaScript, so CRITERIA stays the one place a display bound is written down
@@ -97,16 +106,129 @@ def index_rows() -> list[dict[str, Any]]:
         return [dict(row) for row in cursor.fetchall()]
 
 
-def payloads(dates: list[str]) -> tuple[dict[str, str], int, int]:
+# ------------------------------------------------ the published copy's source
+#
+# THE COMMENTS STAY ON THIS MACHINE. The desk's script and stylesheets are
+# written with their reasons beside them, and those reasons are the machine
+# describing itself: the packet, the collector, what was replayed and why.
+# The owner asked for none of that where a reader can see it, and a page's
+# source is one view-source away. So the published copy is written without
+# them; the local copy and assets.py keep every word.
+#
+# A TOKENIZER AND NOT A PATTERN, because the script holds a regular expression
+# that reads /^[><]=?\s*/, whose last two characters close a block comment
+# for any stripper that does not know it is inside a regex. Strings and regex
+# literals are copied whole; a slash starts a regex where an expression can
+# start, which is after an operator, an opening bracket or a keyword.
+
+_REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
+_REGEX_KEYWORDS = {"return", "typeof", "case", "in", "of", "delete", "void",
+                   "throw", "new", "else", "do"}
+
+
+def strip_js_comments(source: str) -> str:
+    """source with every // and /* */ comment removed and blank lines closed."""
+    out: list[str] = []
+    i, n = 0, len(source)
+    last, word = "", ""
+    while i < n:
+        c = source[i]
+        following = source[i + 1] if i + 1 < n else ""
+        if c in "\"'":
+            j = i + 1
+            while j < n and source[j] != c:
+                if source[j] == "\n":
+                    raise ValueError(f"an unterminated string at offset {i}")
+                j += 2 if source[j] == "\\" else 1
+            out.append(source[i:j + 1])
+            i, last, word = j + 1, c, ""
+            continue
+        if c == "/" and following == "/":
+            end = source.find("\n", i)
+            i = n if end < 0 else end
+            continue
+        if c == "/" and following == "*":
+            end = source.find("*/", i + 2)
+            if end < 0:
+                raise ValueError(f"an unterminated comment at offset {i}")
+            out.append("\n" if "\n" in source[i:end] else " ")
+            i = end + 2
+            continue
+        if c == "/" and (not last or last in _REGEX_AFTER or word in _REGEX_KEYWORDS):
+            j, in_class = i + 1, False
+            while j < n:
+                d = source[j]
+                if d == "\\":
+                    j += 2
+                    continue
+                if d == "\n":
+                    raise ValueError(f"an unterminated regex at offset {i}")
+                if d == "[":
+                    in_class = True
+                elif d == "]":
+                    in_class = False
+                elif d == "/" and not in_class:
+                    break
+                j += 1
+            j += 1
+            while j < n and source[j].isalpha():
+                j += 1
+            out.append(source[i:j])
+            i, last, word = j, "/", ""
+            continue
+        out.append(c)
+        if c.isalnum() or c in "_$":
+            joined = i > 0 and (source[i - 1].isalnum() or source[i - 1] in "_$")
+            word = word + c if joined and word else c
+            last = c
+        elif not c.isspace():
+            last, word = c, ""
+        i += 1
+    lines = "".join(out).split("\n")
+    return "\n".join(line.rstrip() for line in lines if line.strip()) + "\n"
+
+
+def _published(document: str) -> str:
+    """The page as uploaded: its script and styles without their comments.
+
+    Only a script with no attributes is the application; the JSON blocks carry
+    an id and are data, and are left exactly as they are. page.SHELL_MARK
+    stays: it is the stamp the suite finds every page by, and says nothing.
+    """
+    import re
+
+    document = re.sub(r"<script>(.*?)</script>",
+                      lambda m: f"<script>{strip_js_comments(m.group(1))}</script>",
+                      document, flags=re.S)
+
+    def css(match: re.Match[str]) -> str:
+        return match.group(0) if match.group(0) == page.SHELL_MARK else ""
+
+    return re.sub(r"(<style[^>]*>)(.*?)(</style>)",
+                  lambda m: m.group(1) + re.sub(r"/\*.*?\*/", css, m.group(2), flags=re.S)
+                  + m.group(3), document, flags=re.S)
+
+
+def _encode(payload: dict[str, Any]) -> tuple[str, int]:
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.b64encode(gzip.compress(raw, 9)).decode("ascii"), len(raw)
+
+
+def payloads(dates: list[str]) -> tuple[dict[str, str], dict[str, str], int, int]:
     """Frozen payload per session, gzipped and base64 encoded for inlining.
 
     A session with no frozen payload is compacted on the spot rather than
     skipped, so a desk built before the nightly has ever run still carries
-    every session it can see. Returns the map and the raw and encoded totals,
-    which the caller reports because a page that silently grew past what a
-    browser will open is the failure this counting exists to catch.
+    every session it can see. Returns the published map, the local map, and
+    the published map's raw and encoded totals, which the caller reports
+    because a page that silently grew past what a browser will open is the
+    failure this counting exists to catch.
+
+    TWO MAPS FROM ONE PASS, so each session's reports are rendered once. The
+    local one keeps LOCAL_KEEP, what the Health screen reads; see render().
     """
     out: dict[str, str] = {}
+    local: dict[str, str] = {}
     raw_total = encoded_total = 0
     for date in dates:
         payload = compact.load_frozen(date)
@@ -114,15 +236,23 @@ def payloads(dates: list[str]) -> tuple[dict[str, str], int, int]:
             payload = compact.compact_session(date)
         if payload is None:
             continue
-        raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-        encoded = base64.b64encode(gzip.compress(raw, 9)).decode("ascii")
+        # THE PUBLISHED COPY, and this is the one place every session passes
+        # through on its way into the page, frozen ones included. A payload
+        # frozen before 2026-09-11 carries its report rendered in full and the
+        # keys only the Health screen reads, so both are redone here rather
+        # than trusted from the freeze. The frozen file keeps them.
+        run_dir = config.run_path(date)
+        payload = dict(payload, report=compact._rendered(run_dir, "report.md"),
+                       report_midday=compact._rendered(run_dir, "report_midday.md"))
+        encoded, raw = _encode(reader.desk_payload(payload))
         out[date] = encoded
-        raw_total += len(raw)
+        raw_total += raw
         encoded_total += len(encoded)
-    return out, raw_total, encoded_total
+        local[date] = _encode(reader.desk_payload(payload, keep=LOCAL_KEEP))[0]
+    return out, local, raw_total, encoded_total
 
 
-def _nav() -> str:
+def _nav(local: bool = False) -> str:
     # SHORT, because these sit in a menu bar. "Ladder" is a trading price
     # ladder and named nothing a reader could see; "Precedent" is a word
     # about the screen rather than about what it shows. Open and Similar
@@ -144,9 +274,17 @@ def _nav() -> str:
              ("midday", "#/", "Midday"),
              ("report", "#/", "Report"),
              ("sessions", "#/sessions", "Sessions"),
-             ("record", "#/record", "Record"), ("health", "#/health", "Health")]
-    # Morning, Midday, Report and Health resolve against whichever session is
+             ("record", "#/record", "Record")]
+    # Morning, Midday and Report resolve against whichever session is
     # selected, so their href is rewritten by setNav rather than fixed here.
+    #
+    # HEALTH IS ON THE LOCAL DESK ONLY since 2026-09-11. It left the published
+    # one on the owner's instruction once the desk was public: every line of
+    # it was the machine describing itself, its packet, its vendor budget and
+    # its listener, and none of it was about a share. The owner wanted it kept
+    # for themselves, so the copy built into config.LOCAL_DIR still has it.
+    if local:
+        items.append(("health", "#/", "Health"))
     #
     # REPORT JOINED ON 2026-09-04, when the owner opened the desk and asked
     # where the morning report was. It had exactly one inbound link in the
@@ -243,42 +381,38 @@ def alert_banner(today: str | None = None) -> str:
     if not failures and not overdue and not report_missing:
         return ""
 
-    items = [job_status.describe_failure(row) for row in failures]
-    items += [job_status.describe(row) for row in overdue]
-    lines = "".join(f"<li>{html.escape(text)}</li>" for text in items)
-
+    # IN THE READER'S WORDS since 2026-09-11, when the desk went public and the
+    # owner asked for nothing on it about packets, steps or files. The step
+    # names, exit codes and paths this used to list are the machine's working
+    # and are in the job status record and the logs, where the owner reads
+    # them; what a reader of the page needs is whether the screens below are
+    # this morning and whether a report exists. The three readings above are
+    # kept exactly, only said without the machine's names.
     if report_missing:
         # Unresolved by definition, whatever the step records say. A morning
         # with no report is the state itself and not a report of one, so this
-        # stands even when every failed step was later rerun green: something
-        # rewrote the packet and no report came out of it.
+        # stands even when every failed step was later rerun green.
         klass, headline = "deskalert", f"No morning report for {day}"
         if not screens_are_this_session:
-            lead = ("No packet was written for this session, so the screens "
-                    "below are the last session that completed, not this "
-                    "one. Every figure on them is that earlier morning.")
+            lead = ("This morning's update did not complete, so the screens "
+                    "below are the last session that did, not this one. "
+                    "Every figure on them is that earlier morning.")
         elif draft_on_disk:
-            lead = ("A report was written and then withheld, so there is "
-                    "nothing to deliver for this session. The screens below "
-                    "ARE this session, drawn from its own packet by the "
-                    "steps that ran after the failure. The draft is on disk "
-                    f"at runs/{day}/report.md and the step's line below "
-                    "says what stopped it.")
+            lead = ("This morning's report was written and then held back, so "
+                    "there is no report for this session. The screens below "
+                    "are this session.")
         else:
             lead = ("No report was written for this session. The screens "
-                    "below ARE this session, drawn from its own packet by "
-                    "the steps that ran after the failure.")
+                    "below are this session.")
     else:
-        klass, headline = "deskalert warn", f"Still failing on {day}"
+        klass, headline = "deskalert warn", f"Part of {day}'s update did not finish"
         lead = ("The report was written, so the screens below are this "
-                "session. These steps failed and have NOT been rerun green, "
-                "so what they produce may be missing or stale. This clears "
-                "itself on the next desk render once they succeed.")
+                "session, but some of what they show may be missing or out of "
+                "date until the update finishes.")
 
     return (f'<div class="{klass}" role="alert">'
             f"<h2>{html.escape(headline)}</h2>"
-            f"<p>{html.escape(lead)}</p>"
-            f"<ul>{lines}</ul></div>")
+            f"<p>{html.escape(lead)}</p></div>")
 
 
 def glossary_json() -> str:
@@ -297,18 +431,23 @@ def glossary_json() -> str:
     entries = {name.lower(): text for name, text in glossary.COLUMNS.items()}
     # TERMS last: they are the fuller of the two where a word is in both.
     entries.update({name.lower(): text for name, text in glossary.TERMS})
+    # Published with the page, so an entry that defines the machine itself,
+    # "packet" and its kind, is left out: no screen shows those words any more
+    # and the definition was the machine describing its own files.
+    entries = {name: text for name, text in entries.items()
+               if not reader.machine_words(f"{name} {text}")}
     return json.dumps(entries, separators=(",", ":"))
 
 
-def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
+def body(index: dict[str, Any], blobs: dict[str, str], local: bool = False) -> str:
     index_json = json.dumps(index, separators=(",", ":"))
     blob_json = json.dumps(blobs, separators=(",", ":"))
     gloss_json = glossary_json()
     return f"""
 <div class="bar">
   <div class="bar-in">
-    <div class="mark"><b>PremarketDesk</b><span>Desk</span></div>
-    {_nav()}
+    <div class="mark"><b>Premarket<span>Desk</span></b></div>
+    {_nav(local)}
     <div class="bar-actions noprint">
       <div class="picker-wrap" id="picker-wrap">
         <button class="btn" id="session-btn" type="button" aria-haspopup="dialog"
@@ -332,20 +471,16 @@ def body(index: dict[str, Any], blobs: dict[str, str]) -> str:
   <div class="eyebrow" id="stamp">
     <span><b class="mono" id="stamp-date">n/a</b> session</span>
     <span>&middot;</span>
-    <span>packet <b class="mono" id="stamp-run">n/a</b> ET</span>
-    <span>&middot;</span>
-    <span>every figure is read from that session's packet, drawn and not described</span>
+    <span>prices as of <b class="mono" id="stamp-run">n/a</b> ET</span>
   </div>
   <div id="screen"></div>
   <p class="foot">
     These are prices from the hours before the market opens, when far fewer
     shares change hands than during the day. They are unofficial. Wherever a
-    screen says how busy a share's trading has been, that figure is an
-    estimate: this system hears only a fraction of what trades before the
-    open and scales up from the part it heard. Overnight it fetches the real
-    figure and writes it beside the estimate, never over it. The conditions a
-    name has to pass to reach a list are starting values that nobody has yet
-    shown to work. Nothing here is advice.
+    screen says how busy a share's trading has been before the open, that
+    figure is an estimate. The conditions a name has to pass to reach a list
+    are starting values that nobody has yet shown to work. Nothing here is
+    advice.
   </p>
 </div>
 <script id="desk-glossary" type="application/json">{gloss_json}</script>
@@ -367,24 +502,34 @@ def render(limit: int | None = None, compact_first: bool = True) -> dict[str, An
         rows = index_rows()
     rows = rows[:limit]
     dates = [r["date"] for r in rows]
-    blobs, raw_total, encoded_total = payloads(dates)
-    rows = [r for r in rows if r["date"] in blobs]
+    blobs, local_blobs, raw_total, encoded_total = payloads(dates)
+    # The index is published too, and a session's file size on this machine
+    # is not a fact about any share. See core/reader.
+    rows = [{key: value for key, value in r.items()
+             if key not in ("packet_bytes", "packet_compressed")}
+            for r in rows if r["date"] in blobs]
 
     index = {"built_at": ettime.stamp(), "knobs": knobs(), "sessions": rows}
-    document = page.shell(
-        title="PremarketDesk", body=body(index, blobs),
-        extra_css=assets.DECK_CSS,
-        script=f"<script>{assets.DECK_JS}</script>",
-        # REPORT_CSS comes along now that the desk carries the written
-        # reports. Safe beside DECK_CSS by construction: every one of its 46
-        # selectors is scoped under .report and none of them is bare.
-        include_report_css=True)
-
-    config.SITE_DIR.mkdir(parents=True, exist_ok=True)
-    destination = config.SITE_DIR / DESK_FILE
-    files.write_text_atomically(destination, document, attempts=3, retry_s=0.4)
-    return {"path": destination, "sessions": len(rows), "bytes": len(document),
-            "raw": raw_total, "encoded": encoded_total}
+    written = {}
+    for local, folder, sessions, extra in (
+            (False, config.SITE_DIR, blobs, ""),
+            (True, config.LOCAL_DIR, local_blobs, assets.HEALTH_JS)):
+        document = page.shell(
+            title="PremarketDesk", body=body(index, sessions, local=local),
+            extra_css=assets.DECK_CSS,
+            script=f"<script>{assets.DECK_JS.replace(assets.EXTRA_MARKER, extra)}</script>",
+            # REPORT_CSS comes along now that the desk carries the written
+            # reports. Safe beside DECK_CSS by construction: every one of its
+            # 46 selectors is scoped under .report and none of them is bare.
+            include_report_css=True)
+        if not local:
+            document = _published(document)
+        folder.mkdir(parents=True, exist_ok=True)
+        destination = folder / DESK_FILE
+        files.write_text_atomically(destination, document, attempts=3, retry_s=0.4)
+        written[local] = (destination, len(document))
+    return {"path": written[False][0], "sessions": len(rows), "bytes": written[False][1],
+            "local_path": written[True][0], "raw": raw_total, "encoded": encoded_total}
 
 
 def compact_for_this_run(recompact_all: bool = False) -> None:
@@ -472,6 +617,7 @@ def main(argv: list[str] | None = None) -> int:
           f"{result['raw'] / 1048576:.2f} MB of payload became "
           f"{result['encoded'] / 1048576:.2f} MB encoded")
     print(f"desk: wrote {result['path']}, {result['bytes'] / 1048576:.2f} MB")
+    print(f"desk: wrote {result['local_path']}, the copy with Health, never published")
     job_status.produced("sessions on the desk", result["sessions"])
     return 0
 

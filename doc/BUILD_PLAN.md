@@ -279,7 +279,7 @@ at the root and is gitignored along with .env.
   when a quota thinned rerun would otherwise have replaced a fuller packet;
   and premarket_snapshot.superseded.jsonl, the earlier snapshot a rerun of the
   scan set aside rather than overwrote
-- site/Weekly.html: one page saying whether the week worked, rendered by
+- local/Weekly.html: one page saying whether the week worked, rendered by
   night/weekly_page.py at the end of the 22:15 nightly. Five sections: did it
   run, is the data trustworthy, what did it publish, what did it cost, and
   does the score order anything. It reads

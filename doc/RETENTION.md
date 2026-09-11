@@ -345,3 +345,5 @@ the name of a key.
   45 KB, rebuilt from runs/ and the database by the nightly, and it answers
   one question the desk's Record screen does not: what the week cost.
   Kept for now. SCREENS.md carries the same question from the other side.
+  [amended 2026-09-11: Weekly.html is written to local/ now, not site/, so
+  it is never published; see night.weekly_page.OUT_PATH.]

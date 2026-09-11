@@ -400,6 +400,192 @@ def claim_the_redirect_is_tracked_and_says_one_thing(failures: list[str]) -> Non
           "sends the bare URL to the desk")
 
 
+def claim_the_published_desk_names_no_machine(failures: list[str]) -> None:
+    """The page publish uploads carries no word about the machine that built it.
+
+    The owner, 2026-09-11, on the live site: nothing about packets, sources,
+    vendors or how a figure was produced, anywhere, and scrubbed from what had
+    already gone up. Built here from the sandbox's copy of the real sessions,
+    so the claim reads what a real render would publish. Four surfaces, all
+    public: the page text outside its scripts, every session payload once
+    decoded, the glossary, and the page's own source. And the Health screen,
+    every line of which is the machine describing itself, is on the copy
+    built for this machine and nowhere in the published one, which is what
+    the owner asked for once it had gone from both.
+    """
+    import re as _re
+
+    from core import reader
+    from desk import render as desk_render
+
+    result = desk_render.render(compact_first=False)
+    page = Path(result["path"]).read_text(encoding="utf-8")
+    blocks = dict(_re.findall(
+        r'<script id="([^"]+)" type="application/json">(.*?)</script>', page, _re.S))
+    shell = _re.sub(r"<script.*?</script>|<style.*?</style>", " ", page, flags=_re.S)
+    for hit in reader.machine_words(_re.sub(r"<[^>]+>", " ", shell)):
+        failures.append(f"the published page's own text says {hit!r}")
+
+    found = 0
+
+    def walk(value: Any, where: str) -> None:
+        nonlocal found
+        if isinstance(value, dict):
+            for key, item in value.items():
+                walk(item, f"{where}.{key}")
+        elif isinstance(value, list):
+            for item in value:
+                walk(item, f"{where}[]")
+        elif isinstance(value, str) and " " in value:
+            found += 1
+            words = reader.machine_words(_re.sub(r"<[^>]+>", " ", value))
+            if words:
+                failures.append(f"published session data {where} says {words[:3]}: "
+                                f"{value[:100]!r}")
+
+    for day, blob in json.loads(blocks.get("desk-payloads", "{}")).items():
+        payload = json.loads(gzip.decompress(base64.b64decode(blob)))
+        # Headlines and company names are the market's words, whatever they
+        # say, and the reader filter leaves them alone for that reason.
+        for candidate in payload.get("candidates") or []:
+            candidate.pop("headlines", None)
+            candidate.pop("name", None)
+        walk(payload, day)
+    if found < 50:
+        failures.append(f"only {found} strings were read out of the published "
+                        "sessions, so this claim is scanning almost nothing")
+    for term, text in json.loads(blocks.get("desk-glossary", "{}")).items():
+        if reader.machine_words(f"{term} {text}"):
+            failures.append(f"the published glossary defines {term!r} in the "
+                            "machine's own words")
+
+    # THE SOURCE, which is one view-source away. Its comments are the machine
+    # explaining itself and are not published: stripping the published
+    # script again changes nothing, so none is left. And no string in it that
+    # a screen could print names the machine, including the ones on branches
+    # the sandbox's sessions never take, which the scan above cannot reach.
+    scripts = _re.findall(r"<script>(.*?)</script>", page, _re.S)
+    for script in scripts:
+        if desk_render.strip_js_comments(script) != script:
+            failures.append("the published script still carries comments")
+        for match in _re.finditer(r'"((?:[^"\\\n]|\\.)*)"|\'((?:[^\'\\\n]|\\.)*)\'', script):
+            literal = _re.sub(r"<[^>]+>", " ", match.group(1) or match.group(2) or "")
+            if " " in literal.strip() and reader.machine_words(literal):
+                failures.append(f"the published script can print {literal[:90]!r}")
+    from core import page as core_page
+    for style in _re.findall(r"<style[^>]*>(.*?)</style>", page, _re.S):
+        if "/*" in style.replace(core_page.SHELL_MARK, ""):
+            failures.append("a published stylesheet still carries a comment")
+
+    # HEALTH IS LOCAL. Not in the published page's menu, script or data, and
+    # in the copy built beside the Weekly page, with the figures it reads.
+    from desk import assets
+    if ('data-nav="health"' in page or "healthChecks" in page
+            or assets.HEALTH_JS.strip()[:200] in page):
+        failures.append("the Health screen is on the published desk")
+    for day, blob in json.loads(blocks.get("desk-payloads", "{}")).items():
+        if "health" in json.loads(gzip.decompress(base64.b64decode(blob))):
+            failures.append(f"the published {day} session carries its health figures")
+    local_page = Path(result["local_path"]).read_text(encoding="utf-8")
+    if Path(result["local_path"]).parent == Path(result["path"]).parent:
+        failures.append("the desk with Health was written into the published folder")
+    if 'data-nav="health"' not in local_page or "healthChecks" not in local_page:
+        failures.append("the local desk has no Health screen")
+    local_blobs = json.loads(_re.search(
+        r'<script id="desk-payloads" type="application/json">(.*?)</script>',
+        local_page, _re.S).group(1))
+    if local_blobs and not any("health" in json.loads(gzip.decompress(base64.b64decode(b)))
+                               for b in local_blobs.values()):
+        failures.append("the local desk's sessions carry no health figures to draw")
+    print(f"  no machine   the published page, {found} strings across its sessions, "
+          "its source and the glossary name no packet, vendor, file or step; "
+          "Health is on the local desk only")
+
+
+def claim_a_report_keeps_its_reader_half(failures: list[str]) -> None:
+    """reader_markdown drops the machine and keeps every sentence about a share."""
+    from core import reader
+
+    source = "\n".join([
+        "# PremarketDesk: a mood",
+        "",
+        "2026-09-11, packet generated 2026-09-11T08:45:02-04:00, generated by PremarketDesk.",
+        "",
+        "Nothing here is advice, the screen thresholds are unvalidated seed values, "
+        "and every figure below was measured by this system rather than written by the model.",
+        "",
+        "## Summary",
+        "",
+        "SPY is up 0.66 percent on the collector. 20 evidence gaps recorded in the packet.",
+        "",
+        "## Market trends",
+        "",
+        "| Label | Last | Source |",
+        "|---|---|---|",
+        "| SPY | 762.80 | collector |",
+        "",
+        "## Premarket gappers",
+        "",
+        "ASTS, AST SpaceMobile. Catalyst class analyst_action, catalyst_found true. "
+        "catalyst_why: EODHD news tag 'PRICE TARGET' mapped through CRITERIA.md, from "
+        "'Berenberg launches space coverage'.",
+        "",
+        "## Skips and traps",
+        "",
+        "Traps: 0 of 10 candidates gap up against the balance of their own headlines.",
+        "",
+        "1 of 10 candidates carry a premarket RVOL built on a THIN denominator. "
+        "These ratios are published, screened on and scored like the rest: CPRT.",
+        "",
+        "- CPRT: its denominator is a 5,100 share median",
+        "",
+        "Evidence gaps recorded by the scan, 2 in total:",
+        "",
+        "- short interest: 8 fundamentals call(s) at ten credits each.",
+    ])
+    out = reader.reader_markdown(source)
+    for word in reader.machine_words(out):
+        failures.append(f"a filtered report still says {word!r}")
+    for kept in ("SPY is up 0.66 percent.", "| SPY | 762.80 |", reader.DISCLAIMER,
+                 "Catalyst: analyst action, from the story 'Berenberg launches space coverage'.",
+                 "Traps: 0 of 10 candidates"):
+        if kept not in out:
+            failures.append(f"a filtered report lost the reader's sentence {kept!r}")
+    for gone in ("These ratios are published", "CPRT: its denominator", "Source"):
+        if gone in out:
+            failures.append(f"a filtered report kept the diagnostic {gone!r}")
+    print("  reader copy  a report loses its packet stamp, its Source column, its "
+          "diagnostics and every machine sentence, and keeps the rest word for word")
+
+
+def claim_each_list_keeps_its_line(failures: list[str]) -> None:
+    """The What else moved screen's "How each list came out" lines survive.
+
+    The first scrub dropped them for saying "leg", and the owner asked for
+    them back the same day: the counts are a reader's fact. Both shapes are
+    checked, the one morning.scan writes and the one sessions before
+    2026-09-03 froze with the list and leg keys raw.
+    """
+    from core import reader
+
+    now = ("The prior session by sigma list is ranked: 5 selected of 2734 "
+           "qualified of 2751 considered on the prior session leg.")
+    old = ("The prior_session_by_sigma list is ranked: 5 selected of 2750 "
+           "qualified of 2751 considered on the prior_session leg.")
+    payload = {"mover_lists": {"a": {"state": "ranked", "text": now},
+                               "b": {"state": "ranked", "text": old}}}
+    lists = reader.desk_payload(payload)["mover_lists"]
+    if lists["a"].get("text") != now:
+        failures.append(f"a list's line did not reach the published desk: {lists['a']!r}")
+    wanted = old.replace("prior_session_by_sigma", "prior session by sigma").replace(
+        "prior_session", "prior session")
+    if lists["b"].get("text") != wanted:
+        failures.append("an older session's list line did not reach the published "
+                        f"desk in words: {lists['b']!r}")
+    print("  list lines   each ranked list's counts reach the desk, older sessions "
+          "put in words")
+
+
 def main(argv: list[str] | None = None) -> int:
     if config.RUNS_DIR == config.PROJECT_ROOT / "runs":
         print("SKIP  not running under the sandbox; use python -m tests.run_tests")
@@ -414,6 +600,9 @@ def main(argv: list[str] | None = None) -> int:
     run_claim(failures, claim_the_size_report_names_every_file, failures)
     run_claim(failures, claim_a_clean_run_uploads_the_folder_and_nothing_else, failures)
     run_claim(failures, claim_the_redirect_is_tracked_and_says_one_thing, failures)
+    run_claim(failures, claim_the_published_desk_names_no_machine, failures)
+    run_claim(failures, claim_a_report_keeps_its_reader_half, failures)
+    run_claim(failures, claim_each_list_keeps_its_line, failures)
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")

@@ -57,7 +57,7 @@ from core import config
 # added here; the mtime check below is what catches it if nobody remembers.
 _CONFIG_PATHS = (
     "DATA_DIR", "PREMARKET_DIR", "RUNS_DIR", "LOGS_DIR", "SITE_DIR",
-    "STUDY_DIR", "SESSION_DIR",
+    "LOCAL_DIR", "STUDY_DIR", "SESSION_DIR",
     "DB_PATH", "UNIVERSE_PATH", "WATCHLIST_PATH", "CA_BUNDLE_PATH",
 )
 
@@ -89,6 +89,7 @@ _DERIVED = (
 REAL_RUNS = config.RUNS_DIR
 REAL_DATA = config.DATA_DIR
 REAL_SITE = config.SITE_DIR
+REAL_LOCAL = config.LOCAL_DIR
 # Captured before redirection like the others, and used by the sampler
 # exemption below, which has to know where the REAL logs directory is while
 # config.LOGS_DIR is pointing at a sandbox copy.
@@ -207,12 +208,14 @@ def _redirect_config(root: Path) -> None:
     config.RUNS_DIR = root / "runs"
     config.LOGS_DIR = root / "logs"
     config.SITE_DIR = root / "site"
+    config.LOCAL_DIR = root / "local"
     config.DB_PATH = config.DATA_DIR / "premarketdesk.db"
     config.UNIVERSE_PATH = config.DATA_DIR / "universe.json"
     config.WATCHLIST_PATH = config.DATA_DIR / "watchlist.json"
     config.CA_BUNDLE_PATH = config.DATA_DIR / "ca-bundle.pem"
     for directory in (config.DATA_DIR, config.PREMARKET_DIR, config.RUNS_DIR,
-                      config.LOGS_DIR, config.SITE_DIR, config.STUDY_DIR):
+                      config.LOGS_DIR, config.SITE_DIR, config.LOCAL_DIR,
+                      config.STUDY_DIR):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -742,7 +745,8 @@ def _rebase(path: Path) -> Path | None:
     for real, live in ((REAL_DATA, config.DATA_DIR),
                        (REAL_RUNS, config.RUNS_DIR),
                        (REAL_LOGS, config.LOGS_DIR),
-                       (REAL_SITE, config.SITE_DIR)):
+                       (REAL_SITE, config.SITE_DIR),
+                       (REAL_LOCAL, config.LOCAL_DIR)):
         try:
             relative = path.relative_to(real)
         except ValueError:
@@ -1017,6 +1021,7 @@ def activate(copy_data: bool = True) -> Iterator[Path]:
         config.RUNS_DIR = runs_copy
         config.LOGS_DIR = sandbox / "logs"
         config.SITE_DIR = sandbox / "site"
+        config.LOCAL_DIR = sandbox / "local"
         config.DB_PATH = data_copy / "premarketdesk.db"
         config.UNIVERSE_PATH = data_copy / "universe.json"
         config.WATCHLIST_PATH = data_copy / "watchlist.json"

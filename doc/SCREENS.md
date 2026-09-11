@@ -465,6 +465,13 @@ morning on file can be checked and not only the newest.]
 
 Route: `#/health`, or `#/health/<date>`.
 
+[amended 2026-09-11: REMOVED from the published desk on the owner's
+instruction once it was public, because every line of it was the machine
+describing itself, and KEPT on local/PremarketDesk.html, the copy every
+build writes for this machine, at the owner's asking the same day. The
+route is now #/session/<date>/health. The five raw folds were already
+gone. See DECISIONS 2026-09-11 twenty eighth and assets.HEALTH_JS.]
+
 Answers: is the machine right.
 
 Reads: job_health, quota_preflight, collector_coverage,

@@ -4272,7 +4272,7 @@ it has, there is not.
 ## Screens
 
 The desk, one document at site/PremarketDesk.html carrying every session, and
-the marks the screens are drawn from. The nine screens and the reasoning are
+the marks the screens are drawn from. The screens and the reasoning are
 in doc/SCREENS.md. Nothing here is a screen threshold in the sense the rest of
 this file means: these are display bounds, and they are here because the rule
 is that no literal of this kind lives in Python.

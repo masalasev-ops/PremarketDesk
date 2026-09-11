@@ -60,8 +60,10 @@ a { color: var(--accent); }
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .mark { display: flex; align-items: baseline; gap: 7px; }
 .mark b { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
-.mark span { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase;
-  color: var(--accent); font-weight: 600; }
+/* The second half of the one word in the accent, since 2026-09-11. Until
+   then the name was followed by a separate small DESK tag, which the owner
+   read as the word printed twice. */
+.mark b span { color: var(--accent); }
 nav { display: flex; gap: 2px; flex-wrap: wrap; }
 nav a { padding: 5px 11px; border-radius: 6px; font-size: 13px; color: var(--ink-2);
   text-decoration: none; }
@@ -826,7 +828,7 @@ DECK_JS = r"""
         var outside = (iso < FIRST || iso > LAST);
         cells += '<div class="cd ' + (outside ? "void" : "off") + '" title="' +
           (outside ? "outside the history this desk carries"
-            : "no morning on file for this day") + '"><div class="dn">' +
+            : "no morning that day") + '"><div class="dn">' +
           d + "</div></div>";
       }
     }
@@ -848,9 +850,9 @@ DECK_JS = r"""
 
   function calKey() {
     return '<div class="cal-key">' +
-      '<span><i class="k-on"></i>a morning on file, click it</span>' +
+      '<span><i class="k-on"></i>a morning the desk holds, click it</span>' +
       '<span><i class="k-off"></i>no morning that day</span>' +
-      '<span><i class="k-void"></i>outside the history on file</span>' +
+      '<span><i class="k-void"></i>before the first session or after the last</span>' +
       '<span>the bar is that morning\'s largest gap, one scale across every ' +
       "month</span></div>";
   }
@@ -950,7 +952,7 @@ DECK_JS = r"""
       return '<div class="dsnote">This share opened away from the previous ' +
         "day's closing price on " + p.c + " of its last " + p.of +
         " trading days. What those days went on to do after the market " +
-        "opened is not on file.</div>";
+        "opened is not known.</div>";
     }
     return '<div class="dsnote" style="margin-bottom:2px">On the other ' +
       "mornings this share opened away from the day before</div>" +
@@ -1003,8 +1005,8 @@ DECK_JS = r"""
       // Not the vendor's silence. This session ran before the map existed, so
       // its packet carries none; the map itself is on the picks row for it.
       return head + '<div class="empty">This session ran before the daily map ' +
-        "was built, so its packet carries none. The map for it is in the " +
-        "record, put there from bars dated up to that session only.</div></div>";
+        "was added, so none is shown here. The map for it was worked out " +
+        "afterwards from prices dated up to that session only.</div></div>";
     }
     if (d.short) {
       return head + '<div class="empty">' + esc(d.short) + "</div></div>";
@@ -1031,7 +1033,7 @@ DECK_JS = r"""
       // close above it anywhere on file rather than a number nobody found.
       var above = w.sa == null
         ? "it has never finished a day above this price, in all the history "
-          + "on file"
+          + "available"
         : "it last finished a day above this price " + w.sa + " days ago";
       out += '<div class="dsrow"><div class="dslab"><b>' +
         esc(dsWindowWord(w.n)) + "</b><span>last " + w.n + " days \u00b7 " +
@@ -1096,8 +1098,8 @@ DECK_JS = r"""
       // from one it published. Computed from bars dated up to that session
       // only, so it is what the morning COULD have drawn and not what the
       // following month knows.
-      (d.bf ? " This session's packet predates the map, so this was measured " +
-        "into the record afterwards, on " + esc(String(d.bf).slice(0, 10)) +
+      (d.bf ? " This session came before the map existed, so this was worked " +
+        "out afterwards, on " + esc(String(d.bf).slice(0, 10)) +
         ", from bars dated up to that session only." : "") +
       (d.adj && d.adj.length
         ? " A price adjustment of more than 10 percent lands on " +
@@ -1217,9 +1219,9 @@ DECK_JS = r"""
     var b = c.bars || [];
     if (b.length < KNOBS.path_min_bars) {
       return '<div class="empty" style="height:150px;display:flex;align-items:center;' +
-        'justify-content:center;padding:0 20px">The collector recorded ' + b.length +
-        " minute" + (b.length === 1 ? "" : "s") + " of tape for " + esc(bare(c.sym)) +
-        ", too few to draw a path. The levels beside this are still measured, " +
+        'justify-content:center;padding:0 20px">' + esc(bare(c.sym)) + " traded in " +
+        "only " + b.length + " minute" + (b.length === 1 ? "" : "s") + " before the " +
+        "open, too few to draw a path. The levels beside this are still measured, " +
         "from those minutes.</div>";
     }
     var sc = pathScales(c), s = "";
@@ -1523,11 +1525,11 @@ DECK_JS = r"""
       n2(c.score, 0) + "</span>" +
       '<span class="pill' + (c.day ? " on" : "") + '" title="' +
       esc(c.day ? "clears every condition on the same day list"
-        : "did not clear " + (c.day_failed || []).join(", ")) +
+        : "did not clear: " + (c.day_failed || []).map(plainFail).join("; ")) +
       '">' + (c.day ? "On" : "Not on") + " the same day list</span>" +
       '<span class="pill' + (c.swing ? " on" : "") + '" title="' +
       esc(c.swing ? "clears every condition on the longer held list"
-        : "did not clear " + (c.swing_failed || []).join(", ")) +
+        : "did not clear: " + (c.swing_failed || []).map(plainFail).join("; ")) +
       '">' + (c.swing ? "On" : "Not on") + " the longer held list</span>" +
       // THREE STATES, not two. trap is true, false or null, and null means
       // the question could not be answered, which the report calls not a
@@ -1541,16 +1543,16 @@ DECK_JS = r"""
         'title="hardly any shares changed hands near this price, so a real ' +
         'buyer might have found nobody to buy from">Hardly traded there' +
         "</span>" : "") +
-      (c.window_late ? '<span class="pill yellow" title="this system started ' +
-        'hearing prices for it late this morning, so it saw only part of the ' +
-        'move">Watched late</span>' : "") +
-      (c.covered === false ? '<span class="pill red" title="this system heard ' +
-        'no prices at all for this name">No prices heard</span>' : "");
+      (c.window_late ? '<span class="pill yellow" title="prices for it only ' +
+        'start partway through this morning, so only part of the move is ' +
+        'shown">Prices started late</span>' : "") +
+      (c.covered === false ? '<span class="pill red" title="no prices were ' +
+        'found for this name before the open">No premarket prices</span>' : "");
 
     return '<div class="deck"><div class="deck-head">' +
       '<span class="tk mono">' + esc(bare(c.sym)) + "</span>" +
       '<span class="nm">' + esc(c.name) + "</span>" +
-      '<span class="sector">' + esc(c.sector || "sector not on file") + "</span>" +
+      '<span class="sector">' + esc(c.sector || "sector unknown") + "</span>" +
       '<span class="right">' + badges +
       '<a class="pill" href="#/name/' + esc(c.sym) + '">Every appearance</a></span></div>' +
       (hasCatalyst(c)
@@ -1612,8 +1614,7 @@ DECK_JS = r"""
     return '<div class="card verdict" style="margin-top:18px">' +
       '<div class="rule" style="background:var(--warn)"></div>' +
       '<div class="vin"><div class="vt">This is not a morning that happened</div>' +
-      '<div class="vs">' + esc(p.fixture) + ". Every figure below is from that " +
-      "packet and none of it describes a market.</div></div></div>";
+      '<div class="vs">' + esc(p.fixture) + ". None of it describes a real market.</div></div></div>";
   }
 
   function screenMorning(p, root) {
@@ -1676,7 +1677,7 @@ DECK_JS = r"""
       '<div id="decknote" class="printonly"></div>' +
       '<div id="deck"></div></section>';
 
-    html += pipelineSection(p) + evidenceSection(p) + compositionSection(p) +
+    html += pipelineSection(p) + compositionSection(p) +
       notableSection(p) + calendarSection(p) + comingUpSection(p);
     root.innerHTML = html;
     // The notable movers table routes to the Name screen the way the
@@ -1805,74 +1806,6 @@ DECK_JS = r"""
       " Tomorrow's setup, today.</p>" + body + "</section>";
   }
 
-  /* Section 11 of the report, which had ONE of its nine sentences on a screen
-     until 2026-09-04: band_thin, on Health. Measured on that morning's packet
-     the roll wrote nine and carried 18 evidence gaps beside them, and README
-     had gone as far as saying the section was drawn.
-
-     The sentences are the packet's own, quoted rather than rebuilt, and every
-     one is printed whether or not it names anybody, because "0 of 12" and an
-     absent line are different facts and this is the section where that matters
-     most. Where the roll carries a reason per name, it is printed under its
-     sentence, which is what the report does with the same rows. */
-  var ROLL_ORDER = ["band_thin", "thin_baseline", "rvol_null", "rvol_lower_bound",
-    "window_starts_late", "coverage_absent", "dropped_no_coverage",
-    "catalyst_absent", "catalyst_unknown"];
-
-  function evidenceSection(p) {
-    var roll = (p.health || {}).evidence || {};
-    var text = roll.text || {};
-    var keys = ROLL_ORDER.filter(function (k) { return text[k]; });
-    Object.keys(text).forEach(function (k) {
-      if (keys.indexOf(k) < 0) keys.push(k);
-    });
-    var gaps = (p.health || {}).gaps || [];
-    if (!keys.length && !gaps.length) return "";
-
-    var lines = keys.map(function (k) {
-      var rows = roll[k];
-      var named = (Array.isArray(rows) ? rows : []).filter(function (r) {
-        return r && r.why;
-      });
-      // A line that names nobody is the good case and is printed the same way.
-      var count = Array.isArray(rows) ? rows.length : 0;
-      return '<div class="check"><div>' + chip(count ? "watch" : "ok") +
-        '</div><div><div class="s">' + esc(text[k]) + "</div>" +
-        (named.length
-          ? '<div style="margin-top:7px">' + named.map(function (r) {
-              return '<div class="reason"><span class="mono rk">' +
-                esc(bare(r.symbol)) + "</span><span>" + esc(r.why) + "</span></div>";
-            }).join("") + "</div>"
-          : "") + "</div></div>";
-    }).join("");
-
-    var gapBlock = gaps.length
-      ? '<div class="card pad" style="margin-top:13px">' +
-        '<div class="panel-title">' + gaps.length + " evidence gap" +
-        (gaps.length === 1 ? "" : "s") + " the scan recorded</div>" +
-        gaps.map(function (g) {
-          return '<div class="reason"><span class="mono rk">gap</span><span>' +
-            esc(g) + "</span></div>";
-        }).join("") + "</div>"
-      : '<div class="card pad empty" style="margin-top:13px">The scan recorded ' +
-        "no evidence gaps this morning.</div>";
-
-    return '<section><div class="shead"><h2>What the evidence is worth</h2>' +
-      '<span class="note">read this before the watchlists</span></div>' +
-      '<p class="snote">What this system knows about the quality of its own ' +
-      "evidence this morning, in its own words. The exact text it wrote is " +
-      "kept in the record beside the morning; what is shown here has had the " +
-      "machine's own names taken out of it and nothing else. Some of it is " +
-      "still technical, and that is the " +
-      "point: it is the working, kept so that a figure can be argued with. A " +
-      "line that names nobody is printed just as readily as one that does, " +
-      "because a check that found nothing and a check that never ran look " +
-      "identical on a screen and only one of them is good news. None of it is a " +
-      "verdict on a name. The thin trading warning in particular only ever " +
-      "speaks up, so a name it does not mention has not passed anything.</p>" +
-      '<div class="card pad">' + lines + "</div>" + gapBlock + "</section>";
-  }
-
   function pipelineSection(p) {
     var rk = p.prov.ranking || {};
     var tally = p.tally || {};
@@ -1881,7 +1814,7 @@ DECK_JS = r"""
         "companies reporting results, overnight news, big movers yesterday, " +
         "and names that have been running"],
       ["Prices watched", p.prov.subscribed, p.prov.pool_size,
-        "this system can only listen to so many at once, so it picks"],
+        "the ones with the strongest reason to move, looked at closely"],
       ["Priced this morning", rk.subscribed_considered, p.prov.subscribed,
         "ranked on how far each one opened from yesterday's close"],
       ["Moved far enough", rk.cleared_floors, rk.subscribed_considered,
@@ -1909,7 +1842,7 @@ DECK_JS = r"""
         var v = t.failed_by_condition[k];
         var un = v.unmeasured || 0, no = v.measured_and_failed || 0, ok = v.cleared || 0;
         var u = function (x) { return (x / total * 100).toFixed(2) + "%"; };
-        return '<div class="cond"><span class="cn">' + esc(k.replace(/_/g, " ")) + "</span>" +
+        return '<div class="cond"><span class="cn">' + esc(conditionWord(k)) + "</span>" +
           '<span class="track">' +
           (ok ? '<i class="ok" style="width:' + u(ok) + '"></i>' : "") +
           (no ? '<i class="no" style="width:' + u(no) + '"></i>' : "") +
@@ -2110,7 +2043,7 @@ DECK_JS = r"""
         s: "the share got up to the price being watched" },
       { l: "Opened past it", v: states.gapped_through || 0, s: "the open was already through" },
       { l: "Never reached", v: states.never_triggered || 0, s: "the session high fell short" },
-      { l: "Read at", v: (mid.generated || "").slice(11, 16) || NIL, s: "ET, from the vendor sweep" }
+      { l: "Read at", v: (mid.generated || "").slice(11, 16) || NIL, s: "ET" }
     ]);
 
     html += '<section><div class="shead"><h2>Against the levels the morning published</h2>' +
@@ -2118,8 +2051,7 @@ DECK_JS = r"""
       '<p class="snote">Where each name stood at noon, measured from the price ' +
       "it finished at yesterday. The word beside it says whether the share ever " +
       "got up to the price this system was watching for, and the sentence after " +
-      "that is the system's own account of what happened, quoted rather than " +
-      "summarised.</p>" +
+      "that says what happened.</p>" +
       '<div class="card pad scroll"><table><thead><tr><th>Name</th><th>Against reference</th>' +
       '<th style="text-align:right">Move</th><th></th>' +
       '<th style="text-align:right">Open</th><th style="text-align:right">High</th>' +
@@ -2138,7 +2070,7 @@ DECK_JS = r"""
           '<td class="n">' + n2(m.day_rvol) + "×</td></tr>";
       }).join("") + "</tbody></table></div>" +
       '<div class="card pad" style="margin-top:13px">' +
-      '<div class="panel-title">Why, in the packet\'s own words</div>' +
+      '<div class="panel-title">What happened, name by name</div>' +
       rows.map(function (c) {
         return '<div class="reason"><span class="mono rk">' + esc(bare(c.sym)) + "</span>" +
           "<span>" + esc(c.mid.why || "") +
@@ -2312,6 +2244,28 @@ DECK_JS = r"""
     prior_session_mover: "of yesterday's big movers",
     recent_runner: "of the names that have been running"
   };
+  /* THE CONDITIONS AND THE SPLITS, in words. The screens printed these keys
+     with the underscores taken out, so a reader met "rvol null" and "require
+     above prior high". Every key the payloads carried on 2026-09-11 is here;
+     one that is not falls back to the old spelling rather than vanishing. */
+  var CONDITION_WORD = {
+    gap_pct: "size of the gap",
+    market_cap: "company size",
+    premarket_rvol: "trading before the open against its normal",
+    price: "share price",
+    require_above_prior_high: "above yesterday's high",
+    require_catalyst: "a news reason for the move",
+    require_fresh_price: "a recent price",
+    require_open_above_200sma: "opened above its 200 day average",
+    require_open_above_prior_high: "opened above yesterday's high",
+    rvol_null: "trading level could not be judged",
+    thin_baseline: "few past mornings to compare against",
+    window_thin: "only a few minutes of prices before the open"
+  };
+  function conditionWord(key) {
+    return CONDITION_WORD[key] || String(key || "").replace(/_/g, " ");
+  }
+
   function rankGroupWord(key) {
     return RANK_GROUP[key] || String(key || "").replace(/_/g, " ");
   }
@@ -2615,6 +2569,15 @@ DECK_JS = r"""
      Record screen's and is never pooled in. desk/precedent.py holds the fence
      and doc/research/PRECEDENT_PREREGISTRATION.md holds the reasoning. */
 
+  /* One note from the payload as a sentence, or nothing. The published copy
+     passes these through core/reader, which drops a sentence that names the
+     machine, so an empty note is an ordinary state and must not leave ". ."
+     behind it. */
+  function pnote(x) {
+    var s = String(x || "").trim().replace(/\.+$/, "");
+    return s ? " " + esc(s) + "." : "";
+  }
+
   function pstrip(g, dom) {
     // ONE SCALE for every bar on the screen, fixed in CRITERIA rather than
     // fitted per row, so two names compare by eye. A result outside the
@@ -2725,7 +2688,7 @@ DECK_JS = r"""
       return "<tr>" + head +
         '<td class="n">' + n.rows + '<div class="sub">' + n.sessions +
         " session" + (n.sessions === 1 ? "" : "s") + "</div></td>" +
-        '<td colspan="4" class="empty">' + (emptyTable ? "nothing replayed yet"
+        '<td colspan="4" class="empty">' + (emptyTable ? "no past mornings tested yet"
           : "Too few to say anything, so nothing is said. " + esc(n.why || "") +
             ". The score on the Morning screen stands on its own here.") +
         "</td></tr>";
@@ -2769,11 +2732,11 @@ DECK_JS = r"""
       // told which command fills it rather than left to find one.
       html += '<div class="card verdict" style="margin-top:4px">' +
         '<div class="rule" style="background:var(--warn)"></div><div class="vin">' +
-        '<div class="vt">The replay has not been run, so there is no past to ' +
-        'count</div><div class="vs">This screen reads reconstructed sessions ' +
-        'only, and there are none on file. The live record is deliberately ' +
+        '<div class="vt">No past mornings have been tested yet, so there is ' +
+        'nothing to count</div><div class="vs">This screen counts past mornings ' +
+        'the screen was tested on, and there are none yet. The live record is deliberately ' +
         'not used here however large it grows: it is what the desk actually ' +
-        'published, this is what a replay of sessions it never ran produced, ' +
+        'published, this is what testing the screen on past mornings produced, ' +
         'and one figure over both would describe neither. Fill it with ' +
         '<span class="mono">' +
         esc(cover.command || "") + '</span>. Every name below still shows the ' +
@@ -2781,9 +2744,9 @@ DECK_JS = r"""
         'any number exists.</div></div></div>';
     } else {
       html += kpisHTML([
-        { l: "Sessions replayed", v: cover.sessions,
+        { l: "Past mornings tested", v: cover.sessions,
           s: (cover.first || NIL) + " to " + (cover.last || NIL) },
-        { l: "Past candidates", v: commas(cover.rows), s: "graded rows on file" },
+        { l: "Past candidates", v: commas(cover.rows), s: "graded" },
         { l: "Reached a buy", v: commas(cover.reached),
           s: cover.rows ? Math.round(cover.reached / cover.rows * 100) +
             " in 100 of them" : NIL },
@@ -2815,7 +2778,7 @@ DECK_JS = r"""
     var peaks = pr.peaks || [];
     if (peaks.length) {
       html += '<section><div class="shead"><h2>When a winner stopped going up</h2>' +
-        '<span class="note">across every replayed session, not this list</span>' +
+        '<span class="note">across every past morning tested, not this list</span>' +
         '</div><p class="snote">The same past shares again, this time sorted ' +
         'by how quickly each one hit its best price of the day. This asks a ' +
         'different question from the table above. If the shares that peaked ' +
@@ -2864,10 +2827,10 @@ DECK_JS = r"""
         '</tr></thead><tbody>' +
         fl.conditions.map(function (c) {
           var head = '<td><span class="mono">' +
-            esc(String(c.condition).replace(/_/g, " ")) + "</span></td>";
+            esc(conditionWord(c.condition)) + "</span></td>";
           if (c.rows == null) {
             return "<tr>" + head + '<td colspan="5" class="empty">' +
-              esc(c.why || "not evaluated in a replay") + "</td></tr>";
+              esc(c.why || "not evaluated on past mornings") + "</td></tr>";
           }
           if (c.held) {
             return "<tr>" + head + '<td class="n">' + c.rows +
@@ -2898,7 +2861,7 @@ DECK_JS = r"""
         '</span></div><p class="snote">Each split is drawn as a pair, because ' +
         'a figure for the thin group on its own is a number with no scale. A ' +
         'row whose input was never measured joins neither side rather than ' +
-        'being counted as good news. ' + esc(ev.unavailable || "") + '.</p>' +
+        'being counted as good news.' + pnote(ev.unavailable) + '</p>' +
         '<div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Split</th><th class="n">Names</th>' +
         '<th class="n">Sessions</th><th class="n">Got to that price</th>' +
@@ -2907,7 +2870,7 @@ DECK_JS = r"""
           var rows = s.sides.map(function (side, i) {
             var lead = i === 0
               ? '<td rowspan="2"><span class="mono">' +
-                esc(String(s.split).replace(/_/g, " ")) + "</span>" +
+                esc(conditionWord(s.split)) + "</span>" +
                 (s.note ? '<div class="prule">' + esc(s.note) + "</div>" : "") +
                 (s.unknown ? '<div class="prule">' + commas(s.unknown) +
                   " row(s) could not be answered either way</div>" : "") +
@@ -2921,7 +2884,7 @@ DECK_JS = r"""
             if (!side.rows) {
               return "<tr>" + lead + '<td class="n">0' + words +
                 '</td><td class="n">' + NIL +
-                '</td><td colspan="2" class="empty">No replayed name was in ' +
+                '</td><td colspan="2" class="empty">No past name was in ' +
                 "this state, so there is nothing to compare.</td></tr>";
             }
             if (side.held) {
@@ -2953,15 +2916,14 @@ DECK_JS = r"""
         'been worth a look on a past morning, whether or not this system was ' +
         'watching them, grouped by how far they moved. It is the question ' +
         'every screen owes an answer to: not what it caught, but what it went ' +
-        'past. ' + esc(ms.caveat || "") + '. ' +
-        esc(ms.survivorship || "") + '.' +
+        'past.' + pnote(ms.caveat) + pnote(ms.survivorship) +
         (ms.unknown_sessions ? " " + commas(ms.unknown_sessions) +
-          " of these moved on days this replay never screened, so whether " +
+          " of these moved on days the test never covered, so whether " +
           "this system would have been watching them cannot be known, and they " +
           "are left out." : "") +
         '</p><div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Gapped</th><th class="n">Names</th>' +
-        '<th class="n">Pool had it</th><th class="n">Missed</th>' +
+        '<th class="n">Looked at</th><th class="n">Missed</th>' +
         '<th class="n">Middle day of the missed</th>' +
         '<th class="n">Best it offered</th></tr></thead><tbody>' +
         ms.bands.map(function (b) {
@@ -2991,7 +2953,7 @@ DECK_JS = r"""
         '<p class="snote">Every company that published its results in the ' +
         'hours between one day\'s close and the next day\'s open, sorted by ' +
         'when it reported and by whether the figure came in above or below ' +
-        'what analysts had expected. ' + esc(evt.caveat || "") + '.</p>' +
+        'what analysts had expected.' + pnote(evt.caveat) + '</p>' +
         '<div class="cols2"><div class="card pad">' +
         '<div class="panel-title">By when it reported</div>' +
         '<div class="scroll"><table class="ptable"><thead><tr>' +
@@ -3034,11 +2996,11 @@ DECK_JS = r"""
     if (sh && sh.measures && sh.measures.length) {
       html += '<section><div class="shead"><h2>What kind of morning this is' +
         '</h2><span class="note">against ' + commas(sh.sessions) +
-        ' replayed mornings</span></div><p class="snote">This morning\'s mix ' +
-        'against the same measure on every replayed session, so a share has a ' +
+        ' past mornings</span></div><p class="snote">This morning\'s mix ' +
+        'against the same measure on every past morning tested, so a share has a ' +
         'scale rather than standing alone. The middle column is the median ' +
         'morning and the range beside it is the tenth to the ninetieth. ' +
-        esc(sh.unavailable || "") + '.</p>' +
+        pnote(sh.unavailable).trim() + '</p>' +
         '<div class="card pad"><div class="scroll"><table class="ptable">' +
         '<thead><tr><th>Share of the list that</th><th class="n">This morning' +
         '</th><th class="n">Median morning</th><th class="n">Usual range</th>' +
@@ -3067,11 +3029,11 @@ DECK_JS = r"""
     if (nn && nn.states && nn.states.length) {
       html += '<section><div class="shead"><h2>What noon has graded before</h2>' +
         '<span class="note">mirrors What noon will grade</span></div>' +
-        '<p class="snote">Every replayed name graded at ' + esc(nn.clock || "12:00") +
+        '<p class="snote">Every past name graded at ' + esc(nn.clock || "12:00") +
         ' by the noon pass\'s own rule, against what the same name did by the ' +
         'close. The column that matters is the last one: a noon verdict that ' +
         'the close rarely overturns is worth acting on and one it often does ' +
-        'is not. ' + esc(nn.note || "") + '.' +
+        'is not.' + pnote(nn.note) +
         (nn.ungraded ? " " + commas(nn.ungraded) + " row(s) had no levels or " +
           "no tape to grade and are left out." : "") +
         '</p><div class="card pad"><div class="scroll"><table class="ptable">' +
@@ -3100,18 +3062,17 @@ DECK_JS = r"""
     // above to be wrong, and a reader who cannot see them cannot weigh one.
     html += '<section><div class="shead"><h2>What these counts are not</h2></div>' +
       '<div class="card pad"><div class="pnote"><b>Not the record.</b> Every ' +
-      'row counted here is a session the desk did not run, reconstructed by ' +
-      'replaying the shipped screen over a real tape. What the desk actually ' +
+      'row counted here is a past morning the screen was tested on after the ' +
+      'fact, not one the desk published. What the desk actually ' +
       'published is on the <a href="#/record">Record</a> screen and the two are ' +
       'never added together.</div>' +
-      '<div class="pnote"><b>Not sorted by catalyst.</b> A reconstructed row ' +
-      'has no catalyst class: rebuilding it needs the vendor news tags per ' +
-      'article and the session cache holds a newest title only. The one ' +
+      '<div class="pnote"><b>Not sorted by catalyst.</b> A tested past ' +
+      'morning has no catalyst class for its names. The one ' +
       'catalyst fact in the match is whether the name reported overnight, so a ' +
       'takeover and a trial result with the same gap and volume are one group ' +
       'here.</div>' +
       '<div class="pnote"><b>Not survivorship free.</b> ' +
-      esc(cover.survivorship || "") + '.</div>' +
+      pnote(cover.survivorship).trim() + '</div>' +
       '<div class="pnote"><b>Not a measured rule.</b> Every band edge and both ' +
       'floors are seeds, chosen before any of this data existed and written ' +
       'down in advance, before any of this data existed, so they could not ' +
@@ -3144,9 +3105,8 @@ DECK_JS = r"""
     var first = has.morning ? "morning" : "midday";
     root.innerHTML = '<section><div class="shead"><h2>The report, as written</h2>' +
       '<span class="note">' + esc(p.session) + "</span>" + seg + "</div>" +
-      '<p class="snote">The words that were delivered that morning, rendered from ' +
-      "the same markdown the email carried and styled by the same stylesheet, so " +
-      "this and the copy in your inbox are the same document.</p>" +
+      '<p class="snote">The report written that morning, and the midday one ' +
+      "where it exists.</p>" +
       '<div class="card" id="rep-body"><div class="report">' +
       (first === "morning" ? p.report : p.report_midday) + "</div></div></section>";
     root.addEventListener("click", function (e) {
@@ -3173,13 +3133,10 @@ DECK_JS = r"""
           : p.session === etNow().date
             ? "at " + (KNOBS.midday_run_time || "12:00") + " ET"
             : "the 12:00 pass never ran" },
-      { l: "Vendor calls", v: p.api_calls == null ? NIL : p.api_calls, s: "on the morning pass" }
     ]) +
       '<section><div class="shead"><h2>This session</h2></div>' +
-      '<p class="snote">The morning wrote the two marks down and the midday ' +
-      "pass read them back afterwards. Both are below. The minute by minute " +
-      "prices the pictures were drawn from came from <span " +
-      'class="mono">' + esc(p.bars_source || "unknown") + "</span>.</p>" +
+      '<p class="snote">The morning\'s two marks, and what the midday ' +
+      "reading made of them, are both below.</p>" +
       '<div class="cols2">' +
       '<a class="card pad" style="text-decoration:none;display:block" href="#/session/' + esc(d) + '/morning">' +
       '<div class="panel-title">Morning</div><div style="font-size:20px;font-weight:600">' +
@@ -3197,9 +3154,9 @@ DECK_JS = r"""
       '<a class="card pad" style="text-decoration:none;display:block" href="#/session/' + esc(d) + '/report">' +
       '<div class="panel-title">The report</div><div style="font-size:20px;font-weight:600">' +
       (p.report ? "as written" : "not written") + "</div>" +
-      '<div class="snote" style="margin:6px 0 0">The words delivered that morning, and ' +
+      '<div class="snote" style="margin:6px 0 0">The report written that morning, and ' +
       "the midday one where the 12:00 pass wrote it.</div></a></div></section>" +
-      recordSection(p) + healthSection(p);
+      recordSection(p) + extraTail(p);
   }
 
   // WHETHER ANY OF THIS MEANS ANYTHING YET, said first and in the reader's
@@ -3214,7 +3171,9 @@ DECK_JS = r"""
   // size of an edge, which is exactly the quantity this record cannot supply,
   // and one large winner does not move it the way a mean would.
   function verdictBlock(R) {
-    if (!R.booked || !R.booked.rows) return "";
+    // A session frozen before booked_winners existed (2026-09-08 and older)
+    // printed "undefined of 13" here. No count is no verdict, so no block.
+    if (!R.booked || !R.booked.rows || R.booked_winners == null) return "";
     var n = R.booked.rows, w = R.booked_winners, p = R.coin_flip_p;
     var need = R.booked_needed_for_a_verdict;
     var reads = p == null ? "" : p > 0.2
@@ -3255,7 +3214,7 @@ DECK_JS = r"""
     if (!m.missed) {
       return '<div class="card pad"><div class="panel-title">' +
         "Prices the share never reached</div>" +
-        '<p class="snote" style="margin:0">Every pick on file did reach the ' +
+        '<p class="snote" style="margin:0">Every pick so far did reach the ' +
         "price the notebook was watching for.</p></div>";
     }
     var caught = m.prior_high_would_have_caught;
@@ -3475,17 +3434,580 @@ DECK_JS = r"""
       nearMissBlock(R) + "</div></section>";
   }
 
-  /* ---------- health, answered rather than dumped ----------
-     This screen used to print five blocks of the packet's raw JSON, which is
-     the packet talking to itself. Every check below reads the same figures
-     and says what they mean; the JSON is still here, folded, because the
-     working should be checkable and should not be the first thing read. */
+  /* ---------- the state chip ----------
+     The Open screen marks each name's state with one, and so does the Health
+     screen where there is one. */
   var CHIP_WORD = { ok: "Fine", watch: "Worth a look", bad: "Fault", note: "Note" };
 
   function chip(state) {
     return '<span class="chip ' + state + '"><i></i>' + CHIP_WORD[state] + "</span>";
   }
 
+  /* ---------- screens a build adds ----------
+     A screen here is a session screen, #/session/<date>/<key>, drawn by
+     draw(p, root) once the session is loaded; a tail function adds a section
+     to the foot of the Session screen. Empty unless the build fills them. */
+  var EXTRA_SCREENS = {};
+  var EXTRA_TAIL = [];
+  function extraTail(p) {
+    return EXTRA_TAIL.map(function (f) { return f(p); }).join("");
+  }
+  /*@EXTRA_SCREENS@*/
+
+  function screenSessions(root) {
+    var rows = INDEX.sessions;
+    var months = monthsOnFile();
+    var maxGap = CAL_MAX * 1.1;
+    // CRITERIA [Screens] sessions_page_size, which was passed into the page
+    // from the first build and read by nothing: the list rendered every row.
+    // Four sessions hid it. At the inline_sessions ceiling of 400 it is four
+    // hundred rows under a calendar the reader came for.
+    var PAGE = KNOBS.sessions_page_size || 0;
+    function listHTML(limit) {
+      var shown = limit ? rows.slice(0, limit) : rows;
+      return listTable(shown) + (rows.length > shown.length
+        ? '<div class="filters noprint" style="margin-top:11px">' +
+          '<button class="chip" type="button" data-more="1">Show all ' +
+          rows.length + " sessions</button></div>"
+        : "");
+    }
+    function listTable(rows) {
+      return '<div class="card pad scroll"><table><thead><tr><th>Session</th>' +
+      '<th style="text-align:right">Names</th><th style="text-align:right">Day</th>' +
+      '<th style="text-align:right">Swing</th><th>Conviction</th><th>Largest gap</th>' +
+      '<th></th><th style="text-align:right">Price reached</th>' +
+      "</tr></thead><tbody>" + rows.map(function (r) {
+        var conv = ["green", "yellow", "red"].map(function (k) {
+          return r[k] ? '<span class="sw ' + k + '" title="' + r[k] + " " + k +
+            '"></span>' : "";
+        }).join(" ");
+        return '<tr class="clickable" data-date="' + esc(r.date) + '">' +
+          '<td class="tk">' + esc(r.date) + "</td>" +
+          '<td class="n">' + (r.candidates == null ? NIL : r.candidates) + "</td>" +
+          '<td class="n">' + (r.day_eligible == null ? NIL : r.day_eligible) + "</td>" +
+          '<td class="n">' + (r.swing_eligible == null ? NIL : r.swing_eligible) + "</td>" +
+          "<td>" + conv + "</td>" +
+          '<td class="mono">' + esc(r.top_symbol || NIL) + " " +
+          '<span class="' + dirClass(r.top_gap_pct) + '">' + pct(r.top_gap_pct) + "</span></td>" +
+          "<td>" + minibar(r.top_gap_pct, maxGap) + "</td>" +
+          '<td class="n">' + (r.triggered == null ? NIL : r.triggered) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+    }
+    var calHTML = '<div class="calwrap">' + months.map(function (ym) {
+      return calMonth(ym, null, false); }).join("") + "</div>" + calKey();
+
+    var NOTE = {
+      cal: "A lifted day is a morning the desk holds. The ticker under the date is " +
+        "that morning's largest gap and the bar is how large, on one scale across " +
+        "every month, so two mornings compare by eye. Everything faint is a day the " +
+        "machine did not run: a weekend, a holiday, or a date before the history " +
+        "this desk carries.",
+      list: "One row a session, newest first. The bar is that morning's largest gap " +
+        "on the same shared scale."
+    };
+
+    root.innerHTML =
+      '<section><div class="shead"><h2>Every session</h2>' +
+      '<span class="note">' + rows.length + " mornings, " + esc(FIRST) + " to " +
+      esc(LAST) + '</span><div class="seg noprint" style="margin-left:auto">' +
+      '<button type="button" data-view="cal" aria-pressed="true">Calendar</button>' +
+      '<button type="button" data-view="list" aria-pressed="false">List</button>' +
+      '</div></div><p class="snote" id="ses-note">' + esc(NOTE.cal) + "</p>" +
+      '<div id="ses-view">' + calHTML + "</div></section>";
+
+    var view = $("ses-view");
+    wireCal(view, function (date) { location.hash = "#/session/" + date; });
+    view.addEventListener("click", function (e) {
+      if (e.target.closest("[data-more]")) { view.innerHTML = listHTML(0); return; }
+      var tr = e.target.closest("tr[data-date]");
+      if (tr) location.hash = "#/session/" + tr.dataset.date;
+    });
+    root.addEventListener("click", function (e) {
+      // A pick row routes to that name's own screen, the way the other four
+      // tables on the desk do. The attribute was on the rows from the start
+      // and nothing was reading it.
+      var go = e.target.closest("[data-goto]");
+      if (go) { location.hash = "#/name/" + go.dataset.goto; return; }
+      var b = e.target.closest("button[data-view]");
+      if (!b) return;
+      var which = b.dataset.view;
+      Array.prototype.forEach.call(root.querySelectorAll("button[data-view]"),
+        function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+      view.innerHTML = which === "cal" ? calHTML : listHTML(PAGE);
+      view.dataset.sel = "";
+      $("ses-note").textContent = NOTE[which];
+    });
+  }
+
+  function screenRecord(root) {
+    var rows = INDEX.sessions;
+    var totals = rows.reduce(function (a, r) {
+      a.cand += r.candidates || 0; a.day += r.day_eligible || 0;
+      a.swing += r.swing_eligible || 0; a.green += r.green || 0;
+      a.trig += r.triggered || 0; a.never += r.never_triggered || 0;
+      return a;
+    }, { cand: 0, day: 0, swing: 0, green: 0, trig: 0, never: 0 });
+    var maxCand = Math.max.apply(null,
+      rows.map(function (r) { return r.candidates || 0; }).concat([1]));
+
+    var html = kpisHTML([
+      { l: "Sessions", v: rows.length, s: "every morning the desk ran" },
+      { l: "Candidates examined", v: totals.cand, s: "across every session" },
+      { l: "Day eligible", v: totals.day, s: (totals.cand ? (totals.day / totals.cand * 100).toFixed(1) : "0") + "% of candidates" },
+      { l: "Swing eligible", v: totals.swing, s: (totals.cand ? (totals.swing / totals.cand * 100).toFixed(1) : "0") + "% of candidates" },
+      { l: "Entries reached", v: totals.trig, s: totals.never + " never reached" }
+    ]);
+
+    html += '<section><div class="shead"><h2>Candidates a morning</h2></div>' +
+      '<p class="snote">How many names each morning kept, and how many of them cleared a ' +
+      "screen. A morning with no eligible name is not a failure; it is the screen doing its job.</p>" +
+      '<div class="card pad">' + rows.slice().reverse().map(function (r) {
+        var w = (r.candidates || 0) / maxCand * 100;
+        var dayW = (r.candidates ? (r.day_eligible || 0) / r.candidates : 0) * w;
+        return '<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 130px;' +
+          'gap:10px;align-items:center;margin-bottom:5px;font-size:12px">' +
+          '<span class="mono" style="color:var(--ink-2)">' + esc(r.date) + "</span>" +
+          '<span style="position:relative;height:13px;background:var(--sunk);border-radius:2px">' +
+          '<i style="position:absolute;left:0;top:0;bottom:0;width:' + w +
+          '%;background:var(--r2);border-radius:2px"></i>' +
+          '<i style="position:absolute;left:0;top:0;bottom:0;width:' + dayW +
+          '%;background:var(--r4);border-radius:2px"></i></span>' +
+          '<span class="mono" style="color:var(--muted)">' + (r.candidates || 0) +
+          " kept, " + (r.day_eligible == null ? NIL : r.day_eligible) + " day</span></div>";
+      }).join("") +
+      '<div class="legendrow"><span class="lg"><span class="sw" style="background:var(--r2)"></span> candidates kept</span>' +
+      '<span class="lg"><span class="sw" style="background:var(--r4)"></span> of those, day eligible</span></div>' +
+      "</div></section>";
+
+    var newest = INDEX.sessions[0];
+    html += '<div id="record-detail"></div>';
+    root.innerHTML = html;
+    if (newest) {
+      var mine = EPOCH;
+      loadSession(newest.date).then(function (p) {
+        if (!p || stale(mine)) return;
+        // The table redraws itself on a chip, and the payload is captured in
+        // the closure rather than looked up again, so a reader filtering does
+        // not wait on a second inflate.
+        function paint() {
+          var box = $("record-detail");
+          box.innerHTML = recordSection(p) + picksTable(p.record || {});
+          // ONE HANDLER ON THE BOX, because there are two sets of controls
+          // now and both are rebuilt on every repaint. Binding to each after
+          // each paint works, since innerHTML replaces the elements and the
+          // old listeners go with them, but it is a line to remember in two
+          // places and one to forget in a third. The box outlives them all.
+          if (box.dataset.wired) return;
+          box.dataset.wired = "1";
+          box.addEventListener("click", function (e) {
+            var f = e.target.closest("[data-pf]");
+            if (f) {
+              state.pickFilter = f.dataset.pf;
+              state.pickPage = 1;   // a new filter starts at its own first page
+              paint();
+              return;
+            }
+            var pp = e.target.closest("[data-pp]");
+            if (pp && !pp.disabled) {
+              state.pickPage = parseInt(pp.dataset.pp, 10) || 1;
+              paint();
+            }
+          });
+        }
+        paint();
+      });
+    }
+  }
+
+  function screenName(sym, root) {
+    root.innerHTML = '<section><div class="shead"><h2><span class="mono">' + esc(sym) +
+      "</span></h2><span class=\"note\">every session</span></div>" +
+      '<div id="name-body" class="card pad empty">Reading…</div></section>';
+    // ONLY THE SESSIONS THAT CARRY THE NAME. Each session's summary row
+    // lists its candidates, so the question is answered off the index and
+    // only the matching payloads are inflated. This used to open every
+    // inlined session: fine at four, four hundred at the inline_sessions
+    // ceiling, each inflated and held. A row written before the column
+    // existed carries no symbols and is opened, so an old index degrades
+    // to the old behaviour rather than to a wrong answer.
+    var needle = "," + sym + ",";
+    var dates = INDEX.sessions.filter(function (r) {
+      return r.symbols == null || ("," + r.symbols + ",").indexOf(needle) >= 0;
+    }).map(function (r) { return r.date; });
+    var mine = EPOCH;
+    Promise.all(dates.map(function (d) {
+      return loadSession(d).catch(function () { return null; });
+    })).then(function (all) {
+      if (stale(mine)) return;
+      var hits = [];
+      all.forEach(function (p) {
+        if (!p) return;
+        p.candidates.forEach(function (c) {
+          if (c.sym === sym) hits.push({ p: p, c: c });
+        });
+      });
+      if (!hits.length) {
+        $("name-body").innerHTML = esc(sym) +
+          " has not been a candidate in any session so far. That is a fact about this " +
+          "record, not about the name.";
+        return;
+      }
+      var maxGap = Math.max.apply(null,
+        hits.map(function (h) { return Math.abs(h.c.gap || 0); }).concat([1])) * 1.1;
+      var body = '<table><thead><tr><th>Session</th><th style="text-align:right">Gap</th>' +
+        '<th></th><th style="text-align:right">Score</th><th>Conviction</th>' +
+        '<th>Catalyst</th><th>Screens</th><th>At noon</th>' +
+        '<th style="text-align:right">Move</th></tr></thead><tbody>' +
+        hits.map(function (h) {
+          var c = h.c;
+          return "<tr><td class='tk'><a href='#/session/" + esc(h.p.session) +
+            "/morning'>" + esc(h.p.session) + "</a></td>" +
+            '<td class="n ' + dirClass(c.gap) + '">' + pct(c.gap) + "</td>" +
+            "<td>" + minibar(c.gap, maxGap) + "</td>" +
+            '<td class="n">' + n2(c.score, 0) + "</td>" +
+            '<td><span class="pill ' + esc(c.conv || "") + '">' + convWord(c.conv) + "</span></td>" +
+            "<td style='color:var(--muted)'>" + esc(c.catalyst || "") + "</td>" +
+            "<td style='color:var(--muted)'>" +
+            (c.day ? "day " : "") + (c.swing ? "swing" : "") +
+            (!c.day && !c.swing ? "neither" : "") + "</td>" +
+            "<td>" + (c.mid ? esc(MID_WORD[c.mid.state] || c.mid.state) : NIL) + "</td>" +
+            '<td class="n ' + dirClass(c.mid && c.mid.move) + '">' +
+            (c.mid ? pct(c.mid.move) : NIL) + "</td></tr>";
+        }).join("") + "</tbody></table>";
+      $("name-body").className = "card pad scroll";
+      $("name-body").innerHTML = body;
+
+      // A deck is a level ladder, a tape path and every headline, so a name
+      // that has appeared eighty times used to draw eighty of them before
+      // the screen was usable. CRITERIA [Screens] name_decks, newest first,
+      // with the rest one click away.
+      var decks = document.createElement("div");
+      root.appendChild(decks);
+      function drawDecks(limit) {
+        var shown = limit ? hits.slice(0, limit) : hits;
+        decks.innerHTML = shown.map(function (h) {
+          return '<section><div class="shead"><h3 style="font-size:15px">' +
+            esc(h.p.session) + "</h3></div>" + deckHTML(h.c, h.p) + "</section>";
+        }).join("") + (hits.length > shown.length
+          ? '<div class="filters noprint"><button class="chip" type="button" ' +
+            'data-alldecks="1">Draw the other ' + (hits.length - shown.length) +
+            " appearance" + (hits.length - shown.length === 1 ? "" : "s") +
+            "</button></div>"
+          : "");
+        shown.forEach(function (h, i) {
+          var w = decks.querySelectorAll(".chart-wrap")[i];
+          if (w) wirePath(w, h.c);
+        });
+      }
+      decks.addEventListener("click", function (e) {
+        if (e.target.closest("[data-alldecks]")) drawDecks(0);
+      });
+      drawDecks(KNOBS.name_decks || 0);
+    });
+  }
+
+  /* ---------- router ---------- */
+  function parse() {
+    var h = (location.hash || "").replace(/^#\/?/, "");
+    var parts = h.split("/").filter(Boolean);
+    if (!parts.length) {
+      var newest = INDEX.sessions[0];
+      return newest ? { screen: "morning", date: newest.date } : { screen: "sessions" };
+    }
+    if (parts[0] === "sessions") return { screen: "sessions" };
+    if (parts[0] === "record") return { screen: "record" };
+    if (parts[0] === "name") return { screen: "name", sym: parts[1] };
+    if (parts[0] === "session") {
+      return { screen: parts[2] || "session", date: parts[1] };
+    }
+    if (parts[0] === "report") return { screen: "report", date: parts[1] || LAST };
+    return { screen: "sessions" };
+  }
+
+  /* The names in the menu bar, for the printed page, which has no menu bar.
+     Kept beside the map above so a screen renamed in one is renamed in both:
+     Ladder and Precedent became Open and Similar on 2026-09-09 and a second
+     list would still be saying Ladder. */
+  var SCREEN_TITLE = { morning: "Morning", ladder: "Open", precedent: "Similar",
+    midday: "Midday", report: "Report", session: "Session",
+    sessions: "Sessions", record: "Record", name: "Name" };
+
+  function setNav(route) {
+    var map = { morning: "morning", ladder: "ladder", precedent: "precedent",
+      midday: "midday", report: "report",
+      session: "sessions", sessions: "sessions", record: "record", name: "" };
+    var current = route.screen in map ? map[route.screen] : route.screen;
+    Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
+      var key = a.dataset.nav;
+      if (key === current) a.setAttribute("aria-current", "page");
+      else a.removeAttribute("aria-current");
+    });
+    // Morning, Midday, Report and Health all resolve against the chosen
+    // session, so their links carry it rather than dropping the reader on
+    // the newest.
+    var at = route.date || LAST;
+    var link = { morning: "#/session/" + at + "/morning",
+      ladder: "#/session/" + at + "/ladder",
+      precedent: "#/session/" + at + "/precedent",
+      midday: "#/session/" + at + "/midday",
+      report: "#/session/" + at + "/report" };
+    Object.keys(EXTRA_SCREENS).forEach(function (key) {
+      link[key] = "#/session/" + at + "/" + key;
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
+      if (link[a.dataset.nav]) a.href = link[a.dataset.nav];
+    });
+    var scoped = (route.screen === "morning" || route.screen === "midday" ||
+      route.screen === "session" || !!EXTRA_SCREENS[route.screen] ||
+      route.screen === "report" || route.screen === "precedent");
+    $("picker-wrap").style.display = scoped ? "" : "none";
+    if (route.date) $("session-btn-label").textContent = route.date;
+    // The stamp names the session a screen is about. On Sessions, Record,
+    // Health and Name it is about all of them, and a dash beside the word
+    // "session" reads as a session whose date went missing.
+    $("stamp").style.display = scoped ? "" : "none";
+    // WHAT THE PRINTED FILE CALLS ITSELF. The navigation is hidden on paper,
+    // which is right, and it was the only thing on the page that said which
+    // of the nine screens this was. A PDF is saved in order to be sent to
+    // somebody who was not at the desk, so it says the screen and the
+    // session in its own first line.
+    $("print-title").textContent = "PremarketDesk " +
+      (SCREEN_TITLE[route.screen] ||
+        (EXTRA_SCREENS[route.screen] || {}).title || "Desk");
+    $("print-sub").textContent = route.date
+      ? "The " + route.date + " session, saved from the desk."
+      : "Saved from the desk.";
+  }
+
+  var TIMER = null;
+
+  // The same argument as TIMER, for the other thing a screen leaves behind.
+  // Four screens draw from a promise: the session inflates, and only then is
+  // there anything to render. A reader who moves on inside that window used
+  // to get the OLD route's screen drawn over the new one, stamp and all,
+  // under a hash that says something else, or a TypeError from writing into
+  // a node the new screen had already replaced. Every render takes a number
+  // and a resolution that is not the current one draws nothing.
+  var EPOCH = 0;
+  function stale(mine) { return mine !== EPOCH; }
+
+  function render() {
+    // A screen that started a clock owns it until the route changes. Left
+    // running, a countdown keeps writing into a node the next screen has
+    // already replaced.
+    if (TIMER) { clearInterval(TIMER); TIMER = null; }
+    EPOCH += 1;
+    var mine = EPOCH;
+    var route = parse();
+    // A FRESH NODE, not a refilled one. Six screens attach a delegated
+    // click handler to this element, and innerHTML replaces an element's
+    // CHILDREN while its own listeners stay. Refilling it left one handler
+    // per visit, each closed over the session it was created for, so the
+    // Report screen's Morning and Midday toggle ran once for every report
+    // screen the reader had ever opened. Replacing the node drops them
+    // with it, and every screen goes on attaching whatever it needs.
+    var root = document.createElement("div");
+    root.id = "screen";
+    var previous = $("screen");
+    previous.parentNode.replaceChild(root, previous);
+    setNav(route);
+    if (route.screen === "sessions") { screenSessions(root); return; }
+    if (route.screen === "record") { screenRecord(root); return; }
+    if (route.screen === "name") { screenName(route.sym, root); return; }
+
+    root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
+      esc(route.date) + "…</div>";
+    loadSession(route.date).then(function (p) {
+      if (stale(mine)) return;
+      if (!p) {
+        root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
+          esc(route.date) + " is not inlined in this document.</div>";
+        return;
+      }
+      $("stamp-date").textContent = p.session;
+      $("stamp-run").textContent = p.run_at || NIL;
+      if (route.screen === "ladder") screenLadder(p, root);
+      else if (route.screen === "midday") screenMidday(p, root);
+      else if (route.screen === "precedent") screenPrecedent(p, root);
+      else if (route.screen === "report") screenReport(p, root);
+      else if (route.screen === "session") screenSession(p, root);
+      else if (EXTRA_SCREENS[route.screen]) EXTRA_SCREENS[route.screen].draw(p, root);
+      else screenMorning(p, root);
+      window.scrollTo(0, 0);
+    }).catch(function (err) {
+      if (stale(mine)) return;
+      root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
+        esc(err.message) + "</div>";
+    });
+  }
+
+  /* ---------- chrome ---------- */
+  // The session control is the calendar in a popover and not a date input,
+  // because a date input can clamp a range but cannot haze the individual
+  // days the desk holds no morning for, and those are most of them.
+  var pbtn = $("session-btn"), ppop = $("session-pop");
+  function closePop() {
+    ppop.hidden = true;
+    pbtn.setAttribute("aria-expanded", "false");
+  }
+  function openPop() {
+    var sel = parse().date || LAST;
+    ppop.dataset.sel = sel;
+    ppop.innerHTML = calMonth(sel.slice(0, 7), sel, true) + calKey();
+    ppop.hidden = false;
+    pbtn.setAttribute("aria-expanded", "true");
+  }
+  pbtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (ppop.hidden) openPop(); else closePop();
+  });
+  wireCal(ppop, function (date) {
+    closePop();
+    var screen = parse().screen;
+    location.hash = screen === "session" ? "#/session/" + date
+      : screen === "midday" ? "#/session/" + date + "/midday"
+      : screen === "precedent" ? "#/session/" + date + "/precedent"
+      : screen === "report" ? "#/session/" + date + "/report"
+      : EXTRA_SCREENS[screen] ? "#/session/" + date + "/" + screen
+      : "#/session/" + date + "/morning";
+  });
+  document.addEventListener("click", function (e) {
+    if (!ppop.hidden && !ppop.contains(e.target) && !pbtn.contains(e.target)) closePop();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !ppop.hidden) { closePop(); pbtn.focus(); }
+  });
+
+  $("theme-btn").addEventListener("click", function () {
+    var r = document.documentElement;
+    var cur = r.getAttribute("data-theme");
+    if (!cur) {
+      cur = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+        ? "dark" : "light";
+    }
+    var next = cur === "dark" ? "light" : "dark";
+    r.setAttribute("data-theme", next);
+    try { localStorage.setItem("desk-theme", next); } catch (e) { /* private window */ }
+  });
+  try {
+    var saved = localStorage.getItem("desk-theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  } catch (e) { /* private window */ }
+
+  $("print-btn").addEventListener("click", function () {
+    Array.prototype.forEach.call(document.querySelectorAll("details"), function (d) {
+      d.open = true;
+    });
+    setTimeout(function () { window.print(); }, 60);
+  });
+
+  /* ONE POPOVER, DELEGATED. The screens are rebuilt wholesale on every route
+     change, so a listener bound to each label would have to be rebound by
+     every screen that ever draws one. This reads the click on the way up
+     instead and needs nothing from a screen but the class. */
+  function closeGloss() {
+    var open = document.getElementById("glpop");
+    if (open && open.parentNode) open.parentNode.removeChild(open);
+  }
+
+  function openGloss(el) {
+    var text = GLOSSARY[el.getAttribute("data-gl")];
+    if (!text) return;
+    var pop = document.createElement("div");
+    pop.id = "glpop";
+    pop.className = "glpop";
+    pop.innerHTML = "<b>" + esc(el.textContent) + "</b> " + esc(text);
+    document.body.appendChild(pop);
+    var box = el.getBoundingClientRect();
+    var wide = pop.offsetWidth || 300;
+    pop.style.top = (box.bottom + window.scrollY + 6) + "px";
+    pop.style.left = Math.max(8, Math.min(box.left + window.scrollX,
+      (window.innerWidth || 1024) - wide - 10)) + "px";
+  }
+
+  document.addEventListener("click", function (e) {
+    var node = e.target;
+    while (node && node !== document.body &&
+           !(node.getAttribute && node.getAttribute("data-gl"))) {
+      node = node.parentNode;
+    }
+    var hit = node && node.getAttribute && node.getAttribute("data-gl");
+    closeGloss();
+    if (hit) { openGloss(node); e.stopPropagation(); }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var live = document.activeElement;
+    if (e.key === "Escape") { closeGloss(); return; }
+    if ((e.key === "Enter" || e.key === " ") && live && live.getAttribute &&
+        live.getAttribute("data-gl")) {
+      e.preventDefault();
+      closeGloss();
+      openGloss(live);
+    }
+  });
+
+  // A folded section that vanishes from a saved PDF is a section the
+  // reader cannot get back. The Save as PDF button above ALREADY opens
+  // every fold; this covers the other way out, a browser native Ctrl+P,
+  // which does not go through that button.
+  // [corrected 2026-09-09: the comment here first said the debug folds
+  // had never had this. They had, through the button, since they were
+  // built. What they lacked was the Ctrl+P path.]
+  window.addEventListener("beforeprint", function () {
+    var folds = document.querySelectorAll("details");
+    for (var i = 0; i < folds.length; i++) { folds[i].open = true; }
+  });
+
+  /* EVERY TABLE HEADER ON THE DESK, in one place. Wiring gloss() into each
+     screen would mean touching every table and remembering to do it in the
+     next one; several screens also paint asynchronously, after a session
+     loads, so there is no single moment after render() when all the headers
+     exist. An observer marks them whenever they arrive, and skips a header it
+     has already marked, so its own writes settle after one further pass. */
+  function markHeaders() {
+    // TABLE HEADERS AND THE CARD'S OWN LABELS. The Evidence panel is a grid
+    // of divs and not a table, so until 2026-09-09 the glossary reached none
+    // of the nine labels on it, which are the densest on the whole desk.
+    var cells = [];
+    var th = document.getElementsByTagName("th");
+    for (var t = 0; t < th.length; t++) cells.push(th[t]);
+    var keys = document.getElementsByClassName("k");
+    for (var f = 0; f < keys.length; f++) cells.push(keys[f]);
+    for (var i = 0; i < cells.length; i++) {
+      var cell = cells[i];
+      if (cell.getElementsByClassName("gl").length) continue;
+      var label = (cell.textContent || "").replace(/^\s+|\s+$/g, "");
+      if (!label || !GLOSSARY[label.toLowerCase()]) continue;
+      cell.innerHTML = gloss(label);
+    }
+  }
+
+  if (window.MutationObserver) {
+    new MutationObserver(markHeaders).observe(
+      document.body, { childList: true, subtree: true });
+  }
+
+  window.addEventListener("hashchange", render);
+  render();
+})();
+"""
+
+
+# THE HEALTH SCREEN, FOR THIS MACHINE ONLY. It left the published desk on
+# 2026-09-11, when the owner asked for nothing public about the machine, and
+# came back the same day as a screen of the desk built into local/: "I think
+# it was important for me". desk.render puts this in place of the
+# EXTRA_SCREENS marker in DECK_JS for that build and puts nothing there for
+# the one in site/, so the published page does not carry this code, nor the
+# health figures it reads. Inside DECK_JS's closure, so it reads the same
+# helpers every other screen does. The route is a session screen,
+# #/session/<date>/health, where it was #/health/<date> before.
+HEALTH_JS = r"""
+  /* ---------- health, answered rather than dumped ----------
+     This screen used to print five blocks of the packet's raw JSON, which is
+     the packet talking to itself. Every check below reads the same figures
+     and says what they mean. */
   function healthChecks(p) {
     var h = p.health || {};
     var job = h.job || {}, q = h.quota || {}, cov = h.coverage || {};
@@ -3617,601 +4139,41 @@ DECK_JS = r"""
 
   function healthSection(p) {
     return '<section><div class="shead"><h2>Was the machine right</h2>' +
-      '<a class="note" href="#/health/' + esc(p.session) +
-      '">every check, in full</a></div>' + verdictHTML(healthChecks(p)) + "</section>";
+      '<a class="note" href="#/session/' + esc(p.session) +
+      '/health">every check, in full</a></div>' + verdictHTML(healthChecks(p)) +
+      "</section>";
   }
 
-  function screenSessions(root) {
-    var rows = INDEX.sessions;
-    var months = monthsOnFile();
-    var maxGap = CAL_MAX * 1.1;
-    // CRITERIA [Screens] sessions_page_size, which was passed into the page
-    // from the first build and read by nothing: the list rendered every row.
-    // Four sessions hid it. At the inline_sessions ceiling of 400 it is four
-    // hundred rows under a calendar the reader came for.
-    var PAGE = KNOBS.sessions_page_size || 0;
-    function listHTML(limit) {
-      var shown = limit ? rows.slice(0, limit) : rows;
-      return listTable(shown) + (rows.length > shown.length
-        ? '<div class="filters noprint" style="margin-top:11px">' +
-          '<button class="chip" type="button" data-more="1">Show all ' +
-          rows.length + " sessions</button></div>"
-        : "");
-    }
-    function listTable(rows) {
-      return '<div class="card pad scroll"><table><thead><tr><th>Session</th>' +
-      '<th style="text-align:right">Names</th><th style="text-align:right">Day</th>' +
-      '<th style="text-align:right">Swing</th><th>Conviction</th><th>Largest gap</th>' +
-      '<th></th><th style="text-align:right">Price reached</th><th>Packet</th>' +
-      "</tr></thead><tbody>" + rows.map(function (r) {
-        var conv = ["green", "yellow", "red"].map(function (k) {
-          return r[k] ? '<span class="sw ' + k + '" title="' + r[k] + " " + k +
-            '"></span>' : "";
-        }).join(" ");
-        return '<tr class="clickable" data-date="' + esc(r.date) + '">' +
-          '<td class="tk">' + esc(r.date) + "</td>" +
-          '<td class="n">' + (r.candidates == null ? NIL : r.candidates) + "</td>" +
-          '<td class="n">' + (r.day_eligible == null ? NIL : r.day_eligible) + "</td>" +
-          '<td class="n">' + (r.swing_eligible == null ? NIL : r.swing_eligible) + "</td>" +
-          "<td>" + conv + "</td>" +
-          '<td class="mono">' + esc(r.top_symbol || NIL) + " " +
-          '<span class="' + dirClass(r.top_gap_pct) + '">' + pct(r.top_gap_pct) + "</span></td>" +
-          "<td>" + minibar(r.top_gap_pct, maxGap) + "</td>" +
-          '<td class="n">' + (r.triggered == null ? NIL : r.triggered) + "</td>" +
-          '<td style="color:var(--muted);font-size:11.5px">' +
-          (r.packet_bytes == null ? NIL
-            : big(r.packet_bytes) + (r.packet_compressed ? " gz" : "")) + "</td></tr>";
-      }).join("") + "</tbody></table></div>";
-    }
-    var calHTML = '<div class="calwrap">' + months.map(function (ym) {
-      return calMonth(ym, null, false); }).join("") + "</div>" + calKey();
-
-    var NOTE = {
-      cal: "A lifted day is a morning the desk holds. The ticker under the date is " +
-        "that morning's largest gap and the bar is how large, on one scale across " +
-        "every month, so two mornings compare by eye. Everything faint is a day the " +
-        "machine did not run: a weekend, a holiday, or a date before the history " +
-        "this desk carries.",
-      list: "One row a session, newest first. The bar is that morning's largest gap " +
-        "on the same shared scale."
-    };
-
-    root.innerHTML =
-      '<section><div class="shead"><h2>Every session on file</h2>' +
-      '<span class="note">' + rows.length + " mornings, " + esc(FIRST) + " to " +
-      esc(LAST) + '</span><div class="seg noprint" style="margin-left:auto">' +
-      '<button type="button" data-view="cal" aria-pressed="true">Calendar</button>' +
-      '<button type="button" data-view="list" aria-pressed="false">List</button>' +
-      '</div></div><p class="snote" id="ses-note">' + esc(NOTE.cal) + "</p>" +
-      '<div id="ses-view">' + calHTML + "</div></section>";
-
-    var view = $("ses-view");
-    wireCal(view, function (date) { location.hash = "#/session/" + date; });
-    view.addEventListener("click", function (e) {
-      if (e.target.closest("[data-more]")) { view.innerHTML = listHTML(0); return; }
-      var tr = e.target.closest("tr[data-date]");
-      if (tr) location.hash = "#/session/" + tr.dataset.date;
-    });
-    root.addEventListener("click", function (e) {
-      // A pick row routes to that name's own screen, the way the other four
-      // tables on the desk do. The attribute was on the rows from the start
-      // and nothing was reading it.
-      var go = e.target.closest("[data-goto]");
-      if (go) { location.hash = "#/name/" + go.dataset.goto; return; }
-      var b = e.target.closest("button[data-view]");
-      if (!b) return;
-      var which = b.dataset.view;
-      Array.prototype.forEach.call(root.querySelectorAll("button[data-view]"),
-        function (o) { o.setAttribute("aria-pressed", String(o === b)); });
-      view.innerHTML = which === "cal" ? calHTML : listHTML(PAGE);
-      view.dataset.sel = "";
-      $("ses-note").textContent = NOTE[which];
-    });
-  }
-
-  function screenRecord(root) {
-    var rows = INDEX.sessions;
-    var totals = rows.reduce(function (a, r) {
-      a.cand += r.candidates || 0; a.day += r.day_eligible || 0;
-      a.swing += r.swing_eligible || 0; a.green += r.green || 0;
-      a.trig += r.triggered || 0; a.never += r.never_triggered || 0;
-      return a;
-    }, { cand: 0, day: 0, swing: 0, green: 0, trig: 0, never: 0 });
-    var maxCand = Math.max.apply(null,
-      rows.map(function (r) { return r.candidates || 0; }).concat([1]));
-
-    var html = kpisHTML([
-      { l: "Sessions on file", v: rows.length, s: "every morning that produced a packet" },
-      { l: "Candidates examined", v: totals.cand, s: "across every session" },
-      { l: "Day eligible", v: totals.day, s: (totals.cand ? (totals.day / totals.cand * 100).toFixed(1) : "0") + "% of candidates" },
-      { l: "Swing eligible", v: totals.swing, s: (totals.cand ? (totals.swing / totals.cand * 100).toFixed(1) : "0") + "% of candidates" },
-      { l: "Entries reached", v: totals.trig, s: totals.never + " never reached" }
-    ]);
-
-    html += '<section><div class="shead"><h2>Candidates a morning</h2></div>' +
-      '<p class="snote">How many names each morning kept, and how many of them cleared a ' +
-      "screen. A morning with no eligible name is not a failure; it is the screen doing its job.</p>" +
-      '<div class="card pad">' + rows.slice().reverse().map(function (r) {
-        var w = (r.candidates || 0) / maxCand * 100;
-        var dayW = (r.candidates ? (r.day_eligible || 0) / r.candidates : 0) * w;
-        return '<div style="display:grid;grid-template-columns:96px minmax(0,1fr) 130px;' +
-          'gap:10px;align-items:center;margin-bottom:5px;font-size:12px">' +
-          '<span class="mono" style="color:var(--ink-2)">' + esc(r.date) + "</span>" +
-          '<span style="position:relative;height:13px;background:var(--sunk);border-radius:2px">' +
-          '<i style="position:absolute;left:0;top:0;bottom:0;width:' + w +
-          '%;background:var(--r2);border-radius:2px"></i>' +
-          '<i style="position:absolute;left:0;top:0;bottom:0;width:' + dayW +
-          '%;background:var(--r4);border-radius:2px"></i></span>' +
-          '<span class="mono" style="color:var(--muted)">' + (r.candidates || 0) +
-          " kept, " + (r.day_eligible == null ? NIL : r.day_eligible) + " day</span></div>";
-      }).join("") +
-      '<div class="legendrow"><span class="lg"><span class="sw" style="background:var(--r2)"></span> candidates kept</span>' +
-      '<span class="lg"><span class="sw" style="background:var(--r4)"></span> of those, day eligible</span></div>' +
+  function screenHealth(p, root) {
+    var h = p.health || {};
+    var list = healthChecks(p);
+    var out = '<section><div class="shead"><h2>Was the machine right on ' +
+      esc(p.session) + "</h2>" +
+      '<span class="note">packet at ' + esc(p.run_at || NIL) + " ET</span></div>" +
+      '<p class="snote">Every answer below is read out of that morning\'s own ' +
+      "packet. This page measures nothing itself, so a wrong figure here is a " +
+      "wrong figure in the packet and the fix is upstream of the screen.</p>" +
+      verdictHTML(list) + '<div style="margin-top:13px">' + checksHTML(list) +
       "</div></section>";
 
-    var newest = INDEX.sessions[0];
-    html += '<div id="record-detail"></div>';
-    root.innerHTML = html;
-    if (newest) {
-      var mine = EPOCH;
-      loadSession(newest.date).then(function (p) {
-        if (!p || stale(mine)) return;
-        // The table redraws itself on a chip, and the payload is captured in
-        // the closure rather than looked up again, so a reader filtering does
-        // not wait on a second inflate.
-        function paint() {
-          var box = $("record-detail");
-          box.innerHTML = recordSection(p) + picksTable(p.record || {});
-          // ONE HANDLER ON THE BOX, because there are two sets of controls
-          // now and both are rebuilt on every repaint. Binding to each after
-          // each paint works, since innerHTML replaces the elements and the
-          // old listeners go with them, but it is a line to remember in two
-          // places and one to forget in a third. The box outlives them all.
-          if (box.dataset.wired) return;
-          box.dataset.wired = "1";
-          box.addEventListener("click", function (e) {
-            var f = e.target.closest("[data-pf]");
-            if (f) {
-              state.pickFilter = f.dataset.pf;
-              state.pickPage = 1;   // a new filter starts at its own first page
-              paint();
-              return;
-            }
-            var pp = e.target.closest("[data-pp]");
-            if (pp && !pp.disabled) {
-              state.pickPage = parseInt(pp.dataset.pp, 10) || 1;
-              paint();
-            }
-          });
-        }
-        paint();
-      });
+    var ev = h.evidence || {};
+    if (ev.band_thin && ev.band_thin.length) {
+      out += '<section><div class="shead"><h2>Thin at the level</h2></div>' +
+        '<p class="snote">For these names, hardly any shares changed hands ' +
+        "anywhere near the price this system wrote down. The price itself is " +
+        "not wrong: it is what the market showed. But so little was traded " +
+        "there that a real buyer might have found nobody to buy " +
+        "from.</p><div class=\"card pad\">" + ev.band_thin.map(function (r) {
+          return '<div class="reason"><span class="mono rk">' +
+            esc(bare(r.symbol)) + "</span><span>" + esc(r.why) + "</span></div>";
+        }).join("") + "</div></section>";
     }
+    root.innerHTML = out;
   }
 
-  function screenName(sym, root) {
-    root.innerHTML = '<section><div class="shead"><h2><span class="mono">' + esc(sym) +
-      "</span></h2><span class=\"note\">reading every session on file</span></div>" +
-      '<div id="name-body" class="card pad empty">Reading…</div></section>';
-    // ONLY THE SESSIONS THAT CARRY THE NAME. Each session's summary row
-    // lists its candidates, so the question is answered off the index and
-    // only the matching payloads are inflated. This used to open every
-    // inlined session: fine at four, four hundred at the inline_sessions
-    // ceiling, each inflated and held. A row written before the column
-    // existed carries no symbols and is opened, so an old index degrades
-    // to the old behaviour rather than to a wrong answer.
-    var needle = "," + sym + ",";
-    var dates = INDEX.sessions.filter(function (r) {
-      return r.symbols == null || ("," + r.symbols + ",").indexOf(needle) >= 0;
-    }).map(function (r) { return r.date; });
-    var mine = EPOCH;
-    Promise.all(dates.map(function (d) {
-      return loadSession(d).catch(function () { return null; });
-    })).then(function (all) {
-      if (stale(mine)) return;
-      var hits = [];
-      all.forEach(function (p) {
-        if (!p) return;
-        p.candidates.forEach(function (c) {
-          if (c.sym === sym) hits.push({ p: p, c: c });
-        });
-      });
-      if (!hits.length) {
-        $("name-body").innerHTML = esc(sym) +
-          " has not been a candidate in any session on file. That is a fact about this " +
-          "record, not about the name.";
-        return;
-      }
-      var maxGap = Math.max.apply(null,
-        hits.map(function (h) { return Math.abs(h.c.gap || 0); }).concat([1])) * 1.1;
-      var body = '<table><thead><tr><th>Session</th><th style="text-align:right">Gap</th>' +
-        '<th></th><th style="text-align:right">Score</th><th>Conviction</th>' +
-        '<th>Catalyst</th><th>Screens</th><th>At noon</th>' +
-        '<th style="text-align:right">Move</th></tr></thead><tbody>' +
-        hits.map(function (h) {
-          var c = h.c;
-          return "<tr><td class='tk'><a href='#/session/" + esc(h.p.session) +
-            "/morning'>" + esc(h.p.session) + "</a></td>" +
-            '<td class="n ' + dirClass(c.gap) + '">' + pct(c.gap) + "</td>" +
-            "<td>" + minibar(c.gap, maxGap) + "</td>" +
-            '<td class="n">' + n2(c.score, 0) + "</td>" +
-            '<td><span class="pill ' + esc(c.conv || "") + '">' + convWord(c.conv) + "</span></td>" +
-            "<td style='color:var(--muted)'>" + esc(c.catalyst || "") + "</td>" +
-            "<td style='color:var(--muted)'>" +
-            (c.day ? "day " : "") + (c.swing ? "swing" : "") +
-            (!c.day && !c.swing ? "neither" : "") + "</td>" +
-            "<td>" + (c.mid ? esc(MID_WORD[c.mid.state] || c.mid.state) : NIL) + "</td>" +
-            '<td class="n ' + dirClass(c.mid && c.mid.move) + '">' +
-            (c.mid ? pct(c.mid.move) : NIL) + "</td></tr>";
-        }).join("") + "</tbody></table>";
-      $("name-body").className = "card pad scroll";
-      $("name-body").innerHTML = body;
-
-      // A deck is a level ladder, a tape path and every headline, so a name
-      // that has appeared eighty times used to draw eighty of them before
-      // the screen was usable. CRITERIA [Screens] name_decks, newest first,
-      // with the rest one click away.
-      var decks = document.createElement("div");
-      root.appendChild(decks);
-      function drawDecks(limit) {
-        var shown = limit ? hits.slice(0, limit) : hits;
-        decks.innerHTML = shown.map(function (h) {
-          return '<section><div class="shead"><h3 style="font-size:15px">' +
-            esc(h.p.session) + "</h3></div>" + deckHTML(h.c, h.p) + "</section>";
-        }).join("") + (hits.length > shown.length
-          ? '<div class="filters noprint"><button class="chip" type="button" ' +
-            'data-alldecks="1">Draw the other ' + (hits.length - shown.length) +
-            " appearance" + (hits.length - shown.length === 1 ? "" : "s") +
-            "</button></div>"
-          : "");
-        shown.forEach(function (h, i) {
-          var w = decks.querySelectorAll(".chart-wrap")[i];
-          if (w) wirePath(w, h.c);
-        });
-      }
-      decks.addEventListener("click", function (e) {
-        if (e.target.closest("[data-alldecks]")) drawDecks(0);
-      });
-      drawDecks(KNOBS.name_decks || 0);
-    });
-  }
-
-  function screenHealth(date, root) {
-    root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
-      esc(date) + " ...</div>";
-    var mine = EPOCH;
-    loadSession(date).then(function (p) {
-      if (stale(mine)) return;
-      if (!p) {
-        root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
-          esc(date) + " is not inlined in this document.</div>";
-        return;
-      }
-      $("stamp-date").textContent = p.session;
-      $("stamp-run").textContent = p.run_at || NIL;
-      var h = p.health || {};
-      var list = healthChecks(p);
-      var out = '<section><div class="shead"><h2>Was the machine right on ' +
-        esc(p.session) + "</h2>" +
-        '<span class="note">packet at ' + esc(p.run_at || NIL) + " ET</span></div>" +
-        '<p class="snote">Every answer below is read out of that morning\'s own ' +
-        "packet. This page measures nothing itself, so a wrong figure here is a " +
-        "wrong figure in the packet and the fix is upstream of the screen.</p>" +
-        verdictHTML(list) + '<div style="margin-top:13px">' + checksHTML(list) +
-        "</div></section>";
-
-      var ev = h.evidence || {};
-      if (ev.band_thin && ev.band_thin.length) {
-        out += '<section><div class="shead"><h2>Thin at the level</h2></div>' +
-          '<p class="snote">For these names, hardly any shares changed hands ' +
-          "anywhere near the price this system wrote down. The price itself is " +
-          "not wrong: it is what the market showed. But so little was traded " +
-          "there that a real buyer might have found nobody to buy " +
-          "from.</p><div class=\"card pad\">" + ev.band_thin.map(function (r) {
-            return '<div class="reason"><span class="mono rk">' +
-              esc(bare(r.symbol)) + "</span><span>" + esc(r.why) + "</span></div>";
-          }).join("") + "</div></section>";
-      }
-
-      // THE FIVE RAW JSON FOLDS ARE GONE, 2026-09-10. They printed packet
-      // sections through JSON.stringify, which put 47 field names and every
-      // CRITERIA.md citation on the desk onto a screen written for a reader
-      // who does not have this repository. Folded is not absent either: the
-      // print handler opens every fold, so a saved PDF carried all of it.
-      // The sentences above say the same things in English and the packet is
-      // the audit trail, frozen beside the morning and backed up nightly.
-      out += '<section><div class="shead"><h2>Where the working is</h2>' +
-        '</div><p class="snote">Every answer above was read out of the record ' +
-        "this system wrote at " + esc(p.run_at || "08:45") + " and froze. That " +
-        "record is kept exactly as written, so any figure on any screen can be " +
-        "traced back to it, and none of it is recomputed afterwards. This page " +
-        "shows the answers rather than the record, because the record is a " +
-        "file and this is a screen.</p></section>";
-      root.innerHTML = out;
-    });
-  }
-
-  /* ---------- router ---------- */
-  function parse() {
-    var h = (location.hash || "").replace(/^#\/?/, "");
-    var parts = h.split("/").filter(Boolean);
-    if (!parts.length) {
-      var newest = INDEX.sessions[0];
-      return newest ? { screen: "morning", date: newest.date } : { screen: "sessions" };
-    }
-    if (parts[0] === "sessions") return { screen: "sessions" };
-    if (parts[0] === "record") return { screen: "record" };
-    if (parts[0] === "health") return { screen: "health", date: parts[1] || LAST };
-    if (parts[0] === "name") return { screen: "name", sym: parts[1] };
-    if (parts[0] === "session") {
-      return { screen: parts[2] || "session", date: parts[1] };
-    }
-    if (parts[0] === "report") return { screen: "report", date: parts[1] || LAST };
-    return { screen: "sessions" };
-  }
-
-  /* The names in the menu bar, for the printed page, which has no menu bar.
-     Kept beside the map above so a screen renamed in one is renamed in both:
-     Ladder and Precedent became Open and Similar on 2026-09-09 and a second
-     list would still be saying Ladder. */
-  var SCREEN_TITLE = { morning: "Morning", ladder: "Open", precedent: "Similar",
-    midday: "Midday", report: "Report", session: "Session",
-    sessions: "Sessions", record: "Record", health: "Health", name: "Name" };
-
-  function setNav(route) {
-    var map = { morning: "morning", ladder: "ladder", precedent: "precedent",
-      midday: "midday", report: "report",
-      session: "sessions", sessions: "sessions", record: "record",
-      health: "health", name: "" };
-    Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
-      var key = a.dataset.nav;
-      if (key === map[route.screen]) a.setAttribute("aria-current", "page");
-      else a.removeAttribute("aria-current");
-    });
-    // Morning, Midday, Report and Health all resolve against the chosen
-    // session, so their links carry it rather than dropping the reader on
-    // the newest.
-    var at = route.date || LAST;
-    var link = { morning: "#/session/" + at + "/morning",
-      ladder: "#/session/" + at + "/ladder",
-      precedent: "#/session/" + at + "/precedent",
-      midday: "#/session/" + at + "/midday",
-      report: "#/session/" + at + "/report",
-      health: "#/health/" + at };
-    Array.prototype.forEach.call(document.querySelectorAll("nav a"), function (a) {
-      if (link[a.dataset.nav]) a.href = link[a.dataset.nav];
-    });
-    var scoped = (route.screen === "morning" || route.screen === "midday" ||
-      route.screen === "session" || route.screen === "health" ||
-      route.screen === "report" || route.screen === "precedent");
-    $("picker-wrap").style.display = scoped ? "" : "none";
-    if (route.date) $("session-btn-label").textContent = route.date;
-    // The stamp names the session a screen is about. On Sessions, Record,
-    // Health and Name it is about all of them, and a dash beside the word
-    // "session" reads as a session whose date went missing.
-    $("stamp").style.display = scoped ? "" : "none";
-    // WHAT THE PRINTED FILE CALLS ITSELF. The navigation is hidden on paper,
-    // which is right, and it was the only thing on the page that said which
-    // of the nine screens this was. A PDF is saved in order to be sent to
-    // somebody who was not at the desk, so it says the screen and the
-    // session in its own first line.
-    $("print-title").textContent = "PremarketDesk " +
-      (SCREEN_TITLE[route.screen] || "Desk");
-    $("print-sub").textContent = route.date
-      ? "The " + route.date + " session, saved from the desk."
-      : "Saved from the desk.";
-  }
-
-  var TIMER = null;
-
-  // The same argument as TIMER, for the other thing a screen leaves behind.
-  // Four screens draw from a promise: the session inflates, and only then is
-  // there anything to render. A reader who moves on inside that window used
-  // to get the OLD route's screen drawn over the new one, stamp and all,
-  // under a hash that says something else, or a TypeError from writing into
-  // a node the new screen had already replaced. Every render takes a number
-  // and a resolution that is not the current one draws nothing.
-  var EPOCH = 0;
-  function stale(mine) { return mine !== EPOCH; }
-
-  function render() {
-    // A screen that started a clock owns it until the route changes. Left
-    // running, a countdown keeps writing into a node the next screen has
-    // already replaced.
-    if (TIMER) { clearInterval(TIMER); TIMER = null; }
-    EPOCH += 1;
-    var mine = EPOCH;
-    var route = parse();
-    // A FRESH NODE, not a refilled one. Six screens attach a delegated
-    // click handler to this element, and innerHTML replaces an element's
-    // CHILDREN while its own listeners stay. Refilling it left one handler
-    // per visit, each closed over the session it was created for, so the
-    // Report screen's Morning and Midday toggle ran once for every report
-    // screen the reader had ever opened. Replacing the node drops them
-    // with it, and every screen goes on attaching whatever it needs.
-    var root = document.createElement("div");
-    root.id = "screen";
-    var previous = $("screen");
-    previous.parentNode.replaceChild(root, previous);
-    setNav(route);
-    if (route.screen === "sessions") { screenSessions(root); return; }
-    if (route.screen === "record") { screenRecord(root); return; }
-    if (route.screen === "health") { screenHealth(route.date, root); return; }
-    if (route.screen === "name") { screenName(route.sym, root); return; }
-
-    root.innerHTML = '<div class="card pad empty" style="margin-top:24px">Reading ' +
-      esc(route.date) + "…</div>";
-    loadSession(route.date).then(function (p) {
-      if (stale(mine)) return;
-      if (!p) {
-        root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
-          esc(route.date) + " is not inlined in this document.</div>";
-        return;
-      }
-      $("stamp-date").textContent = p.session;
-      $("stamp-run").textContent = p.run_at || NIL;
-      if (route.screen === "ladder") screenLadder(p, root);
-      else if (route.screen === "midday") screenMidday(p, root);
-      else if (route.screen === "precedent") screenPrecedent(p, root);
-      else if (route.screen === "report") screenReport(p, root);
-      else if (route.screen === "session") screenSession(p, root);
-      else screenMorning(p, root);
-      window.scrollTo(0, 0);
-    }).catch(function (err) {
-      if (stale(mine)) return;
-      root.innerHTML = '<div class="card pad empty" style="margin-top:24px">' +
-        esc(err.message) + "</div>";
-    });
-  }
-
-  /* ---------- chrome ---------- */
-  // The session control is the calendar in a popover and not a date input,
-  // because a date input can clamp a range but cannot haze the individual
-  // days the desk holds no morning for, and those are most of them.
-  var pbtn = $("session-btn"), ppop = $("session-pop");
-  function closePop() {
-    ppop.hidden = true;
-    pbtn.setAttribute("aria-expanded", "false");
-  }
-  function openPop() {
-    var sel = parse().date || LAST;
-    ppop.dataset.sel = sel;
-    ppop.innerHTML = calMonth(sel.slice(0, 7), sel, true) + calKey();
-    ppop.hidden = false;
-    pbtn.setAttribute("aria-expanded", "true");
-  }
-  pbtn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    if (ppop.hidden) openPop(); else closePop();
-  });
-  wireCal(ppop, function (date) {
-    closePop();
-    var screen = parse().screen;
-    location.hash = screen === "session" ? "#/session/" + date
-      : screen === "health" ? "#/health/" + date
-      : screen === "midday" ? "#/session/" + date + "/midday"
-      : screen === "precedent" ? "#/session/" + date + "/precedent"
-      : screen === "report" ? "#/session/" + date + "/report"
-      : "#/session/" + date + "/morning";
-  });
-  document.addEventListener("click", function (e) {
-    if (!ppop.hidden && !ppop.contains(e.target) && !pbtn.contains(e.target)) closePop();
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !ppop.hidden) { closePop(); pbtn.focus(); }
-  });
-
-  $("theme-btn").addEventListener("click", function () {
-    var r = document.documentElement;
-    var cur = r.getAttribute("data-theme");
-    if (!cur) {
-      cur = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
-        ? "dark" : "light";
-    }
-    var next = cur === "dark" ? "light" : "dark";
-    r.setAttribute("data-theme", next);
-    try { localStorage.setItem("desk-theme", next); } catch (e) { /* private window */ }
-  });
-  try {
-    var saved = localStorage.getItem("desk-theme");
-    if (saved) document.documentElement.setAttribute("data-theme", saved);
-  } catch (e) { /* private window */ }
-
-  $("print-btn").addEventListener("click", function () {
-    Array.prototype.forEach.call(document.querySelectorAll("details"), function (d) {
-      d.open = true;
-    });
-    setTimeout(function () { window.print(); }, 60);
-  });
-
-  /* ONE POPOVER, DELEGATED. The screens are rebuilt wholesale on every route
-     change, so a listener bound to each label would have to be rebound by
-     every screen that ever draws one. This reads the click on the way up
-     instead and needs nothing from a screen but the class. */
-  function closeGloss() {
-    var open = document.getElementById("glpop");
-    if (open && open.parentNode) open.parentNode.removeChild(open);
-  }
-
-  function openGloss(el) {
-    var text = GLOSSARY[el.getAttribute("data-gl")];
-    if (!text) return;
-    var pop = document.createElement("div");
-    pop.id = "glpop";
-    pop.className = "glpop";
-    pop.innerHTML = "<b>" + esc(el.textContent) + "</b> " + esc(text);
-    document.body.appendChild(pop);
-    var box = el.getBoundingClientRect();
-    var wide = pop.offsetWidth || 300;
-    pop.style.top = (box.bottom + window.scrollY + 6) + "px";
-    pop.style.left = Math.max(8, Math.min(box.left + window.scrollX,
-      (window.innerWidth || 1024) - wide - 10)) + "px";
-  }
-
-  document.addEventListener("click", function (e) {
-    var node = e.target;
-    while (node && node !== document.body &&
-           !(node.getAttribute && node.getAttribute("data-gl"))) {
-      node = node.parentNode;
-    }
-    var hit = node && node.getAttribute && node.getAttribute("data-gl");
-    closeGloss();
-    if (hit) { openGloss(node); e.stopPropagation(); }
-  });
-
-  document.addEventListener("keydown", function (e) {
-    var live = document.activeElement;
-    if (e.key === "Escape") { closeGloss(); return; }
-    if ((e.key === "Enter" || e.key === " ") && live && live.getAttribute &&
-        live.getAttribute("data-gl")) {
-      e.preventDefault();
-      closeGloss();
-      openGloss(live);
-    }
-  });
-
-  // A folded section that vanishes from a saved PDF is a section the
-  // reader cannot get back. The Save as PDF button above ALREADY opens
-  // every fold; this covers the other way out, a browser native Ctrl+P,
-  // which does not go through that button.
-  // [corrected 2026-09-09: the comment here first said the debug folds
-  // had never had this. They had, through the button, since they were
-  // built. What they lacked was the Ctrl+P path.]
-  window.addEventListener("beforeprint", function () {
-    var folds = document.querySelectorAll("details");
-    for (var i = 0; i < folds.length; i++) { folds[i].open = true; }
-  });
-
-  /* EVERY TABLE HEADER ON THE DESK, in one place. Wiring gloss() into each
-     screen would mean touching every table and remembering to do it in the
-     next one; several screens also paint asynchronously, after a session
-     loads, so there is no single moment after render() when all the headers
-     exist. An observer marks them whenever they arrive, and skips a header it
-     has already marked, so its own writes settle after one further pass. */
-  function markHeaders() {
-    // TABLE HEADERS AND THE CARD'S OWN LABELS. The Evidence panel is a grid
-    // of divs and not a table, so until 2026-09-09 the glossary reached none
-    // of the nine labels on it, which are the densest on the whole desk.
-    var cells = [];
-    var th = document.getElementsByTagName("th");
-    for (var t = 0; t < th.length; t++) cells.push(th[t]);
-    var keys = document.getElementsByClassName("k");
-    for (var f = 0; f < keys.length; f++) cells.push(keys[f]);
-    for (var i = 0; i < cells.length; i++) {
-      var cell = cells[i];
-      if (cell.getElementsByClassName("gl").length) continue;
-      var label = (cell.textContent || "").replace(/^\s+|\s+$/g, "");
-      if (!label || !GLOSSARY[label.toLowerCase()]) continue;
-      cell.innerHTML = gloss(label);
-    }
-  }
-
-  if (window.MutationObserver) {
-    new MutationObserver(markHeaders).observe(
-      document.body, { childList: true, subtree: true });
-  }
-
-  window.addEventListener("hashchange", render);
-  render();
-})();
+  EXTRA_SCREENS.health = { title: "Health", draw: screenHealth };
+  EXTRA_TAIL.push(healthSection);
 """
+
+# Where HEALTH_JS goes, and what the published build puts there instead.
+EXTRA_MARKER = "/*@EXTRA_SCREENS@*/"

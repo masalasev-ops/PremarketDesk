@@ -72,6 +72,11 @@ LOGS_DIR = PROJECT_ROOT / "logs"
 # inside the sandbox, and the mtime check did not see it because it watches
 # runs/ and data/, which is where the previous escapes happened.
 SITE_DIR = PROJECT_ROOT / "site"
+# What is built for this machine only and never published: the Weekly page
+# and the desk with its Health screen, since 2026-09-11 when site/ became the
+# folder ops.publish uploads. Here for the reason SITE_DIR is, so the sandbox
+# can redirect it.
+LOCAL_DIR = PROJECT_ROOT / "local"
 
 DB_PATH = DATA_DIR / "premarketdesk.db"
 UNIVERSE_PATH = DATA_DIR / "universe.json"

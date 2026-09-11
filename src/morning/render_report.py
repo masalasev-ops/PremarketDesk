@@ -23,6 +23,7 @@ from core import ettime
 from core import files
 from core import glossary
 from core import page
+from core import reader
 from ops import job_status
 
 _EXTENSIONS = ["tables", "fenced_code", "sane_lists"]
@@ -295,17 +296,22 @@ def footer_links(report_path: Path) -> str:
         links.append('<a href="report_midday.html">the midday report for this day</a>')
     else:
         links.append("the midday report is written at 12:00 and is not here yet")
-    site = runs_dir.parent / "site"
-    if (site / "PremarketDesk.html").is_file():
-        # Same filename, different page and so a different fragment. The desk
-        # took site/PremarketDesk.html from build_archive on 2026-09-04 and it
-        # routes on a hash, so #<date> would land on the newest session rather
-        # than on this one.
-        links.append(
-            f'<a href="../../site/PremarketDesk.html#/session/{date}/morning">'
-            "the desk</a>")
-    if (site / "Weekly.html").is_file():
-        links.append('<a href="../../site/Weekly.html">the weekly page</a>')
+    # The local desk first: it is the public one plus the Health screen, and
+    # this footer is only ever read on this machine. site/ is the fallback for
+    # a tree whose desk has not been built since 2026-09-11.
+    for folder in ("local", "site"):
+        if (runs_dir.parent / folder / "PremarketDesk.html").is_file():
+            # Same filename, different page and so a different fragment. The
+            # desk took PremarketDesk.html from build_archive on 2026-09-04 and
+            # it routes on a hash, so #<date> would land on the newest session
+            # rather than on this one.
+            links.append(
+                f'<a href="../../{folder}/PremarketDesk.html#/session/{date}/morning">'
+                "the desk</a>")
+            break
+    # local/, not site/, since 2026-09-11: see night.weekly_page.OUT_PATH.
+    if (runs_dir.parent / "local" / "Weekly.html").is_file():
+        links.append('<a href="../../local/Weekly.html">the weekly page</a>')
     return (f'<div class="{LOCAL_ONLY_CLASS}"><p>Also on this machine: '
             + "; ".join(links) + ".</p></div>")
 
@@ -324,7 +330,10 @@ def render(report_path: Path, overwrite: bool = False) -> Path:
     reads it, and the chain owns today's artifacts and rewrites them freely.
     """
     text = report_path.read_text(encoding="utf-8")
-    body = to_html(text)
+    # THE READER'S COPY. report.md keeps every word the morning wrote, the
+    # machine's working included, and is the record; the page a person reads
+    # and the email that carries it do not name the machine. See core/reader.
+    body = to_html(reader.reader_markdown(text))
 
     title = "PremarketDesk"
     for line in text.splitlines():

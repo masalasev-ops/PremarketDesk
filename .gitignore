@@ -10,4 +10,6 @@ logs/
 # tracked file is _redirects, which Cloudflare Pages reads for the root URL.
 site/*
 !site/_redirects
+# Pages for the owner of this machine, never published: the weekly page.
+local/
 node_modules/

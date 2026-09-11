@@ -29,6 +29,7 @@ from core import criteria
 from core import files
 from core import glossary
 from core import page
+from core import reader
 from ops import job_status
 from morning import render_report
 
@@ -562,7 +563,9 @@ def render(packet_path: Path, overwrite: bool = False) -> tuple[Path, Path]:
     files.write_text_atomically(md_path, markdown_text,
                                 attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     html_path, _ = artifacts.resolve(run / REPORT_HTML, resolved, what="midday render")
-    files.write_text_atomically(html_path, to_html(markdown_text, title),
+    # The reader's copy, as render_report writes the morning's: the markdown
+    # above is the record and keeps every word. See core/reader.
+    files.write_text_atomically(html_path, to_html(reader.reader_markdown(markdown_text), title),
                                 attempts=files.ATTEMPTS, retry_s=files.RETRY_S)
     return md_path, html_path
 

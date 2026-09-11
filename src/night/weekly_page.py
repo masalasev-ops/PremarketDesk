@@ -59,7 +59,13 @@ from ops import job_status
 
 _CRIT = criteria.load()
 
-OUT_PATH = config.PROJECT_ROOT / "site" / "Weekly.html"
+# NOT UNDER site/ since 2026-09-11. site/ is what ops/publish.py uploads, and
+# this page is the machine's own account of its week: steps and exit codes,
+# the socket against the vendor, what the shared key cost, the field names of
+# the score. The owner asked for none of that on the public site, and it is
+# written for the person who runs this machine, so it stays on it.
+# config.LOCAL_DIR and not a path built here, so the sandbox redirects it.
+OUT_PATH = config.LOCAL_DIR / "Weekly.html"
 
 
 def _days(window: int) -> list[str]:

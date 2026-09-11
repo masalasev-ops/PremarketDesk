@@ -48,6 +48,7 @@ from core import criteria
 from core import ettime
 from core import files
 from core import lookalike
+from core import reader
 from core import store
 from desk import precedent
 from morning import structure
@@ -359,7 +360,9 @@ def _rendered(run_dir: Path, name: str) -> str | None:
     if files.resolve_maybe_gz(run_dir / name) is None:
         return None
     try:
-        return render_report.to_html(files.read_text_maybe_gz(run_dir / name))
+        # The reader's copy of the report, never the record: see core/reader.
+        return render_report.to_html(
+            reader.reader_markdown(files.read_text_maybe_gz(run_dir / name)))
     except (OSError, ValueError) as exc:
         print(f"compact: {run_dir.name} {name} unreadable: {exc}")
         return None

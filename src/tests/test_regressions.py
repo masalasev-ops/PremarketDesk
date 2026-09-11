@@ -15222,16 +15222,25 @@ def claim_the_morning_page_links_to_its_siblings(failures: list[str]) -> None:
                           encoding="utf-8")
         config.SITE_DIR.mkdir(parents=True, exist_ok=True)
         (config.SITE_DIR / "PremarketDesk.html").write_text("<p>archive</p>", encoding="utf-8")
-        (config.SITE_DIR / "Weekly.html").write_text("<p>weekly</p>", encoding="utf-8")
+        local = config.LOCAL_DIR
+        local.mkdir(parents=True, exist_ok=True)
+        (local / "Weekly.html").write_text("<p>weekly</p>", encoding="utf-8")
 
         without_midday = render_report.render(report, overwrite=True).read_text(encoding="utf-8")
         (today / "report_midday.html").write_text("<p>midday</p>", encoding="utf-8")
+        # [amended 2026-09-11: the desk is built twice, the published one in
+        # site/ and this machine's own, with the Health screen, in local/. The
+        # footer is read only on this machine, so it links the local one when
+        # there is one and falls back to site/ when there is not.]
+        (local / "PremarketDesk.html").write_text("<p>local desk</p>", encoding="utf-8")
         with_midday = render_report.render(report, overwrite=True).read_text(encoding="utf-8")
         subject = deliver.email_subject(today / "report.html", "2026-01-08")
 
+    if 'href="../../site/PremarketDesk.html#/session/2026-01-08/morning"' not in without_midday:
+        failures.append("with no local desk, report.html does not fall back to the site/ one")
     for needle in ('href="../2026-01-07/report.html"',
-                   'href="../../site/PremarketDesk.html#/session/2026-01-08/morning"',
-                   'href="../../site/Weekly.html"', f'class="{render_report.LOCAL_ONLY_CLASS}"'):
+                   'href="../../local/PremarketDesk.html#/session/2026-01-08/morning"',
+                   'href="../../local/Weekly.html"', f'class="{render_report.LOCAL_ONLY_CLASS}"'):
         if needle not in with_midday:
             failures.append(f"report.html lacks {needle}")
     if 'href="report_midday.html"' not in with_midday:
@@ -15408,6 +15417,16 @@ def claim_every_report_section_is_drawn_somewhere(failures: list[str]) -> None:
     reach the payload, and the drawing has to iterate the roll rather than
     name the keys it knows, or the tenth sentence the scan writes is
     invisible the same way the other eight were.
+
+    [amended 2026-09-11: the owner took the evidence section and the Health
+    screen off the published desk, Health surviving only on the copy built
+    for this machine in local/, because every sentence of the
+    roll and every evidence gap is the machine describing its own working.
+    Section 11 now reaches a reader through the Report screen, as the
+    reader's copy core/reader keeps of it: partial windows, traps and the
+    thin trading warning. The roll and the gaps still reach the FROZEN
+    payload and are checked there, and the published copy is checked for
+    their absence in test_publish.]
     """
     from desk import assets
     from desk import compact
@@ -15456,7 +15475,7 @@ def claim_every_report_section_is_drawn_somewhere(failures: list[str]) -> None:
         "5 notable movers": "notableSection", "6 market trends": "tapeHTML",
         "7 technical signals": "ladder", "8 economic": "calendarSection",
         "9 coming up": "comingUpSection", "10 the record": "recordSection",
-        "11 skips and traps": "healthChecks",
+        "11 skips and traps": "screenReport",
     }
     for section, function in sorted(drawn.items()):
         if f"function {function}(" not in assets.DECK_JS:
@@ -15499,10 +15518,16 @@ def claim_every_report_section_is_drawn_somewhere(failures: list[str]) -> None:
     if not health.get("gaps"):
         failures.append("the payload carries no evidence gaps, which section 11 "
                         "of the report lists in full")
-    if "Object.keys(text)" not in assets.DECK_JS:
-        failures.append("the evidence section names the roll keys it knows "
-                        "instead of iterating them, so the next sentence the "
-                        "scan writes is invisible the way eight of nine were")
+    # The reader's half of section 11, as the Report screen shows it.
+    from core import reader
+    shown = reader.reader_markdown(
+        "## Skips and traps\n\nPremarket path partial or absent, treat any level "
+        "as partial: ZED.\n\nTraps: 0 of 12 candidates gap up against the balance "
+        "of their own headlines.\n\nEvidence gaps recorded by the scan, 1 in total:"
+        "\n\n- 15 candidate(s) carry a STALE premarket price\n")
+    if "Traps: 0 of 12" not in shown or "Premarket path partial" not in shown:
+        failures.append("the reader's copy of section 11 lost the traps or the "
+                        f"partial window line: {shown!r}")
 
     # And the tri-states, which bool() flattened until 2026-09-04.
     traps = [c.get("trap") for c in eleven.get("candidates") or []]
@@ -15990,8 +16015,11 @@ def claim_the_precedent_screen_cannot_borrow_the_record(failures: list[str]) -> 
             "would not change")
 
     # The morning's own section list, pinned so a change to it is deliberate
-    # rather than a side effect of working on this feature.
-    for helper in ("notableSection", "comingUpSection", "evidenceSection",
+    # rather than a side effect of working on this feature. [amended
+    # 2026-09-11: evidenceSection left it deliberately, on the owner's
+    # instruction that the public desk say nothing about the machine's own
+    # evidence; see core/reader and claim_the_published_desk_names_no_machine.]
+    for helper in ("notableSection", "comingUpSection",
                    "pipelineSection", "compositionSection", "calendarSection"):
         if f"{helper}(p)" not in morning:
             failures.append(
@@ -16137,20 +16165,28 @@ def claim_every_screen_can_be_reached(failures: list[str]) -> None:
     screens = set(re.findall(r'route\.screen === "(\w+)"', app))
     screens.update(re.findall(r'screen: "(\w+)"', app))
     screens.discard("")
-    if len(screens) < 9:
+    # EIGHT since 2026-09-11, when Health left the published desk on the
+    # owner's instruction: every line of it was the machine describing itself.
+    # It is a ninth on the copy built for this machine, and reachable there
+    # the way every other screen is, from the navigation.
+    if len(screens) < 8:
         failures.append(f"only {len(screens)} screens were found in the router, "
-                        f"which is fewer than the nine that exist: {sorted(screens)}")
+                        f"which is fewer than the eight that exist: {sorted(screens)}")
+    local_nav = desk_render._nav(local=True)
+    if 'data-nav="health"' not in local_nav or 'data-nav="health"' in nav:
+        failures.append("Health is not in the local desk's navigation and only "
+                        "there, so it is either unreachable on this machine or "
+                        "published")
+    if "EXTRA_SCREENS.health" not in assets.HEALTH_JS:
+        failures.append("the Health code no longer registers a screen, so the "
+                        "local desk's Health link routes nowhere")
 
     default = "morning"  # parse() with an empty hash
     in_nav = ("morning", "ladder", "precedent", "midday", "report", "sessions",
-              "record", "health")
+              "record")
     # from -> to -> the markup that draws the link
     draws = {
-        # The anchor text rather than the href for the health link, whose
-        # markup carries both kinds of quote. It is as unique, and it goes
-        # if the link goes.
-        "morning": {"name": '"#/name/" + tr.dataset.goto',
-                    "health": "every check, in full"},
+        "morning": {"name": '"#/name/" + tr.dataset.goto'},
         # Precedent is one click from anywhere, and it draws the reader onward
         # to the two screens its own numbers must not be confused with: a name's
         # own history, and the RECORD, which is the live population this screen
@@ -16169,7 +16205,6 @@ def claim_every_screen_can_be_reached(failures: list[str]) -> None:
         "sessions": {"session": '"#/session/" + date'},
         "name": {"morning": "/morning'>"},
         "record": {},
-        "health": {},
         "report": {},
     }
 
@@ -19297,7 +19332,8 @@ def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
         # legitimately has opinions about a fixture this small and they are
         # not what this claim is about.
         job_status.records = lambda *a, **k: [row("2026-09-08", "ok", 0)]
-        if "scan failed" in render.alert_banner("2026-09-08"):
+        quiet = render.alert_banner("2026-09-08")
+        if "No morning report" in quiet or "did not complete" in quiet:
             failures.append("the desk banner named a failure on a morning whose "
                             "only record is a success. A banner that appears "
                             "every day is a banner nobody reads")
@@ -19306,8 +19342,16 @@ def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
         # that the screens below are not this session.
         job_status.records = lambda *a, **k: [row("1999-01-04", "failed", 1)]
         red = render.alert_banner("1999-01-04")
-        if "scan failed at 08:45 ET" not in red:
-            failures.append(f"a failed step is not named on the desk: {red[:200]!r}")
+        # IN THE READER'S WORDS since 2026-09-11: the desk is public and the
+        # owner asked for nothing on it about steps, packets or files. It
+        # still has to say the one thing a reader needs, which is that the
+        # screens below are not this morning.
+        from core import reader as _reader
+        if "not this one" not in red:
+            failures.append("a morning that never completed does not say the "
+                            f"screens below are an earlier session: {red[:200]!r}")
+        if _reader.machine_words(red) or "scan" in red:
+            failures.append(f"the desk banner names the machine: {red[:200]!r}")
         if "No morning report" not in red:
             failures.append(
                 "a morning with no report on disk does not say so on the desk. "
@@ -19367,17 +19411,20 @@ def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
             failures.append(
                 "a morning whose report was written and then withheld does not "
                 f"say there is no report to deliver: {withheld[:200]!r}")
-        if "last session that completed" in withheld:
+        if "not this one" in withheld:
             failures.append(
                 "the desk told the reader the screens below are the previous "
                 "session on a morning whose packet exists and whose screens "
                 "ARE that morning. The desk step runs on the failure path on "
                 "purpose; a banner that denies it sends the reader looking for "
                 f"figures already in front of them: {withheld[:300]!r}")
-        if "report.md" not in withheld:
+        if "held back" not in withheld:
             failures.append(
-                "a withheld draft is on disk and the banner does not say where. "
-                "That is the one no-report state with something to go and read")
+                "a report written and then withheld reads the same as one never "
+                f"written: {withheld[:200]!r}")
+        if "report.md" in withheld or _reader.machine_words(withheld):
+            failures.append("the withheld banner names a file on this machine: "
+                            f"{withheld[:200]!r}")
 
         # THE THIRD RED STATE: a packet, and no report at all, not even a
         # withheld one. Also not a stale desk, and mutating the branch that
@@ -19394,7 +19441,7 @@ def claim_a_failed_morning_says_so_on_the_desk(failures: list[str]) -> None:
             failures.append(
                 "a morning that wrote a packet and no report does not say "
                 f"there is no report: {no_draft[:200]!r}")
-        if "last session that completed" in no_draft:
+        if "not this one" in no_draft:
             failures.append(
                 "the desk called the screens the previous session on a morning "
                 "whose packet exists. Only a morning with NO packet has stale "
@@ -20229,7 +20276,11 @@ def claim_no_screen_explains_itself_in_this_projects_own_words(
               "vwap", "sigma", "atr", "quartile", "float rotation",
               "denominator", "consolidated tape", "stop out", "unsigned",
               "the fill", "the tape", "cohort", "lookalike", "regime",
-              "basis point", "gapped")
+              "basis point", "gapped",
+              # and where a figure came from, which the owner ruled off the
+              # public desk on 2026-09-11: the machine's file, its supplier,
+              # its storage, and how the Similar screen's past was produced
+              "packet", "on file", "vendor", "replayed", "reconstructed")
 
     source = assets.DECK_JS
     source = re.sub(r"/\*.*?\*/", " ", source, flags=re.S)
@@ -20490,9 +20541,12 @@ def claim_a_saved_pdf_keeps_what_the_screen_drew(failures: list[str]) -> None:
             "was not at the desk")
     titles = assets.DECK_JS[assets.DECK_JS.index("var SCREEN_TITLE"):]
     titles = titles[:titles.index("};")]
+    # A screen a build adds names its own title where it registers itself,
+    # EXTRA_SCREENS.health = { title: "Health", ... } in assets.HEALTH_JS.
     for key, shown in re.findall(r'\("(\w+)", "[^"]*", "([^"]+)"\)',
                                  inspect.getsource(desk_render._nav)):
-        if key + ":" not in titles:
+        registered = f'EXTRA_SCREENS.{key} = {{ title: "{shown}"'
+        if key + ":" not in titles and registered not in assets.HEALTH_JS:
             failures.append(
                 f"the nav offers {shown!r} and SCREEN_TITLE has no {key!r}, so "
                 "that screen prints under the word Desk")

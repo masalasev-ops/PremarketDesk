@@ -1210,6 +1210,9 @@ tbody tr:hover{background:var(--ground)}
 <section id="s9">
   <h2><span class="n">09</span> &nbsp;The desk</h2>
   <h3>The nine screens</h3>
+  <p>Nine on this machine and eight in public. Since 2026-09-11 every build writes the desk twice:
+  site/PremarketDesk.html, which is published and carries eight, and local/PremarketDesk.html, the
+  same desk plus Health, which never leaves the machine.</p>
 
   <div class="plain">
     <span class="tag">In plain words</span>
@@ -1289,8 +1292,9 @@ tbody tr:hover{background:var(--ground)}
       everything on file.</p>
     </div>
     <div class="rule-c" style="border-left-color:var(--ext)">
-      <span class="tag">#/health, #/health/&lt;date&gt;</span>
+      <span class="tag">#/session/&lt;date&gt;/health, local desk only</span>
       <h5>7. Health</h5>
+      <p><b>Local only since 2026-09-11.</b> It left the published desk on the owner's instruction, because every line of it was the machine describing itself, and stayed on local/PremarketDesk.html, the copy every build writes for this machine and never uploads.</p>
       <p><b>Answers: is the machine right.</b> A verdict line, then six or seven checks each with a
       state and a plain English paragraph carrying the figures. The one that earns this screen its
       place is the last: the names that cleared the volume floor only because an estimated scaling
@@ -1970,7 +1974,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="id">C32</td><td class="nm">runs/&lt;date&gt;/</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C33</td><td class="nm">data/UNVERIFIED</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>Rewritten by C16 on a vintage violation, deleted by hand</td></tr>
       <tr><td class="id">C54</td><td class="nm">site/PremarketDesk.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>The desk since 2026-09-04, when build_archive was retired and C53 took its filename</td></tr>
-      <tr><td class="id">C65</td><td class="nm">site/Weekly.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
+      <tr><td class="id">C65</td><td class="nm">local/Weekly.html</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C56</td><td class="nm">data/job-status.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C57</td><td class="nm">data/quantifier-flags.jsonl</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
       <tr><td class="id">C58</td><td class="nm">data/exchange-details.json</td><td><span class="lay store">Store</span></td><td>none</td><td>none</td><td>none</td></tr>
@@ -2139,7 +2143,7 @@ tbody tr:hover{background:var(--ground)}
       <tr><td class="nm">C21 fill_outcomes<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Outcome columns.</td><td>Same. It scans for unfilled rows past the one and five session marks, so it catches up on its own.</td><td>Already sent</td></tr>
       <tr><td class="nm">C59 true_volume<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>The measured volume, the measured reference levels and the fill verdict for that date.</td><td>Nothing today is affected and nothing in the morning path reads any of it. It fills by query rather than by date, so a missed night is picked up by the next run. A row it cannot measure is left null WITH <code>truth_reason</code> written, and <code>fill_plausible</code> is separately marked <code>unknown</code> rather than left null, because a null verdict would be a fourth state the column does not have and would read downstream as a row nobody asked about rather than a row nobody could answer.</td><td>Already sent</td></tr>
       <tr><td class="nm">C60 paper_ledger<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, after C59</span></td><td>That night's ledger rows, for every rule version.</td><td>Nothing is affected. It is keyed on <code>(date, ticker, rule_version)</code> and re-books what is missing, so a missed night self-heals and a rerun is the same as a run. If C59 failed first, every row that night is SKIPPED with its reason rather than booked against the sampled levels, which is the whole design: a ledger built on a level that was never available books a P&amp;L that is wrong from its first row. The morning's record block then reads a table one night short and says so, because every count it prints carries its own denominator.</td><td>Already sent</td></tr>
-      <tr><td class="nm">C61 weekly_page<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, last of the reading steps</span></td><td>site/Weekly.html for that week.</td><td>Nothing reads it. It renders from what is already on disk, takes no vendor call and adds no measurement of its own, so a failed run costs a page that the next run rebuilds whole. It runs last so every source it reads is current.</td><td>Already sent</td></tr>
+      <tr><td class="nm">C61 weekly_page<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, last of the reading steps</span></td><td>local/Weekly.html for that week, never published.</td><td>Nothing reads it. It renders from what is already on disk, takes no vendor call and adds no measurement of its own, so a failed run costs a page that the next run rebuilds whole. It runs last so every source it reads is current.</td><td>Already sent</td></tr>
       <tr><td class="nm">C62 backup_evidence<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15, first</span></td><td>That night's copy of the six artifacts that cannot be rebuilt: the collector capture, its two sidecars, the packet, and the report in markdown and HTML. A report is on that list because the same input does not produce the same words twice. The hand judged flag log is snapshotted beside them on the same promise, and separately, because it legitimately grows and comparing it against an older snapshot would report a disagreement every night.</td><td>Never fails the chain, and nothing in the pipeline reads what it writes: a backup anything depends on is a second input. A dated backup is never overwritten, and if the working copy no longer matches one already taken that is reported as a DISAGREEMENT rather than resolved in either direction, because a stale backup and a corrupted working copy look identical from here.</td><td>Already sent</td></tr>
       <tr><td class="nm">C63 prune_data<br><span style="font-family:var(--sans);color:var(--ink-3)">22:15</span></td><td>Nothing. Unfreed disk.</td><td>Never fails the chain. What it may delete is a WHITELIST naming exactly one file class, <code>universe-closes-*.json</code>, not a rule about age: a sweeper that deletes whatever looks stale is one careless pattern away from taking the only copy of something, and data\ holds several only copies. C28, the collector's own socket capture, is a recording of a tape that no longer exists and is never a candidate at any age. The age comes from the FILENAME rather than the mtime, so a file a backup happened to touch is not spared and one it did not is not taken. A file matching the glob whose name carries no readable date is kept and reported.</td><td>Already sent</td></tr>
     </tbody>
