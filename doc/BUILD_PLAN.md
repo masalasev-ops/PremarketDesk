@@ -1496,5 +1496,5 @@ Open after that morning:
 - Every job appends to a dated log in logs/. The morning chain stops on the
   first failure, so an empty inbox with a log that stops at scan means the
   packet failed, not the mail.
-- To take the schedule down: `powershell -ExecutionPolicy Bypass -File
-  tasks\register_tasks.ps1 -Unregister`.
+- To take the schedule down, from an elevated shell: `powershell
+  -ExecutionPolicy Bypass -File tasks\register_tasks.ps1 -Unregister`.

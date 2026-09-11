@@ -876,7 +876,9 @@ be rebuilt from 2026-09-01.
    .venv\Scripts\python.exe -m selection.gap_stats
    ```
 
-7. **Register the scheduled jobs:**
+7. **Register the scheduled jobs,** from an elevated PowerShell (Run as
+   administrator), because every task runs whether or not anyone is logged on
+   and Windows refuses to register that unelevated:
 
    ```
    powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1

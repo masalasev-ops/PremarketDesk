@@ -58,7 +58,18 @@ reason it was noticed is that a test happened to read it.
 
 ## Registering
 
+From an ELEVATED PowerShell (Run as administrator):
+
     powershell -ExecutionPolicy Bypass -File tasks\register_tasks.ps1
+
+Every task runs whether or not anyone is logged on, as the owner's account with
+no stored password (S4U), and Windows refuses to register that unelevated, so
+the script exits with a message rather than half registering. Until 2026-09-11
+the tasks ran only while someone was logged on, and a power cut followed by two
+Windows Update restarts left the machine at the logon screen and skipped the
+whole early morning. The watchdog's schedule check now reports DIFFERS for any
+task that is back to "Interactive only". See DECISIONS.md 2026-09-11 for why
+S4U and not a stored password.
 
 That registers seven tasks, one per entry in the script's `$jobs` array, each
 with every trigger its job has. Every plain run also unregisters the four

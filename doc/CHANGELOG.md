@@ -15,6 +15,57 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-11, one hundred and fourteenth: every task runs whether or not anyone is logged on
+
+The power went at 00:55 and came back at 01:11, and Windows Update then
+restarted the machine twice, at 02:29 and 02:32. It came up to the logon screen
+each time and nobody logged on until 07:58. Every task was registered with the
+ScheduledTasks module's default principal, LogonType Interactive, which runs
+only while the owner is logged on, so the 03:55 and 07:15 discover passes, the
+04:00 collector, the 07:00 catch-up and the 07:25 and 07:55 watchdog passes ALL
+skipped. StartWhenAvailable did not catch any of them up at the logon either:
+the first thing to fire was the 08:00 meter sampler on its own slot. Left
+alone, the 08:25 watchdog would have rerun discover and held the collector to
+08:55, so the 08:45 chain would have screened with no tape at all.
+
+Repaired by hand the same morning: discover at 08:02, then the collector at
+08:03 once watchlist.json was today's, 50 of 50 subscribed. The session's
+window opens at 08:03:30 and window_open_at records it.
+
+THE FIX. register_tasks.ps1 now builds one S4U principal, the owner's account
+with no stored password, and passes it to every Register-ScheduledTask call,
+the three one off probes included, since WakeToRun on a task that needs a logon
+wakes a machine to do nothing. The script refuses to run unelevated, because
+Windows refuses an S4U registration unelevated with Access is denied, measured.
+The S4U mode was proved before anything was switched: a throwaway S4U task ran
+as the owner with the profile PATH, took one meter reading over the Norton
+intercepted TLS, and got OK back from the claude CLI on its subscription login.
+The eight real tasks were re-registered at 10:36 by a one off helper that
+waited for no PremarketDesk task to be running, so the live collector was not
+touched.
+
+THE WATCHDOG NOW CHECKS IT. schtasks reports a Logon Mode per task, "Interactive
+only" before the switch and "Interactive/Background" after. reconcile_schedule
+reports DIFFERS for an Interactive only task and NOT CHECKED for one whose mode
+it could not read, so a re-registration from an older copy of the script or a
+principal edited in the GUI is named on the next pass rather than found on the
+next outage. claim_every_task_runs_with_nobody_logged_on holds both halves, and
+was mutation checked against a copy with one -Principal removed and one with
+the logon type put back.
+
+THE SUITE'S GITLENS FALSE ALARM WAS NEVER FIXED, found by this change's own
+run. Every module passed and the tree photograph failed on .git/gk/config,
+SAME SIZE, DIFFERENT BYTES at 135: GitLens had rewritten gk-last-accessed and
+gk-last-modified at 10:41:13. The 2026-09-06 digest was written for this file
+on the belief that its rewrite was the same 106 bytes, and that was only ever
+the same size, which is all the old check could see. The timestamps are in the
+content, so no digest forgives it. conftest now exempts that one path,
+_editor_branch_state, on the same argument as FETCH_HEAD: nothing here writes
+under .git/gk/. claim_an_mtime_with_no_bytes_behind_it_is_not_a_change holds
+it both ways, forgiven at that path and caught at .git/gk/other and
+.git/config, and fails if the exemption is removed or widened to .git/. The
+two notes that said "the same 106 bytes" carry a correction.
+
 ## 2026-09-10, one hundred and thirteenth: the picks table pages, and still prints whole
 
 Twenty five rows today and about twelve more every weekday, so within a month

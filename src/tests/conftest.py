@@ -420,6 +420,25 @@ def _external_fetch_marker(path: Path, root: Path | None = None) -> bool:
     return path == (root or TREE_ROOT) / ".git" / "FETCH_HEAD"
 
 
+# ------------------------------------ the fourth behaviour exemption
+#
+# .git/gk/config, that one path, for the same reason as FETCH_HEAD above.
+#
+# The GitLens extension in this editor keeps per branch state there and
+# rewrites it on its own schedule, and the rewrite CHANGES BYTES: on
+# 2026-09-11 it went to gk-last-accessed and gk-last-modified =
+# 2026-09-11T14:41:13.290Z at 10:41:13, same 135 bytes, different digest, and
+# failed a nine minute run in which every module had passed. The digest added
+# on 2026-09-06 was written for this file on the belief that the rewrite was
+# the same bytes. It was never going to forgive it: the two timestamps are in
+# the content. Nothing in this project writes under .git/gk/, because every
+# git call here is `--no-optional-locks status` or `ls-files`, the same
+# inventory the FETCH_HEAD note rests on.
+def _editor_branch_state(path: Path, root: Path | None = None) -> bool:
+    """True for the one file GitLens rewrites with fresh timestamps."""
+    return path == (root or TREE_ROOT) / ".git" / "gk" / "config"
+
+
 def _digest(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
@@ -634,7 +653,12 @@ def differences(before: dict[str, Any], after: dict[str, Any],
     This is a widening and a tightening at once, which is why it is safe. It
     stops the run failing on an external toucher: on 2026-09-06 a git GUI
     rewrote .git/gk/config with the same 106 bytes mid run and failed a suite
-    in which every one of the fourteen modules had passed. And it closes the
+    in which every one of the fourteen modules had passed.
+    [corrected 2026-09-11: was "the same 106 bytes". The same SIZE was all the
+    old check could see. The file carries two timestamps GitLens rewrites every
+    time, so the bytes differed and the digest never forgave it; it now has its
+    own exemption, _editor_branch_state. The widening below is still right for
+    every other touch.] And it closes the
     hole the paragraph above admits, because a same size overwrite used to
     reach the reader as the same sentence as a harmless touch, leaving them to
     tell apart two things the check itself could not.
@@ -661,6 +685,8 @@ def differences(before: dict[str, Any], after: dict[str, Any],
             continue  # 00:00 UTC, the sampler started the next day's trail
         if _external_fetch_marker(Path(path)):
             continue  # the editor's first autofetch of this clone
+        if _editor_branch_state(Path(path)):
+            continue  # GitLens wrote its branch state for the first time
         out.append(f"created  {path}")
     for path in sorted(set(before) - set(after)):
         out.append(f"deleted  {path}")
@@ -674,6 +700,8 @@ def differences(before: dict[str, Any], after: dict[str, Any],
             continue  # the scheduled sampler ticked mid run, appending only
         if _external_fetch_marker(Path(path)):
             continue  # the editor autofetched mid run, see the note above
+        if _editor_branch_state(Path(path)):
+            continue  # GitLens restamped its branch state mid run
         if _sqlite_sidecar_touch(Path(path), was, now, before, after):
             continue  # another process holds the live database open
         if was[:1] == ("file",) and now[:1] == ("file",) and was[2] == now[2]:

@@ -921,7 +921,9 @@ def registered_tasks() -> tuple[dict[str, dict[str, Any]], str | None]:
             "start_minute": start_minute,
             "start_text": (row.get("Start Time") or "").strip(),
             "repeat_every_minutes": every, "repeat_for_minutes": for_minutes,
+            "logon_modes": set(),
         })
+        entry["logon_modes"].add((row.get("Logon Mode") or "").strip())
         # One row per trigger. A row this cannot read is counted rather than
         # dropped, so the task is reported NOT CHECKED instead of agreeing on
         # the rows that did parse.
@@ -979,6 +981,24 @@ def reconcile_schedule() -> dict[str, Any]:
 
     for name in sorted(set(spec) & set(live)):
         want, got = spec[name], live[name]
+        # Whether the task runs with nobody logged on, which schtasks calls
+        # Logon Mode. "Interactive only" is the module's default principal and
+        # it cost 2026-09-11 its whole early morning: a power cut and two
+        # Windows Update restarts left the machine at the logon screen until
+        # 07:58, and every task before then skipped. A re-registration from an
+        # older copy of the script, or a principal edited in the GUI, would
+        # put a task back there and nothing else would say so. An empty mode is
+        # a column this could not read, and is not reported as agreeing.
+        modes = {mode for mode in got.get("logon_modes", set()) if mode}
+        if not modes:
+            unreadable.append(
+                f"{name}: schtasks reported no Logon Mode, so whether it runs "
+                "with nobody logged on is NOT being reported as agreeing")
+        elif any(mode.lower() == "interactive only" for mode in modes):
+            differs.append(
+                f"{name}: runs only while someone is logged on (Logon Mode "
+                f"{', '.join(sorted(modes))}), so a reboot that stops at the "
+                "logon screen skips it. Re-register from an elevated PowerShell")
         if got.get("unreadable_rows"):
             unreadable.append(
                 f"{name}: schtasks gave {got['unreadable_rows']} trigger row(s) "
@@ -1526,7 +1546,8 @@ def check_all(now: dt.datetime, dry_run: bool) -> int:
             report("schedule", "OK",
                    f"{schedule['live_count']} registered task(s) match the "
                    f"{schedule['spec_count']} in register_tasks.ps1 $jobs on "
-                   "name, start and repetition")
+                   "name, start and repetition, and every one runs whether or "
+                   "not anyone is logged on")
         else:
             for name in schedule["missing"]:
                 report("schedule", "MISSING",

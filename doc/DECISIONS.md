@@ -18,6 +18,34 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-11, twenty sixth: S4U, not a stored password and not automatic logon
+
+Three ways to have the tasks survive a reboot that stops at the logon screen,
+and the one chosen gives up the least this project uses.
+
+Automatic logon was rejected first. It stores the password in the registry
+in a form any administrator reads, and it leaves an unlocked desktop sitting
+on a machine that also holds the vendor key and a logged in model
+subscription.
+
+Password logon, "run whether logged on or not" with the password stored,
+works for everything and costs a stored credential that has to be re-entered
+on every task whenever the account password changes, silently failing every
+task until it is. The account's secrets would also stay reachable through
+DPAPI, which none of these jobs needs.
+
+S4U runs as the owner with no password stored anywhere. What it cannot do is
+reach a network share or read a DPAPI or Credential Manager secret, and
+nothing here does either: the project is on a local fixed disk, the EODHD key
+comes from .env, and the claude CLI's subscription login is a plain file under
+the profile. Each of those was measured under a throwaway S4U task before the
+switch rather than assumed. If a future job needs a network share or a secret
+from Credential Manager, it will fail under S4U and that job, not the whole
+schedule, should move to Password logon.
+
+RunLevel stays Limited. Nothing a job does needs elevation, and the one thing
+that does, registering the tasks, is done by a human from an elevated shell.
+
 ## 2026-09-09, twenty fifth: which screens may say entry, and which may not
 
 The word came off the watchlist tables on 2026-09-08 and was found again on

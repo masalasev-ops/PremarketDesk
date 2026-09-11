@@ -46,7 +46,35 @@
 # All times are local machine time and the machine is expected to keep US
 # Eastern. If this machine ever changes time zone, re-derive these triggers
 # from the clocks in doc\CRITERIA.md before re-registering.
+#
+# EVERY TASK RUNS WHETHER OR NOT ANYONE IS LOGGED ON, since 2026-09-11, and
+# that is why this script must be run from an ELEVATED PowerShell. Until then
+# every task was registered with the module's default principal, LogonType
+# Interactive, which runs only while the owner is logged on. On 2026-09-11 a
+# power cut at 00:55 and two Windows Update restarts at 02:30 left the machine
+# up and at the logon screen until 07:58, and discover 03:55 and 07:15, the
+# 04:00 collector, the 07:00 catch-up and the 07:25 and 07:55 watchdog passes
+# ALL skipped. StartWhenAvailable did not catch them up at logon either.
+#
+# S4U rather than Password, so no password is stored anywhere. What S4U gives
+# up is network share access and DPAPI or Credential Manager secrets, and none
+# of these jobs uses either: the project is on a local fixed disk, the EODHD
+# key is read from .env, and the claude CLI's subscription login is a plain
+# file under the profile. All three were proved by a throwaway S4U task on
+# 2026-09-11 before this was switched. Registering an S4U task is refused
+# unelevated with "Access is denied", hence the check below.
 param([switch]$Unregister, [string]$Probe, [string]$Capture, [string]$SocketCost)
+
+$elevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $elevated) {
+    Write-Output "FAILED    run this from an elevated PowerShell (Run as administrator)."
+    Write-Output "          The tasks run whether or not anyone is logged on, and Windows"
+    Write-Output "          refuses to register that unelevated with Access is denied."
+    exit 1
+}
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" `
+    -LogonType S4U -RunLevel Limited
 
 $root = Split-Path -Parent $PSScriptRoot
 $weekdays = @("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
@@ -234,7 +262,8 @@ if ($Probe) {
         -ExecutionTimeLimit (New-TimeSpan -Minutes 45)
     try {
         Register-ScheduledTask -TaskName $probeName -TaskPath "\PremarketDesk\" `
-            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+            -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
+            -Force -ErrorAction Stop | Out-Null
         Write-Output "registered PremarketDesk\$probeName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
         Write-Output "           it writes logs\probe-socket-cap-$Probe.log and spends no EODHD quota"
         Write-Output "           read it back the NEXT session, which DOES spend one intraday call per watched symbol."
@@ -305,7 +334,8 @@ if ($Capture) {
         -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
     try {
         Register-ScheduledTask -TaskName $captureName -TaskPath "\PremarketDesk\" `
-            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+            -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
+            -Force -ErrorAction Stop | Out-Null
         Write-Output "registered PremarketDesk\$captureName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
         Write-Output "           waking works from sleep and not from a powered off machine"
         Write-Output "           it writes logs\probe-capture-$Capture.log, spends no EODHD quota,"
@@ -366,7 +396,8 @@ if ($SocketCost) {
         -ExecutionTimeLimit (New-TimeSpan -Minutes 35)
     try {
         Register-ScheduledTask -TaskName $socketCostName -TaskPath "\PremarketDesk\" `
-            -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+            -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
+            -Force -ErrorAction Stop | Out-Null
         Write-Output "registered PremarketDesk\$socketCostName once at $($at.ToString('yyyy-MM-dd HH:mm')), waking the machine if asleep"
         Write-Output "           it runs 20 minutes and writes logs\probe-socket-cost-$SocketCost.log"
         Write-Output "           NOTHING ELSE MAY TOUCH THE EODHD KEY WHILE IT RUNS."
@@ -428,8 +459,9 @@ foreach ($job in $jobs) {
 
     try {
         Register-ScheduledTask -TaskName $job.Name -TaskPath $taskPath `
-            -Action $action -Trigger $triggers -Settings $settings -Force -ErrorAction Stop | Out-Null
-        Write-Output "registered PremarketDesk\$($job.Name) at $($said -join '; ')"
+            -Action $action -Trigger $triggers -Settings $settings -Principal $principal `
+            -Force -ErrorAction Stop | Out-Null
+        Write-Output "registered PremarketDesk\$($job.Name) at $($said -join '; '), logged on or not"
     } catch {
         Write-Output "FAILED    PremarketDesk\$($job.Name): $($_.Exception.Message)"
     }

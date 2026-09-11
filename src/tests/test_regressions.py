@@ -9,7 +9,7 @@ rest, arming the socket cap probe for 2026-08-21 added another, and the
 defect or lose a session, the archive publishing a fixture as a morning, and a
 read that created the directory it was reading, and fifteen from a twelve
 reader review, spread across the collector, the night, the scan, the analyst
-and the two pages. It now carries two hundred and forty six claims, a count read off
+and the two pages. It now carries two hundred and forty seven claims, a count read off
 the file rather than remembered, because it said forty four for a while
 after it held fifty seven and a suite that miscounts itself is the first
 thing a reader stops trusting.
@@ -2824,7 +2824,8 @@ def claim_the_reconciliation_reads_every_trigger(failures: list[str]) -> None:
     def _two_rows():
         live = {}
         for name, entry in spec.items():
-            live[name] = dict(entry, start_minutes=set(entry["start_minutes"]))
+            live[name] = dict(entry, start_minutes=set(entry["start_minutes"]),
+                              logon_modes={"Interactive/Background"})
         return live, None
 
     monitor_jobs.registered_tasks = _two_rows
@@ -2836,6 +2837,72 @@ def claim_the_reconciliation_reads_every_trigger(failures: list[str]) -> None:
         failures.append(f"a machine matching the script reports {result}")
     print("  triggers     both discover triggers reconcile as one set and a "
           "matching machine reports no difference")
+
+
+def claim_every_task_runs_with_nobody_logged_on(failures: list[str]) -> None:
+    """Every task is registered S4U, and the watchdog names one that is not.
+
+    Until 2026-09-11 every task carried the module's default principal,
+    Interactive, which runs only while the owner is logged on. A power cut and
+    two Windows Update restarts left the machine at the logon screen until
+    07:58 that morning, and discover twice, the collector, the catch-up and two
+    watchdog passes all skipped. Two halves: the script registers every task
+    with the S4U principal, and the reconciliation reports DIFFERS for a task
+    schtasks calls "Interactive only" and NOT CHECKED for one whose mode it
+    could not read, rather than agreement in either case.
+    """
+    from ops import monitor_jobs
+
+    text = monitor_jobs.REGISTER_SCRIPT.read_text(encoding="utf-8")
+    code = "\n".join(line for line in text.splitlines()
+                     if not line.lstrip().startswith("#"))
+    if "-LogonType S4U" not in code:
+        failures.append("register_tasks.ps1 builds no S4U principal, so its tasks "
+                        "run only while someone is logged on")
+    calls = re.findall(r"Register-ScheduledTask\b(.*?)\|\s*Out-Null", code, re.DOTALL)
+    if len(calls) < 4:
+        failures.append(f"register_tasks.ps1 has {len(calls)} Register-ScheduledTask "
+                        "call(s) this could read, expected the $jobs loop and the "
+                        "three one off probes")
+    for call in calls:
+        if "-Principal $principal" not in call:
+            name = re.search(r"-TaskName\s+(\S+)", call)
+            failures.append(f"the Register-ScheduledTask call for "
+                            f"{name.group(1) if name else 'a task'} passes no "
+                            "-Principal, so it falls back to Interactive")
+
+    spec, error = monitor_jobs.script_jobs()
+    if error:
+        failures.append(f"the register script could not be read: {error}")
+        return
+    real = monitor_jobs.registered_tasks
+    first = sorted(spec)[0]
+    second = sorted(spec)[1]
+
+    def _machine():
+        live = {}
+        for name, entry in spec.items():
+            live[name] = dict(entry, start_minutes=set(entry["start_minutes"]),
+                              logon_modes={"Interactive/Background"})
+        live[first]["logon_modes"] = {"Interactive only"}
+        live[second]["logon_modes"] = {""}
+        return live, None
+
+    monitor_jobs.registered_tasks = _machine
+    try:
+        result = monitor_jobs.reconcile_schedule()
+    finally:
+        monitor_jobs.registered_tasks = real
+    if not any(line.startswith(f"{first}:") and "logged on" in line
+               for line in result.get("differs", [])):
+        failures.append(f"a task schtasks calls Interactive only is not reported "
+                        f"DIFFERS: {result.get('differs')}")
+    if not any(line.startswith(f"{second}:") and "Logon Mode" in line
+               for line in result.get("unreadable", [])):
+        failures.append(f"a task with no readable Logon Mode is not reported NOT "
+                        f"CHECKED: {result.get('unreadable')}")
+    print("  logon        every task is registered S4U, and an Interactive only "
+          "or unreadable one is named rather than agreed")
 
 
 def claim_a_replayed_print_on_connect_is_tagged(failures: list[str]) -> None:
@@ -13242,6 +13309,7 @@ def claim_the_suite_can_count_itself(failures: list[str]) -> None:
         244: "two hundred and forty four",
         245: "two hundred and forty five",
         246: "two hundred and forty six",
+        247: "two hundred and forty seven",
         120: "one hundred and twenty", 121: "one hundred and twenty one",
         122: "one hundred and twenty two", 123: "one hundred and twenty three",
         124: "one hundred and twenty four", 125: "one hundred and twenty five",
@@ -17530,6 +17598,9 @@ def claim_an_mtime_with_no_bytes_behind_it_is_not_a_change(failures: list[str]) 
     decide between two things the check could not. A gate that fails at
     random teaches its reader to stop reading it, which is the argument the
     sampler and fetch exemptions were already written on.
+    [corrected 2026-09-11: was "the same 106 bytes", which was only ever the
+    same size. GitLens restamps two timestamps in that file, so it has its own
+    one path exemption now and this claim holds that too.]
 
     So the snapshot carries a digest for every file at or under
     conftest.HASH_MAX_BYTES and the question stops being a guess. This claim
@@ -17551,6 +17622,19 @@ def claim_an_mtime_with_no_bytes_behind_it_is_not_a_change(failures: list[str]) 
                         "which is the escape mode the cap exists to catch")
     elif "SAME SIZE, DIFFERENT BYTES" not in diffs[0]:
         failures.append(f"a same size rewrite was reported as something else: {diffs}")
+
+    # The file this was written for is NOT a toucher, measured 2026-09-11:
+    # GitLens restamps two timestamps inside .git/gk/config, so its bytes
+    # differ and it needs its own exemption. That exemption is the one path:
+    # a sibling under .git/gk/ and .git/config beside it are still caught.
+    root = conftest.TREE_ROOT
+    gk = str(root / ".git" / "gk" / "config")
+    if conftest.differences({gk: same[0]}, {gk: rewritten}):
+        failures.append("GitLens restamping .git/gk/config was reported as a change")
+    for other in (root / ".git" / "gk" / "other", root / ".git" / "config"):
+        if not conftest.differences({str(other): same[0]}, {str(other): rewritten}):
+            failures.append(f"a rewrite of {other.relative_to(root)} was forgiven, "
+                            "so the GitLens exemption is wider than its one path")
 
     # Past the cap nothing is hashed, so the old ambiguity survives and the
     # message has to SAY it is unresolved rather than repeat the old sentence
@@ -20975,6 +21059,7 @@ def main() -> int:
     run_claim(failures, claim_the_watchdog_judges_the_last_run, failures)
     run_claim(failures, claim_a_rewrite_is_free_while_the_collector_rereads, failures)
     run_claim(failures, claim_the_reconciliation_reads_every_trigger, failures)
+    run_claim(failures, claim_every_task_runs_with_nobody_logged_on, failures)
     run_claim(failures, claim_a_replayed_print_on_connect_is_tagged, failures)
     run_claim(failures, claim_the_sidecar_remembers_every_subscription, failures)
     run_claim(failures, claim_a_provisional_only_name_is_still_priced, failures)
