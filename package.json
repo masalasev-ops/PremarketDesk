@@ -1,0 +1,9 @@
+{
+  "name": "premarketdesk",
+  "private": true,
+  "description": "Node tooling for PremarketDesk. Only wrangler, which ops/publish.py runs to upload site/ to Cloudflare Pages. The project itself is Python.",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "wrangler": "4.131.1"
+  }
+}

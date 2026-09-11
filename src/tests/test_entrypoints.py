@@ -63,6 +63,7 @@ SCHEDULED = [
     ("verify", "morning.verify_morning", []),
     ("deliver", "morning.deliver", []),
     ("desk", "desk.render", []),
+    ("publish", "ops.publish", []),
     ("backup", "night.backup_evidence", ["--dry-run"]),
     ("backfill", "night.backfill_premarket", []),
     ("outcomes", "night.fill_outcomes", []),
@@ -1715,9 +1716,55 @@ def claim_archive(failures: list[str]) -> None:
     Kept under the archive name because it is the same obligation: the step
     that rebuilds site/PremarketDesk.html from what is on disk must exit
     cleanly and record what it produced.
+
+    And it must leave site/_redirects alone. Since 2026-09-11 that file is
+    what sends the bare Cloudflare Pages URL to the desk, and it is not
+    rendered by anything, so a rebuild that cleared the folder would take the
+    root URL down with no step noticing.
     """
+    from ops import publish
+
+    config.SITE_DIR.mkdir(parents=True, exist_ok=True)
+    redirects = config.SITE_DIR / publish.REDIRECTS_NAME
+    redirects.write_text(publish.REDIRECTS_LINE + "\n", encoding="utf-8")
     outcome = _drive("desk", "desk.render", [])
     _check(outcome, failures)
+    if not redirects.is_file() or redirects.read_text(encoding="utf-8").strip() \
+            != publish.REDIRECTS_LINE:
+        failures.append("desk.render deleted or rewrote site/_redirects while "
+                        "rebuilding the desk, so the bare URL would answer 404")
+
+
+def claim_publish(failures: list[str]) -> None:
+    """The publish entrypoint, after the desk, the way both chains run it.
+
+    Against a stubbed wrangler and stub credentials, over the site the desk
+    step above just rendered into the sandbox. It is the real rendered page,
+    so this is also where a desk that started carrying a local path or a
+    payload that does not decode would be caught before a real upload.
+    """
+    from ops import publish
+
+    calls: list[list[str]] = []
+
+    def _wrangler(args: list[str], cwd: Any, env: Any, timeout_s: float) -> Any:
+        calls.append(list(args))
+        return 0, "Deployment complete! https://0f0f0f0f.premarketdesk.pages.dev\n"
+
+    creds = {"CLOUDFLARE_API_TOKEN": "stub-cloudflare-token-0000",
+             "CLOUDFLARE_ACCOUNT_ID": "stub-cloudflare-account-0000"}
+    saved = publish.run_wrangler, publish.credential
+    publish.run_wrangler = _wrangler
+    publish.credential = lambda name: creds.get(name)
+    try:
+        outcome = _drive("publish", "ops.publish", [])
+    finally:
+        publish.run_wrangler, publish.credential = saved
+    _check(outcome, failures)
+    if len(calls) != 1 or calls[0][:2] != ["pages", "deploy"]:
+        failures.append(f"publish asked wrangler for {calls}, expected one deploy")
+    if "pages.dev" not in (outcome.record.get("note") or ""):
+        failures.append("publish did not record the deployment URL in job status")
 
 
 def claim_backfill(failures: list[str]) -> None:
@@ -2258,6 +2305,7 @@ def main(argv: list[str] | None = None) -> int:
     run_claim(failures, claim_verify, failures)
     run_claim(failures, claim_deliver, failures)
     run_claim(failures, claim_archive, failures)
+    run_claim(failures, claim_publish, failures)
     run_claim(failures, claim_backfill, failures)
     run_claim(failures, claim_outcomes, failures)
     run_claim(failures, claim_backfill_writes_the_true_window, failures)

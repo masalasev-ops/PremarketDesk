@@ -65,6 +65,7 @@ STATUS_ERROR = "error"          # raised, including being killed
 
 _produced: dict[str, Any] = {"label": None, "count": None}
 _declared_failure: str | None = None
+_note: str | None = None
 
 
 def failed(reason: str) -> None:
@@ -89,6 +90,19 @@ def produced(label: str, count: int | None) -> None:
     """
     _produced["label"] = label
     _produced["count"] = None if count is None else int(count)
+
+
+def note(text: str) -> None:
+    """One sentence the record carries beside the count. The last call wins.
+
+    For the things a count cannot say: why a gated step skipped, and where a
+    publish landed. A step that skips records a count of zero, and zero alone
+    does not say whether the gate was closed, the step was held or there was
+    nothing to do. Scrubbed on the way in, because this goes to a file that
+    sits on disk for months.
+    """
+    global _note
+    _note = config.scrub_secrets(text)
 
 
 def append(record: dict[str, Any]) -> None:
@@ -307,7 +321,7 @@ def run(step: str, main: Callable[..., int], argv: list[str] | None = None,
     ok_codes exists for the calendar guard, whose non zero exit means the
     market is shut, which is a correct outcome and not a failure.
     """
-    global _declared_failure
+    global _declared_failure, _note
 
     # In production one process runs one step, so this reset is never needed.
     # It is here because a test runs several through one interpreter, and a
@@ -315,6 +329,7 @@ def run(step: str, main: Callable[..., int], argv: list[str] | None = None,
     # is the exact class of thing this module exists to stop.
     _produced.update({"label": None, "count": None})
     _declared_failure = None
+    _note = None
 
     started = ettime.now_et()
     record_meter(step, "entry")
@@ -355,6 +370,7 @@ def run(step: str, main: Callable[..., int], argv: list[str] | None = None,
                 "exception": exception,
                 "produced_label": _produced["label"],
                 "produced_count": _produced["count"],
+                "note": _note,
             })
         except OSError as exc:
             # The recorder must never be the reason a job fails. It reports

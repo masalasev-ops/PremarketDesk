@@ -233,10 +233,19 @@ def scrub_secrets(text: Any) -> str:
     reach output goes through here first.
     """
     out = str(text)
-    for secret in (get("EODHD_API_TOKEN"), get("RESEND_API_KEY")):
+    for name in SECRET_NAMES:
+        secret = get(name)
         if secret:
             out = out.replace(secret, mask(secret))
     return out
+
+
+# Every credential this project holds, by the name it is read under. The two
+# Cloudflare values joined on 2026-09-11 with ops/publish.py: the account id
+# is not a secret on its own, and it is masked anyway because the owner asked
+# that neither value ever be printed, logged or written.
+SECRET_NAMES = ("EODHD_API_TOKEN", "RESEND_API_KEY",
+                "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID")
 
 
 GIT_DIR = PROJECT_ROOT / ".git"

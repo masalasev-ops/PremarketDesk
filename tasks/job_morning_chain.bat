@@ -1,5 +1,6 @@
 @echo off
-rem PremarketDesk 08:45 morning chain: scan, analyst, render, verify, deliver, archive.
+rem PremarketDesk 08:45 morning chain: scan, analyst, render, verify, deliver,
+rem desk, publish.
 rem Stops on the first failure, so a bad packet never reaches the model and a
 rem bad report never reaches email. deliver.py itself refuses to send while
 rem the data\UNVERIFIED gate marker exists or while email keys are unset.
@@ -65,6 +66,19 @@ rem did not draw.
 echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render >> "%LOG%" 2>&1
 echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
+rem Upload site/ to Cloudflare Pages, after the desk so the upload carries
+rem this morning's screens. ops/publish.py reads every file first and refuses
+rem on an oversized file, a credential, a local path or inline data it cannot
+rem parse. It skips cleanly when the Cloudflare values are unset or while
+rem data\PUBLISH_HELD exists. Never fails the chain: its exit code goes to
+rem job-status, where the watchdog reads it, and a report that was delivered
+rem is not undone by an upload that did not happen. This is the last step on
+rem this path, so its finished line is the watchdog's finish marker for the
+rem job; see monitor_jobs.JOBS.
+echo ===== publish started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m ops.publish >> "%LOG%" 2>&1
+echo ===== publish finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 exit /b 0
 
 rem A FAILED STEP STILL DRAWS THE DESK, and then exits with the failure. Until
@@ -74,10 +88,13 @@ rem was the one morning it silently showed the previous session. desk.render
 rem reads job-status.jsonl and puts today's failures at the top of the page.
 rem
 rem UNDER ITS OWN MARKER, which is load bearing rather than tidy. The watchdog
-rem reads "===== desk finished rc=" as this job's finish marker, so reusing it
-rem here would make a chain that died at scan report as finished, and the one
-rem check that catches a chain which never reached its end would stop working
-rem on the exact runs it exists for.
+rem reads the publish step's finished line as this job's finish marker (the
+rem desk's until 2026-09-11), so reusing it here would make a chain that died
+rem at scan report as finished, and the one check that catches a chain which
+rem never reached its end would stop working on the exact runs it exists for.
+rem The publish that follows it has its own marker too, and it runs on this
+rem path because a failed morning's desk is the page the owner most needs to
+rem reach from wherever they are.
 rem
 rem The exit code is the FAILED step's, never the desk's. The scheduler, the
 rem watchdog and job-status all read it, and a chain that failed must not
@@ -86,4 +103,7 @@ rem report success because the page that describes the failure drew correctly.
 echo ===== desk after failure started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render >> "%LOG%" 2>&1
 echo ===== desk after failure finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+echo ===== publish after failure started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m ops.publish >> "%LOG%" 2>&1
+echo ===== publish after failure finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

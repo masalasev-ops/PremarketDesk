@@ -15,6 +15,79 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-11, one hundred and fifteenth: the desk is published to Cloudflare Pages, and only site/ goes
+
+ops/publish.py uploads the contents of site/ to the Cloudflare Pages project
+premarketdesk, at https://premarketdesk.pages.dev/, and nothing outside that
+folder. wrangler is pinned at 4.131.1 as the one entry in a new package.json,
+node_modules/ is ignored, and site/_redirects, `/ /PremarketDesk.html 302`, is
+now the one tracked file under site/ so the bare URL opens the desk.
+
+THE SHAPE IS DELIVER'S. Without CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID
+it prints why, records why and exits zero. Both are read through config.get,
+so they live in .env like every other credential here, and config.SECRET_NAMES
+now lists all four credentials that config.scrub_secrets masks. job_status
+gained note(), one sentence the record carries beside its count, because a
+count of zero cannot say whether a gate was closed or a step was held; deliver
+now writes its skip reasons there too, and the watchdog prints a failed step's
+note beside its exit code.
+
+THREE CHECKS BEFORE ANY UPLOAD, each a refusal naming the file and the line:
+a file past [Publish] max_file_mb, 25, Cloudflare's own per file limit; a file
+carrying any of the four credentials, an api_token= string, or an absolute
+local path under C:/Users or the project root in any of four spellings; and an
+inline JSON data block that does not parse. The desk's session payloads are
+gzipped and base64 encoded, so a text scan cannot see into them, and every one
+is decoded and scanned as well. Every file's size and every data block's keys,
+the decoded payloads' keys included, are printed on every run.
+
+WIRED AFTER THE DESK in the morning chain, on both of its paths, and in the
+full nightly after the weekly page and the desk. It never fails either chain,
+and its finished line is now both jobs' finish marker in monitor_jobs.JOBS,
+which a claim checks against the .bat. A failed upload is a STEP FAILED read
+by steps_ok, never a reason to relaunch a morning. Not in the midday chain or
+the ladder. Held by data/PUBLISH_HELD: a scheduled run skips while it exists,
+a hand run does not, and the owner deletes it once this entry's first run has
+been read.
+
+THE FIRST HAND RUN, 11:47 ET. Three files, 804,396 bytes: PremarketDesk.html
+764,680 bytes, 2.9 percent of the limit; Weekly.html 39,690; _redirects 26.
+No refusal. The desk carries three data blocks, desk-glossary, desk-index
+(built_at, knobs, sessions) and desk-payloads, eight sessions from 2026-09-01
+to 2026-09-11 whose decoded payloads each carry session, fixture, report,
+report_midday, run_at, generated, api_calls, vintage, bars_source, tape,
+candidates, precedent, tally, shape, criteria, record, ladder, movers,
+mover_lists, coming_up, econ, prov, health and midday. The page therefore
+publishes more than its screens draw: the whole morning and midday reports,
+the call counts and the criteria snapshot for every inlined session.
+Deployed to https://68871aaf.premarketdesk.pages.dev, whose certificate
+took about two minutes to be issued after the deploy; the production URL
+answered at once. None of the four credentials appears in the log or the
+job status record, checked by value.
+
+FOUR THINGS THE FIRST RUN FOUND. wrangler decorates its output with emoji and
+a redirected Windows stdout is the ANSI code page, so printing its output
+raised UnicodeEncodeError after the work was done; every line now goes
+through a replacing encoder, and a claim runs a deploy against a cp1252
+stream. `wrangler pages project create` in 4.131 hands a not yet existing
+project to the Workers based successor of Pages, but only when it detects an
+AI coding agent in its environment, and that hand off failed and created
+nothing; the one time create passes --force, which is what the same command
+does when a person or the scheduler runs it. NODE_EXTRA_CA_CERTS is set in an
+interactive shell here and not in a scheduled task's environment, so publish
+sets it from config.ca_bundle when absent. And Pages serves /PremarketDesk.html
+as a 308 to /PremarketDesk, so the root takes two hops to the desk.
+
+test_publish, a new suite, holds eight claims against a stubbed wrangler and
+throwaway sites: the closed gate and the hold call nothing, each check refuses
+a planted violation, a credential inside a gzipped payload is found and never
+printed, a wrangler failure fails the step, the size report names every file,
+and the tracked redirect says one thing. Five mutations of publish.py were
+each caught by the claim written for it. conftest blocks publish.run_wrangler
+the way it blocks the HTTP session, and redirects PUBLISH_HELD with the other
+state markers. test_entrypoints drives publish after the desk and asserts the
+desk rebuild leaves _redirects alone.
+
 ## 2026-09-11, one hundred and fourteenth: every task runs whether or not anyone is logged on
 
 The power went at 00:55 and came back at 01:11, and Windows Update then

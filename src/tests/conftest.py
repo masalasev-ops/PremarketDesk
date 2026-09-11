@@ -77,6 +77,10 @@ _DERIVED = (
     # inside the suite, and every claim about the trading day guard would pass
     # by never reaching the guard.
     ("ops.market_today", "DORMANT_MARKER", lambda c: c.DATA_DIR / "DORMANT"),
+    # The third state marker, for the same reason: a real data/PUBLISH_HELD
+    # would stand every sandboxed scheduled publish down and pass the claims
+    # about the checks by never reaching them.
+    ("ops.publish", "HOLD_MARKER", lambda c: c.DATA_DIR / "PUBLISH_HELD"),
 )
 
 # Real roots, captured before anything is redirected. Kept because the escape
@@ -1171,12 +1175,27 @@ def block_network() -> Iterator[None]:
     except ImportError:
         pass
 
+    # wrangler is the one exit that is a subprocess rather than an HTTP
+    # session, so it is blocked at its own seam. A claim that means to reach
+    # it assigns publish.run_wrangler a stub and restores it.
+    from ops import publish
+
+    saved_wrangler = publish.run_wrangler
+
+    def _blocked_wrangler(args: list[str], *_a: Any, **_k: Any) -> Any:
+        raise NetworkBlocked(
+            f"a test tried to run wrangler {' '.join(args[:2])}, which uploads to "
+            "Cloudflare. Stub it by assigning ops.publish.run_wrangler.")
+
+    publish.run_wrangler = _blocked_wrangler
+
     try:
         yield
     finally:
         eodhd.build_session = saved_build
         eodhd.read_meter = saved_meter
         eodhd._default_client = saved_client
+        publish.run_wrangler = saved_wrangler
         if saved_probe is not None:
             import probe_alpaca
 

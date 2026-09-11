@@ -76,7 +76,7 @@ at the root and is gitignored along with .env.
              renderer wraps its body in). Infrastructure every other package
              rests on; nothing here knows what a gapper is.
   - ops/     job_status, market_today, monitor_jobs, meter_sampler,
-             quantifier_flags. Whether the machine is running correctly: the
+             quantifier_flags, publish. Whether the machine is running correctly: the
              status record, the trading day guard, the watchdog, the half
              hourly quota reading and the hand judging tool for the guard's
              flag log.
@@ -130,7 +130,7 @@ at the root and is gitignored along with .env.
              Probe and build_session, so it is the Alpaca transport for a
              scheduled step as well as the instrument that wrote
              doc/ALPACA_PROBE.md. Deleting it stops the nightly truth pass.
-  - tests/   conftest, run_tests and the fourteen test_ modules. test_regressions
+  - tests/   conftest, run_tests and the fifteen test_ modules. test_regressions
              holds one claim per defect confirmed by the 2026-08-20 audit;
              they are grouped by how they were found because that is the
              only thing they have in common.

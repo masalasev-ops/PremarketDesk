@@ -10,7 +10,7 @@ rem
 rem   full      22:15 weekdays: true premarket backfill for today's picks, the
 rem             definitive collector volume verification, the outcome fill,
 rem             truth, the paper ledger, pool recall, the prune, the weekly
-rem             page and the archive rebuild.
+rem             page, the desk rebuild and the publish to Cloudflare Pages.
 rem   catchup   07:00 weekdays: the backfill and the outcome fill only. Until
 rem             2026-08-20 that firing ran the whole job, and pool_recall
 rem             measures the session it is invoked ON, so at 07:00 it asked
@@ -169,6 +169,16 @@ rem from disk, never an append. Never fails the chain.
 echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render --no-compact >> "%LOG%" 2>&1
 echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
+rem Upload site/ to Cloudflare Pages, after both the weekly page and the desk
+rem have been written. The same step as the morning chain's, with the same
+rem checks and the same hold; see ops/publish.py. Never fails the chain. The
+rem catch-up firing exits above and never reaches it, which is right: it
+rem renders nothing. This is the last step, so its finished line is the
+rem watchdog's finish marker for the nightly; see monitor_jobs.JOBS.
+echo ===== publish started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m ops.publish >> "%LOG%" 2>&1
+echo ===== publish finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 exit /b 0
 
 :universe

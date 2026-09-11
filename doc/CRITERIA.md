@@ -3075,6 +3075,26 @@ is the mistake this whole section exists to undo. It spends no vendor call: the
 capture and the packet are files, and the point of holding them is that neither
 can be asked for again.
 
+## Publish
+
+ops/publish.py uploads the contents of site/ to Cloudflare Pages and nothing
+outside it. It runs after the desk in the morning chain, on both its paths,
+and in the full nightly, and never fails either chain. Before any upload it
+reads every file and refuses, naming the file and the line, on a file past
+max_file_mb, on a file carrying a credential, an api_token query string or an
+absolute local path, and on an inline data block that does not parse, since
+what such a block carries cannot be stated. Every file's size and every
+inline data block's keys are printed on every run, refusal or not.
+
+Not in the midday chain or the ladder, which the owner did not ask for. The
+ladder redraws the desk thirty times an hour, and a deployment every two
+minutes would put thirty versions of one morning online to publish a price
+ladder that is stale by the time anyone opens it. Whether Cloudflare counts
+direct uploads against an allowance was not checked, so it is not the reason.
+
+max_file_mb                   = 25         # Cloudflare's per file limit on Pages, a vendor ceiling and not a choice. The size report prints each file's share of it so the desk's growth toward it, one session a weekday, is read in the log
+deploy_timeout_s              = 600        # SEED, not measured. How long wrangler pages deploy may run before it is stopped and the step recorded failed
+
 ## Ladder
 
 The live ladder, added 2026-09-08. It runs between the two clocks below and
@@ -3158,6 +3178,7 @@ analyst                       = 1
 render                        = 1
 verify                        = 1
 deliver                       = 1
+publish                       = 1          # ops/publish.py, after the desk in the morning chain and the full nightly. Held by data/PUBLISH_HELD until the first hand run has been read, and a held or ungated run records success with its reason
 desk                          = 1          # rebuilds site/PremarketDesk.html from runs/. Replaced the archive step on 2026-09-04, when build_archive was retired and the desk took its filename; it runs in the morning chain, the midday chain and the nightly, and never fails any of them. The nightly runs desk.compact one step before the prune as well, under this same name
 backfill                      = 1
 outcomes                      = 1

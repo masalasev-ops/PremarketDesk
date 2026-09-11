@@ -916,6 +916,25 @@ be rebuilt from 2026-09-01.
    arrives by email. Everything before this point is guaranteed to send
    nothing.
 
+10. **Publish the desk, if you want it online.** Put `CLOUDFLARE_API_TOKEN`
+    and `CLOUDFLARE_ACCOUNT_ID` into `.env`, run `npm install` in the project
+    root for the pinned wrangler, create the Pages project once, and publish
+    once by hand, from `src/` with PYTHONPATH set to it:
+
+    ```
+    ..\.venv\Scripts\python.exe -m ops.publish --check
+    ..\.venv\Scripts\python.exe -m ops.publish --create-project
+    ..\.venv\Scripts\python.exe -m ops.publish
+    ```
+
+    The first uploads nothing and prints the report: every file's size against
+    the 25 MB per file limit, and the keys of every inline data block,
+    including those inside the desk's gzipped session payloads. The last
+    uploads `site/` and prints the deployment URL; the bare project URL,
+    https://premarketdesk.pages.dev/, redirects to the desk through
+    `site/_redirects`. The chains then publish after every desk rebuild once
+    you delete `data\PUBLISH_HELD`. Anyone with the URL can read the site.
+
 ## Where things land
 
 Everything generated at runtime is git ignored and created on demand. One
@@ -927,13 +946,14 @@ destination is not in the tree at all, and is the last row for that reason:
 | `data/premarket/` | The collector's one minute bar files, its per run stats, and the subscription list it wrote at subscribe time so the 08:45 packet can tell a silent symbol from one that was never subscribed |
 | `data/sessions/` | The two per session working files, keyed by date: `ladder-<date>.json`, which the 09:30 to 10:30 pass writes and `desk/compact.py` reads, and `universe-closes-<date>.json`, which discover writes at 07:15 and the scan reads at 08:45 for the same session. `universe-closes` is pruned on the `[Universe] closes_retention_days` window; the ladder is not, because compact reads it again for any session whose nightly freeze did not happen, and the argument prune requires of a new entry cannot honestly be made for it |
 | `data/research/` | Every payload a script under `src/research/` produces, dated. Regenerable bulk, so it lives under the gitignored data root rather than in `doc/`, where each one inflated every diff. What stays committed is the finding: a note carrying the question, the headline numbers, the date, the commit and the path |
-| `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, and one count of what it produced. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
+| `data/job-status.jsonl` | One line per scheduled step per run: job, step, start and end in ET, status, exception type, one count of what it produced, and since 2026-09-11 a note for what a count cannot say: why a gated step skipped, or where a publish landed. Written in a `finally` block, so a step killed mid run records dying. The next morning's report names any step that has not succeeded inside its window |
 | `data/universe.json`, `data/watchlist.json` | The weekly universe, and the day's whole ranked candidate pool rather than only the names being listened to. Up to `max_subscribed_candidates` rows are marked `subscribed`, which is 45 since 2026-09-06, the socket's hard 50 less the five context tickers. That is not simply the top 45: each populated tier takes `min_slots_per_tier` first. Everything below the cut stays in the file marked `not_subscribed`, so the cut is auditable |
 | `runs/YYYY-MM-DD/` | The day's evidence packet, model transcript, rendered report, verification results |
 | `logs/` | One log per job per day, every step ending in a `rc=N` marker line. Two files here are not that: `meter-<quota day>.log` is the shared quota trail, keyed by the vendor's quota day rather than the ET date because that is the day the counter actually resets on, and `meter-sampler.log` is the sampler's own undated stdout |
 | `site/PremarketDesk.html` | The desk: every session on file in one self contained document, nine screens on hash routes, each session's payload inlined gzipped and base64 encoded. Opens from disk, no server, no network. Rebuilt whole every time, never appended |
 | `runs/YYYY-MM-DD/desk.json.gz` | That session's compacted payload, frozen by `desk/compact.py` in the nightly. It is what the desk inlines, and the file `prune_data.py` requires before it will drop the duplicate premarket snapshot, because the run copy is the only exact record of the tape the morning saw |
 | `site/Weekly.html` | One page saying whether the week worked, rendered by the nightly from what the steps before it have just written. It reads and renders: no vendor call, no measurement of its own |
+| `site/_redirects` | The one tracked file under `site/`: `/ /PremarketDesk.html 302`, which Cloudflare Pages reads so the bare project URL opens the desk. Nothing that renders writes it. `ops/publish.py` uploads the whole folder, and only this folder, to Cloudflare Pages |
 | `%LOCALAPPDATA%\PremarketDesk\evidence` | Outside the working tree on purpose, because a copy inside the directory that gets deleted is not a copy. The nightly's backup of the six artifacts with no route back: the collector's socket capture, which is a recording of a tape that no longer exists, its stats and subscriptions sidecars, the frozen 08:45 packet a morning was judged on, and the report in markdown and HTML, because the same input does not produce the same words twice. A dated snapshot of `data/quantifier-flags.jsonl` sits beside them. See `doc/CRITERIA.md [Backup]` |
 
 ## Configuration reference

@@ -137,6 +137,7 @@ def deliver(html_path: Path) -> int:
         )
         # Gated is a correct outcome, not a failure. Zero recipients is what
         # distinguishes it from a morning that really did send.
+        job_status.note(f"gated: {verify_morning.UNVERIFIED_MARKER.name} exists")
         job_status.produced("recipients emailed", 0)
         return 0
 
@@ -154,6 +155,7 @@ def deliver(html_path: Path) -> int:
               + (f", Resend id {sent['message_id']}" if sent.get("message_id") else "")
               + f". Not sending again. Delete {delivery_record_path(html_path).name} "
               "to force a resend.")
+        job_status.note("skipped: this session was already emailed")
         job_status.produced("recipients emailed", 0)
         return 0
 
@@ -168,6 +170,7 @@ def deliver(html_path: Path) -> int:
             reasons.append("EMAIL_TO is not set")
         print(f"deliver: skipping email, {' and '.join(reasons)}. "
               f"The report is on disk at {html_path}.")
+        job_status.note(f"skipped: {' and '.join(reasons)}")
         job_status.produced("recipients emailed", 0)
         return 0
 

@@ -18,6 +18,43 @@ What changed and when is in CHANGELOG.md. Every threshold is in CRITERIA.md.
 This file starts at 2026-08-14. Earlier reasoning is in doc/BUILD_PLAN.md and
 in the commit messages.
 
+## 2026-09-11, twenty seventh: publish rides the chains and is held by a marker, not a task
+
+The owner asked for a publish step shaped like deliver and registered the way
+deliver is. Deliver is not a task: it is a step inside the morning chain.
+So publish is a step too, in the morning chain after the desk and in the full
+nightly after the weekly page and the desk, and it inherits the chains' S4U
+principal and every setting of theirs with nothing new to register.
+
+That left "do not enable the scheduled task until the report has been read"
+without a task to leave disabled. A marker answers it the way data/UNVERIFIED
+answers the same question for email: data/PUBLISH_HELD stands every run under
+PMD_JOB down with the reason recorded, and a hand run ignores it, because the
+hand run is what produces the report that lifts it. Leaving the .bat lines out
+until later was rejected, because then the wiring the owner asked for would
+be unreviewed on the day it went live.
+
+The desk step used to be both chains' finish marker and publish now is. The
+alternative, publishing before the desk, would upload the previous render
+every time, and moving the marker keeps the watchdog's rule that the marker is
+the last line the job writes.
+
+create uses --force and deploy does not. wrangler 4.131 hands a create for a
+project that does not exist to Cloudflare's Workers based successor of Pages,
+but only when it detects an AI coding agent, so the same command created a
+plain Pages project for a person or the scheduler and nothing at all for an
+agent session. --force makes it create the same thing whoever runs it. Once
+the project exists wrangler never hands a deploy off, which is why deploy
+carries no such flag. Cloudflare is plainly steering new work towards
+Workers, and a Pages project may one day need moving; that is a later
+decision, and this one keeps the product the owner named.
+
+The page publishes more than its screens show, and that was reported rather
+than trimmed: every inlined session carries its whole morning and midday
+report, its call counts and a criteria snapshot. None of it is a credential or
+a path, and the checks prove that on every run. Whether it should be public
+is the owner's call, made on the key list the first run printed.
+
 ## 2026-09-11, twenty sixth: S4U, not a stored password and not automatic logon
 
 Three ways to have the tasks survive a reboot that stops at the logon screen,

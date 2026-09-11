@@ -6,4 +6,8 @@ __pycache__/
 data/
 runs/
 logs/
-site/
+# The rendered pages stay local and are published by ops/publish.py. The one
+# tracked file is _redirects, which Cloudflare Pages reads for the root URL.
+site/*
+!site/_redirects
+node_modules/

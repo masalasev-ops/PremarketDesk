@@ -91,10 +91,17 @@ JOBS = {
     # the job status record the step writes under CRITERIA [Job status
     # steps] desk. Both checks are kept for the reason this module's header
     # gives: neither replaces the other.
+    #
+    # [amended 2026-09-11: the last step of both is now ops.publish, which
+    # uploads site/ to Cloudflare Pages right after the desk, so both markers
+    # moved to its finished line. Everything above about the desk holds for
+    # it: it never stops either chain, and a failed upload is a STEP FAILED
+    # read by steps_ok, never a reason to relaunch a morning and its claude
+    # CLI completion.]
     "chain": ("\\PremarketDesk\\morning-chain", "job_morning_chain.bat", "morning-chain",
-              r"===== desk finished rc="),
+              r"===== publish finished rc="),
     "nightly": ("\\PremarketDesk\\nightly", "job_nightly.bat", "nightly",
-                r"===== desk finished rc="),
+                r"===== publish finished rc="),
     # The 12:00 pass. Added 2026-08-31, having run since that morning watched
     # by nothing: the weekday monitor stops at last_pass and its night firing
     # is at 22:45, so a midday failure was first named by job_status.overdue in
@@ -233,6 +240,10 @@ def failed_steps(job: str, day: str) -> tuple[list[str], int]:
         if row.get("status") == job_status.STATUS_OK:
             continue
         reason = row.get("exception") or f"exit {row.get('exit_code')}"
+        # The step's own sentence, where it left one: "exit 1" says a publish
+        # failed, and the note says whether a check refused or wrangler did.
+        if row.get("note") and row.get("note") != row.get("exception"):
+            reason += f", {row['note']}"
         out.append(f"{step} recorded {row.get('status')}: {reason}")
     # The count is the denominator: a caller cannot tell "every step passed"
     # from "no step recorded anything" without it.
