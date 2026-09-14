@@ -15,6 +15,41 @@ is history, and rewriting it destroys the reasoning.
 This file starts at 2026-08-14. Everything before it is in doc/BUILD_PLAN.md
 and in the git history.
 
+## 2026-09-14, one hundred and eighteenth: the open hour goes online when it ends
+
+The owner asked when the report after 10:30 reaches the site. It did not: the
+ladder redraws the desk every two minutes from 09:30 and uploads nothing, so
+the site carried the 08:49 desk until the midday job uploaded at 12:00, an
+hour and a half after the open hour had finished.
+
+job_ladder.bat now asks morning.ladder.window_over after its desk and runs
+ops.publish only when the answer is yes, which is the firing at or after
+[ladder] close_time. On every day logged so far that firing starts between
+10:30:02 and 10:30:09. The check is a bare python -c rather than a step, so
+the thirty firings before it write no status record, and CRITERIA [Publish]'s
+reason for keeping publish out of the ladder, thirty deployments of one
+morning, still holds. If the 10:30 firing is skipped or its check fails, the
+midday upload carries the same ladder at 12:00. The exit code stays the
+ladder's and the watchdog's marker stays the desk's; a failed upload reaches
+it through the status record, as the other jobs' do.
+
+test_publish's claim_the_ladder_publishes_once_when_its_window_closes holds
+both halves: the window reads closed at close_time and open a second before,
+and the .bat publishes once, after the desk, behind the question. The .bat's
+header said 10:15 for a window that has closed at 10:30 since 2026-09-09, and
+says 10:30 now.
+
+The suite run for this change failed test_backtest, on nothing it touched:
+2026-08-13's subscribed_held read 29 against a published 30. The backtest
+ranks on today's data/universe.json, and the Sunday 2026-09-13 rebuild carries
+2,729 symbols against 2,751, so one fewer gapper ranks under the cap. gapped
+and pool_held did not move. The published figures take a correction marker,
+as they did on 2026-09-05 for the same cause.
+
+The same morning the open hour was uploaded by hand at 11:03, as deployment
+c7de104e, since the 10:30 firing that would have carried it ran before this
+change.
+
 ## 2026-09-11, one hundred and seventeenth: the desk says nothing about the machine that built it
 
 The owner, on the live site that afternoon, over the stamp line "packet 08:45

@@ -586,6 +586,49 @@ def claim_each_list_keeps_its_line(failures: list[str]) -> None:
           "put in words")
 
 
+def claim_the_ladder_publishes_once_when_its_window_closes(failures: list[str]) -> None:
+    """job_ladder.bat uploads on its last firing and on no other.
+
+    The owner, 2026-09-14: the open hour should be on the site when it ends,
+    not at the 12:00 upload. Thirty uploads an hour is what CRITERIA [Publish]
+    ruled out, so the .bat asks morning.ladder.window_over after the desk and
+    publishes only on a yes. Checked on both halves: the clock answers no a
+    second before close_time and yes at it, and the .bat publishes once,
+    after the desk, behind that question.
+    """
+    import datetime as dt
+
+    from core import criteria, ettime
+    from morning import ladder
+
+    close = ettime.at_hm(dt.date(2026, 9, 14),
+                         criteria.load().clock("ladder", "close_time"))
+    if ladder.window_over(close - dt.timedelta(seconds=1)):
+        failures.append("the ladder window reads as over a second before close_time, "
+                        "so a firing inside the open hour would upload")
+    if not ladder.window_over(close + dt.timedelta(seconds=8)):
+        failures.append("the ladder window does not read as over at the close, so "
+                        "the 10:30 firing never uploads")
+
+    bat = (config.PROJECT_ROOT / "tasks" / "job_ladder.bat").read_text(encoding="utf-8")
+    lines = [line.strip() for line in bat.splitlines()]
+    publishes = [i for i, line in enumerate(lines) if "-m ops.publish" in line]
+    asks = [i for i, line in enumerate(lines) if "ladder.window_over()" in line]
+    desk = [i for i, line in enumerate(lines) if line.startswith("%PY% -m desk.render")]
+    if len(publishes) != 1:
+        failures.append(f"job_ladder.bat runs ops.publish {len(publishes)} time(s), not once")
+    elif not (asks and desk and desk[0] < asks[0] < publishes[0]):
+        failures.append("job_ladder.bat does not publish after the desk and behind "
+                        "ladder.window_over, so it uploads on every firing or before "
+                        "the page it uploads is drawn")
+    elif not any(line.startswith("if %ERRORLEVEL% neq 0 exit /b %RC%")
+                 for line in lines[asks[0] + 1:publishes[0]]):
+        failures.append("job_ladder.bat asks whether the window is over and publishes "
+                        "whatever the answer")
+    print("  ladder       the open hour's last firing uploads the desk, once, and the "
+          "firings before it do not")
+
+
 def main(argv: list[str] | None = None) -> int:
     if config.RUNS_DIR == config.PROJECT_ROOT / "runs":
         print("SKIP  not running under the sandbox; use python -m tests.run_tests")
@@ -603,6 +646,7 @@ def main(argv: list[str] | None = None) -> int:
     run_claim(failures, claim_the_published_desk_names_no_machine, failures)
     run_claim(failures, claim_a_report_keeps_its_reader_half, failures)
     run_claim(failures, claim_each_list_keeps_its_line, failures)
+    run_claim(failures, claim_the_ladder_publishes_once_when_its_window_closes, failures)
     if failures:
         for failure in failures:
             print(f"FAIL  {failure}")

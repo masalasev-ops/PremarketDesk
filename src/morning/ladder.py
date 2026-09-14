@@ -182,6 +182,17 @@ def walk(bars: list[dict[str, Any]], entry: float,
     return result
 
 
+def window_over(now: dt.datetime | None = None) -> bool:
+    """True from [ladder] close_time on, the moment this pass stops measuring.
+
+    job_ladder.bat asks it after every firing and uploads the site only when
+    it answers yes, which is the 10:30 firing and no other: the finished
+    ladder goes online once, not thirty times. See CRITERIA.md [Publish].
+    """
+    now = now or ettime.now_et()
+    return now >= ettime.at_hm(now.date(), _CRIT.clock("ladder", "close_time"))
+
+
 def build(day: str | None = None, now: dt.datetime | None = None) -> dict[str, Any]:
     """Every published name against the tape since the open."""
     day = day or ettime.today_str()
@@ -195,7 +206,7 @@ def build(day: str | None = None, now: dt.datetime | None = None) -> dict[str, A
         "generated": ettime.stamp(now),
         "open_time": _CRIT.clock_text("ladder", "open_time"),
         "close_time": _CRIT.clock_text("ladder", "close_time"),
-        "window_over": now >= close_at,
+        "window_over": window_over(now),
         "before_open": now < open_at,
         "names": [],
         "why": why,

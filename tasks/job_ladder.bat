@@ -1,5 +1,5 @@
 @echo off
-rem PremarketDesk live ladder. Fires every two minutes from 09:30 to 10:15 on
+rem PremarketDesk live ladder. Fires every two minutes from 09:30 to 10:30 on
 rem weekdays and answers one question: which of this morning's published names
 rem is closest to its entry, right now.
 rem
@@ -48,4 +48,19 @@ echo ===== ladder finished rc=%RC% %DATE% %TIME% ===== >> "%LOG%"
 echo ===== desk started %DATE% %TIME% ===== >> "%LOG%"
 %PY% -m desk.render >> "%LOG%" 2>&1
 echo ===== desk finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
+
+rem THE FINISHED LADDER GOES ONLINE ONCE. Every firing redraws the desk on
+rem this machine; only the one at or after [ladder] close_time, the 10:30
+rem firing, uploads site/, so the published desk carries the whole open hour
+rem at 10:30 rather than waiting for the 12:00 midday upload, and Cloudflare
+rem gets one deployment and not thirty. The check is a bare python -c and not
+rem a step, so the firings before the close record nothing. A miss here, a
+rem skipped 10:30 firing or a failed check, costs the site ninety minutes: the
+rem midday job uploads the same ladder at 12:00. Asked by the owner on
+rem 2026-09-14. Never changes the exit code, which stays the ladder's.
+%PY% -c "import sys; from morning import ladder; sys.exit(0 if ladder.window_over() else 1)" >> "%LOG%" 2>&1
+if %ERRORLEVEL% neq 0 exit /b %RC%
+echo ===== publish started %DATE% %TIME% ===== >> "%LOG%"
+%PY% -m ops.publish >> "%LOG%" 2>&1
+echo ===== publish finished rc=%ERRORLEVEL% %DATE% %TIME% ===== >> "%LOG%"
 exit /b %RC%

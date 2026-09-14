@@ -69,9 +69,18 @@ from core import eodhd
 # Across the whole cache the refusal removes 372 of 34,519 gapper rows, 1.08
 # percent, of which 58 gapped 8 percent or more. Not one gapper is left
 # unchecked, so no part of this denominator is now merely assumed.]
+# [corrected 2026-09-14: was subscribed_held 30, subscribed recall 0.2885.
+# Overtaken by a vintage again, the first correction's case and not the
+# second's. The Sunday 2026-09-13 universe rebuild carries 2,729 symbols
+# against 2,751, and the universe supplies the dollar volume the pool orders
+# on, so one fewer of this session's gappers ranks inside the cap of 42.
+# gapped stays 104 and pool_held 79; the counts under the cap are what moved.
+# 29/104 = 0.2788. Found by
+# the suite the next morning, and nothing in the harness, discover or the
+# pool builder changed.]
 PUBLISHED_0813 = {
     "gapped": 104, "pool_held": 79, "discovery_recall_all_gappers": 0.7596,
-    "subscribed_held": 30, "subscribed_recall_all_gappers": 0.2885,
+    "subscribed_held": 29, "subscribed_recall_all_gappers": 0.2788,
 }
 
 
